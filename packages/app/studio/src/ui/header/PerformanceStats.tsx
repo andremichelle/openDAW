@@ -24,14 +24,14 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
     let currentMax = 0
     let blocksInPixel = 0
     let writePixelIndex = 0
-    let budgetMs = (RenderQuantum / service.audioContext.sampleRate) * 1000
+    let budgetMs = (RenderQuantum / service.sampleRate) * 1000
     lifecycle.own(service.projectProfileService.catchupAndSubscribe(() => {
         maxValues.fill(0)
         lastReadIndex = 0
         currentMax = 0
         blocksInPixel = 0
         writePixelIndex = 0
-        budgetMs = (RenderQuantum / service.audioContext.sampleRate) * 1000
+        budgetMs = (RenderQuantum / service.sampleRate) * 1000
     }))
     const powerButton: HTMLDivElement = (
         <div className="power"

@@ -72,6 +72,9 @@ export class NativeEnginePort implements Port {
 
     postMessage(data: unknown): void {this.#send({type: "message", data})}
 
+    // an engine the studio terminated or lost has closed its connection
+    get isOpen(): boolean {return this.#socket.readyState === WebSocket.OPEN}
+
     #link(port: MessagePort): int {
         const known = this.#portIds.get(port)
         if (isDefined(known)) {return known}

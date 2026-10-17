@@ -114,9 +114,9 @@ export namespace NativeAudioInputs {
             await this.#update()
             if (!isDefined(this.#open)) {return Promise.reject("No audio input available for recording.")}
             const {project} = this.#capture.manager
-            const {env: {audioContext, sampleManager, sampleService}} = project
+            const {env: {sampleManager, sampleService}} = project
             const feed: { current: Terminable } = {current: Terminable.Empty}
-            const take = new RecordingTake(UUID.generate(), audioContext.sampleRate, this.#open.channels, () => feed.current.terminate())
+            const take = new RecordingTake(UUID.generate(), project.engine.sampleRate, this.#open.channels, () => feed.current.terminate())
             take.bpm = project.timelineBox.bpm.getValue()
             take.sampleService = sampleService
             sampleManager.record(take)

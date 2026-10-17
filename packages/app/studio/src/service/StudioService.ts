@@ -70,7 +70,8 @@ import {
     StudioPreferences,
     TemplateStorage,
     TimelineRange,
-    WasmBpmDetector
+    WasmBpmDetector,
+    EngineVariant
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {PresetService} from "@/ui/browse/PresetService"
@@ -83,6 +84,7 @@ import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 import {ChatService} from "@/chat/ChatService"
+import {EngineRestartRequest} from "@/service/EngineRestartRequest"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -183,7 +185,8 @@ export class StudioService implements ProjectEnv {
         this.#listenPreferences()
     }
 
-    get sampleRate(): number {return this.audioContext.sampleRate}
+    // the rate the engine renders at: the native engine's sound card, else the AudioContext's
+    get sampleRate(): number {return EngineVariant.current().sampleRate?.() ?? this.audioContext.sampleRate}
     get sampleService(): SampleService {return this.#sampleService}
     get soundfontService(): SoundfontService {return this.#soundfontService}
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
@@ -486,6 +489,7 @@ export class StudioService implements ProjectEnv {
                         // we need to restart the screen to subscribe to new broadcaster instances
                         this.switchScreen(null)
                         this.engine.releaseWorklet()
+                        if (safeRead(event, "error") instanceof EngineRestartRequest) {return}
                         return Dialogs.info({
                             headline: "Audio-Engine Error",
                             message: String(safeRead(event, "error", "message") ?? "Unknown error"),

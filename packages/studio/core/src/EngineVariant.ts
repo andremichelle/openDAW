@@ -24,6 +24,8 @@ export type EngineWorkletVariant = {
     // Optional: the engine runs elsewhere (the desktop app's native engine process). The node's own processor is
     // then only a placeholder and every message goes through the returned port instead.
     readonly port?: (options: EngineProcessorAttachment, context: BaseAudioContext, node: AudioWorkletNode) => Port
+    // Optional: the rate that engine renders at when it is not the AudioContext's (the native engine's sound card)
+    readonly sampleRate?: Provider<number>
 }
 
 // The injection point for THE engine. studio-core cannot import studio-core-wasm (that package depends on this

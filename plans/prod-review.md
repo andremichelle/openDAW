@@ -56,7 +56,17 @@ Recommended, by value:
 - ComponentHandler uses RefCell/Cell, plugins may call `performEdit`/`restartComponent` from the audio thread.
 - A 60 s offline load timeout leaves the late Editor alive.
 - macOS tick timer runs in common modes and can release a plugin inside its own modal loop (unverified).
-- Audio device: `expect("no output device")` crash-loops, 48 kHz hard-coded, ring sized from the requested buffer.
+- Audio device: `expect("no output device")` crash-loops, ring sized from the requested buffer.
+  Done 2026-10-17 (uncommitted): 48 kHz is asked of every output, a card that refuses opens at its own rate
+  (`REQUESTED_RATE`, `build_output`), `SAMPLE_RATE` follows and reaches the studio on `/audio` (`sampleRate`), plugins
+  and the input use it. New engines start at that rate (`NativeOutput.sampleRate`), a running engine at another rate
+  restarts without the error dialog (`EngineRestartRequest`). The fallback path cannot be reached on macOS (CoreAudio
+  accepts 48 kHz), first real check on Windows.
+  One rate (uncommitted): `EngineVariant.sampleRate` (optional) names the engine's rate, `EngineWorklet.sampleRate` keeps
+  it (CPU budget), `EngineFacade.sampleRate` and `StudioService.sampleRate` report it, the native variant passes the
+  card's rate. Native recordings, footer, performance display, vocoder display, script previews, convolver limit,
+  consolidation, freeze and video export follow it. The browser has no variant rate, nothing changes there. Left on
+  the AudioContext rate on purpose: boot log, debug menu, resume diagnostics, the browser's own RecordingWorklet.
 - Scan: stdout read after exit deadlocks big bundles, `find()` miss runs a full scan on the main thread and drops user
   folders, single-file Windows `.vst3` reported incompatible.
 - Windows: the message loop starves in modal loops (drag, plugin dialogs), DPI per system not per monitor,

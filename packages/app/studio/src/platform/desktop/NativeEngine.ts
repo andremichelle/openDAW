@@ -9,6 +9,8 @@ import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 import {NativeOfflineWorker} from "@/platform/desktop/bridge/NativeOfflineWorker"
 import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
+import {NativeOutput} from "@/platform/desktop/NativeOutput"
+import {EngineRestartRequest} from "@/service/EngineRestartRequest"
 
 // The engine runs in the native engine process. The webview node only holds a silent placeholder processor.
 export namespace NativeEngine {
@@ -50,7 +52,15 @@ export namespace NativeEngine {
         // script code runs in the engine process, inside the engine's render like in the worklet; the latest code of
         // each script goes to every engine started later
         const scripts = new Map<string, string>()
-        const current: { port: Nullable<NativeEnginePort> } = {port: null}
+        const current: { port: Nullable<NativeEnginePort>, node: Nullable<AudioWorkletNode>, sampleRate: number } =
+            {port: null, node: null, sampleRate: 0}
+        // an engine started at another rate than the sound card's starts again at the card's rate
+        NativeOutput.sampleRate.subscribe(owner => {
+            const sampleRate = owner.getValue()
+            if (current.node === null || current.port?.isOpen !== true || current.sampleRate === sampleRate) {return}
+            const error = new EngineRestartRequest(`The sound card runs at ${sampleRate} Hz.`)
+            current.node.dispatchEvent(new ErrorEvent("error", {error, message: error.message}))
+        })
         ScriptCompiler.installLoader(async (uuid, code) => {
             scripts.set(uuid, code)
             current.port?.send({type: "script", code})
@@ -66,10 +76,12 @@ export namespace NativeEngine {
         const wasm = EngineVariant.current()
         EngineVariant.install((): EngineWorkletVariant => ({
             processorName: PlaceholderName,
+            sampleRate: () => NativeOutput.sampleRate.getValue(),
             attachment: {wasmUrl: "/wasm-engine"},
             connectSync: wasm.connectSync,
-            port: (options, context, node) => {
-                const port = new NativeEnginePort(url, context.sampleRate, options,
+            port: (options, _context, node) => {
+                const sampleRate = NativeOutput.sampleRate.getValue()
+                const port = new NativeEnginePort(url, sampleRate, options,
                     seconds => latency.seconds = seconds, info => NativeAudioInputs.updateInfo(info),
                     (uuid, peaks) => NativeAudioInputs.deliverPeaks(uuid, peaks),
                     devices => NativeAudioInputs.updateDevices(devices),
@@ -80,6 +92,8 @@ export namespace NativeEngine {
                         node.dispatchEvent(new ErrorEvent("error", {error, message}))
                     }, Array.from(scripts.values()))
                 current.port = port
+                current.node = node
+                current.sampleRate = sampleRate
                 NativeAudioInputs.attachPort(port)
                 NativePluginHost.attachPort(port)
                 return port

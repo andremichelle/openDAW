@@ -24,7 +24,7 @@ export namespace AudioConsolidation {
         const rangeMax = last.complete
         const trackBoxAdapter = first.trackBoxAdapter.unwrap("Has no trackAdapter")
         const audioUnitUuid = UUID.toString(trackBoxAdapter.audioUnit.address.uuid)
-        const sampleRate = sampleService.audioContext.sampleRate
+        const sampleRate = project.engine.sampleRate
         const durationSeconds = project.tempoMap.intervalToSeconds(rangeMin, rangeMax)
         const numSamples = Math.ceil(durationSeconds * sampleRate)
         const exportConfiguration: ExportConfiguration = {

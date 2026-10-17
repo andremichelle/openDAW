@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tungstenite::{Message, WebSocket};
 
-use crate::{request_main, MainRequest, OUTPUT_CURRENT, OUTPUT_DEVICES, OUTPUT_NAME};
+use crate::{request_main, MainRequest, OUTPUT_CURRENT, OUTPUT_DEVICES, OUTPUT_NAME, SAMPLE_RATE};
 
 #[derive(Serialize, PartialEq, Clone)]
 struct State {
@@ -14,6 +14,9 @@ struct State {
     devices: Vec<String>,
     device: String,
     buffer: u32,
+    // the rate the card actually runs at, the studio's engines must run at it
+    #[serde(rename = "sampleRate")]
+    sample_rate: u32,
 }
 
 #[derive(Deserialize)]
@@ -25,7 +28,10 @@ enum ToEngine {
 
 fn state() -> State {
     let devices = OUTPUT_DEVICES.lock().unwrap().split('\n').filter(|name| !name.is_empty()).map(String::from).collect();
-    State { kind: "output", devices, device: OUTPUT_NAME.lock().unwrap().clone(), buffer: OUTPUT_CURRENT.lock().unwrap().1 }
+    State {
+        kind: "output", devices, device: OUTPUT_NAME.lock().unwrap().clone(), buffer: OUTPUT_CURRENT.lock().unwrap().1,
+        sample_rate: SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 pub fn serve(mut socket: WebSocket<TcpStream>) {

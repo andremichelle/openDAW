@@ -55,7 +55,15 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                     }
                                 }))
                         }}/>
-            <FooterItem title="SampleRate">{audioContext.sampleRate}</FooterItem>
+            <FooterItem title="SampleRate"
+                        onInit={({value}) => {
+                            const update = () => {
+                                const text = String(service.sampleRate)
+                                if (value.textContent !== text) {value.textContent = text}
+                            }
+                            update()
+                            lifecycle.own(AnimationFrame.add(update))
+                        }}/>
             <FooterItem title="Latency" minWidth="6ch"
                         onInit={({component, value}) => {
                             const threshold = () =>

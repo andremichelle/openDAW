@@ -37,7 +37,7 @@ type Construct = {
 }
 
 export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spectrum}: Construct) => {
-    const sampleRate = service.audioContext.sampleRate
+    const sampleRate = service.sampleRate
     const biquad = new BiquadCoeff()
     const carrierFreq = new Float32Array(MAX_BANDS)
     const modulatorFreq = new Float32Array(MAX_BANDS)

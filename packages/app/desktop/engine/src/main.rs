@@ -65,7 +65,7 @@ pub(crate) const PRELUDE: &str = r#"
 
 static DIST: OnceLock<PathBuf> = OnceLock::new();
 static STARTED: OnceLock<Instant> = OnceLock::new();
-static SAMPLE_RATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(48_000);
+pub(crate) static SAMPLE_RATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(48_000);
 // output latency parts in microseconds: the ring's depth and what the device reports between callback and playback
 static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -534,16 +534,55 @@ fn list_output_devices() -> String {
 }
 
 // Opens the named output ("" or unknown = the default) at the given buffer size; the ring target follows it
-fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: Arc<Mutex<rtrb::Consumer<f32>>>,
+// asked of every output; a card that refuses runs at its own rate, the studio then restarts its engines at that rate
+const REQUESTED_RATE: u32 = 48_000;
+
+fn open_output_stream(requested: &str, buffer: u32, consumer: Arc<Mutex<rtrb::Consumer<f32>>>,
                       waker: std::thread::Thread) -> Option<cpal::Stream> {
     let host = cpal::default_host();
     let chosen = host.output_devices().ok().and_then(|mut devices| devices.find(|device| !requested.is_empty() && device_name(device) == requested));
     let device = chosen.or_else(|| host.default_output_device())?;
     let name = device_name(&device);
-    let buffer_size = device.default_output_config().map(|config| buffer_size_for(config.buffer_size(), buffer))
-        .unwrap_or(cpal::BufferSize::Default);
+    let default_config = device.default_output_config().ok();
+    let buffer_size = default_config.as_ref().map(|config| buffer_size_for(config.buffer_size(), buffer)).unwrap_or(cpal::BufferSize::Default);
+    let own_rate = default_config.as_ref().map(|config| config.sample_rate()).filter(|rate| *rate != REQUESTED_RATE);
+    let (stream, sample_rate) = match build_output(&device, REQUESTED_RATE, buffer_size, consumer.clone(), waker.clone()) {
+        Ok(stream) => (stream, REQUESTED_RATE),
+        Err(error) => match own_rate {
+            Some(rate) => {
+                eprintln!("[engine] output {name} refuses {REQUESTED_RATE} Hz ({error}), using its own {rate} Hz");
+                match build_output(&device, rate, buffer_size, consumer, waker) {
+                    Ok(stream) => (stream, rate),
+                    Err(error) => {
+                        eprintln!("[engine] cannot open output {name} with buffer {buffer}: {error}");
+                        return None;
+                    }
+                }
+            }
+            None => {
+                eprintln!("[engine] cannot open output {name} with buffer {buffer}: {error}");
+                return None;
+            }
+        },
+    };
+    if let Err(error) = stream.play() {
+        eprintln!("[engine] output {error}");
+        return None;
+    }
+    SAMPLE_RATE.store(sample_rate, std::sync::atomic::Ordering::Relaxed);
+    let target = (buffer as usize * 2).max(256);
+    RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
+    RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
+    println!("[engine] output {name}, {sample_rate} Hz, buffer {buffer}, {target} frames ahead");
+    *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer);
+    *OUTPUT_NAME.lock().unwrap() = name;
+    Some(stream)
+}
+
+fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::BufferSize, consumer: Arc<Mutex<rtrb::Consumer<f32>>>,
+                waker: std::thread::Thread) -> Result<cpal::Stream, cpal::Error> {
     let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size };
-    let stream = device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+    device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
         let timestamp = info.timestamp();
         DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
         // the main thread holds the lock only while it swaps streams
@@ -563,25 +602,7 @@ fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: 
         if available < data.len() { stats::count(&stats::UNDERRUNS); }
         data[available..].fill(0.0);
         waker.unpark();
-    }, |error| eprintln!("[engine] audio {error}"), None);
-    let stream = match stream {
-        Ok(stream) => stream,
-        Err(error) => {
-            eprintln!("[engine] cannot open output {name} with buffer {buffer}: {error}");
-            return None;
-        }
-    };
-    if let Err(error) = stream.play() {
-        eprintln!("[engine] output {error}");
-        return None;
-    }
-    let target = (buffer as usize * 2).max(256);
-    RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
-    RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
-    println!("[engine] output {name}, buffer {buffer}, {target} frames ahead");
-    *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer);
-    *OUTPUT_NAME.lock().unwrap() = name;
-    Some(stream)
+    }, |error| eprintln!("[engine] audio {error}"), None)
 }
 
 // only the studio's pages connect: its origin and the token the shell gave both of us
@@ -700,7 +721,7 @@ fn main() {
         std::process::exit(1);
     }
     let buffer: u32 = std::env::var("BUFFER").ok().and_then(|value| value.parse().ok()).unwrap_or(128);
-    let sample_rate = 48_000;
+    let sample_rate = REQUESTED_RATE;
     let (producer, consumer) = rtrb::RingBuffer::<f32>::new(RING_CAPACITY_FRAMES * 2);
     let consumer = Arc::new(Mutex::new(consumer));
     let (events, inbox) = channel();
@@ -709,7 +730,7 @@ fn main() {
     let engine = std::thread::Builder::new().name("engine".into())
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
     let waker = engine.thread().clone();
-    let mut output_stream = Some(open_output_stream("", buffer, sample_rate, consumer.clone(), waker.clone()).expect("no output device"));
+    let mut output_stream = Some(open_output_stream("", buffer, consumer.clone(), waker.clone()).expect("no output device"));
     std::thread::spawn(|| loop {
         *INPUT_DEVICES.lock().unwrap() = list_input_devices();
         *OUTPUT_DEVICES.lock().unwrap() = list_output_devices();
@@ -723,8 +744,8 @@ fn main() {
             MainRequest::Output(device, size) => {
                 if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { return; }
                 drop(output_stream.take());
-                output_stream = Some(open_output_stream(&device, size, sample_rate, consumer.clone(), waker.clone())
-                    .or_else(|| open_output_stream("", 128, sample_rate, consumer.clone(), waker.clone()))
+                output_stream = Some(open_output_stream(&device, size, consumer.clone(), waker.clone())
+                    .or_else(|| open_output_stream("", 128, consumer.clone(), waker.clone()))
                     .expect("no output device"));
                 return;
             }
@@ -735,7 +756,8 @@ fn main() {
             Some(requested) => {
                 if input_stream.as_ref().is_some_and(|(_, current)| *current == requested) { return; }
                 drop(input_stream.take());
-                input_stream = open_input_stream(&input_events, sample_rate, &requested).map(|stream| (stream, requested));
+                input_stream = open_input_stream(&input_events, SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed), &requested)
+                    .map(|stream| (stream, requested));
             }
             None if input_stream.is_some() => {
                 input_stream = None;

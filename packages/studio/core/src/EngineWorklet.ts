@@ -65,6 +65,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #terminator: Terminator = new Terminator()
 
     readonly #project: Project
+    readonly #sampleRate: number
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(120.0)
@@ -102,7 +103,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 exportConfiguration?: ExportConfiguration,
                 options?: ProcessorOptions) {
         const numberOfChannels = ExportConfiguration.countStems(Option.wrap(exportConfiguration)) * 2
-        const budgetMs = (RenderQuantum / context.sampleRate) * 1000
+        // The engine is ALWAYS the installed variant (the wasm engine). There is no built-in fallback
+        // processor to drop to, so an absent provider is a boot error rather than a silent downgrade.
+        const variant: EngineWorkletVariant = EngineVariant.current()
+        const sampleRate = variant.sampleRate?.() ?? context.sampleRate
+        const budgetMs = (RenderQuantum / sampleRate) * 1000
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
             this.#isRecording.setValue(state.isRecording)
@@ -117,9 +122,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         })
 
         const controlFlagsSAB = new SharedArrayBuffer(4) // 4 bytes minimum
-        // The engine is ALWAYS the installed variant (the wasm engine). There is no built-in fallback
-        // processor to drop to, so an absent provider is a boot error rather than a silent downgrade.
-        const variant: EngineWorkletVariant = EngineVariant.current()
 
         const processorOptions: EngineProcessorAttachment = {
             syncStreamBuffer: reader.buffer,
@@ -141,6 +143,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         const {resolve, promise: isReady} = Promise.withResolvers<void>()
         const messenger = Messenger.for(isDefined(variant.port) ? variant.port(processorOptions, context, this) : this.port)
         this.#project = project
+        this.#sampleRate = sampleRate
         this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
@@ -345,6 +348,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
+    // the rate the engine renders at, the one rate everything engine-related uses
+    get sampleRate(): number {return this.#sampleRate}
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get perfBuffer(): Float32Array {return this.#perfBuffer}

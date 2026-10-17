@@ -109,7 +109,7 @@ export class EngineFacade implements Engine {
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
-    get sampleRate(): number {return this.#worklet.isEmpty() ? 44_100 : this.#worklet.unwrap().context.sampleRate}
+    get sampleRate(): number {return this.#worklet.isEmpty() ? 44_100 : this.#worklet.unwrap().sampleRate}
     get preferences(): EnginePreferences {return this.#preferencesFacade}
     get perfBuffer(): Float32Array {return this.#worklet.mapOr(worklet => worklet.perfBuffer, new Float32Array(0))}
     get perfIndex(): number {return this.#worklet.mapOr(worklet => worklet.perfIndex, 0)}

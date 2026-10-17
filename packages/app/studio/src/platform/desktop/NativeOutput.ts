@@ -7,7 +7,10 @@ export namespace NativeOutput {
     const StorageKey = "native-audio-output"
     const BufferSizes: ReadonlyArray<int> = [64, 128, 256, 512, 1024]
 
-    type FromEngine = { type: "output", devices: ReadonlyArray<string>, device: string, buffer: int }
+    type FromEngine = { type: "output", devices: ReadonlyArray<string>, device: string, buffer: int, sampleRate?: int }
+
+    // the rate the sound card runs at (48 kHz is asked for, a card may refuse), the engines run at it
+    export const sampleRate = new DefaultObservableValue<int>(48_000)
     type Choice = { device: string, buffer: int }
 
     const readChoice = (): Choice => {
@@ -42,6 +45,7 @@ export namespace NativeOutput {
                 state.devices = message.devices
                 current.setValue(Option.wrap(toDevice(message.device)))
                 bufferSize.setValue(message.buffer)
+                if (isDefined(message.sampleRate)) {sampleRate.setValue(message.sampleRate)}
             }
         }
         connect(0)
