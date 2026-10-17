@@ -28,6 +28,7 @@ export type ToStudio =
     | { type: "port", id: int, data: unknown }
     | { type: "sync", id: int, bytes: Uint8Array }
     | { type: "midi-out", port: int, buffer: int, events: Array<{ deviceId: string, data: Uint8Array, timeMs: number }> }
+    | { type: "failed", reason: string }
 
 export const enum LiveLock {WRITE = 0, READ = 1}
 export const enum SyncState {READING = 0, READ = 1, WRITING = 2, WRITTEN = 3}

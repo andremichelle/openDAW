@@ -44,6 +44,12 @@ export class OpenSampleAPI implements SampleAPI {
 
     async all(): Promise<ReadonlyArray<Sample>> {return SampleIndex.flatten(await this.tree())}
 
+    // the stock list for the missing-file check: an unreachable catalogue fails instead of looking empty
+    async catalogue(): Promise<ReadonlyArray<Sample>> {
+        if (!OpenDAWCloud.isAvailable()) {return OpenDAWCloud.unavailable("The sample catalogue")}
+        return SampleIndex.flatten(await this.#memoized())
+    }
+
     async get(uuid: UUID.Bytes): Promise<Sample> {
         const uuidAsString = UUID.toString(uuid)
         const known = (await this.all()).find(sample => sample.uuid === uuidAsString)

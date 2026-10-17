@@ -113,8 +113,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     }
     const audioDevices = await AudioOutputDevice.create(context)
     FactoryCatalog.install({
-        samples: () => OpenSampleAPI.get().all(),
-        soundfonts: () => OpenSoundfontAPI.get().all(),
+        samples: () => OpenSampleAPI.get().catalogue(),
+        soundfonts: () => OpenSoundfontAPI.get().catalogue(),
         presets: () => OpenPresetAPI.get().list()
     })
     OpenWclapAPI.get().tree().finally()

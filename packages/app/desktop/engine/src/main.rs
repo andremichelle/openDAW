@@ -151,6 +151,18 @@ fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArgument
     rv.set_double((RING_LATENCY_US.load(ordering) + DEVICE_LATENCY_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
+// a request to the shell's own endpoints, which want the token the shell gave us
+pub(crate) fn tell_shell(path: String) {
+    let token = std::env::var("OPENDAW_ENGINE_TOKEN").unwrap_or_default();
+    let separator = if path.contains('?') { '&' } else { '?' };
+    std::thread::spawn(move || {
+        use std::io::Write;
+        if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", 47110)) {
+            let _ = stream.write_all(format!("GET {path}{separator}token={token} HTTP/1.0\r\n\r\n").as_bytes());
+        }
+    });
+}
+
 pub fn request_main(request: MainRequest) {
     if let Some(sender) = MAIN_REQUESTS.lock().unwrap().as_ref() {
         let _ = sender.send(request);
@@ -572,6 +584,13 @@ fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: 
     Some(stream)
 }
 
+// only the studio's pages connect: its origin and the token the shell gave both of us
+const STUDIO_ORIGIN: &str = "http://127.0.0.1:47110";
+
+fn accepts(query: &str, origin: Option<&str>, token: &str) -> bool {
+    !token.is_empty() && origin == Some(STUDIO_ORIGIN) && query.split('&').any(|pair| pair.strip_prefix("token=") == Some(token))
+}
+
 fn serve(events: Sender<Event>, token: String) {
     let listener = TcpListener::bind(("127.0.0.1", PORT)).expect("engine port taken");
     let mut next = 1;
@@ -585,7 +604,8 @@ fn serve(events: Sender<Event>, token: String) {
             let check = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
                 path = request.uri().path().to_string();
                 query = request.uri().query().unwrap_or("").to_string();
-                if query.split('&').any(|pair| pair == format!("token={token}")) {
+                let origin = request.headers().get("Origin").and_then(|value| value.to_str().ok());
+                if accepts(&query, origin, &token) {
                     Ok(response)
                 } else {
                     Err(Response::builder().status(403).body(None).unwrap())
@@ -675,6 +695,10 @@ fn main() {
         .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../studio/dist-desktop")));
     DIST.set(dist).unwrap();
     let token = std::env::var("OPENDAW_ENGINE_TOKEN").unwrap_or_default();
+    if token.is_empty() {
+        eprintln!("[engine] started without a token (OPENDAW_ENGINE_TOKEN), exiting");
+        std::process::exit(1);
+    }
     let buffer: u32 = std::env::var("BUFFER").ok().and_then(|value| value.parse().ok()).unwrap_or(128);
     let sample_rate = 48_000;
     let (producer, consumer) = rtrb::RingBuffer::<f32>::new(RING_CAPACITY_FRAMES * 2);
@@ -778,4 +802,20 @@ fn run_main_loop(tick: impl FnMut() + 'static) {
     let timer = CFRunLoopTimer::new(0.0, 0.005, 0, 0, fire, std::ptr::null_mut());
     unsafe { CFRunLoop::get_main().add_timer(&timer, kCFRunLoopCommonModes); }
     app.run();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_studio_with_the_token_connects() {
+        assert!(accepts("token=abc", Some(STUDIO_ORIGIN), "abc"));
+        assert!(accepts("worker=%2Fx.js&token=abc", Some(STUDIO_ORIGIN), "abc"));
+        assert!(!accepts("token=abc", None, "abc"));
+        assert!(!accepts("token=abc", Some("https://evil.example"), "abc"));
+        assert!(!accepts("token=abd", Some(STUDIO_ORIGIN), "abc"));
+        assert!(!accepts("token=", Some(STUDIO_ORIGIN), ""));
+        assert!(!accepts("", Some(STUDIO_ORIGIN), ""));
+    }
 }

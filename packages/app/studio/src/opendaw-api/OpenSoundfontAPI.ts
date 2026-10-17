@@ -26,6 +26,12 @@ export class OpenSoundfontAPI {
 
     async all(): Promise<ReadonlyArray<Soundfont>> {return SoundfontIndex.flatten(await this.tree())}
 
+    // the stock list for the missing-file check: an unreachable catalogue fails instead of looking empty
+    async catalogue(): Promise<ReadonlyArray<Soundfont>> {
+        if (!OpenDAWCloud.isAvailable()) {return OpenDAWCloud.unavailable("The soundfont catalogue")}
+        return SoundfontIndex.flatten(await this.#memoized())
+    }
+
     async get(uuid: UUID.Bytes): Promise<Soundfont> {
         const uuidAsString = UUID.toString(uuid)
         return this.all().then(list => asDefined(list

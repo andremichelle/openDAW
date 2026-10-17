@@ -1,4 +1,4 @@
-import {Exec, int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
+import {int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
 import {MIDISender} from "../../../../../../studio/core-processors/src/MIDISender"
@@ -37,7 +37,7 @@ export class NativeEnginePort implements Port {
                 readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>,
                 readonly onRecordData: (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>) => void,
                 readonly onInputLatency: Procedure<number>,
-                readonly onLost: Exec,
+                readonly onLost: Procedure<string>,
                 scripts: ReadonlyArray<string>) {
         this.#shared = new BridgeShared("studio", {idOfPort: (port: MessagePort): int => this.#link(port), portOf: (): unknown => null})
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
@@ -65,7 +65,7 @@ export class NativeEnginePort implements Port {
                 return
             }
             clearInterval(this.#interval)
-            if (event.code === AbnormalClosure) {this.onLost()}
+            if (event.code === AbnormalClosure) {this.onLost("The audio engine stopped unexpectedly.")}
         }
         return socket
     }
@@ -123,6 +123,8 @@ export class NativeEnginePort implements Port {
             this.onRecordData(envelope.uuid, envelope.first, envelope.planes)
         } else if (envelope.type === "input-latency") {
             this.onInputLatency(envelope.seconds)
+        } else if (envelope.type === "failed") {
+            this.onLost(`The audio engine could not start. (${envelope.reason})`)
         } else if (envelope.type === "midi-out") {
             this.#deliverMidiOut(envelope.port, envelope.buffer, envelope.events)
 

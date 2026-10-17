@@ -22,9 +22,10 @@ export class SoundfontService extends AssetService<Soundfont, void> {
 
     constructor() {
         super()
+        // the local soundfonts are listed even without the stock catalogue
         Promise.all([
             SoundfontStorage.get().list(),
-            FactoryCatalog.get().soundfonts()
+            FactoryCatalog.get().soundfonts().catch(() => [])
         ]).then(([local, remote]) => {
             this.#local = Option.wrap(Arrays.subtract(local, remote, (a, b) => a.uuid === b.uuid))
             this.#remote = Option.wrap(remote)

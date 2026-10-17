@@ -189,8 +189,11 @@ fn compatible(bundle: &Path) -> bool {
 }
 
 fn from_scan_process(bundle: &Path) -> Option<Vec<PluginInfo>> {
-    let mut child = Command::new(std::env::current_exe().ok()?).arg("--scan").arg(bundle)
-        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut command = Command::new(std::env::current_exe().ok()?);
+    // Windows: no console window per scanned bundle
+    #[cfg(target_os = "windows")]
+    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
+    let mut child = command.arg("--scan").arg(bundle).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
     let started = Instant::now();
     loop {
         match child.try_wait() {

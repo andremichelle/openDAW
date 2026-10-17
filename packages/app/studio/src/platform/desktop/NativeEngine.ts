@@ -75,9 +75,9 @@ export namespace NativeEngine {
                     devices => NativeAudioInputs.updateDevices(devices),
                     (uuid, first, planes) => NativeAudioInputs.deliverRecording(uuid, first, planes),
                     seconds => NativeAudioInputs.updateInputLatency(seconds),
-                    () => {
-                        const error = new Error("The audio engine stopped unexpectedly.")
-                        node.dispatchEvent(new ErrorEvent("error", {error, message: error.message}))
+                    message => {
+                        const error = new Error(message)
+                        node.dispatchEvent(new ErrorEvent("error", {error, message}))
                     }, Array.from(scripts.values()))
                 current.port = port
                 NativeAudioInputs.attachPort(port)

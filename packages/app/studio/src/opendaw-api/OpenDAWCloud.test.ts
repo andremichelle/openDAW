@@ -101,4 +101,23 @@ describe("OpenDAWCloud follows the network (desktop)", () => {
         await OpenPresetAPI.get().list()
         expect(requestedUrls(fetchMock).some(url => url.startsWith(`${OpenPresetAPI.FileRoot}/index.json`))).toBe(true)
     })
+    // the missing-file check reads the catalogue: an unreachable one must not look like an empty one
+    it("fails the catalogue offline without any request, the browsers still get empty lists", async () => {
+        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI} = await networkApi(false)
+        await expect(OpenSampleAPI.get().catalogue()).rejects.toThrow()
+        await expect(OpenSoundfontAPI.get().catalogue()).rejects.toThrow()
+        expect(await OpenSampleAPI.get().all()).toEqual([])
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+    it("fails the catalogue when the index cannot be fetched while online", async () => {
+        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI} = await networkApi(true)
+        fetchMock.mockImplementation(async () => {throw new TypeError("Load failed")})
+        await expect(OpenSampleAPI.get().catalogue()).rejects.toThrow()
+        await expect(OpenSoundfontAPI.get().catalogue()).rejects.toThrow()
+        expect(await OpenSoundfontAPI.get().all()).toEqual([])
+    })
+    it("lists the catalogue when the index arrives", async () => {
+        const {OpenSampleAPI} = await networkApi(true)
+        expect(await OpenSampleAPI.get().catalogue()).toEqual([])
+    })
 })

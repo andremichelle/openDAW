@@ -731,6 +731,8 @@ struct Editor {
     inbox: SharedInbox,
     handler: ComWrapper<ComponentHandler>,
     offline: bool,
+    // the slot's load this instance belongs to, a release of an earlier load leaves it alone
+    generation: u32,
 }
 
 thread_local! {
@@ -812,7 +814,8 @@ unsafe fn create<T: Interface>(factory: &ComPtr<IPluginFactory>, cid: &TUID) -> 
 }
 
 // main thread
-unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>, offline: bool) -> Option<Loaded> {
+unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>,
+                      offline: bool) -> Option<Loaded> {
     if format != "vst3" { return None; }
     // an offline render plays what the studio's instance holds right now, saved or not
     let state = if offline {
@@ -898,10 +901,12 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
     *handler.ranges.borrow_mut() = ranges.clone();
     if !offline { notify(uuid, "params", serde_json::to_string(&automatable(&infos)).unwrap()); }
-    EDITORS.with(|editors| editors.borrow_mut().insert(handle, Rc::new(Editor {
+    let replaced = EDITORS.with(|editors| editors.borrow_mut().insert(handle, Rc::new(Editor {
         uuid: uuid.to_string(), name: info.name.clone(), component, controller, shared: shared.clone(), view: RefCell::new(None),
-        reread_at: Cell::new(None), inbox: inbox.clone(), handler, offline
+        reread_at: Cell::new(None), inbox: inbox.clone(), handler, offline, generation
     })));
+    // a plugin swapped again before the engine took the earlier one: that earlier instance is never used
+    if let Some(replaced) = replaced { terminate(handle, &replaced); }
     println!("[plugins] {} ready ({} {}, {} parameters)", info.name, info.vendor, id, infos.len());
     Some(Loaded { shared, inbox, ranges })
 }
@@ -967,10 +972,19 @@ fn save(handle: u32, editor: &Editor) {
     STATES.lock().unwrap().push((editor.uuid.clone(), state));
 }
 
-unsafe fn release_on_main(handle: u32) {
-    let Some(editor) = EDITORS.with(|editors| editors.borrow_mut().remove(&handle)) else { return };
+unsafe fn release_on_main(handle: u32, generation: u32) {
+    let editor = EDITORS.with(|editors| {
+        let mut editors = editors.borrow_mut();
+        if editors.get(&handle).is_none_or(|editor| editor.generation != generation) { return None; }
+        editors.remove(&handle)
+    });
+    let Some(editor) = editor else { return };
     DIRTY.with(|dirty| dirty.borrow_mut().remove(&handle));
-    close_view(handle, &editor);
+    terminate(handle, &editor);
+}
+
+unsafe fn terminate(handle: u32, editor: &Editor) {
+    close_view(handle, editor);
     editor.controller.setComponentHandler(ptr::null_mut());
     *editor.handler.controller.borrow_mut() = None;
     let processing = editor.shared.lock().unwrap();
@@ -1108,6 +1122,7 @@ struct Slot {
 // every thread keeps its own slots (the engine thread, each offline render), the handles are unique process wide
 thread_local! {
     static SLOTS: RefCell<HashMap<u32, Slot>> = RefCell::new(HashMap::new());
+    static OFFLINE_THREAD: Cell<bool> = const { Cell::new(false) };
 }
 
 static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
@@ -1119,6 +1134,7 @@ pub fn create_slot(uuid: String) -> u32 {create_any_slot(uuid, None)}
 pub fn create_offline_slot(uuid: String, sample_rate: f64) -> u32 {create_any_slot(uuid, Some(sample_rate))}
 
 fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
+    if offline.is_some() { OFFLINE_THREAD.set(true); }
     let handle = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     SLOTS.with(|slots| slots.borrow_mut().insert(handle, Slot {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
@@ -1137,7 +1153,7 @@ fn load_offline(handle: u32, slot: &mut Slot, sample_rate: f64) {
     let state = slot.state.clone().filter(|state| !state.is_empty());
     let (sender, receiver) = std::sync::mpsc::channel();
     request_main(MainRequest::Run(Box::new(move || {
-        let _ = sender.send(unsafe { instantiate(handle, &uuid, &format, &id, sample_rate, state, true) });
+        let _ = sender.send(unsafe { instantiate(handle, 0, &uuid, &format, &id, sample_rate, state, true) });
     })));
     match receiver.recv_timeout(OFFLINE_LOAD_TIMEOUT) {
         Ok(Some(Loaded { shared, inbox, ranges })) => {
@@ -1171,8 +1187,8 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         }
         slot.format = format.clone();
         slot.id = id.clone();
+        if let Some(previous) = slot.shared.take() { release_shared(handle, slot.generation, previous); }
         slot.generation += 1;
-        if let Some(previous) = slot.shared.take() { release_shared(handle, previous); }
         slot.inbox = None;
         slot.ranges.clear();
         slot.changes.clear();
@@ -1185,7 +1201,7 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         slot.known_state = slot.state.clone();
         notify(&uuid, "status", "loading");
         request_main(MainRequest::Run(Box::new(move || {
-            let shared = unsafe { instantiate(handle, &uuid, &format, &id, sample_rate, state, false) };
+            let shared = unsafe { instantiate(handle, generation, &uuid, &format, &id, sample_rate, state, false) };
             notify(&uuid, "status", if shared.is_some() { "ready" } else { "failed" });
             LOADED.lock().unwrap().push((handle, generation, shared));
         })));
@@ -1227,9 +1243,9 @@ fn queue_param(slot: &mut Slot, id: ParamID, kind: u32, raw: f32, sum: f32) {
     }
 }
 
-fn release_shared(handle: u32, shared: Shared) {
+fn release_shared(handle: u32, generation: u32, shared: Shared) {
     request_main(MainRequest::Run(Box::new(move || {
-        unsafe { release_on_main(handle); }
+        unsafe { release_on_main(handle, generation); }
         drop(shared);
     })));
 }
@@ -1274,7 +1290,7 @@ pub fn reset(handle: u32) {
 pub fn release(handle: u32) {
     SLOTS.with(|slots| {
         if let Some(mut slot) = slots.borrow_mut().remove(&handle) {
-            if let Some(shared) = slot.shared.take() { release_shared(handle, shared); }
+            if let Some(shared) = slot.shared.take() { release_shared(handle, slot.generation, shared); }
         }
     });
 }
@@ -1336,6 +1352,8 @@ fn track_unwritten(slot: &mut Slot, written: bool) {
 }
 
 fn take_loaded() {
+    // the loads are the engine thread's, an offline render taking them would release live plugins
+    if OFFLINE_THREAD.get() { return; }
     let loaded = std::mem::take(&mut *LOADED.lock().unwrap());
     SLOTS.with(|slots| {
         let mut slots = slots.borrow_mut();
@@ -1353,7 +1371,7 @@ fn take_loaded() {
                         if let Some(state) = slot.state.clone() { apply_later(handle, slot, state); }
                     }
                 }
-                (_, Some(loaded)) => release_shared(handle, loaded.shared),
+                (_, Some(loaded)) => release_shared(handle, generation, loaded.shared),
                 _ => {}
             }
         }
@@ -1463,7 +1481,6 @@ pub unsafe fn process(handle: u32, input: Option<(*mut f32, *mut f32)>, left: *m
 mod windows {
     use std::cell::{Cell, RefCell};
     use std::ffi::c_void;
-    use std::io::Write;
     use std::ptr::NonNull;
 
     use block2::RcBlock;
@@ -1527,13 +1544,7 @@ mod windows {
     const CLOSE_KEY: u16 = 13;
     const QUIT_KEY: u16 = 12;
 
-    fn request_shell(path: &'static str) {
-        std::thread::spawn(move || {
-            if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", 47110)) {
-                let _ = stream.write_all(format!("GET {path} HTTP/1.0\r\n\r\n").as_bytes());
-            }
-        });
-    }
+    fn request_shell(path: &'static str) {crate::tell_shell(path.to_string())}
 
     // macOS virtual key codes to the DOM `code` the studio's shortcuts match
     fn dom_code(key: u16) -> Option<&'static str> {
@@ -1559,11 +1570,7 @@ mod windows {
         let query = format!("type={kind}&code={code}&key={}&shift={}&ctrl={}&alt={}&meta={}&repeat={}",
             encode(&key), bit(NSEventModifierFlags::Shift), bit(NSEventModifierFlags::Control),
             bit(NSEventModifierFlags::Option), bit(NSEventModifierFlags::Command), (kind == "keydown" && event.isARepeat()) as u8);
-        std::thread::spawn(move || {
-            if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", 47110)) {
-                let _ = stream.write_all(format!("GET /__key?{query} HTTP/1.0\r\n\r\n").as_bytes());
-            }
-        });
+        crate::tell_shell(format!("/__key?{query}"));
     }
 
     fn encode(text: &str) -> String {
@@ -1666,9 +1673,7 @@ mod windows {
 
     // hands Cmd+` back to the studio, which fronts its first window
     fn cycle_home() {
-        if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", 47110)) {
-            let _ = stream.write_all(b"GET /__cycle-home HTTP/1.0\r\n\r\n");
-        }
+        crate::tell_shell("/__cycle-home".to_string());
         let shell = NSRunningApplication::runningApplicationWithProcessIdentifier(std::os::unix::process::parent_id() as i32);
         #[allow(deprecated)]
         if let Some(shell) = shell { shell.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps); }
@@ -2053,4 +2058,20 @@ mod windows {
     pub fn tick() {}
     pub fn cycle_in() {}
     pub fn dialogs(_open: bool) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_offline_render_leaves_the_engine_threads_loads_alone() {
+        LOADED.lock().unwrap().push((9_999, 1, None));
+        std::thread::spawn(|| {
+            create_offline_slot("offline".into(), 48_000.0);
+            take_loaded();
+        }).join().unwrap();
+        assert!(LOADED.lock().unwrap().iter().any(|(handle, _, _)| *handle == 9_999));
+        LOADED.lock().unwrap().retain(|(handle, _, _)| *handle != 9_999);
+    }
 }

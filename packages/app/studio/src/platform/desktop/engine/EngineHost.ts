@@ -135,6 +135,7 @@ class Connection {
         } else if (envelope.type === "create") {
             this.#create(envelope.sampleRate, envelope.options).catch(error => {
                 console.error(`[host] engine ${this.id} failed to start`, error?.stack ?? error)
+                this.send({type: "failed", reason: error instanceof Error ? error.message : String(error)})
                 this.close()
             })
         } else if (this.processor === null) {

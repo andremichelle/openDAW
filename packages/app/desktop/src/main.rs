@@ -1,3 +1,6 @@
+// a release build has no console window on Windows
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod components;
 mod files;
 mod menu;
@@ -181,10 +184,10 @@ pub fn mime(path: &Path) -> &'static str {
 
 // wry ignores window.close() and window.resizeBy() on opener-linked windows, and a frameless popout drags by its
 // [data-window-drag] element (nodes come from the opener realm, so no instanceof), all through the shell
-fn popout_script(label: &str) -> String {
+fn popout_script(label: &str, token: &str) -> String {
     format!(r#"(() => {{
         if (window.__shellClose__) {{return}}
-        const shell = path => fetch(`http://127.0.0.1:{PORT}/${{path}}`, {{mode: "no-cors"}}).catch(() => {{}})
+        const shell = path => fetch(`http://127.0.0.1:{PORT}/${{path}}&token={token}`, {{mode: "no-cors"}}).catch(() => {{}})
         window.resizeBy = (deltaX, deltaY) => shell(`__resize?label={label}&dx=${{Math.round(deltaX)}}&dy=${{Math.round(deltaY)}}`)
         window.addEventListener("pointerdown", event => {{
             const target = event.target
@@ -197,7 +200,7 @@ fn popout_script(label: &str) -> String {
             if (closing) {{return}}
             closing = true
             window.dispatchEvent(new Event("beforeunload"))
-            fetch("http://127.0.0.1:{PORT}/__close?{label}", {{mode: "no-cors"}}).catch(() => {{}})
+            shell("__close?label={label}")
         }}
         window.close = window.__shellClose__
     }})()"#)
@@ -207,7 +210,7 @@ fn open_window(handle: &AppHandle, counter: &Arc<AtomicUsize>, url: tauri::Url, 
                from_main: bool) -> NewWindowResponse<tauri::Wry> {
     let label = format!("popout-{}", counter.fetch_add(1, Ordering::SeqCst));
     let utility = url.query_pairs().any(|(key, _)| key == "utility");
-    let close = popout_script(&label);
+    let close = popout_script(&label, files::token());
     let builder = WebviewWindowBuilder::new(handle, label, WebviewUrl::External("about:blank".parse().unwrap()));
     let builder = match (features.size(), features.position()) {
         (None, None) => builder.inner_size(1000.0, 800.0).center(),
@@ -225,8 +228,9 @@ fn open_window(handle: &AppHandle, counter: &Arc<AtomicUsize>, url: tauri::Url, 
         .on_document_title_changed(|window, title| {
             let _ = window.set_title(&title);
         })
+        // the script carries the shell token, so it only goes into the studio's own pages
         .on_page_load(move |window, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished) {
+            if matches!(payload.event(), PageLoadEvent::Finished) && is_own_page(payload.url()) {
                 let _ = window.eval(&close);
             }
         });
@@ -288,15 +292,30 @@ fn engine_binary() -> PathBuf {
     if cfg!(debug_assertions) {
         return development;
     }
-    std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("opendaw-engine"))).filter(|path| path.is_file())
+    std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(engine_file_name()))).filter(|path| path.is_file())
         .unwrap_or(development)
 }
+
+// the bundled sidecar, opendaw-engine.exe on Windows
+fn engine_file_name() -> String {format!("opendaw-engine{}", std::env::consts::EXE_SUFFIX)}
+
+// Windows: the engine and its plugin scans run without a console window of their own
+#[cfg(target_os = "windows")]
+fn without_console(command: &mut std::process::Command) -> &mut std::process::Command {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x0800_0000)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn without_console(command: &mut std::process::Command) -> &mut std::process::Command {command}
+
 
 // The native engine process serves the build in root, with the shell token
 fn spawn_engine(root: &Path) -> Option<std::process::Child> {
     let binary = engine_binary();
     // the engine exits when this pipe closes, so it never outlives the shell
-    let command = std::process::Command::new(&binary).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
+    let mut command = std::process::Command::new(&binary);
+    let command = without_console(&mut command).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
         .env("OPENDAW_SHELL_PID", std::process::id().to_string())
         .stdin(std::process::Stdio::piped()).spawn();
     command.map_err(|error| eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display())).ok()
@@ -430,6 +449,13 @@ fn respond(request: tiny_http::Request, bytes: Vec<u8>, status: u16, content_typ
     let _ = request.respond(response);
 }
 
+fn is_own_page(url: &tauri::Url) -> bool {
+    url.as_str() == "about:blank" || (url.scheme() == "http" && url.host_str() == Some("127.0.0.1") && url.port() == Some(PORT))
+}
+
+// the shell's own endpoints answer only callers that know the token: the studio, its popouts and the engine
+fn has_token(url: &str, token: &str) -> bool {query_value(url, "token").as_deref() == Some(token)}
+
 fn query_value(url: &str, key: &str) -> Option<String> {
     let query = url.split_once('?')?.1;
     url::form_urlencoded::parse(query.as_bytes()).find(|(name, _)| name == key).map(|(_, value)| value.into_owned())
@@ -474,6 +500,11 @@ fn serve(request: tiny_http::Request) {
     let Some(request) = files::handle(request) else { return };
     let Some(mut request) = update::handle(request) else { return };
     let url = request.url().to_string();
+    let guarded = ["/__drag", "/__resize", "/__quit", "/__key", "/__cycle-home", "/__close"];
+    if guarded.iter().any(|path| url.starts_with(path)) && !has_token(&url, files::token()) {
+        let _ = request.respond(tiny_http::Response::empty(403));
+        return;
+    }
     if url.starts_with("/__drag") {
         if let Some(window) = popout(&url) {
             let _ = window.start_dragging();
@@ -510,8 +541,7 @@ fn serve(request: tiny_http::Request) {
         }
         let _ = request.respond(tiny_http::Response::empty(204));
     } else if url.starts_with("/__close") {
-        let label = url.split('?').nth(1).unwrap_or("");
-        if let Some(window) = APP.get().and_then(|app| app.get_webview_window(label)) {
+        if let Some(window) = popout(&url) {
             let _ = window.destroy();
         }
         let _ = request.respond(tiny_http::Response::empty(204));
@@ -594,4 +624,31 @@ fn main() {
                 stop_engine();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engine_file_name_has_the_platform_suffix() {
+        assert_eq!(engine_file_name(), format!("opendaw-engine{}", std::env::consts::EXE_SUFFIX));
+        assert!(!cfg!(target_os = "windows") || engine_file_name().ends_with(".exe"));
+    }
+
+    #[test]
+    fn shell_endpoints_need_the_token() {
+        assert!(has_token("/__close?label=popout-1&token=abc", "abc"));
+        assert!(!has_token("/__close?label=popout-1", "abc"));
+        assert!(!has_token("/__close?label=popout-1&token=abd", "abc"));
+        assert!(!has_token("/__quit?token=", "abc"));
+    }
+
+    #[test]
+    fn only_own_pages_get_the_popout_script() {
+        assert!(is_own_page(&"about:blank".parse().unwrap()));
+        assert!(is_own_page(&format!("http://127.0.0.1:{PORT}/popout.html").parse().unwrap()));
+        assert!(!is_own_page(&"https://accounts.google.com/o/oauth2".parse().unwrap()));
+        assert!(!is_own_page(&"http://127.0.0.1:8080/".parse().unwrap()));
+    }
 }
