@@ -22,6 +22,8 @@ the engine refactoring.
    studio only treats 1006 as lost, `EngineWorklet.isReady` never settles.
 8. **Update integrity.** Manifest sha256 comes from the same server as the files, nothing is signed; component names
    reach file paths unsanitized, also through the unauthenticated `/__update/choose`. (Reported, not yet re-checked.)
+   Re-checked 2026-10-17: signing is the same trust as the web studio (the server runs the code either way), downgraded
+   to should fix. `/__update/choose` now keeps only names the manifest lists (uncommitted).
 9. **`/install` ships to PROD at merge** with dead buttons, the installers exist on DEV only.
 10. **Missing-sample dialogs offline.** Since the offline fix a failed catalogue fetch is an empty catalogue, the
     missing-file check then asks to browse for every uncached cloud sample. Skip the check when the catalogue is
@@ -69,6 +71,8 @@ Recommended, by value:
   the AudioContext rate on purpose: boot log, debug menu, resume diagnostics, the browser's own RecordingWorklet.
 - Scan: stdout read after exit deadlocks big bundles, `find()` miss runs a full scan on the main thread and drops user
   folders, single-file Windows `.vst3` reported incompatible.
+  Done 2026-10-17 (uncommitted): `output_of` reads while the scan process runs (tests), `find()` no longer rescans, an
+  unknown plugin loads as failed.
 - Windows: the message loop starves in modal loops (drag, plugin dialogs), DPI per system not per monitor,
   no `OleInitialize`.
 - Second app instance on the fixed ports (`tauri-plugin-single-instance`).

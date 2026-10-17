@@ -315,6 +315,7 @@ fn ask_components(uuid: &str) {
         if let Some(names) = CHOICE.lock().unwrap().take() { break names; }
         std::thread::sleep(Duration::from_millis(100));
     };
+    let names: Vec<String> = names.into_iter().filter(|name| manifest.components.iter().any(|info| &info.name == name)).collect();
     crate::components::select(&names);
 }
 

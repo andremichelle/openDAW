@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::process::{Child, Command, Stdio};
+use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -216,23 +216,34 @@ fn from_scan_process(bundle: &Path) -> Option<Vec<PluginInfo>> {
     // Windows: no console window per scanned bundle
     #[cfg(target_os = "windows")]
     std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
-    let mut child = command.arg("--scan").arg(bundle).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let child = command.arg("--scan").arg(bundle).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    // some plugins crash while the process exits (their own clean-up), after the result was printed
+    let output = output_of(child, SCAN_TIMEOUT)?;
+    serde_json::from_str::<Vec<PluginInfo>>(output.lines().last()?).ok()
+}
+
+// read while the process runs, a full pipe would otherwise block it until the timeout
+fn output_of(mut child: Child, timeout: Duration) -> Option<String> {
+    let mut stdout = child.stdout.take()?;
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut output = String::new();
+        let _ = sender.send(std::io::Read::read_to_string(&mut stdout, &mut output).ok().map(|_| output));
+    });
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Err(_) => return None,
-            Ok(None) if started.elapsed() > SCAN_TIMEOUT => {
+            Ok(None) if started.elapsed() <= timeout => std::thread::sleep(Duration::from_millis(50)),
+            _ => {
                 let _ = child.kill();
+                let _ = child.wait();
                 return None;
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
         }
     }
-    // some plugins crash while the process exits (their own clean-up), after the result was printed
-    let mut output = String::new();
-    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut output).ok()?;
-    serde_json::from_str::<Vec<PluginInfo>>(output.lines().last()?).ok()
+    // a helper process the plugin started may keep the pipe open
+    receiver.recv_timeout(timeout.saturating_sub(started.elapsed()).max(Duration::from_secs(1))).ok().flatten()
 }
 
 fn describe(path: &Path) -> Bundle {
@@ -296,8 +307,7 @@ pub fn find(format: &str, id: &str) -> Option<PluginInfo> {
     let matches = |plugin: &&PluginInfo| plugin.format == format && plugin.id.eq_ignore_ascii_case(id) && plugin.status != "incompatible";
     if let Some(plugin) = CATALOGUE.lock().unwrap().iter().find(matches) { return Some(plugin.clone()); }
     let cached = catalogue_of(&read_cache());
-    if let Some(plugin) = cached.iter().find(matches) { return Some(plugin.clone()); }
-    run(&[], false).iter().find(matches).cloned()
+    cached.iter().find(matches).cloned()
 }
 
 // set while a plugin loads: a marker still set at the next start means it took the engine down
@@ -367,7 +377,29 @@ unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
 
 #[cfg(test)]
 mod tests {
-    use super::pe_machine;
+    use super::{output_of, pe_machine};
+    #[cfg(unix)]
+    use std::process::{Command, Stdio};
+    #[cfg(unix)]
+    use std::time::Duration;
+
+    // more than any pipe buffer holds: the process only exits once its output is read
+    #[cfg(unix)]
+    #[test]
+    fn a_scan_with_a_large_output_is_read_in_full() {
+        let child = Command::new("sh").arg("-c").arg("head -c 300000 /dev/zero | tr '\\0' x; echo; echo '[]'")
+            .stdout(Stdio::piped()).spawn().unwrap();
+        let output = output_of(child, Duration::from_secs(5)).unwrap();
+        assert_eq!(output.len(), 300004);
+        assert_eq!(output.lines().last(), Some("[]"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_scan_that_hangs_is_given_up() {
+        let child = Command::new("sh").arg("-c").arg("sleep 10").stdout(Stdio::piped()).spawn().unwrap();
+        assert_eq!(output_of(child, Duration::from_millis(200)), None);
+    }
 
     fn dll(machine: u16) -> Vec<u8> {
         let mut bytes = vec![0u8; 0x100];
