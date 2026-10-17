@@ -374,6 +374,15 @@ All app-written files must sit under the shell's own identifier directories: dow
 - Audio goes through `cpal`: CoreAudio, WASAPI, ASIO, ALSA and JACK.
 - MIDI goes through `midir`. This also replaces Web MIDI, which WKWebView and WebKitGTK do not have.
   - Done 2026-10-16: studio-core `MidiAccess` strategy (Web MIDI by default), `NativeMidi` installs the desktop one. The engine always sends a first device list (also empty) and pumps the CoreMIDI run loop, so devices plugged in while the app runs appear within 2 seconds.
+  - **SEVERE, open (found 2026-10-17, code read, not run): MIDI output from the engine is lost on desktop.** A MIDI Output device sends nothing to external gear or other apps. The engine hands its MIDI out to the studio through a SharedArrayBuffer ring plus a wake-up MessagePort (`setupMIDI`, `WasmMidiDrain` -> `MIDISender`, read by the studio's `MIDIReceiver`). Neither crosses the process boundary: `BridgeCodec` turns the port into an inert one and the ring's contents are never mirrored back. Offline renders are unaffected.
+    - Simple fix: the engine host gives the drain a local ring and drains it every tick (8 ms), each record goes to the studio as a message; the studio side catches `setupMIDI` on its way out, keeps the studio's real ring and port and writes each record with its own `MIDISender`, so `MIDIReceiver` stays unchanged. Up to ~8 ms extra jitter.
+    - Better: the engine process sends MIDI out to its own `midir` outputs with exact timing (it owns the ports already), together with the MIDI out timing work of #356.
+  - Engine parity check 2026-10-17 (code read, not run), what else crosses into the engine process:
+    - Fine: box sync, engine state and transport, live stream (meters, spectrum, Shadertoy), samples and frozen audio (copied typed views), metronome and preferences, recording and input peaks, offline renders, scripts (fixed: `ScriptCompiler.installLoader`).
+    - CPU load meter reads 0 and "stop playback when overloading" never fires: the engine's `HRClock` reads a SharedArrayBuffer a studio worker keeps writing, the engine process only has a copy. Fix: the engine host stamps before and after each render in the same layout.
+    - Monitoring dialog meter stays empty: it meters a webview node (`monitorPanNode`) that carries no signal, monitoring is mixed in the engine. Fix: feed it from the input peaks the engine sends.
+    - Minor, open: the Playfield Chop dialog previews through the webview's `AudioContext`, on desktop the system default output instead of the device chosen in openDAW's audio settings.
+    - To verify: soundfonts. The parsed `SoundFont2` crosses `BridgeCodec` as plain data (no prototype), a soundfont instrument would be silent if the engine side relies on more.
 
 **Engine hosting (revised 2026-10-16: V8, not wasmtime)**
 - The shell embeds V8 (`rusty_v8` / `deno_core`) and runs the existing engine host JS as is: the engine wasm, the device side-modules and all three JS bridges. V8 runs WebAssembly itself, so no bridge is ported to Rust and behaviour stays that of Chrome.

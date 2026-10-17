@@ -629,8 +629,17 @@ fn serve(events: Sender<Event>, token: String) {
                             if socket.send(Message::Binary(bytes.into())).is_err() { break 'connection; }
                         }
                         None => {
+                            // waits briefly for the studio's answer, a dropped connection would look like a crash there
                             let _ = socket.close(None);
                             let _ = socket.flush();
+                            let deadline = Instant::now() + Duration::from_millis(250);
+                            while Instant::now() < deadline {
+                                match socket.read() {
+                                    Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                                    Err(_) => break,
+                                    Ok(_) => {}
+                                }
+                            }
                             break 'connection;
                         }
                     }

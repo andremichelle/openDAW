@@ -15,7 +15,7 @@ import {
     ValueGuide,
     ValueMapping
 } from "@opendaw/lib-std"
-import {gainToDb} from "@opendaw/lib-dsp"
+import {dbToGain, gainToDb} from "@opendaw/lib-dsp"
 import {CaptureAudio, MonitoringMode} from "@opendaw/studio-core"
 import {Dialog} from "@/ui/components/Dialog"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -96,6 +96,15 @@ export namespace MonitoringDialog {
             muteModel.subscribe(owner => capture.monitorMuted = owner.getValue())
         )
         const peaksInDb = new Float32Array(2).fill(Number.NEGATIVE_INFINITY)
+        // an engine that monitors itself (desktop) sends the input peaks, the webview nodes carry no signal there
+        const enginePeaks = {streaming: false}
+        lifecycle.own(capture.subscribeInputPeaks(peaks => {
+            enginePeaks.streaming = peaks.length > 0
+            if (!enginePeaks.streaming) {return}
+            const gain = capture.monitorMuted ? 0.0 : dbToGain(capture.monitorVolumeDb)
+            peaksInDb[0] = gainToDb(peaks[0] * gain)
+            peaksInDb[1] = gainToDb((peaks[1] ?? peaks[0]) * gain)
+        }))
         const meterTerminator = lifecycle.own(new Terminator())
         const reconnectMeter = () => {
             meterTerminator.terminate()
@@ -104,6 +113,7 @@ export namespace MonitoringDialog {
                 capture.monitorPanNode.connect(meterWorklet)
                 meterTerminator.ownAll(
                     meterWorklet.subscribe(({peak}) => {
+                        if (enginePeaks.streaming) {return}
                         peaksInDb[0] = gainToDb(peak[0])
                         peaksInDb[1] = gainToDb(peak[1] ?? peak[0])
                     }),

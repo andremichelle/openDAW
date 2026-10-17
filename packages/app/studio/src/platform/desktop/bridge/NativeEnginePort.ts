@@ -2,6 +2,9 @@ import {Exec, int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
 
+// a connection that broke without a close message: the engine process went away
+const AbnormalClosure = 1006
+
 // A MessagePort stand-in that carries one engine instance's messages to the native engine process.
 // It also relays the engine state stream, the sleep flag and the live stream buffers.
 export class NativeEnginePort implements Port {
@@ -55,7 +58,7 @@ export class NativeEnginePort implements Port {
                 return
             }
             clearInterval(this.#interval)
-            if (!event.wasClean) {this.onLost()}
+            if (event.code === AbnormalClosure) {this.onLost()}
         }
         return socket
     }

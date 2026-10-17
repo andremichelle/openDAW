@@ -70,11 +70,11 @@ export namespace DesktopStudioMenu {
                     withShortcut(item("Save As...", () => service.projectProfileService.saveAs(), service.hasProfile), "project-save-as"),
                     item("Save as Template...", () => service.projectProfileService.saveAsTemplate(), service.hasProfile),
                     item("Save Bundle File to Disk...", () => service.exportBundle(), service.hasProfile),
+                    item("Open Bundle File from Disk...", () => service.importBundle()),
                     MenuItem.default({label: "Import", separatorBefore: true}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                         item("Audio Files...", () => service.sampleService.browse(true)),
                         item("Stems (Zip)...", () => service.importStems()),
                         item("Soundfont Files...", () => service.soundfontService.browse(true)),
-                        item("Project Bundle...", () => service.importBundle()),
                         item("Preset Bundle...", () => service.importPreset().then(EmptyExec)),
                         item("DAWproject...", () => service.importDawproject().then(EmptyExec, EmptyExec))
                     )),

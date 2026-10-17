@@ -118,6 +118,11 @@ Default folders, plus user folders in the settings:
    keys on, JUCE passes keys on but answers `onKeyDown` with kResultFalse even while typing into its own text field.
    Ideas so far (both rejected for now): software keyboard keys win while its panel is open, or a per-window switch
    "keys go to openDAW / to the plugin" (Reaper).
+10. **Unresolved: studio menus under plugin windows.** Context menus and in-page dropdowns are HTML inside the main
+    window, a plugin window is a native window floating above it, so a menu opened where a plugin window overlaps stays
+    hidden behind it. Lowering plugin windows (like for dialogs) is not wanted for menus, they open constantly. Idea so
+    far (rejected for now): show `MenuItem` trees as native popup menus on desktop (default items map one to one,
+    headers as macOS section headers via AppKit, menus with an `input-value` slider such as the metronome stay HTML).
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap

@@ -111,6 +111,10 @@ class Connection {
     processor: Nullable<Processor> = null
     sync: Nullable<Uint8Array> = null
     control: Nullable<Int32Array> = null
+    // the engine's load clock, stamped here around each render (in the browser a worker writes it)
+    readonly clock = new SharedArrayBuffer(32)
+    readonly clockCounters = new Int32Array(this.clock)
+    readonly clockStamps = new Float64Array(this.clock)
     alive = true
     ticks = 0
     readonly captures = new Map<string, CaptureState>()
@@ -141,7 +145,9 @@ class Connection {
         if (!this.alive || this.processor === null) {return}
         this.main.forEach(channel => channel.fill(0.0))
         const inputs = [input.views.slice(0, input.channels)]
+        const started = performance.now()
         const {status, value, error} = tryCatch(() => this.processor?.process(inputs, [this.main, this.monitor]) ?? false)
+        this.#stampClock(started, performance.now())
         if (status === "failure") {console.error(`[host] engine ${this.id} threw`, (error as Error)?.stack ?? error)}
         this.alive = status === "success" && value
         if (!this.alive) {
@@ -215,6 +221,16 @@ class Connection {
         })
     }
 
+    // answers both signals of this render (HRClock layout: request counter, start and end counters, start and end time)
+    #stampClock(started: number, ended: number): void {
+        const counter = Atomics.load(this.clockCounters, 0)
+        if (counter <= 0 || counter % 2 !== 0) {return}
+        this.clockStamps[2] = started
+        this.clockStamps[3] = ended
+        Atomics.store(this.clockCounters, 1, counter - 1)
+        Atomics.store(this.clockCounters, 2, counter)
+    }
+
     close(): void {
         this.alive = false
         __close(this.id)
@@ -237,7 +253,7 @@ class Connection {
         construction.port = this.port
         this.processor = new processorClass({
             processorOptions: {
-                ...options, variant: nativeModules === null
+                ...options, hrClockBuffer: this.clock, variant: nativeModules === null
                     ? {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}
                     : {
                         engineModule, composites, effectComposites, hostImports: NativePlugins.imports,
