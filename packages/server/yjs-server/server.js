@@ -26,10 +26,13 @@ const corsAllowedOrigins = [
     'http://127.0.0.1:47110'
 ]
 
-const MAX_CONNECTIONS_PER_IP = 32
+// every room member holds two sockets (sync + signaling), so this is about 128 people behind one address
+const MAX_CONNECTIONS_PER_IP = 256
 const MESSAGE_BURST = 2000
 const MESSAGES_PER_SECOND = 500
 const RATE_LIMITED = 4429
+// the studio shows why it cannot join (a refused HTTP upgrade is invisible to a browser's WebSocket)
+const CONNECTION_LIMIT = 4430
 
 const connectionsPerIp = new Map()
 
@@ -183,8 +186,9 @@ server.on("upgrade", (req, socket, head) => {
     const ip = req.socket.remoteAddress || ''
     const count = connectionsPerIp.get(ip) || 0
     if (count >= MAX_CONNECTIONS_PER_IP) {
-        console.warn(`Rejected upgrade from ${ip}: ${count} connections open`)
-        socket.end('HTTP/1.1 429 Too Many Requests\r\n\r\n')
+        console.warn(`Rejected connection from ${ip}: ${count} connections open`)
+        const target = url.startsWith('/signaling') ? signalingWss : wss
+        target.handleUpgrade(req, socket, head, ws => ws.close(CONNECTION_LIMIT, 'connection limit'))
         return
     }
     const track = ws => {

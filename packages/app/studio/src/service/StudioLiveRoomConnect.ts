@@ -131,7 +131,15 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))
         console.warn(error)
-        RuntimeNotifier.notify({message: "Could not connect to room.", icon: "Warning"})
+        if (error instanceof Error && error.message === YService.ConnectionLimit) {
+            progressDialog.terminate()
+            await RuntimeNotifier.info({
+                headline: "Live Room Full",
+                message: "Too many people on your network are connected to live rooms right now. Please try again in a while."
+            })
+        } else {
+            RuntimeNotifier.notify({message: "Could not connect to room.", icon: "Warning"})
+        }
     }
     progressDialog.terminate()
 }

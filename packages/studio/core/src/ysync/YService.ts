@@ -18,6 +18,10 @@ export namespace YService {
 
     export type RoomResult = { project: Project, provider: WebsocketProvider }
 
+    // the live server closes with this code when too many connections come from one network address
+    export const ConnectionLimitCode = 4430
+    export const ConnectionLimit = "Live room connection limit reached"
+
     export const getOrCreateRoom = async (optProject: Option<Project>,
                                           env: ProjectEnv,
                                           roomName: string): Promise<RoomResult> => {
@@ -27,14 +31,23 @@ export namespace YService {
         console.debug("clientID:", doc.clientID)
         console.debug("Provider url:", provider.url)
         if (!provider.synced) {
-            const {resolve, promise} = Promise.withResolvers<void>()
+            const {resolve, reject, promise} = Promise.withResolvers<void>()
             const onSync = (isSynced: boolean) => {
                 if (isSynced) {
                     provider.off("sync", onSync)
+                    provider.off("connection-close", onClose)
                     resolve()
                 }
             }
+            const onClose = (event: CloseEvent) => {
+                if (event.code !== ConnectionLimitCode) {return}
+                provider.off("sync", onSync)
+                provider.off("connection-close", onClose)
+                provider.destroy()
+                reject(new Error(ConnectionLimit))
+            }
             provider.on("sync", onSync)
+            provider.on("connection-close", onClose)
             await Promises.timeout(promise, TimeSpan.seconds(10), "Timeout 'synced'")
         }
         const boxes = doc.getMap("boxes")
