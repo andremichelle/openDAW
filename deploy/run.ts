@@ -215,31 +215,6 @@ const deployDocs = async (): Promise<ReadonlyArray<string>> => [
     await deployFixed(docsDistDir, "docs")
 ]
 
-// DEV keeps only its newest releases, the server's disk fills up otherwise. The live ones are always kept, and a few
-// before them, so an open tab still finds its files.
-const KeepReleases = 3
-
-const liveReleases = async (): Promise<ReadonlyArray<string>> => {
-    const live: Array<string> = []
-    const htaccess = await sftp.get("/.htaccess").then(buffer => buffer.toString()).catch(() => "")
-    const studio = htaccess.match(/RewriteCond %\{HTTP_HOST\} \^dev.*\nRewriteRule \^\(\.\*\)\$ (\/dev\/releases\/[^\s/]+)/)
-    if (studio !== null) {live.push(studio[1])}
-    const desktop = await sftp.get("/dev/tauri/build-info.json").then(buffer => JSON.parse(buffer.toString())).catch(() => null)
-    if (desktop !== null && typeof desktop.uuid === "string") {live.push(`/dev/tauri/releases/${desktop.uuid}`)}
-    return live
-}
-
-const pruneReleases = async (folder: string, live: ReadonlyArray<string>): Promise<void> => {
-    const entries = await sftp.list(folder).catch(() => [])
-    const releases = entries.filter(entry => entry.type === "d").sort((a, b) => b.modifyTime - a.modifyTime)
-    for (const [index, entry] of releases.entries()) {
-        const path = `${folder}/${entry.name}`
-        if (index < KeepReleases || live.includes(path)) {continue}
-        console.log(`pruning old release ${path}`)
-        await sftp.rmdir(path, true).catch(error => console.warn(`could not prune ${path}:`, error))
-    }
-}
-
 // Rewrites the root .htaccess, keeping the other environment's release folder. Pass null to keep both.
 const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> => {
     console.log("updating root .htaccess...")
@@ -317,12 +292,6 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
     }
 
     console.log(`deploying branch "${branchName}" to ${domain}`)
-    if (!isMainEnv) {
-        const live = await liveReleases()
-        console.log(`live releases: ${live.join(", ")}`)
-        await pruneReleases("/dev/releases", live)
-        await pruneReleases("/dev/tauri/releases", live)
-    }
     await uploadDist(distDir, releaseDir)
     await deployDocs()
     await updateRootHtaccess(releaseDir)
