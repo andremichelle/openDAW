@@ -231,17 +231,43 @@ fn engine_binary() -> PathBuf {
         .unwrap_or(development)
 }
 
-// The native engine process serves the build in root; it is started once, with the shell token
-fn start_engine(root: &Path) {
-    let mut engine = ENGINE.lock().unwrap();
-    if !native_engine() || engine.is_some() { return; }
+// The native engine process serves the build in root, with the shell token
+fn spawn_engine(root: &Path) -> Option<std::process::Child> {
     let binary = engine_binary();
     // the engine exits when this pipe closes, so it never outlives the shell
     let command = std::process::Command::new(&binary).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
         .stdin(std::process::Stdio::piped()).spawn();
-    match command {
-        Ok(child) => *engine = Some(child),
-        Err(error) => eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display()),
+    command.map_err(|error| eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display())).ok()
+}
+
+fn start_engine(root: &Path) {
+    let mut engine = ENGINE.lock().unwrap();
+    if !native_engine() || engine.is_some() { return; }
+    *engine = spawn_engine(root);
+    if engine.is_some() {
+        let root = root.to_path_buf();
+        std::thread::spawn(move || watch_engine(root));
+    }
+}
+
+// An engine that went down is replaced at once, the studio reconnects once the user restarts its engine
+fn watch_engine(root: PathBuf) {
+    const MAX_RESTARTS: usize = 10;
+    let mut restarts: Vec<std::time::Instant> = Vec::new();
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let mut engine = ENGINE.lock().unwrap();
+        let Some(child) = engine.as_mut() else { return };
+        let Ok(Some(status)) = child.try_wait() else { continue };
+        restarts.retain(|time| time.elapsed().as_secs() < 60);
+        if restarts.len() == MAX_RESTARTS {
+            eprintln!("[openDAW] the engine stopped ({status}) {MAX_RESTARTS} times within a minute, it is not started again");
+            *engine = None;
+            return;
+        }
+        restarts.push(std::time::Instant::now());
+        eprintln!("[openDAW] the engine stopped ({status}), starting a new one");
+        *engine = spawn_engine(&root);
     }
 }
 

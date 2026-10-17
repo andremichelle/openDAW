@@ -56,13 +56,17 @@ export namespace NativeEngine {
             processorName: PlaceholderName,
             attachment: {wasmUrl: "/wasm-engine"},
             connectSync: wasm.connectSync,
-            port: (options, context) => {
+            port: (options, context, node) => {
                 const port = new NativeEnginePort(url, context.sampleRate, options,
                     seconds => latency.seconds = seconds, info => NativeAudioInputs.updateInfo(info),
                     (uuid, peaks) => NativeAudioInputs.deliverPeaks(uuid, peaks),
                     devices => NativeAudioInputs.updateDevices(devices),
                     (uuid, first, planes) => NativeAudioInputs.deliverRecording(uuid, first, planes),
-                    seconds => NativeAudioInputs.updateInputLatency(seconds))
+                    seconds => NativeAudioInputs.updateInputLatency(seconds),
+                    () => {
+                        const error = new Error("The audio engine stopped unexpectedly.")
+                        node.dispatchEvent(new ErrorEvent("error", {error, message: error.message}))
+                    })
                 NativeAudioInputs.attachPort(port)
                 NativePluginHost.attachPort(port)
                 return port

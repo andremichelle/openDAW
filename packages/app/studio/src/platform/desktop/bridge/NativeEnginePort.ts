@@ -1,4 +1,4 @@
-import {int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
+import {Exec, int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
 
@@ -8,7 +8,10 @@ export class NativeEnginePort implements Port {
     onmessage: Nullable<Procedure<MessageEvent>> = null
     onmessageerror: Nullable<Procedure<MessageEvent>> = null
 
-    readonly #socket: WebSocket
+    readonly #url: string
+    #socket: WebSocket
+    #opened = false
+    #attempts: int = 0
     readonly #shared = new BridgeShared("studio")
     readonly #queue: Array<ArrayBuffer> = []
     readonly #sync: Uint8Array
@@ -24,18 +27,35 @@ export class NativeEnginePort implements Port {
                 readonly onInputPeaks: (uuid: Uint8Array, peaks: Float32Array) => void,
                 readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>,
                 readonly onRecordData: (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>) => void,
-                readonly onInputLatency: Procedure<number>) {
+                readonly onInputLatency: Procedure<number>,
+                readonly onLost: Exec) {
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
-        this.#socket = new WebSocket(url)
-        this.#socket.binaryType = "arraybuffer"
-        this.#socket.onopen = () => this.#queue.splice(0).forEach(bytes => this.#socket.send(bytes))
-        this.#socket.onmessage = (event: MessageEvent<ArrayBuffer>) => this.#receive(event.data)
-        this.#socket.onclose = () => clearInterval(this.#interval)
-        this.#socket.onerror = () => console.warn("[NativeEngine] connection failed", url)
+        this.#url = url
+        this.#socket = this.#connect()
         this.#interval = setInterval(() => this.#tick(), 8)
         this.#send({type: "create", sampleRate, options})
+    }
+
+    // a restarted engine process may still be starting, a connection that never opened is tried again
+    #connect(): WebSocket {
+        const socket = new WebSocket(this.#url)
+        socket.binaryType = "arraybuffer"
+        socket.onopen = () => {
+            this.#opened = true
+            this.#queue.splice(0).forEach(bytes => socket.send(bytes))
+        }
+        socket.onmessage = (event: MessageEvent<ArrayBuffer>) => this.#receive(event.data)
+        socket.onclose = (event: CloseEvent) => {
+            if (!this.#opened && this.#attempts++ < 20) {
+                setTimeout(() => this.#socket = this.#connect(), 250)
+                return
+            }
+            clearInterval(this.#interval)
+            if (!event.wasClean) {this.onLost()}
+        }
+        return socket
     }
 
     postMessage(data: unknown): void {this.#send({type: "message", data})}
@@ -46,7 +66,7 @@ export class NativeEnginePort implements Port {
         const bytes = this.#shared.encode(envelope)
         if (this.#socket.readyState === WebSocket.OPEN) {
             this.#socket.send(bytes)
-        } else if (this.#socket.readyState === WebSocket.CONNECTING) {
+        } else if (!this.#opened) {
             this.#queue.push(bytes)
         }
     }

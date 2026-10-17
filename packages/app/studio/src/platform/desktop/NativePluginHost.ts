@@ -108,7 +108,14 @@ export namespace NativePluginHost {
                 storeState(new TextDecoder().decode(new Uint8Array(data, 0, UuidLength)), new Int8Array(data, UuidLength))
             }
         }
-        socket.onclose = () => state.notices = null
+        // the engine process went away: its plugins and windows are gone, the restarted one is reached again
+        socket.onclose = () => {
+            state.notices = null
+            statuses.clear()
+            openWindows.clear()
+            notifier.notify()
+            setTimeout(connect, 250)
+        }
         state.notices = socket
         rescan(false)
     }
