@@ -97,6 +97,10 @@ Default folders, plus user folders in the settings:
 1. **Signing vs. plugins (macOS):** a signed, notarized app runs with the hardened runtime, which refuses third-party
    code unless the engine carries `com.apple.security.cs.disable-library-validation`. Signing, notarization and that
    entitlement decide whether plugins load at all in a public build. Windows: SmartScreen trust.
+   2026-10-17: test builds are ad-hoc signed without the hardened runtime (`signingIdentity: "-"`,
+   `hardenedRuntime: false`), so macOS asks "Open Anyway" instead of calling the app damaged. With the hardened
+   runtime the engine dies at once (V8 cannot reserve its JIT code range), so notarization needs the runtime with
+   `allow-jit`, `allow-unsigned-executable-memory` and `disable-library-validation` on the engine.
 2. **Export is silent for plugins:** mixdown and stems render in the webview engine, which has no native plugins.
    Export must render in the native engine (phase 6) before plugins are usable.
    **Done 2026-10-17:** offline renders run in the engine process (a thread and an isolate per render, the unchanged

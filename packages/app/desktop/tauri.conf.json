@@ -26,6 +26,10 @@
     ],
     "externalBin": [
       "binaries/opendaw-engine"
-    ]
+    ],
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
   }
 }
