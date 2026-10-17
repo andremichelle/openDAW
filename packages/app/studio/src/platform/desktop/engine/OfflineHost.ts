@@ -2,10 +2,13 @@
 // thread of its own, next to the unchanged wasm-offline-worker bundle, one isolate per render
 import {int, isDefined, Nullable, Optional, Procedure} from "@opendaw/lib-std"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/BridgeLink"
+import type {EngineModules} from "../../../../../../studio/core-wasm/src/engine-modules"
+import {NativeInstrumentBoxType, NativePlugins} from "./NativePlugins"
 
 declare const __offlineSend: (bytes: ArrayBuffer) => void
 
 type Scope = Record<string, unknown>
+type Modules = EngineModules & { hostImports?: typeof NativePlugins.imports }
 type Call = { message?: { func?: string, args?: Array<{ value?: { syncStreamBuffer?: SharedArrayBuffer } }> } }
 
 const scope = globalThis as unknown as Scope
@@ -41,6 +44,18 @@ scope.MessagePort = RelayPort
 scope.onmessage = null
 scope.onmessageerror = null
 scope.postMessage = (data: unknown): void => send({type: "message", data})
+
+// the render plays native plugins like the realtime engine, each through a copy of its own
+scope.extendEngineModules = async (modules: Modules, base: string): Promise<Modules> => {
+    const nativeModule = await NativePlugins.deviceModule(base).catch(error => {
+        console.warn("[offline] no native plugin device", error)
+        return null
+    })
+    return nativeModule === null ? modules : {
+        ...modules, hostImports: NativePlugins.imports,
+        deviceModules: [...modules.deviceModules, nativeModule], deviceBoxTypes: [...modules.deviceBoxTypes, NativeInstrumentBoxType]
+    }
+}
 
 // the engine state stream is the one the studio hands over with `initialize`
 const watchInitialize = (data: unknown): void => {

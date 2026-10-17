@@ -390,6 +390,8 @@ struct ComponentHandler {
     last_edit: Cell<Option<Instant>>,
     // the host is loading a state into the plugin: its "values changed" restates that state, the boxes stay as they are
     applying: Cell<bool>,
+    // a copy for an offline render: nothing it does reaches the studio
+    offline: bool,
 }
 
 impl Class for ComponentHandler {
@@ -398,12 +400,14 @@ impl Class for ComponentHandler {
 
 impl ComponentHandler {
     fn report(&self, id: ParamID, normalized: f64) {
+        if self.offline { return; }
         let Some(max) = self.ranges.borrow().get(&id).copied() else { return };
         self.inbox.lock().unwrap().edits.push((id, normalized));
         notify(&self.uuid, "param", format!("{id}:{}", normalized * max));
     }
 
     unsafe fn reread(&self, titles: bool) {
+        if self.offline { return; }
         let Some(controller) = self.controller.borrow().clone() else { return };
         let params = read_params(&controller);
         *self.ranges.borrow_mut() = params.iter().map(|param| (param.id, param.max)).collect();
@@ -650,6 +654,7 @@ pub struct Processing {
     output_list: ComPtr<IParameterChanges>,
     context: ProcessContext,
     outputs: i32,
+    mode: i32,
 }
 
 pub struct Loaded {
@@ -682,6 +687,7 @@ struct Editor {
     reread_at: Cell<Option<Instant>>,
     inbox: SharedInbox,
     handler: ComWrapper<ComponentHandler>,
+    offline: bool,
 }
 
 thread_local! {
@@ -692,8 +698,9 @@ thread_local! {
 
 fn editor(handle: u32) -> Option<Rc<Editor>> {EDITORS.with(|editors| editors.borrow().get(&handle).cloned())}
 
+// the studio's instances, never the copies of an offline render
 fn all_editors() -> Vec<(u32, Rc<Editor>)> {
-    EDITORS.with(|editors| editors.borrow().iter().map(|(handle, editor)| (*handle, editor.clone())).collect())
+    EDITORS.with(|editors| editors.borrow().iter().filter(|(_, editor)| !editor.offline).map(|(handle, editor)| (*handle, editor.clone())).collect())
 }
 
 // a panic inside a callback a plugin made would abort the engine
@@ -762,8 +769,13 @@ unsafe fn create<T: Interface>(factory: &ComPtr<IPluginFactory>, cid: &TUID) -> 
 }
 
 // main thread
-unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>) -> Option<Loaded> {
+unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>, offline: bool) -> Option<Loaded> {
     if format != "vst3" { return None; }
+    // an offline render plays what the studio's instance holds right now, saved or not
+    let state = if offline {
+        all_editors().into_iter().find(|(_, editor)| editor.uuid == uuid).map(|(_, editor)| read_state(&editor.component, &editor.controller))
+            .or(state)
+    } else { state };
     let info = crate::scan::find(format, id)?;
     let _loading = crate::scan::Loading::new(&info.path);
     let module = module(Path::new(&info.path))?;
@@ -790,7 +802,7 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     let handler = ComWrapper::new(ComponentHandler {
         handle, uuid: uuid.to_string(), inbox: inbox.clone(), ranges: RefCell::new(HashMap::new()),
         controller: RefCell::new(Some(controller.clone())), gestures: Cell::new(0), last_edit: Cell::new(None),
-        applying: Cell::new(false)
+        applying: Cell::new(false), offline
     });
     controller.setComponentHandler(handler.to_com_ptr::<IComponentHandler>()?.into_raw());
     // both are the host's own doing: the plugin's "values changed" during them restates what the host just set
@@ -810,8 +822,9 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     processor.setBusArrangements(inputs.as_mut_ptr(), audio_ins, outputs.as_mut_ptr(), audio_outs);
     if audio_outs > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1); }
     if event_ins > 0 { component.activateBus(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32, 0, 1); }
+    let mode = if offline { ProcessModes_::kOffline } else { ProcessModes_::kRealtime } as i32;
     let mut setup = ProcessSetup {
-        processMode: ProcessModes_::kRealtime as i32,
+        processMode: mode,
         symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
         maxSamplesPerBlock: MAX_BLOCK as i32,
         sampleRate: sample_rate,
@@ -833,15 +846,15 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     let output_list = outputs_changes.to_com_ptr::<IParameterChanges>()?;
     let shared = Arc::new(Mutex::new(Processing {
         component: component.clone(), processor, events, event_list, output_events, output_event_list, params, param_list, outputs_changes, output_list, context,
-        outputs: audio_outs.min(1)
+        outputs: audio_outs.min(1), mode
     }));
     let infos = read_params(&controller);
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
     *handler.ranges.borrow_mut() = ranges.clone();
-    notify(uuid, "params", serde_json::to_string(&automatable(&infos)).unwrap());
+    if !offline { notify(uuid, "params", serde_json::to_string(&automatable(&infos)).unwrap()); }
     EDITORS.with(|editors| editors.borrow_mut().insert(handle, Rc::new(Editor {
         uuid: uuid.to_string(), name: info.name.clone(), component, controller, shared: shared.clone(), view: RefCell::new(None),
-        reread_at: Cell::new(None), inbox: inbox.clone(), handler
+        reread_at: Cell::new(None), inbox: inbox.clone(), handler, offline
     })));
     println!("[plugins] {} ready ({} {}, {} parameters)", info.name, info.vendor, id, infos.len());
     Some(Loaded { shared, inbox, ranges })
@@ -1031,25 +1044,63 @@ struct Slot {
     modulation: HashMap<ParamID, f64>,
     // an edit from the plugin's editor is the base until its box confirms it, host values with the old base use it
     edits: HashMap<ParamID, (f64, Instant)>,
+    // the sample rate of an offline render, its copy loads on the first block once fields and state are known
+    offline: Option<f64>,
+    tried: bool,
 }
 
+// every thread keeps its own slots (the engine thread, each offline render), the handles are unique process wide
 thread_local! {
     static SLOTS: RefCell<HashMap<u32, Slot>> = RefCell::new(HashMap::new());
-    static NEXT: Cell<u32> = const { Cell::new(1) };
 }
 
-pub fn create_slot(uuid: String) -> u32 {
-    let handle = NEXT.with(|next| {
-        let handle = next.get();
-        next.set(handle + 1);
-        handle
-    });
+static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+const OFFLINE_LOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+pub fn create_slot(uuid: String) -> u32 {create_any_slot(uuid, None)}
+
+pub fn create_offline_slot(uuid: String, sample_rate: f64) -> u32 {create_any_slot(uuid, Some(sample_rate))}
+
+fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
+    let handle = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     SLOTS.with(|slots| slots.borrow_mut().insert(handle, Slot {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
-        changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new()
+        changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new(),
+        offline, tried: false
     }));
     handle
+}
+
+// the offline render's thread waits for its copy, the render must not start without the plugin
+fn load_offline(handle: u32, slot: &mut Slot, sample_rate: f64) {
+    slot.tried = true;
+    if slot.format.is_empty() || slot.id.is_empty() { return; }
+    let (uuid, format, id) = (slot.uuid.clone(), slot.format.clone(), slot.id.clone());
+    let state = slot.state.clone().filter(|state| !state.is_empty());
+    let (sender, receiver) = std::sync::mpsc::channel();
+    request_main(MainRequest::Run(Box::new(move || {
+        let _ = sender.send(unsafe { instantiate(handle, &uuid, &format, &id, sample_rate, state, true) });
+    })));
+    match receiver.recv_timeout(OFFLINE_LOAD_TIMEOUT) {
+        Ok(Some(Loaded { shared, inbox, ranges })) => {
+            slot.shared = Some(shared);
+            slot.inbox = Some(inbox);
+            slot.ranges = ranges;
+            for (id, (kind, value, modulation)) in std::mem::take(&mut slot.pending) {
+                queue_param(slot, id, kind, value, modulation);
+            }
+        }
+        Ok(None) => eprintln!("[plugins] {} could not load for the offline render", slot.id),
+        Err(_) => eprintln!("[plugins] {} did not load in time for the offline render", slot.id),
+    }
+}
+
+// an offline render ends: its copies are released with it
+pub fn release_thread_slots() {
+    let handles: Vec<u32> = SLOTS.with(|slots| slots.borrow().keys().copied().collect());
+    handles.into_iter().for_each(release);
 }
 
 pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
@@ -1057,6 +1108,11 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         let mut slots = slots.borrow_mut();
         let Some(slot) = slots.get_mut(&handle) else { return };
         if slot.format == format && slot.id == id { return; }
+        if slot.offline.is_some() {
+            slot.format = format;
+            slot.id = id;
+            return;
+        }
         slot.format = format.clone();
         slot.id = id.clone();
         slot.generation += 1;
@@ -1073,7 +1129,7 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         slot.known_state = slot.state.clone();
         notify(&uuid, "status", "loading");
         request_main(MainRequest::Run(Box::new(move || {
-            let shared = unsafe { instantiate(handle, &uuid, &format, &id, sample_rate, state) };
+            let shared = unsafe { instantiate(handle, &uuid, &format, &id, sample_rate, state, false) };
             notify(&uuid, "status", if shared.is_some() { "ready" } else { "failed" });
             LOADED.lock().unwrap().push((handle, generation, shared));
         })));
@@ -1126,6 +1182,10 @@ pub fn set_state(handle: u32, state: Vec<u8>) {
     SLOTS.with(|slots| {
         let mut slots = slots.borrow_mut();
         let Some(slot) = slots.get_mut(&handle) else { return };
+        if slot.offline.is_some() {
+            slot.state = Some(state);
+            return;
+        }
         if is_known(&slot.uuid, &state) { slot.known_state = Some(state.clone()); }
         let unchanged = slot.known_state.as_deref() == Some(state.as_slice());
         slot.state = Some(state.clone());
@@ -1211,6 +1271,7 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
     SLOTS.with(|slots| {
         let mut slots = slots.borrow_mut();
         let Some(slot) = slots.get_mut(&handle) else { return false };
+        if let Some(sample_rate) = slot.offline.filter(|_| !slot.tried) { load_offline(handle, slot, sample_rate); }
         let Some(shared) = slot.shared.as_ref() else { return false };
         if let Some(inbox) = slot.inbox.as_ref() {
             if let Ok(mut inbox) = inbox.try_lock() {
@@ -1224,7 +1285,9 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
                 }
             }
         }
-        let Ok(mut processing) = shared.try_lock() else {
+        // an offline render waits instead of dropping a block
+        let locked = if slot.offline.is_some() { shared.lock().map_err(|_| ()) } else { shared.try_lock().map_err(|_| ()) };
+        let Ok(mut processing) = locked else {
             crate::stats::count(&crate::stats::PLUGIN_SKIPS);
             return false;
         };
@@ -1268,7 +1331,7 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
         let mut output = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
         output.__field0.channelBuffers32 = channels.as_mut_ptr();
         let mut data = ProcessData {
-            processMode: ProcessModes_::kRealtime as i32,
+            processMode: processing.mode,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: frames.min(MAX_BLOCK) as i32,
             numInputs: 0,

@@ -2,6 +2,9 @@ import {int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
 
+type Envelope = { channel?: string, message?: { type?: string, returnId?: number | false } }
+type Pending = { port: Nullable<int>, channel: string, returnId: number }
+
 // An offline render's worker, run in the native engine process on a thread of its own. Message ports travel as
 // relays, the engine state stream and the live stream are mirrored like the realtime engine's.
 export class NativeOfflineWorker implements Port {
@@ -15,6 +18,9 @@ export class NativeOfflineWorker implements Port {
     readonly #portIds = new WeakMap<MessagePort, int>()
     readonly #returning = new Map<int, int>()
     readonly #interval: ReturnType<typeof setInterval>
+    // calls still waiting for an answer, failed when the engine process goes away mid-render
+    readonly #pending = new Map<string, Pending>()
+    #terminated = false
     #nextPort: int = 2
     #pendingSync: Nullable<{ id: int, bytes: Uint8Array }> = null
     #syncApplied = false
@@ -28,13 +34,20 @@ export class NativeOfflineWorker implements Port {
         this.#socket.binaryType = "arraybuffer"
         this.#socket.onopen = () => this.#queue.splice(0).forEach(bytes => this.#socket.send(bytes))
         this.#socket.onmessage = (event: MessageEvent<ArrayBuffer>) => this.#receive(event.data)
-        this.#socket.onclose = () => clearInterval(this.#interval)
+        this.#socket.onclose = (event: CloseEvent) => {
+            clearInterval(this.#interval)
+            if (!event.wasClean && !this.#terminated) {this.#failPending()}
+        }
         this.#interval = setInterval(() => this.#tick(), 8)
     }
 
-    postMessage(data: unknown): void {this.#send({type: "message", data})}
+    postMessage(data: unknown): void {
+        this.#track(null, data)
+        this.#send({type: "message", data})
+    }
 
     terminate(): void {
+        this.#terminated = true
         clearInterval(this.#interval)
         this.#ports.forEach(port => {
             port.onmessage = null
@@ -51,7 +64,10 @@ export class NativeOfflineWorker implements Port {
         this.#nextPort += 2
         this.#portIds.set(port, id)
         this.#ports.set(id, port)
-        port.onmessage = (event: MessageEvent) => this.#send({type: "port", id, data: event.data})
+        port.onmessage = (event: MessageEvent) => {
+            this.#track(id, event.data)
+            this.#send({type: "port", id, data: event.data})
+        }
         return id
     }
 
@@ -67,8 +83,10 @@ export class NativeOfflineWorker implements Port {
     #receive(bytes: ArrayBuffer): void {
         const envelope = this.#shared.decode<ToStudio>(bytes)
         if (envelope.type === "message") {
+            this.#settle(null, envelope.data)
             this.onmessage?.(new MessageEvent("message", {data: envelope.data}))
         } else if (envelope.type === "port") {
+            this.#settle(envelope.id, envelope.data)
             this.#ports.get(envelope.id)?.postMessage(envelope.data)
         } else if (envelope.type === "sync") {
             this.#pendingSync = {id: envelope.id, bytes: envelope.bytes}
@@ -81,6 +99,31 @@ export class NativeOfflineWorker implements Port {
             Atomics.store(new Int8Array(lock), 0, LiveLock.READ)
             this.#returning.set(envelope.lock, envelope.data)
         }
+    }
+
+    #track(port: Nullable<int>, data: unknown): void {
+        const {channel, message} = data as Envelope
+        if (!isDefined(channel) || message?.type !== "send" || typeof message.returnId !== "number") {return}
+        this.#pending.set(`${port}:${channel}:${message.returnId}`, {port, channel, returnId: message.returnId})
+    }
+
+    #settle(port: Nullable<int>, data: unknown): void {
+        const {channel, message} = data as Envelope
+        if (!isDefined(channel) || (message?.type !== "resolve" && message?.type !== "reject")) {return}
+        this.#pending.delete(`${port}:${channel}:${message.returnId}`)
+    }
+
+    #failPending(): void {
+        const reason = new Error("The audio engine stopped during the render.")
+        this.#pending.forEach(({port, channel, returnId}) => {
+            const data = {__id__: "42", channel, message: {type: "reject", returnId, reject: reason}}
+            if (port === null) {
+                this.onmessage?.(new MessageEvent("message", {data}))
+            } else {
+                this.#ports.get(port)?.postMessage(data)
+            }
+        })
+        this.#pending.clear()
     }
 
     // the reader marks a state READ once consumed; a newer state replaces one that is still pending

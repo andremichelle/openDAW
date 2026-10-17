@@ -197,7 +197,7 @@ fn arg_u32(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, index
     args.get(index).uint32_value(scope).unwrap_or(0)
 }
 
-fn arg_string(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, index: i32) -> String {
+pub(crate) fn arg_string(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, index: i32) -> String {
     args.get(index).to_rust_string_lossy(scope)
 }
 
@@ -206,13 +206,13 @@ fn native_create(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, 
     rv.set_uint32(plugins::create_slot(uuid));
 }
 
-fn native_load(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_load(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let (handle, format, id) = (arg_u32(scope, &args, 0), arg_string(scope, &args, 1), arg_string(scope, &args, 2));
     plugins::load(handle, format, id, SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed) as f64);
 }
 
 // (handle, memory buffer, left pointer, right pointer, frames, bpm, position, flags) -> 1 when the plugin wrote output
-fn native_process(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+pub(crate) fn native_process(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     let handle = arg_u32(scope, &args, 0);
     let Ok(buffer) = v8::Local::<v8::ArrayBuffer>::try_from(args.get(1)) else { return rv.set_uint32(0) };
     let (left, right, frames) = (arg_u32(scope, &args, 2) as usize, arg_u32(scope, &args, 3) as usize, arg_u32(scope, &args, 4) as usize);
@@ -228,20 +228,20 @@ fn native_process(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments,
     rv.set_uint32(wrote as u32);
 }
 
-fn native_note(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_note(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let (handle, on, key) = (arg_u32(scope, &args, 0), arg_u32(scope, &args, 1) != 0, arg_u32(scope, &args, 2) as i16);
     let velocity = args.get(3).number_value(scope).unwrap_or(1.0) as f32;
     plugins::note(handle, on, key, velocity);
 }
 
-fn native_param(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_param(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let (handle, id, kind) = (arg_u32(scope, &args, 0), arg_u32(scope, &args, 1), arg_u32(scope, &args, 2));
     let value = args.get(3).number_value(scope).unwrap_or(0.0) as f32;
     let modulation = args.get(4).number_value(scope).unwrap_or(f64::NAN) as f32;
     plugins::param(handle, id, kind, value, modulation);
 }
 
-fn native_state(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_state(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let handle = arg_u32(scope, &args, 0);
     let Ok(buffer) = v8::Local::<v8::ArrayBuffer>::try_from(args.get(1)) else { return };
     let store = buffer.get_backing_store();
@@ -250,11 +250,11 @@ fn native_state(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _
     plugins::set_state(handle, state);
 }
 
-fn native_reset(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_reset(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     plugins::reset(arg_u32(scope, &args, 0));
 }
 
-fn native_release(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn native_release(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     plugins::release(arg_u32(scope, &args, 0));
 }
 

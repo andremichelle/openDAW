@@ -49,7 +49,7 @@ import {EngineExports, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
-import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine, WasmEngineModules} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
 import type {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
@@ -75,6 +75,11 @@ type EngineState = {
 }
 
 let state: Option<EngineState> = Option.None
+
+// Optional: a host running this worker elsewhere adds device modules and host imports of its own
+type EngineModulesExtension = (modules: WasmEngineModules, base: string) => Promise<WasmEngineModules>
+const engineModulesExtension = (): Optional<EngineModulesExtension> =>
+    (globalThis as unknown as {extendEngineModules?: EngineModulesExtension}).extendEngineModules
 
 const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
     const {engine, memory, stems, midi, analyser, peaks, broadcaster} = engineState
@@ -120,7 +125,9 @@ Communicator.executor<OfflineEngineProtocol>(
             // in this worker so the scriptable devices behave exactly as in the worklet.
             ;(globalThis as unknown as {sampleRate: number}).sampleRate = config.sampleRate
             const variant = config.variant as {wasmUrl: string}
-            const modules = await loadEngineModules(variant.wasmUrl)
+            const loaded: WasmEngineModules = await loadEngineModules(variant.wasmUrl)
+            const extension = engineModulesExtension()
+            const modules = isDefined(extension) ? await extension(loaded, variant.wasmUrl) : loaded
             const memory = createEngineMemory()
             const messenger = Messenger.for(enginePort)
             const engineToClient = Communicator.sender<EngineToClient>(

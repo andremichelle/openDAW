@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use tungstenite::{Message, WebSocket};
 
-use crate::{dist, now, platform, print, read, run, PRELUDE};
+use crate::{arg_string, dist, native_load, native_note, native_param, native_process, native_release, native_reset, native_state, now,
+            platform, plugins, print, read, run, PRELUDE};
 
 const TICK: Duration = Duration::from_millis(8);
 
@@ -22,6 +23,15 @@ fn offline_send(_scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, 
         _ => Vec::new(),
     };
     OUTGOING.with(|outgoing| outgoing.borrow_mut().push(bytes));
+}
+
+// a plugin copy of this render, at the render's sample rate (the worker sets the global before the engine starts)
+fn native_create(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let uuid = arg_string(scope, &args, 0);
+    let key = v8::String::new(scope, "sampleRate").unwrap();
+    let sample_rate = scope.get_current_context().global(scope).get(scope, key.into())
+        .and_then(|value| value.number_value(scope)).filter(|rate| *rate > 0.0).unwrap_or(48_000.0);
+    rv.set_uint32(plugins::create_offline_slot(uuid, sample_rate));
 }
 
 fn decode(text: &str) -> String {
@@ -79,6 +89,14 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
     native!("__now", now);
     native!("__read", read);
     native!("__offlineSend", offline_send);
+    native!("__nativeCreate", native_create);
+    native!("__nativeLoad", native_load);
+    native!("__nativeProcess", native_process);
+    native!("__nativeNote", native_note);
+    native!("__nativeState", native_state);
+    native!("__nativeParam", native_param);
+    native!("__nativeReset", native_reset);
+    native!("__nativeRelease", native_release);
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
@@ -121,5 +139,6 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
             if socket.send(Message::Binary(bytes.into())).is_err() { break 'render; }
         }
     }
+    plugins::release_thread_slots();
     println!("[offline] render finished");
 }
