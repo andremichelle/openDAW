@@ -37,7 +37,10 @@ export class OpenSampleAPI implements SampleAPI {
 
     private constructor() {}
 
-    async tree(): Promise<SampleIndex> {return OpenDAWCloud.isAvailable() ? this.#memoized() : SampleIndex.Empty}
+    // a failed fetch (desktop, offline) is an empty catalogue for now, the next use fetches again
+    async tree(): Promise<SampleIndex> {
+        return OpenDAWCloud.isAvailable() ? this.#memoized().catch(() => SampleIndex.Empty) : SampleIndex.Empty
+    }
 
     async all(): Promise<ReadonlyArray<Sample>> {return SampleIndex.flatten(await this.tree())}
 

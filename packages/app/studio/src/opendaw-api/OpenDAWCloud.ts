@@ -7,6 +7,7 @@ export namespace OpenDAWCloud {
     const state = {followsNetwork: false}
 
     export const followNetwork = (): void => {state.followsNetwork = true}
+    export const followsNetwork = (): boolean => state.followsNetwork
     export const isAvailable = (): boolean => !state.followsNetwork || navigator.onLine
     export const unavailable = (resource: string): never => panic(`${resource} is not available without the openDAW cloud`)
 }

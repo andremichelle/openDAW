@@ -14,6 +14,7 @@ import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
 import {openAudioOutputSettings} from "@/ui/mixer/AudioOutputSelector"
 import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
+import {Shell} from "@/platform/desktop/Shell"
 import {openNativePluginsDialog} from "@/platform/desktop/NativePluginsDialog"
 import type {NativePluginInfo} from "@/platform/desktop/engine/NativePlugins"
 
@@ -127,7 +128,8 @@ export namespace DesktopStudioMenu {
                     navigate("Script Editor", "/scripting"),
                     item("Join Live Room...", () => connectRoom(service)),
                     item("Neural Demux...", () => NeuralDemux.run(service).catch(EmptyExec)),
-                    navigate("Statistics", "/stats").addSeparatorBefore()
+                    navigate("Statistics", "/stats").addSeparatorBefore(),
+                    item("Web Inspector", () => Shell.request("inspector", {}))
                 ]
             },
             {

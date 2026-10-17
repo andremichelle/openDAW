@@ -245,6 +245,16 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
             crate::quit_cancelled();
             empty(request, 204)
         }
+        // the page has its own context menu, so the inspector opens from the Tools menu
+        "inspector" => {
+            if let Some(app) = APP.get() {
+                let main = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    if let Some(window) = main.get_webview_window("main") { window.open_devtools(); }
+                });
+            }
+            empty(request, 204)
+        }
         "title" => {
             if let Some(window) = APP.get().and_then(|app| app.get_webview_window("main")) {
                 crate::set_title(&window, query.get("title").map(String::as_str).unwrap_or(""),
