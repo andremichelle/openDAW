@@ -4,11 +4,13 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {BackButton} from "@/ui/pages/BackButton"
 
 const className = Html.adoptStyleSheet(css, "ImprintPage")
 
-export const ImprintPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => (
+export const ImprintPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => (
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
+        <BackButton service={service}/>
         <h1>Imprint</h1>
         <h3>In accordance with § 5 TMG (German Telemedia Act)</h3>
         <h4>Responsible for content:</h4>

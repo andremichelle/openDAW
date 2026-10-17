@@ -5,6 +5,7 @@ import {isDefined, Optional} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 import {PlatformIcons} from "@/ui/pages/PlatformIcons"
+import {BackButton} from "@/ui/pages/BackButton"
 
 const className = Html.adoptStyleSheet(css, "DownloadPage")
 
@@ -40,8 +41,9 @@ const Platform = ({platform, name, icon, note, size, downloads, alternative}: {
     </div>
 )
 
-export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => (
+export const DownloadPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => (
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
+        <BackButton service={service}/>
         <header>
             <h1>openDAW Desktop</h1>
             <p>The full studio as an app on your computer. It runs offline and keeps itself up to date.</p>

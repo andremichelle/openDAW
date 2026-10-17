@@ -4,6 +4,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {Markdown} from "@opendaw/studio-markdown"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {BackButton} from "@/ui/pages/BackButton"
 
 const className = Html.adoptStyleSheet(css, "ManifestoPage")
 
@@ -13,9 +14,10 @@ const loadManifesto = (): Promise<string> =>
         return response.text()
     })
 
-export const ManifestoPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => (
+export const ManifestoPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => (
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
         <div className="content">
+            <BackButton service={service}/>
             <Await factory={loadManifesto}
                    failure={({reason}) => `Could not load the manifesto (${reason})`}
                    loading={() => <p>Loading…</p>}
