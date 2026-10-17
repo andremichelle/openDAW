@@ -56,7 +56,6 @@ export const App = (service: StudioService) => {
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
                     {path: "/install", factory: DownloadPage},
-                    {path: "/download", factory: DownloadPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},

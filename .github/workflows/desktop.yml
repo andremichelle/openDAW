@@ -2,7 +2,7 @@
 name: Build openDAW desktop app
 
 # A tag desktop-v<version> builds macOS, Windows and Linux and publishes them as the latest GitHub Release
-# (the /download page links the files). A tag desktop-test-<n> or a manual run only builds and keeps the files as
+# (the /install page links the files). A tag desktop-test-<n> or a manual run only builds and keeps the files as
 # workflow artifacts for testers, no release.
 on:
   push:
@@ -160,4 +160,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --latest \
             --title "openDAW Desktop ${GITHUB_REF_NAME#desktop-v}" \
-            --notes "macOS, Windows and Linux. The app installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/download"
+            --notes "macOS, Windows and Linux. The app installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/install"
