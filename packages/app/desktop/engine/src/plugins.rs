@@ -1375,8 +1375,9 @@ pub unsafe fn process(handle: u32, input: Option<(*mut f32, *mut f32)>, left: *m
         let context = &mut processing.context;
         context.tempo = bpm as f64;
         context.projectTimeMusic = position / 960.0;
-        context.state = ProcessContext_::StatesAndFlags_::kTempoValid | ProcessContext_::StatesAndFlags_::kProjectTimeMusicValid
-            | if playing { ProcessContext_::StatesAndFlags_::kPlaying } else { 0 };
+        // the flag constants are signed on Windows, unsigned elsewhere
+        context.state = (ProcessContext_::StatesAndFlags_::kTempoValid | ProcessContext_::StatesAndFlags_::kProjectTimeMusicValid
+            | if playing { ProcessContext_::StatesAndFlags_::kPlaying } else { 0 }) as _;
         let mut channels = [left, right];
         let mut output = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
         output.__field0.channelBuffers32 = channels.as_mut_ptr();

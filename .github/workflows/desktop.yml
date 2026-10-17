@@ -2,10 +2,11 @@
 name: Build openDAW desktop app
 
 # A tag desktop-v<version> builds macOS, Windows and Linux and publishes them as the latest GitHub Release
-# (the /download page links the files). A manual run only builds and keeps the files as workflow artifacts.
+# (the /download page links the files). A tag desktop-test-<n> or a manual run only builds and keeps the files as
+# workflow artifacts for testers, no release.
 on:
   push:
-    tags: ["desktop-v*"]
+    tags: ["desktop-v*", "desktop-test-*"]
   workflow_dispatch:
 
 permissions:
@@ -117,6 +118,7 @@ jobs:
         with:
           name: openDAW-${{ matrix.platform }}
           path: dist/*
+          retention-days: 14
 
   release:
     needs: build
