@@ -9,7 +9,8 @@ import {BackButton} from "@/ui/pages/BackButton"
 
 const className = Html.adoptStyleSheet(css, "DownloadPage")
 
-const ReleaseUrl = "https://github.com/andremichelle/openDAW/releases/latest/download"
+// the installers next to the studio on its own server (dev.opendaw.studio/install for the test builds)
+const ReleaseUrl = "/install"
 
 type Download = { label: string, file: string }
 type PlatformKey = "macos" | "windows" | "linux"
