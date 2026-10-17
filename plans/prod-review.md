@@ -28,6 +28,15 @@ the engine refactoring.
 10. **Missing-sample dialogs offline.** Since the offline fix a failed catalogue fetch is an empty catalogue, the
     missing-file check then asks to browse for every uncached cloud sample. Skip the check when the catalogue is
     unavailable.
+11. **SEVERE, open (2026-10-17): Linux does not start, "crossOriginIsolated must be enabled".** The studio's start
+    check needs `window.crossOriginIsolated`. `fb6c67e9c` turns on WebKitGTK's CrossOriginOpenerPolicy and
+    CrossOriginEmbedderPolicy features (2.42+ API, looked up at runtime, `desktop/src/isolation.rs`) on an
+    `about:blank` webview before loading the studio, and logs `[openDAW] WebKitGTK x.y ...`. Still not isolated in
+    the VM. Next: that log line (`~/.local/share/studio.opendaw/logs/openDAW.log`) and AppImage or .deb. Suspects:
+    (1) WebKitGTK older than 2.42 (the .deb uses the system's, Ubuntu 22.04 / Debian 12 may ship older, the AppImage
+    bundles the build machine's), (2) the features are on but that WebKitGTK still does not isolate, (3) fallback:
+    `JSC_useSharedArrayBuffer=1` in the shell's environment before WebKit starts, and a desktop start check that
+    accepts an existing SharedArrayBuffer instead of `crossOriginIsolated` (changes the start check, last resort).
 
 ## One engine, thin entry points
 
