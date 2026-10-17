@@ -105,6 +105,9 @@ Recommended, by value:
   server takes about 100 ms per request. Docs and manuals (832 files) measured 102 s one by one, 15 s with 8. Temporary
   names keep the extension (`main.js.download`), two files differing only in it no longer share one.
 
+- Log file: release builds write the shell's and the engine's output to `<app data>/logs/openDAW.log` (the session
+  before as `openDAW.previous.log`), Tools > Show Log Files opens the folder. The studio's own console is not in it.
+
 ## Refactoring
 
 - `plugins.rs` (2056 lines) into `plugins/{com, handler, instance, slots, process, notices, window/{macos, windows,

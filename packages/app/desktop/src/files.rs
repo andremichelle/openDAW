@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
@@ -245,6 +245,13 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
             crate::quit_cancelled();
             empty(request, 204)
         }
+        "logs" => match crate::log::folder().and_then(Path::to_str) {
+            Some(folder) => match crate::open_in_browser(folder) {
+                Ok(()) => empty(request, 204),
+                Err(error) => text(request, 500, error.to_string()),
+            },
+            None => empty(request, 404),
+        },
         // the page has its own context menu, so the inspector opens from the Tools menu
         "inspector" => {
             if let Some(app) = APP.get() {

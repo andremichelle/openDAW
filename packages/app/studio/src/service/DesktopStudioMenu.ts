@@ -129,7 +129,8 @@ export namespace DesktopStudioMenu {
                     item("Join Live Room...", () => connectRoom(service)),
                     item("Neural Demux...", () => NeuralDemux.run(service).catch(EmptyExec)),
                     navigate("Statistics", "/stats").addSeparatorBefore(),
-                    item("Web Inspector", () => Shell.request("inspector", {}))
+                    item("Web Inspector", () => Shell.request("inspector", {})),
+                    item("Show Log Files", () => Shell.request("logs", {}))
                 ]
             },
             {

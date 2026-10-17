@@ -3,6 +3,7 @@
 
 mod components;
 mod files;
+mod log;
 mod menu;
 mod update;
 mod wclap;
@@ -315,10 +316,12 @@ fn spawn_engine(root: &Path) -> Option<std::process::Child> {
     let binary = engine_binary();
     // the engine exits when this pipe closes, so it never outlives the shell
     let mut command = std::process::Command::new(&binary);
-    let command = without_console(&mut command).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
-        .env("OPENDAW_SHELL_PID", std::process::id().to_string())
-        .stdin(std::process::Stdio::piped()).spawn();
-    command.map_err(|error| eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display())).ok()
+    without_console(&mut command).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
+        .env("OPENDAW_SHELL_PID", std::process::id().to_string()).stdin(std::process::Stdio::piped());
+    if log::folder().is_some() { command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()); }
+    let mut child = command.spawn().map_err(|error| eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display())).ok()?;
+    log::attach(&mut child);
+    Some(child)
 }
 
 fn start_engine(root: &Path) {
@@ -610,6 +613,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let _ = APP.set(handle.clone());
+            if !cfg!(debug_assertions) { log::start(&app.path().app_data_dir()?); }
             #[cfg(target_os = "macos")]
             install_cycle_monitor(handle.clone());
             #[cfg(target_os = "macos")]
