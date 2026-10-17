@@ -101,6 +101,10 @@ Recommended, by value:
   The server's `tar` exit 9 (killed) stays unexplained: `extract.php` sends `2>&1` only for `rm`, tar's own message is
   lost.
 
+- Installer and updates: files download 8 at a time with 3 attempts each (`in_parallel`, `with_retries`, tests), the
+  server takes about 100 ms per request. Docs and manuals (832 files) measured 102 s one by one, 15 s with 8. Temporary
+  names keep the extension (`main.js.download`), two files differing only in it no longer share one.
+
 ## Refactoring
 
 - `plugins.rs` (2056 lines) into `plugins/{com, handler, instance, slots, process, notices, window/{macos, windows,

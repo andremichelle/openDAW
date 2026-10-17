@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -14,6 +14,9 @@ use crate::{set_root, APP, HEADERS, SHELL_API, UPDATE_ORIGIN};
 
 const POINTER_TIMEOUT: Duration = Duration::from_secs(3);
 const BOOT_TIMEOUT: Duration = Duration::from_secs(90);
+// the server takes about 100 ms per request, files download side by side
+const WORKERS: usize = 8;
+const ATTEMPTS: u32 = 3;
 
 #[derive(Deserialize)]
 struct Pointer {
@@ -135,8 +138,43 @@ fn roll_back(web: &Path) -> Option<String> {
     Some(previous)
 }
 
-fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(5)).timeout_read(Duration::from_secs(30)).build()
+pub(crate) fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(5)).timeout_read(Duration::from_secs(30))
+        .max_idle_connections_per_host(WORKERS).build()
+}
+
+// runs work on every item with WORKERS threads, the first failure stops the others from taking more
+pub(crate) fn in_parallel<T: Sync>(items: &[T], work: impl Fn(&T) -> Result<(), String> + Sync) -> Result<(), String> {
+    let next = AtomicUsize::new(0);
+    let failure: Mutex<Option<String>> = Mutex::new(None);
+    std::thread::scope(|scope| {
+        for _ in 0..WORKERS.min(items.len()) {
+            scope.spawn(|| {
+                while failure.lock().unwrap().is_none() {
+                    let Some(item) = items.get(next.fetch_add(1, Ordering::SeqCst)) else { break };
+                    if let Err(error) = work(item) { failure.lock().unwrap().get_or_insert(error); }
+                }
+            });
+        }
+    });
+    failure.into_inner().unwrap().map_or(Ok(()), Err)
+}
+
+pub(crate) fn with_retries(mut attempt: impl FnMut() -> Result<(), String>) -> Result<(), String> {
+    let mut result = attempt();
+    for round in 1..ATTEMPTS {
+        if result.is_ok() || SKIP.load(Ordering::SeqCst) { break; }
+        std::thread::sleep(Duration::from_secs(round as u64));
+        result = attempt();
+    }
+    result
+}
+
+// unique per file, two files differing only in their extension download side by side
+pub(crate) fn temporary_of(target: &Path) -> PathBuf {
+    let mut name = target.file_name().unwrap_or_default().to_os_string();
+    name.push(".download");
+    target.with_file_name(name)
 }
 
 enum Unavailable {
@@ -181,7 +219,7 @@ fn safe_path(path: &str) -> bool {
 
 // The server answers with the brotli file where one exists; ureq decodes it, the checks run on the decoded bytes
 fn download_file(agent: &ureq::Agent, url: &str, target: &Path, entry: &Entry) -> Result<(), String> {
-    let temporary = target.with_extension("download");
+    let temporary = temporary_of(target);
     let response = agent.get(url).call().map_err(|error| format!("{url}: {error}"))?;
     let mut reader = response.into_reader();
     let mut file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
@@ -221,8 +259,8 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
         })
         .unwrap_or_default();
     let partial = web.join(format!("{uuid}.partial"));
-    let mut done = 0u64;
-    let mut transferred = 0u64;
+    let done = Mutex::new(0u64);
+    let transferred = Mutex::new(0u64);
     let wanted = |entry: &&Entry| entry.component.as_deref().map_or(true, crate::components::is_selected);
     let models: Vec<(String, crate::components::Model)> = manifest.components.iter()
         .filter(|component| crate::components::is_selected(&component.name))
@@ -231,12 +269,13 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
         .collect();
     let total = manifest.files.iter().filter(wanted).map(Entry::transfer).sum::<u64>() + models.iter().map(|(_, model)| model.bytes).sum::<u64>();
     progress(0, total);
-    for entry in manifest.files.iter().filter(wanted) {
+    let files: Vec<&Entry> = manifest.files.iter().filter(wanted).collect();
+    if let Some(entry) = files.iter().find(|entry| !safe_path(&entry.path)) {
+        return Err(format!("unsafe path {}", entry.path));
+    }
+    in_parallel(&files, |entry| {
         if SKIP.load(Ordering::SeqCst) {
             return Err("skipped".into());
-        }
-        if !safe_path(&entry.path) {
-            return Err(format!("unsafe path {}", entry.path));
         }
         let target = partial.join(&entry.path);
         if let Some(parent) = target.parent() {
@@ -246,28 +285,36 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
             let copied = local.get(&entry.sha256)
                 .is_some_and(|source| fs::copy(source, &target).is_ok() && matches(&target, entry));
             if !copied {
-                download_file(&agent, &format!("{base}/{}", entry.path), &target, entry)?;
-                transferred += entry.transfer();
+                with_retries(|| download_file(&agent, &format!("{base}/{}", entry.path), &target, entry))?;
+                *transferred.lock().unwrap() += entry.transfer();
             }
         }
-        done += entry.transfer();
-        progress(done, total);
-    }
+        let mut done = done.lock().unwrap();
+        *done += entry.transfer();
+        progress(*done, total);
+        Ok(())
+    })?;
     for (name, model) in &models {
         if SKIP.load(Ordering::SeqCst) {
             return Err("skipped".into());
         }
         let target = crate::components::model_path(name, model).ok_or_else(|| format!("unsafe model path {}", model.path))?;
-        crate::components::fetch(&agent, &model.url, &target, &model.sha256, None, &mut |count| {
-            done += count;
-            progress(done.min(total), total);
+        let start = *done.lock().unwrap();
+        with_retries(|| {
+            *done.lock().unwrap() = start;
+            crate::components::fetch(&agent, &model.url, &target, &model.sha256, None, &mut |count| {
+                let mut done = done.lock().unwrap();
+                *done += count;
+                progress((*done).min(total), total);
+            })
         })?;
-        transferred += model.bytes;
+        *transferred.lock().unwrap() += model.bytes;
     }
     for component in manifest.components.iter().filter(|component| !component.models.is_empty() && crate::components::is_selected(&component.name)) {
         crate::components::mark_models_installed(&component.name)?;
     }
     let files: u64 = manifest.files.iter().map(|entry| entry.size).sum();
+    let transferred = *transferred.lock().unwrap();
     println!("[update] {uuid}: {:.1} MB of files, {:.1} MB downloaded", files as f64 / 1048576.0, transferred as f64 / 1048576.0);
     fs::write(partial.join("manifest.json"), manifest_bytes).map_err(|error| error.to_string())?;
     let complete = web.join(uuid);
@@ -451,3 +498,63 @@ const SPLASH: &str = include_str!("../splash/splash.html");
 const LOGO: &str = include_str!("../../studio/public/favicon.svg");
 const RUBIK_300: &[u8] = include_bytes!("../../studio/public/fonts/rubik-300.woff2");
 const RUBIK_400: &[u8] = include_bytes!("../../studio/public/fonts/rubik-400.woff2");
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    use super::{in_parallel, temporary_of, with_retries};
+
+    #[test]
+    fn every_item_is_worked_on_once() {
+        let items: Vec<usize> = (0..500).collect();
+        let seen = Mutex::new(vec![0u32; items.len()]);
+        assert_eq!(in_parallel(&items, |item| {
+            seen.lock().unwrap()[*item] += 1;
+            Ok(())
+        }), Ok(()));
+        assert!(seen.into_inner().unwrap().iter().all(|count| *count == 1));
+    }
+
+    #[test]
+    fn a_failure_stops_the_rest() {
+        let items: Vec<usize> = (0..10_000).collect();
+        let worked = AtomicUsize::new(0);
+        let result = in_parallel(&items, |item| {
+            worked.fetch_add(1, Ordering::SeqCst);
+            if *item == 3 { Err("broken".into()) } else { Ok(()) }
+        });
+        assert_eq!(result, Err("broken".to_string()));
+        assert!(worked.load(Ordering::SeqCst) < items.len());
+    }
+
+    #[test]
+    fn no_items_is_fine() {
+        assert_eq!(in_parallel(&Vec::<usize>::new(), |_| Err("never".into())), Ok(()));
+    }
+
+    #[test]
+    fn a_failed_attempt_is_tried_again() {
+        let attempts = AtomicUsize::new(0);
+        assert_eq!(with_retries(|| if attempts.fetch_add(1, Ordering::SeqCst) == 0 { Err("dropped".into()) } else { Ok(()) }), Ok(()));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn retries_give_up_after_three_attempts() {
+        let attempts = AtomicUsize::new(0);
+        assert_eq!(with_retries(|| {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            Err("gone".into())
+        }), Err("gone".to_string()));
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn files_differing_in_their_extension_download_apart() {
+        assert_ne!(temporary_of(Path::new("a/main.js")), temporary_of(Path::new("a/main.css")));
+        assert_eq!(temporary_of(Path::new("a/main.js")), Path::new("a/main.js.download"));
+    }
+}

@@ -5,7 +5,6 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -128,7 +127,7 @@ pub fn fetch(agent: &ureq::Agent, url: &str, target: &Path, sha256: &str, size: 
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    let temporary = target.with_extension("download");
+    let temporary = crate::update::temporary_of(target);
     let response = agent.get(url).call().map_err(|error| format!("{url}: {error}"))?;
     let mut reader = response.into_reader();
     let mut file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
@@ -166,20 +165,21 @@ fn install_blocking(name: &str, models: &[Model]) -> Result<(), String> {
         .filter(|model| sha256_of(&directory.join("models").join(&model.path)).as_deref() != Some(model.sha256.as_str()))
         .collect();
     let total = runtime.iter().map(|entry| entry.download.unwrap_or(entry.size)).sum::<u64>() + missing.iter().map(|model| model.bytes).sum::<u64>();
-    let mut done = 0u64;
+    let done = Mutex::new(0u64);
     set_status("downloading", 0, total, "");
-    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout_read(Duration::from_secs(60)).build();
+    let agent = crate::update::agent();
     let release = root.file_name().and_then(|name| name.to_str()).unwrap_or("").to_string();
-    let mut progress = |count: u64| {
-        done += count;
-        set_status("downloading", done.min(total), total, "");
+    let progress = |count: u64| {
+        let mut done = done.lock().unwrap();
+        *done += count;
+        set_status("downloading", (*done).min(total), total, "");
     };
-    for entry in runtime {
+    crate::update::in_parallel(&runtime, |entry| {
         let url = format!("{UPDATE_ORIGIN}/tauri/releases/{release}/{}", entry.path);
-        fetch(&agent, &url, &root.join(&entry.path), &entry.sha256, Some(entry.size), &mut progress)?;
-    }
+        crate::update::with_retries(|| fetch(&agent, &url, &root.join(&entry.path), &entry.sha256, Some(entry.size), &mut |count| progress(count)))
+    })?;
     for model in missing {
-        fetch(&agent, &model.url, &directory.join("models").join(&model.path), &model.sha256, None, &mut progress)?;
+        crate::update::with_retries(|| fetch(&agent, &model.url, &directory.join("models").join(&model.path), &model.sha256, None, &mut |count| progress(count)))?;
     }
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     fs::write(directory.join("selected"), "").map_err(|error| error.to_string())?;
