@@ -2,6 +2,7 @@ import {
     Address,
     ArrayField,
     Box,
+    ByteArrayField,
     Field,
     Fields,
     ObjectField,
@@ -50,7 +51,7 @@ export namespace YMapper {
                         if (isNotUndefined(value)) {field.fromJSON(value as JSONValue)}
                     },
                     visitPrimitiveField: (field: PrimitiveField) => {
-                        if (isNotUndefined(value)) {field.fromJSON(value as JSONValue)}
+                        if (isNotUndefined(value)) {fromY(field, value)}
                     }
                 })
             })
@@ -66,13 +67,26 @@ export namespace YMapper {
         return new Address(UUID.parse(String(uuidAsString)), fieldKeys)
     }
 
+    // Yjs stores only Uint8Array as raw bytes, a view onto the same memory
+    export const toY = (value: unknown): unknown =>
+        value instanceof Int8Array ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength) : value
+
+    export const fromY = (field: PrimitiveField, value: unknown): void => {
+        if (field instanceof ByteArrayField && !field.deprecated && value instanceof Uint8Array) {
+            field.setValue(new Int8Array(value.buffer, value.byteOffset, value.byteLength))
+        } else {
+            field.fromJSON(value as JSONValue)
+        }
+    }
+
     export const findMap = (map: Y.Map<unknown>, fieldKeys: ReadonlyArray<string | number>): Y.Map<unknown> =>
         fieldKeys.reduce((map, key) => asDefined(map.get(String(key)), "Could not findMap") as Y.Map<unknown>, map)
 
     const createDeepMap = (struct: Readonly<Record<string, Field>>): Y.Map<unknown> => Object.entries(struct)
         .reduce((map, [key, field]) => {
             field.accept({
-                visitPrimitiveField: (field: PrimitiveField): unknown => map.set(key, field.toJSON() ?? null),
+                visitPrimitiveField: (field: PrimitiveField): unknown => map.set(key,
+                    field instanceof ByteArrayField && !field.deprecated ? toY(field.getValue()) : field.toJSON() ?? null),
                 visitPointerField: (field: PointerField): unknown => map.set(key, field.toJSON() ?? null),
                 visitArrayField: (field: ArrayField): unknown => map.set(key, createDeepMap(field.record())),
                 visitObjectField: (field: ObjectField<any>): unknown => map.set(key, createDeepMap(field.record()))
