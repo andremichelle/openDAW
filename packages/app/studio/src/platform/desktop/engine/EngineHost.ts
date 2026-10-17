@@ -6,6 +6,7 @@ import {loadEngineModules} from "../../../../../../studio/core-wasm/src/engine-m
 import {WASM_ENGINE_PROCESSOR_NAME} from "../../../../../../studio/core-wasm/src/protocol"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/BridgeLink"
 import {NativePlugins} from "./NativePlugins"
+import {LinkedPort, MidiOutRelay} from "./MidiOutRelay"
 
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
@@ -102,7 +103,11 @@ class EnginePort implements Port {
 }
 
 class Connection {
-    readonly shared = new BridgeShared("engine")
+    readonly shared = new BridgeShared("engine", {
+        idOfPort: (): int => {throw new Error("ports do not travel to the studio")},
+        portOf: (id: int): unknown => new LinkedPort(id)
+    })
+    readonly midiOut = new MidiOutRelay()
     readonly port: EnginePort = new EnginePort(this)
     readonly queue: Array<ToEngine> = []
     readonly inFlight = new Set<int>()
@@ -148,6 +153,7 @@ class Connection {
         const started = performance.now()
         const {status, value, error} = tryCatch(() => this.processor?.process(inputs, [this.main, this.monitor]) ?? false)
         this.#stampClock(started, performance.now())
+        this.#sendMidiOut()
         if (status === "failure") {console.error(`[host] engine ${this.id} threw`, (error as Error)?.stack ?? error)}
         this.alive = status === "success" && value
         if (!this.alive) {
@@ -221,6 +227,13 @@ class Connection {
         })
     }
 
+    #sendMidiOut(): void {
+        const target = this.midiOut.target
+        if (target === null) {return}
+        const events = this.midiOut.take()
+        if (events.length > 0) {this.send({type: "midi-out", port: target.port, buffer: target.buffer, events})}
+    }
+
     // answers both signals of this render (HRClock layout: request counter, start and end counters, start and end time)
     #stampClock(started: number, ended: number): void {
         const counter = Atomics.load(this.clockCounters, 0)
@@ -268,6 +281,7 @@ class Connection {
 
     #handle(envelope: ToEngine): void {
         if (envelope.type === "message") {
+            this.midiOut.intercept(envelope.data, buffer => this.shared.idOf(buffer))
             const started = performance.now()
             this.port.onmessage?.({data: envelope.data} as MessageEvent)
             const elapsed = performance.now() - started

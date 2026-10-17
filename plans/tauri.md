@@ -374,7 +374,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 - Audio goes through `cpal`: CoreAudio, WASAPI, ASIO, ALSA and JACK.
 - MIDI goes through `midir`. This also replaces Web MIDI, which WKWebView and WebKitGTK do not have.
   - Done 2026-10-16: studio-core `MidiAccess` strategy (Web MIDI by default), `NativeMidi` installs the desktop one. The engine always sends a first device list (also empty) and pumps the CoreMIDI run loop, so devices plugged in while the app runs appear within 2 seconds.
-  - **SEVERE, open (found 2026-10-17, code read, not run): MIDI output from the engine is lost on desktop.** A MIDI Output device sends nothing to external gear or other apps. The engine hands its MIDI out to the studio through a SharedArrayBuffer ring plus a wake-up MessagePort (`setupMIDI`, `WasmMidiDrain` -> `MIDISender`, read by the studio's `MIDIReceiver`). Neither crosses the process boundary: `BridgeCodec` turns the port into an inert one and the ring's contents are never mirrored back. Offline renders are unaffected.
+  - **Done 2026-10-17 (simple fix, tested with Logic and Bitwig over the IAC bus; a track listening to IAC loops its own output back, as anywhere): `MidiOutRelay` in the engine host gives `setupMIDI` a local ring, read after every render and written into the studio's ring by its own `MIDISender`. Was SEVERE: MIDI output from the engine is lost on desktop.** A MIDI Output device sends nothing to external gear or other apps. The engine hands its MIDI out to the studio through a SharedArrayBuffer ring plus a wake-up MessagePort (`setupMIDI`, `WasmMidiDrain` -> `MIDISender`, read by the studio's `MIDIReceiver`). Neither crosses the process boundary: `BridgeCodec` turns the port into an inert one and the ring's contents are never mirrored back. Offline renders are unaffected.
     - Simple fix: the engine host gives the drain a local ring and drains it every tick (8 ms), each record goes to the studio as a message; the studio side catches `setupMIDI` on its way out, keeps the studio's real ring and port and writes each record with its own `MIDISender`, so `MIDIReceiver` stays unchanged. Up to ~8 ms extra jitter.
     - Better: the engine process sends MIDI out to its own `midir` outputs with exact timing (it owns the ports already), together with the MIDI out timing work of #356.
   - Engine parity check 2026-10-17 (code read, not run), what else crosses into the engine process:
@@ -519,6 +519,7 @@ Nothing is hidden because it is the desktop app. An online feature stays and wor
 - **Only hidden:** the update poll, because the shell owns updates.
 
 ### E. Desktop behaviour
+- **Important, open (2026-10-17):** the privacy and terms pages have no back button. The desktop app has no browser back button or address bar, so there is no way back to the studio from them.
 1. **Native menu bar**
    - Mirror `StudioMenu.ts` (`populateStudioMenu`) into a Tauri `Menu`:
      - macOS app menu (About, Preferences `Cmd+,`, Hide, Quit `Cmd+Q`);

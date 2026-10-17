@@ -1,6 +1,7 @@
 import {Exec, int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
+import {MIDISender} from "../../../../../../studio/core-processors/src/MIDISender"
 
 // a connection that broke without a close message: the engine process went away
 const AbnormalClosure = 1006
@@ -15,7 +16,12 @@ export class NativeEnginePort implements Port {
     #socket: WebSocket
     #opened = false
     #attempts: int = 0
-    readonly #shared = new BridgeShared("studio")
+    readonly #shared: BridgeShared
+    // ports handed to the engine (the MIDI out wake-up), and the writers into their rings
+    readonly #ports = new Map<int, MessagePort>()
+    readonly #portIds = new WeakMap<MessagePort, int>()
+    readonly #midiSenders = new Map<string, MIDISender>()
+    #nextPort: int = 2
     readonly #queue: Array<ArrayBuffer> = []
     readonly #sync: Uint8Array
     readonly #control: Int32Array
@@ -33,6 +39,7 @@ export class NativeEnginePort implements Port {
                 readonly onInputLatency: Procedure<number>,
                 readonly onLost: Exec,
                 scripts: ReadonlyArray<string>) {
+        this.#shared = new BridgeShared("studio", {idOfPort: (port: MessagePort): int => this.#link(port), portOf: (): unknown => null})
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
@@ -65,6 +72,27 @@ export class NativeEnginePort implements Port {
 
     postMessage(data: unknown): void {this.#send({type: "message", data})}
 
+    #link(port: MessagePort): int {
+        const known = this.#portIds.get(port)
+        if (isDefined(known)) {return known}
+        const id = this.#nextPort
+        this.#nextPort += 2
+        this.#portIds.set(port, id)
+        this.#ports.set(id, port)
+        return id
+    }
+
+    // the engine's MIDI out, written into the studio's ring as the browser engine would
+    #deliverMidiOut(portId: int, bufferId: int, events: ReadonlyArray<{ deviceId: string, data: Uint8Array, timeMs: number }>): void {
+        const key = `${portId}:${bufferId}`
+        const port = this.#ports.get(portId)
+        const buffer = this.#shared.get(bufferId)
+        if (!isDefined(port) || !isDefined(buffer)) {return}
+        const sender = this.#midiSenders.get(key) ?? new MIDISender(port, buffer)
+        this.#midiSenders.set(key, sender)
+        events.forEach(({deviceId, data, timeMs}) => sender.send(deviceId, data, timeMs))
+    }
+
     send(envelope: ToEngine): void {this.#send(envelope)}
 
     #send(envelope: ToEngine): void {
@@ -95,6 +123,8 @@ export class NativeEnginePort implements Port {
             this.onRecordData(envelope.uuid, envelope.first, envelope.planes)
         } else if (envelope.type === "input-latency") {
             this.onInputLatency(envelope.seconds)
+        } else if (envelope.type === "midi-out") {
+            this.#deliverMidiOut(envelope.port, envelope.buffer, envelope.events)
 
         } else if (envelope.type === "live") {
             const data = this.#shared.get(envelope.data)
