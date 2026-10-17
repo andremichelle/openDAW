@@ -21,17 +21,6 @@ use crate::{request_main, MainRequest};
 const MAX_BLOCK: usize = 128;
 const STATE_MAGIC: &[u8; 4] = b"ODV3";
 
-#[derive(Serialize, Clone)]
-pub struct PluginInfo {
-    pub format: String,
-    pub id: String,
-    pub name: String,
-    pub vendor: String,
-    pub kind: String,
-    #[serde(skip)]
-    pub path: PathBuf,
-}
-
 #[derive(Serialize)]
 struct Notice {
     uuid: String,
@@ -40,7 +29,6 @@ struct Notice {
     value: String,
 }
 
-static CATALOGUE: Mutex<Vec<PluginInfo>> = Mutex::new(Vec::new());
 static NOTICES: Mutex<Vec<Notice>> = Mutex::new(Vec::new());
 static LOADED: Mutex<Vec<(u32, u32, Option<Loaded>)>> = Mutex::new(Vec::new());
 
@@ -74,6 +62,7 @@ pub fn serve_notices(mut socket: tungstenite::WebSocket<std::net::TcpStream>) {
             if socket.send(tungstenite::Message::Text(json.into())).is_err() { break; }
         }
         match socket.read() {
+            Ok(tungstenite::Message::Text(text)) => scan_request(&text),
             Ok(tungstenite::Message::Close(_)) => break,
             Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(_) => break,
@@ -83,95 +72,19 @@ pub fn serve_notices(mut socket: tungstenite::WebSocket<std::net::TcpStream>) {
     println!("[plugins] studio disconnected");
 }
 
-// ---------- scanning ----------
-
-fn vst3_folders() -> Vec<PathBuf> {
-    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
-    if cfg!(target_os = "macos") {
-        vec![PathBuf::from("/Library/Audio/Plug-Ins/VST3"), home.join("Library/Audio/Plug-Ins/VST3")]
-    } else if cfg!(target_os = "windows") {
-        vec![PathBuf::from(std::env::var("CommonProgramFiles").unwrap_or("C:\\Program Files\\Common Files".into())).join("VST3")]
-    } else {
-        vec![home.join(".vst3"), PathBuf::from("/usr/lib/vst3"), PathBuf::from("/usr/local/lib/vst3")]
-    }
+#[derive(serde::Deserialize)]
+struct ScanRequest {
+    folders: Vec<String>,
+    force: bool,
 }
 
-fn bundles(folder: &Path, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(folder) else { return };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_some_and(|extension| extension == "vst3") {
-            found.push(path);
-        } else if path.is_dir() {
-            bundles(&path, found);
-        }
-    }
-}
-
-// moduleinfo.json is written by hand-rolled serialisers: trailing commas are common
-fn lenient_json(text: &str) -> Option<serde_json::Value> {
-    let mut cleaned = String::with_capacity(text.len());
-    let chars: Vec<char> = text.chars().collect();
-    let mut in_string = false;
-    let mut index = 0;
-    while index < chars.len() {
-        let char = chars[index];
-        if in_string {
-            cleaned.push(char);
-            if char == '\\' && index + 1 < chars.len() {
-                cleaned.push(chars[index + 1]);
-                index += 1;
-            } else if char == '"' {
-                in_string = false;
-            }
-        } else if char == '"' {
-            in_string = true;
-            cleaned.push(char);
-        } else if char == ',' {
-            let next = chars[index + 1..].iter().find(|next| !next.is_whitespace());
-            if !matches!(next, Some('}') | Some(']')) { cleaned.push(char); }
-        } else {
-            cleaned.push(char);
-        }
-        index += 1;
-    }
-    serde_json::from_str(&cleaned).ok()
-}
-
-fn describe(bundle: &Path) -> Vec<PluginInfo> {
-    let Ok(text) = std::fs::read_to_string(bundle.join("Contents/Resources/moduleinfo.json")) else { return Vec::new() };
-    let Some(json) = lenient_json(&text) else { return Vec::new() };
-    let factory_vendor = json["Factory Info"]["Vendor"].as_str().unwrap_or("").to_string();
-    json["Classes"].as_array().map(|classes| classes.iter()
-        .filter(|class| class["Category"] == "Audio Module Class")
-        .filter_map(|class| {
-            let id = class["CID"].as_str()?.to_string();
-            let instrument = class["Sub Categories"].as_array()
-                .is_some_and(|categories| categories.iter().any(|category| category == "Instrument"));
-            Some(PluginInfo {
-                format: "vst3".into(),
-                id,
-                name: class["Name"].as_str().unwrap_or("").to_string(),
-                vendor: class["Vendor"].as_str().map(str::to_string).unwrap_or(factory_vendor.clone()),
-                kind: if instrument { "instrument" } else { "effect" }.into(),
-                path: bundle.to_path_buf(),
-            })
-        }).collect()).unwrap_or_default()
-}
-
-pub fn scan() -> String {
-    let mut found = Vec::new();
-    for folder in vst3_folders() { bundles(&folder, &mut found); }
-    let catalogue: Vec<PluginInfo> = found.iter().flat_map(|bundle| describe(bundle)).collect();
-    println!("[plugins] {} plugins in {} bundles", catalogue.len(), found.len());
-    let json = serde_json::to_string(&catalogue).unwrap();
-    *CATALOGUE.lock().unwrap() = catalogue;
-    json
-}
-
-fn find(format: &str, id: &str) -> Option<PluginInfo> {
-    if CATALOGUE.lock().unwrap().is_empty() { scan(); }
-    CATALOGUE.lock().unwrap().iter().find(|info| info.format == format && info.id == id).cloned()
+// scanning loads plugins in their own processes and can take seconds, so it runs on a thread of its own
+fn scan_request(text: &str) {
+    let Ok(ScanRequest { folders, force }) = serde_json::from_str::<ScanRequest>(text) else { return };
+    std::thread::spawn(move || {
+        let catalogue = crate::scan::run(&folders, force);
+        notify("", "plugins", serde_json::to_string(&catalogue).unwrap());
+    });
 }
 
 // ---------- COM objects the host implements ----------
@@ -527,8 +440,8 @@ unsafe impl Send for Processing {}
 
 type Shared = Arc<Mutex<Processing>>;
 
-struct Module {
-    factory: ComPtr<IPluginFactory>,
+pub(crate) struct Module {
+    pub(crate) factory: ComPtr<IPluginFactory>,
     _library: libloading::Library,
     #[cfg(target_os = "macos")]
     _bundle: core_foundation::bundle::CFBundle,
@@ -543,6 +456,8 @@ struct Editor {
     controller: ComPtr<IEditController>,
     shared: Shared,
     view: RefCell<Option<ComPtr<IPlugView>>>,
+    // a plugin may change its parameters when its editor opens without telling the host (BA-1 loads its preset)
+    reread_at: Cell<Option<Instant>>,
     inbox: SharedInbox,
     handler: ComWrapper<ComponentHandler>,
 }
@@ -569,14 +484,15 @@ fn check(label: &str, result: tresult) -> bool {
     result == kResultOk
 }
 
-unsafe fn module(path: &Path) -> Option<Rc<Module>> {
+pub(crate) unsafe fn module(path: &Path) -> Option<Rc<Module>> {
     if let Some(module) = MODULES.with(|modules| modules.borrow().get(path).cloned()) { return Some(module); }
+    #[cfg(not(target_os = "macos"))]
     let name = path.file_stem()?.to_string_lossy().to_string();
     #[cfg(target_os = "macos")]
     let (binary, bundle) = {
         use core_foundation::url::CFURL;
         let bundle = core_foundation::bundle::CFBundle::new(CFURL::from_path(path, true)?)?;
-        (path.join("Contents/MacOS").join(&name), bundle)
+        (crate::scan::bundle_binary(path), bundle)
     };
     #[cfg(target_os = "windows")]
     let binary = path.join("Contents").join(if cfg!(target_arch = "aarch64") { "arm64-win" } else { "x86_64-win" }).join(format!("{name}.vst3"));
@@ -626,8 +542,9 @@ unsafe fn create<T: Interface>(factory: &ComPtr<IPluginFactory>, cid: &TUID) -> 
 // main thread
 unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>) -> Option<Loaded> {
     if format != "vst3" { return None; }
-    let info = find(format, id)?;
-    let module = module(&info.path)?;
+    let info = crate::scan::find(format, id)?;
+    let _loading = crate::scan::Loading::new(&info.path);
+    let module = module(Path::new(&info.path))?;
     let cid = parse_cid(id)?;
     let host = ComWrapper::new(Host);
     let host_unknown = host.to_com_ptr::<IHostApplication>()?.into_raw() as *mut FUnknown;
@@ -654,7 +571,14 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
         applying: Cell::new(false)
     });
     controller.setComponentHandler(handler.to_com_ptr::<IComponentHandler>()?.into_raw());
-    if let Some(state) = state { apply_state_quietly(&handler, &component, &controller, &state); } else { sync_controller(&component, &controller); }
+    // both are the host's own doing: the plugin's "values changed" during them restates what the host just set
+    if let Some(state) = state {
+        apply_state_quietly(&handler, &component, &controller, &state);
+    } else {
+        handler.applying.set(true);
+        sync_controller(&component, &controller);
+        handler.applying.set(false);
+    }
     let processor = component.cast::<IAudioProcessor>()?;
     let audio_ins = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32);
     let audio_outs = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32);
@@ -690,7 +614,7 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     notify(uuid, "params", serde_json::to_string(&automatable(&infos)).unwrap());
     EDITORS.with(|editors| editors.borrow_mut().insert(handle, Rc::new(Editor {
         uuid: uuid.to_string(), name: info.name.clone(), component, controller, shared: shared.clone(), view: RefCell::new(None),
-        inbox: inbox.clone(), handler
+        reread_at: Cell::new(None), inbox: inbox.clone(), handler
     })));
     println!("[plugins] {} ready ({} {}, {} parameters)", info.name, info.vendor, id, infos.len());
     Some(Loaded { shared, inbox, ranges })
@@ -742,13 +666,18 @@ fn mark_dirty(handle: u32) {
 }
 
 // reading a state can block the plugin's processing, so it happens only when it is needed: closing the window, saving
+// read on every save and window close: plugins do not always report a change (BA-1 loads its preset silently), an
+// unchanged state is not sent again
 fn save(handle: u32, editor: &Editor) {
-    if !DIRTY.with(|dirty| dirty.borrow_mut().remove(&handle)) { return; }
+    DIRTY.with(|dirty| dirty.borrow_mut().remove(&handle));
     let started = Instant::now();
     let state = unsafe { read_state(&editor.component, &editor.controller) };
     crate::stats::count(&crate::stats::STATE_READS);
     crate::stats::record_max(&crate::stats::MAX_STATE_US, started);
-    KNOWN_STATES.lock().unwrap().get_or_insert_with(HashMap::new).insert(editor.uuid.clone(), state.clone());
+    let mut known = KNOWN_STATES.lock().unwrap();
+    let known = known.get_or_insert_with(HashMap::new);
+    if known.get(&editor.uuid) == Some(&state) { return; }
+    known.insert(editor.uuid.clone(), state.clone());
     STATES.lock().unwrap().push((editor.uuid.clone(), state));
 }
 
@@ -781,14 +710,16 @@ unsafe fn close_view(handle: u32, editor: &Editor) {
 }
 
 // main thread, every few milliseconds: windows closed with their close button, the window level
+const REREAD_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
+
 pub fn tick() {
     for (_, editor) in all_editors() {
-        let values: Vec<(ParamID, f64)> = match editor.inbox.try_lock() {
-            Ok(mut inbox) if !inbox.to_gui.is_empty() => inbox.to_gui.drain().collect(),
-            _ => continue,
-        };
-        for (id, normalized) in values { unsafe { editor.controller.setParamNormalized(id, normalized); } }
+        if editor.reread_at.get().is_some_and(|at| Instant::now() >= at) {
+            editor.reread_at.set(None);
+            unsafe { editor.handler.reread(false); }
+        }
     }
+    for (_, editor) in all_editors() { unsafe { flush_display(&editor); } }
     for handle in windows::closed() {
         if let Some(editor) = editor(handle) {
             unsafe { close_view(handle, &editor); }
@@ -807,6 +738,15 @@ pub fn save_all() {
 
 pub fn cycle_in() {request_main(MainRequest::Run(Box::new(windows::cycle_in)));}
 
+// the host's values for the editor display; a value the plugin already has is not written again
+unsafe fn flush_display(editor: &Editor) {
+    let values: Vec<(ParamID, f64)> = editor.inbox.lock().unwrap().to_gui.drain().collect();
+    for (id, normalized) in values {
+        if (editor.controller.getParamNormalized(id) - normalized).abs() < 1e-7 { continue; }
+        editor.controller.setParamNormalized(id, normalized);
+    }
+}
+
 unsafe fn open_view(handle: u32) {
     let Some(editor) = editor(handle) else { return };
     {
@@ -814,6 +754,8 @@ unsafe fn open_view(handle: u32) {
             windows::front(handle);
             return;
         }
+        // display values queued before must land before the editor exists, it may load a preset when it is created
+        flush_display(&editor);
         let Some(view) = ComPtr::<IPlugView>::from_raw(editor.controller.createView(b"editor\0".as_ptr() as FIDString)) else {
             notify(&editor.uuid, "gui", "unavailable");
             return;
@@ -833,6 +775,8 @@ unsafe fn open_view(handle: u32) {
             return;
         }
         *editor.view.borrow_mut() = Some(view);
+        editor.handler.reread(false);
+        editor.reread_at.set(Some(Instant::now() + REREAD_DELAY));
         notify(&editor.uuid, "gui", "open");
     }
 }
@@ -1170,6 +1114,8 @@ mod windows {
                 if handled.as_bool() || !event.modifierFlags().contains(NSEventModifierFlags::Command) { return handled; }
                 if event.keyCode() == CLOSE_KEY {
                     if let Some(window) = self.window() { window.performClose(None); }
+                } else if event.keyCode() == QUIT_KEY {
+                    request_shell("/__quit");
                 } else {
                     forward(event, "keydown");
                 }
@@ -1179,6 +1125,15 @@ mod windows {
     );
 
     const CLOSE_KEY: u16 = 13;
+    const QUIT_KEY: u16 = 12;
+
+    fn request_shell(path: &'static str) {
+        std::thread::spawn(move || {
+            if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", 47110)) {
+                let _ = stream.write_all(format!("GET {path} HTTP/1.0\r\n\r\n").as_bytes());
+            }
+        });
+    }
 
     // macOS virtual key codes to the DOM `code` the studio's shortcuts match
     fn dom_code(key: u16) -> Option<&'static str> {
@@ -1261,7 +1216,12 @@ mod windows {
             let mut windows = windows.borrow_mut();
             windows.iter().position(|(id, _)| *id == handle).map(|index| windows.remove(index).1)
         });
-        if let Some(window) = removed { window.close(); }
+        let Some(window) = removed else { return };
+        window.close();
+        // the engine is an app of its own: with its last window gone, the studio's main window takes the focus back
+        if WINDOWS.with(|windows| windows.borrow().is_empty()) && NSApplication::sharedApplication(mtm()).isActive() {
+            cycle_home();
+        }
     }
 
     // windows the user closed with the close button

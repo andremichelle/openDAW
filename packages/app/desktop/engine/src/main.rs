@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 mod audio;
 mod midi;
 mod plugins;
+mod scan;
 mod stats;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -199,11 +200,6 @@ fn arg_string(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, in
     args.get(index).to_rust_string_lossy(scope)
 }
 
-fn native_scan(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
-    let json = plugins::scan();
-    rv.set(v8::String::new(scope, &json).unwrap().into());
-}
-
 fn native_create(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     let uuid = arg_string(scope, &args, 0);
     rv.set_uint32(plugins::create_slot(uuid));
@@ -331,7 +327,6 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__inputInfo", input_info);
     native!("__inputLatency", input_latency);
     native!("__inputDevices", input_devices);
-    native!("__nativeScan", native_scan);
     native!("__nativeCreate", native_create);
     native!("__nativeLoad", native_load);
     native!("__nativeProcess", native_process);
@@ -612,6 +607,9 @@ fn serve(events: Sender<Event>, token: String) {
 }
 
 fn main() {
+    if let [_, flag, bundle] = std::env::args().collect::<Vec<_>>().as_slice() {
+        if flag == "--scan" { scan::scan_process(bundle); }
+    }
     STARTED.set(Instant::now()).unwrap();
     // the shell holds our stdin and sends commands on it; when it goes away, so do we
     std::thread::spawn(|| {

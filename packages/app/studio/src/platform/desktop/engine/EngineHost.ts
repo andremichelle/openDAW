@@ -277,8 +277,6 @@ class Connection {
             this.captures.delete(UUID.toString(envelope.uuid as UUID.Bytes))
             refreshInput()
             this.updateMonitoringMap()
-        } else if (envelope.type === "native-scan") {
-            this.send({type: "native-plugins", plugins: NativePlugins.scan()})
         } else if (envelope.type === "native-save") {
             NativePlugins.saveAll()
         } else if (envelope.type === "native-gui") {

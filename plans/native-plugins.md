@@ -70,6 +70,28 @@ Default folders, plus user folders in the settings:
 2. First run of `desktop.yml`: installers have never been built, Windows and Linux have never compiled.
 3. A small macOS group gets unsigned builds with instructions (Gatekeeper blocks or calls the app damaged).
 
+## Finding plugins and plugin types (next, in this order)
+
+**Finding plugins**
+1. Folders: the system defaults plus the user's own folders, kept by the studio, sent with every scan request.
+2. Scan process: bundles without `moduleinfo.json` are described by the engine binary run as `--scan <bundle>`, a
+   separate process with a timeout. A plugin that crashes it is marked "failed", the engine is never at risk.
+3. Scan cache in the app data folder (path + modification time), only new or changed bundles are scanned again.
+4. Architecture check from the binary header: an Intel-only plugin on Apple Silicon is "not compatible".
+5. A plugin that took the engine down while loading is marked "crashed" (a marker written before loading, cleared
+   after), until it is rescanned.
+6. "Manage Plugins…" (desktop): folders (add, remove), Rescan, every plugin with its status.
+7. The Plugins menu: Instruments and Effects, grouped by vendor.
+8. Scanning never runs on the engine thread: requests and results travel on the `/native` socket.
+
+**Types**
+- Instrument: VST3 sub-category "Instrument". Effect: "Fx". MIDI effect: no category of its own, recognised by its
+  buses (events in and out, no audio), which the scan records.
+- Audio effects: `NativeEffectBox`, adapter, desktop effect device (audio through the plugin, passthrough while not
+  ready), browser keeps a silent placeholder with all its boxes (check the browser engine passes an unknown effect).
+- MIDI effects: `NativeMidiEffectBox`, the plugin's output events (with sample offsets) go back into the chain.
+- Latency: shown first, compensated later (engine-wide delay compensation).
+
 ## Gaps that change things
 
 1. **Signing vs. plugins (macOS):** a signed, notarized app runs with the hardened runtime, which refuses third-party
@@ -177,3 +199,17 @@ before a wider test.
 - Native editor looks like the WebCLAP editor (same styles, duplicated with a note): plugin box (name, vendor or
   status), Load Plugin (installed instruments, a switch clears the state), Open UI, Parameters. The Parameters menu
   moved into the shared `ui/devices/ParametersMenu.tsx`, used by both editors (WebCLAP behaviour unchanged).
+- 2026-10-17 finding plugins (UNCOMMITTED, app-untested): `engine/src/scan.rs`. Bundles without moduleinfo.json are
+  described by `opendaw-engine --scan <bundle>` (a separate process, 20 s timeout, its printed result counts even if
+  the plugin crashes while the process exits, e.g. Cardinal, exit 139). Bundles with only private classes (Yamaha DSP,
+  category "Private") are not listed. Cache `~/Library/Caches/openDAW/plugins.json` (path + modification time),
+  architecture check from the Mach-O header, crash marker set while a plugin loads (`scan::Loading`, cleared on drop).
+  Scan requests and results travel on `/native`, never the engine thread. This machine: 3 plugins before, 33 now
+  (12 instruments, 21 effects), full rescan ~2 s, cached ~12 ms. Studio: Plugins ▸ Instruments ▸ vendor ▸ plugin,
+  "Manage Plugins…" dialog (own folders via the shell's `pick-folder`, Rescan, every plugin with type and status).
+- 2026-10-17 BA-1 loads its default preset only when its editor is created and tells the host nothing (probe: 20 of
+  46 values change on `createView`), the default box values then overwrote the preset in the processor. A plugin's
+  parameters are read again right after its window opens and 500 ms later, changes go to their boxes like a preset
+  switch. New plugins (VST and WebCLAP) open their window once ready. Cmd+Q in a plugin window goes to the shell
+  (`/__quit`, with the unsaved-changes question), the studio's main window takes the focus back when the last plugin
+  window closes. Bundle binaries are found via Info.plist (`CFBundleExecutable`), other bundles (.app) are not searched.

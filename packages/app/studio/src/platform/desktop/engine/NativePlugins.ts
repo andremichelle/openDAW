@@ -1,6 +1,5 @@
 import {int, UUID} from "@opendaw/lib-std"
 
-declare const __nativeScan: () => string
 declare const __nativeCreate: (uuid: string) => int
 declare const __nativeLoad: (handle: int, format: string, id: string) => void
 declare const __nativeProcess: (handle: int, memory: ArrayBuffer, left: int, right: int, frames: int, bpm: number, position: number, flags: int) => int
@@ -13,8 +12,11 @@ declare const __nativeOpenGui: (uuid: string) => void
 declare const __nativeCloseGui: (uuid: string) => void
 declare const __nativeSaveAll: () => void
 
-export type NativePluginInfo = { format: string, id: string, name: string, vendor: string, kind: "instrument" | "effect" }
-export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param", value: string }
+export type NativePluginInfo = {
+    format: string, id: string, name: string, vendor: string, kind: "instrument" | "effect" | "", path: string
+    status: "ok" | "failed" | "incompatible" | "crashed"
+}
+export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param" | "plugins", value: string }
 
 export const NativeInstrumentBoxType = "NativeInstrumentBox"
 
@@ -50,8 +52,6 @@ export namespace NativePlugins {
             host_native_release: (handle: int): void => __nativeRelease(handle)
         }
     }
-
-    export const scan = (): Array<NativePluginInfo> => JSON.parse(__nativeScan())
 
     export const openGui = (uuid: string, open: boolean): void => open ? __nativeOpenGui(uuid) : __nativeCloseGui(uuid)
 

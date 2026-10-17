@@ -116,6 +116,10 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
                 Err(error) => text(request, 500, error.to_string()),
             },
         },
+        "pick-folder" => match chosen(APP.get().expect("app not ready").dialog().file().blocking_pick_folder()) {
+            None => empty(request, 204),
+            Some(path) => text(request, 200, path.to_string_lossy().into_owned()),
+        },
         "open" => {
             let paths: Vec<PathBuf> = if options.multiple {
                 dialog(&options).blocking_pick_files().unwrap_or_default()

@@ -35,15 +35,19 @@ export const NativeInstrumentEditor = ({lifecycle, service, adapter, deviceHost}
                         parameters={adapter.parameters} tracks={() => adapter.deviceHost().audioUnitBoxAdapter().tracks}/>
     )
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-        ...NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument").map(plugin =>
+        ...NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument" && plugin.status === "ok").map(plugin =>
             MenuItem.default({label: plugin.name, checked: plugin.id === adapter.pluginIdField.getValue()})
-                .setTriggerProcedure(() => plugin.id !== adapter.pluginIdField.getValue() && project.editing.modify(() => {
-                    adapter.box.state.setValue(new Int8Array(0))
-                    adapter.formatField.setValue(plugin.format)
-                    adapter.pluginIdField.setValue(plugin.id)
-                    adapter.pluginNameField.setValue(plugin.name)
-                    adapter.vendorField.setValue(plugin.vendor)
-                })))))
+                .setTriggerProcedure(() => {
+                    if (plugin.id === adapter.pluginIdField.getValue()) {return}
+                    NativePluginHost.openOnceReady(uuid)
+                    project.editing.modify(() => {
+                        adapter.box.state.setValue(new Int8Array(0))
+                        adapter.formatField.setValue(plugin.format)
+                        adapter.pluginIdField.setValue(plugin.id)
+                        adapter.pluginNameField.setValue(plugin.name)
+                        adapter.vendorField.setValue(plugin.vendor)
+                    })
+                }))))
     const update = (): void => {
         const status = NativePluginHost.status(uuid)
         const name = adapter.pluginNameField.getValue()

@@ -14,6 +14,7 @@ import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
 import {openAudioOutputSettings} from "@/ui/mixer/AudioOutputSelector"
 import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
+import {openNativePluginsDialog} from "@/platform/desktop/NativePluginsDialog"
 
 export namespace DesktopStudioMenu {
     export type NativeRole = "about" | "services" | "hide" | "hide-others" | "show-all" | "quit"
@@ -115,9 +116,20 @@ export namespace DesktopStudioMenu {
             },
             {
                 label: "Plugins", entries: [
-                    ...NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument").map(plugin =>
-                        item(plugin.name, () => NativePluginHost.createInstrument(service, plugin), service.hasProfile)),
-                    item("Rescan", () => NativePluginHost.rescan()).addSeparatorBefore()
+                    MenuItem.default({label: "Instruments"}).setRuntimeChildrenProcedure(parent => {
+                        const instruments = NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument" && plugin.status === "ok")
+                        if (instruments.length === 0) {
+                            parent.addMenuItem(MenuItem.default({
+                                label: NativePluginHost.isScanning() ? "Scanning…" : "No instruments found", selectable: false
+                            }))
+                            return
+                        }
+                        const vendors = Array.from(new Set(instruments.map(plugin => plugin.vendor)))
+                        parent.addMenuItem(...vendors.map(vendor => MenuItem.default({label: vendor.length > 0 ? vendor : "Unknown"})
+                            .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...instruments.filter(plugin => plugin.vendor === vendor)
+                                .map(plugin => item(plugin.name, () => NativePluginHost.createInstrument(service, plugin), service.hasProfile))))))
+                    }),
+                    item("Manage Plugins…", () => openNativePluginsDialog()).addSeparatorBefore()
                 ]
             },
             {label: "Window", role: "window", entries: ["minimize", "zoom"]},

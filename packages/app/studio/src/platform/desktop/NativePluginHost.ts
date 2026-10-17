@@ -1,4 +1,5 @@
-import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, Subscription, UUID} from "@opendaw/lib-std"
+import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {Platform} from "@opendaw/lib-dom"
 import {BoxGraph, Field} from "@opendaw/lib-box"
 import {BoxIO, NativeInstrumentBox} from "@opendaw/studio-boxes"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
@@ -15,10 +16,14 @@ export type NativeStatus = "loading" | "ready" | "failed"
 export namespace NativePluginHost {
     const state: {
         port: Nullable<NativeEnginePort>, service: Nullable<StudioService>, plugins: ReadonlyArray<NativePluginInfo>
-        notices: Nullable<WebSocket>
-    } = {port: null, service: null, plugins: [], notices: null}
+        notices: Nullable<WebSocket>, scanning: boolean
+    } = {port: null, service: null, plugins: [], notices: null, scanning: false}
     const statuses = new Map<string, NativeStatus>()
     const openWindows = new Set<string>()
+    // plugins just added open their window once ready, as in other hosts (some apply their default preset only then)
+    const openWhenReady = new Set<string>()
+
+    export const openOnceReady = (uuid: string): void => {openWhenReady.add(uuid)}
     const notifier = new Notifier<void>()
     const catalogue = new Notifier<void>()
 
@@ -28,6 +33,7 @@ export namespace NativePluginHost {
     export const attachService = (service: StudioService): void => {
         state.service = service
         service.projectProfileService.addBeforeSave(flush)
+        connect()
     }
 
     // the engine writes every changed plugin state into its box, then answers "saved"
@@ -43,28 +49,52 @@ export namespace NativePluginHost {
         return promise
     }
 
-    export const attachPort = (port: NativeEnginePort): void => {
-        state.port = port
-        port.send({type: "native-scan"})
-        if (state.notices === null) {
-            const {engine} = Shell.info()
-            if (!isDefined(engine)) {return}
-            const socket = new WebSocket(`ws://127.0.0.1:${engine.port}/native?token=${engine.token}`)
-            socket.binaryType = "arraybuffer"
-            socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
-                const {data} = event
-                if (typeof data === "string") {
-                    deliverNotices(JSON.parse(data))
-                } else {
-                    storeState(new TextDecoder().decode(new Uint8Array(data, 0, UuidLength)), new Int8Array(data, UuidLength))
-                }
-            }
-            socket.onclose = () => state.notices = null
-            state.notices = socket
-        }
+    // the user's own plugin folders, scanned with the system folders
+    const FoldersKey = "opendaw:native-plugin-folders"
+
+    export const folders = (): ReadonlyArray<string> => {
+        const stored = tryCatch(() => JSON.parse(Platform.storage().getItem(FoldersKey) ?? "[]"))
+        return stored.status === "success" && Array.isArray(stored.value) ? stored.value.filter(folder => typeof folder === "string") : []
     }
 
-    export const rescan = (): void => state.port?.send({type: "native-scan"})
+    export const setFolders = (list: ReadonlyArray<string>): void => {
+        Platform.storage().setItem(FoldersKey, JSON.stringify(list))
+        rescan(false)
+    }
+
+    // scanning runs in the engine process on a thread of its own, the result arrives as a "plugins" notice
+    export const rescan = (force: boolean = true): void => {
+        state.scanning = true
+        catalogue.notify()
+        const request = JSON.stringify({folders: folders(), force})
+        const socket = state.notices
+        if (socket === null) {return}
+        if (socket.readyState === WebSocket.OPEN) {socket.send(request)} else {socket.addEventListener("open", () => socket.send(request), {once: true})}
+    }
+
+    export const isScanning = (): boolean => state.scanning
+
+    export const attachPort = (port: NativeEnginePort): void => {state.port = port}
+
+    // the notices (plugins, states, windows) need no project, the socket opens with the engine process
+    const connect = (): void => {
+        if (state.notices !== null) {return}
+        const {engine} = Shell.info()
+        if (!isDefined(engine)) {return}
+        const socket = new WebSocket(`ws://127.0.0.1:${engine.port}/native?token=${engine.token}`)
+        socket.binaryType = "arraybuffer"
+        socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
+            const {data} = event
+            if (typeof data === "string") {
+                deliverNotices(JSON.parse(data))
+            } else {
+                storeState(new TextDecoder().decode(new Uint8Array(data, 0, UuidLength)), new Int8Array(data, UuidLength))
+            }
+        }
+        socket.onclose = () => state.notices = null
+        state.notices = socket
+        rescan(false)
+    }
 
     export const plugins = (): ReadonlyArray<NativePluginInfo> => state.plugins
 
@@ -78,8 +108,9 @@ export namespace NativePluginHost {
 
     export const subscribeCatalogue = (observer: Observer<void>): Subscription => catalogue.subscribe(observer)
 
-    export const deliverPlugins = (plugins: ReadonlyArray<NativePluginInfo>): void => {
+    const deliverPlugins = (plugins: ReadonlyArray<NativePluginInfo>): void => {
         state.plugins = plugins
+        state.scanning = false
         catalogue.notify()
     }
 
@@ -87,6 +118,9 @@ export namespace NativePluginHost {
         notices.forEach(({uuid, type, value}) => {
             if (type === "status") {
                 statuses.set(uuid, value as NativeStatus)
+                if (value !== "loading" && openWhenReady.delete(uuid) && value === "ready" && !openWindows.has(uuid)) {
+                    state.port?.send({type: "native-gui", uuid, open: true})
+                }
             } else if (type === "gui") {
                 if (value === "open") {openWindows.add(uuid)} else {openWindows.delete(uuid)}
             } else if (type === "params") {
@@ -94,6 +128,8 @@ export namespace NativePluginHost {
             } else if (type === "param") {
                 const [id, paramValue] = value.split(":")
                 withHub(uuid, (project, hub) => WclapParameters.applyHub(project, hub, Number(id) >>> 0, Number(paramValue)))
+            } else if (type === "plugins") {
+                deliverPlugins(JSON.parse(value))
             } else if (type === "saved") {
                 saving.splice(0).forEach(done => done())
             }
@@ -137,6 +173,7 @@ export namespace NativePluginHost {
     }
 
     export const createInstrument = (service: StudioService, info: NativePluginInfo): void => {
-        service.runIfProject(project => project.editing.modify(() => project.api.createInstrument(factory, {name: info.name, attachment: info})))
+        service.runIfProject(project => project.editing.modify(() => project.api.createInstrument(factory, {name: info.name, attachment: info}))
+            .ifSome(({instrumentBox}) => openOnceReady(UUID.toString(instrumentBox.address.uuid))))
     }
 }

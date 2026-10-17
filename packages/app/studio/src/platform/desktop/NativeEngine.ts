@@ -62,8 +62,7 @@ export namespace NativeEngine {
                     (uuid, peaks) => NativeAudioInputs.deliverPeaks(uuid, peaks),
                     devices => NativeAudioInputs.updateDevices(devices),
                     (uuid, first, planes) => NativeAudioInputs.deliverRecording(uuid, first, planes),
-                    seconds => NativeAudioInputs.updateInputLatency(seconds),
-                    plugins => NativePluginHost.deliverPlugins(plugins))
+                    seconds => NativeAudioInputs.updateInputLatency(seconds))
                 NativeAudioInputs.attachPort(port)
                 NativePluginHost.attachPort(port)
                 return port

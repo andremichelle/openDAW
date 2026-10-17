@@ -1,0 +1,80 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.5em
+  width: 100%
+
+  > h2
+    margin: 0.75em 0 0 0
+    font-size: 1em
+    color: var(--color-bright)
+
+    > span.summary
+      margin-left: 0.5em
+      color: var(--color-shadow)
+      font-weight: normal
+
+  > p
+    margin: 0
+    color: var(--color-shadow)
+
+  > div.folders
+    display: flex
+    flex-direction: column
+    row-gap: 0.25em
+
+    > span.empty
+      color: var(--color-dark)
+      font-style: italic
+
+    > div.folder
+      display: flex
+      column-gap: 1em
+
+      > span.path
+        flex: 1
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+
+      > span.remove
+        cursor: pointer
+        color: var(--color-red)
+
+  > div.plugins
+    display: grid
+    grid-template-columns: 1fr repeat(3, max-content)
+    grid-auto-rows: max-content
+    align-content: start
+    column-gap: 1em
+    row-gap: 0.25em
+    max-height: 22em
+    overflow-y: auto
+
+    > div.plugin
+      display: contents
+
+      > span
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+
+      > span.vendor, > span.kind
+        color: var(--color-shadow)
+
+      &.header > span
+        position: sticky
+        top: 0
+        padding-bottom: 0.25em
+        background-color: var(--color-panel-background-dark)
+        color: var(--color-shadow)
+        font-weight: bold
+
+      &.problem > span
+        opacity: 0.6
+
+      &.problem > span.status
+        opacity: 1
+        color: var(--color-red)

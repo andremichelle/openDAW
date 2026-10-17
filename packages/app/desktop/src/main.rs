@@ -403,6 +403,16 @@ fn serve(request: tiny_http::Request) {
     } else if url.starts_with("/__auth-callback") {
         let status = auth_callback(&mut request, &url);
         let _ = request.respond(tiny_http::Response::empty(status));
+    } else if url.starts_with("/__quit") {
+        // Cmd+Q in a plugin window: the native menu never sees it, the engine passes it on
+        if let Some(app) = APP.get() {
+            let main = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(window) = main.get_webview_window("main") { let _ = window.set_focus(); }
+                request_quit(&main);
+            });
+        }
+        let _ = request.respond(tiny_http::Response::empty(204));
     } else if url.starts_with("/__key") {
         replay_key(&url);
         let _ = request.respond(tiny_http::Response::empty(204));
@@ -469,6 +479,8 @@ fn main() {
                 .title(if cfg!(target_os = "macos") { "" } else { "openDAW Studio" })
                 .inner_size(1400.0, 900.0)
                 .maximized(true)
+                // a click coming from a plugin window (the engine is an app of its own) acts at once, not only activates
+                .accept_first_mouse(true)
                 .background_color(tauri::window::Color(21, 23, 25, 255))
                 .disable_drag_drop_handler()
                 .background_throttling(BackgroundThrottlingPolicy::Disabled)

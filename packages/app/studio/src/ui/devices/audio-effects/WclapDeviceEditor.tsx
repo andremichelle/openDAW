@@ -82,7 +82,11 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
+    // a plugin the user just picked opens its window once it is ready, as in other hosts (some apply their default
+    // preset only when their window opens); "loading" first, so the previous plugin's "ready" does not count
+    const autoOpen: { phase: "idle" | "picked" | "loading" } = {phase: "idle"}
     const select = (url: string, clapId: string): void => {
+        autoOpen.phase = "picked"
         editing.modify(() => {
             adapter.urlField.setValue(url)
             adapter.clapIdField.setValue(clapId)
@@ -329,6 +333,16 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         engine.subscribeWclapStatus(uuidString, status => {
             state.ready = status.state === "ready"
             state.editor = status.editor === true
+            if (status.state === "failed") {
+                autoOpen.phase = "idle"
+            } else if (status.state !== "ready" && autoOpen.phase === "picked") {
+                autoOpen.phase = "loading"
+            } else if (status.state === "ready" && autoOpen.phase === "loading") {
+                autoOpen.phase = "idle"
+                if (state.editor && !WclapWindows.isOpen(uuidString)) {
+                    WclapWindows.toggle(service, adapter, state.info?.name ?? adapter.labelField.getValue())
+                }
+            }
             vendorLabel.classList.toggle("failed", status.state === "failed")
             vendorLabel.textContent = status.state === "ready"
                 ? state.info?.vendor ?? ""
