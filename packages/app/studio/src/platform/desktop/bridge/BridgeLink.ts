@@ -13,6 +13,7 @@ export type ToEngine =
     | { type: "native-save" }
     | { type: "native-gui", uuid: string, open: boolean }
     | { type: "port", id: int, data: unknown }
+    | { type: "script", code: string }
 
 export type ToStudio =
     | { type: "message", data: unknown }

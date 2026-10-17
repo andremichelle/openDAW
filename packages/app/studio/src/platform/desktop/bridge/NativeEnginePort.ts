@@ -28,13 +28,15 @@ export class NativeEnginePort implements Port {
                 readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>,
                 readonly onRecordData: (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>) => void,
                 readonly onInputLatency: Procedure<number>,
-                readonly onLost: Exec) {
+                readonly onLost: Exec,
+                scripts: ReadonlyArray<string>) {
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
         this.#url = url
         this.#socket = this.#connect()
         this.#interval = setInterval(() => this.#tick(), 8)
+        scripts.forEach(code => this.#send({type: "script", code}))
         this.#send({type: "create", sampleRate, options})
     }
 

@@ -1,6 +1,7 @@
-import {isDefined, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {isDefined, Nullable, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
 import {AudioInputs, EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, WebAudioInputs} from "@opendaw/studio-core"
+import {ScriptCompiler} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {OutputLatency} from "@/audio/OutputLatency"
 import {NativeAudioInputs} from "@/platform/desktop/NativeAudioInputs"
@@ -46,6 +47,14 @@ export namespace NativeEngine {
             return
         }
         NativePluginHost.attachService(service)
+        // script code runs in the engine process, inside the engine's render like in the worklet; the latest code of
+        // each script goes to every engine started later
+        const scripts = new Map<string, string>()
+        const current: { port: Nullable<NativeEnginePort> } = {port: null}
+        ScriptCompiler.installLoader(async (uuid, code) => {
+            scripts.set(uuid, code)
+            current.port?.send({type: "script", code})
+        })
         OfflineEngineRenderer.installWorkerFactory(workerUrl => new NativeOfflineWorker(
             `ws://127.0.0.1:${engine.port}/offline?token=${engine.token}&worker=${encodeURIComponent(workerUrl)}`))
         const placeholder = URL.createObjectURL(new Blob([PlaceholderSource], {type: "text/javascript"}))
@@ -69,7 +78,8 @@ export namespace NativeEngine {
                     () => {
                         const error = new Error("The audio engine stopped unexpectedly.")
                         node.dispatchEvent(new ErrorEvent("error", {error, message: error.message}))
-                    })
+                    }, Array.from(scripts.values()))
+                current.port = port
                 NativeAudioInputs.attachPort(port)
                 NativePluginHost.attachPort(port)
                 return port

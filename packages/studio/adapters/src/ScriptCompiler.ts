@@ -1,4 +1,4 @@
-import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
@@ -144,7 +144,11 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
 
 const validateCode = (wrappedCode: string): void => {new Function(wrappedCode)}
 
-const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: string): Promise<void> => {
+// Optional: a host whose engine runs elsewhere takes the wrapped code instead of the audio worklet
+const loader: { load: Option<(uuid: string, wrappedCode: string) => Promise<void>> } = {load: Option.None}
+
+const registerWorklet = async (audioContext: BaseAudioContext, uuid: string, wrappedCode: string): Promise<void> => {
+    if (loader.load.nonEmpty()) {return loader.load.unwrap()(uuid, wrappedCode)}
     const blob = new Blob([wrappedCode], {type: "application/javascript"})
     const blobUrl = URL.createObjectURL(blob)
     try {
@@ -173,6 +177,10 @@ export namespace ScriptCompiler {
     // the live app (which goes through `compile` / `load`). The single source of truth for the registry shape.
     export const wrap = wrapScript
 
+    export const installLoader = (load: (uuid: string, wrappedCode: string) => Promise<void>): void => {
+        loader.load = Option.wrap(load)
+    }
+
     export const create = (config: Config) => {
         const headerPattern = createHeaderPattern(config.headerTag)
         const createHeader = (update: number): string =>
@@ -190,7 +198,7 @@ export namespace ScriptCompiler {
                 const uuid = UUID.toString(deviceBox.address.uuid)
                 const wrappedCode = wrapScript(config, uuid, update, userCode)
                 validateCode(wrappedCode)
-                return registerWorklet(audioContext, wrappedCode)
+                return registerWorklet(audioContext, uuid, wrappedCode)
             },
             compile: async (audioContext: BaseAudioContext,
                             editing: Editing,
@@ -220,7 +228,7 @@ export namespace ScriptCompiler {
                 } else {
                     editing.modify(modifier)
                 }
-                return registerWorklet(audioContext, wrappedCode)
+                return registerWorklet(audioContext, uuid, wrappedCode)
             }
         }
     }

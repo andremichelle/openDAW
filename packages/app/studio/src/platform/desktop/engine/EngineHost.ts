@@ -119,7 +119,11 @@ class Connection {
 
     receive(bytes: ArrayBuffer): void {
         const envelope = this.shared.decode<ToEngine>(bytes)
-        if (envelope.type === "create") {
+        if (envelope.type === "script") {
+            // registers in globalThis.openDAW, where the engine's script bridge looks the processor up
+            const {status, error} = tryCatch(() => new Function(envelope.code)())
+            if (status === "failure") {console.warn(`[host] script failed`, (error as Error)?.stack ?? error)}
+        } else if (envelope.type === "create") {
             this.#create(envelope.sampleRate, envelope.options).catch(error => {
                 console.error(`[host] engine ${this.id} failed to start`, error?.stack ?? error)
                 this.close()
