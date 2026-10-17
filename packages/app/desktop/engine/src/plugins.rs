@@ -835,7 +835,9 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     };
     if !check("setupProcessing", processor.setupProcessing(&mut setup)) { return None; }
     check("setActive", component.setActive(1));
-    check("setProcessing", processor.setProcessing(1));
+    // optional in VST3, many plugins answer kNotImplemented
+    let processing = processor.setProcessing(1);
+    if processing != kNotImplemented { check("setProcessing", processing); }
     let events = ComWrapper::new(Events { list: RefCell::new(Vec::with_capacity(64)) });
     let event_list = events.to_com_ptr::<IEventList>()?;
     let output_events = ComWrapper::new(Events { list: RefCell::new(Vec::with_capacity(64)) });

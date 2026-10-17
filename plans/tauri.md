@@ -588,7 +588,6 @@ Nothing is hidden because it is the desktop app. An online feature stays and wor
 | `playbackStats` | underrun detector off | fine, optional |
 | Service workers | none on custom schemes | not needed: WCLAP GUIs are served by the shell in their own OS windows |
 | Background throttling | occluded windows throttle rAF and timers | `backgroundThrottling: disabled` per window |
-| Output latency (macOS, seen 2026-10-15) | audible latency far above the shown 15.4 ms, and much worse after loading a bundle. Same machine and project are fine in the browser, so it is WKWebView. Output device runs at 48 kHz, no resampling | open. Measure first: `outputLatency`, `currentTime - getOutputTimestamp().contextTime` over time, engine load. Long term: native engine |
 
 ### G. Storage details for the file storage strategy
 - `OpfsProtocol` consumers:
