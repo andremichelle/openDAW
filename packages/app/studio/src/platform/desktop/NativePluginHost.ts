@@ -34,6 +34,7 @@ export namespace NativePluginHost {
         state.service = service
         service.projectProfileService.addBeforeSave(flush)
         connect()
+        watchDialogs()
     }
 
     // the engine writes every changed plugin state into its box, then answers "saved"
@@ -66,10 +67,26 @@ export namespace NativePluginHost {
     export const rescan = (force: boolean = true): void => {
         state.scanning = true
         catalogue.notify()
-        const request = JSON.stringify({folders: folders(), force})
+        send({type: "scan", folders: folders(), force})
+    }
+
+    const send = (request: Record<string, unknown>): void => {
         const socket = state.notices
         if (socket === null) {return}
-        if (socket.readyState === WebSocket.OPEN) {socket.send(request)} else {socket.addEventListener("open", () => socket.send(request), {once: true})}
+        const text = JSON.stringify(request)
+        if (socket.readyState === WebSocket.OPEN) {socket.send(text)} else {socket.addEventListener("open", () => socket.send(text), {once: true})}
+    }
+
+    // plugin windows float above the studio, an open studio dialog must not be covered by them
+    const watchDialogs = (): void => {
+        const watch = {open: false}
+        const update = (): void => {
+            const open = document.querySelector("dialog[open]") !== null
+            if (open === watch.open) {return}
+            watch.open = open
+            send({type: "dialogs", open})
+        }
+        new MutationObserver(update).observe(document.body, {subtree: true, childList: true, attributes: true, attributeFilter: ["open"]})
     }
 
     export const isScanning = (): boolean => state.scanning

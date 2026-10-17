@@ -62,7 +62,7 @@ pub fn serve_notices(mut socket: tungstenite::WebSocket<std::net::TcpStream>) {
             if socket.send(tungstenite::Message::Text(json.into())).is_err() { break; }
         }
         match socket.read() {
-            Ok(tungstenite::Message::Text(text)) => scan_request(&text),
+            Ok(tungstenite::Message::Text(text)) => studio_request(&text),
             Ok(tungstenite::Message::Close(_)) => break,
             Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(_) => break,
@@ -73,18 +73,25 @@ pub fn serve_notices(mut socket: tungstenite::WebSocket<std::net::TcpStream>) {
 }
 
 #[derive(serde::Deserialize)]
-struct ScanRequest {
-    folders: Vec<String>,
-    force: bool,
+#[serde(tag = "type", rename_all = "kebab-case")]
+enum StudioRequest {
+    Scan { folders: Vec<String>, force: bool },
+    // a studio dialog is open, plugin windows must not cover it
+    Dialogs { open: bool },
 }
 
-// scanning loads plugins in their own processes and can take seconds, so it runs on a thread of its own
-fn scan_request(text: &str) {
-    let Ok(ScanRequest { folders, force }) = serde_json::from_str::<ScanRequest>(text) else { return };
-    std::thread::spawn(move || {
-        let catalogue = crate::scan::run(&folders, force);
-        notify("", "plugins", serde_json::to_string(&catalogue).unwrap());
-    });
+fn studio_request(text: &str) {
+    match serde_json::from_str::<StudioRequest>(text) {
+        // scanning loads plugins in their own processes and can take seconds, so it runs on a thread of its own
+        Ok(StudioRequest::Scan { folders, force }) => {
+            std::thread::spawn(move || {
+                let catalogue = crate::scan::run(&folders, force);
+                notify("", "plugins", serde_json::to_string(&catalogue).unwrap());
+            });
+        }
+        Ok(StudioRequest::Dialogs { open }) => request_main(MainRequest::Run(Box::new(move || windows::dialogs(open)))),
+        Err(error) => eprintln!("[plugins] {error}"),
+    }
 }
 
 // ---------- COM objects the host implements ----------
@@ -1084,6 +1091,7 @@ mod windows {
     thread_local! {
         static WINDOWS: RefCell<Vec<(u32, Retained<NSWindow>)>> = const { RefCell::new(Vec::new()) };
         static FLOATING: Cell<bool> = const { Cell::new(false) };
+        static DIALOGS: Cell<bool> = const { Cell::new(false) };
         static TICKS: Cell<u32> = const { Cell::new(0) };
         static MONITOR: Cell<bool> = const { Cell::new(false) };
     }
@@ -1230,17 +1238,30 @@ mod windows {
             .map(|(handle, _)| *handle).collect())
     }
 
-    // plugin windows float above the studio while openDAW (the studio or this engine) is the frontmost app
+    // plugin windows float above the studio while openDAW (the studio or this engine) is the frontmost app and no
+    // studio dialog is open
     pub fn tick() {
         let ticks = TICKS.get() + 1;
         TICKS.set(ticks);
-        if ticks % LEVEL_TICKS != 0 || WINDOWS.with(|windows| windows.borrow().is_empty()) { return; }
+        if ticks % LEVEL_TICKS == 0 { apply_level(); }
+    }
+
+    fn apply_level() {
+        if WINDOWS.with(|windows| windows.borrow().is_empty()) { return; }
         let frontmost = NSWorkspace::sharedWorkspace().frontmostApplication().map(|app| app.processIdentifier());
         let ours = frontmost.is_some_and(|pid| pid == std::process::id() as i32 || pid == std::os::unix::process::parent_id() as i32);
-        if ours == FLOATING.get() { return; }
-        FLOATING.set(ours);
+        let floating = ours && !DIALOGS.get();
+        if floating == FLOATING.get() { return; }
+        FLOATING.set(floating);
         WINDOWS.with(|windows| windows.borrow().iter()
-            .for_each(|(_, window)| window.setLevel(if ours { FLOATING_LEVEL } else { NORMAL_LEVEL })));
+            .for_each(|(_, window)| window.setLevel(if floating { FLOATING_LEVEL } else { NORMAL_LEVEL })));
+    }
+
+    // a dialog opened from a plugin window (a forwarded shortcut) also needs the studio in front
+    pub fn dialogs(open: bool) {
+        DIALOGS.set(open);
+        apply_level();
+        if open && NSApplication::sharedApplication(mtm()).isActive() { cycle_home(); }
     }
 
     // the studio passed Cmd+` on after its last window
@@ -1303,4 +1324,5 @@ mod windows {
     pub fn closed() -> Vec<u32> {Vec::new()}
     pub fn tick() {}
     pub fn cycle_in() {}
+    pub fn dialogs(_open: bool) {}
 }
