@@ -108,6 +108,12 @@ Default folders, plus user folders in the settings:
 6. **No plugin windows on Windows and Linux:** loading is written but untested there, "Open UI" does nothing.
 7. **Latency compensation:** plugins with latency (effects) play late, the engine has no delay compensation for them.
 8. **Effects and MIDI effects** (see "To test").
+9. **Unresolved: studio keys in plugin windows.** Keys a plugin leaves unused reach the studio only if its window passes
+   them on (JUCE does). DPF/pugl windows (Cardinal) keep every key, so the software keyboard and shortcuts stop while
+   such a window has focus. No signal fits all plugins: DPF answers `IPlugView::onKeyDown` truthfully but never passes
+   keys on, JUCE passes keys on but answers `onKeyDown` with kResultFalse even while typing into its own text field.
+   Ideas so far (both rejected for now): software keyboard keys win while its panel is open, or a per-window switch
+   "keys go to openDAW / to the plugin" (Reaper).
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap
@@ -213,3 +219,7 @@ before a wider test.
   switch. New plugins (VST and WebCLAP) open their window once ready. Cmd+Q in a plugin window goes to the shell
   (`/__quit`, with the unsaved-changes question), the studio's main window takes the focus back when the last plugin
   window closes. Bundle binaries are found via Info.plist (`CFBundleExecutable`), other bundles (.app) are not searched.
+- 2026-10-17 host completeness: output parameter changes (`ProcessData.outputParameterChanges`, 64 parameters x 16
+  points, preallocated, cleared per block, dropped for now) and output events (`outputEvents`, 64, dropped for now),
+  DPF asserted on every block without them. `IHostApplication.createInstance` creates `IMessage` with an
+  `IAttributeList`, DPF plugin windows talk to their audio part through them.

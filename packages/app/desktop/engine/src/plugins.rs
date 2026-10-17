@@ -110,9 +110,132 @@ impl IHostApplicationTrait for Host {
         kResultOk
     }
 
-    unsafe fn createInstance(&self, _cid: *mut TUID, _iid: *mut TUID, obj: *mut *mut c_void) -> tresult {
+    unsafe fn createInstance(&self, cid: *mut TUID, iid: *mut TUID, obj: *mut *mut c_void) -> tresult {
         *obj = ptr::null_mut();
-        kNotImplemented
+        let is_message = |tuid: *mut TUID| !tuid.is_null() && (*tuid).iter().zip(IMessage::IID.iter()).all(|(a, b)| *a as u8 == *b);
+        if !is_message(cid) || !is_message(iid) { return kNotImplemented; }
+        let attributes = ComWrapper::new(Attributes { values: RefCell::new(HashMap::new()) });
+        let Some(list) = attributes.to_com_ptr::<IAttributeList>() else { return kNotImplemented };
+        let message = ComWrapper::new(Message { id: RefCell::new(std::ffi::CString::default()), attributes: list });
+        match message.to_com_ptr::<IMessage>() {
+            Some(pointer) => {
+                *obj = pointer.into_raw() as *mut c_void;
+                kResultOk
+            }
+            None => kNotImplemented,
+        }
+    }
+}
+
+// what plugin windows send to their audio part through the connection points
+struct Message {
+    id: RefCell<std::ffi::CString>,
+    attributes: ComPtr<IAttributeList>,
+}
+
+impl Class for Message {
+    type Interfaces = (IMessage,);
+}
+
+impl IMessageTrait for Message {
+    unsafe fn getMessageID(&self) -> FIDString {self.id.borrow().as_ptr()}
+
+    unsafe fn setMessageID(&self, id: FIDString) {
+        *self.id.borrow_mut() = if id.is_null() { std::ffi::CString::default() } else { std::ffi::CStr::from_ptr(id).to_owned() };
+    }
+
+    unsafe fn getAttributes(&self) -> *mut IAttributeList {self.attributes.as_ptr()}
+}
+
+enum Attribute {
+    Int(int64),
+    Float(f64),
+    Text(Vec<TChar>),
+    Binary(Vec<u8>),
+}
+
+struct Attributes {
+    values: RefCell<HashMap<Vec<u8>, Attribute>>,
+}
+
+impl Attributes {
+    unsafe fn key(id: IAttributeList_::AttrID) -> Option<Vec<u8>> {
+        (!id.is_null()).then(|| std::ffi::CStr::from_ptr(id).to_bytes().to_vec())
+    }
+
+    unsafe fn set(&self, id: IAttributeList_::AttrID, value: Attribute) -> tresult {
+        match Self::key(id) {
+            Some(key) => {
+                self.values.borrow_mut().insert(key, value);
+                kResultOk
+            }
+            None => kInvalidArgument,
+        }
+    }
+}
+
+impl Class for Attributes {
+    type Interfaces = (IAttributeList,);
+}
+
+impl IAttributeListTrait for Attributes {
+    unsafe fn setInt(&self, id: IAttributeList_::AttrID, value: int64) -> tresult {self.set(id, Attribute::Int(value))}
+
+    unsafe fn getInt(&self, id: IAttributeList_::AttrID, value: *mut int64) -> tresult {
+        match Self::key(id).and_then(|key| match self.values.borrow().get(&key) { Some(Attribute::Int(found)) => Some(*found), _ => None }) {
+            Some(found) => {
+                *value = found;
+                kResultOk
+            }
+            None => kResultFalse,
+        }
+    }
+
+    unsafe fn setFloat(&self, id: IAttributeList_::AttrID, value: f64) -> tresult {self.set(id, Attribute::Float(value))}
+
+    unsafe fn getFloat(&self, id: IAttributeList_::AttrID, value: *mut f64) -> tresult {
+        match Self::key(id).and_then(|key| match self.values.borrow().get(&key) { Some(Attribute::Float(found)) => Some(*found), _ => None }) {
+            Some(found) => {
+                *value = found;
+                kResultOk
+            }
+            None => kResultFalse,
+        }
+    }
+
+    unsafe fn setString(&self, id: IAttributeList_::AttrID, string: *const TChar) -> tresult {
+        if string.is_null() { return kInvalidArgument; }
+        let length = (0..).take_while(|index| *string.add(*index) != 0).count();
+        self.set(id, Attribute::Text(std::slice::from_raw_parts(string, length).to_vec()))
+    }
+
+    unsafe fn getString(&self, id: IAttributeList_::AttrID, string: *mut TChar, sizeInBytes: uint32) -> tresult {
+        let Some(key) = Self::key(id) else { return kInvalidArgument };
+        let values = self.values.borrow();
+        let Some(Attribute::Text(text)) = values.get(&key) else { return kResultFalse };
+        let capacity = sizeInBytes as usize / size_of::<TChar>();
+        if string.is_null() || capacity == 0 { return kInvalidArgument; }
+        let count = text.len().min(capacity - 1);
+        ptr::copy_nonoverlapping(text.as_ptr(), string, count);
+        *string.add(count) = 0;
+        kResultOk
+    }
+
+    unsafe fn setBinary(&self, id: IAttributeList_::AttrID, data: *const c_void, sizeInBytes: uint32) -> tresult {
+        let bytes = if data.is_null() { Vec::new() } else { std::slice::from_raw_parts(data as *const u8, sizeInBytes as usize).to_vec() };
+        self.set(id, Attribute::Binary(bytes))
+    }
+
+    unsafe fn getBinary(&self, id: IAttributeList_::AttrID, data: *mut *const c_void, sizeInBytes: *mut uint32) -> tresult {
+        let Some(key) = Self::key(id) else { return kInvalidArgument };
+        match self.values.borrow().get(&key) {
+            Some(Attribute::Binary(bytes)) => {
+                *data = bytes.as_ptr() as *const c_void;
+                *sizeInBytes = bytes.len() as uint32;
+                kResultOk
+            }
+            _ => kResultFalse,
+        }
     }
 }
 
@@ -138,7 +261,9 @@ impl IEventListTrait for Events {
     }
 
     unsafe fn addEvent(&self, event: *mut Event) -> tresult {
-        self.list.borrow_mut().push(*event);
+        let mut list = self.list.borrow_mut();
+        if list.len() == list.capacity() { return kResultFalse; }
+        list.push(*event);
         kResultOk
     }
 }
@@ -383,6 +508,92 @@ impl IParameterChangesTrait for ParamChanges {
 }
 
 const MAX_PARAM_CHANGES: usize = 256;
+const MAX_OUTPUT_PARAMS: usize = 64;
+const MAX_OUTPUT_POINTS: usize = 16;
+
+// DPF plugins (Cardinal) assert without an output change list
+struct OutputQueue {
+    id: Cell<ParamID>,
+    points: RefCell<Vec<(int32, ParamValue)>>,
+}
+
+impl Class for OutputQueue {
+    type Interfaces = (IParamValueQueue,);
+}
+
+impl IParamValueQueueTrait for OutputQueue {
+    unsafe fn getParameterId(&self) -> ParamID {self.id.get()}
+    unsafe fn getPointCount(&self) -> int32 {self.points.borrow().len() as int32}
+
+    unsafe fn getPoint(&self, index: int32, offset: *mut int32, value: *mut ParamValue) -> tresult {
+        match self.points.borrow().get(index as usize) {
+            Some((at, point)) => {
+                *offset = *at;
+                *value = *point;
+                kResultOk
+            }
+            None => kInvalidArgument,
+        }
+    }
+
+    unsafe fn addPoint(&self, offset: int32, value: ParamValue, index: *mut int32) -> tresult {
+        let mut points = self.points.borrow_mut();
+        if points.len() == MAX_OUTPUT_POINTS { return kResultFalse; }
+        points.push((offset, value));
+        if !index.is_null() { *index = points.len() as int32 - 1; }
+        kResultOk
+    }
+}
+
+struct OutputChanges {
+    queues: Vec<(ComWrapper<OutputQueue>, ComPtr<IParamValueQueue>)>,
+    count: Cell<usize>,
+}
+
+impl OutputChanges {
+    fn clear(&self) {
+        for (queue, _) in &self.queues[..self.count.get()] { queue.points.borrow_mut().clear(); }
+        self.count.set(0);
+    }
+}
+
+impl Class for OutputChanges {
+    type Interfaces = (IParameterChanges,);
+}
+
+impl IParameterChangesTrait for OutputChanges {
+    unsafe fn getParameterCount(&self) -> int32 {self.count.get() as int32}
+
+    unsafe fn getParameterData(&self, index: int32) -> *mut IParamValueQueue {
+        if index < 0 || index as usize >= self.count.get() { return ptr::null_mut(); }
+        self.queues[index as usize].1.as_ptr()
+    }
+
+    unsafe fn addParameterData(&self, id: *const ParamID, index: *mut int32) -> *mut IParamValueQueue {
+        if id.is_null() { return ptr::null_mut(); }
+        let count = self.count.get();
+        let slot = match self.queues[..count].iter().position(|(queue, _)| queue.id.get() == *id) {
+            Some(slot) => slot,
+            None if count < self.queues.len() => {
+                self.queues[count].0.id.set(*id);
+                self.count.set(count + 1);
+                count
+            }
+            None => return ptr::null_mut(),
+        };
+        if !index.is_null() { *index = slot as int32; }
+        self.queues[slot].1.as_ptr()
+    }
+}
+
+fn output_changes() -> ComWrapper<OutputChanges> {
+    let queues = (0..MAX_OUTPUT_PARAMS).map(|_| {
+        let queue = ComWrapper::new(OutputQueue { id: Cell::new(0), points: RefCell::new(Vec::with_capacity(MAX_OUTPUT_POINTS)) });
+        let pointer = queue.to_com_ptr::<IParamValueQueue>().unwrap();
+        (queue, pointer)
+    }).collect();
+    ComWrapper::new(OutputChanges { queues, count: Cell::new(0) })
+}
 
 fn param_changes() -> ComWrapper<ParamChanges> {
     let queues = (0..MAX_PARAM_CHANGES).map(|_| {
@@ -431,8 +642,12 @@ pub struct Processing {
     processor: ComPtr<IAudioProcessor>,
     events: ComWrapper<Events>,
     event_list: ComPtr<IEventList>,
+    output_events: ComWrapper<Events>,
+    output_event_list: ComPtr<IEventList>,
     params: ComWrapper<ParamChanges>,
     param_list: ComPtr<IParameterChanges>,
+    outputs_changes: ComWrapper<OutputChanges>,
+    output_list: ComPtr<IParameterChanges>,
     context: ProcessContext,
     outputs: i32,
 }
@@ -606,14 +821,19 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     check("setProcessing", processor.setProcessing(1));
     let events = ComWrapper::new(Events { list: RefCell::new(Vec::with_capacity(64)) });
     let event_list = events.to_com_ptr::<IEventList>()?;
+    let output_events = ComWrapper::new(Events { list: RefCell::new(Vec::with_capacity(64)) });
+    let output_event_list = output_events.to_com_ptr::<IEventList>()?;
     let mut context: ProcessContext = std::mem::zeroed();
     context.sampleRate = sample_rate;
     context.timeSigNumerator = 4;
     context.timeSigDenominator = 4;
     let params = param_changes();
     let param_list = params.to_com_ptr::<IParameterChanges>()?;
+    let outputs_changes = output_changes();
+    let output_list = outputs_changes.to_com_ptr::<IParameterChanges>()?;
     let shared = Arc::new(Mutex::new(Processing {
-        component: component.clone(), processor, events, event_list, params, param_list, context, outputs: audio_outs.min(1)
+        component: component.clone(), processor, events, event_list, output_events, output_event_list, params, param_list, outputs_changes, output_list, context,
+        outputs: audio_outs.min(1)
     }));
     let infos = read_params(&controller);
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
@@ -1036,6 +1256,8 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
             }
             params.count.set(count);
         }
+        processing.outputs_changes.clear();
+        processing.output_events.list.borrow_mut().clear();
         let playing = flags & FLAG_PLAYING != 0;
         let context = &mut processing.context;
         context.tempo = bpm as f64;
@@ -1054,9 +1276,9 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
             inputs: ptr::null_mut(),
             outputs: &mut output,
             inputParameterChanges: processing.param_list.as_ptr(),
-            outputParameterChanges: ptr::null_mut(),
+            outputParameterChanges: processing.output_list.as_ptr(),
             inputEvents: processing.event_list.as_ptr(),
-            outputEvents: ptr::null_mut(),
+            outputEvents: processing.output_event_list.as_ptr(),
             processContext: &mut processing.context,
         };
         let wrote = processing.processor.process(&mut data) == kResultOk && processing.outputs > 0;
