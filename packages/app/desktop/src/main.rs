@@ -403,8 +403,15 @@ fn install_cycle_monitor(app: AppHandle) {
     std::mem::forget(unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler) });
 }
 
+// closing its stdin lets the engine exit on its own (it clears its plugin trials), a hung one is killed
 fn stop_engine() {
     if let Some(mut child) = ENGINE.lock().unwrap().take() {
+        drop(child.stdin.take());
+        let started = std::time::Instant::now();
+        while started.elapsed() < std::time::Duration::from_secs(1) {
+            if !matches!(child.try_wait(), Ok(None)) { return; }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         let _ = child.kill();
     }
 }
@@ -584,19 +591,20 @@ fn required_shell_api(root: &Path) -> Option<u64> {
     serde_json::from_slice::<serde_json::Value>(&bytes).ok()?.get("shellApi")?.as_u64()
 }
 
-// another openDAW holds the shell's port: it shows its window, this start ends
-fn show_running() {
-    use std::io::Write;
-    if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", PORT)) {
-        let _ = stream.write_all(b"GET /__show HTTP/1.0\r\n\r\n");
-    }
+// another openDAW holds the shell's port: it shows its window (answers 204), this start ends
+fn show_running() -> bool {
+    use std::io::{Read, Write};
+    let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", PORT)) else { return false };
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+    let mut reply = [0u8; 12];
+    stream.write_all(b"GET /__show HTTP/1.0\r\n\r\n").is_ok() && stream.read_exact(&mut reply).is_ok() && reply.ends_with(b" 204")
 }
 
 fn main() {
     // one openDAW at a time: the shell's port is the lock, before anything else (the engine) starts
     let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", PORT)) else {
-        show_running();
-        return;
+        if show_running() { return; }
+        panic!("port {PORT} is taken by another program, openDAW cannot start");
     };
     // OPENDAW_DIST, or a debug build without OPENDAW_UPDATE, serves a local build and skips the update flow
     let local = std::env::var("OPENDAW_DIST").ok().map(PathBuf::from)

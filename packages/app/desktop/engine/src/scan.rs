@@ -31,6 +31,9 @@ struct Bundle {
     status: String,
     plugins: Vec<PluginInfo>,
     crashed: bool,
+    // in its first second of audio, still set at the next engine start it becomes `crashed`
+    #[serde(default)]
+    trial: bool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -250,16 +253,16 @@ fn describe(path: &Path) -> Bundle {
     let modified = modified(path);
     if !compatible(path) {
         let name = path.file_stem().map(|stem| stem.to_string_lossy().to_string()).unwrap_or_default();
-        return Bundle { modified, status: "incompatible".into(), crashed: false, plugins: vec![PluginInfo {
+        return Bundle { modified, status: "incompatible".into(), crashed: false, trial: false, plugins: vec![PluginInfo {
             format: "vst3".into(), id: String::new(), name, vendor: String::new(), kind: String::new(),
             path: path.to_string_lossy().into(), status: "incompatible".into()
         }] };
     }
     match from_module_info(path).or_else(|| from_scan_process(path)) {
-        Some(plugins) => Bundle { modified, status: "ok".into(), crashed: false, plugins },
+        Some(plugins) => Bundle { modified, status: "ok".into(), crashed: false, trial: false, plugins },
         None => {
             let name = path.file_stem().map(|stem| stem.to_string_lossy().to_string()).unwrap_or_default();
-            Bundle { modified, status: "failed".into(), crashed: false, plugins: vec![PluginInfo {
+            Bundle { modified, status: "failed".into(), crashed: false, trial: false, plugins: vec![PluginInfo {
                 format: "vst3".into(), id: String::new(), name, vendor: String::new(), kind: String::new(),
                 path: path.to_string_lossy().into(), status: "failed".into()
             }] }
@@ -320,24 +323,38 @@ impl Loading {
         Self(path.to_string())
     }
 
-    // the marker stays set past the load, `survived` clears it
-    pub fn keep(mut self) -> String {std::mem::take(&mut self.0)}
+    // loaded: the plugin goes on trial, `survived` ends it
+    pub fn keep(mut self) -> String {
+        let path = std::mem::take(&mut self.0);
+        update_bundles(|key, bundle| if key == path { bundle.crashed = false; bundle.trial = true; });
+        path
+    }
 }
 
-pub fn survived(path: &str) {mark_loading(path, false)}
+pub fn survived(path: &str) {update_bundles(|key, bundle| if key == path { bundle.trial = false; })}
+
+// engine start: a plugin still on trial took the previous engine down
+pub fn settle_trials() {update_bundles(|_, bundle| if bundle.trial { bundle.crashed = true; bundle.trial = false; })}
+
+// a clean exit: nothing on trial crashed
+pub fn end_trials() {update_bundles(|_, bundle| bundle.trial = false)}
 
 impl Drop for Loading {
     fn drop(&mut self) {if !self.0.is_empty() { mark_loading(&self.0, false) }}
 }
 
-fn mark_loading(path: &str, loading: bool) {
+fn mark_loading(path: &str, loading: bool) {update_bundles(|key, bundle| if key == path { bundle.crashed = loading; })}
+
+fn update_bundles(mut change: impl FnMut(&str, &mut Bundle)) {
     let _guard = CACHE_LOCK.lock().unwrap();
     let mut cache = read_cache();
-    if let Some(bundle) = cache.bundles.get_mut(path) {
-        if bundle.crashed == loading { return; }
-        bundle.crashed = loading;
-        write_cache(&cache);
+    let mut changed = false;
+    for (key, bundle) in cache.bundles.iter_mut() {
+        let before = (bundle.crashed, bundle.trial);
+        change(key, bundle);
+        changed |= before != (bundle.crashed, bundle.trial);
     }
+    if changed { write_cache(&cache); }
 }
 
 // `--scan <bundle>`: describes one bundle by loading it and prints its plugins as JSON (none for a bundle that only
@@ -383,11 +400,40 @@ unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{output_of, pe_machine};
+    use super::{end_trials, output_of, pe_machine, read_cache, settle_trials, survived, write_cache, Bundle, Cache, Loading};
     #[cfg(unix)]
     use std::process::{Command, Stdio};
     #[cfg(unix)]
     use std::time::Duration;
+
+    // the only test that touches the cache, it points the cache folder somewhere of its own
+    #[test]
+    fn a_plugin_on_trial_counts_as_crashed_only_at_the_next_start() {
+        let folder = std::env::temp_dir().join(format!("opendaw-trial-{}", std::process::id()));
+        std::env::set_var("HOME", &folder);
+        std::env::set_var("XDG_CACHE_HOME", &folder);
+        std::env::set_var("LOCALAPPDATA", &folder);
+        let mut cache = Cache::default();
+        cache.bundles.insert("plugin.vst3".into(), Bundle::default());
+        write_cache(&cache);
+        let flags = || read_cache().bundles.get("plugin.vst3").map(|bundle| (bundle.crashed, bundle.trial)).unwrap();
+        let loading = Loading::new("plugin.vst3");
+        assert_eq!(flags(), (true, false));
+        let path = loading.keep();
+        assert_eq!(flags(), (false, true));
+        survived(&path);
+        assert_eq!(flags(), (false, false));
+        let _ = Loading::new("plugin.vst3").keep();
+        end_trials();
+        assert_eq!(flags(), (false, false));
+        let _ = Loading::new("plugin.vst3").keep();
+        settle_trials();
+        assert_eq!(flags(), (true, false));
+        let failed = Loading::new("plugin.vst3");
+        drop(failed);
+        assert_eq!(flags(), (false, false));
+        let _ = std::fs::remove_dir_all(&folder);
+    }
 
     // more than any pipe buffer holds: the process only exits once its output is read
     #[cfg(unix)]

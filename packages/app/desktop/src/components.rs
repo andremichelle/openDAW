@@ -169,17 +169,27 @@ fn install_blocking(name: &str, models: &[Model]) -> Result<(), String> {
     set_status("downloading", 0, total, "");
     let agent = crate::update::agent();
     let release = root.file_name().and_then(|name| name.to_str()).unwrap_or("").to_string();
-    let progress = |count: u64| {
+    let progress = |count: u64, failed: bool| {
         let mut done = done.lock().unwrap();
-        *done += count;
+        *done = if failed { done.saturating_sub(count) } else { *done + count };
         set_status("downloading", (*done).min(total), total, "");
     };
+    // a failed attempt takes back the bytes it counted, its retry counts them again
+    let attempt = |url: &str, target: &Path, sha256: &str, size: Option<u64>| crate::update::with_retries(|| {
+        let mut counted = 0u64;
+        let result = fetch(&agent, url, target, sha256, size, &mut |count| {
+            counted += count;
+            progress(count, false)
+        });
+        if result.is_err() { progress(counted, true); }
+        result
+    });
     crate::update::in_parallel(&runtime, |entry| {
         let url = format!("{UPDATE_ORIGIN}/tauri/releases/{release}/{}", entry.path);
-        crate::update::with_retries(|| fetch(&agent, &url, &root.join(&entry.path), &entry.sha256, Some(entry.size), &mut |count| progress(count)))
+        attempt(&url, &root.join(&entry.path), &entry.sha256, Some(entry.size))
     })?;
     for model in missing {
-        crate::update::with_retries(|| fetch(&agent, &model.url, &directory.join("models").join(&model.path), &model.sha256, None, &mut |count| progress(count)))?;
+        attempt(&model.url, &directory.join("models").join(&model.path), &model.sha256, None)?;
     }
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     fs::write(directory.join("selected"), "").map_err(|error| error.to_string())?;

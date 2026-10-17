@@ -723,6 +723,7 @@ fn main() {
                 Err(_) => break,
             }
         }
+        scan::end_trials();
         std::process::exit(0);
     });
     let dist = std::env::var("OPENDAW_DIST").map(PathBuf::from)
@@ -733,6 +734,7 @@ fn main() {
         eprintln!("[engine] started without a token (OPENDAW_ENGINE_TOKEN), exiting");
         std::process::exit(1);
     }
+    scan::settle_trials();
     let buffer: u32 = std::env::var("BUFFER").ok().and_then(|value| value.parse().ok()).unwrap_or(128);
     let sample_rate = REQUESTED_RATE;
     let (producer, consumer) = rtrb::RingBuffer::<f32>::new(RING_CAPACITY_FRAMES * 2);
@@ -756,10 +758,19 @@ fn main() {
         let request = match request {
             MainRequest::Output(device, size) => {
                 if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { return; }
+                let rate = SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed);
                 drop(output_stream.take());
                 output_stream = Some(open_output_stream(&device, size, consumer.clone(), waker.clone())
                     .or_else(|| open_output_stream("", 128, consumer.clone(), waker.clone()))
                     .expect("no output device"));
+                // the input records at the output's rate
+                let rate_now = SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed);
+                if rate_now != rate {
+                    if let Some((stream, requested)) = input_stream.take() {
+                        drop(stream);
+                        input_stream = open_input_stream(&input_events, rate_now, &requested).map(|stream| (stream, requested));
+                    }
+                }
                 return;
             }
             MainRequest::Run(work) => return work(),

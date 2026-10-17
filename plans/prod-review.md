@@ -115,6 +115,36 @@ Recommended, by value:
 - Crash loop: the crash marker stays set through a plugin's first second of audio (`Loading::keep`, `end_trial`), a
   plugin marked crashed is not loaded until a rescan or a bundle update. Not tested end to end (needs a crashing plugin).
 
+## Pre-merge review (2026-10-17, after desktop-test-12)
+
+Three reviews: changes since 49c014fa6, browser and SDK safety (98efab88f..HEAD), open plan items.
+
+Before the merge into main (PROD web, SDK):
+- `/install` reaches opendaw.studio with dead buttons (installers on DEV only, `desktop.yml` release notes link it).
+  Proposed: register the route on DEV only until the public desktop release. Decision pending.
+- Web recording moved into `WebAudioInputs` (logic compared identical, no tests, no browser recording since). Record
+  audio and MIDI once by hand in the web build before merging.
+- Live rooms during the deploy: bytes fields now travel as `Uint8Array` in Yjs, an old tab in a room with a new client
+  drops them (`ByteArrayField.fromJSON`) until it reloads. Temporary, note at deploy time.
+- Decide knowingly: `http://127.0.0.1:47110` in the shared root `.htaccess` CORS list (already live), DEV deploys no
+  longer post to Discord, `hostImports` and untyped `extendEngineModules` become public SDK API once merged.
+- Browser and SDK check: no blockers, desktop code gated, no existing box changed, SDK changes additive.
+
+Bugs in the last changes (desktop, DEV), fixed 2026-10-17 (uncommitted), least intrusive each:
+1. Crash marker trial reads as a crash: a scan in a plugin's first second keeps it "crashed" for the session, quitting
+   within a second blocks the plugin until a rescan. Fix: a separate `trial` flag in the cache, `settle_trials` turns
+   leftovers into `crashed` at engine start, `end_trials` on a clean exit, the shell closes the engine's stdin and waits
+   up to 1 s before killing it (test `a_plugin_on_trial_counts_as_crashed_only_at_the_next_start`).
+2. An open audio input keeps its rate when the output reopens at another one, recordings play at the wrong pitch.
+   Fix: the input reopens at the new rate after the output.
+3. Deploy retries miss thrown network errors (`sftp.put`, `fetch`), temp files stay behind. Fix: a thrown error is a
+   failed attempt (the temp files only matter on the CI runner, left).
+4. A plugin that failed to load is not retried once the startup scan lists it. Fix: a finished scan sets
+   `RETRY_FAILED`, the engine thread loads its failed slots again.
+5. Another program on the shell's port: openDAW exits silently. Fix: only a 204 to `/__show` counts as openDAW,
+   otherwise the start panics as before the single instance change.
+6. Retried component downloads count their progress twice. Fix: a failed attempt takes back its bytes.
+
 ## Refactoring
 
 - `plugins.rs` (2056 lines) into `plugins/{com, handler, instance, slots, process, notices, window/{macos, windows,

@@ -31,6 +31,8 @@ struct Notice {
 
 static NOTICES: Mutex<Vec<Notice>> = Mutex::new(Vec::new());
 static LOADED: Mutex<Vec<(u32, u32, Option<Loaded>)>> = Mutex::new(Vec::new());
+// a scan finished: plugins that failed to load may be listed now
+static RETRY_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn notify(uuid: &str, kind: &'static str, value: impl Into<String>) {
     NOTICES.lock().unwrap().push(Notice { uuid: uuid.to_string(), kind, value: value.into() });
@@ -86,6 +88,7 @@ fn studio_request(text: &str) {
         Ok(StudioRequest::Scan { folders, force }) => {
             std::thread::spawn(move || {
                 let catalogue = crate::scan::run(&folders, force);
+                RETRY_FAILED.store(true, std::sync::atomic::Ordering::SeqCst);
                 notify("", "plugins", serde_json::to_string(&catalogue).unwrap());
             });
         }
@@ -1169,6 +1172,9 @@ struct Slot {
     inactive: bool,
     // the bundle on trial and the frames it has played
     trial: Option<(String, usize)>,
+    // the sample rate of the last load, and whether it failed
+    rate: f64,
+    failed: bool,
 }
 
 // every thread keeps its own slots (the engine thread, each offline render), the handles are unique process wide
@@ -1192,7 +1198,7 @@ fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
         changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new(),
-        offline, tried: false, unwritten: 0, inactive: false, trial: None
+        offline, tried: false, unwritten: 0, inactive: false, trial: None, rate: 0.0, failed: false
     }));
     handle
 }
@@ -1240,6 +1246,8 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         }
         slot.format = format.clone();
         slot.id = id.clone();
+        slot.rate = sample_rate;
+        slot.failed = false;
         end_trial(slot.trial.take());
         if let Some(previous) = slot.shared.take() { release_shared(handle, slot.generation, previous); }
         slot.generation += 1;
@@ -1431,10 +1439,18 @@ fn take_loaded() {
                     end_trial(Some((loaded.trial, 0)));
                     release_shared(handle, generation, loaded.shared)
                 }
+                (Some(slot), None) if slot.generation == generation => slot.failed = true,
                 _ => {}
             }
         }
     });
+    if RETRY_FAILED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        let failed: Vec<(u32, String, String, f64)> = SLOTS.with(|slots| slots.borrow_mut().iter_mut()
+            .filter(|(_, slot)| slot.failed)
+            .map(|(handle, slot)| (*handle, std::mem::take(&mut slot.format), std::mem::take(&mut slot.id), slot.rate))
+            .collect());
+        for (handle, format, id, rate) in failed { load(handle, format, id, rate); }
+    }
 }
 
 // writes `frames` into the two channel pointers, an effect reads its input from `input`; false while the plugin is not

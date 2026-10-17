@@ -176,8 +176,9 @@ const uploadDist = async (localDir: string, remoteDir: string): Promise<void> =>
         fs.writeFileSync(listPath, chunk.join("\n"))
         execSync(`tar -czf ${tarballPath} -C ${localDir} -T ${listPath}`)
         for (let attempt = 1; ; attempt++) {
-            await sftp.put(tarballPath, remoteTarball)
-            const {ok, text} = await extractOnServer(remoteTarball)
+            const {ok, text} = await sftp.put(tarballPath, remoteTarball)
+                .then(() => extractOnServer(remoteTarball))
+                .catch((error: unknown) => ({ok: false, text: String(error)}))
             if (ok) {break}
             if (attempt === ChunkAttempts) {throw new Error(`Extraction of chunk ${index + 1}/${chunks.length} failed: ${text}`)}
             console.warn(`chunk ${index + 1}/${chunks.length} failed (${text}), attempt ${attempt + 1} of ${ChunkAttempts}`)
