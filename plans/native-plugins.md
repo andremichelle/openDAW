@@ -138,6 +138,10 @@ Default folders, plus user folders in the settings:
     default patch, sliders and pitch worked. Fine on macOS, and on the next try in the VM too. Suspect a race: after the
     preset change the engine reads the new state, an older state from the studio arriving then is applied again
     (`set_state` / `apply_later`, `is_known`). Needs a log first (Windows discards the engine output, no log file yet).
+12. **Later: a plugin's other outputs.** Plugins with more than one output bus (Microtonic's second stereo pair, the
+    eight outputs of Microtonic Multi, drum machines and samplers in general) play only their main bus, the others
+    write into a scratch buffer (`Buses`). Wanted at some point: route each extra output to its own channel in the
+    mixer. Same for WebCLAP (`plans/webclap.md`).
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap

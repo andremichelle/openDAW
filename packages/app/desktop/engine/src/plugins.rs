@@ -693,18 +693,60 @@ pub struct Processing {
     outputs_changes: ComWrapper<OutputChanges>,
     output_list: ComPtr<IParameterChanges>,
     context: ProcessContext,
-    inputs: i32,
-    outputs: i32,
+    inputs: Buses,
+    outputs: Buses,
     mode: i32,
-    // the input of a plugin that takes audio but is played as an instrument
+    // the input of a plugin that takes audio but is played as an instrument, and of its other input buses
     silence: Vec<f32>,
+    // where its other output buses write, nobody reads it
+    _scratch: Vec<f32>,
+}
+
+// buffers for every audio bus a plugin declares (it may write all of them), the first carries the engine's channels
+struct Buses {
+    buses: Vec<AudioBusBuffers>,
+    pointers: Vec<Vec<*mut f32>>,
+}
+
+impl Buses {
+    unsafe fn new(component: &ComPtr<IComponent>, direction: BusDirections, fill: *mut f32) -> Self {
+        let count = component.getBusCount(MediaTypes_::kAudio as i32, direction as i32).max(0);
+        let mut pointers: Vec<Vec<*mut f32>> = (0..count).map(|index| {
+            let mut info: BusInfo = std::mem::zeroed();
+            component.getBusInfo(MediaTypes_::kAudio as i32, direction as i32, index, &mut info);
+            vec![fill; if index == 0 { 2 } else { info.channelCount.max(0) as usize }]
+        }).collect();
+        let buses = pointers.iter_mut().map(|channels| {
+            let mut bus = AudioBusBuffers { numChannels: channels.len() as i32, silenceFlags: 0, __field0: std::mem::zeroed() };
+            bus.__field0.channelBuffers32 = channels.as_mut_ptr();
+            bus
+        }).collect();
+        Self { buses, pointers }
+    }
+
+    fn count(&self) -> i32 {self.buses.len() as i32}
+
+    fn main(&mut self, left: *mut f32, right: *mut f32) -> *mut AudioBusBuffers {
+        if self.buses.is_empty() { return ptr::null_mut(); }
+        self.pointers[0][0] = left;
+        self.pointers[0][1] = right;
+        for bus in &mut self.buses { bus.silenceFlags = 0; }
+        self.buses.as_mut_ptr()
+    }
+
+    fn main_silent(&self) -> bool {self.buses.first().is_some_and(|bus| bus.silenceFlags & 0b11 == 0b11)}
 }
 
 pub struct Loaded {
     shared: Shared,
     inbox: SharedInbox,
     ranges: HashMap<ParamID, f64>,
+    // the bundle whose crash marker stays set until the plugin has played a while
+    trial: String,
 }
+
+// about a second of audio
+const TRIAL_FRAMES: usize = 48_000;
 
 unsafe impl Send for Processing {}
 
@@ -823,7 +865,11 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
             .or(state)
     } else { state };
     let info = crate::scan::find(format, id)?;
-    let _loading = crate::scan::Loading::new(&info.path);
+    if info.status == "crashed" {
+        eprintln!("[plugins] {} took the engine down before and is not loaded, a rescan tries it again", info.name);
+        return None;
+    }
+    let loading = crate::scan::Loading::new(&info.path);
     let module = module(Path::new(&info.path))?;
     let cid = parse_cid(id)?;
     let host = ComWrapper::new(Host);
@@ -893,9 +939,13 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
     let param_list = params.to_com_ptr::<IParameterChanges>()?;
     let outputs_changes = output_changes();
     let output_list = outputs_changes.to_com_ptr::<IParameterChanges>()?;
+    let mut silence = vec![0.0; MAX_BLOCK];
+    let mut scratch = vec![0.0; MAX_BLOCK];
+    let inputs = Buses::new(&component, BusDirections_::kInput as BusDirections, silence.as_mut_ptr());
+    let outputs = Buses::new(&component, BusDirections_::kOutput as BusDirections, scratch.as_mut_ptr());
     let shared = Arc::new(Mutex::new(Processing {
         component: component.clone(), processor, events, event_list, output_events, output_event_list, params, param_list, outputs_changes, output_list, context,
-        inputs: audio_ins.min(1), outputs: audio_outs.min(1), mode, silence: vec![0.0; MAX_BLOCK]
+        inputs, outputs, mode, silence, _scratch: scratch
     }));
     let infos = read_params(&controller);
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
@@ -908,7 +958,7 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
     // a plugin swapped again before the engine took the earlier one: that earlier instance is never used
     if let Some(replaced) = replaced { terminate(handle, &replaced); }
     println!("[plugins] {} ready ({} {}, {} parameters)", info.name, info.vendor, id, infos.len());
-    Some(Loaded { shared, inbox, ranges })
+    Some(Loaded { shared, inbox, ranges, trial: loading.keep() })
 }
 
 unsafe fn sync_controller(component: &ComPtr<IComponent>, controller: &ComPtr<IEditController>) {
@@ -1117,6 +1167,8 @@ struct Slot {
     // blocks in a row the plugin left unwritten (an unlicensed plugin returns without processing)
     unwritten: u32,
     inactive: bool,
+    // the bundle on trial and the frames it has played
+    trial: Option<(String, usize)>,
 }
 
 // every thread keeps its own slots (the engine thread, each offline render), the handles are unique process wide
@@ -1140,7 +1192,7 @@ fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
         changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new(),
-        offline, tried: false, unwritten: 0, inactive: false
+        offline, tried: false, unwritten: 0, inactive: false, trial: None
     }));
     handle
 }
@@ -1156,7 +1208,8 @@ fn load_offline(handle: u32, slot: &mut Slot, sample_rate: f64) {
         let _ = sender.send(unsafe { instantiate(handle, 0, &uuid, &format, &id, sample_rate, state, true) });
     })));
     match receiver.recv_timeout(OFFLINE_LOAD_TIMEOUT) {
-        Ok(Some(Loaded { shared, inbox, ranges })) => {
+        Ok(Some(Loaded { shared, inbox, ranges, trial })) => {
+            slot.trial = Some((trial, 0));
             slot.shared = Some(shared);
             slot.inbox = Some(inbox);
             slot.ranges = ranges;
@@ -1187,6 +1240,7 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         }
         slot.format = format.clone();
         slot.id = id.clone();
+        end_trial(slot.trial.take());
         if let Some(previous) = slot.shared.take() { release_shared(handle, slot.generation, previous); }
         slot.generation += 1;
         slot.inbox = None;
@@ -1290,6 +1344,7 @@ pub fn reset(handle: u32) {
 pub fn release(handle: u32) {
     SLOTS.with(|slots| {
         if let Some(mut slot) = slots.borrow_mut().remove(&handle) {
+            end_trial(slot.trial.take());
             if let Some(shared) = slot.shared.take() { release_shared(handle, slot.generation, shared); }
         }
     });
@@ -1359,7 +1414,8 @@ fn take_loaded() {
         let mut slots = slots.borrow_mut();
         for (handle, generation, shared) in loaded {
             match (slots.get_mut(&handle), shared) {
-                (Some(slot), Some(Loaded { shared, inbox, ranges })) if slot.generation == generation => {
+                (Some(slot), Some(Loaded { shared, inbox, ranges, trial })) if slot.generation == generation => {
+                    slot.trial = Some((trial, 0));
                     slot.shared = Some(shared);
                     slot.inbox = Some(inbox);
                     slot.ranges = ranges;
@@ -1371,7 +1427,10 @@ fn take_loaded() {
                         if let Some(state) = slot.state.clone() { apply_later(handle, slot, state); }
                     }
                 }
-                (_, Some(loaded)) => release_shared(handle, generation, loaded.shared),
+                (_, Some(loaded)) => {
+                    end_trial(Some((loaded.trial, 0)));
+                    release_shared(handle, generation, loaded.shared)
+                }
                 _ => {}
             }
         }
@@ -1443,36 +1502,45 @@ pub unsafe fn process(handle: u32, input: Option<(*mut f32, *mut f32)>, left: *m
         // the flag constants are signed on Windows, unsigned elsewhere
         context.state = (ProcessContext_::StatesAndFlags_::kTempoValid | ProcessContext_::StatesAndFlags_::kProjectTimeMusicValid
             | if playing { ProcessContext_::StatesAndFlags_::kPlaying } else { 0 }) as _;
-        let mut channels = [left, right];
-        let mut output = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
-        output.__field0.channelBuffers32 = channels.as_mut_ptr();
+        let channels = [left, right];
         let silence = processing.silence.as_mut_ptr();
-        let mut input_channels = match input { Some((in_left, in_right)) => [in_left, in_right], None => [silence, silence] };
-        let mut input_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
-        input_bus.__field0.channelBuffers32 = input_channels.as_mut_ptr();
+        let (in_left, in_right) = input.unwrap_or((silence, silence));
+        let inputs = processing.inputs.main(in_left, in_right);
+        let outputs = processing.outputs.main(left, right);
         let frames = frames.min(MAX_BLOCK);
         mark_unwritten(&channels, frames);
         let mut data = ProcessData {
             processMode: processing.mode,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: frames as i32,
-            numInputs: processing.inputs,
-            numOutputs: processing.outputs,
-            inputs: if processing.inputs > 0 { &mut input_bus } else { ptr::null_mut() },
-            outputs: &mut output,
+            numInputs: processing.inputs.count(),
+            numOutputs: processing.outputs.count(),
+            inputs,
+            outputs,
             inputParameterChanges: processing.param_list.as_ptr(),
             outputParameterChanges: processing.output_list.as_ptr(),
             inputEvents: processing.event_list.as_ptr(),
             outputEvents: processing.output_event_list.as_ptr(),
             processContext: &mut processing.context,
         };
-        let processed = processing.processor.process(&mut data) == kResultOk && processing.outputs > 0;
-        let silent = output.silenceFlags & 0b11 == 0b11;
+        let processed = processing.processor.process(&mut data) == kResultOk && processing.outputs.count() > 0;
+        let silent = processing.outputs.main_silent();
         let written = take_written(&channels, frames, silent);
         crate::stats::record_max(&crate::stats::MAX_PLUGIN_US, started);
         track_unwritten(slot, processed && written);
+        if let Some((_, played)) = slot.trial.as_mut() {
+            *played += frames;
+            if *played >= TRIAL_FRAMES { end_trial(slot.trial.take()); }
+        }
         processed && written
     })
+}
+
+// the marker is written on the main thread, never on the audio thread
+fn end_trial(trial: Option<(String, usize)>) {
+    if let Some((path, _)) = trial {
+        request_main(MainRequest::Run(Box::new(move || crate::scan::survived(&path))));
+    }
 }
 
 // ---------- plugin windows ----------
@@ -2073,5 +2141,57 @@ mod tests {
         }).join().unwrap();
         assert!(LOADED.lock().unwrap().iter().any(|(handle, _, _)| *handle == 9_999));
         LOADED.lock().unwrap().retain(|(handle, _, _)| *handle != 9_999);
+    }
+
+    // OPENDAW_PROBE="<bundle>|<class id>" cargo test probe_a_plugin -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn probe_a_plugin() {
+        let probe = std::env::var("OPENDAW_PROBE").expect("OPENDAW_PROBE");
+        let (path, id) = probe.split_once('|').unwrap();
+        unsafe {
+            let module = module(Path::new(path)).expect("module");
+            let component: ComPtr<IComponent> = create(&module.factory, &parse_cid(id).unwrap()).expect("component");
+            let host = ComWrapper::new(Host);
+            assert_eq!(component.initialize(host.to_com_ptr::<IHostApplication>().unwrap().into_raw() as *mut FUnknown), kResultOk);
+            for (media, direction, label) in [(MediaTypes_::kAudio, BusDirections_::kInput, "audio in"), (MediaTypes_::kAudio, BusDirections_::kOutput, "audio out"),
+                                              (MediaTypes_::kEvent, BusDirections_::kInput, "event in")] {
+                let count = component.getBusCount(media as i32, direction as i32);
+                for index in 0..count {
+                    let mut info: BusInfo = std::mem::zeroed();
+                    component.getBusInfo(media as i32, direction as i32, index, &mut info);
+                    println!("{label} {index}: {} channels, type {}, flags {}", info.channelCount, info.busType, info.flags);
+                }
+            }
+            let processor = component.cast::<IAudioProcessor>().unwrap();
+            let ins = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32);
+            let outs = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32);
+            let mut in_arrangements = vec![SpeakerArr::kStereo; ins as usize];
+            let mut out_arrangements = vec![SpeakerArr::kStereo; outs as usize];
+            processor.setBusArrangements(in_arrangements.as_mut_ptr(), ins, out_arrangements.as_mut_ptr(), outs);
+            if ins > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, 0, 1); }
+            if outs > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1); }
+            let mut setup = ProcessSetup { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+                maxSamplesPerBlock: MAX_BLOCK as i32, sampleRate: 48_000.0 };
+            processor.setupProcessing(&mut setup);
+            component.setActive(1);
+            processor.setProcessing(1);
+            let mut left = vec![0f32; MAX_BLOCK];
+            let mut right = vec![0f32; MAX_BLOCK];
+            let mut scratch = vec![0f32; MAX_BLOCK];
+            let mut silence = vec![0f32; MAX_BLOCK];
+            let mut inputs = Buses::new(&component, BusDirections_::kInput as BusDirections, silence.as_mut_ptr());
+            let mut outputs = Buses::new(&component, BusDirections_::kOutput as BusDirections, scratch.as_mut_ptr());
+            let mut context: ProcessContext = std::mem::zeroed();
+            context.sampleRate = 48_000.0;
+            let mut data = ProcessData { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+                numSamples: 128, numInputs: inputs.count(), numOutputs: outputs.count(),
+                inputs: inputs.main(silence.as_mut_ptr(), silence.as_mut_ptr()), outputs: outputs.main(left.as_mut_ptr(), right.as_mut_ptr()),
+                inputParameterChanges: ptr::null_mut(), outputParameterChanges: ptr::null_mut(), inputEvents: ptr::null_mut(),
+                outputEvents: ptr::null_mut(), processContext: &mut context };
+            assert_eq!(processor.process(&mut data), kResultOk);
+            component.setActive(0);
+            component.terminate();
+        }
     }
 }

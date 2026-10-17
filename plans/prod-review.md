@@ -108,6 +108,13 @@ Recommended, by value:
 - Log file: release builds write the shell's and the engine's output to `<app data>/logs/openDAW.log` (the session
   before as `openDAW.previous.log`), Tools > Show Log Files opens the folder. The studio's own console is not in it.
 
+- Microtonic crashed the engine on its first block, every restart again: it declares a second output bus (default
+  active) and the engine passed buffers for the first only. Every audio bus now gets buffers, the extra ones a scratch
+  or silence buffer (`Buses`). Probe test `probe_a_plugin` (ignored, `OPENDAW_PROBE`): crashed before, passes now, all
+  installed plugins process a block (Cardinal aborts in the probe during initialize, a probe limit, it runs in the app).
+- Crash loop: the crash marker stays set through a plugin's first second of audio (`Loading::keep`, `end_trial`), a
+  plugin marked crashed is not loaded until a rescan or a bundle update. Not tested end to end (needs a crashing plugin).
+
 ## Refactoring
 
 - `plugins.rs` (2056 lines) into `plugins/{com, handler, instance, slots, process, notices, window/{macos, windows,

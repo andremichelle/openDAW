@@ -382,6 +382,8 @@ Missing:
 - plugin browser (`WclapService`, `WclapBrowser`, `BrowseScope.Plugins`), `FactoryCatalog.plugins()`
   `index.json`, "Add from URL...", drag onto a track
 - bundle presets (`clap.preset-load`)
+- a plugin's other output ports: only the main output plays, wanted at some point as their own mixer channels, same as
+  for native plugins (`plans/native-plugins.md`, gap 12)
 - `EVENT_CHOKE` and `cent` tuning note expressions
 - a missing-plugin placeholder (today the device passes through and the editor shows "Failed")
 - offline render waits for every WebCLAP plugin to finish initializing, if it needs to: today

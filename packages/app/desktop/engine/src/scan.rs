@@ -310,7 +310,8 @@ pub fn find(format: &str, id: &str) -> Option<PluginInfo> {
     cached.iter().find(matches).cloned()
 }
 
-// set while a plugin loads: a marker still set at the next start means it took the engine down
+// set while a plugin loads and its first second plays: a marker still set at the next start means it took the engine
+// down, the plugin is then not loaded until a rescan or an update of its bundle
 pub struct Loading(String);
 
 impl Loading {
@@ -318,10 +319,15 @@ impl Loading {
         mark_loading(path, true);
         Self(path.to_string())
     }
+
+    // the marker stays set past the load, `survived` clears it
+    pub fn keep(mut self) -> String {std::mem::take(&mut self.0)}
 }
 
+pub fn survived(path: &str) {mark_loading(path, false)}
+
 impl Drop for Loading {
-    fn drop(&mut self) {mark_loading(&self.0, false)}
+    fn drop(&mut self) {if !self.0.is_empty() { mark_loading(&self.0, false) }}
 }
 
 fn mark_loading(path: &str, loading: bool) {
