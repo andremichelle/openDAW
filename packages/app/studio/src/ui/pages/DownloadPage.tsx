@@ -56,9 +56,10 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle, service}: P
             <Platform platform="windows" name="Windows" icon={PlatformIcons.Windows} note="Windows 10 and 11, 64-bit"
                       size="about 20 MB"
                       downloads={[{label: "Download", file: "openDAW-windows-setup.exe"}]}/>
-            <Platform platform="linux" name="Linux" icon={PlatformIcons.Linux} note="64-bit"
+            <Platform platform="linux" name="Linux" icon={PlatformIcons.Linux} note="64-bit, x86 and ARM"
                       size="AppImage about 90 MB, .deb about 20 MB"
-                      downloads={[{label: "AppImage", file: "openDAW-linux.AppImage"}, {label: ".deb", file: "openDAW-linux.deb"}]}/>
+                      downloads={[{label: "AppImage", file: "openDAW-linux.AppImage"}, {label: ".deb", file: "openDAW-linux.deb"},
+                          {label: "ARM AppImage", file: "openDAW-linux-arm64.AppImage"}, {label: "ARM .deb", file: "openDAW-linux-arm64.deb"}]}/>
         </div>
         <div className="details">
             <section>

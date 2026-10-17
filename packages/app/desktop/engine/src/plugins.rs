@@ -612,8 +612,48 @@ struct Frame {
     handle: u32,
 }
 
+#[cfg(not(target_os = "linux"))]
 impl Class for Frame {
     type Interfaces = (IPlugFrame,);
+}
+
+// Linux plugins ask the frame for the host's run loop to get their descriptors and timers served
+#[cfg(target_os = "linux")]
+impl Class for Frame {
+    type Interfaces = (IPlugFrame, Linux::IRunLoop);
+}
+
+#[cfg(target_os = "linux")]
+impl Linux::IRunLoopTrait for Frame {
+    unsafe fn registerEventHandler(&self, handler: *mut Linux::IEventHandler, fd: Linux::FileDescriptor) -> tresult {
+        match vst3::ComRef::from_raw(handler) {
+            Some(handler) => {
+                windows::register_event(handler.to_com_ptr(), fd);
+                kResultOk
+            }
+            None => kInvalidArgument,
+        }
+    }
+
+    unsafe fn unregisterEventHandler(&self, handler: *mut Linux::IEventHandler) -> tresult {
+        windows::unregister_event(handler);
+        kResultOk
+    }
+
+    unsafe fn registerTimer(&self, handler: *mut Linux::ITimerHandler, milliseconds: Linux::TimerInterval) -> tresult {
+        match vst3::ComRef::from_raw(handler) {
+            Some(handler) => {
+                windows::register_timer(handler.to_com_ptr(), milliseconds);
+                kResultOk
+            }
+            None => kInvalidArgument,
+        }
+    }
+
+    unsafe fn unregisterTimer(&self, handler: *mut Linux::ITimerHandler) -> tresult {
+        windows::unregister_timer(handler);
+        kResultOk
+    }
 }
 
 impl IPlugFrameTrait for Frame {
@@ -984,6 +1024,10 @@ pub fn save_all() {
 
 pub fn cycle_in() {request_main(MainRequest::Run(Box::new(windows::cycle_in)));}
 
+// Linux: the main thread waits here for X11, the plugins' descriptors and their timers
+#[cfg(target_os = "linux")]
+pub fn pump(wait: std::time::Duration) {windows::pump(wait)}
+
 // the host's values for the editor display; a value the plugin already has is not written again
 unsafe fn flush_display(editor: &Editor) {
     let values: Vec<(ParamID, f64)> = editor.inbox.lock().unwrap().to_gui.drain().collect();
@@ -1010,6 +1054,9 @@ unsafe fn open_view(handle: u32) {
             notify(&editor.uuid, "gui", "unavailable");
             return;
         }
+        // macOS scales by itself, Windows editors draw at the screen's scale once they know it
+        #[cfg(target_os = "windows")]
+        if let Some(scaling) = view.cast::<IPlugViewContentScaleSupport>() { scaling.setContentScaleFactor(windows::scale_factor()); }
         let mut rect: ViewRect = std::mem::zeroed();
         view.getSize(&mut rect);
         let parent = windows::open(handle, &editor.name, (rect.right - rect.left) as f64, (rect.bottom - rect.top) as f64);
@@ -1656,7 +1703,343 @@ mod windows {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+// Windows: one native window per plugin editor on the engine's main thread, which runs a Windows message loop
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::cell::{Cell, RefCell};
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::HiDpi::GetDpiForSystem;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
+                                                     GetForegroundWindow, GetWindowThreadProcessId, LoadCursorW, RegisterClassW,
+                                                     SetForegroundWindow, SetWindowPos, ShowWindow, CW_USEDEFAULT, HWND_NOTOPMOST,
+                                                     HWND_TOPMOST, IDC_ARROW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+                                                     SW_RESTORE, SW_SHOW, WM_CLOSE, WNDCLASSW, WS_CAPTION, WS_MINIMIZEBOX,
+                                                     WS_OVERLAPPED, WS_SYSMENU};
+
+    pub const PLATFORM_TYPE: vst3::Steinberg::FIDString = vst3::Steinberg::kPlatformTypeHWND;
+    const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    const LEVEL_TICKS: u32 = 20;
+
+    thread_local! {
+        static WINDOWS: RefCell<Vec<(u32, HWND)>> = const { RefCell::new(Vec::new()) };
+        static CLOSED: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+        static REGISTERED: Cell<bool> = const { Cell::new(false) };
+        static TOPMOST: Cell<bool> = const { Cell::new(false) };
+        static DIALOGS: Cell<bool> = const { Cell::new(false) };
+        static TICKS: Cell<u32> = const { Cell::new(0) };
+    }
+
+    fn wide(text: &str) -> Vec<u16> {text.encode_utf16().chain(std::iter::once(0)).collect()}
+
+    fn class_name() -> Vec<u16> {wide("OpenDAWPluginWindow")}
+
+    // the studio's process, passed by the shell: plugin windows stay above it
+    fn shell_process() -> u32 {
+        static SHELL: OnceLock<u32> = OnceLock::new();
+        *SHELL.get_or_init(|| std::env::var("OPENDAW_SHELL_PID").ok().and_then(|pid| pid.parse().ok()).unwrap_or(0))
+    }
+
+    // the close button only marks the window: the host detaches the plugin view first, then close() destroys it
+    unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if message == WM_CLOSE {
+            if let Some(handle) = WINDOWS.with(|windows| windows.borrow().iter().find(|(_, window)| *window == hwnd).map(|(handle, _)| *handle)) {
+                CLOSED.with(|closed| closed.borrow_mut().push(handle));
+            }
+            return 0;
+        }
+        DefWindowProcW(hwnd, message, wparam, lparam)
+    }
+
+    fn register() {
+        if REGISTERED.replace(true) { return; }
+        let name = class_name();
+        let class = WNDCLASSW {
+            style: 0, lpfnWndProc: Some(window_proc), cbClsExtra: 0, cbWndExtra: 0,
+            hInstance: unsafe { GetModuleHandleW(std::ptr::null()) }, hIcon: std::ptr::null_mut(),
+            hCursor: unsafe { LoadCursorW(std::ptr::null_mut(), IDC_ARROW) }, hbrBackground: std::ptr::null_mut(),
+            lpszMenuName: std::ptr::null(), lpszClassName: name.as_ptr()
+        };
+        unsafe { RegisterClassW(&class); }
+    }
+
+    fn outer_size(width: f64, height: f64) -> (i32, i32) {
+        let mut rect = RECT { left: 0, top: 0, right: width as i32, bottom: height as i32 };
+        unsafe { AdjustWindowRectEx(&mut rect, STYLE, 0, 0); }
+        (rect.right - rect.left, rect.bottom - rect.top)
+    }
+
+    fn find(handle: u32) -> Option<HWND> {
+        WINDOWS.with(|windows| windows.borrow().iter().find(|(other, _)| *other == handle).map(|(_, window)| *window))
+    }
+
+    // the plugin's size is in pixels, the engine runs DPI aware
+    pub fn scale_factor() -> f32 {unsafe { GetDpiForSystem() as f32 / 96.0 }}
+
+    pub fn open(handle: u32, title: &str, width: f64, height: f64) -> *mut c_void {
+        register();
+        let (outer_width, outer_height) = outer_size(width, height);
+        let (name, title) = (class_name(), wide(title));
+        let hwnd = unsafe {
+            CreateWindowExW(0, name.as_ptr(), title.as_ptr(), STYLE, CW_USEDEFAULT, CW_USEDEFAULT, outer_width, outer_height,
+                            std::ptr::null_mut(), std::ptr::null_mut(), GetModuleHandleW(std::ptr::null()), std::ptr::null())
+        };
+        if hwnd.is_null() { return std::ptr::null_mut(); }
+        WINDOWS.with(|windows| windows.borrow_mut().push((handle, hwnd)));
+        unsafe {
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+        }
+        TOPMOST.set(false);
+        apply_level();
+        hwnd
+    }
+
+    pub fn resize(handle: u32, width: f64, height: f64) {
+        let Some(hwnd) = find(handle) else { return };
+        let (outer_width, outer_height) = outer_size(width, height);
+        unsafe { SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, outer_width, outer_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); }
+    }
+
+    pub fn front(handle: u32) {
+        let Some(hwnd) = find(handle) else { return };
+        unsafe {
+            ShowWindow(hwnd, SW_RESTORE);
+            SetForegroundWindow(hwnd);
+        }
+    }
+
+    pub fn close(handle: u32) {
+        let hwnd = WINDOWS.with(|windows| {
+            let mut windows = windows.borrow_mut();
+            let index = windows.iter().position(|(other, _)| *other == handle)?;
+            Some(windows.remove(index).1)
+        });
+        if let Some(hwnd) = hwnd { unsafe { DestroyWindow(hwnd); } }
+    }
+
+    pub fn closed() -> Vec<u32> {CLOSED.with(|closed| std::mem::take(&mut *closed.borrow_mut()))}
+
+    // plugin windows stay above the studio while openDAW (the studio or this engine) is in front and no studio dialog is open
+    pub fn tick() {
+        let ticks = TICKS.get() + 1;
+        TICKS.set(ticks);
+        if ticks % LEVEL_TICKS == 0 { apply_level(); }
+    }
+
+    fn apply_level() {
+        if WINDOWS.with(|windows| windows.borrow().is_empty()) { return; }
+        let mut process = 0u32;
+        unsafe { GetWindowThreadProcessId(GetForegroundWindow(), &mut process); }
+        let ours = process != 0 && (process == std::process::id() || process == shell_process());
+        let topmost = ours && !DIALOGS.get();
+        if topmost == TOPMOST.get() { return; }
+        TOPMOST.set(topmost);
+        let level = if topmost { HWND_TOPMOST } else { HWND_NOTOPMOST };
+        WINDOWS.with(|windows| windows.borrow().iter().for_each(|(_, hwnd)| unsafe {
+            SetWindowPos(*hwnd, level, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }));
+    }
+
+    pub fn dialogs(open: bool) {
+        DIALOGS.set(open);
+        apply_level();
+    }
+
+    pub fn cycle_in() {
+        if let Some((handle, _)) = WINDOWS.with(|windows| windows.borrow().first().copied()) { front(handle); }
+    }
+}
+
+// Linux: one X11 window per plugin editor (libX11 opened at runtime), and the run loop Linux plugins need: they register
+// their file descriptors and timers with the host, the engine's main thread polls them next to the X11 connection
+#[cfg(target_os = "linux")]
+mod windows {
+    use std::cell::{Cell, RefCell};
+    use std::ffi::{c_void, CString};
+    use std::time::{Duration, Instant};
+    use vst3::ComPtr;
+    use vst3::Steinberg::Linux::{FileDescriptor, IEventHandler, IEventHandlerTrait, ITimerHandler, ITimerHandlerTrait, TimerInterval};
+    use x11_dl::xlib;
+
+    pub const PLATFORM_TYPE: vst3::Steinberg::FIDString = vst3::Steinberg::kPlatformTypeX11EmbedWindowID;
+
+    struct X11 {
+        lib: xlib::Xlib,
+        display: *mut xlib::Display,
+        delete: xlib::Atom,
+    }
+
+    struct Timer {
+        handler: ComPtr<ITimerHandler>,
+        interval: Duration,
+        next: Instant,
+    }
+
+    thread_local! {
+        static X: RefCell<Option<X11>> = const { RefCell::new(None) };
+        static TRIED: Cell<bool> = const { Cell::new(false) };
+        static WINDOWS: RefCell<Vec<(u32, xlib::Window)>> = const { RefCell::new(Vec::new()) };
+        static CLOSED: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+        static HANDLERS: RefCell<Vec<(ComPtr<IEventHandler>, FileDescriptor)>> = const { RefCell::new(Vec::new()) };
+        static TIMERS: RefCell<Vec<Timer>> = const { RefCell::new(Vec::new()) };
+    }
+
+    // without an X server (Wayland without XWayland) there are no editors
+    fn with_x<R>(work: impl FnOnce(&X11) -> R) -> Option<R> {
+        if !TRIED.replace(true) {
+            let opened = xlib::Xlib::open().ok().and_then(|lib| {
+                let display = unsafe { (lib.XOpenDisplay)(std::ptr::null()) };
+                if display.is_null() { return None; }
+                let name = CString::new("WM_DELETE_WINDOW").unwrap();
+                let delete = unsafe { (lib.XInternAtom)(display, name.as_ptr(), 0) };
+                Some(X11 { lib, display, delete })
+            });
+            if opened.is_none() { eprintln!("[plugins] no X11 display, plugin windows are unavailable"); }
+            X.with(|x| *x.borrow_mut() = opened);
+        }
+        X.with(|x| x.borrow().as_ref().map(work))
+    }
+
+    fn find(handle: u32) -> Option<xlib::Window> {
+        WINDOWS.with(|windows| windows.borrow().iter().find(|(other, _)| *other == handle).map(|(_, window)| *window))
+    }
+
+    // the editor sets the size, the user does not
+    fn fix_size(x: &X11, window: xlib::Window, width: i32, height: i32) {
+        unsafe {
+            let hints = (x.lib.XAllocSizeHints)();
+            if hints.is_null() { return; }
+            (*hints).flags = xlib::PMinSize | xlib::PMaxSize;
+            (*hints).min_width = width;
+            (*hints).max_width = width;
+            (*hints).min_height = height;
+            (*hints).max_height = height;
+            (x.lib.XSetWMNormalHints)(x.display, window, hints);
+            (x.lib.XFree)(hints as *mut c_void);
+        }
+    }
+
+    pub fn open(handle: u32, title: &str, width: f64, height: f64) -> *mut c_void {
+        let window = with_x(|x| unsafe {
+            let screen = (x.lib.XDefaultScreen)(x.display);
+            let root = (x.lib.XRootWindow)(x.display, screen);
+            let window = (x.lib.XCreateSimpleWindow)(x.display, root, 0, 0, width.max(1.0) as u32, height.max(1.0) as u32, 0, 0, 0);
+            let name = CString::new(title.replace('\0', "")).unwrap_or_default();
+            (x.lib.XStoreName)(x.display, window, name.as_ptr());
+            let mut delete = x.delete;
+            (x.lib.XSetWMProtocols)(x.display, window, &mut delete, 1);
+            fix_size(x, window, width as i32, height as i32);
+            (x.lib.XMapRaised)(x.display, window);
+            (x.lib.XFlush)(x.display);
+            window
+        });
+        match window {
+            Some(window) => {
+                WINDOWS.with(|windows| windows.borrow_mut().push((handle, window)));
+                window as *mut c_void
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    pub fn resize(handle: u32, width: f64, height: f64) {
+        let Some(window) = find(handle) else { return };
+        with_x(|x| unsafe {
+            fix_size(x, window, width as i32, height as i32);
+            (x.lib.XResizeWindow)(x.display, window, width.max(1.0) as u32, height.max(1.0) as u32);
+            (x.lib.XFlush)(x.display);
+        });
+    }
+
+    pub fn front(handle: u32) {
+        let Some(window) = find(handle) else { return };
+        with_x(|x| unsafe {
+            (x.lib.XMapRaised)(x.display, window);
+            (x.lib.XFlush)(x.display);
+        });
+    }
+
+    pub fn close(handle: u32) {
+        let window = WINDOWS.with(|windows| {
+            let mut windows = windows.borrow_mut();
+            let index = windows.iter().position(|(other, _)| *other == handle)?;
+            Some(windows.remove(index).1)
+        });
+        let Some(window) = window else { return };
+        with_x(|x| unsafe {
+            (x.lib.XDestroyWindow)(x.display, window);
+            (x.lib.XFlush)(x.display);
+        });
+    }
+
+    pub fn closed() -> Vec<u32> {CLOSED.with(|closed| std::mem::take(&mut *closed.borrow_mut()))}
+
+    pub fn tick() {}
+    pub fn dialogs(_open: bool) {}
+
+    pub fn cycle_in() {
+        if let Some((handle, _)) = WINDOWS.with(|windows| windows.borrow().first().copied()) { front(handle); }
+    }
+
+    // the window manager's close button arrives as a message, the host detaches the view before close() destroys it
+    fn read_events() {
+        with_x(|x| unsafe {
+            while (x.lib.XPending)(x.display) > 0 {
+                let mut event: xlib::XEvent = std::mem::zeroed();
+                (x.lib.XNextEvent)(x.display, &mut event);
+                if event.get_type() != xlib::ClientMessage { continue; }
+                let message = event.client_message;
+                if message.data.get_long(0) as xlib::Atom != x.delete { continue; }
+                let handle = WINDOWS.with(|windows| windows.borrow().iter().find(|(_, window)| *window == message.window).map(|(handle, _)| *handle));
+                if let Some(handle) = handle { CLOSED.with(|closed| closed.borrow_mut().push(handle)); }
+            }
+        });
+    }
+
+    pub fn register_event(handler: ComPtr<IEventHandler>, fd: FileDescriptor) {HANDLERS.with(|handlers| handlers.borrow_mut().push((handler, fd)));}
+
+    pub fn unregister_event(handler: *mut IEventHandler) {
+        HANDLERS.with(|handlers| handlers.borrow_mut().retain(|(other, _)| other.as_ptr() != handler));
+    }
+
+    pub fn register_timer(handler: ComPtr<ITimerHandler>, milliseconds: TimerInterval) {
+        let interval = Duration::from_millis(milliseconds.max(1));
+        TIMERS.with(|timers| timers.borrow_mut().push(Timer { handler, interval, next: Instant::now() + interval }));
+    }
+
+    pub fn unregister_timer(handler: *mut ITimerHandler) {
+        TIMERS.with(|timers| timers.borrow_mut().retain(|timer| timer.handler.as_ptr() != handler));
+    }
+
+    // waits up to `wait` for the X11 connection or a plugin's descriptor, then serves both and the due timers
+    pub fn pump(wait: Duration) {
+        let x11 = with_x(|x| unsafe { (x.lib.XConnectionNumber)(x.display) });
+        let handlers: Vec<(ComPtr<IEventHandler>, FileDescriptor)> = HANDLERS.with(|handlers| handlers.borrow().clone());
+        let next_timer = TIMERS.with(|timers| timers.borrow().iter().map(|timer| timer.next).min());
+        let wait = next_timer.map_or(wait, |next| wait.min(next.saturating_duration_since(Instant::now())));
+        let mut fds: Vec<libc::pollfd> = x11.into_iter().chain(handlers.iter().map(|(_, fd)| *fd))
+            .map(|fd| libc::pollfd { fd, events: libc::POLLIN, revents: 0 }).collect();
+        unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, wait.as_millis() as i32); }
+        read_events();
+        let offset = if x11.is_some() { 1 } else { 0 };
+        for (index, (handler, fd)) in handlers.iter().enumerate() {
+            if fds[index + offset].revents != 0 { unsafe { handler.onFDIsSet(*fd); } }
+        }
+        let now = Instant::now();
+        let due: Vec<ComPtr<ITimerHandler>> = TIMERS.with(|timers| timers.borrow_mut().iter_mut()
+            .filter(|timer| timer.next <= now)
+            .map(|timer| {
+                timer.next = now + timer.interval;
+                timer.handler.clone()
+            }).collect());
+        due.iter().for_each(|handler| unsafe { handler.onTimer(); });
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 mod windows {
     use std::ffi::c_void;
 

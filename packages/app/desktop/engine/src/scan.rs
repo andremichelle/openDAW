@@ -87,6 +87,7 @@ fn bundles(folder: &Path, found: &mut Vec<PathBuf>) {
 }
 
 // a macOS bundle names its binary in Info.plist, it need not be the bundle's own name
+#[cfg(target_os = "macos")]
 pub(crate) fn bundle_binary(bundle: &Path) -> PathBuf {
     let folder = bundle.join("Contents/MacOS");
     let named = std::fs::read_to_string(bundle.join("Contents/Info.plist")).ok().and_then(|plist| {

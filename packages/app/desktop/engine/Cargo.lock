@@ -1190,6 +1190,7 @@ dependencies = [
  "block2",
  "core-foundation",
  "cpal",
+ "libc",
  "libloading 0.8.9",
  "midir",
  "objc2",
@@ -1201,6 +1202,8 @@ dependencies = [
  "tungstenite",
  "v8",
  "vst3",
+ "windows-sys 0.59.0",
+ "x11-dl",
 ]
 
 [[package]]
@@ -2152,6 +2155,17 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "x11-dl"
+version = "2.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38735924fedd5314a6e548792904ed8c6de6636285cb9fec04d5b1db85c1516f"
+dependencies = [
+ "libc",
+ "once_cell",
+ "pkg-config",
+]
 
 [[package]]
 name = "yoke"

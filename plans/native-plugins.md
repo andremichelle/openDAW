@@ -114,6 +114,12 @@ Default folders, plus user folders in the settings:
 5. **Intel-only plugins on Apple Silicon:** an arm64 engine cannot load x86_64-only binaries, the scan checks the
    architecture and reports "not compatible" instead of failing silently.
 6. **No plugin windows on Windows and Linux:** loading is written but untested there, "Open UI" does nothing.
+   **Written 2026-10-17, compiles, never run:** Windows: a Win32 window per editor (`HWND`), a message loop on the
+   engine's main thread (`MsgWaitForMultipleObjects`, 5 ms), DPI aware with `setContentScaleFactor`, topmost while the
+   studio or the engine is in front and no studio dialog is open (the shell passes `OPENDAW_SHELL_PID`). Linux: an X11
+   window per editor (libX11 via `x11-dl` at runtime, `X11EmbedWindowID`), the frame offers `Linux::IRunLoop`, the main
+   thread polls the X11 connection and the plugins' descriptors and fires their timers. No staying in front on Linux,
+   no shortcut forwarding from plugin windows on either. CI also builds ARM64 Linux (testable in UTM).
 7. **Latency compensation:** plugins with latency (effects) play late, the engine has no delay compensation for them. Planned for the browser and desktop alike: `plans/latency-compensation.md`.
 8. **Effects and MIDI effects** (see "To test").
 9. **Unresolved: studio keys in plugin windows.** Keys a plugin leaves unused reach the studio only if its window passes

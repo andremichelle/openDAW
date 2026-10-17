@@ -656,6 +656,9 @@ fn main() {
         if flag == "--scan" { scan::scan_process(bundle); }
     }
     STARTED.set(Instant::now()).unwrap();
+    // plugin editors measure in pixels, the windows must not be stretched by Windows
+    #[cfg(target_os = "windows")]
+    unsafe { windows_sys::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(windows_sys::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); }
     // the shell holds our stdin and sends commands on it; when it goes away, so do we
     std::thread::spawn(|| {
         use std::io::BufRead;
@@ -724,8 +727,37 @@ fn main() {
         while let Ok(request) = incoming.try_recv() { handle(request); }
         plugins::tick();
     });
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    run_main_loop(move || {
+        while let Ok(request) = incoming.try_recv() { handle(request); }
+        plugins::tick();
+    });
+    #[cfg(target_os = "linux")]
+    loop {
+        plugins::pump(Duration::from_millis(5));
+        while let Ok(request) = incoming.try_recv() { handle(request); }
+        plugins::tick();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     for request in incoming { handle(request); }
+}
+
+// plugin windows need a Windows message loop on this thread; it wakes for messages or every 5 ms for the requests
+#[cfg(target_os = "windows")]
+fn run_main_loop(mut tick: impl FnMut()) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, TranslateMessage,
+                                                     MSG, PM_REMOVE, QS_ALLINPUT};
+    loop {
+        let mut message: MSG = unsafe { std::mem::zeroed() };
+        while unsafe { PeekMessageW(&mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) } != 0 {
+            unsafe {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        tick();
+        unsafe { MsgWaitForMultipleObjects(0, std::ptr::null(), 0, 5, QS_ALLINPUT); }
+    }
 }
 
 // plugin windows need the main thread's run loop, the requests are handled from a timer on it

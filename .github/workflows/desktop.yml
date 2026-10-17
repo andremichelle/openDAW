@@ -44,6 +44,11 @@ jobs:
             target: x86_64-unknown-linux-gnu
             rust-targets: x86_64-unknown-linux-gnu
             bundles: appimage,deb
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            rust-targets: aarch64-unknown-linux-gnu
+            bundles: appimage,deb
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -53,7 +58,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: 🐧 Install Linux build dependencies
-        if: matrix.platform == 'linux'
+        if: startsWith(matrix.platform, 'linux')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
@@ -110,6 +115,9 @@ jobs:
             linux)
               cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux.AppImage"
               cp deb/*.deb "$GITHUB_WORKSPACE/dist/openDAW-linux.deb" ;;
+            linux-arm64)
+              cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux-arm64.AppImage"
+              cp deb/*.deb "$GITHUB_WORKSPACE/dist/openDAW-linux-arm64.deb" ;;
           esac
           ls -la "$GITHUB_WORKSPACE/dist"
 

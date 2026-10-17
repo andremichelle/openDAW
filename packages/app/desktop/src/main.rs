@@ -297,6 +297,7 @@ fn spawn_engine(root: &Path) -> Option<std::process::Child> {
     let binary = engine_binary();
     // the engine exits when this pipe closes, so it never outlives the shell
     let command = std::process::Command::new(&binary).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
+        .env("OPENDAW_SHELL_PID", std::process::id().to_string())
         .stdin(std::process::Stdio::piped()).spawn();
     command.map_err(|error| eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display())).ok()
 }
