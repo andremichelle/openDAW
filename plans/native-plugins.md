@@ -133,6 +133,11 @@ Default folders, plus user folders in the settings:
     hidden behind it. Lowering plugin windows (like for dialogs) is not wanted for menus, they open constantly. Idea so
     far (rejected for now): show `MenuItem` trees as native popup menus on desktop (default items map one to one,
     headers as macOS section headers via AppKit, menus with an `input-value` slider such as the metronome stay HTML).
+11. **Follow up if it happens again: Surge XT presets silent on Windows.** Seen once 2026-10-17 in the Windows VM
+    (x64 build under emulation, desktop-test-9/10): switching a preset changed Surge's window, the sound stayed the
+    default patch, sliders and pitch worked. Fine on macOS, and on the next try in the VM too. Suspect a race: after the
+    preset change the engine reads the new state, an older state from the studio arriving then is applied again
+    (`set_state` / `apply_later`, `is_known`). Needs a log first (Windows discards the engine output, no log file yet).
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap
