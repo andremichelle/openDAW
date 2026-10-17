@@ -146,7 +146,10 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
 // The server's unpack gets killed under load (tar exit 9), so a dist goes up in chunks, each unpacked before the next
 // under the one name extract.php accepts; a chunk that fails is sent again.
 const ChunkBytes = 16 * 1024 * 1024
+// the server kills an unpack that runs long, many small files take longer than few large ones
+const ChunkFiles = 150
 const ChunkAttempts = 3
+const RetryDelay = 30_000
 
 const listFiles = (dir: string, prefix: string = ""): Array<DistFile> =>
     fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => entry.isDirectory()
@@ -163,7 +166,7 @@ const extractOnServer = async (remoteTarball: string): Promise<{ ok: boolean, te
 const uploadDist = async (localDir: string, remoteDir: string): Promise<void> => {
     console.log("creating", remoteDir)
     await sftp.mkdir(remoteDir, true).catch(() => {})
-    const chunks = chunkFiles(listFiles(localDir), ChunkBytes)
+    const chunks = chunkFiles(listFiles(localDir), ChunkBytes, ChunkFiles)
     console.log(`uploading ${localDir} to ${remoteDir} in ${chunks.length} chunks...`)
     const tarballPath = "./dist.tar.gz"
     const listPath = "./dist.files"
@@ -178,7 +181,7 @@ const uploadDist = async (localDir: string, remoteDir: string): Promise<void> =>
             if (ok) {break}
             if (attempt === ChunkAttempts) {throw new Error(`Extraction of chunk ${index + 1}/${chunks.length} failed: ${text}`)}
             console.warn(`chunk ${index + 1}/${chunks.length} failed (${text}), attempt ${attempt + 1} of ${ChunkAttempts}`)
-            await new Promise(resolve => setTimeout(resolve, 5_000 * attempt))
+            await new Promise(resolve => setTimeout(resolve, RetryDelay))
         }
     }
     fs.unlinkSync(tarballPath)
