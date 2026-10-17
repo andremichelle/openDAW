@@ -99,8 +99,12 @@ Default folders, plus user folders in the settings:
    entitlement decide whether plugins load at all in a public build. Windows: SmartScreen trust.
 2. **Export is silent for plugins:** mixdown and stems render in the webview engine, which has no native plugins.
    Export must render in the native engine (phase 6) before plugins are usable.
+   **Done 2026-10-17:** offline renders run in the engine process (a thread and an isolate per render, the unchanged
+   offline worker), plugins render through a copy per render with the live instance's current state, VST3 offline mode.
 3. **A plugin crash kills the engine, no recovery:** the studio must notice, restart the engine and mark the plugin
    that crashed. Much earlier than the optional sandbox (phase 8).
+   **Done 2026-10-17, like the browser:** the shell starts a new engine process, the studio shows "Audio-Engine Error"
+   with "Restart Engine". A plugin that crashes on load crashes the engine again, as in the browser. Not marked yet.
 4. **Plugins without `moduleinfo.json` are invisible:** older VST3 bundles ship none, a scan process that loads them
    safely is needed (phase 1).
 5. **Intel-only plugins on Apple Silicon:** an arm64 engine cannot load x86_64-only binaries, the scan checks the
