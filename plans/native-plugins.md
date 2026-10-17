@@ -110,7 +110,7 @@ Default folders, plus user folders in the settings:
 5. **Intel-only plugins on Apple Silicon:** an arm64 engine cannot load x86_64-only binaries, the scan checks the
    architecture and reports "not compatible" instead of failing silently.
 6. **No plugin windows on Windows and Linux:** loading is written but untested there, "Open UI" does nothing.
-7. **Latency compensation:** plugins with latency (effects) play late, the engine has no delay compensation for them.
+7. **Latency compensation:** plugins with latency (effects) play late, the engine has no delay compensation for them. Planned for the browser and desktop alike: `plans/latency-compensation.md`.
 8. **Effects and MIDI effects** (see "To test").
 9. **Unresolved: studio keys in plugin windows.** Keys a plugin leaves unused reach the studio only if its window passes
    them on (JUCE does). DPF/pugl windows (Cardinal) keep every key, so the software keyboard and shortcuts stop while

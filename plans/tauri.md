@@ -382,7 +382,7 @@ All app-written files must sit under the shell's own identifier directories: dow
     - CPU load meter reads 0 and "stop playback when overloading" never fires: the engine's `HRClock` reads a SharedArrayBuffer a studio worker keeps writing, the engine process only has a copy. Fix: the engine host stamps before and after each render in the same layout.
     - Monitoring dialog meter stays empty: it meters a webview node (`monitorPanNode`) that carries no signal, monitoring is mixed in the engine. Fix: feed it from the input peaks the engine sends.
     - Minor, open: the Playfield Chop dialog previews through the webview's `AudioContext`, on desktop the system default output instead of the device chosen in openDAW's audio settings.
-    - To verify: soundfonts. The parsed `SoundFont2` crosses `BridgeCodec` as plain data (no prototype), a soundfont instrument would be silent if the engine side relies on more.
+    - Soundfonts work (verified 2026-10-17), the parsed `SoundFont2` crossing `BridgeCodec` as plain data is enough.
 
 **Engine hosting (revised 2026-10-16: V8, not wasmtime)**
 - The shell embeds V8 (`rusty_v8` / `deno_core`) and runs the existing engine host JS as is: the engine wasm, the device side-modules and all three JS bridges. V8 runs WebAssembly itself, so no bridge is ported to Rust and behaviour stays that of Chrome.
@@ -513,7 +513,7 @@ Nothing is hidden because it is the desktop app. An online feature stays and wor
   - Later: joining an existing room on desktop. No address bar, and an invite link opens the browser. Let the dialog's room name field accept a pasted invite link (room plus key), and later an `opendaw://join/...` deep link (Tauri deep-link plugin, scheme registered per installer).
   - Done 2026-10-16: invite links on desktop are built from `https://opendaw.studio` (`VITE_SHARE_ORIGIN` in the desktop build).
   - Later: protection against bad edits from someone inside a room. The server relays updates without understanding them, so only the clients can reject a change that breaks the project. Start from how the studio handles a broken incoming change today.
-- **Moving projects between the browser and the desktop app (open):** both keep their projects in separate storage (browser OPFS, the desktop data folder), nothing moves by itself. Needed both ways, ideally many projects at once with their samples, soundfonts and WCLAP bundles. Idea: reuse the cloud backup (Dropbox, Google Drive, Nextcloud), which already syncs whole libraries, so one side backs up and the other restores. Without a cloud account: a full-library bundle export/import (a zip of every project and its assets). Desktop projects with VST devices open in the browser with the placeholder and keep all boxes, see `plans/native-plugins.md`.
+- **Moving projects between the browser and the desktop app (covered 2026-10-17):** the cloud backup is a two-way sync (projects, samples, templates, soundfonts, presets, scripts, WCLAP plugins), so backing up on one side and running the same backup on the other moves everything, Dropbox and Google Drive work on desktop. Single projects move with Save / Open Bundle File. A whole-library file without a cloud account is not needed. Desktop projects with VST devices open in the browser with the placeholder and keep all boxes, see `plans/native-plugins.md`.
 - **Dashboard pages:** stats, errors, sponsors, contributors, demo projects, `/open-bundle/*`. Same CORS change, test each.
 - **Telemetry:** visitor beacon and error POSTs stay when online (open question 4).
 - **Only hidden:** the update poll, because the shell owns updates.
@@ -641,10 +641,11 @@ Nothing is hidden because it is the desktop app. An online feature stays and wor
 **Cloud from the desktop origin**
 - `assets.opendaw.studio` sends no CORS header for `127.0.0.1:<port>`, so catalogues never resolve. This confirms the need for the catalogue strategy (empty or offline content).
 
+**Works (2026-10-17):** HTML5 file drop from Finder onto the timeline.
+
 **Still open:**
 - a Werkstatt script on JSC;
 - the mic permission prompt (needs the Info.plist key);
-- HTML5 file drop;
 - accelerator suppression;
 - Windows and Linux.
 
