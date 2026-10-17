@@ -101,12 +101,13 @@ RewriteRule ^ - [L]
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^tauri/(.*)$ /dev/tauri/$1 [L]
 
-# Desktop installers for testers (DEV only), uploaded by the desktop workflow
+# Desktop installers for testers (DEV only), uploaded by the desktop workflow. Only the files go to the folder,
+# /install itself is the studio's download page
 RewriteCond %{REQUEST_URI} ^/dev/install/ [NC]
 RewriteRule ^ - [L]
 
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
-RewriteRule ^install/?(.*)$ /dev/install/$1 [L]
+RewriteRule ^install/(openDAW-[^/]+)$ /dev/install/$1 [L]
 
 # Documentation: the manuals app and the generated scripting docs live in one fixed folder each per
 # environment, deployed with the studio or alone (DOCS_ONLY=true)
