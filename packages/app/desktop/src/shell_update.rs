@@ -1,6 +1,6 @@
-// The app updates itself (plans/shell-updates.md): it checks at launch and every few hours, downloads in the background
-// and asks to restart. macOS and Linux install right away (the new version runs from the next start), Windows when the
-// app exits (its installer closes the app). Restart goes through the page's unsaved-work guard.
+// The app updates itself (plans/shell-updates.md). At launch it checks first, before the studio: nothing is open yet, it
+// installs and restarts without asking (Windows' installer starts the new version itself). While it runs it checks every
+// few hours, downloads in the background and asks to restart through the page's unsaved-work guard.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -11,8 +11,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::UPDATE_ORIGIN;
 
-const FIRST_CHECK: Duration = Duration::from_secs(20);
 const INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+// a launch without internet must not wait long for the feed
+const LAUNCH_TIMEOUT: Duration = Duration::from_secs(5);
 
 // downloaded, installed when the app exits (Windows)
 static PENDING: Mutex<Option<(Update, Vec<u8>)>> = Mutex::new(None);
@@ -24,15 +25,44 @@ static OUTDATED_TOLD: AtomicBool = AtomicBool::new(false);
 fn feed(origin: &str) -> String {format!("{origin}/install/openDAW-latest.json")}
 
 pub fn start(app: AppHandle) {
-    std::thread::spawn(move || {
-        std::thread::sleep(FIRST_CHECK);
-        loop {
-            if !READY.load(Ordering::SeqCst) {
-                if let Err(error) = tauri::async_runtime::block_on(check(&app)) { eprintln!("[app update] {error}"); }
-            }
-            std::thread::sleep(INTERVAL);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(INTERVAL);
+        if !READY.load(Ordering::SeqCst) {
+            if let Err(error) = tauri::async_runtime::block_on(check(&app)) { eprintln!("[app update] {error}"); }
         }
     });
+}
+
+// the launch: true when the update is installed and the app restarts, the caller stops
+pub fn upfront(app: &AppHandle) -> bool {
+    match tauri::async_runtime::block_on(install_at_launch(app)) {
+        Ok(restarting) => restarting,
+        Err(error) => {
+            eprintln!("[app update] {error}");
+            false
+        }
+    }
+}
+
+async fn install_at_launch(app: &AppHandle) -> Result<bool, String> {
+    crate::update::status("checking", "Checking for updates");
+    let url = feed(UPDATE_ORIGIN).parse().map_err(|error| format!("{error}"))?;
+    let updater = app.updater_builder().endpoints(vec![url]).map(|builder| builder.timeout(LAUNCH_TIMEOUT))
+        .and_then(|builder| builder.build()).map_err(|error| error.to_string())?;
+    let Some(update) = updater.check().await.map_err(|error| error.to_string())? else { return Ok(false) };
+    let version = update.version.clone();
+    println!("[app update] installing {version} at launch");
+    crate::update::status("downloading", format!("Updating openDAW to {version}"));
+    let mut done = 0u64;
+    let bytes = update.download(|chunk, total| {
+        done += chunk as u64;
+        crate::update::progress(done, total.unwrap_or(done));
+    }, || {}).await.map_err(|error| error.to_string())?;
+    crate::update::status("downloading", format!("Installing openDAW {version}"));
+    // Windows: the installer closes this app and starts the new one, install does not return
+    update.install(&bytes).map_err(|error| error.to_string())?;
+    std::env::set_var(crate::AFTER_UPDATE, "1");
+    tauri::process::restart(&app.env());
 }
 
 async fn check(app: &AppHandle) -> Result<(), String> {

@@ -91,13 +91,13 @@ static NEEDS_NEWER_SHELL: AtomicBool = AtomicBool::new(false);
 
 pub fn needs_newer_shell() -> bool {NEEDS_NEWER_SHELL.load(Ordering::SeqCst)}
 
-fn status(phase: &'static str, message: impl Into<String>) {
+pub(crate) fn status(phase: &'static str, message: impl Into<String>) {
     let mut status = STATUS.lock().unwrap();
     status.phase = phase;
     status.message = message.into();
 }
 
-fn progress(done: u64, total: u64) {
+pub(crate) fn progress(done: u64, total: u64) {
     let mut status = STATUS.lock().unwrap();
     status.done = done;
     status.total = total;
@@ -445,10 +445,12 @@ pub fn booted() {
     }
 }
 
-pub fn start(data: PathBuf) {
+pub fn start(data: PathBuf, app: tauri::AppHandle) {
     let web = data.join("web");
     *WEB.lock().unwrap() = Some(web.clone());
     std::thread::spawn(move || {
+        // the app's own update comes first, before any studio is chosen
+        if crate::shell_update::upfront(&app) { return; }
         if let Err(error) = fs::create_dir_all(&web) {
             return status("error", format!("Cannot create {} ({error})", web.display()));
         }

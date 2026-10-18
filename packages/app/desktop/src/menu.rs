@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::Deserialize;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
+use tauri::menu::{AboutMetadata, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::{request_quit, APP};
@@ -64,6 +64,14 @@ fn states(nodes: &[Node], out: &mut Vec<(String, bool, bool)>) {
     }
 }
 
+// Windows and Linux show only what the about item is given, macOS builds its own panel from the app bundle
+fn about(version: &str, studio: Option<&str>) -> AboutMetadata<'static> {
+    AboutMetadata {
+        name: Some("openDAW Studio".into()), version: Some(version.into()), comments: studio.map(|uuid| format!("Studio {uuid}")),
+        ..Default::default()
+    }
+}
+
 fn append(app: &AppHandle, parent: &Submenu<Wry>, node: &Node, slots: &mut Vec<Slot>) -> tauri::Result<()> {
     match node {
         Node::Item { id, label, enabled, accelerator } => {
@@ -95,7 +103,11 @@ fn append(app: &AppHandle, parent: &Submenu<Wry>, node: &Node, slots: &mut Vec<S
             parent.append(&MenuItem::with_id(app, ZOOM_RESET_ID, "Actual Size", true, Some("CmdOrCtrl+0"))?),
         Node::Native { role } => {
             let item = match role.as_str() {
-                "about" => PredefinedMenuItem::about(app, None, None)?,
+                "about" if cfg!(target_os = "macos") => PredefinedMenuItem::about(app, None, None)?,
+                "about" => {
+                    let studio = crate::root().and_then(|root| root.file_name().map(|name| name.to_string_lossy().into_owned()));
+                    PredefinedMenuItem::about(app, Some("About openDAW Studio"), Some(about(&crate::app_version(), studio.as_deref())))?
+                }
                 "services" => PredefinedMenuItem::services(app, None)?,
                 "hide" => PredefinedMenuItem::hide(app, None)?,
                 "hide-others" => PredefinedMenuItem::hide_others(app, None)?,
@@ -279,6 +291,18 @@ mod tests {
     }
 
     // the bar the shell shows from the start (the page's top menus, empty) is filled in place, never replaced
+    // Windows and Linux show only what the about item is given (macOS builds its own panel from the bundle): the app's
+    // version and the studio release, no links (they are in the Help menu)
+    #[test]
+    fn about_names_the_app_version_and_the_studio() {
+        let metadata = about("0.0.20", Some("d07f6fe6-a701-4702-b7db-3639bc738de9"));
+        assert_eq!(metadata.name.as_deref(), Some("openDAW Studio"));
+        assert_eq!(metadata.version.as_deref(), Some("0.0.20"));
+        assert_eq!(metadata.comments.as_deref(), Some("Studio d07f6fe6-a701-4702-b7db-3639bc738de9"));
+        assert_eq!((metadata.website, metadata.credits, metadata.icon.is_some()), (None, None, false));
+        assert_eq!(about("0.0.20", None).comments, None);
+    }
+
     #[test]
     fn the_top_menus_stay_while_their_items_change() {
         let tops: Tops = vec![("File".into(), None), ("Window".into(), Some("window".into()))];

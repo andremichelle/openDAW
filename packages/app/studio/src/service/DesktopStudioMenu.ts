@@ -147,6 +147,8 @@ export namespace DesktopStudioMenu {
             {
                 label: "Help", role: "help", entries: [
                     item("Manuals", () => openManual("/manuals/")),
+                    item("openDAW Website", () => Shell.request("browse", {url: "https://opendaw.studio"})),
+                    item("Source Code on GitHub", () => Shell.request("browse", {url: "https://github.com/andremichelle/openDAW"})),
                     createDebugMenu(service).addSeparatorBefore()
                 ]
             }

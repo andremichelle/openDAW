@@ -640,6 +640,18 @@ fn required_shell_api(root: &Path) -> Option<u64> {
     serde_json::from_slice::<serde_json::Value>(&bytes).ok()?.get("shellApi")?.as_u64()
 }
 
+// the port is the lock against a second openDAW; after its own update the app restarts and waits for the old one to go
+fn bind_lock(port: u16, attempts: u32) -> Option<std::net::TcpListener> {
+    for attempt in 0..attempts.max(1) {
+        if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) { return Some(listener); }
+        if attempt + 1 < attempts { std::thread::sleep(std::time::Duration::from_millis(100)); }
+    }
+    None
+}
+
+// set before an update restarts the app, the new process inherits it
+pub const AFTER_UPDATE: &str = "OPENDAW_AFTER_UPDATE";
+
 // another openDAW holds the shell's port: it shows its window (answers 204), this start ends
 fn show_running() -> bool {
     use std::io::{Read, Write};
@@ -654,7 +666,8 @@ fn main() {
     #[cfg(target_os = "linux")]
     if std::env::var_os("JSC_useSharedArrayBuffer").is_none() { std::env::set_var("JSC_useSharedArrayBuffer", "1"); }
     // one openDAW at a time: the shell's port is the lock, before anything else (the engine) starts
-    let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", PORT)) else {
+    let attempts = if std::env::var_os(AFTER_UPDATE).is_some() { 50 } else { 1 };
+    let Some(listener) = bind_lock(PORT, attempts) else {
         if show_running() { return; }
         panic!("port {PORT} is taken by another program, openDAW cannot start");
     };
@@ -684,7 +697,7 @@ fn main() {
             terminate::install();
             let counter = Arc::new(AtomicUsize::new(0));
             if updating {
-                update::start(app.path().app_data_dir()?);
+                update::start(app.path().app_data_dir()?, app.handle().clone());
                 shell_update::start(app.handle().clone());
             }
             let url = format!("http://127.0.0.1:{PORT}/{}", if updating { "__splash" } else { "" });
@@ -753,6 +766,19 @@ mod tests {
             assert_eq!(std::fs::metadata(engine.unwrap()).unwrap().permissions().mode() & 0o111, 0o111, "downloaded files are not executable");
         }
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // after its own update the app restarts at once, the old process may still hold the port for a moment
+    #[test]
+    fn a_restarted_app_waits_for_the_port() {
+        let held = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = held.local_addr().unwrap().port();
+        assert!(bind_lock(port, 1).is_none(), "taken without waiting");
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            drop(held);
+        });
+        assert!(bind_lock(port, 30).is_some(), "free within the wait");
     }
 
     #[test]

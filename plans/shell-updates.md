@@ -17,7 +17,10 @@ really the last one a tester does by hand.
    bundler signs it, each with its `.sig`. The
    install job writes `openDAW-latest.json` (version, per platform url and signature) next to the installers on
    `/install`. The endpoint follows `OPENDAW_UPDATE_ORIGIN`.
-4. **Shell (`shell_update.rs`)**: checks at launch and every 6 hours, downloads in the background, then asks
+4. **Shell (`shell_update.rs`)**: at launch the app checks first, before the studio update (splash "Updating openDAW to
+   <version>", 5 s timeout when offline), installs and restarts without asking, nothing is open yet. Windows' passive
+   installer starts the new version itself (`/R`), macOS and Linux restart, the new process waits up to 5 s for the old
+   one's port (`OPENDAW_AFTER_UPDATE`). While it runs it checks every 6 hours, downloads in the background, then asks
    "openDAW <version> is ready. Restart now?" (Restart, Later). macOS and Linux install right after the download
    (the new version runs from the next start), Windows when the app exits (its passive installer closes the app).
    Restart goes through the page's unsaved-work guard (`request_quit`) and starts the app again.
