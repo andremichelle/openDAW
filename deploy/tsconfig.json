@@ -10,6 +10,7 @@
     "skipLibCheck": true
   },
   "files": [
-    "run.ts"
+    "run.ts",
+    "chunks.ts"
   ]
 }
