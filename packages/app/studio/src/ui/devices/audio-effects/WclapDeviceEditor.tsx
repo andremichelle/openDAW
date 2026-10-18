@@ -20,6 +20,7 @@ import {
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
@@ -155,7 +156,13 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const files = await Files.open({...FilePickerAcceptTypes.WclapFiles, multiple: false}).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
-        const archive = await file.arrayBuffer()
+        // Safari fails to read a file it cannot reach, an iCloud file not downloaded yet for one (error 1184)
+        const read = await Promises.tryCatch(file.arrayBuffer())
+        if (read.status === "rejected") {
+            RuntimeNotifier.notify({message: `Could not read ${file.name}. If it lives in iCloud, download it first.`, icon: "Warning"})
+            return
+        }
+        const archive = read.value
         const url = await WclapStorage.urlFor(archive)
         WclapBundles.register(url, archive).catch(EmptyExec)
         const described: ReadonlyArray<WclapPluginInfo> = await describe(url).catch(error => {

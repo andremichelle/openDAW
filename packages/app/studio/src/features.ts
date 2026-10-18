@@ -7,6 +7,8 @@ export const testFeatures = async (): Promise<void> => {
     requireProperty(window, "WebAssembly")
     requireProperty(window, "AudioWorkletNode")
     requireProperty(window, "SharedArrayBuffer")
+    // a privacy setting can remove it, every canvas reads it (errors 1182, 1183)
+    requireProperty(window, "devicePixelRatio")
     requireProperty(navigator, "storage")
     requireProperty(navigator.storage, "getDirectory")
     requireProperty(crypto, "randomUUID")
