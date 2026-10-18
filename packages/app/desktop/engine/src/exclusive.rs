@@ -148,7 +148,7 @@ fn render(opened: &Opened, consumer: &Mutex<rtrb::Consumer<f32>>, waker: &std::t
     // a first period of silence before the start, as the documentation asks
     sample.write(&samples, &mut bytes);
     renderer.write_to_device(period, &bytes, None)?;
-    let target = (period * 2).max(256);
+    let target = crate::exclusive_reserve(period);
     RING_TARGET_FRAMES.store(target, Ordering::Relaxed);
     RING_LATENCY_US.store(target as u64 * 1_000_000 / *rate as u64, Ordering::Relaxed);
     DEVICE_LATENCY_US.store(period as u64 * 1_000_000 / *rate as u64, Ordering::Relaxed);

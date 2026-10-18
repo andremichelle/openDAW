@@ -39,6 +39,12 @@ pub fn report() {
     report_latency();
 }
 
+// callback frames, reserve frames, device ms: a new callback size, the reserve by more than a tenth, the device by 10 ms
+fn worth_logging(seen: Option<(u64, u64, u64)>, now: (u64, u64, u64)) -> bool {
+    let Some((callback, reserve, device)) = seen else { return true };
+    callback != now.0 || reserve.abs_diff(now.1) * 10 > reserve || device.abs_diff(now.2) >= DEVICE_JITTER_MS
+}
+
 // where the output latency comes from, logged when it changes: the card's callback, our reserve, the device itself
 fn report_latency() {
     let rate = crate::SAMPLE_RATE.load(Ordering::Relaxed).max(1) as u64;
@@ -47,10 +53,24 @@ fn report_latency() {
     let device = crate::DEVICE_LATENCY_US.load(Ordering::Relaxed) / 1000;
     if callback == 0 { return; }
     let mut last = LATENCY.lock().unwrap();
-    if last.is_some_and(|(seen_callback, seen_reserve, seen_device)| seen_callback == callback && seen_reserve == reserve
-        && seen_device.abs_diff(device) < DEVICE_JITTER_MS) { return; }
+    if !worth_logging(*last, (callback, reserve, device)) { return; }
     *last = Some((callback, reserve, device));
     let reserve_ms = reserve * 1000 / rate;
     println!("[latency] callback {callback} frames ({} ms), reserve {reserve} frames ({reserve_ms} ms), device {device} ms, output {} ms",
         callback * 1000 / rate, reserve_ms + device);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // callback, reserve, device ms: a new callback size or a reserve change above 10% or 10 ms of device latency is news
+    #[test]
+    fn only_real_latency_changes_are_logged() {
+        assert!(worth_logging(None, (480, 2048, 20)));
+        assert!(!worth_logging(Some((480, 2048, 20)), (480, 2112, 25)), "the reserve between the buffer floor and two callbacks");
+        assert!(worth_logging(Some((480, 2048, 20)), (480, 960, 20)), "the reserve halves");
+        assert!(worth_logging(Some((480, 2048, 20)), (128, 2048, 20)), "the card changed its callback");
+        assert!(worth_logging(Some((480, 2048, 20)), (480, 2048, 31)), "the device moved by 10 ms or more");
+    }
 }

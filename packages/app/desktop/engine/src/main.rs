@@ -652,6 +652,9 @@ fn open_output(requested: &str, buffer: u32, exclusive: bool, consumer: &Arc<Mut
     open_output_stream(requested, buffer, consumer.clone(), waker.clone()).map(Output::Shared)
 }
 
+// exclusive mode is driven by the card's clock: one period plus a margin of at least one engine block (128 frames)
+fn exclusive_reserve(period: usize) -> usize {(period + (period / 4).max(128)).min(RING_CAPACITY_FRAMES / 2)}
+
 // The frames kept ready: two of the card's largest callbacks of the last seconds (this window and the one before), at
 // least the floor the buffer size asks for, within the ring. A burst (WASAPI's first callbacks) no longer raises it for good.
 struct Reserve {
@@ -917,6 +920,14 @@ mod tests {
         assert_eq!(reserve.after(128), 256);
         assert_eq!(reserve.after(480), 960);
         assert_eq!(Reserve::new(256, 48_000).after(16_384), RING_CAPACITY_FRAMES / 2);
+    }
+
+    // the card's clock drives exclusive mode (event driven), one period plus one engine block is enough, not two periods
+    #[test]
+    fn the_exclusive_reserve_is_one_period_and_a_margin() {
+        assert_eq!(exclusive_reserve(960), 1200);
+        assert_eq!(exclusive_reserve(144), 272);
+        assert_eq!(exclusive_reserve(16_384), RING_CAPACITY_FRAMES / 2);
     }
 
     // a burst at the start (1056 frames once, then 480 as on a Windows VM) holds the reserve for seconds, not for good

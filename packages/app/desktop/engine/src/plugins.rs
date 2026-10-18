@@ -827,8 +827,32 @@ fn guarded(label: &str, callback: impl FnOnce()) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(callback)).is_err() { eprintln!("[plugins] {label} panicked"); }
 }
 
+// the codes a plugin answers with, by name (E_NOINTERFACE is the COM value on every platform's Windows plugins)
+const E_NOINTERFACE: tresult = -2147467262;
+
+fn describe_result(plugin: &str, label: &str, result: tresult) -> String {
+    let meaning = match result {
+        E_NOINTERFACE => "no such interface (E_NOINTERFACE)".to_string(),
+        code if code == kNoInterface => "no such interface".to_string(),
+        code if code == kNotImplemented => "not implemented".to_string(),
+        code if code == kInvalidArgument => "invalid argument".to_string(),
+        code if code == kNotInitialized => "not initialized".to_string(),
+        code if code == kInternalError => "internal error".to_string(),
+        code => format!("result {code}"),
+    };
+    let name = if plugin.is_empty() { String::new() } else { format!("{plugin}: ") };
+    format!("[plugins] {name}{label} failed, {meaning}")
+}
+
+thread_local! {
+    // the plugin being loaded on this thread, named in its failures
+    static LOADING_NAME: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
 fn check(label: &str, result: tresult) -> bool {
-    if result != kResultOk && result != kResultFalse { eprintln!("[plugins] {label}: result {result}"); }
+    if result != kResultOk && result != kResultFalse {
+        eprintln!("{}", LOADING_NAME.with(|name| describe_result(&name.borrow(), label, result)));
+    }
     result == kResultOk
 }
 
@@ -897,6 +921,7 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
             .or(state)
     } else { state };
     let info = crate::scan::find(format, id)?;
+    LOADING_NAME.with(|name| *name.borrow_mut() = info.name.clone());
     if info.status == "crashed" {
         eprintln!("[plugins] {} took the engine down before and is not loaded, a rescan tries it again", info.name);
         return None;
@@ -2338,6 +2363,15 @@ mod tests {
             mine
         });
         assert_eq!(notices, vec![("follow", "2:0.25".to_string())]);
+    }
+
+    // a failed call names the plugin and what the code means (E_NOINTERFACE came as -2147467262 without a name)
+    #[test]
+    fn a_failed_call_names_the_plugin_and_the_code() {
+        assert_eq!(describe_result("Generate", "createInstance", -2147467262),
+            "[plugins] Generate: createInstance failed, no such interface (E_NOINTERFACE)");
+        assert_eq!(describe_result("Surge XT", "setupProcessing", kNotImplemented), "[plugins] Surge XT: setupProcessing failed, not implemented");
+        assert_eq!(describe_result("", "initialize", 7), "[plugins] initialize failed, result 7");
     }
 
     // a device deleted, or its creation undone, comes back with what its plugin held when it went away (changes in
