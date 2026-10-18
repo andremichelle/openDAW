@@ -23,7 +23,7 @@ pub fn start(data: &Path) {
     *ENGINE_LOG.lock().unwrap() = file.try_clone().ok();
     redirect(file);
     let _ = FOLDER.set(folder);
-    println!("[openDAW] {} on {} {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
+    println!("[openDAW] {} on {} {}", crate::app_version(), std::env::consts::OS, std::env::consts::ARCH);
 }
 
 pub fn folder() -> Option<&'static Path> {FOLDER.get().map(PathBuf::as_path)}

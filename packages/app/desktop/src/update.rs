@@ -480,7 +480,7 @@ pub fn handle(request: tiny_http::Request) -> Option<tiny_http::Request> {
     let path = request.url().split('?').next().unwrap_or("").to_string();
     match path.as_str() {
         "/__splash" => {
-            let page = SPLASH.replace("{LOGO}", LOGO).replace("{VERSION}", env!("CARGO_PKG_VERSION"));
+            let page = SPLASH.replace("{LOGO}", LOGO).replace("{VERSION}", &crate::app_version());
             reply(request, page.into_bytes(), "text/html; charset=utf-8")
         }
         "/__splash/rubik-300.woff2" => reply(request, RUBIK_300.to_vec(), "font/woff2"),

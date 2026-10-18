@@ -140,6 +140,11 @@ pub fn quit_approved(app: &AppHandle) {
     app.exit(0)
 }
 
+// the version this build was made as (a test build is 0.0.<n>, set by desktop.yml), the one the updater compares
+pub fn app_version() -> String {
+    APP.get().map(|app| app.package_info().version.to_string()).unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
+}
+
 // the page kept the app open: a logout or restart macOS asked for is cancelled
 pub fn quit_cancelled() {
     #[cfg(target_os = "macos")]
