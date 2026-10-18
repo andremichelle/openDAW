@@ -17,25 +17,29 @@ struct State {
     // the rate the card actually runs at, the studio's engines must run at it
     #[serde(rename = "sampleRate")]
     sample_rate: u32,
+    // Windows only: the card taken exclusively, the studio offers the choice where this is present
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exclusive: Option<bool>,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum ToEngine {
     // device "" is the system default
-    Output { device: String, buffer: u32 },
+    Output { device: String, buffer: u32, #[serde(default)] exclusive: bool },
 }
 
 fn state() -> State {
     let devices = OUTPUT_DEVICES.lock().unwrap().split('\n').filter(|name| !name.is_empty()).map(String::from).collect();
     State {
         kind: "output", devices, device: OUTPUT_NAME.lock().unwrap().clone(), buffer: OUTPUT_CURRENT.lock().unwrap().1,
-        sample_rate: SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed)
+        sample_rate: SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed),
+        exclusive: cfg!(target_os = "windows").then(|| OUTPUT_CURRENT.lock().unwrap().2)
     }
 }
 
 pub fn serve(mut socket: WebSocket<TcpStream>) {
-    let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(50)));
+    crate::poll::poll(&socket);
     let mut sent: Option<State> = None;
     let mut next = Instant::now();
     loop {
@@ -43,21 +47,20 @@ pub fn serve(mut socket: WebSocket<TcpStream>) {
             next = Instant::now() + Duration::from_millis(500);
             let current = state();
             if sent.as_ref() != Some(&current) {
-                if socket.send(Message::Text(serde_json::to_string(&current).unwrap().into())).is_err() { break; }
+                if crate::poll::send(&mut socket, Message::Text(serde_json::to_string(&current).unwrap().into())).is_err() { break; }
                 sent = Some(current);
             }
         }
-        match socket.read() {
-            Ok(Message::Text(text)) => match serde_json::from_str::<ToEngine>(&text) {
-                Ok(ToEngine::Output { device, buffer }) => {
-                    request_main(MainRequest::Output(device, buffer));
+        match crate::poll::read(&mut socket, Duration::from_millis(50)) {
+            Ok(Some(Message::Text(text))) => match serde_json::from_str::<ToEngine>(&text) {
+                Ok(ToEngine::Output { device, buffer, exclusive }) => {
+                    request_main(MainRequest::Output(device, buffer, exclusive));
                     next = Instant::now() + Duration::from_millis(100);
                 }
                 Err(error) => eprintln!("[audio] {error}"),
             },
-            Ok(Message::Close(_)) => break,
+            Ok(Some(Message::Close(_))) => break,
             Ok(_) => {}
-            Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(_) => break,
         }
     }

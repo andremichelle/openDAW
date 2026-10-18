@@ -75,7 +75,7 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
         eprintln!("[offline] the served build has no offline-host.js");
         return;
     };
-    let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(1)));
+    crate::poll::poll(&socket);
     let platform = platform();
     let isolate = &mut v8::Isolate::new(v8::CreateParams::default());
     v8::scope!(let handle_scope, isolate);
@@ -112,19 +112,19 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
     let mut last_tick = Instant::now();
     'render: loop {
         loop {
-            match socket.read() {
-                Ok(Message::Binary(bytes)) => {
+            match crate::poll::read(&mut socket, Duration::from_millis(1)) {
+                Ok(Some(Message::Binary(bytes))) => {
                     let store = v8::ArrayBuffer::new_backing_store_from_vec(bytes.to_vec()).make_shared();
                     let buffer = v8::ArrayBuffer::with_backing_store(scope, &store).into();
                     let receiver = v8::undefined(scope).into();
                     v8::Local::new(scope, &receive).call(scope, receiver, &[buffer]);
                 }
-                Ok(Message::Close(_)) => {
+                Ok(Some(Message::Close(_))) => {
                     let _ = socket.flush();
                     break 'render;
                 }
-                Ok(_) => {}
-                Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => break,
+                Ok(Some(_)) => {}
+                Ok(None) => break,
                 Err(_) => break 'render,
             }
         }
@@ -137,7 +137,7 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
             v8::Local::new(scope, &tick).call(scope, receiver, &[]);
         }
         for bytes in OUTGOING.with(|outgoing| std::mem::take(&mut *outgoing.borrow_mut())) {
-            if socket.send(Message::Binary(bytes.into())).is_err() { break 'render; }
+            if crate::poll::send(&mut socket, Message::Binary(bytes.into())).is_err() { break 'render; }
         }
     }
     plugins::release_thread_slots();

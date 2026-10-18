@@ -73,24 +73,23 @@ fn is_known(uuid: &str, state: &[u8]) -> bool {
 
 // The notices reach the studio on their own socket, written by this thread, never by the audio thread
 pub fn serve_notices(mut socket: tungstenite::WebSocket<std::net::TcpStream>) {
-    let _ = socket.get_ref().set_read_timeout(Some(std::time::Duration::from_millis(10)));
+    crate::poll::poll(&socket);
     println!("[plugins] studio connected");
     loop {
         let states = std::mem::take(&mut *STATES.lock().unwrap());
         for (uuid, state) in states {
             let mut message = uuid.into_bytes();
             message.extend_from_slice(&state);
-            if socket.send(tungstenite::Message::Binary(message.into())).is_err() { return; }
+            if crate::poll::send(&mut socket, tungstenite::Message::Binary(message.into())).is_err() { return; }
         }
         let notices = std::mem::take(&mut *NOTICES.lock().unwrap());
         if !notices.is_empty() {
             let json = serde_json::to_string(&notices).unwrap();
-            if socket.send(tungstenite::Message::Text(json.into())).is_err() { break; }
+            if crate::poll::send(&mut socket, tungstenite::Message::Text(json.into())).is_err() { break; }
         }
-        match socket.read() {
-            Ok(tungstenite::Message::Text(text)) => studio_request(&text),
-            Ok(tungstenite::Message::Close(_)) => break,
-            Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+        match crate::poll::read(&mut socket, std::time::Duration::from_millis(10)) {
+            Ok(Some(tungstenite::Message::Text(text))) => studio_request(&text),
+            Ok(Some(tungstenite::Message::Close(_))) => break,
             Err(_) => break,
             Ok(_) => {}
         }

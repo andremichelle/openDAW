@@ -40,11 +40,11 @@ fn list() -> (Vec<Port>, Vec<Port>) {
 }
 
 fn send_json(socket: &mut WebSocket<TcpStream>, message: &ToStudio) -> bool {
-    socket.send(Message::Text(serde_json::to_string(message).unwrap().into())).is_ok()
+    crate::poll::send(socket, Message::Text(serde_json::to_string(message).unwrap().into())).is_ok()
 }
 
 pub fn serve(mut socket: WebSocket<TcpStream>) {
-    let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(1)));
+    crate::poll::poll(&socket);
     let (incoming, received) = channel::<(String, Vec<u8>)>();
     let mut connections: HashMap<String, MidiInputConnection<()>> = HashMap::new();
     let mut outputs: HashMap<String, MidiOutputConnection> = HashMap::new();
@@ -82,17 +82,16 @@ pub fn serve(mut socket: WebSocket<TcpStream>) {
                 if !send_json(&mut socket, &ToStudio::Devices { inputs: &known.0, outputs: &known.1 }) { break; }
             }
         }
-        match socket.read() {
-            Ok(Message::Text(text)) => match serde_json::from_str::<ToEngine>(&text) {
+        match crate::poll::read(&mut socket, Duration::from_millis(1)) {
+            Ok(Some(Message::Text(text))) => match serde_json::from_str::<ToEngine>(&text) {
                 Ok(ToEngine::Send { id, data, delay }) => {
                     order += 1;
                     scheduled.push(Reverse((Instant::now() + Duration::from_secs_f64(delay.max(0.0) / 1000.0), order, id, data)));
                 }
                 Err(error) => eprintln!("[midi] {error}"),
             },
-            Ok(Message::Close(_)) => break,
+            Ok(Some(Message::Close(_))) => break,
             Ok(_) => {}
-            Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(_) => break,
         }
         while scheduled.peek().is_some_and(|Reverse((at, ..))| *at <= Instant::now()) {
