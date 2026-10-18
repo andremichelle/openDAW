@@ -676,6 +676,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let _ = APP.set(handle.clone());
+            menu::start(&handle)?;
             if !cfg!(debug_assertions) { log::start(&app.path().app_data_dir()?); }
             #[cfg(target_os = "macos")]
             install_cycle_monitor(handle.clone());
