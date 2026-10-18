@@ -39,9 +39,13 @@ Too much friction for what reaches the user.
 5. **Faster deploys.** Upload only what the app downloads (about 100 MB instead of 460 MB), a desktop-only deploy that
    skips the web studio.
 6. **Audio on Windows.** WASAPI exclusive mode exists but is unproven on real hardware, ASIO needs the Steinberg license.
-7. **VST stability.** A crash-proof plugin host (plugins in their own process) before it reaches users.
+7. **VST stability.** The open plugin issues (undo with a plugin's own history, plugin windows, loading) solved before
+   it reaches users.
 
 ## State at the freeze
 
-Uncommitted on the branch: the app update at launch before the studio, the About details, Help menu links. Temporary
+Last on the branch: `525dd4c10` (the app update at launch before the studio, About details, Help menu links), never
+tagged or deployed: testers run desktop-test-19 with the studio `d07f6fe6`. The installed apps will stop working, testers
+are asked to delete VST plugins from their projects (PROD knows no NativeInstrumentBox or NativeEffectBox, such a
+project does not open there), save them as bundles (File > Save Bundle File to Disk) and open them in the browser. Temporary
 diagnostics are still in the code (`[boot]` markers, `[wclap trace]`, `plans/desktop-issues.md` #22).
