@@ -53,6 +53,9 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     async list(): Promise<ReadonlyArray<T>> {return this.collectAllFiles()}
 
     async replaceMissingFiles(boxGraph: BoxGraph, manager: { invalidate: (uuid: UUID.Bytes) => void }): Promise<void> {
+        // a project without such files needs no catalogue (offline it may never arrive)
+        const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
+        if (boxes.length === 0) {return}
         const {status, error, value: available} = await Promises.tryCatch(this.collectAllFiles())
         if (status === "rejected") {
             console.warn(`Could not collect ${this.namePlural}:`, error)
@@ -62,8 +65,6 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
             })
             return
         }
-        const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
-        if (boxes.length === 0) {return}
         for (const box of boxes) {
             const uuid = box.address.uuid
             const uuidAsString = UUID.toString(uuid)
