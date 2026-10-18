@@ -85,9 +85,19 @@ jobs:
             exit 1
           fi
 
+      # a test build is version 0.0.<n>, so the updater of an installed app takes it (plans/shell-updates.md)
       - name: 🏗️ Build
         working-directory: packages/app/desktop
-        run: cargo tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          config='{"bundle": {"createUpdaterArtifacts": true}}'
+          case "$GITHUB_REF_NAME" in
+            desktop-test-*) config="{\"version\": \"0.0.${GITHUB_REF_NAME#desktop-test-}\", \"bundle\": {\"createUpdaterArtifacts\": true}}" ;;
+          esac
+          echo "$config"
+          cargo tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$config"
 
       - name: 🔍 Check the architecture
         if: startsWith(matrix.platform, 'macos')
@@ -106,16 +116,22 @@ jobs:
         working-directory: packages/app/desktop/target/${{ matrix.target }}/release/bundle
         run: |
           mkdir -p "$GITHUB_WORKSPACE/dist"
+          # each installer, and the file the updater downloads with its signature (.sig)
+          take() { cp $1 "$GITHUB_WORKSPACE/dist/$2"; if ls $1.sig > /dev/null 2>&1; then cp $1.sig "$GITHUB_WORKSPACE/dist/$2.sig"; fi; }
           case "${{ matrix.platform }}" in
-            macos-arm64) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos-arm64.dmg" ;;
-            macos-intel) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos-intel.dmg" ;;
-            windows) cp nsis/*.exe "$GITHUB_WORKSPACE/dist/openDAW-windows-setup.exe" ;;
+            macos-arm64)
+              take "dmg/*.dmg" openDAW-macos-arm64.dmg
+              take "macos/*.app.tar.gz" openDAW-macos-arm64.app.tar.gz ;;
+            macos-intel)
+              take "dmg/*.dmg" openDAW-macos-intel.dmg
+              take "macos/*.app.tar.gz" openDAW-macos-intel.app.tar.gz ;;
+            windows) take "nsis/*.exe" openDAW-windows-setup.exe ;;
             linux)
-              cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux.AppImage"
-              cp deb/*.deb "$GITHUB_WORKSPACE/dist/openDAW-linux.deb" ;;
+              take "appimage/*.AppImage" openDAW-linux.AppImage
+              take "deb/*.deb" openDAW-linux.deb ;;
             linux-arm64)
-              cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux-arm64.AppImage"
-              cp deb/*.deb "$GITHUB_WORKSPACE/dist/openDAW-linux-arm64.deb" ;;
+              take "appimage/*.AppImage" openDAW-linux-arm64.AppImage
+              take "deb/*.deb" openDAW-linux-arm64.deb ;;
           esac
           ls -la "$GITHUB_WORKSPACE/dist"
 
@@ -132,11 +148,20 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/desktop-test-')
     runs-on: ubuntu-latest
     steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
       - name: ⬇️ Collect the builds
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # the updater's feed: version and per platform the signed file, a release never goes out half signed
+      - name: 📝 Write openDAW-latest.json
+        run: |
+          node packages/app/desktop/scripts/latest-json.mjs dist "0.0.${GITHUB_REF_NAME#desktop-test-}" "$OPENDAW_UPDATE_ORIGIN/install"
+          cat dist/openDAW-latest.json
 
       - name: 🚚 Upload to dev.opendaw.studio/install
         env:
@@ -154,11 +179,21 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: ubuntu-latest
     steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
       - name: ⬇️ Collect the builds
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # the updater's feed points at this release's files
+      - name: 📝 Write openDAW-latest.json
+        run: |
+          node packages/app/desktop/scripts/latest-json.mjs dist "${GITHUB_REF_NAME#desktop-v}" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          cat dist/openDAW-latest.json
 
       - name: 🚀 Publish release
         env:
@@ -167,3 +202,20 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --latest \
             --title "openDAW Desktop ${GITHUB_REF_NAME#desktop-v}" \
             --notes "macOS, Windows and Linux. The app installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/install"
+
+      # installed apps read the feed from their update origin (dev.opendaw.studio/install or opendaw.studio/install)
+      - name: 🚚 Publish the feed
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          case "$OPENDAW_UPDATE_ORIGIN" in
+            https://dev.opendaw.studio) folder=/dev/install ;;
+            https://opendaw.studio) folder=/main/install ;;
+            *) echo "no install folder for $OPENDAW_UPDATE_ORIGIN"; exit 1 ;;
+          esac
+          sudo apt-get update && sudo apt-get install -y lftp
+          lftp -e "set sftp:auto-confirm yes; mkdir -p -f $folder; put -O $folder dist/openDAW-latest.json; bye" \
+            -u "$SFTP_USERNAME" --env-password -p "$SFTP_PORT" "sftp://$SFTP_HOST"

@@ -24,6 +24,19 @@
     "macOS": {
       "signingIdentity": "-",
       "hardenedRuntime": false
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0RTYwQjMyQzg4NTg1RkUKUldUK2hZWElNZ3ZtMUJramc1WVRNQ1QraHByeW9xcTljTFFHVUtWM0p4ZmdmNHJIMU9VSXduRGQK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -67,8 +67,9 @@ The desktop shell runs the audio engine in its own scope, outside the webview, a
 
 ## Updates: the app stays a wrapper
 
-- Everything the engine runs comes from the installed web build: `engine.wasm`, the device wasm files, `wasm-processor.js` and `engine-host.js` (bridge relays and worklet stand-in). An engine change ships with a studio deploy, the user does nothing.
-- The `opendaw-engine` binary holds only V8, the audio driver (`cpal`) and the loopback WebSocket server. Only native changes (driver features, device selection, `midir`) need an app update through the Tauri updater.
+- Everything the engine runs comes from the installed web build: `engine.wasm`, the device wasm files, `wasm-processor.js` and `engine-host.js` (bridge relays and worklet stand-in).
+- The `opendaw-engine` binary (V8, `cpal`, `midir`, the VST3 host) ships with every deploy as well since 2026-10-18 (`plans/engine-updates.md`): the release carries it per platform. Until then this section wrongly claimed the binary needed no updates, so engine fixes needed a new installer.
+- The app itself (the Tauri shell) updates through the Tauri updater (`plans/shell-updates.md`).
 - A studio build that needs a newer native layer raises `shellApi`, so it waits for the app update (the existing mechanism).
 
 ## Desktop audio duties

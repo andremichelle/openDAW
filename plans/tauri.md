@@ -672,8 +672,8 @@ Nothing is hidden because it is the desktop app. An online feature stays and wor
 3. **Shell core**: splash, version check, verified incremental download, atomic switch, rollback, local server with headers and `/fs` endpoints, IPC surface.
 4. **Tauri strategies**: windows, popouts, external links, files, key-value store, file storage, catalogue (offline index), MIDI (`midir`), decode, clipboard, fullscreen, lifecycle.
 4b. **Desktop behaviour**: native menu bar with Edit menu, accelerator suppression, close-requested flow, window title, file associations, deep link, single instance, web wording, `isLocalHost` replaced by `Platform.isDevelopment`, FFmpeg core, manuals and docs bundled (Audit A to E).
-5. **Shell update and distribution**: updater keys, signing and notarization, CI workflow, `latest.json`.
-6. **Uninstall**: NSIS hook, in-app uninstall (macOS, AppImage), Flatpak manifest, export-before-uninstall.
+5. **Shell update and distribution**: updater keys, signing and notarization, CI workflow, `latest.json`. Updater done 2026-10-18 (`plans/shell-updates.md`), signing and notarization open.
+6. **Uninstall**: NSIS hook, in-app uninstall (macOS, AppImage), Flatpak manifest, export-before-uninstall. Done 2026-10-18 except Flatpak and export (`plans/shell-updates.md` point 9).
 7. **Offline content**: presets and WCLAP downloads (see Phase 2 section).
 8. **Linked samples**: samples referenced by OS file path (see above).
 9. **Native audio engine**: `cpal` and `midir` I/O, `wasmtime`-hosted engine, V8-hosted scriptable devices, binary UI link, native render.

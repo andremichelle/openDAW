@@ -45,6 +45,10 @@ the engine refactoring.
 
 12. **Done (2026-10-18): the engine ships with every deploy, no new installer** (`plans/engine-updates.md`). The
     release carries an engine per platform (built by `deploy.yml`), the shell runs its release's engine, shell API 2.
+13. **Done (2026-10-18): the app updates itself** (`plans/shell-updates.md`). `plans/tauri.md` promised the Tauri
+    updater, it never existed. A tagged build signs its update files, `/install/openDAW-latest.json` is the feed, the
+    app downloads in the background and asks to restart. `desktop-v` releases
+    publish their feed, uninstall from Tools (phase 6) removes what the app wrote, the projects only when asked.
 
 ## One engine, thin entry points
 

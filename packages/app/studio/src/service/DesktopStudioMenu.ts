@@ -130,7 +130,9 @@ export namespace DesktopStudioMenu {
                     item("Neural Demux...", () => NeuralDemux.run(service).catch(EmptyExec)),
                     navigate("Statistics", "/stats").addSeparatorBefore(),
                     item("Web Inspector", () => Shell.request("inspector", {})),
-                    item("Show Log Files", () => Shell.request("logs", {}))
+                    item("Show Log Files", () => Shell.request("logs", {})),
+                    // apps before shell api 3 cannot uninstall
+                    item("Uninstall openDAW...", () => Shell.request("uninstall", {}), Shell.info().api >= 3).addSeparatorBefore()
                 ]
             },
             {

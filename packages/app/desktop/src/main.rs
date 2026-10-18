@@ -7,6 +7,8 @@ mod files;
 mod isolation;
 mod log;
 mod menu;
+mod shell_update;
+mod uninstall;
 mod update;
 mod wclap;
 
@@ -19,7 +21,7 @@ use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewWindowBuilder};
 use tauri::{AppHandle, Manager, WindowEvent};
 
 // Bump when a primitive is added or changed; a build's build-info.json shellApi must not exceed it
-pub const SHELL_API: u64 = 2;
+pub const SHELL_API: u64 = 3;
 const PORT: u16 = 47110;
 // Where the shell looks for studio builds; DEV until the public release builds with OPENDAW_UPDATE_ORIGIN=https://opendaw.studio
 pub const UPDATE_ORIGIN: &str = match option_env!("OPENDAW_UPDATE_ORIGIN") {
@@ -663,6 +665,7 @@ fn main() {
     let shell_info = format!("window.__OPENDAW_SHELL__ = {{token: \"{}\", api: {SHELL_API}{engine_info}}}", files::token());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_menu_event(|app, event| menu::clicked(app, event.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -675,6 +678,7 @@ fn main() {
             let counter = Arc::new(AtomicUsize::new(0));
             if updating {
                 update::start(app.path().app_data_dir()?);
+                shell_update::start(app.handle().clone());
             }
             let url = format!("http://127.0.0.1:{PORT}/{}", if updating { "__splash" } else { "" });
             // Linux loads the studio once the webview can isolate it
@@ -705,9 +709,10 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("tauri build")
-        .run(|_, event| {
+        .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 stop_engine();
+                if !uninstall::finish(app) { shell_update::finish(app); }
             }
         });
 }

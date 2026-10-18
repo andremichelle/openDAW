@@ -252,6 +252,10 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
             },
             None => empty(request, 404),
         },
+        "uninstall" => {
+            if let Some(app) = crate::APP.get() { crate::uninstall::ask(app); }
+            empty(request, 204)
+        }
         // the page has its own context menu, so the inspector opens from the Tools menu
         "inspector" => {
             if let Some(app) = APP.get() {

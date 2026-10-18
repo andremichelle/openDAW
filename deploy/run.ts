@@ -110,6 +110,13 @@ RewriteRule ^ - [L]
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^install/(openDAW-[^/]+)$ /dev/install/$1 [L]
 
+# Desktop releases (desktop.yml, a desktop-v tag): the updater's feed for apps updating from opendaw.studio
+RewriteCond %{REQUEST_URI} ^/main/install/ [NC]
+RewriteRule ^ - [L]
+
+RewriteCond %{HTTP_HOST} ^opendaw\\.studio$ [NC]
+RewriteRule ^install/(openDAW-[^/]+)$ /main/install/$1 [L]
+
 # Documentation: the manuals app and the generated scripting docs live in one fixed folder each per
 # environment, deployed with the studio or alone (DOCS_ONLY=true)
 RewriteCond %{REQUEST_URI} ^/(main|dev)/(manuals|docs)(/|$) [NC]

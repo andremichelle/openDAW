@@ -86,6 +86,10 @@ static CHOICE: Mutex<Option<Vec<String>>> = Mutex::new(None);
 static SKIP: AtomicBool = AtomicBool::new(false);
 static RETRY: AtomicBool = AtomicBool::new(false);
 static WEB: Mutex<Option<PathBuf>> = Mutex::new(None);
+// the latest studio build needs a newer app, the app update says so when it finds none (shell_update.rs)
+static NEEDS_NEWER_SHELL: AtomicBool = AtomicBool::new(false);
+
+pub fn needs_newer_shell() -> bool {NEEDS_NEWER_SHELL.load(Ordering::SeqCst)}
 
 fn status(phase: &'static str, message: impl Into<String>) {
     let mut status = STATUS.lock().unwrap();
@@ -386,6 +390,7 @@ fn choose(web: &Path) -> Option<PathBuf> {
             let required = pointer.shell_api.unwrap_or(SHELL_API);
             if required > SHELL_API {
                 eprintln!("[update] build {} needs shell api {required}, this shell has {SHELL_API}", pointer.uuid);
+                NEEDS_NEWER_SHELL.store(true, Ordering::SeqCst);
                 if current.is_none() {
                     status("error", "This studio version needs a newer openDAW app. Please download the latest app.");
                 }
