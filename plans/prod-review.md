@@ -50,6 +50,15 @@ the engine refactoring.
     app downloads in the background and asks to restart. `desktop-v` releases
     publish their feed, uninstall from Tools (phase 6) removes what the app wrote, the projects only when asked.
 
+14. **Fixed (2026-10-18): engine errors every few minutes on Windows.** The engine polled its sockets with read
+    timeouts. Windows leaves a socket undefined after one (`SO_RCVTIMEO`), reads failed with os error 997 and the
+    connection to the studio ended. All five loops now poll non-blocking sockets (`engine/src/poll.rs`), a full socket
+    queues instead of ending the connection (test: large messages both ways with a slow reader).
+15. **Windows latency (2026-10-18, 90 ms reported).** WASAPI shared mode plus a reserve of two callbacks. The engine
+    logs the split (`[latency]` line). WASAPI exclusive mode (`engine/src/exclusive.rs`, the `wasapi` crate) is a Mode
+    in the Audio Output dialog on Windows, shared stays the default, a card refusing it falls back to shared. ASIO
+    needs the Steinberg SDK license, not now. Unverified on Windows hardware.
+
 ## One engine, thin entry points
 
 Shared: DSP, mixing, metering, scripts, WebCLAP, MIDI drain, transport (the desktop runs the unchanged

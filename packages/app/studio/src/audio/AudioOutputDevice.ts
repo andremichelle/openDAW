@@ -1,4 +1,4 @@
-import {asDefined, DefaultObservableValue, int, ObservableValue, Option, Strings} from "@opendaw/lib-std"
+import {asDefined, DefaultObservableValue, int, ObservableValue, Option, Optional, Strings} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioDevices} from "@/audio/AudioDevices"
 
@@ -9,8 +9,10 @@ export interface AudioOutputBackend {
     readonly current: ObservableValue<Option<OutputDevice>>
     readonly bufferSize: ObservableValue<int>
     readonly bufferSizes: ReadonlyArray<int>
+    // defined where the card can be taken exclusively (Windows): lowest latency, other programs cannot play meanwhile
+    readonly exclusive: ObservableValue<Optional<boolean>>
     devices(): ReadonlyArray<OutputDevice>
-    choose(device: OutputDevice, frames: int): void
+    choose(device: OutputDevice, frames: int, exclusive: boolean): void
 }
 
 export class AudioOutputDevice {
@@ -54,7 +56,7 @@ export class AudioOutputDevice {
     async setOutput(device: OutputDevice) {
         if (AudioOutputDevice.#backend.nonEmpty()) {
             const backend = AudioOutputDevice.#backend.unwrap()
-            return backend.choose(device, backend.bufferSize.getValue())
+            return backend.choose(device, backend.bufferSize.getValue(), backend.exclusive.getValue() === true)
         }
         if (!this.#switchable || device.deviceId === "default") {return}
         const {status} = await Promises.tryCatch(this.#context.setSinkId(device.deviceId))

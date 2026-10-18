@@ -1,4 +1,4 @@
-import {DefaultObservableValue, int, isDefined, Nullable, Option, tryCatch} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isDefined, Nullable, Option, Optional, tryCatch} from "@opendaw/lib-std"
 import {AudioOutputBackend, AudioOutputDevice, OutputDevice} from "@/audio/AudioOutputDevice"
 import {Shell} from "@/platform/desktop/Shell"
 
@@ -7,11 +7,11 @@ export namespace NativeOutput {
     const StorageKey = "native-audio-output"
     const BufferSizes: ReadonlyArray<int> = [64, 128, 256, 512, 1024]
 
-    type FromEngine = { type: "output", devices: ReadonlyArray<string>, device: string, buffer: int, sampleRate?: int }
+    type FromEngine = { type: "output", devices: ReadonlyArray<string>, device: string, buffer: int, sampleRate?: int, exclusive?: boolean }
 
     // the rate the sound card runs at (48 kHz is asked for, a card may refuse), the engines run at it
     export const sampleRate = new DefaultObservableValue<int>(48_000)
-    type Choice = { device: string, buffer: int }
+    type Choice = { device: string, buffer: int, exclusive?: boolean }
 
     const readChoice = (): Choice => {
         const {status, value} = tryCatch(() => JSON.parse(localStorage.getItem(StorageKey) ?? "null") as Nullable<Choice>)
@@ -25,6 +25,7 @@ export namespace NativeOutput {
         if (!isDefined(engine)) {return}
         const current = new DefaultObservableValue<Option<OutputDevice>>(Option.None)
         const bufferSize = new DefaultObservableValue<int>(readChoice().buffer)
+        const exclusive = new DefaultObservableValue<Optional<boolean>>(undefined)
         const state: { socket: Nullable<WebSocket>, devices: ReadonlyArray<string> } = {socket: null, devices: []}
         const choose = (choice: Choice): void => {
             localStorage.setItem(StorageKey, JSON.stringify(choice))
@@ -45,6 +46,7 @@ export namespace NativeOutput {
                 state.devices = message.devices
                 current.setValue(Option.wrap(toDevice(message.device)))
                 bufferSize.setValue(message.buffer)
+                exclusive.setValue(message.exclusive)
                 if (isDefined(message.sampleRate)) {sampleRate.setValue(message.sampleRate)}
             }
         }
@@ -53,8 +55,9 @@ export namespace NativeOutput {
             current,
             bufferSize,
             bufferSizes: BufferSizes,
+            exclusive,
             devices: () => state.devices.map(toDevice),
-            choose: (device, frames) => choose({device: device.deviceId, buffer: frames})
+            choose: (device, frames, exclusive) => choose({device: device.deviceId, buffer: frames, exclusive})
         }
         AudioOutputDevice.install(backend)
     }

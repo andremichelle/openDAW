@@ -10,7 +10,7 @@ import {AudioOutputDevices} from "@/ui/mixer/AudioOutputDevices"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {TextScroller} from "@/ui/TextScroller"
-import {DefaultObservableValue, int, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isDefined, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {AudioOutputBackend, OutputDevice} from "@/audio/AudioOutputDevice"
 import {DropDown} from "@/ui/composite/DropDown"
 
@@ -88,6 +88,8 @@ const openBackendDialog = (backend: AudioOutputBackend): void => {
     const device = new DefaultObservableValue<OutputDevice>(
         devices.find(candidate => candidate.deviceId === currentId) ?? devices[0] ?? {deviceId: "", label: "Default"})
     const frames = new DefaultObservableValue<int>(backend.bufferSize.getValue())
+    const offered = backend.exclusive.getValue()
+    const exclusive = new DefaultObservableValue<boolean>(offered === true)
     const dialog: HTMLDialogElement = (
         <Dialog headline="Audio Output"
                 icon={IconSymbol.AudioDevice}
@@ -97,7 +99,7 @@ const openBackendDialog = (backend: AudioOutputBackend): void => {
                     text: "Ok",
                     primary: true,
                     onClick: handler => {
-                        backend.choose(device.getValue(), frames.getValue())
+                        backend.choose(device.getValue(), frames.getValue(), exclusive.getValue())
                         handler.close()
                     }
                 }]}>
@@ -114,6 +116,14 @@ const openBackendDialog = (backend: AudioOutputBackend): void => {
                           provider={() => backend.bufferSizes}
                           mapping={value => `${value} samples (${(value / 48).toFixed(1)} ms)`}
                           width="16em"/>
+                {isDefined(offered) && [
+                    <span>Mode</span>,
+                    <DropDown lifecycle={lifecycle}
+                              owner={exclusive}
+                              provider={() => [false, true]}
+                              mapping={value => value ? "Exclusive (lowest latency)" : "Shared"}
+                              width="16em"/>
+                ]}
             </div>
         </Dialog>
     )

@@ -8,9 +8,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 mod audio;
+#[cfg(target_os = "windows")]
+mod exclusive;
 mod midi;
 mod offline;
 mod plugins;
+mod poll;
 mod scan;
 mod stats;
 
@@ -77,8 +80,8 @@ static INPUT_RING_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 pub enum MainRequest {
     // Some(name) opens that input ("" = the default), None closes it
     Input(Option<String>),
-    // device name ("" = the default) and buffer size in frames
-    Output(String, u32),
+    // device name ("" = the default), buffer size in frames, the card taken exclusively (Windows)
+    Output(String, u32, bool),
     // work that must run on the main thread (native plugins and their windows)
     Run(Box<dyn FnOnce() + Send>),
 }
@@ -89,7 +92,7 @@ const RING_CAPACITY_FRAMES: usize = 8192;
 static RING_TARGET_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256);
 // "\n"-separated output device names, refreshed in the background, and the open output with its buffer size
 pub static OUTPUT_DEVICES: Mutex<String> = Mutex::new(String::new());
-pub static OUTPUT_CURRENT: Mutex<(String, u32)> = Mutex::new((String::new(), 128));
+pub static OUTPUT_CURRENT: Mutex<(String, u32, bool)> = Mutex::new((String::new(), 128, false));
 pub static OUTPUT_NAME: Mutex<String> = Mutex::new(String::new());
 // "name\tchannels" lines of the available inputs, refreshed in the background
 static INPUT_DEVICES: Mutex<String> = Mutex::new(String::new());
@@ -576,7 +579,7 @@ fn open_output_stream(requested: &str, buffer: u32, consumer: Arc<Mutex<rtrb::Co
     RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
     RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
     println!("[engine] output {name}, {sample_rate} Hz, buffer {buffer}, {target} frames ahead");
-    *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer);
+    *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer, false);
     *OUTPUT_NAME.lock().unwrap() = name;
     Some(stream)
 }
@@ -591,26 +594,60 @@ fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::Buff
             RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
             RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
         }
+        stats::CALLBACK_FRAMES.store((data.len() / 2) as u64, std::sync::atomic::Ordering::Relaxed);
         let timestamp = info.timestamp();
         DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-        // the main thread holds the lock only while it swaps streams
-        let available = match consumer.try_lock() {
-            Ok(mut consumer) => {
-                let available = consumer.slots().min(data.len());
-                if let Ok(chunk) = consumer.read_chunk(available) {
-                    let (first, second) = chunk.as_slices();
-                    data[..first.len()].copy_from_slice(first);
-                    data[first.len()..first.len() + second.len()].copy_from_slice(second);
-                    chunk.commit_all();
-                }
-                available
-            }
-            Err(_) => 0,
-        };
-        if available < data.len() { stats::count(&stats::UNDERRUNS); }
-        data[available..].fill(0.0);
-        waker.unpark();
+        fill(data, &consumer, &waker);
     }, |error| eprintln!("[engine] audio {error}"), None)
+}
+
+// the engine's rendered frames into the card's buffer, silence where it fell behind
+fn fill(data: &mut [f32], consumer: &Mutex<rtrb::Consumer<f32>>, waker: &std::thread::Thread) {
+    // the main thread holds the lock only while it swaps streams
+    let available = match consumer.try_lock() {
+        Ok(mut consumer) => {
+            let available = consumer.slots().min(data.len());
+            if let Ok(chunk) = consumer.read_chunk(available) {
+                let (first, second) = chunk.as_slices();
+                data[..first.len()].copy_from_slice(first);
+                data[first.len()..first.len() + second.len()].copy_from_slice(second);
+                chunk.commit_all();
+            }
+            available
+        }
+        Err(_) => 0,
+    };
+    if available < data.len() { stats::count(&stats::UNDERRUNS); }
+    data[available..].fill(0.0);
+    waker.unpark();
+}
+
+// the output the studio chose: Windows can take the card exclusively, otherwise cpal shares it
+enum Output {
+    #[allow(dead_code)]
+    Shared(cpal::Stream),
+    #[cfg(target_os = "windows")]
+    #[allow(dead_code)]
+    Exclusive(exclusive::Stream),
+}
+
+fn open_output(requested: &str, buffer: u32, exclusive: bool, consumer: &Arc<Mutex<rtrb::Consumer<f32>>>,
+               waker: &std::thread::Thread) -> Option<Output> {
+    #[cfg(target_os = "windows")]
+    if exclusive {
+        match exclusive::start(requested, buffer, REQUESTED_RATE, consumer.clone(), waker.clone()) {
+            Ok((stream, rate, name)) => {
+                SAMPLE_RATE.store(rate, std::sync::atomic::Ordering::Relaxed);
+                *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer, true);
+                *OUTPUT_NAME.lock().unwrap() = name;
+                return Some(Output::Exclusive(stream));
+            }
+            Err(error) => eprintln!("[engine] exclusive mode unavailable ({error}), sharing the card"),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = exclusive;
+    open_output_stream(requested, buffer, consumer.clone(), waker.clone()).map(Output::Shared)
 }
 
 // the frames kept ready: two of the card's callbacks, within the ring
@@ -661,18 +698,17 @@ fn serve(events: Sender<Event>, token: String) {
             if path == "/offline" {
                 return offline::serve(socket, &query);
             }
-            let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(2)));
+            poll::poll(&socket);
             let (sender, outgoing) = channel::<Option<Vec<u8>>>();
             outbox().lock().unwrap().insert(id, sender);
             let _ = events.send(Event::Open(id));
             'connection: loop {
-                match socket.read() {
-                    Ok(Message::Binary(bytes)) => {
+                match poll::read(&mut socket, Duration::from_millis(2)) {
+                    Ok(Some(Message::Binary(bytes))) => {
                         let _ = events.send(Event::Receive(id, bytes.to_vec()));
                     }
-                    Ok(Message::Close(_)) => break,
+                    Ok(Some(Message::Close(_))) => break,
                     Ok(_) => {}
-                    Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
                     Err(error) => {
                         println!("[engine] connection {id} ended: {error}");
                         break;
@@ -681,7 +717,7 @@ fn serve(events: Sender<Event>, token: String) {
                 while let Ok(message) = outgoing.try_recv() {
                     match message {
                         Some(bytes) => {
-                            if socket.send(Message::Binary(bytes.into())).is_err() { break 'connection; }
+                            if poll::send(&mut socket, Message::Binary(bytes.into())).is_err() { break 'connection; }
                         }
                         None => {
                             // waits briefly for the studio's answer, a dropped connection would look like a crash there
@@ -689,11 +725,7 @@ fn serve(events: Sender<Event>, token: String) {
                             let _ = socket.flush();
                             let deadline = Instant::now() + Duration::from_millis(250);
                             while Instant::now() < deadline {
-                                match socket.read() {
-                                    Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
-                                    Err(_) => break,
-                                    Ok(_) => {}
-                                }
+                                if poll::read(&mut socket, Duration::from_millis(1)).is_err() { break; }
                             }
                             break 'connection;
                         }
@@ -746,7 +778,7 @@ fn main() {
     let engine = std::thread::Builder::new().name("engine".into())
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
     let waker = engine.thread().clone();
-    let mut output_stream = Some(open_output_stream("", buffer, consumer.clone(), waker.clone()).expect("no output device"));
+    let mut output_stream = Some(open_output("", buffer, false, &consumer, &waker).expect("no output device"));
     std::thread::spawn(|| loop {
         *INPUT_DEVICES.lock().unwrap() = list_input_devices();
         *OUTPUT_DEVICES.lock().unwrap() = list_output_devices();
@@ -757,12 +789,12 @@ fn main() {
     let mut input_stream: Option<(cpal::Stream, String)> = None;
     let mut handle = move |request: MainRequest| {
         let request = match request {
-            MainRequest::Output(device, size) => {
-                if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { return; }
+            MainRequest::Output(device, size, exclusive) => {
+                if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size, exclusive) { return; }
                 let rate = SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed);
                 drop(output_stream.take());
-                output_stream = Some(open_output_stream(&device, size, consumer.clone(), waker.clone())
-                    .or_else(|| open_output_stream("", 128, consumer.clone(), waker.clone()))
+                output_stream = Some(open_output(&device, size, exclusive, &consumer, &waker)
+                    .or_else(|| open_output("", 128, false, &consumer, &waker))
                     .expect("no output device"));
                 // the input records at the output's rate
                 let rate_now = SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed);
