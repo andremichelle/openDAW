@@ -21,6 +21,7 @@ import type {NativePluginInfo} from "@/platform/desktop/engine/NativePlugins"
 export namespace DesktopStudioMenu {
     export type NativeRole = "about" | "services" | "hide" | "hide-others" | "show-all" | "quit"
         | "cut" | "copy" | "paste" | "select-all" | "minimize" | "zoom" | "fullscreen" | "close-window" | "separator"
+        | "zoom-in" | "zoom-out" | "zoom-reset"
     export type Entry = MenuItem | NativeRole
     export type Menu = { label: string, role?: "window" | "help", entries: ReadonlyArray<Entry> }
 
@@ -120,7 +121,7 @@ export namespace DesktopStudioMenu {
                     screen("Shader Visualizer", "shadertoy", "workspace-screen-shadertoy"),
                     screen("Modulation", "modulation", "workspace-screen-modulation"),
                     screen("Tap Tempo", "tap", "workspace-screen-tap"),
-                    "separator", "fullscreen"
+                    "separator", "zoom-in", "zoom-out", "zoom-reset", "separator", "fullscreen"
                 ]
             },
             {

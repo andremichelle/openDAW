@@ -5,6 +5,9 @@ use tauri::{AppHandle, Manager, Wry};
 use crate::{request_quit, APP};
 
 const QUIT_ID: &str = "__quit__";
+const ZOOM_IN_ID: &str = "__zoom_in__";
+const ZOOM_OUT_ID: &str = "__zoom_out__";
+const ZOOM_RESET_ID: &str = "__zoom_reset__";
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -39,6 +42,12 @@ fn append(app: &AppHandle, parent: &Submenu<Wry>, node: &Node) -> tauri::Result<
         Node::Separator => parent.append(&PredefinedMenuItem::separator(app)?),
         Node::Native { role } if role == "quit" =>
             parent.append(&MenuItem::with_id(app, QUIT_ID, "Quit openDAW Studio", true, Some("CmdOrCtrl+Q"))?),
+        Node::Native { role } if role == "zoom-in" =>
+            parent.append(&MenuItem::with_id(app, ZOOM_IN_ID, "Zoom In", true, Some("CmdOrCtrl+="))?),
+        Node::Native { role } if role == "zoom-out" =>
+            parent.append(&MenuItem::with_id(app, ZOOM_OUT_ID, "Zoom Out", true, Some("CmdOrCtrl+-"))?),
+        Node::Native { role } if role == "zoom-reset" =>
+            parent.append(&MenuItem::with_id(app, ZOOM_RESET_ID, "Actual Size", true, Some("CmdOrCtrl+0"))?),
         Node::Native { role } => {
             let item = match role.as_str() {
                 "about" => PredefinedMenuItem::about(app, None, None)?,
@@ -89,6 +98,15 @@ pub fn set(json: &[u8]) -> Result<(), String> {
 pub fn clicked(app: &AppHandle, id: &str) {
     if id == QUIT_ID {
         return request_quit(app);
+    }
+    let zoom = match id {
+        ZOOM_IN_ID => Some(crate::zoom::Step::In),
+        ZOOM_OUT_ID => Some(crate::zoom::Step::Out),
+        ZOOM_RESET_ID => Some(crate::zoom::Step::Reset),
+        _ => None,
+    };
+    if let Some(step) = zoom {
+        return crate::zoom::step(app, step);
     }
     if let Some(window) = app.get_webview_window("main") {
         let id = serde_json::to_string(id).unwrap();

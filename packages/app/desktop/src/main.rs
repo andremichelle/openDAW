@@ -11,6 +11,7 @@ mod shell_update;
 mod uninstall;
 mod update;
 mod wclap;
+mod zoom;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -696,6 +697,7 @@ fn main() {
                 .initialization_script(&shell_info)
                 .on_new_window(move |url, features| open_window(&handle, &counter, url, features, true))
                 .build()?;
+            zoom::restore(&main);
             #[cfg(target_os = "linux")]
             main.with_webview(move |webview| isolation::load(&webview.inner(), &url))?;
             let quitting = app.handle().clone();
