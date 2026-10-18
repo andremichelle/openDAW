@@ -25,20 +25,6 @@ component
     touch-action: none
     outline: none
 
-    &::after
-      content: ""
-      position: absolute
-      left: -36px
-      right: 0
-      bottom: 0
-      height: 1px
-      background-color: var(--color-green)
-      opacity: 0
-      pointer-events: none
-
-    &:hover::after
-      opacity: 0.5
-
   // An automation lane whose unit is collapsed: out of flow (grid skips it).
   &.collapsed-away
     display: none
