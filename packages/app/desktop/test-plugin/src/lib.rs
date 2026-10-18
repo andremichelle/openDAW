@@ -311,6 +311,8 @@ impl IEditControllerTrait for Controller {
         *slot = value;
         self.values.set(values);
         if !changed { return kResultOk; }
+        #[cfg(target_os = "macos")]
+        if id == TONE { slider::refresh(); }
         if id == TONE && switched("linked") {
             if let Some(handler) = self.handler() {
                 let mut values = self.values.get();
@@ -401,7 +403,11 @@ mod slider {
 
     thread_local! {
         static TARGET: RefCell<Option<Target>> = const { RefCell::new(None) };
+        static SHOWN: RefCell<Option<Retained<Slider>>> = const { RefCell::new(None) };
     }
+
+    // a value set by the host (undo, automation) is shown too
+    pub fn refresh() {SHOWN.with(|shown| if let Some(slider) = shown.borrow().as_ref() { slider.setNeedsDisplay(true); })}
 
     define_class!(
         #[unsafe(super(NSView, objc2_app_kit::NSResponder, objc2_foundation::NSObject))]
@@ -460,11 +466,13 @@ mod slider {
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(320.0, 120.0));
         let slider: Retained<Slider> = msg_send![Slider::alloc(mtm), initWithFrame: frame];
         (*(parent as *const NSView)).addSubview(&slider);
+        SHOWN.with(|shown| *shown.borrow_mut() = Some(slider.clone()));
         slider
     }
 
     pub fn detach(slider: &Slider) {
         slider.removeFromSuperview();
+        SHOWN.with(|shown| *shown.borrow_mut() = None);
         TARGET.with(|target| *target.borrow_mut() = None);
     }
 }

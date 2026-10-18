@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {Arrays, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {applyUpdateTasks, BoxGraph, Update, UpdateTask} from "@opendaw/lib-box"
-import {BoxIO, NativeInstrumentBox} from "@opendaw/studio-boxes"
+import {BoxIO, NativeInstrumentBox, WclapParameterBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, InstrumentFactory, ProjectSkeleton, TrackType, WclapParamInfo} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import type {ProjectEnv} from "../project/ProjectEnv"
@@ -132,5 +132,24 @@ describe("undo all the way back past an instrument's creation, then redo", () =>
         const result = await run(nativeFactory, "outside-history")
         expect(result.undos).toEqual([true, true, false])
         expect(result.afterUndo).toEqual({attached: false, inSync: false})
+    })
+})
+
+describe("a slider drag in the plugin's window", () => {
+    it("undo restores the value before the drag", async () => {
+        const {Project} = await import("../project/Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {editing} = project
+        const {instrumentBox} = editing.modify(() => project.api.createAnyInstrument(nativeFactory), false).unwrap()
+        const hub = (instrumentBox as NativeInstrumentBox).parameters
+        editing.modify(() => WclapParameters.reconcileHub(project, hub, testSynthParams), false)
+        editing.mark()
+        const tone = () => hub.pointerHub.incoming().map(({box}) => box as WclapParameterBox).find(box => box.clapId.getValue() === 1)!.value.getValue()
+        // performEdit notices while dragging, then the gesture end seals
+        ;[0.6, 0.7, 0.8].forEach(value => WclapParameters.applyHub(project, hub, 1, value))
+        editing.mark()
+        expect(tone()).toBeCloseTo(0.8)
+        expect(editing.undo()).toBe(true)
+        expect(tone()).toBeCloseTo(0.5)
     })
 })

@@ -18,7 +18,7 @@ export type NativePluginInfo = {
     format: string, id: string, name: string, vendor: string, kind: "instrument" | "effect" | "", path: string
     status: "ok" | "failed" | "incompatible" | "crashed"
 }
-export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param" | "plugins" | "processing" | "gesture", value: string }
+export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param" | "plugins" | "processing" | "gesture" | "follow", value: string }
 
 export const NativeInstrumentBoxType = "NativeInstrumentBox"
 export const NativeEffectBoxType = "NativeEffectBox"

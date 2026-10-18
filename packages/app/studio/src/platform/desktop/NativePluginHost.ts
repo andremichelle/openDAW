@@ -1,7 +1,7 @@
-import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, RuntimeNotifier, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, Optional, RuntimeNotifier, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Platform} from "@opendaw/lib-dom"
 import {Box, BoxGraph, Field} from "@opendaw/lib-box"
-import {BoxIO, NativeEffectBox, NativeInstrumentBox} from "@opendaw/studio-boxes"
+import {BoxIO, NativeEffectBox, NativeInstrumentBox, WclapParameterBox} from "@opendaw/studio-boxes"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentFactory, TrackType} from "@opendaw/studio-adapters"
 import {Project, WclapParameters} from "@opendaw/studio-core"
@@ -41,7 +41,16 @@ export namespace NativePluginHost {
         if (!isDefined(entry)) {return}
         clearTimeout(entry.timeout)
         unsealed.delete(uuid)
-        entry.project.editing.mark()
+        if (entry.project.boxGraph.findBox(UUID.parse(uuid)).nonEmpty()) {entry.project.editing.mark()}
+    }
+
+    // a burst of gestures (a preset loaded in the plugin's window) becomes one undo step
+    const GestureSealMillis = 300
+    const gestureSeal: { timeout: Optional<ReturnType<typeof setTimeout>> } = {timeout: undefined}
+
+    const sealGestures = (): void => {
+        clearTimeout(gestureSeal.timeout)
+        gestureSeal.timeout = setTimeout(() => state.service?.optProject.ifSome(project => project.editing.mark()), GestureSealMillis)
     }
     const notifier = new Notifier<void>()
     const catalogue = new Notifier<void>()
@@ -184,10 +193,13 @@ export namespace NativePluginHost {
             } else if (type === "param") {
                 const [id, paramValue] = value.split(":")
                 withHub(uuid, (project, hub) => WclapParameters.applyHub(project, hub, Number(id) >>> 0, Number(paramValue)))
+            } else if (type === "follow") {
+                const [id, paramValue] = value.split(":")
+                withHub(uuid, (project, hub) => follow(project, hub, Number(id) >>> 0, Number(paramValue)))
             } else if (type === "plugins") {
                 deliverPlugins(JSON.parse(value))
             } else if (type === "gesture") {
-                state.service?.optProject.ifSome(project => project.editing.mark())
+                sealGestures()
             } else if (type === "saved") {
                 saving.splice(0).forEach(done => done())
             }
@@ -202,6 +214,21 @@ export namespace NativePluginHost {
         state.service?.optProject.ifSome(project => project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
             if (isNativeBox(box)) {procedure(project, box.parameters)}
         }))
+
+    // a plugin's edit following a value the host set (undo, redo, automation) is no user action: kept out of the history
+    const follow = (project: Project, hub: Field<Pointers.Parameter>, paramId: number, value: number): void => {
+        const paramBox = hub.pointerHub.incoming().map(({box}) => box)
+            .find((box): box is WclapParameterBox => box instanceof WclapParameterBox && (box.clapId.getValue() >>> 0) === paramId)
+        if (!isDefined(paramBox) || paramBox.value.getValue() === Math.fround(value)) {return}
+        const graph = project.boxGraph
+        if (graph.inTransaction()) {
+            paramBox.value.setValue(value)
+            return
+        }
+        graph.beginTransaction()
+        paramBox.value.setValue(value)
+        graph.endTransaction()
+    }
 
     const UuidLength = 36
 

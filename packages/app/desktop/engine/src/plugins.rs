@@ -393,6 +393,8 @@ struct ComponentHandler {
     last_edit: Cell<Option<Instant>>,
     // the host is loading a state into the plugin: its "values changed" restates that state, the boxes stay as they are
     applying: Cell<bool>,
+    // the host is setting a value: the plugin's edits during it follow that value, they are no user action
+    following: Cell<bool>,
     // a copy for an offline render: nothing it does reaches the studio
     offline: bool,
 }
@@ -406,7 +408,7 @@ impl ComponentHandler {
         if self.offline { return; }
         let Some(max) = self.ranges.borrow().get(&id).copied() else { return };
         self.inbox.lock().unwrap().edits.push((id, normalized));
-        notify(&self.uuid, "param", format!("{id}:{}", normalized * max));
+        notify(&self.uuid, if self.following.get() { "follow" } else { "param" }, format!("{id}:{}", normalized * max));
     }
 
     unsafe fn reread(&self, titles: bool) {
@@ -439,7 +441,7 @@ impl IComponentHandlerTrait for ComponentHandler {
             self.gestures.set((self.gestures.get() - 1).max(0));
             self.last_edit.set(Some(Instant::now()));
             // a gesture in the plugin's window ended: the studio seals its undo step, like after a knob turn
-            if self.gestures.get() == 0 && !self.offline { notify(&self.uuid, "gesture", "end"); }
+            if self.gestures.get() == 0 && !self.offline && !self.following.get() { notify(&self.uuid, "gesture", "end"); }
         });
         kResultOk
     }
@@ -899,7 +901,7 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
     let handler = ComWrapper::new(ComponentHandler {
         handle, uuid: uuid.to_string(), inbox: inbox.clone(), ranges: RefCell::new(HashMap::new()),
         controller: RefCell::new(Some(controller.clone())), gestures: Cell::new(0), last_edit: Cell::new(None),
-        applying: Cell::new(false), offline
+        applying: Cell::new(false), following: Cell::new(false), offline
     });
     controller.setComponentHandler(handler.to_com_ptr::<IComponentHandler>()?.into_raw());
     // both are the host's own doing: the plugin's "values changed" during them restates what the host just set
@@ -1102,8 +1104,14 @@ unsafe fn flush_display(editor: &Editor) {
     let values: Vec<(ParamID, f64)> = editor.inbox.lock().unwrap().to_gui.drain().collect();
     for (id, normalized) in values {
         if (editor.controller.getParamNormalized(id) - normalized).abs() < 1e-7 { continue; }
-        editor.controller.setParamNormalized(id, normalized);
+        show_value(&editor.handler, &editor.controller, id, normalized);
     }
+}
+
+unsafe fn show_value(handler: &ComponentHandler, controller: &ComPtr<IEditController>, id: ParamID, normalized: f64) {
+    handler.following.set(true);
+    controller.setParamNormalized(id, normalized);
+    handler.following.set(false);
 }
 
 unsafe fn open_view(handle: u32) {
@@ -2254,5 +2262,36 @@ mod tests {
     fn a_plugin_writing_its_second_output_bus_gets_buffers_for_it() {
         let (bundle, id) = test_plugin();
         assert_eq!(with_switches("aux", || unsafe { process_block(&bundle, &id) }), kResultOk);
+    }
+
+    // the linked switch: the plugin edits "Follow" while the host sets "Tone" (an undo, a redo, automation). Recorded as
+    // a user action it would end the redo history.
+    #[test]
+    fn edits_a_plugin_makes_while_the_host_sets_a_value_follow_it() {
+        let (bundle, id) = test_plugin();
+        let notices = with_switches("linked", || unsafe {
+            let module = module(&bundle).expect("module");
+            let component: ComPtr<IComponent> = create(&module.factory, &parse_cid(&id).unwrap()).expect("component");
+            let host = ComWrapper::new(Host);
+            let host_unknown = host.to_com_ptr::<IHostApplication>().unwrap().into_raw() as *mut FUnknown;
+            assert_eq!(component.initialize(host_unknown), kResultOk);
+            let mut controller_cid: TUID = [0; 16];
+            component.getControllerClassId(&mut controller_cid);
+            let controller: ComPtr<IEditController> = create(&module.factory, &controller_cid).expect("controller");
+            assert_eq!(controller.initialize(host_unknown), kResultOk);
+            let handler = ComWrapper::new(ComponentHandler {
+                handle: 0, uuid: "linked".into(), inbox: SharedInbox::default(), ranges: RefCell::new((0..4).map(|id| (id, 1.0)).collect()),
+                controller: RefCell::new(None), gestures: Cell::new(0), last_edit: Cell::new(None), applying: Cell::new(false), following: Cell::new(false), offline: false
+            });
+            controller.setComponentHandler(handler.to_com_ptr::<IComponentHandler>().unwrap().into_raw());
+            show_value(&handler, &controller, 1, 0.25);
+            controller.terminate();
+            component.terminate();
+            let mut notices = NOTICES.lock().unwrap();
+            let mine: Vec<(&str, String)> = notices.iter().filter(|notice| notice.uuid == "linked").map(|notice| (notice.kind, notice.value.clone())).collect();
+            notices.retain(|notice| notice.uuid != "linked");
+            mine
+        });
+        assert_eq!(notices, vec![("follow", "2:0.25".to_string())]);
     }
 }
