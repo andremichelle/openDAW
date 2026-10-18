@@ -133,14 +133,18 @@
     }
 
     const open = async ({uuid, page, files: list}) => {
+        post({type: "wclap-trace", step: `open ${page}, ${list.length} files`})
         state.uuid = uuid
         const path = page.split("?")[0]
         state.pageDirectory = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : ""
         files.clear()
         for (const {path, bytes} of list) {files.set(path, bytes)}
+        const started = performance.now()
         if (shellHosted) {await uploadToShell(uuid, list)} else {await registerWorker()}
+        post({type: "wclap-trace", step: `files ready after ${Math.round(performance.now() - started)} ms`})
         const inner = document.createElement("iframe")
         inner.addEventListener("load", () => {
+            post({type: "wclap-trace", step: "plugin page loaded"})
             forwardInput(inner)
             releaseLostButtons(inner)
             forwardPointer()

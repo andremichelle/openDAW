@@ -36,6 +36,8 @@ type FrameMessage =
     | { type: "wclap-key", kind: "keydown" | "keyup", init: KeyboardEventInit }
     | { type: "wclap-error", message: string }
     | { type: "wclap-wheel", deltaX: number, deltaY: number, deltaMode: number }
+    // TEMPORARY trace (black WebCLAP window on the first open, Windows)
+    | { type: "wclap-trace", step: string }
 
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
@@ -130,6 +132,7 @@ export namespace WclapWindows {
             )
         }
         const onFrameMessage = (message: FrameMessage): void => {
+            if (message.type === "wclap-trace") {return console.debug(`[wclap trace] frame: ${message.step}`)}
             if (message.type === "wclap-message") {
                 if (message.bytes.byteLength > MAX_MESSAGE_BYTES) {return}
                 engine.wclapReceive(uuid, message.bytes)
@@ -180,6 +183,7 @@ export namespace WclapWindows {
                 }}
             )
             port.start()
+            console.debug(`[wclap trace] studio: frame ready, load ${link.loads + 1}`)
             if (link.loads++ === 0) {
                 post({type: "wclap-open", uuid: uuidString, page, files: bundle.files})
             } else {
@@ -227,7 +231,11 @@ export namespace WclapWindows {
         session.own(handle.owner.catchupAndSubscribe(owner => {
             listener.terminate()
             connection.terminate()
+            console.debug(`[wclap trace] studio: listening on ${owner.getValue() === window ? "the studio window" : "the plugin window"}`)
             listener.own(Events.subscribe(owner.getValue(), "message", (event: MessageEvent) => {
+                if (isFrameReady(event.data)) {
+                    console.debug(`[wclap trace] studio: ready message, own frame ${event.source === iframe.contentWindow}, origin ${event.origin}`)
+                }
                 if (event.source !== iframe.contentWindow || event.origin !== frameOrigin || !isFrameReady(event.data)) {return}
                 const port = event.ports.at(0)
                 if (isDefined(port)) {connect(port)}
