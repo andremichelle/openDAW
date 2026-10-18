@@ -216,7 +216,7 @@ pub(crate) fn arg_string(scope: &mut v8::PinScope, args: &v8::FunctionCallbackAr
 
 fn native_create(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     let uuid = arg_string(scope, &args, 0);
-    rv.set_uint32(plugins::create_slot(uuid));
+    rv.set_uint32(plugins::create_slot(uuid, args.get(1).int32_value(scope).unwrap_or(-1)));
 }
 
 pub(crate) fn native_load(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
@@ -306,6 +306,7 @@ fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8:
     if let Some(sender) = outbox().lock().unwrap().remove(&id) {
         let _ = sender.send(None);
     }
+    plugins::forget(id);
 }
 
 pub(crate) fn run<'s>(scope: &mut v8::PinScope<'s, '_>, source: &str, name: &str) -> Option<v8::Local<'s, v8::Value>> {

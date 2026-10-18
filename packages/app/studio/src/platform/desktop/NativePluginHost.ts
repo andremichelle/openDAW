@@ -1,12 +1,13 @@
-import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, Optional, RuntimeNotifier, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {Exec, isDefined, Notifier, Nullable, Observer, Optional, RuntimeNotifier, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Platform} from "@opendaw/lib-dom"
 import {Box, BoxGraph, Field} from "@opendaw/lib-box"
-import {BoxIO, NativeEffectBox, NativeInstrumentBox, WclapParameterBox} from "@opendaw/studio-boxes"
+import {BoxIO, NativeEffectBox, NativeInstrumentBox} from "@opendaw/studio-boxes"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentFactory, TrackType} from "@opendaw/studio-adapters"
 import {Project, WclapParameters} from "@opendaw/studio-core"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 import {Shell} from "@/platform/desktop/Shell"
+import {NativeState} from "@/platform/desktop/NativeState"
 import type {NativeNotice, NativePluginInfo} from "@/platform/desktop/engine/NativePlugins"
 import {StudioService} from "@/service/StudioService"
 
@@ -192,10 +193,10 @@ export namespace NativePluginHost {
                 }
             } else if (type === "param") {
                 const [id, paramValue] = value.split(":")
-                withHub(uuid, (project, hub) => WclapParameters.applyHub(project, hub, Number(id) >>> 0, Number(paramValue)))
+                withHub(uuid, (project, hub) => NativeState.edit(project, hub, Number(id) >>> 0, Number(paramValue)))
             } else if (type === "follow") {
                 const [id, paramValue] = value.split(":")
-                withHub(uuid, (project, hub) => follow(project, hub, Number(id) >>> 0, Number(paramValue)))
+                withHub(uuid, (project, hub) => NativeState.follow(project, hub, Number(id) >>> 0, Number(paramValue)))
             } else if (type === "plugins") {
                 deliverPlugins(JSON.parse(value))
             } else if (type === "gesture") {
@@ -215,28 +216,12 @@ export namespace NativePluginHost {
             if (isNativeBox(box)) {procedure(project, box.parameters)}
         }))
 
-    // a plugin's edit following a value the host set (undo, redo, automation) is no user action: kept out of the history
-    const follow = (project: Project, hub: Field<Pointers.Parameter>, paramId: number, value: number): void => {
-        const paramBox = hub.pointerHub.incoming().map(({box}) => box)
-            .find((box): box is WclapParameterBox => box instanceof WclapParameterBox && (box.clapId.getValue() >>> 0) === paramId)
-        if (!isDefined(paramBox) || paramBox.value.getValue() === Math.fround(value)) {return}
-        const graph = project.boxGraph
-        if (graph.inTransaction()) {
-            paramBox.value.setValue(value)
-            return
-        }
-        graph.beginTransaction()
-        paramBox.value.setValue(value)
-        graph.endTransaction()
-    }
-
     const UuidLength = 36
 
     const storeState = (uuid: string, bytes: Int8Array): void => {
         const project = state.service?.optProject
         project?.ifSome(project => project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
-            if (!isNativeBox(box) || Arrays.equals(box.state.getValue(), bytes)) {return}
-            project.editing.modify(() => box.state.setValue(bytes), false)
+            if (isNativeBox(box)) {NativeState.store(project, box, bytes)}
         }))
     }
 

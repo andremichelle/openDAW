@@ -1,6 +1,6 @@
 import {int, UUID} from "@opendaw/lib-std"
 
-declare const __nativeCreate: (uuid: string) => int
+declare const __nativeCreate: (uuid: string, engine: int) => int
 declare const __nativeLoad: (handle: int, format: string, id: string) => void
 declare const __nativeProcess: (handle: int, memory: ArrayBuffer, left: int, right: int, frames: int, bpm: number, position: number, flags: int) => int
 declare const __nativeProcessEffect: (handle: int, memory: ArrayBuffer, inLeft: int, inRight: int, outLeft: int, outRight: int,
@@ -42,12 +42,12 @@ export namespace NativePlugins {
         return {modules: [instrument, effect], boxTypes: [NativeInstrumentBoxType, NativeEffectBoxType]}
     }
 
-    // the device's host_native_* imports, bound to the engine memory
-    export const imports = (memory: WebAssembly.Memory): Record<string, (...args: Array<number>) => number | void> => {
+    // the device's host_native_* imports, bound to the engine memory and the engine (a project) creating the devices
+    export const imports = (memory: WebAssembly.Memory, engine: int = -1): Record<string, (...args: Array<number>) => number | void> => {
         const text = (pointer: int, length: int): string => decoder.decode(new Uint8Array(memory.buffer, pointer, length).slice())
         return {
             host_native_create: (uuidPtr: int): int =>
-                __nativeCreate(UUID.toString(new Uint8Array(memory.buffer, uuidPtr, 16).slice() as UUID.Bytes)),
+                __nativeCreate(UUID.toString(new Uint8Array(memory.buffer, uuidPtr, 16).slice() as UUID.Bytes), engine),
             host_native_load: (handle: int, formatPtr: int, formatLen: int, idPtr: int, idLen: int): void =>
                 __nativeLoad(handle, text(formatPtr, formatLen), text(idPtr, idLen)),
             host_native_process: (handle: int, left: int, right: int, frames: int, bpm: number, position: number, flags: int): int =>

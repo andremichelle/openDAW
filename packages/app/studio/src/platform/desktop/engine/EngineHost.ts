@@ -270,7 +270,8 @@ class Connection {
                 ...options, hrClockBuffer: this.clock, variant: nativeModules === null
                     ? {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}
                     : {
-                        engineModule, composites, effectComposites, hostImports: NativePlugins.imports,
+                        engineModule, composites, effectComposites,
+                        hostImports: (memory: WebAssembly.Memory) => NativePlugins.imports(memory, this.id),
                         deviceModules: [...deviceModules, ...nativeModules.modules], deviceBoxTypes: [...deviceBoxTypes, ...nativeModules.boxTypes]
                     }
             }

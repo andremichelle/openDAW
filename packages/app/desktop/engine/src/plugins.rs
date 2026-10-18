@@ -43,6 +43,30 @@ static KNOWN_STATES: Mutex<Option<HashMap<String, Vec<u8>>>> = Mutex::new(None);
 // saved states on their way to the studio, sent as binary messages: the uuid's 36 characters, then the state
 static STATES: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
 
+// what a plugin held when its device went away (deleted, its creation undone), per engine (a project) and device: the
+// device that comes back takes it instead of the older state in the studio's history
+type Kept = HashMap<(i32, String), (String, Vec<u8>)>;
+static KEPT: Mutex<Option<Kept>> = Mutex::new(None);
+
+fn keep(engine: i32, uuid: &str, id: &str, state: Vec<u8>) {
+    KEPT.lock().unwrap().get_or_insert_with(HashMap::new).insert((engine, uuid.to_string()), (id.to_string(), state));
+}
+
+fn take_kept(engine: i32, uuid: &str, id: &str) -> Option<Vec<u8>> {
+    let mut kept = KEPT.lock().unwrap();
+    let key = (engine, uuid.to_string());
+    if kept.as_ref()?.get(&key)?.0 != id { return None; }
+    let (_, state) = kept.as_mut()?.remove(&key)?;
+    drop(kept);
+    KNOWN_STATES.lock().unwrap().get_or_insert_with(HashMap::new).insert(uuid.to_string(), state.clone());
+    STATES.lock().unwrap().push((uuid.to_string(), state.clone()));
+    Some(state)
+}
+
+pub fn forget(engine: i32) {
+    if let Some(kept) = KEPT.lock().unwrap().as_mut() { kept.retain(|(kept_engine, _), _| *kept_engine != engine); }
+}
+
 fn is_known(uuid: &str, state: &[u8]) -> bool {
     KNOWN_STATES.lock().unwrap().as_ref().and_then(|known| known.get(uuid)).is_some_and(|known| known.as_slice() == state)
 }
@@ -750,6 +774,8 @@ pub struct Loaded {
     ranges: HashMap<ParamID, f64>,
     // the bundle whose crash marker stays set until the plugin has played a while
     trial: String,
+    // loaded from the state its plugin held when the device went away: the plugin's values
+    kept: Option<HashMap<ParamID, f64>>,
 }
 
 // about a second of audio
@@ -864,7 +890,7 @@ unsafe fn create<T: Interface>(factory: &ComPtr<IPluginFactory>, cid: &TUID) -> 
 
 // main thread
 unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id: &str, sample_rate: f64, state: Option<Vec<u8>>,
-                      offline: bool) -> Option<Loaded> {
+                      offline: bool, kept: bool) -> Option<Loaded> {
     if format != "vst3" { return None; }
     // an offline render plays what the studio's instance holds right now, saved or not
     let state = if offline {
@@ -958,6 +984,8 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
     *handler.ranges.borrow_mut() = ranges.clone();
     if !offline { notify(uuid, "params", serde_json::to_string(&automatable(&infos)).unwrap()); }
+    if kept { report_values(uuid, &infos); }
+    let kept = kept.then(|| infos.iter().map(|param| (param.id, param.value)).collect());
     let replaced = EDITORS.with(|editors| editors.borrow_mut().insert(handle, Rc::new(Editor {
         uuid: uuid.to_string(), name: info.name.clone(), component, controller, shared: shared.clone(), view: RefCell::new(None),
         reread_at: Cell::new(None), inbox: inbox.clone(), handler, offline, generation
@@ -965,7 +993,7 @@ unsafe fn instantiate(handle: u32, generation: u32, uuid: &str, format: &str, id
     // a plugin swapped again before the engine took the earlier one: that earlier instance is never used
     if let Some(replaced) = replaced { terminate(handle, &replaced); }
     println!("[plugins] {} ready ({} {}, {} parameters)", info.name, info.vendor, id, infos.len());
-    Some(Loaded { shared, inbox, ranges, trial: loading.keep() })
+    Some(Loaded { shared, inbox, ranges, trial: loading.keep(), kept })
 }
 
 unsafe fn sync_controller(component: &ComPtr<IComponent>, controller: &ComPtr<IEditController>) {
@@ -1029,7 +1057,7 @@ fn save(handle: u32, editor: &Editor) {
     STATES.lock().unwrap().push((editor.uuid.clone(), state));
 }
 
-unsafe fn release_on_main(handle: u32, generation: u32) {
+unsafe fn release_on_main(handle: u32, generation: u32, keeping: Option<(i32, String)>) {
     let editor = EDITORS.with(|editors| {
         let mut editors = editors.borrow_mut();
         if editors.get(&handle).is_none_or(|editor| editor.generation != generation) { return None; }
@@ -1037,6 +1065,7 @@ unsafe fn release_on_main(handle: u32, generation: u32) {
     });
     let Some(editor) = editor else { return };
     DIRTY.with(|dirty| dirty.borrow_mut().remove(&handle));
+    if let Some((engine, id)) = keeping { keep(engine, &editor.uuid, &id, read_state(&editor.component, &editor.controller)); }
     terminate(handle, &editor);
 }
 
@@ -1155,6 +1184,7 @@ unsafe fn open_view(handle: u32) {
 
 struct Slot {
     uuid: String,
+    engine: i32,
     generation: u32,
     format: String,
     id: String,
@@ -1197,15 +1227,15 @@ static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1)
 
 const OFFLINE_LOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
-pub fn create_slot(uuid: String) -> u32 {create_any_slot(uuid, None)}
+pub fn create_slot(uuid: String, engine: i32) -> u32 {create_any_slot(uuid, engine, None)}
 
-pub fn create_offline_slot(uuid: String, sample_rate: f64) -> u32 {create_any_slot(uuid, Some(sample_rate))}
+pub fn create_offline_slot(uuid: String, sample_rate: f64) -> u32 {create_any_slot(uuid, -1, Some(sample_rate))}
 
-fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
+fn create_any_slot(uuid: String, engine: i32, offline: Option<f64>) -> u32 {
     if offline.is_some() { OFFLINE_THREAD.set(true); }
     let handle = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     SLOTS.with(|slots| slots.borrow_mut().insert(handle, Slot {
-        uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
+        uuid, engine, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
         changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new(),
         offline, tried: false, unwritten: 0, inactive: false, trial: None, rate: 0.0, failed: false
@@ -1221,10 +1251,10 @@ fn load_offline(handle: u32, slot: &mut Slot, sample_rate: f64) {
     let state = slot.state.clone().filter(|state| !state.is_empty());
     let (sender, receiver) = std::sync::mpsc::channel();
     request_main(MainRequest::Run(Box::new(move || {
-        let _ = sender.send(unsafe { instantiate(handle, 0, &uuid, &format, &id, sample_rate, state, true) });
+        let _ = sender.send(unsafe { instantiate(handle, 0, &uuid, &format, &id, sample_rate, state, true, false) });
     })));
     match receiver.recv_timeout(OFFLINE_LOAD_TIMEOUT) {
-        Ok(Some(Loaded { shared, inbox, ranges, trial })) => {
+        Ok(Some(Loaded { shared, inbox, ranges, trial, .. })) => {
             slot.trial = Some((trial, 0));
             slot.shared = Some(shared);
             slot.inbox = Some(inbox);
@@ -1259,7 +1289,7 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         slot.rate = sample_rate;
         slot.failed = false;
         end_trial(slot.trial.take());
-        if let Some(previous) = slot.shared.take() { release_shared(handle, slot.generation, previous); }
+        if let Some(previous) = slot.shared.take() { release_shared(handle, slot.generation, previous, None); }
         slot.generation += 1;
         slot.inbox = None;
         slot.ranges.clear();
@@ -1268,12 +1298,14 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         slot.modulation.clear();
         slot.edits.clear();
         if format.is_empty() || id.is_empty() { return; }
-        let (generation, uuid) = (slot.generation, slot.uuid.clone());
+        let (generation, uuid, engine) = (slot.generation, slot.uuid.clone(), slot.engine);
         let state = slot.state.clone().filter(|state| !state.is_empty());
         slot.known_state = slot.state.clone();
         notify(&uuid, "status", "loading");
         request_main(MainRequest::Run(Box::new(move || {
-            let shared = unsafe { instantiate(handle, generation, &uuid, &format, &id, sample_rate, state, false) };
+            let kept = take_kept(engine, &uuid, &id);
+            let loaded_kept = kept.is_some();
+            let shared = unsafe { instantiate(handle, generation, &uuid, &format, &id, sample_rate, kept.or(state), false, loaded_kept) };
             notify(&uuid, "status", if shared.is_some() { "ready" } else { "failed" });
             LOADED.lock().unwrap().push((handle, generation, shared));
         })));
@@ -1281,6 +1313,19 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
 }
 
 const PARAM_KIND_UNIT: u32 = 0;
+const PARAM_KIND_PLAIN: u32 = 1;
+
+// a device that came back with its plugin's kept state plays the plugin's values, not the older ones from the history
+fn pending_values(pending: HashMap<ParamID, (u32, f32, f32)>, kept: Option<&HashMap<ParamID, f64>>) -> Vec<(ParamID, u32, f32, f32)> {
+    pending.into_iter().map(|(id, (kind, value, modulation))| match kept.and_then(|kept| kept.get(&id)) {
+        Some(plain) => (id, PARAM_KIND_PLAIN, *plain as f32, modulation),
+        None => (id, kind, value, modulation),
+    }).collect()
+}
+
+fn report_values(uuid: &str, params: &[ParamInfo]) {
+    for param in automatable(params) { notify(uuid, "follow", format!("{}:{}", param.id, param.value)); }
+}
 
 pub fn param(handle: u32, id: ParamID, kind: u32, value: f32, modulation: f32) {
     SLOTS.with(|slots| {
@@ -1315,9 +1360,9 @@ fn queue_param(slot: &mut Slot, id: ParamID, kind: u32, raw: f32, sum: f32) {
     }
 }
 
-fn release_shared(handle: u32, generation: u32, shared: Shared) {
+fn release_shared(handle: u32, generation: u32, shared: Shared, keeping: Option<(i32, String)>) {
     request_main(MainRequest::Run(Box::new(move || {
-        unsafe { release_on_main(handle, generation); }
+        unsafe { release_on_main(handle, generation, keeping); }
         drop(shared);
     })));
 }
@@ -1363,7 +1408,8 @@ pub fn release(handle: u32) {
     SLOTS.with(|slots| {
         if let Some(mut slot) = slots.borrow_mut().remove(&handle) {
             end_trial(slot.trial.take());
-            if let Some(shared) = slot.shared.take() { release_shared(handle, slot.generation, shared); }
+            let keeping = slot.offline.is_none().then(|| (slot.engine, slot.id.clone()));
+            if let Some(shared) = slot.shared.take() { release_shared(handle, slot.generation, shared, keeping); }
         }
     });
 }
@@ -1432,12 +1478,12 @@ fn take_loaded() {
         let mut slots = slots.borrow_mut();
         for (handle, generation, shared) in loaded {
             match (slots.get_mut(&handle), shared) {
-                (Some(slot), Some(Loaded { shared, inbox, ranges, trial })) if slot.generation == generation => {
+                (Some(slot), Some(Loaded { shared, inbox, ranges, trial, kept })) if slot.generation == generation => {
                     slot.trial = Some((trial, 0));
                     slot.shared = Some(shared);
                     slot.inbox = Some(inbox);
                     slot.ranges = ranges;
-                    for (id, (kind, value, modulation)) in std::mem::take(&mut slot.pending) {
+                    for (id, kind, value, modulation) in pending_values(std::mem::take(&mut slot.pending), kept.as_ref()) {
                         queue_param(slot, id, kind, value, modulation);
                     }
                     // a state that arrived while the plugin was loading
@@ -1447,7 +1493,7 @@ fn take_loaded() {
                 }
                 (_, Some(loaded)) => {
                     end_trial(Some((loaded.trial, 0)));
-                    release_shared(handle, generation, loaded.shared)
+                    release_shared(handle, generation, loaded.shared, None)
                 }
                 (Some(slot), None) if slot.generation == generation => slot.failed = true,
                 _ => {}
@@ -2293,5 +2339,65 @@ mod tests {
             mine
         });
         assert_eq!(notices, vec![("follow", "2:0.25".to_string())]);
+    }
+
+    // a device deleted, or its creation undone, comes back with what its plugin held when it went away (changes in
+    // the plugin's window the studio never saw included), never with the older state in the studio's history
+    #[test]
+    fn a_device_that_comes_back_takes_the_state_its_plugin_had_when_it_went_away() {
+        let (bundle, id) = test_plugin();
+        let latest = with_switches("", || unsafe {
+            let module = module(&bundle).expect("module");
+            let component: ComPtr<IComponent> = create(&module.factory, &parse_cid(&id).unwrap()).expect("component");
+            let host = ComWrapper::new(Host);
+            let host_unknown = host.to_com_ptr::<IHostApplication>().unwrap().into_raw() as *mut FUnknown;
+            assert_eq!(component.initialize(host_unknown), kResultOk);
+            let mut controller_cid: TUID = [0; 16];
+            component.getControllerClassId(&mut controller_cid);
+            let controller: ComPtr<IEditController> = create(&module.factory, &controller_cid).expect("controller");
+            assert_eq!(controller.initialize(host_unknown), kResultOk);
+            // the user changed the sound in the plugin's window
+            let values: Vec<u8> = [0.1f64, 0.9, 0.3, 2.0].iter().flat_map(|value| value.to_le_bytes()).collect();
+            let mut changed = STATE_MAGIC.to_vec();
+            changed.extend_from_slice(&(values.len() as u32).to_le_bytes());
+            changed.extend_from_slice(&values);
+            apply_state(&component, &controller, &changed);
+            keep(7, "comes-back", &id, read_state(&component, &controller));
+            controller.terminate();
+            component.terminate();
+            changed
+        });
+        assert_eq!(take_kept(8, "comes-back", &id), None, "another engine (a project opened again) never takes it");
+        assert_eq!(take_kept(7, "comes-back", "another plugin"), None);
+        assert_eq!(take_kept(7, "comes-back", &id), Some(latest.clone()));
+        assert!(STATES.lock().unwrap().iter().any(|(uuid, state)| uuid == "comes-back" && *state == latest), "the studio stores it");
+        STATES.lock().unwrap().retain(|(uuid, _)| uuid != "comes-back");
+        assert_eq!(take_kept(7, "comes-back", &id), None, "taken once");
+        keep(9, "closed", &id, latest);
+        forget(9);
+        assert_eq!(take_kept(9, "closed", &id), None, "a closed engine's states are dropped");
+    }
+
+    // the device that came back plays what its plugin held: the older values the studio sent from its history while it
+    // loaded are replaced by the plugin's (modulation stays), and the studio is told the plugin's values
+    #[test]
+    fn a_device_that_came_back_keeps_its_plugins_values() {
+        let pending = HashMap::from([(0, (PARAM_KIND_UNIT, 0.5f32, 0.1f32)), (1, (PARAM_KIND_PLAIN, 2.0f32, f32::NAN))]);
+        let kept = HashMap::from([(0, 0.8), (1, 3.0)]);
+        let mut values = pending_values(pending.clone(), Some(&kept));
+        values.sort_by_key(|(id, ..)| *id);
+        assert_eq!(values[0], (0, PARAM_KIND_PLAIN, 0.8, 0.1));
+        assert_eq!((values[1].0, values[1].1, values[1].2), (1, PARAM_KIND_PLAIN, 3.0));
+        assert!(values[1].3.is_nan());
+        let mut loaded = pending_values(pending, None);
+        loaded.sort_by_key(|(id, ..)| *id);
+        assert_eq!(loaded[0], (0, PARAM_KIND_UNIT, 0.5, 0.1), "a plain load takes the studio's values");
+        let info = |id: u32, value: f64, flags: u32| ParamInfo {id, name: String::new(), module: String::new(), min: 0.0, max: 1.0,
+            default_value: 0.0, value, flags};
+        report_values("came-back", &[info(0, 0.8, 0), info(1, 0.3, PARAM_HIDDEN)]);
+        let mut notices = NOTICES.lock().unwrap();
+        let mine: Vec<(&str, String)> = notices.iter().filter(|notice| notice.uuid == "came-back").map(|notice| (notice.kind, notice.value.clone())).collect();
+        notices.retain(|notice| notice.uuid != "came-back");
+        assert_eq!(mine, vec![("follow", "0:0.8".to_string())]);
     }
 }
