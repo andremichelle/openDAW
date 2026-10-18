@@ -22,7 +22,7 @@ waiting (for a tester or André), fixed (shipped, with the commit), done (confir
 | 13 | A VST3 fails to load with E_NOINTERFACE (createInstance -2147467262) | open: the log does not name the plugin, the load message should |
 | 14 | Engine stalls up to 1 s ("max timers"), underruns | open: needs its own measurement |
 | 15 | Zoom (Ctrl +/-/0) | fixed in desktop-test-17, not confirmed on Windows |
-| 16 | Self-update 0.0.17 to 0.0.18 | waiting: does a 17 app offer the restart |
+| 16 | Self-update: came only after the studio download, with a question | works (18 to 19 seen), open: install at launch before the studio, no question (implemented, ships with desktop-test-20) |
 | 17 | Uninstall from Tools | untested on Windows (NSIS uninstaller, hook for the plugin cache) |
 | 23 | A "JSON" error kept the studio from starting | open: waiting for the message, it should now land in openDAW.log |
 | 24 | The inspector's console cannot be copied in the VM | fixed: DesktopConsole writes console errors, warnings, `[boot]` and `[wclap trace]` lines into openDAW.log (`[studio ...]`) |
