@@ -22,6 +22,7 @@ import {IconLibrary} from "@/ui/IconLibrary.tsx"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {TextTooltip} from "./TextTooltip"
+import {whenLoaded} from "./whenLoaded"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
@@ -204,7 +205,7 @@ export class Surface implements TerminableOwner {
         }
         // a desktop shell opens a utility window frameless and in front of the studio, browsers ignore the query
         const owner = this.#owner.open(utility ? `${POPOUT_URL}?utility` : POPOUT_URL, id, stringifyFeatures(features))
-        if (owner === null || !await whenLoaded(owner)) {return Option.None}
+        if (owner === null || !await whenLoaded(owner, isDefined(window.__OPENDAW_SHELL__))) {return Option.None}
         owner.name = name
         owner.document.title = name
         this.#copyHeadElements(owner)
@@ -363,19 +364,6 @@ type WindowFeatures = {
 
 // a real document, not about:blank: Firefox skips the service worker for workers of cross-origin frames in about:blank
 const POPOUT_URL = `${import.meta.env.BASE_URL}popout.html`
-
-const whenLoaded = (owner: WindowProxy): Promise<boolean> => new Promise(resolve => {
-    const check = () => {
-        if (owner.closed) {
-            resolve(false)
-        } else if (owner.location.href !== "about:blank" && owner.document.readyState === "complete") {
-            resolve(true)
-        } else {
-            setTimeout(check, 10)
-        }
-    }
-    check()
-})
 
 const stringifyFeatures = (features: WindowFeatures): string =>
     Object.entries(features).map(([key, value]: [string, number]) => `${key}=${value}`).join(",")

@@ -217,7 +217,8 @@ export namespace WclapWindows {
         iframe.src = FRAME_URL
         const handle = FloatingWindow({
             title, icon: IconSymbol.WebClap, width, height,
-            scale: StudioPreferences.settings.webclap["default-zoom"] / 100, resizable: false,
+            // a plugin of a fixed size draws at that size, the default zoom only reaches one that resizes
+            scale: gui.resizable ? StudioPreferences.settings.webclap["default-zoom"] / 100 : 1, resizable: false,
             zoomLevels: gui.resizable ? WclapZoomOptions.map(value => value / 100) : undefined, popoutOnly: options.popoutOnly,
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)

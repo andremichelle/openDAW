@@ -202,7 +202,8 @@ export const FloatingWindow = ({
         if (current.width === next.width && current.height === next.height) {return}
         size.setValue(next)
         layout()
-        if (zoomable) {resizeWindow(next.width, next.height)}
+        // a window the user cannot resize follows its content, the popout's OS window too
+        if (zoomable || resizable === false) {resizeWindow(next.width, next.height)}
     }
     const negotiate = () => {
         if (!isDefined(adjust) || adjusting.busy || adjusting.closed || isNull(adjusting.next)) {return}

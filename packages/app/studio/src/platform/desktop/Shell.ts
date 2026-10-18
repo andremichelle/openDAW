@@ -3,6 +3,8 @@ import {asDefined, Exec, Nullable, Procedure} from "@opendaw/lib-std"
 declare global {
     interface Window {
         __OPENDAW_SHELL__?: { token: string, api: number, engine?: { port: number, token: string }, menu?: Procedure<string>, close?: Exec }
+        // set by the shell in each window it opens, once it routes the window's resizeBy, drag and close
+        __shellClose__?: Exec
     }
 }
 
