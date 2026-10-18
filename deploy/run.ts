@@ -289,13 +289,12 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
     console.log(`✅ Release uploaded and activated: ${releaseDir}`)
 
     const webhookUrl = process.env.DISCORD_WEBHOOK
-    if (webhookUrl) {
+    if (webhookUrl && isMainEnv) {
         const commitLog = previousCommit && previousCommit !== currentCommit ? readCommitLog(previousCommit) : null
         const summary = commitLog ? await generateSummary(commitLog) : null
         const now = Math.floor(Date.now() / 1000)
-        const branchInfo = isMainEnv ? "" : ` (\`${branchName}\`)`
         const content =
-            `🚀 **openDAW** deployed <https://${domain}>${branchInfo} using release \`${uuid}\` <t:${now}:R>.`
+            `🚀 **openDAW** deployed <https://${domain}> using release \`${uuid}\` <t:${now}:R>.`
             + (summary ? `\n\nwhat's new:\n${summary}` : "")
         try {
             const response = await fetch(webhookUrl, {
