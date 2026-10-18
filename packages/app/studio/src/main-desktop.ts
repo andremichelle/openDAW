@@ -1,4 +1,5 @@
 import {OpenDAWCloud} from "@/opendaw-api"
+import {DesktopConsole} from "@/platform/desktop/DesktopConsole"
 import {start} from "@/start"
 import {DesktopFiles} from "@/platform/desktop/DesktopFiles"
 import {DesktopMenu} from "@/platform/desktop/DesktopMenu"
@@ -15,6 +16,7 @@ import {NativeComponents} from "@/platform/desktop/NativeComponents"
 import {NativeMenu} from "@/service/NativeMenu"
 import {WclapWindows} from "@/service/WclapWindows"
 
+DesktopConsole.install()
 OpenDAWCloud.followNetwork()
 DesktopFiles.install()
 NativeMenu.install(service => {

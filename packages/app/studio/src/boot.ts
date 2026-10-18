@@ -60,15 +60,20 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
 }) => {
     console.debug("booting...")
     console.debug(location.origin)
+    // TEMPORARY markers (the desktop app's start stalls on Windows, DesktopConsole writes them into openDAW.log)
+    console.debug("[boot] build info")
     const {status, value: buildInfo} = await Promises.tryCatch(loadBuildInfo())
     if (status === "rejected") {
         Platform.alert("Error loading build info. Please reload the page.")
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
+    console.debug("[boot] fonts")
     await FontLoader.load()
+    console.debug("[boot] workers")
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
+    console.debug("[boot] features")
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
@@ -86,6 +91,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     Platform.storage().removeItem("__id__")
     Platform.storage().removeItem("reported-latencies")
     reportVisitor()
+    console.debug("[boot] audio worklets")
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
         return panic(audioWorklets.error)
@@ -95,6 +101,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
+    console.debug("[boot] engine")
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
         Dialogs.info({
@@ -111,7 +118,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         }
         window.addEventListener("click", resumeOnClick, {capture: true})
     }
+    console.debug("[boot] audio output")
     const audioDevices = await AudioOutputDevice.create(context)
+    console.debug("[boot] studio")
     FactoryCatalog.install({
         samples: () => OpenSampleAPI.get().catalogue(),
         soundfonts: () => OpenSoundfontAPI.get().catalogue(),
@@ -175,7 +184,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     Tour.install(service)
     AnimationFrame.start(window)
     installCursors()
+    console.debug("[boot] storage")
     const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
+    console.debug("[boot] done")
     if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({
             headline: "Storage Unavailable",

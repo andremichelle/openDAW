@@ -27,6 +27,8 @@ struct State {
 enum ToEngine {
     // device "" is the system default
     Output { device: String, buffer: u32, #[serde(default)] exclusive: bool },
+    // a line of the studio's console (errors, warnings, marked lines) for openDAW.log
+    Log { level: String, text: String },
 }
 
 fn state() -> State {state_of(cfg!(target_os = "windows"))}
@@ -60,6 +62,7 @@ pub fn serve(mut socket: WebSocket<TcpStream>) {
                     request_main(MainRequest::Output(device, buffer, exclusive));
                     next = Instant::now() + Duration::from_millis(100);
                 }
+                Ok(ToEngine::Log { level, text }) => println!("[studio {level}] {text}"),
                 Err(error) => eprintln!("[audio] {error}"),
             },
             Ok(Some(Message::Close(_))) => break,
@@ -74,6 +77,13 @@ mod tests {
     use super::*;
 
     // the state Windows sends (with the exclusive mode) is built and answered, the engine's locks stay free
+    // the studio's console errors and marked lines reach openDAW.log through this connection
+    #[test]
+    fn the_studio_sends_log_lines() {
+        let message = serde_json::from_str::<ToEngine>(r#"{"type": "log", "level": "error", "text": "[boot] fonts"}"#).expect("a log message");
+        assert!(matches!(message, ToEngine::Log { level, text } if level == "error" && text == "[boot] fonts"));
+    }
+
     #[test]
     fn the_windows_state_is_answered() {
         let (sender, receiver) = std::sync::mpsc::channel();
