@@ -56,18 +56,26 @@ impl ByteWriter {
         self.bytes.extend_from_slice(value)
     }
 
+    // UTF-16 big-endian, an ASCII string (a base64 plugin state) without the encoder
     pub fn write_string(&mut self, value: &str) {
-        let units = value.encode_utf16();
-        self.write_int(value.encode_utf16().count() as i32);
-        for unit in units {
-            self.write_short(unit as i16)
+        if value.is_ascii() {
+            self.write_int(value.len() as i32);
+            self.bytes.reserve(value.len() * 2);
+            for byte in value.bytes() {
+                self.bytes.push(0);
+                self.bytes.push(byte);
+            }
+            return;
         }
+        let units: Vec<u16> = value.encode_utf16().collect();
+        self.write_utf16(&units)
     }
 
     pub fn write_utf16(&mut self, units: &[u16]) {
         self.write_int(units.len() as i32);
+        self.bytes.reserve(units.len() * 2);
         for unit in units {
-            self.write_short(*unit as i16)
+            self.bytes.extend_from_slice(&unit.to_be_bytes())
         }
     }
 }
@@ -106,7 +114,7 @@ impl<'a> ByteReader<'a> {
     }
 
     fn take(&mut self, count: usize) -> Result<&'a [u8], ByteError> {
-        if self.position + count > self.bytes.len() {
+        if count > self.bytes.len() - self.position {
             return Err(ByteError::UnexpectedEnd);
         }
         let slice = &self.bytes[self.position..self.position + count];
@@ -159,10 +167,19 @@ impl<'a> ByteReader<'a> {
 
     pub fn read_utf16(&mut self) -> Result<Vec<u16>, ByteError> {
         let count = self.read_int()? as usize;
-        let mut units = Vec::with_capacity(count);
-        for _ in 0..count {
-            units.push(self.read_short()? as u16)
+        let bytes = self.take(count.checked_mul(2).ok_or(ByteError::UnexpectedEnd)?)?;
+        Ok(bytes.chunks_exact(2).map(|unit| u16::from_be_bytes([unit[0], unit[1]])).collect())
+    }
+
+    // a string field: the units of an ASCII string (a base64 plugin state) become its bytes directly
+    pub fn read_text(&mut self) -> Result<Result<String, Vec<u16>>, ByteError> {
+        let count = self.read_int()? as usize;
+        let bytes = self.take(count.checked_mul(2).ok_or(ByteError::UnexpectedEnd)?)?;
+        if bytes.chunks_exact(2).all(|unit| unit[0] == 0 && unit[1] < 0x80) {
+            let ascii: Vec<u8> = bytes.chunks_exact(2).map(|unit| unit[1]).collect();
+            return Ok(Ok(String::from_utf8(ascii).expect("ascii is valid UTF-8")));
         }
-        Ok(units)
+        let units: Vec<u16> = bytes.chunks_exact(2).map(|unit| u16::from_be_bytes([unit[0], unit[1]])).collect();
+        Ok(String::from_utf16(&units).map_err(|_| units))
     }
 }
