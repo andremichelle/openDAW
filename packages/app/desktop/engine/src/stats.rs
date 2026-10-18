@@ -15,6 +15,8 @@ pub static MAX_TIMERS_US: AtomicU64 = AtomicU64::new(0);
 pub static CALLBACK_FRAMES: AtomicU64 = AtomicU64::new(0);
 static LAST: Mutex<Option<Instant>> = Mutex::new(None);
 static LATENCY: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
+// a shared mode device latency wanders by a few milliseconds all the time
+const DEVICE_JITTER_MS: u64 = 10;
 
 pub fn count(counter: &AtomicU64) {counter.fetch_add(1, Ordering::Relaxed);}
 
@@ -46,7 +48,7 @@ fn report_latency() {
     if callback == 0 { return; }
     let mut last = LATENCY.lock().unwrap();
     if last.is_some_and(|(seen_callback, seen_reserve, seen_device)| seen_callback == callback && seen_reserve == reserve
-        && seen_device.abs_diff(device) < 2) { return; }
+        && seen_device.abs_diff(device) < DEVICE_JITTER_MS) { return; }
     *last = Some((callback, reserve, device));
     let reserve_ms = reserve * 1000 / rate;
     println!("[latency] callback {callback} frames ({} ms), reserve {reserve} frames ({reserve_ms} ms), device {device} ms, output {} ms",

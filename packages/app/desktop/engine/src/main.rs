@@ -551,12 +551,13 @@ fn open_output_stream(requested: &str, buffer: u32, consumer: Arc<Mutex<rtrb::Co
     let default_config = device.default_output_config().ok();
     let buffer_size = default_config.as_ref().map(|config| buffer_size_for(config.buffer_size(), buffer)).unwrap_or(cpal::BufferSize::Default);
     let own_rate = default_config.as_ref().map(|config| config.sample_rate()).filter(|rate| *rate != REQUESTED_RATE);
-    let (stream, sample_rate) = match build_output(&device, REQUESTED_RATE, buffer_size, consumer.clone(), waker.clone()) {
+    let floor = (buffer as usize * 2).max(256);
+    let (stream, sample_rate) = match build_output(&device, REQUESTED_RATE, buffer_size, floor, consumer.clone(), waker.clone()) {
         Ok(stream) => (stream, REQUESTED_RATE),
         Err(error) => match own_rate {
             Some(rate) => {
                 eprintln!("[engine] output {name} refuses {REQUESTED_RATE} Hz ({error}), using its own {rate} Hz");
-                match build_output(&device, rate, buffer_size, consumer, waker) {
+                match build_output(&device, rate, buffer_size, floor, consumer, waker) {
                     Ok(stream) => (stream, rate),
                     Err(error) => {
                         eprintln!("[engine] cannot open output {name} with buffer {buffer}: {error}");
@@ -575,7 +576,7 @@ fn open_output_stream(requested: &str, buffer: u32, consumer: Arc<Mutex<rtrb::Co
         return None;
     }
     SAMPLE_RATE.store(sample_rate, std::sync::atomic::Ordering::Relaxed);
-    let target = (buffer as usize * 2).max(256);
+    let target = floor;
     RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
     RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
     println!("[engine] output {name}, {sample_rate} Hz, buffer {buffer}, {target} frames ahead");
@@ -584,13 +585,14 @@ fn open_output_stream(requested: &str, buffer: u32, consumer: Arc<Mutex<rtrb::Co
     Some(stream)
 }
 
-fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::BufferSize, consumer: Arc<Mutex<rtrb::Consumer<f32>>>,
-                waker: std::thread::Thread) -> Result<cpal::Stream, cpal::Error> {
+fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::BufferSize, floor: usize,
+                consumer: Arc<Mutex<rtrb::Consumer<f32>>>, waker: std::thread::Thread) -> Result<cpal::Stream, cpal::Error> {
     let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size };
+    let mut reserve = Reserve::new(floor, sample_rate);
     device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
         // a card may ask for more per callback than requested (WASAPI and ALSA often do), the reserve follows it
-        let current = RING_TARGET_FRAMES.load(std::sync::atomic::Ordering::Relaxed);
-        if let Some(target) = raised_ring_target(current, data.len() / 2) {
+        let target = reserve.after(data.len() / 2);
+        if target != RING_TARGET_FRAMES.load(std::sync::atomic::Ordering::Relaxed) {
             RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
             RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
         }
@@ -650,10 +652,32 @@ fn open_output(requested: &str, buffer: u32, exclusive: bool, consumer: &Arc<Mut
     open_output_stream(requested, buffer, consumer.clone(), waker.clone()).map(Output::Shared)
 }
 
-// the frames kept ready: two of the card's callbacks, within the ring
-fn raised_ring_target(current: usize, callback_frames: usize) -> Option<usize> {
-    let wanted = (callback_frames * 2).min(RING_CAPACITY_FRAMES / 2);
-    (wanted > current).then_some(wanted)
+// The frames kept ready: two of the card's largest callbacks of the last seconds (this window and the one before), at
+// least the floor the buffer size asks for, within the ring. A burst (WASAPI's first callbacks) no longer raises it for good.
+struct Reserve {
+    floor: usize,
+    current: usize,
+    previous: usize,
+    elapsed: usize,
+    window: usize,
+}
+
+impl Reserve {
+    fn new(floor: usize, sample_rate: u32) -> Self {
+        Reserve { floor, current: 0, previous: 0, elapsed: 0, window: sample_rate as usize * 2 }
+    }
+
+    // the target after a callback of this many frames
+    fn after(&mut self, callback: usize) -> usize {
+        self.current = self.current.max(callback);
+        self.elapsed += callback;
+        if self.elapsed >= self.window {
+            self.previous = self.current;
+            self.current = 0;
+            self.elapsed = 0;
+        }
+        (self.current.max(self.previous) * 2).max(self.floor).min(RING_CAPACITY_FRAMES / 2)
+    }
 }
 
 // only the studio's pages connect: its origin and the token the shell gave both of us
@@ -889,11 +913,22 @@ mod tests {
 
     #[test]
     fn the_reserve_follows_the_cards_callback_size() {
-        assert_eq!(raised_ring_target(256, 128), None);
-        assert_eq!(raised_ring_target(256, 480), Some(960));
-        assert_eq!(raised_ring_target(960, 480), None);
-        assert_eq!(raised_ring_target(256, 1056), Some(2112));
-        assert_eq!(raised_ring_target(256, 16_384), Some(RING_CAPACITY_FRAMES / 2));
+        let mut reserve = Reserve::new(256, 48_000);
+        assert_eq!(reserve.after(128), 256);
+        assert_eq!(reserve.after(480), 960);
+        assert_eq!(Reserve::new(256, 48_000).after(16_384), RING_CAPACITY_FRAMES / 2);
+    }
+
+    // a burst at the start (1056 frames once, then 480 as on a Windows VM) holds the reserve for seconds, not for good
+    #[test]
+    fn the_reserve_comes_back_after_a_burst() {
+        let mut reserve = Reserve::new(256, 48_000);
+        assert_eq!(reserve.after(1056), 2112);
+        let callbacks_per_second = 48_000 / 480;
+        for _ in 0..callbacks_per_second { assert_eq!(reserve.after(480), 2112, "within the burst's window"); }
+        for _ in 0..callbacks_per_second * 4 { reserve.after(480); }
+        assert_eq!(reserve.after(480), 960);
+        assert_eq!(reserve.after(1056), 2112, "a new burst raises it at once");
     }
 
     #[test]

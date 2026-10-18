@@ -58,6 +58,10 @@ the engine refactoring.
     logs the split (`[latency]` line). WASAPI exclusive mode (`engine/src/exclusive.rs`, the `wasapi` crate) is a Mode
     in the Audio Output dialog on Windows, shared stays the default, a card refusing it falls back to shared. ASIO
     needs the Steinberg SDK license, not now. Unverified on Windows hardware.
+    The first deploy (`c88ee44e`) deadlocked the Windows engine's audio settings thread (`state()` locked
+    `OUTPUT_CURRENT` twice in one expression), no Mode row, and a main thread that asks for that lock hangs too.
+    Fixed with a test. The reserve now follows the largest callback of the last seconds instead of the largest ever
+    (a 1056 frame burst at the start kept it at 44 ms for good).
 
 ## One engine, thin entry points
 

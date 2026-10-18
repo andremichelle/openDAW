@@ -29,12 +29,15 @@ enum ToEngine {
     Output { device: String, buffer: u32, #[serde(default)] exclusive: bool },
 }
 
-fn state() -> State {
+fn state() -> State {state_of(cfg!(target_os = "windows"))}
+
+fn state_of(exclusive_mode: bool) -> State {
     let devices = OUTPUT_DEVICES.lock().unwrap().split('\n').filter(|name| !name.is_empty()).map(String::from).collect();
+    // read once: a guard taken inside the struct expression lives to its end, a second lock there waits for itself
+    let (_, buffer, exclusive) = OUTPUT_CURRENT.lock().unwrap().clone();
     State {
-        kind: "output", devices, device: OUTPUT_NAME.lock().unwrap().clone(), buffer: OUTPUT_CURRENT.lock().unwrap().1,
-        sample_rate: SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed),
-        exclusive: cfg!(target_os = "windows").then(|| OUTPUT_CURRENT.lock().unwrap().2)
+        kind: "output", devices, device: OUTPUT_NAME.lock().unwrap().clone(), buffer,
+        sample_rate: SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed), exclusive: exclusive_mode.then_some(exclusive)
     }
 }
 
@@ -63,5 +66,20 @@ pub fn serve(mut socket: WebSocket<TcpStream>) {
             Ok(_) => {}
             Err(_) => break,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // the state Windows sends (with the exclusive mode) is built and answered, the engine's locks stay free
+    #[test]
+    fn the_windows_state_is_answered() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || { let _ = sender.send(serde_json::to_string(&state_of(true)).unwrap()); });
+        let json = receiver.recv_timeout(Duration::from_secs(2)).expect("building the state hangs");
+        assert!(json.contains("\"exclusive\":false"), "{json}");
+        assert!(OUTPUT_CURRENT.try_lock().is_ok());
     }
 }
