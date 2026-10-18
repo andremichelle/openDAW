@@ -64,6 +64,8 @@ jobs:
       - name: 🏗️ Build the engine
         working-directory: packages/app/desktop/engine
         run: |
+          # the cache can restore v8's build script output without the prebuilt library it downloaded
+          cargo clean --release --target ${{ matrix.target }} -p v8
           cargo build --release --target ${{ matrix.target }}
           suffix=""
           case "${{ matrix.platform }}" in windows) suffix=".exe" ;; esac
