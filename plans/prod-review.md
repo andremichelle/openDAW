@@ -37,6 +37,11 @@ the engine refactoring.
     bundles the build machine's), (2) the features are on but that WebKitGTK still does not isolate, (3) fallback:
     `JSC_useSharedArrayBuffer=1` in the shell's environment before WebKit starts, and a desktop start check that
     accepts an existing SharedArrayBuffer instead of `crossOriginIsolated` (changes the start check, last resort).
+    Update 2026-10-18: two Linux users now get "SharedArrayBuffer not available" from `features.ts`, which runs only
+    after the `crossOriginIsolated` check passed, so `fb6c67e9c` isolates the page. WebKitGTK keeps SharedArrayBuffer
+    hidden on isolated pages until WebKit 104506c (321889@main), its message names `JSC_useSharedArrayBuffer=true`.
+    Fix: the shell sets `JSC_useSharedArrayBuffer=1` on Linux before anything starts (unless set), the web process
+    inherits it. Start check unchanged. Unverified on Linux. Next possible blocker: `AudioWorkletNode` in the same check.
 
 ## One engine, thin entry points
 

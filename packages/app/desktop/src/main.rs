@@ -601,6 +601,9 @@ fn show_running() -> bool {
 }
 
 fn main() {
+    // WebKitGTK before 321889@main hides SharedArrayBuffer even on a cross-origin isolated page
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("JSC_useSharedArrayBuffer").is_none() { std::env::set_var("JSC_useSharedArrayBuffer", "1"); }
     // one openDAW at a time: the shell's port is the lock, before anything else (the engine) starts
     let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", PORT)) else {
         if show_running() { return; }
