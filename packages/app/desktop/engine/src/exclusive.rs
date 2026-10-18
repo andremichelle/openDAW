@@ -77,6 +77,8 @@ struct Opened {
     sample: Sample,
     rate: u32,
     name: String,
+    // the shortest period the card allows, in frames: the floor of the latency
+    minimum: u64,
 }
 
 // 48 kHz first like the shared output, then the card's own rate
@@ -90,6 +92,7 @@ fn open(requested: &str, buffer: u32, preferred_rate: u32) -> Result<Opened, Str
         .find_map(|(sample, rate)| probe.is_supported_exclusive_with_quirks(&sample.format(rate as usize)).ok().map(|format| (format, sample, rate)))
         .ok_or_else(|| format!("{name} takes no stereo format in exclusive mode"))?;
     let mut client = device.get_iaudioclient().map_err(|error| error.to_string())?;
+    let minimum = client.get_device_period().map(|(_, minimum)| minimum.max(0) as u64 * rate as u64 / 10_000_000).unwrap_or(0);
     let desired = calculate_period_100ns(buffer as i64, rate as i64);
     let period = client.calculate_aligned_period_near(desired, Some(128), &format).map_err(|error| error.to_string())?;
     let mode = StreamMode::EventsExclusive { period_hns: period };
@@ -102,7 +105,7 @@ fn open(requested: &str, buffer: u32, preferred_rate: u32) -> Result<Opened, Str
         let mode = StreamMode::EventsExclusive { period_hns: calculate_period_100ns(frames as i64, rate as i64) };
         client.initialize_client(&format, &Direction::Render, &mode).map_err(|error| format!("{name}: {error}"))?;
     }
-    Ok(Opened { client, format, sample, rate, name })
+    Ok(Opened { client, format, sample, rate, name, minimum })
 }
 
 // opens the stream on its own thread (WASAPI wants the thread that renders), answers its rate and the card's name
@@ -136,7 +139,7 @@ pub fn start(requested: &str, buffer: u32, preferred_rate: u32, consumer: Arc<Mu
 
 fn render(opened: &Opened, consumer: &Mutex<rtrb::Consumer<f32>>, waker: &std::thread::Thread, stop: &AtomicBool,
           answer: &std::sync::mpsc::Sender<Result<(u32, String), String>>) -> Result<(), WasapiError> {
-    let Opened { client, format, sample, rate, name } = opened;
+    let Opened { client, format, sample, rate, name, minimum } = opened;
     let event = client.set_get_eventhandle()?;
     let renderer = client.get_audiorenderclient()?;
     let period = client.get_buffer_size()? as usize;
@@ -152,7 +155,7 @@ fn render(opened: &Opened, consumer: &Mutex<rtrb::Consumer<f32>>, waker: &std::t
     stats::CALLBACK_FRAMES.store(period as u64, Ordering::Relaxed);
     pro_audio_priority();
     client.start_stream()?;
-    println!("[engine] exclusive output {name}, {rate} Hz, period {period} frames");
+    println!("[engine] exclusive output {name}, {rate} Hz, period {period} frames (the card allows {minimum})");
     let _ = answer.send(Ok((*rate, name.clone())));
     while !stop.load(Ordering::SeqCst) {
         if event.wait_for_event(1000).is_err() { continue; }
