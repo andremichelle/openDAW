@@ -17,6 +17,12 @@ RewriteRule ^(.*)$ $1.br [QSA,L]
     Header set Content-Encoding br
 </FilesMatch>
 
+# The desktop release's native engines (no extension, the desktop app decodes them)
+<FilesMatch "^opendaw-engine(\.exe)?\.br$">
+    Header set Content-Encoding br
+    ForceType application/octet-stream
+</FilesMatch>
+
 # WebAssembly streaming compilation requires application/wasm
 <FilesMatch "\.wasm\.br$">
     ForceType application/wasm

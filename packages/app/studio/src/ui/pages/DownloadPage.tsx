@@ -73,7 +73,7 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle, service}: P
             <section>
                 <h3>What happens on the first launch?</h3>
                 <ol>
-                    <li>The app downloads the studio and its audio engine (about 50 MB). You can choose more parts for
+                    <li>The app downloads the studio and its audio engine (about 30 MB). You can choose more parts for
                         offline use.</li>
                     <li>Everything stays on your computer, so it works without internet from then on.</li>
                     <li>Later updates only download the files that changed.</li>

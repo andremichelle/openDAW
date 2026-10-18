@@ -144,6 +144,11 @@ export default defineConfig(({command, mode}) => {
                             console.warn(`desktop build without ${target}: ${from} is missing (build it first)`)
                         }
                     }
+                    const engines = resolve(outDir, "engine")
+                    if (existsSync(engines)) {
+                        const {compressEngines} = await import("../desktop/scripts/engine-brotli.mjs")
+                        compressEngines(engines)
+                    }
                 }
             }, {
                 name: "desktop-manifest",
