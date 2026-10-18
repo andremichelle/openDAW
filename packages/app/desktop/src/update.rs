@@ -201,6 +201,14 @@ fn fetch_pointer() -> Result<Pointer, Unavailable> {
     }
 }
 
+// a release carries an engine per platform (component engine-<platform>), the shell takes its own
+fn is_wanted(component: Option<&str>) -> bool {
+    component.map_or(true, |name| match name.strip_prefix("engine-") {
+        Some(platform) => platform == crate::ENGINE_PLATFORM,
+        None => crate::components::is_selected(name),
+    })
+}
+
 fn sha256_of(path: &Path) -> Option<(u64, String)> {
     let mut file = fs::File::open(path).ok()?;
     let mut hasher = Sha256::new();
@@ -261,7 +269,7 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
     let partial = web.join(format!("{uuid}.partial"));
     let done = Mutex::new(0u64);
     let transferred = Mutex::new(0u64);
-    let wanted = |entry: &&Entry| entry.component.as_deref().map_or(true, crate::components::is_selected);
+    let wanted = |entry: &&Entry| is_wanted(entry.component.as_deref());
     let models: Vec<(String, crate::components::Model)> = manifest.components.iter()
         .filter(|component| crate::components::is_selected(&component.name))
         .flat_map(|component| component.models.iter().filter(|model| !crate::components::has_model(&component.name, model))
@@ -353,7 +361,7 @@ fn ask_components(uuid: &str) {
     }).collect();
     {
         let mut status = STATUS.lock().unwrap();
-        status.core = size_of(None);
+        status.core = size_of(None) + size_of(Some(&format!("engine-{}", crate::ENGINE_PLATFORM)));
         status.components = choices;
     }
     status("choose", "");
@@ -505,7 +513,17 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
-    use super::{in_parallel, temporary_of, with_retries};
+    use super::{in_parallel, is_wanted, temporary_of, with_retries};
+    use crate::ENGINE_PLATFORM;
+
+    // the release carries an engine per platform, a shell downloads its own only
+    #[test]
+    fn the_own_platforms_engine_comes_with_the_release() {
+        assert!(is_wanted(None));
+        assert!(is_wanted(Some(&format!("engine-{ENGINE_PLATFORM}"))));
+        let other = if ENGINE_PLATFORM == "windows" { "engine-linux" } else { "engine-windows" };
+        assert!(!is_wanted(Some(other)));
+    }
 
     #[test]
     fn every_item_is_worked_on_once() {

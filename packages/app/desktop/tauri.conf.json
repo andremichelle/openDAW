@@ -3,9 +3,6 @@
   "productName": "openDAW Studio",
   "version": "0.0.1",
   "identifier": "studio.opendaw",
-  "build": {
-    "beforeBuildCommand": "bash desktop/scripts/sidecar.sh"
-  },
   "app": {
     "windows": [],
     "security": {
@@ -23,9 +20,6 @@
     ],
     "targets": [
       "app"
-    ],
-    "externalBin": [
-      "binaries/opendaw-engine"
     ],
     "macOS": {
       "signingIdentity": "-",

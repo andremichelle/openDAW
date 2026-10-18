@@ -14,7 +14,77 @@ env:
   DEPLOY_ENV: ${{ inputs.to_dev && 'dev' || '' }}
 
 jobs:
+  # The desktop release carries the native engine for every installer platform, so an engine change ships with the
+  # deploy and needs no new installer (plans/engine-updates.md). DEV only, like the desktop variant.
+  engines:
+    if: ${{ inputs.to_dev || github.ref_name != 'main' }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+          - platform: macos-intel
+            runner: macos-latest
+            target: x86_64-apple-darwin
+          - platform: windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: linux
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
+      - name: 🐧 Install Linux build dependencies
+        if: startsWith(matrix.platform, 'linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
+            librsvg2-dev libasound2-dev libdbus-1-dev patchelf file
+
+      - name: 🦀 Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: 📦 Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/app/desktop/engine
+          key: engine-${{ matrix.platform }}
+
+      - name: 🏗️ Build the engine
+        working-directory: packages/app/desktop/engine
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          suffix=""
+          case "${{ matrix.platform }}" in windows) suffix=".exe" ;; esac
+          mkdir -p "$GITHUB_WORKSPACE/engine"
+          cp "target/${{ matrix.target }}/release/opendaw-engine$suffix" "$GITHUB_WORKSPACE/engine/"
+
+      - name: ✍️ Sign (ad hoc)
+        if: startsWith(matrix.platform, 'macos')
+        run: codesign --force --sign - "$GITHUB_WORKSPACE/engine/opendaw-engine"
+
+      - name: 📤 Keep as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.platform }}
+          path: engine/*
+          retention-days: 3
+
   build-and-deploy:
+    needs: engines
+    # runs when the engines were built, or skipped for a PROD deploy
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     environment: production
 
@@ -57,6 +127,13 @@ jobs:
         run: |
           npm run build
 
+      - name: ⬇️ Collect the engines (DEV only)
+        if: ${{ inputs.to_dev || github.ref_name != 'main' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: engine-*
+          path: packages/app/desktop/engine/dist
+
       - name: 🖥️ Build desktop variant (DEV only)
         if: ${{ inputs.to_dev || github.ref_name != 'main' }}
         shell: bash
@@ -64,6 +141,13 @@ jobs:
           CI: true
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
+          # engine/dist/engine-<platform>/ becomes the release's engine/<platform>/
+          cd packages/app/desktop/engine/dist
+          for folder in engine-*; do mv "$folder" "${folder#engine-}"; done
+          for platform in macos-arm64 macos-intel windows linux linux-arm64; do
+            ls "$platform"/opendaw-engine* > /dev/null || { echo "the $platform engine is missing"; exit 1; }
+          done
+          cd "$GITHUB_WORKSPACE"
           sh packages/app/desktop/devices/build.sh
           npm run build:desktop
 

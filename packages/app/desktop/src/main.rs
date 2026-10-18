@@ -19,7 +19,7 @@ use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewWindowBuilder};
 use tauri::{AppHandle, Manager, WindowEvent};
 
 // Bump when a primitive is added or changed; a build's build-info.json shellApi must not exceed it
-pub const SHELL_API: u64 = 1;
+pub const SHELL_API: u64 = 2;
 const PORT: u16 = 47110;
 // Where the shell looks for studio builds; DEV until the public release builds with OPENDAW_UPDATE_ORIGIN=https://opendaw.studio
 pub const UPDATE_ORIGIN: &str = match option_env!("OPENDAW_UPDATE_ORIGIN") {
@@ -285,21 +285,46 @@ fn native_engine() -> bool {
     std::env::var("OPENDAW_NATIVE_ENGINE").map_or(true, |value| value != "0")
 }
 
-// A bundle runs its sidecar next to the shell executable. A debug build always runs the engine crate's release
-// build, since tauri-build also copies a possibly stale sidecar next to the debug executable.
-fn engine_binary() -> PathBuf {
+// The engine comes with each release (plans/engine-updates.md), a debug build runs the engine crate's release build
+fn engine_binary(root: &Path) -> Option<PathBuf> {
     if let Ok(path) = std::env::var("OPENDAW_ENGINE") {
-        return PathBuf::from(path);
+        return Some(PathBuf::from(path));
     }
-    let development = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine"));
     if cfg!(debug_assertions) {
-        return development;
+        return Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine")));
     }
-    std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(engine_file_name()))).filter(|path| path.is_file())
-        .unwrap_or(development)
+    release_engine(root)
 }
 
-// the bundled sidecar, opendaw-engine.exe on Windows
+// the platform's folder in a release's engine/ (deploy.yml builds one per installer platform)
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub const ENGINE_PLATFORM: &str = "macos-arm64";
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+pub const ENGINE_PLATFORM: &str = "macos-intel";
+#[cfg(target_os = "windows")]
+pub const ENGINE_PLATFORM: &str = "windows";
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub const ENGINE_PLATFORM: &str = "linux";
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+pub const ENGINE_PLATFORM: &str = "linux-arm64";
+
+// downloaded files are not executable, macOS and Linux need the bit
+fn release_engine(root: &Path) -> Option<PathBuf> {
+    let path = root.join("engine").join(ENGINE_PLATFORM).join(engine_file_name());
+    if !path.is_file() { return None; }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&path).ok()?.permissions();
+        if permissions.mode() & 0o111 != 0o111 {
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&path, permissions).map_err(|error| eprintln!("[openDAW] {} is not executable ({error})", path.display())).ok()?;
+        }
+    }
+    Some(path)
+}
+
+// opendaw-engine.exe on Windows
 fn engine_file_name() -> String {format!("opendaw-engine{}", std::env::consts::EXE_SUFFIX)}
 
 // Windows: the engine and its plugin scans run without a console window of their own
@@ -314,10 +339,9 @@ fn without_console(command: &mut std::process::Command) -> &mut std::process::Co
 
 
 // The native engine process serves the build in root, with the shell token
-fn spawn_engine(root: &Path) -> Option<std::process::Child> {
-    let binary = engine_binary();
+fn spawn_engine(binary: &Path, root: &Path) -> Option<std::process::Child> {
     // the engine exits when this pipe closes, so it never outlives the shell
-    let mut command = std::process::Command::new(&binary);
+    let mut command = std::process::Command::new(binary);
     without_console(&mut command).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
         .env("OPENDAW_SHELL_PID", std::process::id().to_string()).stdin(std::process::Stdio::piped());
     if log::folder().is_some() { command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()); }
@@ -326,22 +350,39 @@ fn spawn_engine(root: &Path) -> Option<std::process::Child> {
     Some(child)
 }
 
+// the running engine's binary, and a count that retires the watcher of a replaced engine
+static ENGINE_BINARY: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+static ENGINE_GENERATION: AtomicUsize = AtomicUsize::new(0);
+
+// a rollback to the previous build (watch_boot) runs that build's engine
 fn start_engine(root: &Path) {
+    if !native_engine() { return; }
+    let Some(binary) = engine_binary(root) else {
+        eprintln!("[openDAW] {} has no engine for {ENGINE_PLATFORM}", root.display());
+        return;
+    };
+    if ENGINE.lock().unwrap().is_some() {
+        if ENGINE_BINARY.lock().unwrap().as_ref() == Some(&binary) { return; }
+        stop_engine();
+    }
     let mut engine = ENGINE.lock().unwrap();
-    if !native_engine() || engine.is_some() { return; }
-    *engine = spawn_engine(root);
+    *engine = spawn_engine(&binary, root);
     if engine.is_some() {
+        println!("[openDAW] engine {}", binary.display());
+        *ENGINE_BINARY.lock().unwrap() = Some(binary.clone());
+        let generation = ENGINE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
         let root = root.to_path_buf();
-        std::thread::spawn(move || watch_engine(root));
+        std::thread::spawn(move || watch_engine(binary, root, generation));
     }
 }
 
 // An engine that went down is replaced at once, the studio reconnects once the user restarts its engine
-fn watch_engine(root: PathBuf) {
+fn watch_engine(binary: PathBuf, root: PathBuf, generation: usize) {
     const MAX_RESTARTS: usize = 10;
     let mut restarts: Vec<std::time::Instant> = Vec::new();
     loop {
         std::thread::sleep(std::time::Duration::from_millis(250));
+        if ENGINE_GENERATION.load(Ordering::SeqCst) != generation { return; }
         let mut engine = ENGINE.lock().unwrap();
         let Some(child) = engine.as_mut() else { return };
         let Ok(Some(status)) = child.try_wait() else { continue };
@@ -353,7 +394,7 @@ fn watch_engine(root: PathBuf) {
         }
         restarts.push(std::time::Instant::now());
         eprintln!("[openDAW] the engine stopped ({status}), starting a new one");
-        *engine = spawn_engine(&root);
+        *engine = spawn_engine(&binary, &root);
     }
 }
 
@@ -679,6 +720,26 @@ mod tests {
     fn engine_file_name_has_the_platform_suffix() {
         assert_eq!(engine_file_name(), format!("opendaw-engine{}", std::env::consts::EXE_SUFFIX));
         assert!(!cfg!(target_os = "windows") || engine_file_name().ends_with(".exe"));
+    }
+
+    // a release carries its own engine, the shell runs it instead of the bundled one
+    #[test]
+    fn a_release_engine_is_run_from_the_release() {
+        let root = std::env::temp_dir().join(format!("opendaw-release-engine-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        assert_eq!(release_engine(&root), None, "a release without engines");
+        let folder = root.join("engine").join(ENGINE_PLATFORM);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join(engine_file_name()), b"engine").unwrap();
+        let engine = release_engine(&root);
+        assert_eq!(engine, Some(folder.join(engine_file_name())));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(engine.unwrap()).unwrap().permissions().mode() & 0o111, 0o111, "downloaded files are not executable");
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

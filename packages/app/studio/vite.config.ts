@@ -11,7 +11,7 @@ import {BuildInfo} from "./src/BuildInfo"
 import {existsSync} from "node:fs"
 
 // Minimum desktop shell API (SHELL_API in packages/app/desktop) the desktop build needs
-const DESKTOP_SHELL_API = 1
+const DESKTOP_SHELL_API = 2
 
 export default defineConfig(({command, mode}) => {
     const uuid = generateUUID()
@@ -136,7 +136,7 @@ export default defineConfig(({command, mode}) => {
                     const outDir = resolve(__dirname, "dist-desktop")
                     await copyFFmpeg(resolve(outDir, "ffmpeg"))
                     for (const [source, target] of [["../manual/dist", "manuals"], ["../../studio/docs/scripting", "docs/scripting"],
-                        ["../desktop/devices/dist", "wasm-engine/wasm/desktop"]]) {
+                        ["../desktop/devices/dist", "wasm-engine/wasm/desktop"], ["../desktop/engine/dist", "engine"]]) {
                         const from = resolve(__dirname, source)
                         if (existsSync(from)) {
                             cpSync(from, resolve(outDir, target), {recursive: true})
@@ -306,11 +306,13 @@ const neuralModels = (): ReadonlyArray<DesktopModel> => {
         ({path: `${taskKey}/${model.version}/model.onnx`, url: model.url, sha256: model.sha256, bytes: model.bytes}))
 }
 
+// the native engine per platform (deploy.yml builds them into engine/dist), each shell downloads its own
 const componentOf = (file: string): string | undefined =>
-    /ort-wasm.*\.wasm$/i.test(file) ? "neural"
-        : file.startsWith("ffmpeg/") ? "ffmpeg"
-            : file.startsWith("manuals/") ? "manuals"
-                : file.startsWith("docs/") ? "docs" : undefined
+    file.startsWith("engine/") ? `engine-${file.split("/")[1]}`
+        : /ort-wasm.*\.wasm$/i.test(file) ? "neural"
+            : file.startsWith("ffmpeg/") ? "ffmpeg"
+                : file.startsWith("manuals/") ? "manuals"
+                    : file.startsWith("docs/") ? "docs" : undefined
 
 // @ffmpeg/core 0.12.6 (dist/esm), mirrored on package.opendaw.studio; fetched once into .cache, pinned by sha256
 const FFmpegCore = {

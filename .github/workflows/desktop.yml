@@ -70,9 +70,7 @@ jobs:
       - name: 📦 Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            packages/app/desktop
-            packages/app/desktop/engine
+          workspaces: packages/app/desktop
           key: ${{ matrix.platform }}
 
       - name: 🔧 Install Tauri CLI

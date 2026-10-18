@@ -43,6 +43,9 @@ the engine refactoring.
     Fix: the shell sets `JSC_useSharedArrayBuffer=1` on Linux before anything starts (unless set), the web process
     inherits it. Start check unchanged. Unverified on Linux. Next possible blocker: `AudioWorkletNode` in the same check.
 
+12. **Done (2026-10-18): the engine ships with every deploy, no new installer** (`plans/engine-updates.md`). The
+    release carries an engine per platform (built by `deploy.yml`), the shell runs its release's engine, shell API 2.
+
 ## One engine, thin entry points
 
 Shared: DSP, mixing, metering, scripts, WebCLAP, MIDI drain, transport (the desktop runs the unchanged

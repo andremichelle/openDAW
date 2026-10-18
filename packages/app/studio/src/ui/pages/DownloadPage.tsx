@@ -50,14 +50,14 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle, service}: P
             <p>The full studio as an app on your computer. It runs offline and keeps itself up to date.</p>
         </header>
         <div className="platforms">
-            <Platform platform="macos" name="macOS" icon={PlatformIcons.Apple} note="Apple Silicon (M1 and later)" size="about 20 MB"
+            <Platform platform="macos" name="macOS" icon={PlatformIcons.Apple} note="Apple Silicon (M1 and later)" size="about 5 MB"
                       downloads={[{label: "Download", file: "openDAW-macos-arm64.dmg"}]}
                       alternative={{label: "Download for Intel Mac", file: "openDAW-macos-intel.dmg"}}/>
             <Platform platform="windows" name="Windows" icon={PlatformIcons.Windows} note="Windows 10 and 11, 64-bit"
-                      size="about 20 MB"
+                      size="about 5 MB"
                       downloads={[{label: "Download", file: "openDAW-windows-setup.exe"}]}/>
             <Platform platform="linux" name="Linux" icon={PlatformIcons.Linux} note="64-bit, x86 and ARM"
-                      size="AppImage about 90 MB, .deb about 20 MB"
+                      size="AppImage about 75 MB, .deb about 6 MB"
                       downloads={[{label: "AppImage", file: "openDAW-linux.AppImage"}, {label: ".deb", file: "openDAW-linux.deb"}]}
                       alternative={{label: "Download for ARM", file: "openDAW-linux-arm64.AppImage"}}/>
         </div>
@@ -66,14 +66,15 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle, service}: P
                 <h3>What is in the download?</h3>
                 <p>
                     A small app that hosts the studio and talks to your audio and MIDI devices directly, for low and
-                    steady latency. The studio, its instruments and effects update themselves inside the app, so you
-                    only download the app once.
+                    steady latency. The studio, its audio engine, instruments and effects update themselves inside the
+                    app, so you only download the app once.
                 </p>
             </section>
             <section>
                 <h3>What happens on the first launch?</h3>
                 <ol>
-                    <li>The app downloads the studio (at least 6 MB). You can choose more parts for offline use.</li>
+                    <li>The app downloads the studio and its audio engine (about 50 MB). You can choose more parts for
+                        offline use.</li>
                     <li>Everything stays on your computer, so it works without internet from then on.</li>
                     <li>Later updates only download the files that changed.</li>
                 </ol>
