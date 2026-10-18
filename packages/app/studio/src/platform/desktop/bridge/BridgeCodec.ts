@@ -19,8 +19,8 @@ export namespace BridgeCodec {
     // MIDI ports do not cross the process boundary yet, a port arrives as one that drops everything
     const InertPort = {postMessage: () => {}, start: () => {}, close: () => {}, onmessage: null}
 
-    const isShared = (value: unknown): value is SharedArrayBuffer =>
-        typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer
+    // by tag, not instanceof: values from another window (a plugin editor in its own window) have their own constructors
+    const tagOf = (value: object): string => Object.prototype.toString.call(value).slice(8, -1)
 
     const writeBytes = (output: ByteArrayOutput, bytes: Uint8Array): void => {
         output.writeInt(bytes.length)
@@ -53,42 +53,45 @@ export namespace BridgeCodec {
             output.writeByte(Tag.Array)
             output.writeInt(value.length)
             value.forEach(item => write(output, item, shared))
-        } else if (value instanceof ArrayBuffer) {
+        } else if (tagOf(value) === "ArrayBuffer") {
             output.writeByte(Tag.ArrayBuffer)
-            writeBytes(output, new Uint8Array(value))
-        } else if (isShared(value)) {
+            writeBytes(output, new Uint8Array(value as ArrayBuffer))
+        } else if (tagOf(value) === "SharedArrayBuffer") {
             output.writeByte(Tag.Shared)
-            output.writeInt(shared.idOf(value))
-            output.writeInt(value.byteLength)
+            output.writeInt(shared.idOf(value as SharedArrayBuffer))
+            output.writeInt((value as SharedArrayBuffer).byteLength)
         } else if (ArrayBuffer.isView(value)) {
-            const kind = TypedKinds.findIndex(type => value instanceof type)
-            if (kind < 0) {return panic(`Cannot encode ${value.constructor.name}`)}
+            const kind = TypedKinds.findIndex(type => type.name === tagOf(value))
+            if (kind < 0) {return panic(`Cannot encode ${tagOf(value)}`)}
             output.writeByte(Tag.Typed)
             output.writeByte(kind)
             writeBytes(output, new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
-        } else if (typeof MessagePort !== "undefined" && value instanceof MessagePort) {
-            const id = shared.idOfPort?.(value)
+        } else if ((typeof MessagePort !== "undefined" && value instanceof MessagePort) || tagOf(value) === "MessagePort") {
+            const id = shared.idOfPort?.(value as MessagePort)
             if (isDefined(id)) {
                 output.writeByte(Tag.LinkedPort)
                 output.writeInt(id)
             } else {
                 output.writeByte(Tag.Port)
             }
-        } else if (value instanceof Error) {
+        } else if (tagOf(value) === "Error") {
+            const error = value as Error
             output.writeByte(Tag.Error)
-            output.writeString(value.message)
-            output.writeString(value.stack ?? "")
-        } else if (value instanceof Map) {
+            output.writeString(error.message)
+            output.writeString(error.stack ?? "")
+        } else if (tagOf(value) === "Map") {
+            const map = value as Map<unknown, unknown>
             output.writeByte(Tag.Map)
-            output.writeInt(value.size)
-            value.forEach((entry, key) => {
+            output.writeInt(map.size)
+            map.forEach((entry, key) => {
                 write(output, key, shared)
                 write(output, entry, shared)
             })
-        } else if (value instanceof Set) {
+        } else if (tagOf(value) === "Set") {
+            const set = value as Set<unknown>
             output.writeByte(Tag.Set)
-            output.writeInt(value.size)
-            value.forEach(entry => write(output, entry, shared))
+            output.writeInt(set.size)
+            set.forEach(entry => write(output, entry, shared))
         } else {
             const entries = Object.entries(value as object)
             output.writeByte(Tag.Object)

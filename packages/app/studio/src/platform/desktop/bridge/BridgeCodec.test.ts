@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest"
+import {runInNewContext} from "node:vm"
 import {BridgeShared} from "./BridgeLink"
 
 describe("BridgeCodec", () => {
@@ -16,6 +17,24 @@ describe("BridgeCodec", () => {
         expect(decoded.data.e.has(3)).toBe(true)
         expect(Object.is(decoded.data.f, -0)).toBe(true)
         expect(decoded.data.g).toBeNaN()
+    })
+
+    // a WebCLAP editor in its own window (the desktop app's popups) hands over values of that window's realm, where
+    // instanceof fails: its message arrived as an empty object and the plugin heard nothing (2026-10-18)
+    it("keeps values made in another window", () => {
+        const foreign = runInNewContext(`({
+            buffer: new Uint8Array([1, 2, 3]).buffer, view: new Float32Array([0.5, 1.5]), map: new Map([["k", 1]]), set: new Set([2]),
+            error: new Error("broken")
+        })`)
+        const decoded = roundTrip(foreign) as {
+            data: { buffer: ArrayBuffer, view: Float32Array, map: Map<string, number>, set: Set<number>, error: Error }
+        }
+        expect(Array.from(new Uint8Array(decoded.data.buffer))).toEqual([1, 2, 3])
+        expect(decoded.data.view).toBeInstanceOf(Float32Array)
+        expect(Array.from(decoded.data.view)).toEqual([0.5, 1.5])
+        expect(decoded.data.map.get("k")).toBe(1)
+        expect(decoded.data.set.has(2)).toBe(true)
+        expect(decoded.data.error.message).toBe("broken")
     })
 
     it("copies array buffers and typed arrays including views with an offset", () => {
