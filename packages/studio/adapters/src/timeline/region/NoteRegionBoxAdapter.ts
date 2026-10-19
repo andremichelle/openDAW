@@ -243,6 +243,38 @@ export class NoteRegionBoxAdapter
         }))
     }
 
+    unloop(): void {
+        const {position, duration} = this
+        const passes = Array.from(LoopableRegion.locateLoops(this, position, position + duration))
+        if (passes.length < 2) {return}
+        const placementsOf = (local: ppqn): ReadonlyArray<ppqn> => passes
+            .filter(({rawStart, regionStart, regionEnd}) =>
+                regionStart - rawStart <= local && local < regionEnd - rawStart)
+            .map(({rawStart}) => rawStart + local - position)
+        this.optCollection.ifSome(collection => {
+            if (this.isMirrowed) {
+                // copy only what plays: a copy deleted in the transaction that made it stays in the collection adapter
+                const target = NoteEventCollectionBox.create(this.#context.boxGraph, UUID.generate())
+                collection.events.asArray().forEach(event => placementsOf(event.position)
+                    .forEach(placement => event.copyTo({position: placement, events: target.events})))
+                this.#box.events.refer(target.owners)
+            } else {
+                // snapshot, because moving an event re-sorts the collection
+                collection.events.asArray().slice().forEach(event => {
+                    const placements = placementsOf(event.position)
+                    if (placements.length === 0) {
+                        event.box.delete()
+                    } else {
+                        placements.slice(1).forEach(placement => event.copyTo({position: placement}))
+                        event.box.position.setValue(placements[0])
+                    }
+                })
+            }
+        })
+        this.loopOffset = 0
+        this.loopDuration = duration
+    }
+
     toString(): string {return `{NoteRegionBoxAdapter ${UUID.toString(this.#box.address.uuid)} p: ${PPQN.toString(this.position)}, c: ${PPQN.toString(this.complete)}}`}
 
     #dispatchChange(): void {
