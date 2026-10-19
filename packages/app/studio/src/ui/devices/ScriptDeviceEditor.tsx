@@ -100,18 +100,12 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const box = adapter.box
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? compiler.stripHeader(storedCode) : config.defaultCode
-    let compiling = false
     const compile = async (code: string) => {
-        compiling = true
-        try {
-            const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
-            if (result.status === "rejected") {
-                errorIcon.classList.remove("hidden")
-                errorIcon.title = String(result.error)
-                throw result.error
-            }
-        } finally {
-            compiling = false
+        const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
+        if (result.status === "rejected") {
+            errorIcon.classList.remove("hidden")
+            errorIcon.title = String(result.error)
+            throw result.error
         }
     }
     if (storedCode.length > 0) {
@@ -366,7 +360,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             }
         },
         adapter.codeChanged.subscribe(() => {
-            if (!compiling) {compiler.load(service.audioContext, box).finally(EmptyExec)}
+            compiler.load(service.audioContext, box).finally(EmptyExec)
         }),
         service.activeCodeEditor.catchupAndSubscribe(option => {
             const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)

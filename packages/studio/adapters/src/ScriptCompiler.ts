@@ -4,6 +4,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
 import {ParamDeclaration, SampleDeclaration, ScriptDeclaration, SidechainDeclaration} from "./ScriptDeclaration"
 import {DeviceBox} from "./DeviceBox"
+import {Promises} from "@opendaw/lib-runtime"
 
 const COMPILER_VERSION = 1
 
@@ -181,6 +182,28 @@ const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: stri
     }
 }
 
+// the script version each device has registered in a context's worklet scope, so a reload of the same version is skipped
+const registeredUpdates = new WeakMap<BaseAudioContext, WeakMap<ScriptCompiler.ScriptDeviceBox, number>>()
+
+const claimRegistration = (audioContext: BaseAudioContext, deviceBox: ScriptCompiler.ScriptDeviceBox,
+                           update: number): boolean => {
+    const updates = registeredUpdates.get(audioContext) ?? new WeakMap<ScriptCompiler.ScriptDeviceBox, number>()
+    registeredUpdates.set(audioContext, updates)
+    if (updates.get(deviceBox) === update) {return false}
+    updates.set(deviceBox, update)
+    return true
+}
+
+const registerClaimed = async (audioContext: BaseAudioContext, deviceBox: ScriptCompiler.ScriptDeviceBox,
+                               update: number, wrappedCode: string): Promise<void> => {
+    const result = await Promises.tryCatch(registerWorklet(audioContext, wrappedCode))
+    if (result.status === "rejected") {
+        const updates = registeredUpdates.get(audioContext)
+        if (updates?.get(deviceBox) === update) {updates.delete(deviceBox)}
+        throw result.error
+    }
+}
+
 export namespace ScriptCompiler {
     export interface ScriptDeviceBox extends DeviceBox {
         readonly graph: BoxGraph
@@ -220,7 +243,8 @@ export namespace ScriptCompiler {
                 const uuid = UUID.toString(deviceBox.address.uuid)
                 const wrappedCode = wrapScript(config, uuid, update, userCode)
                 validateCode(wrappedCode)
-                return registerWorklet(audioContext, wrappedCode)
+                if (!claimRegistration(audioContext, deviceBox, update)) {return}
+                return registerClaimed(audioContext, deviceBox, update, wrappedCode)
             },
             compile: async (audioContext: BaseAudioContext,
                             editing: Editing,
@@ -240,6 +264,7 @@ export namespace ScriptCompiler {
                 const wrappedCode = wrapScript(config, uuid, newUpdate, userCode)
                 validateCode(wrappedCode)
                 const label = ScriptDeclaration.parseLabel(userCode)
+                claimRegistration(audioContext, deviceBox, newUpdate)
                 const modifier = () => {
                     deviceBox.code.setValue(createHeader(newUpdate) + userCode)
                     label.ifSome(name => deviceBox.label.setValue(name))
@@ -252,7 +277,7 @@ export namespace ScriptCompiler {
                 } else {
                     editing.modify(modifier)
                 }
-                return registerWorklet(audioContext, wrappedCode)
+                return registerClaimed(audioContext, deviceBox, newUpdate, wrappedCode)
             }
         }
     }
