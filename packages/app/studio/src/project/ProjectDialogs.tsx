@@ -3,7 +3,7 @@ import {ExportConfiguration, ExportStemConfiguration} from "@opendaw/studio-adap
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Errors, isDefined, Objects, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isDefined, Objects, Terminator, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
 import {
@@ -11,9 +11,12 @@ import {
     EditableExportStemsConfiguration,
     ExportStemsConfigurator
 } from "@/service/ExportStemsConfigurator"
-import {Project, ProjectMeta} from "@opendaw/studio-core"
+import {MixdownSection, Project, ProjectMeta} from "@opendaw/studio-core"
+import {MixdownSectionSelector} from "@/ui/components/MixdownSectionSelector"
 
 export namespace ProjectDialogs {
+    const stemsSectionKey = new DefaultObservableValue<string>("song")
+
     export const showSaveDialog = async ({headline, meta}: {
         headline: string,
         meta?: ProjectMeta
@@ -130,9 +133,13 @@ export namespace ProjectDialogs {
         return promise.finally(() => lifecycle.terminate())
     }
 
-    export const showExportStemsDialog = async (project: Project): Promise<ExportConfiguration> => {
-        const {resolve, reject, promise} = Promise.withResolvers<ExportConfiguration>()
+    export const showExportStemsDialog = async (project: Project)
+        : Promise<{ configuration: ExportConfiguration, section: MixdownSection }> => {
+        const {resolve, reject, promise} =
+            Promise.withResolvers<{ configuration: ExportConfiguration, section: MixdownSection }>()
         const terminator = new Terminator()
+        const sections = MixdownSection.collect(project)
+        const sectionModel = new DefaultObservableValue(MixdownSection.find(sections, stemsSectionKey.getValue()))
         const configuration: EditableExportStemsConfiguration = Object
             .fromEntries(project.rootBoxAdapter.audioUnits.adapters()
                 .map(unit => ([
@@ -176,15 +183,21 @@ export namespace ProjectDialogs {
                                             ] as const))])) as Record<string, ExportStemConfiguration>
                                 // Omitted entirely when unchecked, so the engine keeps the metronome silent
                                 // rather than rendering a stem nobody asked for.
-                                resolve(metronome.include
-                                    ? {stems, metronome: {stem: {fileName: metronome.fileName}}}
-                                    : {stems})
+                                const section = sectionModel.getValue()
+                                stemsSectionKey.setValue(section.key)
+                                resolve({
+                                    configuration: metronome.include
+                                        ? {stems, metronome: {stem: {fileName: metronome.fileName}}}
+                                        : {stems},
+                                    section
+                                })
                                 dialog.close()
                             },
                             primary: true
                         }
                     ]}
                     cancelable={true}>
+                <MixdownSectionSelector lifecycle={terminator} sections={sections} model={sectionModel}/>
                 <ExportStemsConfigurator lifecycle={terminator} configuration={configuration} metronome={metronome}/>
             </Dialog>
         )
