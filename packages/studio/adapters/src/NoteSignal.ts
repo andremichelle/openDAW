@@ -2,9 +2,9 @@ import {byte, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {MidiData} from "@opendaw/lib-midi"
 import {ppqn} from "@opendaw/lib-dsp"
 
-export type NoteSignalOn = { type: "note-on", uuid: UUID.Bytes, pitch: byte, velocity: unitValue }
+export type NoteSignalOn = { type: "note-on", uuid: UUID.Bytes, pitch: byte, velocity: unitValue, timeStamp?: number }
 
-export type NoteSignalOff = { type: "note-off", uuid: UUID.Bytes, pitch: byte }
+export type NoteSignalOff = { type: "note-off", uuid: UUID.Bytes, pitch: byte, timeStamp?: number }
 
 export type NoteSignalAudition = {
     type: "note-audition",
@@ -33,10 +33,10 @@ export namespace NoteSignal {
         if (MidiData.isNoteOn(data)) {
             const pitch = MidiData.readPitch(data)
             const velocity = MidiData.readVelocity(data)
-            return ({type: "note-on", uuid, pitch, velocity})
+            return ({type: "note-on", uuid, pitch, velocity, timeStamp: event.timeStamp})
         } else if (MidiData.isNoteOff(data)) {
             const pitch = MidiData.readPitch(data)
-            return ({type: "note-off", uuid, pitch})
+            return ({type: "note-off", uuid, pitch, timeStamp: event.timeStamp})
         }
         return panic("Unknown MIDI event")
     }
