@@ -679,18 +679,7 @@ export class ProjectApi {
         const blockEnd = notes.reduce((max, {position, duration}) => Math.max(max, position + duration), -Infinity)
         const shift = blockEnd - blockStart
         if (shift <= 0) {return []}
-        const {boxGraph, boxAdapters} = this.#project
-        return notes.map(adapter => {
-            const copy = NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                const events = adapter.box.events.targetVertex.unwrap("events.target")
-                box.events.refer(events)
-                box.position.setValue(adapter.position + shift)
-                box.duration.setValue(adapter.duration)
-                box.pitch.setValue(adapter.pitch)
-                box.velocity.setValue(adapter.velocity)
-            })
-            return boxAdapters.adapterFor(copy, NoteEventBoxAdapter)
-        })
+        return notes.map(adapter => adapter.copyTo({position: adapter.position + shift}))
     }
 
     #createTrack({field, target, trackType, insertIndex}: {
