@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, it} from "vitest"
+import {beforeEach, describe, expect, it, vi} from "vitest"
 import {BooleanField, BoxGraph, Field} from "./"
 import {PointerField, UnreferenceableType} from "./pointer"
 import {Box, BoxConstruct} from "./box"
@@ -1106,5 +1106,217 @@ describe("#306 each automation-node placement is its own undo step", () => {
         scene.editing.undo() // one more step removes placement 1
         expect(scene.graph.findBox(firstUuid).nonEmpty()).false
         expect(scene.editing.canUndo()).false
+    })
+})
+
+describe("afterTransaction", () => {
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        scene.graph = createGraphWithFactory()
+        scene.editing = new BoxEditing(scene.graph)
+    })
+
+    const createAnchored = (graph: BoxGraph): MandatoryBox => {
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        return mandatory
+    }
+
+    describe("validation", () => {
+        it("a transaction that fails validation drops its queued tasks", (scene: TestScene) => {
+            const {graph} = scene
+            let ran = 0
+            expect(() => {
+                graph.beginTransaction()
+                graph.afterTransaction(() => ran++)
+                MandatoryBox.create(graph, UUID.generate())
+                graph.endTransaction()
+            }).toThrow(/requires an edge/)
+            expect(ran).toBe(0)
+            graph.beginTransaction()
+            createAnchored(graph)
+            graph.endTransaction()
+            expect(ran).toBe(0)
+            expect(graph.boxes().length).toBe(2)
+        })
+
+        it("a follow-up that leaves the graph invalid is rolled back alone; the committed transaction's boxes stay and the graph validates", (scene: TestScene) => {
+            const {graph} = scene
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            graph.beginTransaction()
+            const mandatory = createAnchored(graph)
+            graph.afterTransaction(() => {
+                mandatory.value.setValue(true)
+                MandatoryBox.create(graph, UUID.generate())
+            })
+            expect(() => graph.endTransaction()).not.toThrow()
+            expect(graph.boxes().length).toBe(2)
+            expect(mandatory.value.getValue()).false
+            expect(() => graph.edges().validateRequirements()).not.toThrow()
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(String(warn.mock.calls[0][1])).toMatch(/requires an edge/)
+            warn.mockRestore()
+            // the next transaction is not charged for the failed follow-up
+            graph.beginTransaction()
+            mandatory.value.setValue(true)
+            graph.endTransaction()
+            expect(mandatory.value.getValue()).true
+        })
+    })
+
+    describe("undo steps", () => {
+        it("a follow-up joins the modify's undo step: one undo restores both, one redo reapplies both", (scene: TestScene) => {
+            const {first, second} = scene.editing.modify(() => ({
+                first: BarBox.create(scene.graph, UUID.generate()),
+                second: BarBox.create(scene.graph, UUID.generate())
+            })).unwrap()
+            scene.editing.modify(() => {
+                first.delete()
+                scene.graph.afterTransaction(() => second.delete())
+            })
+            expect(scene.graph.boxes().length).toBe(0)
+            expect(scene.editing.undo()).true
+            expect(scene.graph.findBox(first.address.uuid).nonEmpty()).true
+            expect(scene.graph.findBox(second.address.uuid).nonEmpty()).true
+            expect(scene.editing.redo()).true
+            expect(scene.graph.boxes().length).toBe(0)
+            // exactly two steps: the delete with its follow-up, then the create
+            expect(scene.editing.undo()).true
+            expect(scene.graph.boxes().length).toBe(2)
+            expect(scene.editing.undo()).true
+            expect(scene.graph.boxes().length).toBe(0)
+            expect(scene.editing.canUndo()).false
+        })
+
+        it("inside beginModification the follow-up joins the approved step", (scene: TestScene) => {
+            const {first, second} = scene.editing.modify(() => ({
+                first: BarBox.create(scene.graph, UUID.generate()),
+                second: BarBox.create(scene.graph, UUID.generate())
+            })).unwrap()
+            const process = scene.editing.beginModification()
+            second.bool.setValue(true)
+            scene.graph.afterTransaction(() => first.delete())
+            process.approve()
+            expect(scene.graph.findBox(first.address.uuid).nonEmpty()).false
+            expect(second.bool.getValue()).true
+            expect(scene.editing.undo()).true
+            expect(scene.graph.findBox(first.address.uuid).nonEmpty()).true
+            expect(second.bool.getValue()).false
+            expect(scene.editing.redo()).true
+            expect(scene.graph.findBox(first.address.uuid).nonEmpty()).false
+            expect(second.bool.getValue()).true
+        })
+
+        it("a reverted beginModification reverts its follow-up too", (scene: TestScene) => {
+            const {first, second} = scene.editing.modify(() => ({
+                first: BarBox.create(scene.graph, UUID.generate()),
+                second: BarBox.create(scene.graph, UUID.generate())
+            })).unwrap()
+            const process = scene.editing.beginModification()
+            second.bool.setValue(true)
+            scene.graph.afterTransaction(() => first.delete())
+            process.revert()
+            expect(scene.graph.findBox(first.address.uuid).nonEmpty()).true
+            expect(second.bool.getValue()).false
+        })
+
+        it("after an unmarked modify the follow-up stays pending until mark()", (scene: TestScene) => {
+            // a gesture held open until pointer-up, such as a trim: every step and its follow-up form one entry
+            const {first, second} = scene.editing.modify(() => ({
+                first: BarBox.create(scene.graph, UUID.generate()),
+                second: BarBox.create(scene.graph, UUID.generate())
+            })).unwrap()
+            scene.editing.modify(() => {
+                first.bool.setValue(true)
+                scene.graph.afterTransaction(() => second.bool.setValue(true))
+            }, false)
+            scene.editing.modify(() => {
+                first.delete()
+                scene.graph.afterTransaction(() => second.delete())
+            }, false)
+            expect(scene.graph.boxes().length).toBe(0)
+            scene.editing.mark()
+            expect(scene.editing.undo()).true
+            const restoredFirst = scene.graph.findBox<BarBox>(first.address.uuid).unwrap()
+            const restoredSecond = scene.graph.findBox<BarBox>(second.address.uuid).unwrap()
+            expect(restoredFirst.bool.getValue()).false
+            expect(restoredSecond.bool.getValue()).false
+            expect(scene.editing.undo()).true
+            expect(scene.graph.boxes().length).toBe(0)
+            expect(scene.editing.canUndo()).false
+        })
+
+        it("a failed follow-up leaves an entry whose undo restores exactly the pre-modify graph", (scene: TestScene) => {
+            // the rollback's inverse updates are recorded too, so this asserts graph state, not the recorded updates
+            const {mandatory, bar} = scene.editing.modify(() => ({
+                mandatory: createAnchored(scene.graph),
+                bar: BarBox.create(scene.graph, UUID.generate())
+            })).unwrap()
+            const before = scene.graph.checksum()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            scene.editing.modify(() => {
+                bar.bool.setValue(true)
+                scene.graph.afterTransaction(() => {
+                    mandatory.value.setValue(true)
+                    MandatoryBox.create(scene.graph, UUID.generate())
+                })
+            })
+            expect(warn).toHaveBeenCalledTimes(1)
+            warn.mockRestore()
+            expect(bar.bool.getValue()).true
+            expect(mandatory.value.getValue()).false
+            expect(scene.graph.boxes().length).toBe(3)
+            const after = scene.graph.checksum()
+            expect(scene.editing.undo()).true
+            expect(scene.graph.checksum()).toEqual(before)
+            expect(bar.bool.getValue()).false
+            expect(mandatory.value.getValue()).false
+            expect(scene.editing.redo()).true
+            expect(scene.graph.checksum()).toEqual(after)
+            expect(scene.graph.boxes().length).toBe(3)
+        })
+    })
+
+    describe("replays", () => {
+        it("undo and redo run no reaction: the replayed step already holds what the reaction wrote", (scene: TestScene) => {
+            const {graph, editing} = scene
+            const source = editing.modify(() => BarBox.create(graph, UUID.generate())).unwrap()
+            let reactions = 0
+            // reacts to every change of the flag by adding a box, so a reaction during a replay adds one too many
+            source.bool.subscribe(() => graph.afterTransaction(() => {
+                reactions++
+                BarBox.create(graph, UUID.generate())
+            }))
+            editing.modify(() => source.bool.setValue(true))
+            expect(reactions).toBe(1)
+            expect(graph.boxes().length).toBe(2)
+            expect(editing.undo()).true
+            expect(source.bool.getValue()).false
+            expect(graph.boxes().length).toBe(1)
+            expect(editing.redo()).true
+            expect(source.bool.getValue()).true
+            expect(graph.boxes().length).toBe(2)
+            expect(reactions).toBe(1)
+        })
+
+        it("revertPending and a reverted beginModification run no reaction either", (scene: TestScene) => {
+            const {graph, editing} = scene
+            const source = editing.modify(() => BarBox.create(graph, UUID.generate())).unwrap()
+            let reactions = 0
+            source.bool.subscribe(() => graph.afterTransaction(() => reactions++))
+            editing.modify(() => source.bool.setValue(true), false)
+            editing.revertPending()
+            expect(source.bool.getValue()).false
+            const process = editing.beginModification()
+            source.bool.setValue(true)
+            process.revert()
+            expect(source.bool.getValue()).false
+            // one for each of the two edits, none for the two reverts
+            expect(reactions).toBe(2)
+        })
     })
 })

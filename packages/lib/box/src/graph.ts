@@ -65,11 +65,13 @@ export class BoxGraph<BoxMap = any> {
         index: int
     }>
     readonly #finalizeTransactionObservers: Array<Exec>
+    readonly #afterTransactionTasks: Array<Exec>
     readonly #deletionListeners: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, listeners: Set<Exec> }>
 
     #inTransaction: boolean = false
     #constructingBox: boolean = false
     #rollingBack: boolean = false
+    #replaying: boolean = false
 
     constructor(boxFactory: Option<BoxFactory<BoxMap>> = Option.None) {
         this.#boxFactory = boxFactory
@@ -84,6 +86,7 @@ export class BoxGraph<BoxMap = any> {
         this.#edges = new GraphEdges()
         this.#pointerTransactionState = Address.newSet(({pointer}) => pointer.address)
         this.#finalizeTransactionObservers = []
+        this.#afterTransactionTasks = []
         this.#deletionListeners = UUID.newSet<{ uuid: UUID.Bytes, listeners: Set<Exec> }>(entry => entry.uuid)
     }
 
@@ -92,6 +95,12 @@ export class BoxGraph<BoxMap = any> {
         this.#inTransaction = true
         this.#transactionUpdates.length = 0
         this.#transactionListeners.proxy.onBeginTransaction()
+    }
+
+    /** Begins a transaction that replays recorded or remote updates; its afterTransaction tasks are dropped. */
+    beginReplayTransaction(): void {
+        this.beginTransaction()
+        this.#replaying = true
     }
 
     abortTransaction(): void {
@@ -177,6 +186,12 @@ export class BoxGraph<BoxMap = any> {
     }
 
     subscribeEndTransaction(observer: Exec): void {this.#finalizeTransactionObservers.push(observer)}
+
+    /** Runs task in a follow-up transaction once this one commits; dropped if it rolls back or replays. */
+    afterTransaction(task: Exec): void {
+        this.#assertTransaction()
+        this.#afterTransactionTasks.push(task)
+    }
 
     subscribeDeletion(uuid: UUID.Bytes, listener: Exec): Subscription {
         const entry = this.#deletionListeners.getOrCreate(uuid, () => ({uuid, listeners: new Set()}))
@@ -327,14 +342,32 @@ export class BoxGraph<BoxMap = any> {
             })
         this.#pointerTransactionState.clear()
         this.#inTransaction = false
+        const tasks = this.#afterTransactionTasks.splice(0)
+        const replayed = this.#replaying
+        this.#replaying = false
         while (this.#finalizeTransactionObservers.length > 0) {
             this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
             if (this.#finalizeTransactionObservers.length > 0) {
                 console.debug(`${this.#finalizeTransactionObservers.length} new observers while notifying`)
             }
         }
-        this.#transactionListeners.proxy.onEndTransaction(this.#rollingBack)
+        const rolledBack = this.#rollingBack
+        this.#transactionListeners.proxy.onEndTransaction(rolledBack)
         this.#rollingBack = false
+        if (!rolledBack && !replayed && tasks.length > 0) {this.#runAfterTransaction(tasks)}
+    }
+
+    #runAfterTransaction(tasks: ReadonlyArray<Exec>): void {
+        this.beginTransaction()
+        const result = tryCatch(() => {
+            tasks.forEach(task => task())
+            this.endTransaction()
+        })
+        if (result.status === "failure") {
+            if (this.#inTransaction) {this.abortTransaction()}
+            console.warn("[BoxGraph] after-transaction follow-up failed",
+                result.error instanceof Error ? result.error.stack : result.error)
+        }
     }
 
     #rollback(): void {

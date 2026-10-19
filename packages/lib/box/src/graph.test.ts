@@ -1,4 +1,4 @@
-import {Maybe, Option, safeExecute, UUID} from "@opendaw/lib-std"
+import {Maybe, Option, panic, safeExecute, UUID} from "@opendaw/lib-std"
 import {Field} from "./field"
 import {NoPointers, VertexVisitor} from "./vertex"
 import {Box, BoxConstruct, ResourceType} from "./box"
@@ -986,5 +986,170 @@ describe("dependenciesOf with stopAtResources", () => {
         })
         expect([...boxes]).toContain(resource)
         expect([...boxes]).not.toContain(child)
+    })
+})
+
+describe("afterTransaction", () => {
+    const recordTransactions = (graph: BoxGraph): Array<string> => {
+        const events: Array<string> = []
+        graph.subscribeTransaction({
+            onBeginTransaction: () => events.push("begin"),
+            onEndTransaction: rolledBack => events.push(rolledBack ? "rolled back" : "end")
+        })
+        return events
+    }
+
+    it("a box deleted from a pointer-hub onRemoved via afterTransaction reaches its own target's onRemoved", () => {
+        // owner <- track <- item: deleting the item empties the track, and the track's delete must be heard by the owner
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const owner = NodeBox.create(graph, UUID.generate())
+        const track = NodeBox.create(graph, UUID.generate())
+        const item = NodeBox.create(graph, UUID.generate())
+        track.ref.refer(owner)
+        item.ref.refer(track)
+        graph.endTransaction()
+        const removedFromOwner: Array<PointerField> = []
+        owner.pointerHub.subscribe({onAdded: () => {}, onRemoved: pointer => removedFromOwner.push(pointer)})
+        track.pointerHub.subscribe({
+            onAdded: () => {},
+            onRemoved: () => graph.afterTransaction(() => {
+                if (track.isAttached() && track.pointerHub.isEmpty()) {track.delete()}
+            })
+        })
+        graph.beginTransaction()
+        item.delete()
+        graph.endTransaction()
+        expect(item.isAttached()).toBe(false)
+        expect(track.isAttached()).toBe(false)
+        expect(owner.isAttached()).toBe(true)
+        expect(removedFromOwner).toEqual([track.ref])
+        expect(owner.pointerHub.isEmpty()).toBe(true)
+    })
+
+    it("TransactionListeners see begin, end, begin, end and never a nested pair", () => {
+        const graph = new BoxGraph()
+        const events = recordTransactions(graph)
+        graph.beginTransaction()
+        NodeBox.create(graph, UUID.generate())
+        graph.afterTransaction(() => events.push(graph.inTransaction() ? "task in transaction" : "task outside"))
+        graph.endTransaction()
+        expect(events).toEqual(["begin", "end", "begin", "task in transaction", "end"])
+        expect(graph.inTransaction()).toBe(false)
+    })
+
+    it("abortTransaction drops queued tasks, including tasks queued by its own rollback notifications", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const box = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+        let queued = 0
+        let ran = 0
+        graph.subscribeToAllUpdates({
+            onUpdate: () => {
+                queued++
+                graph.afterTransaction(() => ran++)
+            }
+        })
+        graph.beginTransaction()
+        box.ref.refer(NodeBox.create(graph, UUID.generate()))
+        const queuedBeforeAbort = queued
+        graph.abortTransaction()
+        // the rollback's own inverse updates queued more tasks while the transaction was still open
+        expect(queuedBeforeAbort).toBeGreaterThan(0)
+        expect(queued).toBeGreaterThan(queuedBeforeAbort)
+        expect(ran).toBe(0)
+        graph.beginTransaction()
+        graph.endTransaction()
+        expect(ran).toBe(0)
+        expect(graph.boxes()).toEqual([box])
+    })
+
+    it("a TransactionListener that throws drops the queued tasks; the next transaction runs none of them", () => {
+        const graph = new BoxGraph()
+        let failing = true
+        graph.subscribeTransaction({
+            onBeginTransaction: () => {},
+            onEndTransaction: () => {
+                if (!failing) {return}
+                failing = false
+                panic("listener failure")
+            }
+        })
+        let ran = 0
+        graph.beginTransaction()
+        NodeBox.create(graph, UUID.generate())
+        graph.afterTransaction(() => ran++)
+        expect(() => graph.endTransaction()).toThrow("listener failure")
+        expect(ran).toBe(0)
+        graph.beginTransaction()
+        graph.endTransaction()
+        expect(ran).toBe(0)
+    })
+
+    it("a finalize observer that throws drops the queued tasks; the next transaction runs none of them", () => {
+        const graph = new BoxGraph()
+        let ran = 0
+        graph.beginTransaction()
+        NodeBox.create(graph, UUID.generate())
+        graph.afterTransaction(() => ran++)
+        graph.subscribeEndTransaction(() => panic("observer failure"))
+        expect(() => graph.endTransaction()).toThrow("observer failure")
+        expect(ran).toBe(0)
+        graph.beginTransaction()
+        graph.endTransaction()
+        expect(ran).toBe(0)
+    })
+
+    it("a replay transaction drops its queued tasks, whether it ends or aborts; the next transaction runs its own", () => {
+        const graph = new BoxGraph()
+        const events = recordTransactions(graph)
+        graph.beginReplayTransaction()
+        NodeBox.create(graph, UUID.generate())
+        graph.afterTransaction(() => events.push("task of an ended replay"))
+        graph.endTransaction()
+        graph.beginReplayTransaction()
+        graph.afterTransaction(() => events.push("task of an aborted replay"))
+        graph.abortTransaction()
+        graph.beginTransaction()
+        graph.afterTransaction(() => events.push("task"))
+        graph.endTransaction()
+        expect(events).toEqual(["begin", "end", "begin", "rolled back", "begin", "end", "begin", "task", "end"])
+    })
+
+    it("a task queued by a task runs in a further follow-up", () => {
+        const graph = new BoxGraph()
+        const events = recordTransactions(graph)
+        graph.beginTransaction()
+        graph.afterTransaction(() => {
+            events.push("first")
+            graph.afterTransaction(() => events.push("second"))
+        })
+        graph.endTransaction()
+        expect(events).toEqual(["begin", "end", "begin", "first", "end", "begin", "second", "end"])
+    })
+
+    it("a task that throws rolls back its follow-up alone; the committed transaction stays", () => {
+        const graph = new BoxGraph()
+        const events = recordTransactions(graph)
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        graph.beginTransaction()
+        const committed = NodeBox.create(graph, UUID.generate())
+        graph.afterTransaction(() => {
+            NodeBox.create(graph, UUID.generate())
+            panic("task failure")
+        })
+        expect(() => graph.endTransaction()).not.toThrow()
+        expect(graph.inTransaction()).toBe(false)
+        expect(graph.boxes()).toEqual([committed])
+        expect(events).toEqual(["begin", "end", "begin", "rolled back"])
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn.mock.calls[0][0]).toContain("after-transaction")
+        warn.mockRestore()
+    })
+
+    it("afterTransaction outside a transaction panics", () => {
+        const graph = new BoxGraph()
+        expect(() => graph.afterTransaction(() => {})).toThrow(/transaction mode/)
     })
 })

@@ -44,6 +44,29 @@ during `endTransaction()`. Code subscribed via `pointerHub.catchupAndSubscribe()
 After pointer processing, `#inTransaction` is set to false. Then `#finalizeTransactionObservers`
 are executed (these can add more observers in a loop). Finally `onEndTransaction` fires.
 
+### Writing in reaction to a notification
+
+A pointer-hub callback runs inside the closing transaction, but after its validation and after the
+notification loop took its snapshot. A write made there is validated by the NEXT transaction, which
+then throws and rolls back an unrelated edit. Its own pointer changes are never announced, so a
+track deleted there stays in its audio unit's track collection.
+
+Queue such a write with `graph.afterTransaction(task)` instead. It works while the transaction is
+open: in pointer-hub callbacks, update listeners and `PrimitiveField.subscribe` observers. It panics
+in `PointerField.subscribe` and `ObjectField.subscribe` observers, which run after the transaction
+closed. Once every `onEndTransaction` listener has run, and only if the transaction did not roll
+back, the queued tasks run in one follow-up transaction before `endTransaction()` returns.
+Listeners see an ordinary begin/end pair, and `BoxEditing` records the follow-up in the same undo
+step. Tasks queued by a task run in a further follow-up.
+
+A task that throws, or a follow-up that fails validation, rolls the follow-up back alone and is
+reported with `console.warn`. A listener that throws once the follow-up committed is only warned
+too, so a sync listener's error for the follow-up does not reach the caller.
+
+A transaction opened with `beginReplayTransaction()` drops its tasks. It applies updates whose
+origin already ran its follow-ups, so running a reaction again would write twice or undo the
+replay. `BoxEditing` replays undo, redo and reverts this way.
+
 ## Box Deletion and Cascade
 
 `box.delete()` computes dependencies via `graph.dependenciesOf(box)`:

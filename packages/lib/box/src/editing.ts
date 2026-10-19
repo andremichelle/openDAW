@@ -23,13 +23,13 @@ class Modification {
     constructor(updates: ReadonlyArray<Update>) {this.#updates = updates}
 
     inverse(graph: BoxGraph): void {
-        graph.beginTransaction()
+        graph.beginReplayTransaction()
         this.#updates.toReversed().forEach(update => update.inverse(graph))
         graph.endTransaction()
     }
 
     forward(graph: BoxGraph): void {
-        graph.beginTransaction()
+        graph.beginReplayTransaction()
         this.#updates.forEach(update => update.forward(graph))
         graph.endTransaction()
     }
