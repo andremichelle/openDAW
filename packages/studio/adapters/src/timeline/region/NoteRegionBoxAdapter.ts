@@ -193,6 +193,27 @@ export class NoteRegionBoxAdapter
         })
     }
 
+    // pass the engine preference of the same name, so the region keeps playing the same
+    resetLoopOffset(truncateNotesAtRegionEnd: boolean): void {
+        const {loopOffset, loopDuration} = this
+        if (loopOffset === 0 || loopDuration <= 0) {return}
+        const wrap = (value: ppqn) => ((value % loopDuration) + loopDuration) % loopDuration
+        const phase = wrap(loopOffset)
+        if (phase !== 0) {
+            this.consolidate()
+            this.optCollection.ifSome(collection => collection.events.asArray()
+                .filter(event => event.position >= 0 && event.position < loopDuration)
+                .forEach(event => {
+                    const {position, complete, playCount} = event
+                    if (truncateNotesAtRegionEnd && playCount === 1 && complete > loopDuration) {
+                        event.box.duration.setValue(loopDuration - position)
+                    }
+                    event.box.position.setValue(wrap(position - phase))
+                }))
+        }
+        this.loopOffset = 0
+    }
+
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
         return regions.length > 0 && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap("trackBoxAdapter")))
             && regions.every(region => region.isSelected && region instanceof NoteRegionBoxAdapter)
