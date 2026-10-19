@@ -198,7 +198,8 @@ export class NoteRegionBoxAdapter
             && regions.every(region => region.isSelected && region instanceof NoteRegionBoxAdapter)
     }
 
-    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<NoteRegionBox> {
+    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>,
+            truncateNotesAtRegionEnd: boolean = false): Option<NoteRegionBox> {
         if (!this.canFlatten(regions)) {return Option.None}
         const graph = this.#context.boxGraph
         const sorted = regions.toSorted(RegionCollection.Comparator)
@@ -216,13 +217,17 @@ export class NoteRegionBoxAdapter
                     for (const {
                         resultStart,
                         resultEnd,
-                        rawStart
+                        rawStart,
+                        regionEnd
                     } of LoopableRegion.locateLoops(region, region.position, region.complete)) {
                         const searchStart = Math.floor(resultStart - rawStart)
                         const searchEnd = Math.floor(resultEnd - rawStart)
+                        const end = truncateNotesAtRegionEnd ? regionEnd - rawStart : Number.POSITIVE_INFINITY
                         for (const event of region.optCollection.unwrap("optCollection").events.iterateRange(searchStart, searchEnd)) {
                             event.copyTo({
                                 position: event.position + rawStart - first.position,
+                                duration: event.playCount > 1
+                                    ? event.duration : Math.min(event.duration, end - event.position),
                                 events: collectionBox.events
                             })
                         }
