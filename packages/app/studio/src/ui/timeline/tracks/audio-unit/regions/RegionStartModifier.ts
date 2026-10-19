@@ -1,6 +1,6 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {int, mod, Option} from "@opendaw/lib-std"
-import {LoopableRegion, ppqn, RegionCollection} from "@opendaw/lib-dsp"
+import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
@@ -120,10 +120,9 @@ export class RegionStartModifier implements RegionModifier {
             ({region, delta: this.#selectedModifyStrategy.computeClampedDelta(region)}))
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, delta}) => {
-                const loopOffset = LoopableRegion.loopOffsetAt(region, region.position + delta)
                 region.position += delta
                 region.duration -= delta
-                region.loopOffset = loopOffset
+                region.loopOffset = mod(region.loopOffset + delta, region.loopDuration)
             })
         })
     }

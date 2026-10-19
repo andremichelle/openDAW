@@ -72,24 +72,14 @@ describe("LoopableRegion degenerate loop durations", () => {
     })
 })
 
-describe("LoopableRegion.loopOffsetAt", () => {
+describe("LoopableRegion.globalToLocal exact wrap", () => {
     const beat = PPQN.Quarter
     const region = (position: number, loopOffset: number, loopDuration: number) => ({
         type: "region", position, duration: 16 * beat, complete: position + 16 * beat, loopOffset, loopDuration
     })
 
-    it("keeps a whole tick whole where globalToLocal does not (3/4 bar loop at bar 2, beat 2)", () => {
-        const waltz = region(0, 0, 3 * beat)
-        expect(LoopableRegion.globalToLocal(waltz, 4 * beat)).toBe(959.9999999999998)
-        expect(LoopableRegion.loopOffsetAt(waltz, 4 * beat)).toBe(960)
-    })
-
-    it("equals globalToLocal on every 1/16 within 4 bars either side of a 4/4 bar loop's start", () => {
-        const bar = 4 * beat
-        const loop = region(bar, 2 * beat, bar)
-        for (let delta = -4 * bar; delta <= 4 * bar; delta += beat / 4) {
-            expect(LoopableRegion.loopOffsetAt(loop, bar + delta)).toBe(LoopableRegion.globalToLocal(loop, bar + delta))
-        }
+    it("keeps a whole tick whole (3/4 bar loop at bar 2, beat 2)", () => {
+        expect(LoopableRegion.globalToLocal(region(0, 0, 3 * beat), 4 * beat)).toBe(960)
     })
 
     it.each([1280, 2880, 3840, 11520])("returns a whole tick in [0, loopDuration) for every whole tick (loopDuration=%s)",
@@ -97,7 +87,7 @@ describe("LoopableRegion.loopOffsetAt", () => {
             const loop = region(960, 480, loopDuration)
             const misses: Array<number> = []
             for (let at = -30000; at <= 30000; at++) {
-                const offset = LoopableRegion.loopOffsetAt(loop, at)
+                const offset = LoopableRegion.globalToLocal(loop, at)
                 const congruent = (at - loop.position + loop.loopOffset - offset) % loopDuration === 0
                 if (!Number.isInteger(offset) || offset < 0 || offset >= loopDuration || !congruent) {misses.push(at)}
             }
@@ -105,8 +95,8 @@ describe("LoopableRegion.loopOffsetAt", () => {
         })
 
     it("wraps a position before the region start and a loopOffset past the loop end", () => {
-        expect(LoopableRegion.loopOffsetAt(region(4 * beat, 0, 3 * beat), 0)).toBe(1920)
-        expect(LoopableRegion.loopOffsetAt(region(0, 4000, 3 * beat), 0)).toBe(1120)
+        expect(LoopableRegion.globalToLocal(region(4 * beat, 0, 3 * beat), 0)).toBe(1920)
+        expect(LoopableRegion.globalToLocal(region(0, 4000, 3 * beat), 0)).toBe(1120)
     })
 })
 

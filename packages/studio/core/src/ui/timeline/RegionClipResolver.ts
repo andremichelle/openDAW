@@ -1,5 +1,5 @@
-import {asDefined, Exec, int, panic, UUID} from "@opendaw/lib-std"
-import {Event, EventCollection, LoopableRegion, ppqn} from "@opendaw/lib-dsp"
+import {asDefined, Exec, int, mod, panic, UUID} from "@opendaw/lib-std"
+import {Event, EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
     RegionEditing,
@@ -255,10 +255,11 @@ export class RegionClipResolver {
         if (position >= region.complete - boundaryTolerance(region.complete)) {return region.box.delete()}
         const delta = position - region.position
         const oldDuration = region.duration
-        const loopOffset = LoopableRegion.loopOffsetAt(region, position)
+        const oldLoopOffset = region.loopOffset
+        const oldLoopDuration = region.loopDuration
         region.position = position
         region.duration = oldDuration - delta
-        region.loopOffset = loopOffset
+        region.loopOffset = mod(oldLoopOffset + delta, oldLoopDuration)
     }
 
     #trimComplete(region: AnyRegionBoxAdapter, complete: ppqn): void {

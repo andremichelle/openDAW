@@ -51,10 +51,6 @@ export namespace LoopableRegion {
     export const globalToLocal = (region: LoopableRegion, ppqn: ppqn): ppqn =>
         mod(ppqn - region.position + region.loopOffset, region.loopDuration)
 
-    // globalToLocal without the division (whole ticks stay whole), for a loopOffset written to a box
-    export const loopOffsetAt = ({position, loopOffset, loopDuration}: Region, at: ppqn): ppqn =>
-        ((at - position + loopOffset) % loopDuration + loopDuration) % loopDuration
-
     export interface LoopCycle {
         // index of the cycle
         index: int
