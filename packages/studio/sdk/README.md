@@ -34,14 +34,18 @@ WasmEngine.install({
     offlineWorkerUrl: "/opendaw-wasm/wasm-offline-worker.js",
     wasmUrl: "/opendaw-wasm"
 })
-if (WasmEngine.isEnabled() && !await WasmEngine.ensureReady(audioContext)) {
-    console.warn("WASM engine unavailable — TypeScript engine active")
+if (!await WasmEngine.ensureReady(audioContext)) {
+    // no engine: tell the user
 }
 ```
 
+Call `ensureReady` for every `AudioContext` you boot an engine on. There is no other engine to fall back to, so
+`false` means no audio. To learn why the engine failed to load (to log or report it), call
+`WasmEngine.prepare(audioContext)` instead: it does the same work and rejects with the original error (the worklet
+module's `DOMException`, a binary that failed to download, or a `WebAssembly.CompileError`).
+
 With a bundler that resolves package assets (e.g. vite), the two module URLs can come straight from the
-package: `import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url"`. The engine is
-enabled by default; `WasmEngine.setEnabled(false)` persists an opt-out to the TypeScript engine. Offline
+package: `import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url"`. Offline
 renders (mixdown, stems, freeze) follow automatically via `OfflineEngineRenderer`.
 
 ## Dual-Licensing Model

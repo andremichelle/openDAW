@@ -1,10 +1,9 @@
 // Main-thread API of the WASM engine: `install` takes the host-served URLs (the prebuilt worklet module,
 // the prebuilt offline render worker, and the base serving the wasm binaries — all shipped in this
 // package's dist), registers the EngineVariant provider the studio-core EngineWorklet consults at
-// construction, and wires the offline render variant. `ensureReady` compiles the modules + registers the
-// processor module once. The WASM engine is the DEFAULT; localStorage only records an explicit opt-out.
-// Every engine (re)boot re-reads it, so the existing restart machinery swaps engines without a page reload.
-import {MutableObservableOption, Terminable} from "@opendaw/lib-std"
+// construction, and wires the offline render variant. `prepare` (and its boolean form `ensureReady`) compiles the
+// modules once and registers the processor module on each AudioContext it is given.
+import {isDefined, MutableObservableOption, Terminable} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
@@ -30,25 +29,36 @@ export type WasmEngineUrls = {
 export namespace WasmEngine {
     const modules = new MutableObservableOption<EngineModules>()
     const config = new MutableObservableOption<WasmEngineUrls>()
+    const registrations = new WeakMap<BaseAudioContext, Promise<void>>()
 
-    // Whether the wasm modules are compiled and the processor is registered (i.e. `ensureReady` succeeded).
+    // Whether the wasm modules are compiled. Each AudioContext still needs its own `prepare` / `ensureReady`.
     export const isReady = (): boolean => modules.nonEmpty()
 
-    // Compile the wasm modules + register the processor module (both once). Returns false when the engine
-    // artifacts are unavailable (e.g. a deploy without them). There is no other engine to fall back to, so a
-    // caller that gets false has no working engine and must say so rather than carry on.
+    // A rejected registration is dropped, so the next call retries it.
+    const register = (context: BaseAudioContext, processorUrl: string): Promise<void> => {
+        const existing = registrations.get(context)
+        if (isDefined(existing)) {return existing}
+        const registration = context.audioWorklet.addModule(processorUrl)
+        registrations.set(context, registration)
+        registration.catch(() => registrations.delete(context))
+        return registration
+    }
+
+    // Rejects with the error that kept the engine from loading.
+    export const prepare = async (context: BaseAudioContext): Promise<void> => {
+        const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before prepare")
+        await register(context, processorUrl)
+        if (modules.isEmpty()) {modules.wrap(await loadEngineModules(wasmUrl))}
+    }
+
+    // `prepare` as a boolean: false when the engine cannot load.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {
-        if (modules.nonEmpty()) {return true}
-        const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before ensureReady")
-        const {status, value, error} = await Promises.tryCatch((async () => {
-            await context.audioWorklet.addModule(processorUrl)
-            return loadEngineModules(wasmUrl)
-        })())
+        config.assert("WasmEngine.install must run before ensureReady")
+        const {status, error} = await Promises.tryCatch(prepare(context))
         if (status === "rejected") {
             console.warn("WASM engine unavailable:", error)
             return false
         }
-        modules.wrap(value)
         return true
     }
 
