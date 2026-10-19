@@ -96,7 +96,9 @@ export class NoteRegionBoxAdapter
     isValueRegion(): this is ValueRegionBoxAdapter {return false}
 
     moveContentStart(delta: ppqn): void {
-        this.optCollection.ifSome(collection => collection.events.asArray()
+        if (delta === 0) {return}
+        this.consolidate()
+        this.optCollection.ifSome(collection => collection.events.asArray().slice()
             .forEach(event => event.box.position.setValue(event.position - delta)))
         this.position = this.position + delta
         this.loopDuration = this.loopDuration - delta
