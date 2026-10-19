@@ -1,5 +1,5 @@
-import {ppqn} from "@opendaw/lib-dsp"
-import {mod, Option, panic} from "@opendaw/lib-std"
+import {LoopableRegion, ppqn} from "@opendaw/lib-dsp"
+import {Option, panic} from "@opendaw/lib-std"
 import {AnyRegionBoxAdapter, UnionAdapterTypes} from "../UnionAdapterTypes"
 
 export namespace RegionEditing {
@@ -13,7 +13,7 @@ export namespace RegionEditing {
             return Option.wrap(region.copyTo({
                 position: cut,
                 duration: complete - cut,
-                loopOffset: mod(loopOffset + (cut - position), loopDuration),
+                loopOffset: LoopableRegion.loopOffsetAt({position, complete, loopOffset, loopDuration}, cut),
                 consolidate
             }) as REGION)
         } else {
@@ -30,7 +30,7 @@ export namespace RegionEditing {
             return region.copyTo({
                 position: end,
                 duration: complete - end,
-                loopOffset: mod(loopOffset + (end - position), loopDuration)
+                loopOffset: LoopableRegion.loopOffsetAt({position, complete, loopOffset, loopDuration}, end)
             }) as REGION
         } else {
             return panic("Not yet implemented")
