@@ -124,8 +124,8 @@ export class YSync<T> implements Terminable {
             const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}, isOwnOrigin: ${isOwnOrigin}`)
             if (isOwnOrigin || (local && !isHistoryReplay)) {return}
-            // First attempt: apply the remote batch verbatim.
-            this.#boxGraph.beginTransaction()
+            // First attempt: apply the remote batch verbatim. A replay, its origin already ran the follow-ups.
+            this.#boxGraph.beginReplayTransaction()
             const result = tryCatch(() => {
                 this.#assertResolvable(this.#applyEvents(events))
                 this.#ignoreUpdates = true
@@ -149,7 +149,7 @@ export class YSync<T> implements Terminable {
                 // document's violation clears by other means (a later write wins the field by LWW) the healed
                 // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
                 const reconciled = tryCatch(() => {
-                    this.#boxGraph.beginTransaction()
+                    this.#boxGraph.beginReplayTransaction()
                     this.#applyEvents(events)
                     this.#publishFrom = Option.wrap(this.#updates.length)
                     deterministicReconcile(this.#boxGraph)
