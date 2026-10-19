@@ -3,6 +3,7 @@ import {
     Arrays,
     int,
     Maybe,
+    mod,
     Notifier,
     Observer,
     Option,
@@ -197,8 +198,7 @@ export class NoteRegionBoxAdapter
     resetLoopOffset(truncateNotesAtRegionEnd: boolean): void {
         const {loopOffset, loopDuration} = this
         if (loopOffset === 0 || loopDuration <= 0) {return}
-        const wrap = (value: ppqn) => ((value % loopDuration) + loopDuration) % loopDuration
-        const phase = wrap(loopOffset)
+        const phase = mod(loopOffset, loopDuration)
         if (phase !== 0) {
             this.consolidate()
             this.optCollection.ifSome(collection => collection.events.asArray()
@@ -208,7 +208,7 @@ export class NoteRegionBoxAdapter
                     if (truncateNotesAtRegionEnd && playCount === 1 && complete > loopDuration) {
                         event.box.duration.setValue(loopDuration - position)
                     }
-                    event.box.position.setValue(wrap(position - phase))
+                    event.box.position.setValue(mod(position - phase, loopDuration))
                 }))
         }
         this.loopOffset = 0
