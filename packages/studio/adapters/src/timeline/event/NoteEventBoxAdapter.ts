@@ -12,6 +12,7 @@ type CopyToParams = {
     duration?: ppqn,
     pitch?: int,
     playCount?: int,
+    playCurve?: float,
     events?: Field<Pointers.NoteEvents>
 }
 
@@ -96,6 +97,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             box.duration.setValue(options?.duration ?? this.duration)
             box.pitch.setValue(options?.pitch ?? this.pitch)
             box.playCount.setValue(options?.playCount ?? this.playCount)
+            box.playCurve.setValue(options?.playCurve ?? this.playCurve)
             box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
             box.velocity.setValue(this.velocity)
             box.cent.setValue(this.cent)
@@ -115,6 +117,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
                 position: Math.floor(this.position + a),
                 duration: Math.max(1, b - a),
                 playCount: 1,
+                playCurve: 0,
                 events
             })
         }, playCount)
