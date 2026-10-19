@@ -65,7 +65,8 @@ too, so a sync listener's error for the follow-up does not reach the caller.
 
 A transaction opened with `beginReplayTransaction()` drops its tasks. It applies updates whose
 origin already ran its follow-ups, so running a reaction again would write twice or undo the
-replay. `BoxEditing` replays undo, redo and reverts this way.
+replay. `BoxEditing` replays undo, redo and reverts this way. `YSync` applies remote batches this
+way too, so the peer that makes an edit owns its follow-ups and the other peers receive them.
 
 ## Box Deletion and Cascade
 

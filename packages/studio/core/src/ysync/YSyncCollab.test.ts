@@ -791,4 +791,57 @@ describe("YSync live collaboration", () => {
         warn.mockRestore()
     })
 
+    describe("afterTransaction follow-ups", () => {
+        const sharedLaneWithRegion = (): { laneId: UUID.Bytes, regionId: UUID.Bytes, laneKey: string } => {
+            const laneId = UUID.generate()
+            const regionId = UUID.generate()
+            shared(graph => {
+                const lane = LeafBox.create(graph, laneId)
+                RefBox.create(graph, regionId, box => box.target.refer(lane))
+            })
+            return {laneId, regionId, laneKey: UUID.toString(laneId)}
+        }
+
+        // removes the lane once its last region leaves, the way a host closes an emptied track
+        const closeLaneWhenEmptied = (peer: Peer, laneId: UUID.Bytes): { queued: number } => {
+            const lane = peer.graph.findBox<LeafBox>(laneId).unwrap()
+            const counter = {queued: 0}
+            lane.pointerHub.subscribe({
+                onAdded: () => {},
+                onRemoved: () => {
+                    counter.queued++
+                    peer.graph.afterTransaction(() => {
+                        if (lane.isAttached() && lane.pointerHub.isEmpty()) {lane.delete()}
+                    })
+                }
+            })
+            return counter
+        }
+
+        it("a follow-up of a local edit is published like the edit itself", () => {
+            const {laneId, regionId, laneKey} = sharedLaneWithRegion()
+            closeLaneWhenEmptied(A, laneId)
+            edit(A, graph => graph.findBox(regionId).unwrap().delete())
+            expect(A.graph.findBox(laneId).isEmpty()).toBe(true)
+            expect(A.boxes.has(laneKey), "the origin's document receives the follow-up").toBe(false)
+            converge(A, B)
+            expect(B.graph.findBox(laneId).isEmpty()).toBe(true)
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        })
+
+        it("a follow-up queued while a remote batch applies is dropped, so the peer's graph still equals its document", () => {
+            const {laneId, regionId, laneKey} = sharedLaneWithRegion()
+            const onB = closeLaneWhenEmptied(B, laneId)
+            edit(A, graph => graph.findBox(regionId).unwrap().delete())
+            deliver(A, B)
+            // A made the edit and owns its follow-ups; B running one here would change its graph and not its document
+            expect(onB.queued).toBe(1)
+            expect(B.graph.findBox(laneId).nonEmpty(), "the peer's graph keeps the lane").toBe(true)
+            expect(B.boxes.has(laneKey), "the peer's document keeps the lane").toBe(true)
+            converge(A, B)
+            expect(A.boxes.has(laneKey)).toBe(true)
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        })
+    })
+
 })
