@@ -294,10 +294,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#writeUuid(uuid)
                     engine.suspend_automation()
                 }),
-                scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => clipIds.forEach(uuid => {
-                    this.#writeUuid(uuid)
-                    engine.schedule_clip_play()
-                })),
+                scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => {
+                    if (!this.#isTransporting() && this.#preferences.settings.playback.timestampEnabled) {
+                        engine.set_position(this.#playbackTimestamp)
+                    }
+                    clipIds.forEach(uuid => {
+                        this.#writeUuid(uuid)
+                        engine.schedule_clip_play()
+                    })
+                }),
                 scheduleClipStop: (trackIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => trackIds.forEach(uuid => {
                     this.#writeUuid(uuid)
                     engine.schedule_clip_stop()
@@ -509,7 +514,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         // local flag alone would misread a clip-launched playback as "not transporting" and hard-reset.
         const statePtr = this.#engine.engine_state_ptr()
         const view = new DataView(this.#memory.buffer, statePtr, this.#engine.engine_state_len())
-        const wasTransporting = this.#transporting || view.getUint8(16) === 1
+        const wasTransporting = this.#isTransporting()
         const wasRecording = view.getUint8(17) === 1 || view.getUint8(18) === 1
         this.#transporting = false
         this.#engine.pause()
@@ -523,6 +528,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             this.#playbackTimestamp = 0.0
             this.#peaks.clear()
         }
+    }
+
+    #isTransporting(): boolean {
+        const view = new DataView(this.#memory.buffer, this.#engine.engine_state_ptr(), this.#engine.engine_state_len())
+        return this.#transporting || view.getUint8(16) === 1
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {
