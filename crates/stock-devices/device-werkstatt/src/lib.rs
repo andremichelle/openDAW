@@ -7,7 +7,8 @@
 //! collection and drives `parameter_changed` with each child's declaration index as the id.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`.
+//! `parameter_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`,
+//! `observe_sidechain_collection_field() -> 13`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -44,6 +45,13 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn observe_param_collection_field() -> u32 {
     11
+}
+
+/// The `side-chains` hub field key — the engine turns each `WerkstattSidechainBox` child into a sidechain port,
+/// which the JS script bridge resolves itself during `host_script_audio`.
+#[no_mangle]
+pub extern "C" fn observe_sidechain_collection_field() -> u32 {
+    13
 }
 
 /// Boot: stash the sample rate, learn this device's box uuid, and create the JS-side script bridge keyed to it.

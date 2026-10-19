@@ -1,5 +1,6 @@
 import {Observable, Option, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, BooleanField, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Field, StringField} from "@opendaw/lib-box"
+import {Pointers} from "@opendaw/studio-enums"
 import {ApparatDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -39,6 +40,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get defaultTrackType(): TrackType {return TrackType.Notes}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
+    get sideChains(): Field<Pointers.ScriptSideChain> {return this.#box.sideChains}
     get acceptsMidiEvents(): boolean {return true}
     get parameters(): ParameterAdapterSet {return this.#parametric}
     get codeChanged(): Observable<void> {return this.#codeChanged}

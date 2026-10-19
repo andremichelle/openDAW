@@ -74,7 +74,9 @@ struct DeviceReg {
     // COLLECTIONS the engine must observe and drive into the device (the params/samples are `WerkstattParameterBox`
     // / `WerkstattSampleBox` children, not fixed paths). 0 = the device has no such collection.
     param_collection_field: u16,
-    sample_collection_field: u16
+    sample_collection_field: u16,
+    // the hub of `WerkstattSidechainBox` children, each one a sidechain port; 0 = none
+    sidechain_collection_field: u16
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -1392,8 +1394,15 @@ impl Engine {
         let id = self.devices.len() as u32;
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
-            param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16});
+            param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
+            sidechain_collection_field: 0});
         id
+    }
+
+    fn set_device_sidechain_collection_field(&mut self, device_id: u32, field: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.sidechain_collection_field = field as u16;
+        }
     }
 
     /// Map a device-box type name to a loaded device (its index). This is the whole device table: given a
@@ -3164,6 +3173,17 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
         let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.set_device_box_type(String::from(name), device_id as usize);
+        }
+    }
+}
+
+/// Set the field key of a registered device's sidechain COLLECTION hub (`observe_sidechain_collection_field`).
+/// Call after `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_sidechain_collection_field(device_id: u32, field: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_sidechain_collection_field(device_id, field);
         }
     }
 }

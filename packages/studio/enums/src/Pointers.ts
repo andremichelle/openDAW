@@ -62,4 +62,5 @@ export enum Pointers {
     // APPEND ONLY: the values are ordinals, so inserting one renumbers every member after it.
     ModulatorCollection,
     ModulatorSource,
+    ScriptSideChain,
 }

@@ -301,4 +301,65 @@ describe("ScriptDeclaration", () => {
             expect(ScriptDeclaration.isEqual(base, {...base, mapping: "exp" as const})).toBe(false)
         })
     })
+
+    describe("parseSidechains", () => {
+        it("parses sidechains in line order", () => {
+            const code = "// @sidechain Key\n// @param gain\n// @sidechain Modulator"
+            expect(ScriptDeclaration.parseSidechains(code)).toEqual([{label: "Key"}, {label: "Modulator"}])
+        })
+        it("returns an empty list without @sidechain", () => {
+            expect(ScriptDeclaration.parseSidechains("// @param gain\n// @sample kick")).toEqual([])
+        })
+        it("keeps the first of duplicate names", () => {
+            expect(ScriptDeclaration.parseSidechains("// @sidechain A\n// @sidechain B\n// @sidechain A"))
+                .toEqual([{label: "A"}, {label: "B"}])
+        })
+        it("ignores a trailing comment", () => {
+            expect(ScriptDeclaration.parseSidechains("// @sidechain Key // the kick")).toEqual([{label: "Key"}])
+        })
+        it("throws on extra tokens", () => {
+            expect(() => ScriptDeclaration.parseSidechains("// @sidechain Key Extra")).toThrow()
+        })
+        it("does not match without a name or a space", () => {
+            expect(ScriptDeclaration.parseSidechains("// @sidechain\n// @sidechainKey")).toEqual([])
+        })
+        it("supports many sidechains", () => {
+            const code = Array.from({length: 32}, (_, index) => `// @sidechain S${index}`).join("\n")
+            expect(ScriptDeclaration.parseSidechains(code).length).toBe(32)
+        })
+        it("leaves the param and sample declaration order untouched", () => {
+            const code = "// @param attack\n// @sidechain Key\n// @sample kick\n// @sidechain Other\n// @param decay"
+            const order = ScriptDeclaration.parseDeclarationOrder(code)
+            expect(order.get("attack")).toBe(0)
+            expect(order.get("kick")).toBe(1)
+            expect(order.get("decay")).toBe(2)
+            expect(order.has("Key")).toBe(false)
+            expect(order.size).toBe(3)
+        })
+        it("parseGroups emits sidechain items in place", () => {
+            const code = "// @param gain\n// @group Inputs orange\n// @sidechain A\n// @param mixA\n// @sidechain B"
+            const sections = ScriptDeclaration.parseGroups(code)
+            expect(sections.length).toBe(2)
+            expect(sections[0].items.map(item => item.type)).toEqual(["param"])
+            expect(sections[1].group).toEqual({label: "Inputs", color: "orange"})
+            expect(sections[1].items.map(item => `${item.type}:${item.declaration.label}`))
+                .toEqual(["sidechain:A", "param:mixA", "sidechain:B"])
+        })
+        it("parseGroups is unchanged for scripts without @sidechain", () => {
+            const code = "// @group G blue\n// @param a\n// @sample s"
+            expect(ScriptDeclaration.parseGroups(code)[0].items.map(item => item.type)).toEqual(["param", "sample"])
+        })
+    })
+
+    describe("reserved names", () => {
+        it("rejects __proto__ as a @param, @sample or @sidechain name", () => {
+            expect(() => ScriptDeclaration.parseParams("// @param __proto__ 0.5")).toThrow("Reserved name '__proto__'")
+            expect(() => ScriptDeclaration.parseSamples("// @sample __proto__")).toThrow("Reserved name '__proto__'")
+            expect(() => ScriptDeclaration.parseSidechains("// @sidechain __proto__")).toThrow("Reserved name '__proto__'")
+            expect(() => ScriptDeclaration.parseGroups("// @sample __proto__")).toThrow("Reserved name '__proto__'")
+        })
+        it("accepts names that merely contain proto", () => {
+            expect(ScriptDeclaration.parseSidechains("// @sidechain proto")).toEqual([{label: "proto"}])
+        })
+    })
 })

@@ -145,6 +145,21 @@ When playing back samples, account for sample rate differences between the sampl
 const playbackRate = data.sampleRate / sampleRate
 ```
 
+### Sidechains
+
+Declare any number of sidechain inputs, each with a unique name:
+
+```javascript
+// @sidechain Key
+// @sidechain Modulator
+```
+
+Each `@sidechain` creates a source selector on the device panel. Click it to pick a track, a device or the input of an enclosing composite. Inside `process` the signal is available as `this.sidechains.<name>`, a `[left, right]` pair of `Float32Array` in the same block coordinates as the `output` buffers. An unconnected sidechain reads silence.
+
+```javascript
+const [keyL, keyR] = this.sidechains.Key
+```
+
 ### Groups
 
 Organize parameters and samples visually using `// @group` comments:

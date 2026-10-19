@@ -149,6 +149,21 @@ When a parameter's name starts with the group's name (case-insensitive) followed
 
 If the next character is lowercase or the parameter name does not start with the group name, the label is shown unchanged.
 
+### Sidechains
+
+Declare any number of sidechain inputs, each with a unique name:
+
+```javascript
+// @sidechain Key
+// @sidechain Modulator
+```
+
+Each `@sidechain` creates a source selector on the device panel. Click it to pick a track, a device or the input of an enclosing composite. Inside `process` the signal is available as `this.sidechains.<name>`, a `[left, right]` pair of `Float32Array` in the same block coordinates as the `src` and `out` buffers. An unconnected sidechain reads silence.
+
+```javascript
+const [keyL, keyR] = this.sidechains.Key
+```
+
 ---
 
 ## 4. Keyboard Shortcuts

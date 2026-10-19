@@ -30,6 +30,10 @@ export interface SampleDeclaration {
     readonly label: string
 }
 
+export interface SidechainDeclaration {
+    readonly label: string
+}
+
 export interface GroupDeclaration {
     readonly label: string
     readonly color: string
@@ -38,6 +42,7 @@ export interface GroupDeclaration {
 export type DeclarationItem =
     | { readonly type: "param", readonly declaration: ParamDeclaration }
     | { readonly type: "sample", readonly declaration: SampleDeclaration }
+    | { readonly type: "sidechain", readonly declaration: SidechainDeclaration }
 
 export interface DeclarationSection {
     readonly group: Nullable<GroupDeclaration>
@@ -47,12 +52,20 @@ export interface DeclarationSection {
 const LABEL_LINE = /^\/\/ @label .+$/m
 const PARAM_LINE = /^\/\/ @param .+$/gm
 const SAMPLE_LINE = /^\/\/ @sample .+$/gm
+const SIDECHAIN_LINE = /^\/\/ @sidechain .+$/gm
 const GROUP_LINE = /^\/\/ @group .+$/gm
-const DIRECTIVE_LINE = /^\/\/ @(group|param|sample) .+$/gm
+const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain) .+$/gm
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
 const FLOAT_TOLERANCE = 1e-6
 const VALID_MAPPINGS: ReadonlyArray<string> = ["linear", "exp", "int", "bool"]
+
+const RESERVED_NAMES: ReadonlyArray<string> = ["__proto__"]
+
+const checkName = (label: string, line: string): string => {
+    if (RESERVED_NAMES.includes(label)) {throw new Error(`Reserved name '${label}' in '${line}' — choose another name`)}
+    return label
+}
 
 const BoolStringMapping: StringMapping<number> = new class implements StringMapping<number> {
     x(y: number): { value: string, unit: string } {
@@ -69,7 +82,7 @@ const parseSingleParam = (line: string): ParamDeclaration => {
     if (tokens.length === 0) {
         throw new Error(`Malformed @param: '${line}'`)
     }
-    const label = tokens[0]
+    const label = checkName(tokens[0], line)
     if (tokens.length === 1) {
         return {label, defaultValue: 0, min: 0, max: 1, mapping: "unipolar", unit: ""}
     }
@@ -126,6 +139,14 @@ const parseSingleParam = (line: string): ParamDeclaration => {
     return {label, defaultValue, min, max, mapping, unit}
 }
 
+const parseSingleSidechain = (line: string): SidechainDeclaration => {
+    const tokens = line.replace(/^\/\/ @sidechain\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
+    if (tokens.length !== 1 || tokens[0].length === 0) {
+        throw new Error(`Malformed @sidechain: '${line}' — expected: // @sidechain <name>`)
+    }
+    return {label: checkName(tokens[0], line)}
+}
+
 const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
     a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
 
@@ -174,9 +195,20 @@ export namespace ScriptDeclaration {
             if (tokens.length > 1) {
                 throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
             }
-            samples.push({label: tokens[0]})
+            samples.push({label: checkName(tokens[0], match[0])})
         }
         return samples
+    }
+
+    export const parseSidechains = (code: string): ReadonlyArray<SidechainDeclaration> => {
+        const sidechains: Array<SidechainDeclaration> = []
+        let match: Nullable<RegExpExecArray>
+        SIDECHAIN_LINE.lastIndex = 0
+        while ((match = SIDECHAIN_LINE.exec(code)) !== null) {
+            const declaration = parseSingleSidechain(match[0])
+            if (!sidechains.some(other => other.label === declaration.label)) {sidechains.push(declaration)}
+        }
+        return sidechains
     }
 
     export const parseDeclarationOrder = (code: string): Map<string, number> => {
@@ -216,7 +248,9 @@ export namespace ScriptDeclaration {
                 if (tokens.length === 0 || tokens[0].length === 0) {
                     throw new Error(`Malformed @sample: '${line}' — expected: // @sample <name>`)
                 }
-                currentItems.push({type: "sample", declaration: {label: tokens[0]}})
+                currentItems.push({type: "sample", declaration: {label: checkName(tokens[0], line)}})
+            } else if (type === "sidechain") {
+                currentItems.push({type: "sidechain", declaration: parseSingleSidechain(line)})
             }
         }
         if (currentItems.length > 0 || currentGroup !== null) {

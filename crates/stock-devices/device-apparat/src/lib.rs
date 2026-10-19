@@ -8,7 +8,8 @@
 //! lives in the user `Processor` JS-side; this crate keeps only the bridge handle.
 //!
 //! Exports: `kind()` (instrument), `state_size()`, `process(desc_ptr)`, `init(...)`, `parameter_changed(...)`,
-//! `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`, `observe_sample_collection_field() -> 12`.
+//! `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`, `observe_sample_collection_field() -> 12`,
+//! `observe_sidechain_collection_field() -> 13`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -48,6 +49,12 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
 #[no_mangle]
 pub extern "C" fn observe_sample_collection_field() -> u32 {
     12
+}
+
+/// The `side-chains` hub field key — see Werkstatt.
+#[no_mangle]
+pub extern "C" fn observe_sidechain_collection_field() -> u32 {
+    13
 }
 
 #[no_mangle]

@@ -1,7 +1,7 @@
 import {Box, Field, PointerTypes, StringField} from "@opendaw/lib-box"
 import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
-import {ParamDeclaration, SampleDeclaration, ScriptDeclaration} from "@opendaw/studio-adapters"
+import {ParamDeclaration, SampleDeclaration, ScriptCompiler, ScriptDeclaration} from "@opendaw/studio-adapters"
 import {asInstanceOf, float, int, isDefined, isNull, Nullable, panic, UUID} from "@opendaw/lib-std"
 import {Sample, ScriptParameter, ScriptSample} from "../../Api"
 import {Context} from "../Context"
@@ -14,6 +14,7 @@ export type ScriptDeviceBox = Box & {
     readonly label: StringField<PointerTypes>
     readonly parameters: Field<Pointers.Parameter>
     readonly samples: Field<Pointers.Sample>
+    readonly sideChains?: Field<Pointers.ScriptSideChain>
 }
 
 const COMPILER_VERSION = 1
@@ -73,6 +74,7 @@ export class ScriptSupport {
         const params = ScriptDeclaration.parseParams(userCode)
         const samples = ScriptDeclaration.parseSamples(userCode)
         const order = ScriptDeclaration.parseDeclarationOrder(userCode)
+        const sidechains = ScriptDeclaration.parseSidechains(userCode)
         const label = ScriptDeclaration.parseLabel(userCode)
         const update = this.#parse(this.#box.code.getValue()).update + 1
         this.#context.edit(() => {
@@ -80,6 +82,8 @@ export class ScriptSupport {
             label.ifSome(name => this.#box.label.setValue(name))
             this.#reconcileParameters(params, order)
             this.#reconcileSamples(samples, order)
+            const sideChains = this.#box.sideChains
+            if (isDefined(sideChains)) {ScriptCompiler.reconcileSidechainBoxes(sideChains, sidechains)}
         })
     }
 

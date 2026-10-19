@@ -9,7 +9,8 @@ import {
     ParameterAdapterSet,
     SampleDeclaration,
     ScriptCompiler,
-    ScriptDeclaration
+    ScriptDeclaration,
+    SidechainDeclaration
 } from "@opendaw/studio-adapters"
 import {
     asInstanceOf,
@@ -29,12 +30,13 @@ import {
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Clipboard, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
+import {Field} from "@opendaw/lib-box"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -46,6 +48,7 @@ import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
+import {SidechainSelector} from "@/ui/devices/SidechainSelector"
 
 const className = Html.adoptStyleSheet(css, "ScriptDeviceEditor")
 
@@ -65,6 +68,7 @@ type ScriptAdapter = DeviceBoxAdapter & {
     readonly box: ScriptCompiler.ScriptDeviceBox
     readonly parameters: ParameterAdapterSet
     readonly codeChanged: Observable<void>
+    readonly sideChains?: Field<Pointers.ScriptSideChain>
 }
 
 export type ScriptDeviceEditorConfig = {
@@ -101,10 +105,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         compiling = true
         try {
             const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
-            if (result.status === "resolved") {
-                errorIcon.classList.add("hidden")
-                errorIcon.title = ""
-            } else {
+            if (result.status === "rejected") {
                 errorIcon.classList.remove("hidden")
                 errorIcon.title = String(result.error)
                 throw result.error
@@ -183,6 +184,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const controlsTerminator = lifecycle.own(new Terminator())
     const paramBoxesByLabel = new Map<string, WerkstattParameterBox>()
     const sampleBoxesByLabel = new Map<string, WerkstattSampleBox>()
+    const sidechainBoxesByLabel = new Map<string, WerkstattSidechainBox>()
     const createParamElement = (terminator: Terminator,
                                 declaration: ParamDeclaration,
                                 group: Nullable<GroupDeclaration>): HTMLElement => {
@@ -261,12 +263,32 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             </Column>
         )
     }
+    const createSidechainElement = (terminator: Terminator, declaration: SidechainDeclaration): HTMLElement => {
+        const sidechain = sidechainBoxesByLabel.get(declaration.label)
+        if (!isDefined(sidechain)) {return <div/>}
+        return (
+            <SidechainSelector lifecycle={terminator}
+                               editing={editing}
+                               rootBoxAdapter={project.rootBoxAdapter}
+                               sideChain={sidechain.source}
+                               deviceHost={deviceHost}
+                               label={declaration.label}/>
+        )
+    }
     const populateSection = (terminator: Terminator, section: DeclarationSection, container: HTMLElement): void => {
         const controls: HTMLElement = (<div className="controls"/>)
         for (const item of section.items) {
-            controls.appendChild(item.type === "param"
-                ? createParamElement(terminator, item.declaration, section.group)
-                : createSampleElement(terminator, item.declaration))
+            switch (item.type) {
+                case "param":
+                    controls.appendChild(createParamElement(terminator, item.declaration, section.group))
+                    break
+                case "sample":
+                    controls.appendChild(createSampleElement(terminator, item.declaration))
+                    break
+                case "sidechain":
+                    controls.appendChild(createSidechainElement(terminator, item.declaration))
+                    break
+            }
         }
         if (isDefined(section.group)) {
             const color = resolveGroupColor(section.group.color)
@@ -317,9 +339,17 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             sampleBoxesByLabel.set(sample.label.getValue(), sample)
         }
     }
+    const indexSidechainBoxes = () => {
+        sidechainBoxesByLabel.clear()
+        for (const pointer of adapter.sideChains?.pointerHub.incoming() ?? []) {
+            const sidechain = asInstanceOf(pointer.box, WerkstattSidechainBox)
+            sidechainBoxesByLabel.set(sidechain.label.getValue(), sidechain)
+        }
+    }
     const scheduleRebuild = () => {
         indexParamBoxes()
         indexSampleBoxes()
+        indexSidechainBoxes()
         rebuildControls()
     }
     lifecycle.ownAll(
@@ -344,8 +374,15 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         }),
         box.parameters.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
         box.samples.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
-        box.code.subscribe(scheduleRebuild)
+        box.code.subscribe(scheduleRebuild),
+        box.code.subscribe(() => {
+            errorIcon.classList.add("hidden")
+            errorIcon.title = ""
+        })
     )
+    if (isDefined(adapter.sideChains)) {
+        lifecycle.own(adapter.sideChains.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}))
+    }
     scheduleRebuild()
     return (
         <DeviceEditor lifecycle={lifecycle}

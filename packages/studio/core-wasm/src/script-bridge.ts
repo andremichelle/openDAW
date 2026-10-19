@@ -36,14 +36,18 @@ const REGISTRY_BY_KIND: Record<number, string> = {
 const PARAM_KIND_UNIT = 0
 
 const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutput
+const SIDECHAIN_PORT_BASE = 2 // WASM CONTRACT: a script device's sidechain port id = 2 + its `@sidechain` index
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
 type SampleDecl = {label: string, index: number}
-type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>, pass: boolean}
+type SidechainDecl = {label: string, index: number}
+type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>,
+    sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, pass: boolean}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
     host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_input(id: number, outPtr: number): number
     input_reserve(length: number): number
 }
 
@@ -61,6 +65,11 @@ class Bridge {
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
+    sidechains: ReadonlyArray<SidechainDecl> = []
+    sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
+    sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
+    readsSidechains = false
+    readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
     // Spielwerk's `@no-pass` verdict for the CURRENTLY loaded script. `true` by default so a device whose script
@@ -86,6 +95,22 @@ const resolveMapping = (declaration: ParamDecl): ValueMapping<number> => {
         case "bool": return ValueMapping.linearInteger(0, 1) as ValueMapping<number>
         default: return ValueMapping.unipolar()
     }
+}
+
+const SIDECHAIN_HINT = "this.sidechains is only available with a // @sidechain <name> declaration"
+
+// Reading a name that no `@sidechain` line declares throws a named error instead of a bare TypeError.
+const createSidechainLookup = (views: Record<string, ReadonlyArray<Float32Array>>,
+                               declared: ReadonlyArray<SidechainDecl>): Record<string, ReadonlyArray<Float32Array>> => {
+    const names = declared.map(({label}) => label).join(", ")
+    return new Proxy(views, {
+        get: (target, key) => {
+            if (typeof key === "symbol" || Reflect.has(Object.prototype, key) || Object.hasOwn(target, key)) {
+                return Reflect.get(target, key)
+            }
+            throw new Error(`No @sidechain '${key}' declared (declared: ${names})`)
+        }
+    })
 }
 
 const validateOutput = (channels: ReadonlyArray<Float32Array>, s0: number, s1: number): string | null => {
@@ -173,6 +198,10 @@ export class ScriptBridges {
                 const proc = new registry.create()
                 bridge.paramMappings = new Map(registry.params.map(declaration => [declaration.index, {label: declaration.label, mapping: resolveMapping(declaration)}]))
                 bridge.sampleLabels = new Map(registry.samples.map(declaration => [declaration.index, declaration.label]))
+                bridge.sidechains = registry.sidechains ?? []
+                bridge.sidechainViews = {}
+                bridge.sidechainLookup = createSidechainLookup(bridge.sidechainViews, bridge.sidechains)
+                bridge.readsSidechains = registry.readsSidechains === true
                 if (bridge.kind === KIND_INSTRUMENT) {
                     proc.samples = {}
                     for (const label of bridge.sampleLabels.values()) {proc.samples[label] = null}
@@ -197,15 +226,25 @@ export class ScriptBridges {
 
     #audio(handle: number, srcL: number, srcR: number, outL: number, outR: number,
            s0: number, s1: number, index: number, p0: number, p1: number, bpm: number, flags: number): number {
-        const bridge = this.#bridges.get(handle)
-        if (bridge === undefined) {return 1}
-        const proc = this.#ensureProc(bridge)
-        if (proc === null) {return 1}
         const buffer = this.#memory.buffer
         const outLeft = new Float32Array(buffer, outL, RENDER_QUANTUM)
         const outRight = new Float32Array(buffer, outR, RENDER_QUANTUM)
+        // the engine keeps a device's output between quanta: every failure must clear it, or the last quantum loops
+        const mute = (): number => {
+            outLeft.fill(0.0, s0, s1)
+            outRight.fill(0.0, s0, s1)
+            return 1
+        }
+        const bridge = this.#bridges.get(handle)
+        if (bridge === undefined) {return mute()}
+        const proc = this.#ensureProc(bridge)
+        if (proc === null) {return mute()}
         const block = {index, p0, p1, s0, s1, bpm, flags}
         try {
+            if (bridge.sidechains.length > 0) {
+                this.#deliverSidechains(bridge, s0, s1)
+                proc.sidechains = bridge.sidechainLookup
+            }
             if (bridge.kind === KIND_AUDIO_EFFECT) {
                 const io = {src: [new Float32Array(buffer, srcL, RENDER_QUANTUM), new Float32Array(buffer, srcR, RENDER_QUANTUM)], out: [outLeft, outRight]}
                 proc.process(io, block)
@@ -220,15 +259,15 @@ export class ScriptBridges {
                 proc.process([outLeft, outRight], block)
             }
         } catch (error) {
-            this.#silence(bridge, `Runtime error: ${error}`)
-            return 1
+            const hint = error instanceof TypeError && bridge.readsSidechains && bridge.sidechains.length === 0
+                && proc.sidechains === undefined ? ` (${SIDECHAIN_HINT})` : ""
+            this.#silence(bridge, `Runtime error: ${error}${hint}`)
+            return mute()
         }
         const error = validateOutput([outLeft, outRight], s0, s1)
         if (error !== null) {
-            outLeft.fill(0.0, s0, s1)
-            outRight.fill(0.0, s0, s1)
             this.#silence(bridge, error)
-            return 1
+            return mute()
         }
         if (bridge.kind === KIND_INSTRUMENT && bridge.limiter !== null) {
             // SimpleLimiter.replace only reads `buffer.channels()`; a duck-typed view over our two channels reuses
@@ -327,6 +366,28 @@ export class ScriptBridges {
             frames.push(new Float32Array(this.#memory.buffer, framesPtr + channel * frameCount * 4, frameCount))
         }
         bridge.proc.samples[label] = {sampleRate, numberOfFrames: frameCount, numberOfChannels: channelCount, frames}
+    }
+
+    // Runs inside the device's `process`, while the engine has its resolved sidechain ports swapped in.
+    #deliverSidechains(bridge: Bridge, s0: number, s1: number): void {
+        const scratch = this.#engine.input_reserve(16)
+        for (const {label, index} of bridge.sidechains) {
+            if (this.#engine.host_resolve_input(SIDECHAIN_PORT_BASE + index, scratch) === 0) {
+                let silence = bridge.sidechainSilence.get(index)
+                if (silence === undefined) {
+                    silence = [new Float32Array(RENDER_QUANTUM), new Float32Array(RENDER_QUANTUM)]
+                    bridge.sidechainSilence.set(index, silence)
+                }
+                silence.forEach(channel => channel.fill(0.0, s0, s1))
+                bridge.sidechainViews[label] = silence
+            } else {
+                const buffer = this.#memory.buffer
+                const view = new DataView(buffer, scratch, 8)
+                bridge.sidechainViews[label] = [
+                    new Float32Array(buffer, view.getUint32(0, true), RENDER_QUANTUM),
+                    new Float32Array(buffer, view.getUint32(4, true), RENDER_QUANTUM)]
+            }
+        }
     }
 
     #silence(bridge: Bridge, message: string): void {

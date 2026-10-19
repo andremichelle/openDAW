@@ -82,6 +82,25 @@ Examples:
 // @param mode    0     0   3      int
 // @param bypass  false
 
+## Declaring sidechains
+Sidechain inputs are declared as comments, any number, each with a unique name:
+
+// @sidechain <name>
+
+Each @sidechain creates a source selector on the device panel (any track, device or
+enclosing composite input). Inside process() read it via this.sidechains.<name>, a pair
+[left, right] of Float32Array indexed like src and out (s0..s1). An unconnected
+sidechain reads silence. this.sidechains is set before every process() call, it is not
+available in the constructor.
+Reading a name that no @sidechain line declares stops the device with an error naming it.
+
+Example:
+// @sidechain Key
+    process({src, out}, {s0, s1}) {
+        const [keyL, keyR] = this.sidechains.Key
+        ...
+    }
+
 ## Globals
 - sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).
   Always use this instead of hardcoding a sample rate.

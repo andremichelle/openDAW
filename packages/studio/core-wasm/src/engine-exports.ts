@@ -13,6 +13,7 @@ export type EngineExports = {
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    device_set_sidechain_collection_field: (deviceId: number, field: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.

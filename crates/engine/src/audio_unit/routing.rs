@@ -55,10 +55,10 @@ impl Engine {
     /// target's output, swap the producer -> consumer edge if the source node changed, and (if any port moved)
     /// push the device its current sidechain sources. See `resolve_sidechains` for the why.
     pub(crate) fn resolve_one_sidechain(&mut self, binding: &mut SidechainBinding) {
-        let mut changed = false;
+        let mut changed = self.sync_sidechain_collection(binding);
         let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
-            let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
+            let target = self.graph.target_of(&port.address).cloned();
             let resolution = target.and_then(|target| {
                 // A pointer at a FIELD of a box resolves by its FULL address first: that is how a device nested
                 // in an effect composite taps the composite's INPUT (its `input` vertex, registered to the

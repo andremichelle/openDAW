@@ -1,0 +1,32 @@
+component
+  display: contents
+
+  button
+    margin-top: 1px
+    scale: 0.8
+    border-radius: 50%
+    color: var(--color-orange)
+    outline: 1px dashed rgba(white, 0.1)
+    aspect-ratio: 1
+
+    > svg
+      width: 1.5em
+      height: 1.5em
+
+    &.active
+      color: var(--color-orange)
+      outline: 1px solid var(--color-orange)
+
+    &.has-source
+      color: var(--color-background)
+      background-color: var(--color-orange)
+      outline: 1px solid var(--color-orange)
+
+  .source
+    width: 100%
+    font-size: 0.5em
+    text-align: center
+    white-space: nowrap
+    text-overflow: ellipsis
+    overflow: hidden
+    color: var(--color-orange)

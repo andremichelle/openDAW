@@ -557,18 +557,28 @@ pub(crate) struct SidechainBinding {
     pub(crate) sink: Rc<RefCell<dyn SidechainSink>>,
     pub(crate) node_id: NodeId,
     pub(crate) device_uuid: Uuid,
-    pub(crate) ports: Vec<SidechainPort>
+    pub(crate) ports: Vec<SidechainPort>,
+    pub(crate) collection: Option<SidechainCollection>
 }
 
-/// One declared sidechain port: its id (2+), the device-relative pointer path to follow, the source node it
+/// A scriptable device's hub of `WerkstattSidechainBox` children: each child is one port, synced on resolve.
+pub(crate) struct SidechainCollection {
+    pub(crate) hub_field: u16,
+    pub(crate) bound_count: u32,
+    pub(crate) hub_sub: SubscriptionId,
+    pub(crate) signal: Rc<dyn Fn()>
+}
+
+/// One declared sidechain port: its id (2+), the pointer address to follow, the source node it
 /// is currently wired to (`None` = unresolved, kept so the resolve pass can diff + tear down the old edge),
 /// and a TARGETED `This` monitor on the device's sidechain pointer field so a re-point / detach enqueues the
 /// owning unit (no all-updates listener).
 pub(crate) struct SidechainPort {
     pub(crate) port_id: u32,
-    pub(crate) path: Vec<u16>,
+    pub(crate) address: Address,
     pub(crate) resolved: Option<NodeId>,
-    pub(crate) pointer_sub: SubscriptionId
+    pub(crate) pointer_sub: SubscriptionId,
+    pub(crate) child: Option<(Uuid, SubscriptionId)> // a collection port: its child box + `index` monitor
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -1181,9 +1191,7 @@ impl Engine {
             self.context.remove_processor(node_id);
         }
         if let Some(sidechain) = member.sidechain {
-            for port in sidechain.ports {
-                self.graph.unsubscribe(port.pointer_sub);
-            }
+            self.teardown_sidechain(sidechain);
         }
         self.graph.unsubscribe(member.enabled_sub);
         if let Some(params) = member.params {

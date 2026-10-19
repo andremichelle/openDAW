@@ -1,8 +1,8 @@
 import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
-import {ParamDeclaration, SampleDeclaration, ScriptDeclaration} from "./ScriptDeclaration"
+import {WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
+import {ParamDeclaration, SampleDeclaration, ScriptDeclaration, SidechainDeclaration} from "./ScriptDeclaration"
 import {DeviceBox} from "./DeviceBox"
 
 const COMPILER_VERSION = 1
@@ -110,6 +110,30 @@ const reconcileSamples = (deviceBox: ScriptCompiler.ScriptDeviceBox, declared: R
     }
 }
 
+const reconcileSidechains = (hub: Field<Pointers.ScriptSideChain>, declared: ReadonlyArray<SidechainDeclaration>): void => {
+    const existingByLabel = new Map<string, WerkstattSidechainBox>()
+    for (const pointer of hub.pointerHub.filter()) {
+        const sidechainBox = asInstanceOf(pointer.box, WerkstattSidechainBox)
+        existingByLabel.set(sidechainBox.label.getValue(), sidechainBox)
+    }
+    const declaredLabels = new Set(declared.map(({label}) => label))
+    for (const [label, sidechainBox] of existingByLabel) {
+        if (!declaredLabels.has(label)) {sidechainBox.delete()}
+    }
+    declared.forEach(({label}, index) => {
+        const existing = existingByLabel.get(label)
+        if (isDefined(existing)) {
+            if (existing.index.getValue() !== index) {existing.index.setValue(index)}
+        } else {
+            WerkstattSidechainBox.create(hub.box.graph, UUID.generate(), sidechainBox => {
+                sidechainBox.owner.refer(hub)
+                sidechainBox.label.setValue(label)
+                sidechainBox.index.setValue(index)
+            })
+        }
+    })
+}
+
 // Wrap the user script for registration into `globalThis.openDAW.<registry>[uuid]`. Beyond `{update, create}`
 // (consumed by the TS core-processors engine), the entry also carries the `@no-pass` verdict (`pass`, read by
 // the Spielwerk bridge) plus the PARSED `@param` / `@sample`
@@ -126,6 +150,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
     const samples = ScriptDeclaration.parseSamples(userCode).map(declaration => ({
         label: declaration.label, index: order.get(declaration.label) ?? 0
     }))
+    const sidechains = ScriptDeclaration.parseSidechains(userCode).map(({label}, index) => ({label, index}))
     return `
     if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
@@ -137,6 +162,8 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         })(),
         params: ${JSON.stringify(params)},
         samples: ${JSON.stringify(samples)},
+        sidechains: ${JSON.stringify(sidechains)},
+        readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}
     }
 `
@@ -160,6 +187,7 @@ export namespace ScriptCompiler {
         readonly code: StringField
         readonly parameters: Field<Pointers.Parameter>
         readonly samples: Field<Pointers.Sample>
+        readonly sideChains?: Field<Pointers.ScriptSideChain>
     }
 
     export type Config = {
@@ -172,6 +200,8 @@ export namespace ScriptCompiler {
     // WASM script bridge + its parity tests + the offline renderer can seed `globalThis.openDAW` identically to
     // the live app (which goes through `compile` / `load`). The single source of truth for the registry shape.
     export const wrap = wrapScript
+
+    export const reconcileSidechainBoxes = reconcileSidechains
 
     export const create = (config: Config) => {
         const headerPattern = createHeaderPattern(config.headerTag)
@@ -206,6 +236,7 @@ export namespace ScriptCompiler {
                 const params = ScriptDeclaration.parseParams(userCode)
                 const samples = ScriptDeclaration.parseSamples(userCode)
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
+                const sidechains = ScriptDeclaration.parseSidechains(userCode)
                 const wrappedCode = wrapScript(config, uuid, newUpdate, userCode)
                 validateCode(wrappedCode)
                 const label = ScriptDeclaration.parseLabel(userCode)
@@ -214,6 +245,7 @@ export namespace ScriptCompiler {
                     label.ifSome(name => deviceBox.label.setValue(name))
                     reconcileParameters(deviceBox, params, order)
                     reconcileSamples(deviceBox, samples, order)
+                    if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}
                 }
                 if (append) {
                     editing.append(modifier)

@@ -4,6 +4,8 @@ import SimpleDelay from "./examples/simple-delay.js?raw"
 import BiquadLowpass from "./examples/biquad-lowpass.js?raw"
 import Alienator from "./examples/alienator.js?raw"
 import Beautifier from "./examples/beautifier.js?raw"
+import SidechainMixer from "./examples/sidechain-mixer.js?raw"
+import SidechainDucker from "./examples/sidechain-ducker.js?raw"
 import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 
 export const WerkstattExamples: ReadonlyArray<CodeEditorExample> = [
@@ -12,5 +14,7 @@ export const WerkstattExamples: ReadonlyArray<CodeEditorExample> = [
     {name: "Simple Delay", code: SimpleDelay},
     {name: "Biquad Lowpass", code: BiquadLowpass},
     {name: "Alienator", code: Alienator},
-    {name: "Beautifier", code: Beautifier}
+    {name: "Beautifier", code: Beautifier},
+    {name: "Sidechain Mixer", code: SidechainMixer},
+    {name: "Sidechain Ducker", code: SidechainDucker}
 ]

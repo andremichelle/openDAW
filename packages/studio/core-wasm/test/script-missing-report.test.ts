@@ -65,7 +65,7 @@ describe("script bridge rebind dedup", () => {
         // fix) orphaned a Bridge (its Processor + limiter + runtime) on every rebind. A `create` for a uuid that
         // already has a live bridge must release the old one first.
         const memory = new WebAssembly.Memory({initial: 1})
-        const engine: ScriptEngine = {host_resolve_sample: () => 0, input_reserve: () => 0}
+        const engine: ScriptEngine = {host_resolve_sample: () => 0, host_resolve_input: () => 0, input_reserve: () => 0}
         const bridges = new ScriptBridges(memory, engine, 48000)
         const uuidPtr = 0
         new Uint8Array(memory.buffer, uuidPtr, 16).set(UUID.generate())

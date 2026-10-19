@@ -828,7 +828,7 @@ impl Engine {
         // 128-bit note set broadcasts separately (the binding's `note_bits`, marked from the pull path).
         let meter_slot = instrument.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, instrument.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, instrument.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
@@ -898,23 +898,34 @@ impl Engine {
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, node.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, node.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
     /// The device's declared sidechain ports with their pointer monitors; the resolve pass wires the edges.
-    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], node_id: NodeId, sink: Rc<RefCell<dyn SidechainSink>>,
-                       signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
-        if paths.is_empty() { return None; }
+    /// A device with a sidechain COLLECTION hub gets its child ports on the first resolve (and on every hub edit).
+    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], collection_field: u16, node_id: NodeId,
+                       sink: Rc<RefCell<dyn SidechainSink>>, signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
+        if paths.is_empty() && collection_field == 0 { return None; }
         let mut ports = Vec::new();
         for (index, path) in paths.iter().cloned().enumerate() {
+            let address = Address::of(uuid, path);
             let port_signal = signal.clone();
-            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
+            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, address.clone(),
                 Box::new(move |_graph, _update| port_signal()));
-            ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+            ports.push(SidechainPort {port_id: index as u32 + 2, address, resolved: None, pointer_sub, child: None});
         }
-        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports})
+        let collection = (collection_field != 0).then(|| {
+            let hub_signal = signal.clone();
+            let armed = Rc::new(core::cell::Cell::new(false)); // the catch-up `Added`s must not re-enqueue the unit being built
+            let hub_armed = armed.clone();
+            let hub_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![collection_field]),
+                Box::new(move |_graph, _event| if hub_armed.get() { hub_signal() }));
+            armed.set(true);
+            SidechainCollection {hub_field: collection_field, bound_count: paths.len() as u32, hub_sub, signal: signal.clone()}
+        });
+        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports, collection})
     }
 
     /// Reuse the pooled audio sink (its target binding survives, `resolve_sinks` diffs it) or build a fresh one:
