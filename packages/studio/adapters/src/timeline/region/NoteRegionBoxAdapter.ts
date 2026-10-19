@@ -3,6 +3,7 @@ import {
     Arrays,
     int,
     Maybe,
+    mod,
     Notifier,
     Observer,
     Option,
@@ -95,7 +96,9 @@ export class NoteRegionBoxAdapter
     isValueRegion(): this is ValueRegionBoxAdapter {return false}
 
     moveContentStart(delta: ppqn): void {
-        this.optCollection.ifSome(collection => collection.events.asArray()
+        if (delta === 0) {return}
+        this.consolidate()
+        this.optCollection.ifSome(collection => collection.events.asArray().slice()
             .forEach(event => event.box.position.setValue(event.position - delta)))
         this.position = this.position + delta
         this.loopDuration = this.loopDuration - delta
@@ -191,6 +194,26 @@ export class NoteRegionBoxAdapter
             source.events.asArray().forEach(adapter => adapter.copyTo({events: target.events}))
             this.#box.events.refer(target.owners)
         })
+    }
+
+    // pass the engine preference of the same name, so the region keeps playing the same
+    resetLoopOffset(truncateNotesAtRegionEnd: boolean): void {
+        const {loopOffset, loopDuration} = this
+        if (loopOffset === 0 || loopDuration <= 0) {return}
+        const phase = mod(loopOffset, loopDuration)
+        if (phase !== 0) {
+            this.consolidate()
+            this.optCollection.ifSome(collection => collection.events.asArray()
+                .filter(event => event.position >= 0 && event.position < loopDuration)
+                .forEach(event => {
+                    const {position, complete, playCount} = event
+                    if (truncateNotesAtRegionEnd && playCount === 1 && complete > loopDuration) {
+                        event.box.duration.setValue(loopDuration - position)
+                    }
+                    event.box.position.setValue(mod(position - phase, loopDuration))
+                }))
+        }
+        this.loopOffset = 0
     }
 
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
