@@ -75,6 +75,11 @@ const setup = async ({outputLatency = 0.020}: {outputLatency?: number} = {}) => 
     const record = () => worklet.isRecording.setValue(true)
     const noteOn = (pitch: number) => notifier.notify(NoteSignal.on(UUID.generate(), pitch, 1.0))
     const noteOff = (pitch: number) => notifier.notify(NoteSignal.off(UUID.generate(), pitch))
+    // a MIDIMessageEvent carries the time the key was pressed, which can be earlier than the handler runs
+    const noteOnStamped = (pitch: number, seconds: number) =>
+        notifier.notify({...NoteSignal.on(UUID.generate(), pitch, 1.0), timeStamp: seconds * 1000.0})
+    const noteOffStamped = (pitch: number, seconds: number) =>
+        notifier.notify({...NoteSignal.off(UUID.generate(), pitch), timeStamp: seconds * 1000.0})
     const stop = () => {
         worklet.isRecording.setValue(false)
         project.editing.modify(() => recorder.terminate(), false)
@@ -85,7 +90,7 @@ const setup = async ({outputLatency = 0.020}: {outputLatency?: number} = {}) => 
         loopArea.to.setValue(to)
         loopArea.enabled.setValue(true)
     })
-    return {project, regions, notes, validate, at, tick, record, noteOn, noteOff, stop, loop}
+    return {project, regions, notes, validate, at, tick, record, noteOn, noteOff, noteOnStamped, noteOffStamped, stop, loop}
 }
 
 describe("RecordMidi", () => {
@@ -239,6 +244,37 @@ describe("RecordMidi", () => {
             const [released, pressed] = notes()
             expect(released.position + released.duration).toBeLessThanOrEqual(regions()[0].duration)
             expect(pressed.position).toBeLessThan(regions()[0].duration)
+        })
+
+        it("starts a key where its MIDI event was stamped, not where a late handler sees it", async () => {
+            const {notes, at, noteOnStamped} = await startAtBar()
+            at(seconds(PPQN.Bar + PPQN.SemiQuaver))
+            noteOnStamped(60, seconds(PPQN.Bar + 60))
+            expect(notes()[0].position).toBe(60)
+        })
+
+        it("keeps the length held between the MIDI stamps of key-down and key-up", async () => {
+            const {notes, at, noteOnStamped, noteOffStamped} = await startAtBar()
+            at(seconds(PPQN.Bar + 100))
+            noteOnStamped(60, seconds(PPQN.Bar))
+            at(seconds(PPQN.Bar + 700))
+            noteOffStamped(60, seconds(PPQN.Bar + 480))
+            expect(notes().map(({position, duration}) => [position, duration])).toEqual([[0, 480]])
+        })
+
+        it("starts a key stamped before the last playhead update at that update", async () => {
+            const {notes, at, tick, noteOnStamped} = await startAtBar()
+            at(seconds(PPQN.Bar + 240))
+            tick(PPQN.Bar + 240)
+            noteOnStamped(60, seconds(PPQN.Bar + 200))
+            expect(notes()[0].position).toBe(240)
+        })
+
+        it("treats a stamp later than now as now", async () => {
+            const {notes, at, noteOnStamped} = await startAtBar()
+            at(seconds(PPQN.Bar + 120))
+            noteOnStamped(60, seconds(PPQN.Bar + 900))
+            expect(notes()[0].position).toBe(120)
         })
 
         it("keeps the full length of a note held across a loop wrap", async () => {

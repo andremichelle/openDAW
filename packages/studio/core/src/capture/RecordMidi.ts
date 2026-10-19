@@ -56,8 +56,8 @@ export namespace RecordMidi {
         let takeCount: int = 0
 
         // engine.position moves only on animation frames: extrapolate it, but not across a loop end the engine wraps at
-        const writePositionNow = (): ppqn => {
-            const elapsedSeconds = (performance.now() - lastPositionTime) / 1000.0
+        const writePositionAt = (timeStamp: number): ppqn => {
+            const elapsedSeconds = Math.max(0.0, Math.min(timeStamp, performance.now()) - lastPositionTime) / 1000.0
             const elapsed = PPQN.secondsToPulses(elapsedSeconds, engine.bpm.getValue())
             const loopTo = loopArea.to.getValue()
             const crossesLoopEnd = loopArea.enabled.getValue() && engine.preferences.settings.recording.allowTakes
@@ -211,7 +211,7 @@ export namespace RecordMidi {
         }))
 
         terminator.ownAll(notifier.subscribe((signal: NoteSignal) => {
-            const writePosition = writePositionNow()
+            const writePosition = writePositionAt((NoteSignal.isAudition(signal) ? undefined : signal.timeStamp) ?? performance.now())
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
                 if (currentTake.isEmpty()) {
