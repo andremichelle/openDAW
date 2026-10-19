@@ -252,50 +252,20 @@ export class NoteRegionBoxAdapter
                     }
                 }
             )
-        overlapping.forEach(({box}) => box.delete())
-        return Option.wrap(NoteRegionBox.create(graph, UUID.generate(), box => {
-            box.position.setValue(rangeMin)
-            box.duration.setValue(rangeMax - rangeMin)
-            box.loopDuration.setValue(rangeMax - rangeMin)
-            box.loopOffset.setValue(0)
-            box.hue.setValue(this.hue)
-            box.mute.setValue(this.mute)
-            box.label.setValue(this.label)
-            box.events.refer(collectionBox.owners)
-            box.regions.refer(trackBoxAdapter.box.regions)
-        }))
-    }
-
-    unloop(): void {
-        const {position, duration} = this
-        const passes = Array.from(LoopableRegion.locateLoops(this, position, position + duration))
-        if (passes.length < 2) {return}
-        const placementsOf = (local: ppqn): ReadonlyArray<ppqn> => passes
-            .filter(({rawStart, regionStart, regionEnd}) =>
-                regionStart - rawStart <= local && local < regionEnd - rawStart)
-            .map(({rawStart}) => rawStart + local - position)
-        this.optCollection.ifSome(collection => {
-            if (this.isMirrowed) {
-                // copy only what plays: a copy deleted in the transaction that made it stays in the collection adapter
-                const target = NoteEventCollectionBox.create(this.#context.boxGraph, UUID.generate())
-                collection.events.asArray().forEach(event => placementsOf(event.position)
-                    .forEach(placement => event.copyTo({position: placement, events: target.events})))
-                this.#box.events.refer(target.owners)
-            } else {
-                // snapshot, because moving an event re-sorts the collection
-                collection.events.asArray().slice().forEach(event => {
-                    const placements = placementsOf(event.position)
-                    if (placements.length === 0) {
-                        event.box.delete()
-                    } else {
-                        placements.slice(1).forEach(placement => event.copyTo({position: placement}))
-                        event.box.position.setValue(placements[0])
-                    }
-                })
-            }
-        })
-        this.loopOffset = 0
-        this.loopDuration = duration
+        const keep = regions.includes(this) ? this : first as NoteRegionBoxAdapter
+        overlapping.filter(region => region !== keep).forEach(({box}) => box.delete())
+        const {box} = keep
+        box.position.setValue(rangeMin)
+        box.duration.setValue(rangeMax - rangeMin)
+        box.loopDuration.setValue(rangeMax - rangeMin)
+        box.loopOffset.setValue(0)
+        box.hue.setValue(this.hue)
+        box.mute.setValue(this.mute)
+        box.label.setValue(this.label)
+        const replaced = keep.optCollection.map(collection => collection.box)
+        box.events.refer(collectionBox.owners)
+        replaced.ifSome(collection => {if (collection.owners.pointerHub.isEmpty()) {collection.delete()}})
+        return Option.wrap(box)
     }
 
     toString(): string {return `{NoteRegionBoxAdapter ${UUID.toString(this.#box.address.uuid)} p: ${PPQN.toString(this.position)}, c: ${PPQN.toString(this.complete)}}`}
