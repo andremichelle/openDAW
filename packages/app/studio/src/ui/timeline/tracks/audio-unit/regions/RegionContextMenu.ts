@@ -116,8 +116,9 @@ export const installRegionContextMenu =
                             AudioConsolidation.flatten(project, service.sampleService, audioRegions)
                                 .then(EmptyExec, console.warn)
                         } else {
-                            editing.modify(() =>
-                                region.flatten(selection.selected()).ifSome(box => project.selection.select(box)))
+                            const {truncateNotesAtRegionEnd} = service.engine.preferences.settings.playback
+                            editing.modify(() => region.flatten(selection.selected(), truncateNotesAtRegionEnd)
+                                .ifSome(box => project.selection.select(box)))
                         }
                     }),
                 MenuItem.default({label: "Convert to Clip"})
