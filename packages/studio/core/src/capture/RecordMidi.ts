@@ -2,6 +2,7 @@ import {
     asInstanceOf,
     byte,
     int,
+    isDefined,
     Notifier,
     Nullable,
     Option,
@@ -50,8 +51,25 @@ export namespace RecordMidi {
         const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 0.01, timelineBox.bpm.getValue()) // 10ms fallback (seconds)
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
+        let lastPositionTime: number = performance.now()
         let positionOffset: ppqn = 0
         let takeCount: int = 0
+
+        // engine.position moves only on animation frames: extrapolate it, but not across a loop end the engine wraps at
+        const writePositionAt = (timeStamp: number): ppqn => {
+            const elapsedSeconds = Math.max(0.0, Math.min(timeStamp, performance.now()) - lastPositionTime) / 1000.0
+            const elapsed = PPQN.secondsToPulses(elapsedSeconds, engine.bpm.getValue())
+            const loopTo = loopArea.to.getValue()
+            const crossesLoopEnd = loopArea.enabled.getValue() && engine.preferences.settings.recording.allowTakes
+                && lastPosition < loopTo && lastPosition + elapsed >= loopTo
+            return (crossesLoopEnd ? lastPosition : lastPosition + elapsed) + latency
+        }
+
+        const writeDuration = ({event, take, creationOffset}: ActiveNote, writePosition: ppqn): void => {
+            const elapsed = (positionOffset + writePosition)
+                - (creationOffset + take.regionBox.position.getValue() + event.position.getValue())
+            event.duration.setValue(Math.max(MIN_NOTE_DURATION, elapsed))
+        }
 
         const takeDuration = (regionPosition: ppqn, writePosition: ppqn): ppqn => {
             const loopTo = loopArea.to.getValue()
@@ -59,6 +77,12 @@ export namespace RecordMidi {
                 && engine.preferences.settings.recording.allowTakes && regionPosition < loopTo
             const cap = capped ? loopTo - regionPosition : Infinity
             return Math.min(cap, Math.max(beats, quantizeCeil(writePosition, beats) - regionPosition))
+        }
+
+        const growTake = ({position: regionPosition, duration, loopDuration}: NoteRegionBox, writePosition: ppqn) => {
+            const newDuration = Math.max(duration.getValue(), takeDuration(regionPosition.getValue(), writePosition))
+            duration.setValue(newDuration)
+            loopDuration.setValue(newDuration)
         }
 
         const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
@@ -158,6 +182,7 @@ export namespace RecordMidi {
                 }, false)
             }
             lastPosition = currentPosition
+            lastPositionTime = performance.now()
             if (currentTake.isEmpty()) {
                 editing.modify(() => {
                     const pos = quantizeFloor(currentPosition, beats)
@@ -169,17 +194,12 @@ export namespace RecordMidi {
             currentTake.ifSome(({regionBox, collection}) => {
                 editing.modify(() => {
                     if (regionBox.isAttached() && collection.isAttached()) {
-                        const {position: regionPosition, duration, loopDuration} = regionBox
-                        const newDuration = Math.max(duration.getValue(),
-                            takeDuration(regionPosition.getValue(), writePosition))
-                        duration.setValue(newDuration)
-                        loopDuration.setValue(newDuration)
-                        for (const {event, take, creationOffset} of activeNotes.values()) {
-                            if (event.isAttached()) {
-                                const elapsed = (positionOffset + writePosition) - (creationOffset + take.regionBox.position.getValue() + event.position.getValue())
-                                event.duration.setValue(Math.max(MIN_NOTE_DURATION, elapsed))
+                        growTake(regionBox, writePosition)
+                        for (const note of activeNotes.values()) {
+                            if (note.event.isAttached()) {
+                                writeDuration(note, writePosition)
                             } else {
-                                activeNotes.delete(event.pitch.getValue())
+                                activeNotes.delete(note.event.pitch.getValue())
                             }
                         }
                     } else {
@@ -191,7 +211,7 @@ export namespace RecordMidi {
         }))
 
         terminator.ownAll(notifier.subscribe((signal: NoteSignal) => {
-            const writePosition = position.getValue() + latency
+            const writePosition = writePositionAt((NoteSignal.isAudition(signal) ? undefined : signal.timeStamp) ?? performance.now())
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
                 if (currentTake.isEmpty()) {
@@ -203,6 +223,7 @@ export namespace RecordMidi {
                 editing.modify(() => {
                     const notePosition = writePosition - regionBox.position.getValue()
                     if (notePosition < -PPQN.SemiQuaver) {return}
+                    growTake(regionBox, writePosition)
                     const event = NoteEventBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(Math.max(0, notePosition))
                         box.duration.setValue(MIN_NOTE_DURATION)
@@ -216,7 +237,14 @@ export namespace RecordMidi {
                 if (pendingNotes.has(signal.pitch)) {
                     pendingNotes.delete(signal.pitch)
                 } else {
+                    const note = activeNotes.get(signal.pitch)
                     activeNotes.delete(signal.pitch)
+                    if (isDefined(note) && note.event.isAttached()) {
+                        editing.modify(() => {
+                            writeDuration(note, writePosition)
+                            currentTake.ifSome(({regionBox}) => growTake(regionBox, writePosition))
+                        }, false)
+                    }
                 }
             }
         }))

@@ -72,6 +72,34 @@ describe("LoopableRegion degenerate loop durations", () => {
     })
 })
 
+describe("LoopableRegion.globalToLocal exact wrap", () => {
+    const beat = PPQN.Quarter
+    const region = (position: number, loopOffset: number, loopDuration: number) => ({
+        type: "region", position, duration: 16 * beat, complete: position + 16 * beat, loopOffset, loopDuration
+    })
+
+    it("keeps a whole tick whole (3/4 bar loop at bar 2, beat 2)", () => {
+        expect(LoopableRegion.globalToLocal(region(0, 0, 3 * beat), 4 * beat)).toBe(960)
+    })
+
+    it.each([1280, 2880, 3840, 11520])("returns a whole tick in [0, loopDuration) for every whole tick (loopDuration=%s)",
+        loopDuration => {
+            const loop = region(960, 480, loopDuration)
+            const misses: Array<number> = []
+            for (let at = -30000; at <= 30000; at++) {
+                const offset = LoopableRegion.globalToLocal(loop, at)
+                const congruent = (at - loop.position + loop.loopOffset - offset) % loopDuration === 0
+                if (!Number.isInteger(offset) || offset < 0 || offset >= loopDuration || !congruent) {misses.push(at)}
+            }
+            expect(misses).toEqual([])
+        })
+
+    it("wraps a position before the region start and a loopOffset past the loop end", () => {
+        expect(LoopableRegion.globalToLocal(region(4 * beat, 0, 3 * beat), 0)).toBe(1920)
+        expect(LoopableRegion.globalToLocal(region(0, 4000, 3 * beat), 0)).toBe(1120)
+    })
+})
+
 describe("TempoMap.intervalToSeconds with negative fromPPQN", () => {
     const barPpqn = 4 * PPQN.Quarter
     const bpm = 120
