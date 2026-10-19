@@ -1,5 +1,5 @@
 import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
-import {Arrays, float, int, Option, Selectable, Subscription, unitValue, UUID} from "@opendaw/lib-std"
+import {Arrays, bipolar, float, int, Option, Selectable, Subscription, unitValue, UUID} from "@opendaw/lib-std"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {Address, Field, Propagation, Update} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
@@ -12,6 +12,7 @@ type CopyToParams = {
     duration?: ppqn,
     pitch?: int,
     playCount?: int,
+    playCurve?: bipolar,
     events?: Field<Pointers.NoteEvents>
 }
 
@@ -67,7 +68,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     get cent(): number {return this.#box.cent.getValue()} // -50.0...+50.0
     get chance(): int {return this.#box.chance.getValue()} // 0...100%
     get playCount(): int {return this.#box.playCount.getValue()} // 1...16
-    get playCurve(): int {return this.#box.playCurve.getValue()} // -1...+1
+    get playCurve(): bipolar {return this.#box.playCurve.getValue()}
     get isSelected(): boolean {return this.#isSelected}
     get collection(): Option<NoteEventCollectionBoxAdapter> {
         return this.#box.events.targetVertex
@@ -96,6 +97,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             box.duration.setValue(options?.duration ?? this.duration)
             box.pitch.setValue(options?.pitch ?? this.pitch)
             box.playCount.setValue(options?.playCount ?? this.playCount)
+            box.playCurve.setValue(options?.playCurve ?? this.playCurve)
             box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
             box.velocity.setValue(this.velocity)
             box.cent.setValue(this.cent)
@@ -115,6 +117,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
                 position: Math.floor(this.position + a),
                 duration: Math.max(1, b - a),
                 playCount: 1,
+                playCurve: 0,
                 events
             })
         }, playCount)
