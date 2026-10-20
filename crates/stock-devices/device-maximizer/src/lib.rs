@@ -93,6 +93,7 @@ impl AudioEffect for Maximizer {
         state.headroom_gain = 1.0;
         state.threshold_id = abi::bind_parameter(&THRESHOLD_FIELD);
         state.lookahead_field_id = abi::observe_field(&LOOKAHEAD_FIELD);
+        abi::set_latency(state.look_ahead_frames as u32);
         state.reduction_id = abi::bind_broadcast(&REDUCTION_FIELD, 1);
         state.reduction_ptr = 0;
         state.reduction_min = 0.0;
@@ -236,6 +237,7 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
                 if let FieldValue::Bool(on) = FieldValue::from_wire(kind, bits, len) {
                     state.lookahead = on;
                     state.lookahead_mix.set(if on {1.0} else {0.0}, state.processed);
+                    abi::set_latency(if on {state.look_ahead_frames as u32} else {0});
                 }
             }
         })

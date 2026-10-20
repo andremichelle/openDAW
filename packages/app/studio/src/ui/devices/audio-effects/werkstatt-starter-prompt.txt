@@ -118,6 +118,10 @@ Example:
         ...
     }
 
+## Declaring latency
+A processor that delays its output (an FFT window, a look-ahead) sets this.latency to the delay in
+frames, in the constructor or whenever it changes. The engine delays every parallel path to match.
+
 ## Globals
 - sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).
   Always use this instead of hardcoding a sample rate.

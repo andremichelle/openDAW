@@ -276,6 +276,10 @@ impl DelayLine {
         Self {buffer: [[0.0; DELAY_BUFFER_SIZE]; 2], delay_in_samples, write_position: 0}
     }
 
+    pub fn latency(&self) -> usize {
+        self.delay_in_samples
+    }
+
     pub fn process(&mut self, channels: [&mut [f32]; 2], from: usize, to: usize) {
         if self.delay_in_samples == 0 {
             return;

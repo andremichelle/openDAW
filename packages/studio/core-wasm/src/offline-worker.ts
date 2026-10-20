@@ -36,6 +36,7 @@ import {
     OfflineEngineProtocol,
     OfflineEngineRenderConfig,
     ProjectSkeleton,
+    SignalGraph,
     WclapBundle,
     WclapGuiInfo,
     WclapGuiSize,
@@ -45,7 +46,7 @@ import {
     WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {EngineExports, takeReportMessage} from "./engine-exports"
+import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
@@ -72,6 +73,24 @@ type EngineState = {
     readonly broadcasts: ReadonlyArray<Terminable>
     totalFrames: int
     running: boolean
+    // frames still to drop from the start: the settled delay compensation latency (-1 until settled)
+    latencyToTrim: int
+    position: ppqn // the transport the renderer requested, restored after settling
+    playing: boolean
+}
+
+const settle = (engineState: EngineState): void => {
+    if (engineState.latencyToTrim >= 0) {return}
+    const {engine, sampleRate, position, playing, numberOfChannels} = engineState
+    const scratch: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
+    engineState.latencyToTrim = settleCompensation(engine, sampleRate, position, playing,
+        () => renderQuantum(engineState, scratch))
+}
+
+const trimStart = (engineState: EngineState): int => {
+    const start = Math.min(engineState.latencyToTrim, RenderQuantum)
+    engineState.latencyToTrim -= start
+    return start
 }
 
 let state: Option<EngineState> = Option.None
@@ -272,15 +291,23 @@ Communicator.executor<OfflineEngineProtocol>(
                 engineState.isPlaying = view.getUint8(16) === 1
                 engineState.isCountingIn = false
                 engineState.isRecording = false
+                engineState.compensationLatency = engine.compensation_latency() / config.sampleRate
                 engineState.recordingStopTime = Number.NaN
             })
             Communicator.executor<EngineCommands>(messenger.channel("engine-commands"), {
-                play: (): void => engine.play(),
+                play: (): void => {
+                    state.ifSome(engineState => engineState.playing = true)
+                    engine.play()
+                },
                 stop: (reset: boolean): void => {
+                    state.ifSome(engineState => engineState.playing = false)
                     engine.pause()
                     if (reset) {engine.stop()}
                 },
-                setPosition: (position: ppqn): void => engine.set_position(position),
+                setPosition: (position: ppqn): void => {
+                    state.ifSome(engineState => engineState.position = position)
+                    engine.set_position(position)
+                },
                 prepareRecordingState: (_countIn: boolean, _generation: int): void => {},
                 stopRecording: (): void => {},
                 queryLoadingComplete: (): Promise<boolean> => Promise.all(pending).then(() => true),
@@ -302,6 +329,8 @@ Communicator.executor<OfflineEngineProtocol>(
                 wclapSaveState: (_uuid: UUID.Bytes): void => {},
                 wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 wclapRetry: (_url: string): void => {},
+                querySignalGraph: (): Promise<SignalGraph> =>
+                    Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}),
                 terminate: (): void => {}
             })
             enginePort.start()
@@ -313,7 +342,10 @@ Communicator.executor<OfflineEngineProtocol>(
                 numberOfChannels: stemPairs > 0 ? stemPairs * 2 : 2,
                 stems: stemPairs,
                 totalFrames: 0,
-                running: false
+                running: false,
+                latencyToTrim: -1,
+                position: 0,
+                playing: false
             })
             engineToClient.ready()
         },
@@ -330,14 +362,16 @@ Communicator.executor<OfflineEngineProtocol>(
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
             const {numberOfChannels} = engineState
+            settle(engineState)
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
             const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
             let offset = 0 | 0
             while (offset < numSamples) {
                 renderQuantum(engineState, outputChannels)
-                const toCopy = Math.min(numSamples - offset, RenderQuantum)
+                const start = trimStart(engineState)
+                const toCopy = Math.min(numSamples - offset, RenderQuantum - start)
                 for (let channel = 0; channel < numberOfChannels; channel++) {
-                    result[channel].set(outputChannels[channel].subarray(0, toCopy), offset)
+                    result[channel].set(outputChannels[channel].subarray(start, start + toCopy), offset)
                 }
                 offset += toCopy
                 stateSender.tryWrite()
@@ -357,11 +391,15 @@ Communicator.executor<OfflineEngineProtocol>(
             let lastYield = 0
             engine.running = true
             await Wait.timeSpan(TimeSpan.seconds(0))
+            settle(engine)
             while (engine.running && engine.totalFrames < maxFrames) {
                 const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
                 renderQuantum(engine, outputChannels)
+                const start = trimStart(engine)
+                if (start === RenderQuantum) {continue}
+                const kept = start === 0 ? outputChannels : outputChannels.map(channel => channel.subarray(start))
                 let maxSample = 0
-                for (const channel of outputChannels) {
+                for (const channel of kept) {
                     for (const sample of channel) {
                         const absoluteValue = Math.abs(sample)
                         if (absoluteValue > maxSample) {maxSample = absoluteValue}
@@ -370,15 +408,15 @@ Communicator.executor<OfflineEngineProtocol>(
                 const isSilent = maxSample <= threshold
                 if (maxSample > threshold) {hasHadAudio = true}
                 if (isSilent && hasHadAudio) {
-                    consecutiveSilentFrames += RenderQuantum
+                    consecutiveSilentFrames += kept[0].length
                     if (consecutiveSilentFrames >= silenceFramesNeeded) {break}
                 } else {
                     consecutiveSilentFrames = 0
                 }
                 for (let channel = 0; channel < numberOfChannels; channel++) {
-                    chunks[channel].push(outputChannels[channel].slice())
+                    chunks[channel].push(kept[channel].slice())
                 }
-                engine.totalFrames += RenderQuantum
+                engine.totalFrames += kept[0].length
                 engine.stateSender.tryWrite()
                 if (engine.totalFrames - lastYield >= engine.sampleRate) {
                     lastYield = engine.totalFrames

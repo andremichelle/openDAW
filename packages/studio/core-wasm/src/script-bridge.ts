@@ -160,7 +160,8 @@ export class ScriptBridges {
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
                 this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
-            host_script_release: (handle) => this.#release(handle)
+            host_script_release: (handle) => this.#release(handle),
+            host_script_latency: (handle) => this.#latency(handle)
         }
     }
 
@@ -224,6 +225,12 @@ export class ScriptBridges {
             }
         }
         return bridge.silenced ? null : bridge.proc
+    }
+
+    // a script declares its delay with `this.latency = frames`
+    #latency(handle: number): number {
+        const latency: unknown = this.#bridges.get(handle)?.proc?.latency
+        return typeof latency === "number" && Number.isFinite(latency) && latency > 0 ? Math.round(latency) : 0
     }
 
     #audio(handle: number, srcL: number, srcR: number, outL: number, outR: number,

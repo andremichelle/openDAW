@@ -15,12 +15,13 @@
 //! `Rc<RefCell>` state) and context-mutating re-wiring will be an explicit engine step.
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use crate::audio_output_buffer_registry::AudioOutputBufferRegistry;
+use crate::compensation::{CompensationLimits, SignalEdge, SignalGraph, SignalNode};
 use crate::graph::Graph;
 use crate::process_info::ProcessInfo;
 use crate::process_phase::ProcessPhase;
@@ -51,6 +52,10 @@ pub struct EngineContext {
     registry: AudioOutputBufferRegistry<NodeId>,
     phase_observers: Vec<Box<dyn FnMut(ProcessPhase)>>,
     labels: BTreeMap<NodeId, String>,
+    owners: BTreeMap<NodeId, [u8; 16]>,
+    order_edges: BTreeSet<(NodeId, NodeId)>,
+    edge_delays: BTreeMap<(NodeId, NodeId), u32>,
+    compensation_dirty: bool,
     profiler: Option<Profiler>,
     // The topsorted processors CACHED as handles (rebuilt with the sort), so the steady-state render loop is
     // a linear walk with zero per-node BTreeMap lookups. Rc clones only; capacity reserved at registration.
@@ -68,6 +73,10 @@ impl EngineContext {
             registry: AudioOutputBufferRegistry::new(),
             phase_observers: Vec::new(),
             labels: BTreeMap::new(),
+            owners: BTreeMap::new(),
+            order_edges: BTreeSet::new(),
+            edge_delays: BTreeMap::new(),
+            compensation_dirty: false,
             profiler: None,
             queue: Vec::new(),
             needs_sort: false
@@ -77,6 +86,11 @@ impl EngineContext {
     /// Attach a human-readable label to a node (its box type / role), for the profiler report. Reconcile-time.
     pub fn set_label(&mut self, id: NodeId, label: String) {
         self.labels.insert(id, label);
+    }
+
+    /// The box (unit, bus, device, send) a node renders for, so the signal graph page can name it.
+    pub fn set_owner(&mut self, id: NodeId, owner: [u8; 16]) {
+        self.owners.insert(id, owner);
     }
 
     /// Enable per-node render profiling with the given micros clock, (re)zeroing the accumulators.
@@ -117,6 +131,7 @@ impl EngineContext {
             profiler.accum.resize(self.next_id as usize, 0.0); // grow at reconcile, never during render
         }
         self.needs_sort = true;
+        self.compensation_dirty = true;
         id
     }
 
@@ -124,6 +139,13 @@ impl EngineContext {
     pub fn register_edge(&mut self, source: NodeId, target: NodeId) {
         self.graph.add_edge(source, target);
         self.needs_sort = true;
+        self.compensation_dirty = true;
+    }
+
+    /// Order `source` before `target` without carrying audio into `target` (a sidechain tap).
+    pub fn register_order_edge(&mut self, source: NodeId, target: NodeId) {
+        self.register_edge(source, target);
+        self.order_edges.insert((source, target));
     }
 
     /// Remove a node and its processor (the explicit engine-side re-wire step the module doc notes). The
@@ -132,6 +154,8 @@ impl EngineContext {
     pub fn remove_processor(&mut self, id: NodeId) {
         self.graph.remove_vertex(id);
         self.processors.remove(&id);
+        self.owners.remove(&id);
+        self.order_edges.retain(|(source, target)| *source != id && *target != id);
         self.labels.remove(&id); // ids are never reused; keeping dead labels would grow forever
         // Drop the cached render queue NOW (it rebuilds on the next `process` anyway): its Rc clones would
         // keep the removed processor alive past this reconcile — its telemetry slots then read as ALIVE,
@@ -140,12 +164,15 @@ impl EngineContext {
         // synchronously; mirror that. `clear` keeps the capacity, so the in-render rebuild never allocates.
         self.queue.clear();
         self.needs_sort = true;
+        self.compensation_dirty = true;
     }
 
     /// Remove an ordering edge (the inverse of `register_edge`).
     pub fn remove_edge(&mut self, source: NodeId, target: NodeId) {
         self.graph.remove_edge(source, target);
+        self.order_edges.remove(&(source, target));
         self.needs_sort = true;
+        self.compensation_dirty = true;
     }
 
     /// Whether a node is still a registered vertex — checked before `remove_edge`, which panics on a missing
@@ -172,6 +199,106 @@ impl EngineContext {
             }
         }
         false
+    }
+
+    /// Snapshot of every node and edge with reported latencies and arrivals. Diagnostic, allocates.
+    pub fn signal_graph(&self) -> SignalGraph {
+        let mut arrivals: BTreeMap<NodeId, u32> = BTreeMap::new();
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        for &id in self.graph.vertices() {
+            let latency = self.processors.get(&id).map_or(0, |processor| processor.borrow().latency());
+            nodes.push(SignalNode {
+                id,
+                label: self.labels.get(&id).cloned().unwrap_or_else(|| String::from("<unlabeled>")),
+                owner: self.owners.get(&id).copied(),
+                latency,
+                arrival: self.arrival(id, &mut arrivals)
+            });
+            for &source in self.graph.get_predecessors(id) {
+                let delay = self.edge_delays.get(&(source, id)).copied().unwrap_or(0);
+                edges.push(SignalEdge {source, target: id, data: !self.order_edges.contains(&(source, id)), delay});
+            }
+        }
+        SignalGraph {nodes, edges}
+    }
+
+    fn arrival(&self, id: NodeId, memo: &mut BTreeMap<NodeId, u32>) -> u32 {
+        if let Some(&arrival) = memo.get(&id) {
+            return arrival;
+        }
+        memo.insert(id, 0); // a feedback route (a sidechain from downstream) reads 0 instead of recursing forever
+        let (own, junction, aligns) = self.processors.get(&id).map_or((0, None, false), |processor| {
+            let processor = processor.borrow();
+            (processor.latency(), processor.junction_sources(), processor.aligns_inputs())
+        });
+        let upstream = match junction {
+            Some(sources) => sources.iter().map(|&source| self.arrival(source, memo)).max().unwrap_or(0),
+            None => self.graph.get_predecessors(id).iter()
+                .filter(|&&source| !self.order_edges.contains(&(source, id)) || (aligns && !self.would_cycle(source, id)))
+                .map(|&source| self.arrival(source, memo)).max().unwrap_or(0)
+        };
+        memo.insert(id, own + upstream);
+        own + upstream
+    }
+
+    /// The latency at which `id`'s output arrives, relative to the timeline. Outside render.
+    pub fn arrival_of(&self, id: NodeId) -> u32 {
+        self.arrival(id, &mut BTreeMap::new())
+    }
+
+    pub fn compensation_dirty(&self) -> bool {
+        self.compensation_dirty
+    }
+
+    pub fn mark_compensation_dirty(&mut self) {
+        self.compensation_dirty = true;
+    }
+
+    /// Align every junction: each input is delayed to the latest one, within `limits`. Outside render.
+    pub fn compensate(&mut self, limits: CompensationLimits) {
+        self.compensation_dirty = false;
+        self.edge_delays.clear();
+        let mut memo: BTreeMap<NodeId, u32> = BTreeMap::new();
+        for (&id, processor) in &self.processors {
+            let Some(sources) = processor.borrow().junction_sources() else { continue };
+            let arrivals: Vec<u32> = sources.iter().map(|&source| self.arrival(source, &mut memo)).collect();
+            let latest = arrivals.iter().copied().max().unwrap_or(0);
+            let delays: Vec<u32> = arrivals.iter().map(|arrival| latest - arrival).collect();
+            for (&source, arrival) in sources.iter().zip(&arrivals) {
+                if latest > *arrival {
+                    self.edge_delays.insert((source, id), latest - arrival);
+                }
+            }
+            processor.borrow_mut().set_junction_delays(&delays, limits);
+        }
+        for (&id, processor) in &self.processors {
+            if !processor.borrow().aligns_inputs() {
+                continue;
+            }
+            let (sidechains, mains): (Vec<NodeId>, Vec<NodeId>) = self.graph.get_predecessors(id).iter()
+                .filter(|&&source| !self.order_edges.contains(&(source, id)) || !self.would_cycle(source, id))
+                .partition(|&&source| self.order_edges.contains(&(source, id)));
+            if sidechains.is_empty() {
+                processor.borrow_mut().set_input_delays(0, &[], limits);
+                continue;
+            }
+            let main = mains.iter().map(|&source| self.arrival(source, &mut memo)).max().unwrap_or(0);
+            let arrivals: Vec<(NodeId, u32)> = sidechains.iter().map(|&source| (source, self.arrival(source, &mut memo))).collect();
+            let latest = arrivals.iter().map(|(_, arrival)| *arrival).max().unwrap_or(0).max(main);
+            for &source in &mains {
+                if latest > main {
+                    self.edge_delays.insert((source, id), latest - main);
+                }
+            }
+            let delays: Vec<(NodeId, u32)> = arrivals.iter().map(|&(source, arrival)| {
+                if latest > arrival {
+                    self.edge_delays.insert((source, id), latest - arrival);
+                }
+                (source, latest - arrival)
+            }).collect();
+            processor.borrow_mut().set_input_delays(latest - main, &delays, limits);
+        }
     }
 
     /// Run an observer in each `ProcessPhase` (TS `subscribeProcessPhase`). Unsubscription is deferred.

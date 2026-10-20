@@ -15,6 +15,13 @@ export type WclapGuiInfo = { uri: string, width: number, height: number, resizab
 export type WclapGuiSize = { width: number, height: number }
 // one plugin of a bundle's factory, `features` as CLAP lists them ("instrument", "audio-effect", ...)
 export type WclapPluginInfo = { clapId: string, name: string, vendor: string, features: ReadonlyArray<string> }
+// the engine's live processor graph, latencies and compensation delays in frames
+export type SignalGraphNode = { id: int, label: string, owner: Nullable<UUID.Bytes>, latency: int, arrival: int }
+// `data` false = the edge only orders the render (a sidechain tap)
+export type SignalGraphEdge = { source: int, target: int, data: boolean, delay: int }
+export type SignalGraph = {
+    sampleRate: number, maxCompensation: int, nodes: ReadonlyArray<SignalGraphNode>, edges: ReadonlyArray<SignalGraphEdge>
+}
 // one clap_param_info of a loaded plugin, values in plain CLAP units, `flags` the clap_param_info_flags bits
 export type WclapParamInfo = {
     id: number, name: string, module: string, min: number, max: number, defaultValue: number, value: number, flags: number
@@ -64,6 +71,7 @@ export interface EngineCommands extends Terminable {
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
     // loads every failed plugin of this url again (its bundle became available)
     wclapRetry(url: string): void
+    querySignalGraph(): Promise<SignalGraph>
 }
 
 export interface EngineToClient {

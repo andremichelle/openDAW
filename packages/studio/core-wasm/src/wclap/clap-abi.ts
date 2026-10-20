@@ -134,6 +134,16 @@ export namespace ClapAbi {
         export const THREAD_CHECK = "clap.thread-check"
         export const PARAM_HOVERED = "clap.param-hovered/1"
         export const HOST_PARAMS = "clap.params"
+        export const LATENCY = "clap.latency"
+    }
+
+    export namespace PluginLatency {
+        export const GET = 0
+    }
+
+    export namespace HostLatency {
+        export const SIZE = 4
+        export const CHANGED = 0
     }
 
     export namespace AudioPorts {

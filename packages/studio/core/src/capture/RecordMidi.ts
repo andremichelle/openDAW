@@ -48,7 +48,8 @@ export namespace RecordMidi {
         const terminator = new Terminator()
         const activeNotes = new Map<byte, ActiveNote>()
         const pendingNotes = new Map<byte, byte>()
-        const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 0.01, timelineBox.bpm.getValue()) // 10ms fallback (seconds)
+        const latency = PPQN.secondsToPulses((audioContext.outputLatency ?? 0.01) + engine.compensationLatency.getValue(),
+            timelineBox.bpm.getValue()) // 10ms fallback (seconds)
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let lastPositionTime: number = performance.now()

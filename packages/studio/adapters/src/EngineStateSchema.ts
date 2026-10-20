@@ -12,6 +12,7 @@ export const EngineStateSchema = Schema.createBuilder({
     isCountingIn: Schema.bool,
     isRecording: Schema.bool,
     recordingStopTime: Schema.double,
+    compensationLatency: Schema.float,
     perfIndex: Schema.int32,
     perfBuffer: Schema.floats(PERF_BUFFER_SIZE)
 })

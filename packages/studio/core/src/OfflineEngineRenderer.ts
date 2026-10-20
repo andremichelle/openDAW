@@ -27,7 +27,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-, ScriptCompiler, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPluginInfo} from "@opendaw/studio-adapters"
+, ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
@@ -165,6 +165,7 @@ export class OfflineEngineRenderer {
                 wclapSaveState(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapSaveState, uuid) }
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
                 wclapRetry(url: string): void { dispatcher.dispatchAndForget(this.wclapRetry, url) }
+                querySignalGraph(): Promise<SignalGraph> { return dispatcher.dispatchAndReturn(this.querySignalGraph) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )

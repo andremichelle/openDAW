@@ -17,6 +17,7 @@ pub mod audio_sink;
 pub mod channel_strip;
 pub mod clip_sequencer;
 pub mod composite_mix;
+pub mod compensation;
 pub mod telemetry;
 pub mod ramp;
 pub mod audio_generator;

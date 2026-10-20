@@ -9,6 +9,8 @@
 //! splits each block at the clock and refreshes parameters; with no automation it pulls nothing.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
+use core::cell::Cell;
 use alloc::string::String;
 use boxgraph::address::Uuid;
 use alloc::vec;
@@ -16,6 +18,8 @@ use alloc::vec::Vec;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
+use engine_env::compensation::{CompensatedInput, CompensationLimits};
+use engine_env::engine_context::NodeId;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
@@ -62,7 +66,11 @@ pub(crate) struct PluginAudioEffect {
     out_offsets: Box<[u32]>,
     #[allow(dead_code)]
     device_state: Box<[u64]>,
-    descriptor: Box<[u32]>
+    descriptor: Box<[u32]>,
+    latency: Rc<Cell<u32>>,
+    main_compensation: Option<CompensatedInput>,
+    sidechain_nodes: Vec<NodeId>,
+    sidechain_compensation: Vec<Option<CompensatedInput>>
 }
 
 impl PluginAudioEffect {
@@ -92,6 +100,8 @@ impl PluginAudioEffect {
             0, 0,
             sample_rate.to_bits()
         ].into_boxed_slice();
+        let latency = Rc::new(Cell::new(0));
+        unsafe { crate::LATENCIES.get() }.insert(device_state.as_ptr() as u32, latency.clone());
         Self {
             process_index: device.process_index,
             reset_index: device.reset_index,
@@ -111,7 +121,11 @@ impl PluginAudioEffect {
             in_offsets,
             out_offsets,
             device_state,
-            descriptor
+            descriptor,
+            latency,
+            main_compensation: None,
+            sidechain_nodes: Vec::new(),
+            sidechain_compensation: Vec::new()
         }
     }
 
@@ -140,13 +154,8 @@ impl EventReceiver for PluginAudioEffect {
 
 impl AudioInput for PluginAudioEffect {
     fn set_audio_source(&mut self, source: SharedAudioBuffer) {
-        let buffer = source.borrow();
-        let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
-        self.in_offsets[0] = left;
-        self.in_offsets[1] = right;
-        self.input_ports[0] = (abi::MAIN_INPUT, left, right); // port 1, the through-signal resolve_input(1) returns
-        drop(buffer);
         self.input = Some(source);
+        self.point_main();
     }
 }
 
@@ -156,16 +165,38 @@ impl SidechainSink for PluginAudioEffect {
     /// drops every previous sidechain, so a re-point / detach leaves no stale port — an unbound port simply
     /// vanishes, and `host_resolve_input(port_id)` returns 0 (the device falls back to MAIN). Source buffers
     /// are kept alive so their captured pointers stay valid. Called by the engine's sidechain-resolution pass.
-    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]) {
         self.input_ports.truncate(1); // index 0 is MAIN (set by set_audio_source); drop the previous sidechains
         self.sidechain_buffers.clear();
-        for (port_id, source) in sources {
-            let buffer = source.borrow();
-            let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
-            drop(buffer);
+        let mut previous: Vec<(NodeId, Option<CompensatedInput>)> = core::mem::take(&mut self.sidechain_nodes).into_iter()
+            .zip(core::mem::take(&mut self.sidechain_compensation)).collect();
+        for (port_id, node, source) in sources {
+            let compensation = previous.iter_mut().find(|(known, _)| known == node).and_then(|(_, entry)| entry.take());
+            let (left, right) = pointers(&compensation.as_ref().map_or_else(|| source.clone(), CompensatedInput::output));
             self.input_ports.push((*port_id, left, right));
             self.sidechain_buffers.push(source.clone());
+            self.sidechain_nodes.push(*node);
+            self.sidechain_compensation.push(compensation);
         }
+    }
+}
+
+fn pointers(buffer: &SharedAudioBuffer) -> (u32, u32) {
+    let buffer = buffer.borrow();
+    (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32)
+}
+
+impl PluginAudioEffect {
+    fn point_main(&mut self) {
+        let source = match (&self.main_compensation, &self.input) {
+            (Some(compensation), _) => compensation.output(),
+            (None, Some(input)) => input.clone(),
+            (None, None) => return
+        };
+        let (left, right) = pointers(&source);
+        self.in_offsets[0] = left;
+        self.in_offsets[1] = right;
+        self.input_ports[0] = (abi::MAIN_INPUT, left, right); // port 1, the through-signal resolve_input(1) returns
     }
 }
 
@@ -175,11 +206,45 @@ impl AudioGenerator for PluginAudioEffect {
     }
 }
 
+impl Drop for PluginAudioEffect {
+    fn drop(&mut self) {
+        unsafe { crate::LATENCIES.get() }.remove(&(self.device_state.as_ptr() as u32));
+    }
+}
+
 impl Processor for PluginAudioEffect {
+    fn latency(&self) -> u32 {
+        self.latency.get()
+    }
+
+    fn aligns_inputs(&self) -> bool {
+        true
+    }
+
+    fn set_input_delays(&mut self, main: u32, sidechains: &[(NodeId, u32)], limits: CompensationLimits) {
+        if main > 0 || self.main_compensation.is_some() {
+            self.main_compensation.get_or_insert_with(CompensatedInput::new).set_delay(main, limits);
+            self.point_main();
+        }
+        for (index, node) in self.sidechain_nodes.iter().enumerate() {
+            let frames = sidechains.iter().find(|(known, _)| known == node).map_or(0, |(_, frames)| *frames);
+            if frames > 0 || self.sidechain_compensation[index].is_some() {
+                let compensation = self.sidechain_compensation[index].get_or_insert_with(CompensatedInput::new);
+                compensation.set_delay(frames, limits);
+                let (left, right) = pointers(&compensation.output());
+                self.input_ports[index + 1].1 = left;
+                self.input_ports[index + 1].2 = right;
+            }
+        }
+    }
+
     fn reset(&mut self) {
         // Transport STOP: clear the device's runtime state (delay lines, filter history, detector / envelope),
         // keeping its bindings. Also drop the buffered input residual.
         call_device_reset(self.reset_index, self.device_state.as_ptr() as u32);
+        for compensation in self.main_compensation.iter_mut().chain(self.sidechain_compensation.iter_mut().flatten()) {
+            compensation.clear();
+        }
     }
 
     fn process(&mut self, info: &ProcessInfo) {
@@ -204,6 +269,15 @@ impl Processor for PluginAudioEffect {
             // and any sidechains for THIS device's call.
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
+        if let (Some(compensation), Some(input)) = (self.main_compensation.as_mut(), self.input.as_ref()) {
+            compensation.process(input);
+        }
+        for (compensation, source) in self.sidechain_compensation.iter_mut().zip(&self.sidechain_buffers) {
+            if let Some(compensation) = compensation {
+                compensation.process(source);
+            }
+        }
+        crate::calling_device(self.device_state.as_ptr() as u32);
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
             let pull = unsafe { PULL.get() };

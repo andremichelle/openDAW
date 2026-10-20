@@ -54,8 +54,8 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                     }
                                 }))
                         }}/>
-            <FooterItem title="SampleRate">{audioContext.sampleRate}</FooterItem>
-            <FooterItem title="Latency" minWidth="6ch"
+            <FooterItem title="SampleRate">{`${audioContext.sampleRate / 1000}k`}</FooterItem>
+            <FooterItem title="Output" minWidth="6ch"
                         onInit={({component, value}) => {
                             const threshold = () =>
                                 StudioPreferences.settings.engine["latency-warning-threshold"] / 1000.0
@@ -89,6 +89,14 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                 {terminate: hide}
                             )
                         }}>N/A</FooterItem>
+            <FooterItem title="PDC" minWidth="6ch"
+                        onInit={({component, value}) => {
+                            lifecycle.own(engine.compensationLatency.catchupAndSubscribe(owner => {
+                                const seconds = owner.getValue()
+                                component.classList.toggle("hidden", seconds <= 0.0)
+                                value.textContent = `${(seconds * 1000.0).toFixed(1)}ms`
+                            }))
+                        }}>0.0ms</FooterItem>
             <FooterItem title="CPU Load" minWidth="4ch"
                         onInit={({component, value}) => {
                             lifecycle.own(engine.preferences.catchupAndSubscribe(enabled => {

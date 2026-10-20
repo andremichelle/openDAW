@@ -22,6 +22,8 @@ use crate::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
 use crate::audio_generator::AudioGenerator;
 use crate::audio_input::AudioInput;
 use crate::block::Block;
+use crate::compensation::{CompensationDelay, CompensationLimits};
+use crate::engine_context::NodeId;
 use crate::frequency_split::FrequencySplitter;
 use crate::telemetry::{broadcast_slot, BroadcastSlot};
 use dsp::analyser::{AudioAnalyser, NUM_BINS};
@@ -240,6 +242,9 @@ pub struct DryWetMixProcessor {
     output: SharedAudioBuffer,
     tap: SharedAudioBuffer,
     wet_sum: SharedAudioBuffer,
+    junction: Option<[NodeId; 2]>,
+    compensation: [Option<CompensationDelay>; 2],
+    compensated: [SharedAudioBuffer; 2],
     dry_gain: LinearRamp,
     wet_gain: LinearRamp,
     sample_rate: f32,
@@ -257,6 +262,9 @@ impl DryWetMixProcessor {
             output: shared_audio_buffer(),
             tap,
             wet_sum,
+            junction: None,
+            compensation: [None, None],
+            compensated: [shared_audio_buffer(), shared_audio_buffer()],
             dry_gain: LinearRamp::linear(sample_rate),
             wet_gain: LinearRamp::linear(sample_rate),
             sample_rate,
@@ -344,8 +352,40 @@ impl AudioGenerator for DryWetMixProcessor {
     }
 }
 
+impl DryWetMixProcessor {
+    /// The nodes producing the dry tap and the wet sum, so compensation can align them.
+    pub fn set_junction_nodes(&mut self, dry: NodeId, wet: NodeId) {
+        self.junction = Some([dry, wet]);
+    }
+
+    fn compensated_input(&mut self, index: usize, source: &SharedAudioBuffer) -> SharedAudioBuffer {
+        match self.compensation[index].as_mut() {
+            Some(delay) => {
+                delay.process(&source.borrow(), &mut self.compensated[index].borrow_mut(), 0, RENDER_QUANTUM);
+                self.compensated[index].clone()
+            }
+            None => source.clone()
+        }
+    }
+}
+
 impl Processor for DryWetMixProcessor {
+    fn junction_sources(&self) -> Option<Vec<NodeId>> {
+        self.junction.map(|nodes| nodes.to_vec())
+    }
+
+    fn set_junction_delays(&mut self, delays: &[u32], limits: CompensationLimits) {
+        for (slot, &frames) in self.compensation.iter_mut().zip(delays) {
+            if frames > 0 || slot.is_some() {
+                slot.get_or_insert_with(CompensationDelay::new).set_delay(frames, limits);
+            }
+        }
+    }
+
     fn reset(&mut self) {
+        for delay in self.compensation.iter_mut().flatten() {
+            delay.clear();
+        }
         self.output.borrow_mut().clear();
         self.meter.clear();
     }
@@ -354,8 +394,9 @@ impl Processor for DryWetMixProcessor {
         // Clone the handles before borrowing: a borrow taken straight off `self` would freeze `self` and block
         // the `&mut self` retargets below (the aux send does the same).
         let output = self.output.clone();
-        let tap = self.tap.clone();
-        let wet_sum = self.wet_sum.clone();
+        let (tap, wet_sum) = (self.tap.clone(), self.wet_sum.clone());
+        let tap = self.compensated_input(0, &tap);
+        let wet_sum = self.compensated_input(1, &wet_sum);
         let mut output = output.borrow_mut();
         let dry = tap.borrow();
         let wet = wet_sum.borrow();
