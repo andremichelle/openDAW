@@ -202,9 +202,11 @@ export class ScriptBridges {
                 bridge.sidechainViews = {}
                 bridge.sidechainLookup = createSidechainLookup(bridge.sidechainViews, bridge.sidechains)
                 bridge.readsSidechains = registry.readsSidechains === true
-                if (bridge.kind === KIND_INSTRUMENT) {
+                if (bridge.kind !== KIND_MIDI_EFFECT) {
                     proc.samples = {}
                     for (const label of bridge.sampleLabels.values()) {proc.samples[label] = null}
+                }
+                if (bridge.kind === KIND_INSTRUMENT) {
                     bridge.limiter ??= new SimpleLimiter(this.#sampleRate)
                 }
                 if (bridge.kind === KIND_MIDI_EFFECT) {
@@ -245,15 +247,15 @@ export class ScriptBridges {
                 this.#deliverSidechains(bridge, s0, s1)
                 proc.sidechains = bridge.sidechainLookup
             }
+            // Re-resolve the @sample slots every block (mirrors the TS `#pollSamples`): a sample's PCM loads
+            // ASYNC after bind, so the handle is delivered before its frames are resident; re-resolving flips
+            // `samples[label]` from null to the AudioData once ready. Re-deriving the views each block also
+            // keeps them valid if the SharedArrayBuffer grew (same reason `#audio` re-derives its outputs).
+            for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
             if (bridge.kind === KIND_AUDIO_EFFECT) {
                 const io = {src: [new Float32Array(buffer, srcL, RENDER_QUANTUM), new Float32Array(buffer, srcR, RENDER_QUANTUM)], out: [outLeft, outRight]}
                 proc.process(io, block)
             } else {
-                // Re-resolve the @sample slots every block (mirrors the TS `#pollSamples`): a sample's PCM loads
-                // ASYNC after bind, so the handle is delivered before its frames are resident; re-resolving flips
-                // `samples[label]` from null to the AudioData once ready. Re-deriving the views each block also
-                // keeps them valid if the SharedArrayBuffer grew (same reason `#audio` re-derives its outputs).
-                for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
                 outLeft.fill(0.0, s0, s1)
                 outRight.fill(0.0, s0, s1)
                 proc.process([outLeft, outRight], block)

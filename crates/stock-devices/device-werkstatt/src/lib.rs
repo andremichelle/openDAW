@@ -4,11 +4,13 @@
 //! over the shared linear memory. All real state (the user processor instance, the hot-swap, validation) lives
 //! JS-side; this crate only marshals offsets and forwards parameter changes. The script's parameters live on
 //! dynamic `WerkstattParameterBox` children under the `parameters` hub (field 11); the engine observes that
-//! collection and drives `parameter_changed` with each child's declaration index as the id.
+//! collection and drives `parameter_changed` with each child's declaration index as the id. Samples declared with
+//! `@sample` live on dynamic `WerkstattSampleBox` children under the `samples` hub (field 12); the engine resolves
+//! each child's `file` and drives `sample_changed`, which the bridge turns into `proc.samples[label]`.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`,
-//! `observe_sidechain_collection_field() -> 13`.
+//! `parameter_changed(...)`, `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`,
+//! `observe_sample_collection_field() -> 12`, `observe_sidechain_collection_field() -> 13`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -47,6 +49,13 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
     11
 }
 
+/// The `samples` hub field key — the engine observes its `WerkstattSampleBox` children and drives
+/// `sample_changed` per child (declaration index as id).
+#[no_mangle]
+pub extern "C" fn observe_sample_collection_field() -> u32 {
+    12
+}
+
 /// The `side-chains` hub field key — the engine turns each `WerkstattSidechainBox` child into a sidechain port,
 /// which the JS script bridge resolves itself during `host_script_audio`.
 #[no_mangle]
@@ -76,6 +85,16 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe {
         abi::with_state::<WerkstattState>(state_ptr, |state| {
             forward_param(state, id, ParamValue::from_wire(kind, value, modulation));
+        })
+    }
+}
+
+/// A `@sample` slot's resolved handle (or `present == 0` to clear), keyed by the child's declaration `id`.
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    unsafe {
+        abi::with_state::<WerkstattState>(state_ptr, |state| {
+            abi::script_sample(state.handle, id, handle, present != 0);
         })
     }
 }

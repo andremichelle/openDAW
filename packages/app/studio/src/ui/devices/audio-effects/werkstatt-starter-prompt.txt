@@ -82,6 +82,23 @@ Examples:
 // @param mode    0     0   3      int
 // @param bypass  false
 
+## Declaring samples
+Samples are declared as comments:
+
+// @sample <name>
+
+Each @sample creates a file picker on the device panel. Access the loaded audio via
+this.samples.<name>. Returns null before loaded.
+
+When loaded, this.samples.<name> is an AudioData object:
+- sampleRate: number — the sample's own sample rate
+- numberOfFrames: number — total frames
+- numberOfChannels: number — 1 (mono) or 2 (stereo)
+- frames: [Float32Array, ...] — per-channel audio data
+
+IMPORTANT: The sample's sampleRate may differ from the project sampleRate.
+Account for this, e.g. resample an impulse response before convolving.
+
 ## Declaring sidechains
 Sidechain inputs are declared as comments, any number, each with a unique name:
 
