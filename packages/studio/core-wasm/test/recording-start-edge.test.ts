@@ -23,6 +23,19 @@ describe("RecordingStartEdge", () => {
         expect(edge.observe(true)).toBe(false)
     })
 
+    // the processor stamps the recording stop time only when the edge still reads as recording
+    it("reads as recording from the rising edge until a falling edge or a reset", () => {
+        const edge = new RecordingStartEdge()
+        expect(edge.wasRecording).toBe(false)
+        edge.observe(true)
+        expect(edge.wasRecording).toBe(true)
+        edge.observe(false)
+        expect(edge.wasRecording, "a falling edge in render").toBe(false)
+        edge.observe(true)
+        edge.reset()
+        expect(edge.wasRecording, "a stop command").toBe(false)
+    })
+
     it("a reset while not recording changes nothing", () => {
         const edge = new RecordingStartEdge()
         edge.reset()

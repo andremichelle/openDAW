@@ -272,6 +272,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 engineState.isPlaying = view.getUint8(16) === 1
                 engineState.isCountingIn = false
                 engineState.isRecording = false
+                engineState.recordingStopTime = Number.NaN
             })
             Communicator.executor<EngineCommands>(messenger.channel("engine-commands"), {
                 play: (): void => engine.play(),

@@ -1,10 +1,10 @@
-import {describe, expect, it, vi} from "vitest"
+import {afterEach, describe, expect, it, vi} from "vitest"
 import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
-import type {RecordingStart} from "../Engine"
+import type {RecordingStart, RecordingStop} from "../Engine"
 import type {RecordingWorklet} from "../RecordingWorklet"
 import {InputLatency} from "./InputLatency"
 import type {Capture} from "./Capture"
@@ -38,6 +38,7 @@ const createFakeWorklet = () => ({
     markerState: new DefaultObservableValue(null),
     cpuLoad: new DefaultObservableValue(0),
     recordingStart: new MutableObservableOption<RecordingStart>(),
+    recordingStop: Option.None as Option<RecordingStop>,
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 
@@ -49,7 +50,8 @@ const createFakeRecordingWorklet = () => ({
     limit(count: number): void {this.limits.push(count)},
     terminate(): void {},
     setFillLength(): void {},
-    set onSaved(_: unknown) {},
+    saved: Option.None as Option<() => void>,
+    set onSaved(callback: () => void) {this.saved = Option.wrap(callback)},
     get data() {return Option.None}
 })
 
@@ -77,13 +79,14 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
     project.engine.setWorklet(worklet as unknown as EngineWorklet)
     project.editing.modify(() => project.timelineBox.loopArea.enabled.setValue(false))
     const recordingWorklet = createFakeRecordingWorklet()
+    const sourceNode = {disconnects: 0, disconnect(): void {this.disconnects++}}
     const capture = {
         audioUnitBox: primaryAudioUnitBox,
         addRecordedRegion: () => {}
     } as unknown as Capture
     const recorder = RecordAudio.start({
         recordingWorklet: recordingWorklet as unknown as RecordingWorklet,
-        sourceNode: {disconnect: () => {}} as unknown as AudioNode,
+        sourceNode: sourceNode as unknown as AudioNode,
         sampleManager: project.env.sampleManager,
         project,
         capture,
@@ -98,7 +101,8 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
     const startAt = (contextTime: number, position: ppqn) => worklet.recordingStart.wrap({contextTime, position})
     const firstQuantumAt = (contextTime: number) => recordingWorklet.firstQuantumTime = Option.wrap(contextTime)
     const deliver = (seconds: number) => recordingWorklet.numberOfFrames = Math.round(seconds * SAMPLE_RATE)
-    const stop = () => {
+    const stop = (stopTime?: number) => {
+        if (isDefined(stopTime)) {worklet.recordingStop = Option.wrap({contextTime: stopTime})}
         worklet.isRecording.setValue(false)
         project.editing.modify(() => recorder.terminate(), false)
     }
@@ -109,8 +113,10 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
         loopArea.enabled.setValue(true)
     })
     const reportOutputLatency = (seconds: number) => reportedOutputLatency = seconds
+    const terminate = () => project.editing.modify(() => recorder.terminate(), false)
+    const reportStop = (stopTime: number) => worklet.recordingStop = Option.wrap({contextTime: stopTime})
     return {
-        project, audioContext, recordingWorklet, regions, validate, tick, record, startAt, firstQuantumAt, deliver,
+        project, audioContext, recordingWorklet, sourceNode, terminate, reportStop, regions, validate, tick, record, startAt, firstQuantumAt, deliver,
         stop, loop, reportOutputLatency
     }
 }
@@ -123,6 +129,8 @@ const captureDebugLines = () => {
 }
 
 describe("RecordAudio", () => {
+    afterEach(() => {vi.useRealTimers()})
+
     describe("placing the first take", () => {
         it("anchors the take on the engine's recording start and the buffer's first frame", async () => {
             const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup()
@@ -304,6 +312,88 @@ describe("RecordAudio", () => {
             expect(regions().length).toBe(1)
             expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.56 - 0.53, 5)
             expect(recordingWorklet.limits).toEqual([Math.round(4.56 * SAMPLE_RATE)])
+        })
+
+        it("keeps the input still in flight when the engine stopped", async () => {
+            const {regions, recordingWorklet, sourceNode, tick, record, startAt, firstQuantumAt, deliver, stop} =
+                await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            // the engine stopped at 5.5 s: the buffer holds the input up to 5.5 s plus both latency terms
+            stop(5.5)
+            const stopFrames = Math.round((5.5 - 1.0 + 0.030) * SAMPLE_RATE)
+            expect(recordingWorklet.limits).toEqual([stopFrames])
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.0, 5)
+            expect(sourceNode.disconnects).toBe(0)
+            recordingWorklet.saved.unwrap()()
+            expect(sourceNode.disconnects).toBe(1)
+        })
+
+        it("cuts a take the ring delivered past the stop at the stop", async () => {
+            const {regions, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop} = await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.6)
+            stop(5.5)
+            expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE)])
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.0, 5)
+        })
+
+        it("ends the take at the delivered frames once the input tail never arrives", async () => {
+            vi.useFakeTimers()
+            const {regions, recordingWorklet, sourceNode, tick, record, startAt, firstQuantumAt, deliver, stop} =
+                await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            stop(5.5)
+            vi.advanceTimersByTime(900)
+            expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE)])
+            vi.advanceTimersByTime(200)
+            expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE), Math.round(4.5 * SAMPLE_RATE)])
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.5 - 0.53, 5)
+            expect(sourceNode.disconnects).toBe(0)
+        })
+
+        it("does not wait for the tail once it arrived", async () => {
+            vi.useFakeTimers()
+            const {recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop} = await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            stop(5.5)
+            deliver(4.53)
+            vi.advanceTimersByTime(2000)
+            expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE)])
+        })
+
+        it("ignores an earlier recording's stop when the take ends while the engine still records", async () => {
+            const {regions, recordingWorklet, sourceNode, tick, record, startAt, firstQuantumAt, deliver, terminate,
+                reportStop} = await setup()
+            reportStop(0.5)
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.56)
+            terminate()
+            expect(recordingWorklet.limits).toEqual([Math.round(4.56 * SAMPLE_RATE)])
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.56 - 0.53, 5)
+            expect(sourceNode.disconnects).toBe(0)
         })
 
         it("aborts a recording whose only take never grew past zero and removes its file box", async () => {

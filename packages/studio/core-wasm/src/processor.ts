@@ -94,6 +94,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
     readonly #quantumClock: QuantumClock = new QuantumClock()
     #quantumFrame: number = 0
+    #recordingStopTime: number = Number.NaN
     #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
@@ -153,6 +154,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.isPlaying = view.getUint8(16) === 1
             state.isCountingIn = view.getUint8(17) === 1
             state.isRecording = view.getUint8(18) === 1
+            state.recordingStopTime = this.#recordingStopTime
             if (this.#measureLoad) {
                 state.perfBuffer.set(this.#perfBuffer)
                 state.perfIndex = this.#perfWriteIndex
@@ -225,13 +227,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 prepareRecordingState: (countIn: boolean, generation: int): void => this.#guarded(() => {
                     this.#transporting = true
                     this.#recordingGeneration = generation
+                    this.#recordingStopTime = Number.NaN
                     engine.prepare_recording_state(countIn ? 1 : 0,
                         this.#preferences.settings.recording.countInBars)
                 }),
                 stopRecording: (): void => this.#guarded(() => {
                     this.#transporting = false
                     engine.stop_recording()
-                    this.#recordingStartEdge.reset()
+                    this.#closeRecordingEdge()
                 }),
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
@@ -394,7 +397,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }
         }
         engine.render()
-        this.#announceRecordingStart(engine)
+        this.#announceRecordingEdges(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
@@ -437,13 +440,23 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     }
 
     // the quantum frame is the quantum start, the state position is post-render: report the quantum end
-    #announceRecordingStart(engine: EngineExports): void {
+    #announceRecordingEdges(engine: EngineExports): void {
         const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
-        if (this.#recordingStartEdge.observe(view.getUint8(18) === 1)) {
-            this.#engineToClient.recordingStarted((this.#quantumFrame + RenderQuantum) / sampleRate, view.getFloat32(0),
+        const isRecording = view.getUint8(18) === 1
+        if (this.#recordingStartEdge.wasRecording && !isRecording) {this.#recordingStopTime = this.#quantumEndTime()}
+        if (this.#recordingStartEdge.observe(isRecording)) {
+            this.#engineToClient.recordingStarted(this.#quantumEndTime(), view.getFloat32(0),
                 this.#recordingGeneration)
         }
     }
+
+    // commands run between renders: the last rendered quantum's end is the first frame the stop excludes
+    #closeRecordingEdge(): void {
+        if (this.#recordingStartEdge.wasRecording) {this.#recordingStopTime = this.#quantumEndTime()}
+        this.#recordingStartEdge.reset()
+    }
+
+    #quantumEndTime(): number {return (this.#quantumFrame + RenderQuantum) / sampleRate}
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
     // `notifyClipSequenceChanges`): 20-byte records [uuid 16][kind u32 LE].
@@ -518,7 +531,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const wasRecording = view.getUint8(17) === 1 || view.getUint8(18) === 1
         this.#transporting = false
         this.#engine.pause()
-        this.#recordingStartEdge.reset()
+        this.#closeRecordingEdge()
         if (wasRecording) {
             // TS `#stop`: leaving a recording returns the playhead to where playback started (or 0).
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)

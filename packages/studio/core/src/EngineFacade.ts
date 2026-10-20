@@ -26,7 +26,7 @@ import {
     WclapStatus
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
-import {Engine, RecordingStart} from "./Engine"
+import {Engine, RecordingStart, RecordingStop} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
 import {Preferences} from "@opendaw/lib-fusion"
@@ -100,6 +100,7 @@ export class EngineFacade implements Engine {
 
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
+    get recordingStop(): Option<RecordingStop> {return this.#worklet.flatMap(worklet => worklet.recordingStop)}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}

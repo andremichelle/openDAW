@@ -48,7 +48,7 @@ import {
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Engine, RecordingStart} from "./Engine"
+import {Engine, RecordingStart, RecordingStop} from "./Engine"
 import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
@@ -77,6 +77,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
+    #recordingStop: Option<RecordingStop> = Option.None
     #recordingGeneration: int = 0
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
@@ -105,6 +106,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         const budgetMs = (RenderQuantum / context.sampleRate) * 1000
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
+            const {recordingStopTime} = state
+            if (this.#recordingStop.mapOr(stop => stop.contextTime !== recordingStopTime, true)) {
+                this.#recordingStop = Number.isFinite(recordingStopTime)
+                    ? Option.wrap({contextTime: recordingStopTime}) : Option.None
+            }
             this.#isRecording.setValue(state.isRecording)
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
@@ -340,6 +346,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
+    get recordingStop(): Option<RecordingStop> {return this.#recordingStop}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}

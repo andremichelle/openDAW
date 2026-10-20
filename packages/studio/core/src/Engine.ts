@@ -4,6 +4,7 @@ import {
     ObservableOption,
     ObservableValue,
     Observer,
+    Option,
     Procedure,
     Subscription,
     Terminable,
@@ -14,6 +15,7 @@ import {ClipNotification, EnginePreferences, NoteSignal, WclapGuiInfo, WclapGuiS
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
+export type RecordingStop = {readonly contextTime: number}
 
 export interface Engine extends Terminable {
     play(): void
@@ -52,6 +54,7 @@ export interface Engine extends Terminable {
 
     get position(): ObservableValue<ppqn>
     get recordingStart(): ObservableOption<RecordingStart>
+    get recordingStop(): Option<RecordingStop>
     get bpm(): ObservableValue<bpm>
     get isPlaying(): ObservableValue<boolean>
     get isRecording(): ObservableValue<boolean>
