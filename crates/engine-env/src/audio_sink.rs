@@ -15,7 +15,7 @@ use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
 use crate::meter::Meter;
-use crate::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use crate::ppqn::pulses_to_samples;
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
 use crate::ramp::LinearRamp;
@@ -174,7 +174,7 @@ impl Processor for AudioSinkProcessor {
             }
             let mut cursor = s0;
             self.retarget_resolved(block.p0, true);
-            let mut position = first_update_position(block.p0);
+            let mut position = crate::update_clock::first_update(block.p0, self.automation_lag);
             while position < block.p1 {
                 let offset = self.sample_offset(position, block).clamp(cursor, s1);
                 if offset > cursor {
@@ -182,7 +182,7 @@ impl Processor for AudioSinkProcessor {
                     cursor = offset;
                 }
                 self.retarget_resolved(position, true);
-                position += UPDATE_CLOCK_RATE;
+                position = crate::update_clock::next_update(position, self.automation_lag);
             }
             if cursor < s1 {
                 self.apply(&source, &mut output, cursor, s1);

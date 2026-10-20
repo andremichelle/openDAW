@@ -5,6 +5,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use engine_env::block::Block;
+use engine_env::ppqn::UPDATE_CLOCK_RATE;
 
 #[derive(Clone, Copy, Default)]
 struct Record {
@@ -73,33 +74,59 @@ impl PlayheadHistory {
         &self.records[(self.head + self.records.len() - 1 - back) % self.records.len()]
     }
 
+    fn current(&self) -> impl Iterator<Item = &Record> {
+        (0..self.count).map(|back| self.newest(back)).take_while(|record| record.quantum == self.quantum)
+    }
+
     /// Resolve `position` (a pulse inside the current quantum) `lag` frames earlier.
     pub(crate) fn lagged(&self, position: f64, lag: u32) -> Option<Lagged> {
         if self.count == 0 {
             return None;
         }
-        let frame = (0..self.count)
-            .map(|back| self.newest(back))
-            .take_while(|record| record.quantum == self.quantum)
+        let frame = self.current()
             .find(|record| record.p0 <= position && position <= record.p1)
-            .map_or(self.quantum_start, |record| {
+            .map_or(self.quantum_start as f64, |record| {
                 let span = record.p1 - record.p0;
-                let offset = if span > 0.0 {(position - record.p0) / span * record.frames as f64} else {0.0};
-                record.start + offset as u64
+                record.start as f64 + if span > 0.0 {(position - record.p0) / span * record.frames as f64} else {0.0}
             });
-        let target = frame.saturating_sub(lag as u64);
+        let target = (frame - lag as f64).max(0.0);
         let record = (0..self.count)
             .map(|back| self.newest(back))
-            .find(|record| record.start <= target)
+            .find(|record| record.start as f64 <= target)
             .unwrap_or_else(|| self.newest(self.count - 1));
-        let ratio = if record.frames == 0 {0.0} else {(target.saturating_sub(record.start)) as f64 / record.frames as f64};
-        let pulse = record.p0 + (record.p1 - record.p0) * ratio.min(1.0);
+        let ratio = if record.frames == 0 {0.0} else {((target - record.start as f64) / record.frames as f64).clamp(0.0, 1.0)};
+        let pulse = snap(record.p0 + (record.p1 - record.p0) * ratio);
         Some(Lagged {
             automation: if record.transporting {pulse} else {record.song},
             modulation: pulse,
             quanta_back: (self.quantum - record.quantum) as usize
         })
     }
+}
+
+impl PlayheadHistory {
+    /// The pulse inside the current quantum at which audio rendered at `pulse`, `lag` frames ago, arrives now.
+    pub(crate) fn lead(&self, pulse: f64, lag: u32) -> Option<f64> {
+        let window = self.quantum_start as f64 - lag as f64;
+        let rendered = (0..self.count)
+            .map(|back| self.newest(back))
+            .filter(|record| record.transporting && record.p0 <= pulse && pulse < record.p1)
+            .map(|record| record.start as f64 + (pulse - record.p0) / (record.p1 - record.p0) * record.frames as f64)
+            .find(|frame| *frame >= window)?;
+        let arrival = rendered + lag as f64 + 1.0e-6; // a frame boundary must not floor one frame early
+        self.current()
+            .find(|record| record.start as f64 <= arrival && arrival < (record.start + record.frames as u64) as f64)
+            .map(|record| {
+                let span = record.p1 - record.p0;
+                record.p0 + if record.frames == 0 {0.0} else {(arrival - record.start as f64) / record.frames as f64 * span}
+            })
+    }
+}
+
+// round-trips through `lead` land within float noise of a grid pulse; snap them onto it
+fn snap(pulse: f64) -> f64 {
+    let grid = math::floor(pulse / UPDATE_CLOCK_RATE + 0.5) * UPDATE_CLOCK_RATE;
+    if (pulse - grid).abs() < 1.0e-4 {grid} else {pulse}
 }
 
 #[cfg(test)]
@@ -156,6 +183,18 @@ mod tests {
         assert_eq!(lagged.automation, 777.0);
         assert_eq!(lagged.modulation, 5064.0);
         assert_eq!(lagged.quanta_back, 1);
+    }
+
+    #[test]
+    fn lead_inverts_lagged_across_a_tempo_change() {
+        let mut history = PlayheadHistory::new();
+        history.reserve(8, 4);
+        history.record_quantum(&[block(0.0, 64.0, 0, 64), block(64.0, 192.0, 64, 128)], 0.0, 128);
+        history.record_quantum(&[block(192.0, 320.0, 0, 128)], 0.0, 128);
+        let lead = history.lead(100.0, 96).unwrap();
+        assert!((lead - 242.0).abs() < 1.0e-5);
+        assert_eq!(history.lagged(lead, 96).unwrap().automation, 100.0);
+        assert_eq!(history.lead(10.0, 96), None);
     }
 
     #[test]

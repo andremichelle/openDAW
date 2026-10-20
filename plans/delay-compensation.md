@@ -62,6 +62,9 @@ A project without latent devices computes zero everywhere, holds no delay line a
    Phase 5 reads automation and modulators through a playhead history (`playhead_history.rs`): a processor whose
    input is `lag` frames late steps back that many frames through the recorded blocks, exact across tempo changes,
    loop jumps and locates; modulators keep one value per quantum. Solo and MIDI-out CC automation stay unshifted.
+   A lagged reader also walks a lagged update clock (`update_clock.rs`, `lead`): its ticks sit where the position
+   its audio was rendered at crosses the grid, so a step lands on the same sample of the audio, also under tempo
+   automation (test/automation-compensation-tempo.test.ts).
    Werkstatt declares `// @latency <ms>`, `this.latency = frames` overrides it at runtime.
 2. Sidechains are fully aligned, not only the earlier case: a late sidechain delays the consumer's main input
    and the paths downstream compensate. A sidechain from downstream (feedback) stays unaligned.

@@ -518,6 +518,23 @@ shared_static! {
 pub(crate) fn playhead_lagged(position: f64, lag: u32) -> Option<playhead_history::Lagged> {
     unsafe { PLAYHEAD.get() }.lagged(position, lag)
 }
+
+// The update clock of a reader whose audio is `lag` frames late: the current pulse where the position that audio
+// was rendered at crosses the grid, so its automation steps on the same sample of the audio as without latency.
+fn lagged_update_position(position: f64, lag: u32, strict: bool) -> f64 {
+    let history = unsafe { PLAYHEAD.get() };
+    let Some(lagged) = history.lagged(position, lag) else { return f64::INFINITY };
+    let grid = if strict {
+        (math::floor(lagged.modulation / UPDATE_CLOCK_RATE) + 1.0) * UPDATE_CLOCK_RATE
+    } else {
+        first_update_position(lagged.modulation)
+    };
+    match history.lead(grid, lag) {
+        Some(lead) if !strict || lead > position => lead,
+        Some(_) => history.lead(grid + UPDATE_CLOCK_RATE, lag).unwrap_or(f64::INFINITY),
+        None => f64::INFINITY
+    }
+}
 // The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
 // OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
@@ -863,6 +880,9 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     if !pull.clock_armed {
         return f64::INFINITY;
     }
+    if pull.automation_lag > 0 && quantum_transporting() {
+        return lagged_update_position(at, pull.automation_lag, false);
+    }
     if quantum_transporting() || modulation_armed(pull) {
         return first_update_position(at);
     }
@@ -881,6 +901,9 @@ pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
     if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
+    }
+    if pull.automation_lag > 0 && quantum_transporting() {
+        return lagged_update_position(after, pull.automation_lag, true);
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).
     let mut position = ((after / UPDATE_CLOCK_RATE) as i64 + 1) as f64 * UPDATE_CLOCK_RATE;
@@ -1370,6 +1393,7 @@ impl Engine {
     fn new(sample_rate: f32) -> Self {
         let quanta = engine_env::compensation::max_compensation_frames(sample_rate) as usize / RENDER_QUANTUM + 2;
         unsafe { PLAYHEAD.get() }.reserve(quanta, MAX_BLOCKS_PER_QUANTUM);
+        engine_env::update_clock::install_lagged_clock(lagged_update_position);
         Self {
             graph: BoxGraph::from_boxes(Vec::new()),
             registry: registry(),
