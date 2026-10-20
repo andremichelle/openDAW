@@ -58,10 +58,14 @@ A project without latent devices computes zero everywhere, holds no delay line a
 
 ## Status (2026-10-20)
 
-1. Done: phases 0, 1, 2, 3, 4 (metronome, recording placement, MIDI out, offline trim, stems, freeze via stems), 6.
+1. Done: phases 0, 1, 2, 3, 4 (metronome, recording placement, MIDI out, offline trim, stems, freeze via stems), 5, 6.
+   Phase 5 reads automation and modulators through a playhead history (`playhead_history.rs`): a processor whose
+   input is `lag` frames late steps back that many frames through the recorded blocks, exact across tempo changes,
+   loop jumps and locates; modulators keep one value per quantum. Solo and MIDI-out CC automation stay unshifted.
+   Werkstatt declares `// @latency <ms>`, `this.latency = frames` overrides it at runtime.
 2. Sidechains are fully aligned, not only the earlier case: a late sidechain delays the consumer's main input
    and the paths downstream compensate. A sidechain from downstream (feedback) stays unaligned.
-3. Open: phase 5 (automation, later), phase 7 (monitoring), the playhead (it subtracts no latency today either),
+3. Open: phase 7 (monitoring), the playhead (it subtracts no latency today either),
    a WCLAP plug-in with `clap.latency` is untested against a real bundle.
 
 ## Phases

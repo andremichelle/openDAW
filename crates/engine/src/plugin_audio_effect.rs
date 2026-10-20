@@ -70,7 +70,8 @@ pub(crate) struct PluginAudioEffect {
     latency: Rc<Cell<u32>>,
     main_compensation: Option<CompensatedInput>,
     sidechain_nodes: Vec<NodeId>,
-    sidechain_compensation: Vec<Option<CompensatedInput>>
+    sidechain_compensation: Vec<Option<CompensatedInput>>,
+    automation_lag: u32
 }
 
 impl PluginAudioEffect {
@@ -125,7 +126,8 @@ impl PluginAudioEffect {
             latency,
             main_compensation: None,
             sidechain_nodes: Vec::new(),
-            sidechain_compensation: Vec::new()
+            sidechain_compensation: Vec::new(),
+            automation_lag: 0
         }
     }
 
@@ -221,6 +223,10 @@ impl Processor for PluginAudioEffect {
         true
     }
 
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
     fn set_input_delays(&mut self, main: u32, sidechains: &[(NodeId, u32)], limits: CompensationLimits) {
         if main > 0 || self.main_compensation.is_some() {
             self.main_compensation.get_or_insert_with(CompensatedInput::new).set_delay(main, limits);
@@ -264,6 +270,7 @@ impl Processor for PluginAudioEffect {
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
             pull.clock_armed = self.clock_armed;
+            pull.automation_lag = self.automation_lag;
             core::mem::swap(&mut self.params, &mut pull.params);
             // Swap in this effect's input ports so `host_resolve_input` resolves port 1 (the through-signal)
             // and any sidechains for THIS device's call.
@@ -284,6 +291,7 @@ impl Processor for PluginAudioEffect {
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
             pull.clock_armed = false;
+            pull.automation_lag = 0;
             core::mem::swap(&mut self.params, &mut pull.params);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }

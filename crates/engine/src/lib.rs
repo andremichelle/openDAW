@@ -332,6 +332,7 @@ const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits p
 const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
+mod playhead_history;
 mod monitor;
 mod frozen;
 use metronome::Metronome;
@@ -508,6 +509,14 @@ shared_static! {
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 shared_static! {
     static PULL: PullContext = PullContext::new();
+}
+// Where the playhead was during the last quanta, for automation behind delay compensation (#482).
+shared_static! {
+    static PLAYHEAD: playhead_history::PlayheadHistory = playhead_history::PlayheadHistory::new();
+}
+
+pub(crate) fn playhead_lagged(position: f64, lag: u32) -> Option<playhead_history::Lagged> {
+    unsafe { PLAYHEAD.get() }.lagged(position, lag)
 }
 // The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
@@ -703,6 +712,8 @@ struct PullContext {
     // returns real grid points (and the render fragments); otherwise it returns INFINITY (no fragmentation).
     params: Vec<ParamHandle>,
     clock_armed: bool,
+    // frames the CURRENT device's input is late through delay compensation, its automation follows that audio
+    automation_lag: u32,
     // The CURRENT CONSUMER's unit note-bits slot (TS `NoteEventInstrument`'s 128-bit `NoteBroadcaster`):
     // resolved note starts/completes set/clear pitch bits. Set by `PluginInstrument` around its device call;
     // cleared during a MidiFx descent so nested pulls mark only their own producers.
@@ -713,7 +724,7 @@ impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false, note_bits: None
+            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0
         }
     }
 }
@@ -1060,11 +1071,15 @@ fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
     let mut count = 0;
     // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
     let automation_position = if quantum_transporting() {position} else {song_position()};
+    let lagged = if pull.automation_lag == 0 {None} else {playhead_lagged(position, pull.automation_lag)};
     for param in &pull.params {
         if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind, modulation) = param.resolve_split(automation_position, position);
+        let (value, kind, modulation) = match &lagged {
+            Some(lagged) => param.resolve_lagged(lagged),
+            None => param.resolve_split(automation_position, position)
+        };
         if param.changed(value, modulation) {
             param.mark(value, modulation);
             if count >= out.len() {
@@ -1353,6 +1368,8 @@ struct Engine {
 
 impl Engine {
     fn new(sample_rate: f32) -> Self {
+        let quanta = engine_env::compensation::max_compensation_frames(sample_rate) as usize / RENDER_QUANTUM + 2;
+        unsafe { PLAYHEAD.get() }.reserve(quanta, MAX_BLOCKS_PER_QUANTUM);
         Self {
             graph: BoxGraph::from_boxes(Vec::new()),
             registry: registry(),
@@ -1710,6 +1727,7 @@ impl Engine {
                 bpm: paused.bpm
             });
         }
+        unsafe { PLAYHEAD.get() }.record_quantum(blocks.as_slice(), transport.position(), RENDER_QUANTUM as u32);
         // Queue a switchMarkerState notification when the active marker (or its play count) moved
         // this quantum (TS raises `markerChanged` and notifies once per `process`).
         if transport.take_marker_changed() {
@@ -2113,6 +2131,7 @@ impl Engine {
                 modulators.anchor(self.tempo_map.borrow().ppqn_to_seconds(free_running), position);
             }
             modulators.refresh_params(position, free_running);
+            modulators.record_history();
             modulators.publish_phases();
         }
         self.modulation_free = free_running + quantum_pulses;

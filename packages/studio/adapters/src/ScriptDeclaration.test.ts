@@ -36,6 +36,26 @@ describe("ScriptDeclaration", () => {
         })
     })
 
+    describe("parseLatency", () => {
+        it("is 0 without the directive", () => {
+            expect(ScriptDeclaration.parseLatency("class Processor {}")).toBe(0)
+        })
+        it("reads milliseconds", () => {
+            expect(ScriptDeclaration.parseLatency("// @latency 21.3\nclass Processor {}")).toBe(21.3)
+        })
+        it("allows a trailing comment", () => {
+            expect(ScriptDeclaration.parseLatency("// @latency 5 // look-ahead")).toBe(5)
+        })
+        it("ignores the directive mid-line", () => {
+            expect(ScriptDeclaration.parseLatency("const text = \"// @latency 5\"")).toBe(0)
+        })
+        it("throws on a missing, negative or non-numeric value", () => {
+            expect(() => ScriptDeclaration.parseLatency("// @latency")).toThrow()
+            expect(() => ScriptDeclaration.parseLatency("// @latency -1")).toThrow()
+            expect(() => ScriptDeclaration.parseLatency("// @latency fast")).toThrow()
+        })
+    })
+
     describe("parseParams", () => {
         it("parses unipolar param with no args", () => {
             const params = ScriptDeclaration.parseParams("// @param gain")

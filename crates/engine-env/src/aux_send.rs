@@ -46,6 +46,7 @@ pub struct AuxSendProcessor {
     // The send's automation overrides, reusing the strip's shape: `volume` carries the sendGain curve (dB),
     // `panning` the sendPan curve (-1..1). `None` per parameter = not automated, the static `SendParams` rules.
     automation: Rc<StripAutomation>,
+    automation_lag: u32,
     output: SharedAudioBuffer,
     input: Option<SharedAudioBuffer>,
     gain_left: LinearRamp,
@@ -60,6 +61,7 @@ impl AuxSendProcessor {
         Self {
             params,
             automation,
+            automation_lag: 0,
             output: shared_audio_buffer(),
             input: None,
             gain_left: LinearRamp::linear(sample_rate),
@@ -85,11 +87,11 @@ impl AuxSendProcessor {
 
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let gain_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.gain_db.get()
         };
         let panning = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.pan.get()
         };
         self.retarget(gain_db, panning);
@@ -158,6 +160,10 @@ impl AudioGenerator for AuxSendProcessor {
 }
 
 impl Processor for AuxSendProcessor {
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
     }

@@ -935,7 +935,7 @@ impl Engine {
         let mut changed = false;
         for unit in &self.audio_units {
             let soloed = match unit.strip_automation.solo.borrow().as_ref() {
-                Some(source) => source(position, true) >= 0.5, // TS `ValueMapping.bool.y`
+                Some(source) => source(position, true, 0) >= 0.5, // TS `ValueMapping.bool.y`
                 None => continue
             };
             if unit.strip_params.solo.get() != soloed {

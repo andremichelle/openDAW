@@ -239,6 +239,7 @@ pub struct DryWetMixProcessor {
     params: Rc<DryWetParams>,
     meter: crate::meter::Meter, // peaks/RMS of the composite's OUTPUT (a broadcast slot), like any device
     automation: Rc<StripAutomation>,
+    automation_lag: u32,
     output: SharedAudioBuffer,
     tap: SharedAudioBuffer,
     wet_sum: SharedAudioBuffer,
@@ -259,6 +260,7 @@ impl DryWetMixProcessor {
             params,
             meter: crate::meter::Meter::new(sample_rate),
             automation,
+            automation_lag: 0,
             output: shared_audio_buffer(),
             tap,
             wet_sum,
@@ -287,11 +289,11 @@ impl DryWetMixProcessor {
 
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let dry_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.dry_db.get()
         };
         let wet_db = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.wet_db.get()
         };
         self.retarget(dry_db, wet_db);
@@ -370,6 +372,10 @@ impl DryWetMixProcessor {
 }
 
 impl Processor for DryWetMixProcessor {
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
     fn junction_sources(&self) -> Option<Vec<NodeId>> {
         self.junction.map(|nodes| nodes.to_vec())
     }

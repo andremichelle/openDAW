@@ -195,7 +195,7 @@ impl EffectCompositeBinding {
     pub(crate) fn entry_gain_at(&self, uuid: Uuid, position: f64, transporting: bool) -> Option<f32> {
         self.members.iter().find(|entry| entry.uuid == uuid)
             .map(|entry| match entry.strip_automation.volume.borrow().as_ref() {
-                Some(source) => source(position, transporting),
+                Some(source) => source(position, transporting, 0),
                 None => entry.strip_params.volume_db.get()
             })
     }

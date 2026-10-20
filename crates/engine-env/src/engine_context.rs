@@ -299,6 +299,11 @@ impl EngineContext {
             }).collect();
             processor.borrow_mut().set_input_delays(latest - main, &delays, limits);
         }
+        for (&id, processor) in &self.processors {
+            let own = processor.borrow().latency();
+            let input = self.arrival(id, &mut memo).saturating_sub(own);
+            processor.borrow_mut().set_automation_delay(input);
+        }
     }
 
     /// Run an observer in each `ProcessPhase` (TS `subscribeProcessPhase`). Unsubscription is deferred.

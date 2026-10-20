@@ -119,8 +119,12 @@ Example:
     }
 
 ## Declaring latency
-A processor that delays its output (an FFT window, a look-ahead) sets this.latency to the delay in
-frames, in the constructor or whenever it changes. The engine delays every parallel path to match.
+A processor that delays its output (an FFT window, a look-ahead) declares the delay in milliseconds:
+
+// @latency <milliseconds>
+
+The engine delays every parallel path to match. A delay that changes at runtime can be set in frames
+with this.latency = frames, which overrides the declaration.
 
 ## Globals
 - sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).

@@ -166,13 +166,17 @@ const [keyL, keyR] = this.sidechains.Key
 
 ### Latency
 
-A processor that delays its output, for example an FFT with a large window or a look-ahead limiter, declares the delay in frames:
+A processor that delays its output, for example an FFT with a large window or a look-ahead limiter, declares the delay in milliseconds:
+
+```javascript
+// @latency 21.3
+```
+
+The engine then delays every parallel path by the same amount, so the track stays in time with the rest of the mix, and automation on later devices follows the delayed audio. A delay that changes while the script runs can be set in frames instead, which overrides the declaration:
 
 ```javascript
 this.latency = 1024
 ```
-
-The engine then delays every parallel path by the same amount, so the track stays in time with the rest of the mix. Set it in the constructor, or change it later when the delay changes. Leave it unset for no delay.
 
 ---
 

@@ -165,6 +165,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},
         readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
+        latency: ${ScriptDeclaration.parseLatency(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}
     }
 `

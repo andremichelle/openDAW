@@ -42,7 +42,7 @@ type ParamDecl = {label: string, index: number, mapping: string, min: number, ma
 type SampleDecl = {label: string, index: number}
 type SidechainDecl = {label: string, index: number}
 type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>,
-    sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, pass: boolean}
+    sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, latency?: number, pass: boolean}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -69,6 +69,7 @@ class Bridge {
     sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
     readsSidechains = false
+    declaredLatency = 0 // `// @latency <ms>`
     readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
@@ -203,6 +204,7 @@ export class ScriptBridges {
                 bridge.sidechainViews = {}
                 bridge.sidechainLookup = createSidechainLookup(bridge.sidechainViews, bridge.sidechains)
                 bridge.readsSidechains = registry.readsSidechains === true
+                bridge.declaredLatency = registry.latency ?? 0
                 if (bridge.kind !== KIND_MIDI_EFFECT) {
                     proc.samples = {}
                     for (const label of bridge.sampleLabels.values()) {proc.samples[label] = null}
@@ -227,10 +229,13 @@ export class ScriptBridges {
         return bridge.silenced ? null : bridge.proc
     }
 
-    // a script declares its delay with `this.latency = frames`
+    // a script declares its delay with `// @latency <ms>`, or changes it at runtime with `this.latency = frames`
     #latency(handle: number): number {
-        const latency: unknown = this.#bridges.get(handle)?.proc?.latency
-        return typeof latency === "number" && Number.isFinite(latency) && latency > 0 ? Math.round(latency) : 0
+        const bridge = this.#bridges.get(handle)
+        if (bridge === undefined) {return 0}
+        const latency: unknown = bridge.proc?.latency
+        if (typeof latency === "number" && Number.isFinite(latency) && latency > 0) {return Math.round(latency)}
+        return Math.round(bridge.declaredLatency * this.#sampleRate / 1000)
     }
 
     #audio(handle: number, srcL: number, srcR: number, outL: number, outR: number,
