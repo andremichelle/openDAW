@@ -13,6 +13,7 @@ export * from "./sync-log"
 export * from "./ui"
 export * from "./ysync"
 
+export * from "./AudioBounce"
 export * from "./AudioConsolidation"
 export * from "./AutoEq"
 export * from "./AudioContexts"
