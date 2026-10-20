@@ -300,7 +300,12 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             } satisfies EngineToClient
         )
         this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
+        const clockLease = this.#terminator.own(new Terminator())
         this.#terminator.ownAll(
+            this.#preferences.catchupAndSubscribe(measure => {
+                clockLease.terminate()
+                if (measure) {clockLease.own(HRClockWorker.get().lease())}
+            }, "debug", "dspLoadMeasurement"),
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
