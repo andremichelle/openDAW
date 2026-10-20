@@ -44,6 +44,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         recordGainNode: GainNode
+        monitorMixdown: GainNode
         keepAliveSink: GainNode
         channelCount: 1 | 2
     }> = null
@@ -334,12 +335,19 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         recordGainNode.channelCount = channelCount
         recordGainNode.channelCountMode = "explicit"
         sourceNode.connect(recordGainNode)
+        // the engine splits its monitoring input discretely, so a forced mono must arrive already mixed down
+        const monitorMixdown = audioContext.createGain()
+        monitorMixdown.gain.value = 1.0
+        monitorMixdown.channelCount = channelCount
+        monitorMixdown.channelCountMode = "explicit"
+        monitorMixdown.channelInterpretation = "speakers"
+        sourceNode.connect(monitorMixdown)
         // a silent sink on the destination keeps the source pulled, so its input delay stays settled
         const keepAliveSink = audioContext.createGain()
         keepAliveSink.gain.value = 0.0
         sourceNode.connect(keepAliveSink)
         keepAliveSink.connect(audioContext.destination)
-        this.#audioChain = {sourceNode, recordGainNode, keepAliveSink, channelCount}
+        this.#audioChain = {sourceNode, recordGainNode, monitorMixdown, keepAliveSink, channelCount}
         this.#connectMonitoring()
     }
 
@@ -354,9 +362,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #destroyAudioChain(): void {
         if (isDefined(this.#audioChain)) {
-            const {sourceNode, recordGainNode, keepAliveSink} = this.#audioChain
+            const {sourceNode, recordGainNode, monitorMixdown, keepAliveSink} = this.#audioChain
             sourceNode.disconnect()
             recordGainNode.disconnect()
+            monitorMixdown.disconnect()
             keepAliveSink.disconnect()
             this.#audioChain = null
         }
@@ -368,7 +377,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #connectMonitoring(): void {
         if (!isDefined(this.#audioChain)) {return}
-        const {sourceNode, channelCount} = this.#audioChain
+        const {sourceNode, monitorMixdown, channelCount} = this.#audioChain
         switch (this.#monitoringMode) {
             case "off":
                 break
@@ -378,7 +387,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 break
             case "effects":
                 this.manager.project.engine.registerMonitoringSource(
-                    this.audioUnitBox.address.uuid, sourceNode, channelCount, this.#monitorGainNode)
+                    this.audioUnitBox.address.uuid, monitorMixdown, channelCount, this.#monitorGainNode)
                 this.#monitorPanNode.connect(this.#monitorDestination())
                 break
         }
