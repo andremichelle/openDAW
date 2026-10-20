@@ -263,6 +263,8 @@ export class BoxGraph<BoxMap = any> {
 
     onPointerAddressUpdated(pointerField: PointerField, oldValue: Option<Address>, newValue: Option<Address>): void {
         this.#assertTransaction()
+        // https://github.com/andremichelle/openDAW/issues/480
+        if (!this.#constructingBox && !pointerField.isAttached()) {return}
         if (oldValue.nonEmpty()) {this.#edges.disconnect(pointerField)}
         if (newValue.nonEmpty()) {this.#edges.connect(pointerField, newValue.unwrap())}
         const update = new PointerUpdate(pointerField.address, oldValue, newValue)
