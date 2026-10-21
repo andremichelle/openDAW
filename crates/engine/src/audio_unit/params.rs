@@ -892,8 +892,8 @@ impl Engine {
         // handles line up by index). Fresh handles start at `last = NaN`, which would re-push EVERY parameter;
         // carrying `last` over means `refresh_params` only pushes the ones whose value actually changed — so a
         // parameter (or whole plugin) unaffected by this automation edit is never re-pushed (and never glides).
-        let previous_last: Vec<(f32, f32)> = params.handles.iter()
-            .map(|handle| (handle.last.get(), handle.last_modulation.get())).collect();
+        let previous_last: Vec<(u32, f32, f32)> = params.handles.iter()
+            .map(|handle| (handle.id, handle.last.get(), handle.last_modulation.get())).collect();
         for sub in core::mem::take(&mut params.field_subs) {
             self.graph.unsubscribe(sub);
         }
@@ -910,8 +910,9 @@ impl Engine {
             collections.append(&mut script_collections);
             armed |= script_armed;
         }
-        for (handle, (last, last_modulation)) in handles.iter().zip(previous_last) {
-            handle.mark(last, last_modulation);
+        // carried over only for an unchanged id: a re-numbered script param must be pushed again under its new id
+        for (handle, (id, last, last_modulation)) in handles.iter().zip(previous_last) {
+            if handle.id == id {handle.mark(last, last_modulation);}
         }
         params.sink.set_params(handles.clone(), armed);
         refresh_params(&handles, params.reg, params.state_ptr, position);

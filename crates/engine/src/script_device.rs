@@ -17,6 +17,7 @@ use core::cell::Cell;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::field::FieldValue;
+use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{Propagation, SubscriptionId};
 use crate::audio_unit::{resolve_and_deliver_sample, visit_member_params, AudioUnitBinding, DeviceParams, SidechainBinding, SidechainPort, Wired};
 use crate::param_automation::ParamHandle;
@@ -47,6 +48,10 @@ impl Engine {
                 self.observe_param(child, &[PARAM_VALUE_KEY], id, invalidate);
             handles.push(handle);
             subs.append(&mut child_subs);
+            // a reordered @param re-numbers its child: re-bind so the value travels under the new index
+            let index_invalidate = invalidate.clone();
+            subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(child, vec![DECL_INDEX_KEY]),
+                Box::new(move |_graph, _update| index_invalidate())));
             collections.append(&mut child_collections);
             armed |= child_armed;
         }
@@ -62,13 +67,14 @@ impl Engine {
         let sample_changed_index = reg.sample_changed_index;
         let mut subs = Vec::new();
         for child in self.collection_children(device_uuid, hub_field) {
-            let id = self.declaration_index(child);
-            resolve_and_deliver_sample(&self.graph, child, &[SAMPLE_FILE_KEY], sample_changed_index, state_ptr, id);
-            let sub = self.graph.subscribe_vertex(Propagation::This, Address::of(child, vec![SAMPLE_FILE_KEY]),
-                Box::new(move |graph, _update| {
-                    resolve_and_deliver_sample(graph, child, &[SAMPLE_FILE_KEY], sample_changed_index, state_ptr, id);
-                }));
-            subs.push(sub);
+            resolve_and_deliver_sample(&self.graph, child, &[SAMPLE_FILE_KEY], sample_changed_index, state_ptr, declaration_index_in(&self.graph, child));
+            // the index is read at delivery: a reordered @sample re-numbers its child, its file is delivered again
+            for key in [SAMPLE_FILE_KEY, DECL_INDEX_KEY] {
+                subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(child, vec![key]),
+                    Box::new(move |graph, _update| {
+                        resolve_and_deliver_sample(graph, child, &[SAMPLE_FILE_KEY], sample_changed_index, state_ptr, declaration_index_in(graph, child));
+                    })));
+            }
         }
         subs
     }
@@ -142,9 +148,12 @@ impl Engine {
     /// A child's declaration `index` (key 3) — its order among the script's `@param` / `@sample` lines, used as
     /// the id the device forwards to the JS bridge (which maps it to the declared label + value mapping).
     fn declaration_index(&self, child: Uuid) -> u32 {
-        self.graph.field_value(&Address::of(child, vec![DECL_INDEX_KEY]))
-            .and_then(|value| value.as_int32()).unwrap_or(0) as u32
+        declaration_index_in(&self.graph, child)
     }
+}
+
+fn declaration_index_in(graph: &BoxGraph, child: Uuid) -> u32 {
+    graph.field_value(&Address::of(child, vec![DECL_INDEX_KEY])).and_then(|value| value.as_int32()).unwrap_or(0) as u32
 }
 
 // Record / value box field keys (WASM CONTRACT: mirror the TS `ScriptRecordBox` / `ScriptValueBox` schemas).
