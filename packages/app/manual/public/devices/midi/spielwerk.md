@@ -247,7 +247,7 @@ The `events` parameter is a unified iterator containing both note-ons and note-o
 |------------|-----------|---------|---------------------------------------|
 | `gate`     | `boolean` | `true`  | Identifies this as a note-on          |
 | `id`       | `number`  | —       | Unique identifier for this note       |
-| `position` | `number`  | ppqn    | Start position (480 ppqn per quarter) |
+| `position` | `number`  | ppqn    | Start position (960 ppqn per quarter) |
 | `duration` | `number`  | ppqn    | Note length                           |
 | `pitch`    | `number`  | 0–127   | MIDI note number                      |
 | `velocity` | `number`  | 0.0–1.0 | Note velocity                         |
@@ -268,7 +268,7 @@ Your generator yields note-on objects only: `{ position, duration, pitch, veloci
 
 | Property   | Type     | Range     | Description                           |
 |------------|----------|-----------|---------------------------------------|
-| `position` | `number` | ppqn      | Start position (480 ppqn per quarter) |
+| `position` | `number` | ppqn      | Start position (960 ppqn per quarter) |
 | `duration` | `number` | ppqn      | Note length                           |
 | `pitch`    | `number` | 0–127     | MIDI note number                      |
 | `velocity` | `number` | 0.0–1.0   | Note velocity                         |

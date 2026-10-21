@@ -16,13 +16,13 @@ const AUDIO_BLOCK = parameter("block", "block", "Timing and transport of this bl
     entry("s1", "block.s1: int", "Last sample index (exclusive). Only read and write between `s0` and `s1`."),
     entry("index", "block.index: int", "Block counter, increments each audio callback."),
     entry("bpm", "block.bpm: number", "Current project tempo in BPM."),
-    entry("p0", "block.p0: ppqn", "Start position in ppqn (480 per quarter note)."),
+    entry("p0", "block.p0: ppqn", "Start position in ppqn (960 per quarter note)."),
     entry("p1", "block.p1: ppqn", "End position in ppqn."),
     entry("flags", "block.flags: int", "Bitmask: 1 transporting, 2 discontinuous (seek or loop restart), 4 playing, 8 bpmChanged.")
 ])
 
 const NOTE_BLOCK = parameter("block", "block", "Position range and transport of this block.", [
-    entry("from", "block.from: ppqn", "Start position in ppqn, inclusive (480 per quarter note)."),
+    entry("from", "block.from: ppqn", "Start position in ppqn, inclusive (960 per quarter note)."),
     entry("to", "block.to: ppqn", "End position in ppqn, exclusive. Yield positions from `block.from` on."),
     entry("bpm", "block.bpm: number", "Current project tempo in BPM."),
     entry("flags", "block.flags: int", "Bitmask: 1 transporting, 2 discontinuous (seek or loop restart).")
@@ -43,7 +43,7 @@ const BLOCK_TIMING = [
     "- `block.s0`, `block.s1`: sample range to process (s1 exclusive)",
     "- `block.index`: block counter",
     "- `block.bpm`: project tempo",
-    "- `block.p0`, `block.p1`: position range in ppqn (480 per quarter note)",
+    "- `block.p0`, `block.p1`: position range in ppqn (960 per quarter note)",
     "- `block.flags`: 1 transporting, 2 discontinuous, 4 playing, 8 bpmChanged"
 ].join("\n")
 

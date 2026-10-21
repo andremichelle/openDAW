@@ -245,7 +245,7 @@ class Processor {
         // block.s1    — last sample index to process (exclusive)
         // block.index — block counter (increments each audio callback)
         // block.bpm   — current project tempo in beats per minute
-        // block.p0    — start position in ppqn (pulses per quarter note, 480 ppqn)
+        // block.p0    — start position in ppqn (pulses per quarter note, 960 ppqn)
         // block.p1    — end position in ppqn
         // block.flags — bitmask:
         //   1 (transporting) — transport is active

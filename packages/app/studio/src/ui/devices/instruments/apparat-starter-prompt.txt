@@ -52,7 +52,7 @@ block (timing and transport):
 - block.s1    — last sample index to process (exclusive)
 - block.index — block counter
 - block.bpm   — current project tempo in BPM
-- block.p0    — start position in ppqn (480 ppqn per quarter note)
+- block.p0    — start position in ppqn (960 ppqn per quarter note)
 - block.p1    — end position in ppqn
 - block.flags — bitmask: 1=transporting, 2=discontinuous, 4=playing, 8=bpmChanged
 
