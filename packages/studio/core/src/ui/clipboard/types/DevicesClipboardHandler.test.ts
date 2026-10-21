@@ -23,6 +23,7 @@ import {
     ValueEventCollectionBox,
     ValueRegionBox,
     ScriptBufferBox,
+    ScriptBufferChunkBox,
     ScriptRecordBox,
     ScriptValueBox,
     WerkstattParameterBox,
@@ -777,9 +778,12 @@ describe("DevicesClipboardHandler", () => {
                 box.field.setValue("velocity")
                 box.value.setValue(0.5)
             })
-            ScriptBufferBox.create(source.boxGraph, UUID.generate(), box => {
+            const buffer = ScriptBufferBox.create(source.boxGraph, UUID.generate(), box => {
                 box.owner.refer(apparat.buffers)
                 box.label.setValue("table")
+            })
+            ScriptBufferChunkBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(buffer.chunks)
                 box.data.setValue(new Int8Array(new Float32Array([0.25, -0.5]).buffer))
             })
             source.boxGraph.endTransaction()
@@ -787,6 +791,7 @@ describe("DevicesClipboardHandler", () => {
             expect(deps.filter(box => isInstanceOf(box, ScriptRecordBox)).length).toBe(1)
             expect(deps.filter(box => isInstanceOf(box, ScriptValueBox)).length).toBe(1)
             expect(deps.filter(box => isInstanceOf(box, ScriptBufferBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptBufferChunkBox)).length).toBe(1)
         })
     })
 

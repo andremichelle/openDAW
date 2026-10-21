@@ -81,3 +81,32 @@ The view must look like it was always part of openDAW. Derived from the stock de
    Keep the hit areas generous. Every drag is a host.gesture(), every click a single write.
 8. Compact: the panel is 3 rows of 3.5em. Show what the sound does (a curve, a pattern, a spectrum), leave
    numbers to the knobs.
+
+### Pitfalls (mistakes that already happened, avoid them)
+
+1. Empty data as "use the default": if a script treats an all-zero @buffer (or an empty @collection) as "use a
+   built-in default", the FIRST partial edit must store the whole default first (in the same edit), then the
+   change. Otherwise everything outside the edited range becomes silence.
+2. Write only what changed: during a drag call `host.data.<buffer>.set(values, offset)` with just the touched
+   range, never the whole buffer per pointer move. Every write is kept in the undo history and sent to the
+   engine.
+3. Parameters jump once per block: a param that selects or morphs between shapes (table position, waveform,
+   morph) must be smoothed per sample (a few milliseconds), or fast moves and automation click.
+4. Interpolate properly: read tables with 4-point Hermite (or better) and crossfade between neighbouring frames,
+   linear lookups sound grainy when scanning.
+5. Guard degenerate values: `Math.round` on an int param can give 0, a division by a count can become a
+   division by zero. Clamp every value you divide by or index with (at least 1, inside the table). A single NaN
+   silences the device.
+6. Deterministic processor: never use Math.random() in the Processor for anything audible that must render the
+   same offline (an export) as live. Random generators belong in the view, their result stored as data.
+7. Canvas feedback: never size the layout from the canvas you draw (grid rows minmax(0, 1fr), min-height 0),
+   or the view grows with every redraw.
+8. Stacked or 3D drawings: draw lines with opacity fading by depth, never fill the area under each line to hide
+   the ones behind. Overlapping fills create dark patches that look broken.
+9. Buttons must say what they change: group buttons by their target ("Fill all frames", "Selected frames"),
+   explain the hovered button in a hint line, confirm what happened. A button that silently replaces all data
+   is a surprise. Make selections (a frame, a range) explicit and visible.
+10. Discoverable windows: a @window needs a visible button in the inline view (not only a double-click) and
+    a short hint how to open it.
+11. Fresh data: host.data.<buffer>.toArray() returns a copy. Re-read it in the subscribe callback instead of
+    keeping an old array, or a reopened view or another view's edit shows stale data.

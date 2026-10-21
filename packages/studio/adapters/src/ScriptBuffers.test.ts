@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
+import {asInstanceOf, UUID} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
-import {AudioUnitBox, ScriptBufferBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ScriptBufferBox, ScriptBufferChunkBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "./project/ProjectSkeleton"
 import {ScriptCompiler} from "./ScriptCompiler"
 import {ScriptDeclaration} from "./ScriptDeclaration"
@@ -76,8 +76,9 @@ describe("ScriptBuffers", () => {
         expect(Array.from(ScriptBuffers.read(device.buffers, buffer("// @buffer wave 6", "wave")))).toEqual([1, 2, 3, 4, 0, 0])
         await compile("// @buffer wave 2")
         expect(Array.from(ScriptBuffers.read(device.buffers, buffer("// @buffer wave 2", "wave")))).toEqual([1, 2])
-        const box = device.buffers.pointerHub.filter()[0].box
-        expect(box instanceof ScriptBufferBox && box.data.getValue().byteLength).toBe(8)
+        const bufferBox = asInstanceOf(device.buffers.pointerHub.filter()[0].box, ScriptBufferBox)
+        const chunks = bufferBox.chunks.pointerHub.filter().map(({box}) => asInstanceOf(box, ScriptBufferChunkBox))
+        expect(chunks.map(chunk => chunk.data.getValue().byteLength)).toEqual([8])
     })
     it("notifies once per transaction that touched a buffer", async () => {
         const {device, compile, buffer, editing} = setup()
@@ -92,5 +93,60 @@ describe("ScriptBuffers", () => {
         editing.modify(() => device.label.setValue("Other"))
         expect(calls).toBe(1)
         subscription.terminate()
+    })
+    it("splits long buffers into chunks and stores only the touched chunks on a write", async () => {
+        const {device, compile, buffer, editing} = setup()
+        const code = "// @buffer table 600"
+        await compile(code)
+        const table = buffer(code, "table")
+        const chunks = () => asInstanceOf(device.buffers.pointerHub.filter()[0].box, ScriptBufferBox).chunks.pointerHub.filter()
+            .map(({box}) => asInstanceOf(box, ScriptBufferChunkBox))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+        expect(chunks().map(chunk => chunk.data.getValue().byteLength)).toEqual([1024, 1024, 352])
+        const before = chunks().map(chunk => chunk.data.getValue())
+        editing.modify(() => ScriptBuffers.write(device.buffers, table, 300, [0.5, 0.25]))
+        const after = chunks().map(chunk => chunk.data.getValue())
+        expect(after.map((bytes, index) => bytes === before[index])).toEqual([true, false, true])
+        const values = ScriptBuffers.read(device.buffers, table)
+        expect([values[299], values[300], values[301], values[302], values.length]).toEqual([0, 0.5, 0.25, 0, 600])
+        editing.modify(() => ScriptBuffers.write(device.buffers, table, 254, [1, 2, 3, 4]))
+        expect(Array.from(ScriptBuffers.read(device.buffers, table).subarray(254, 258))).toEqual([1, 2, 3, 4])
+        await compile("// @buffer table 300")
+        expect(chunks().map(chunk => chunk.data.getValue().byteLength)).toEqual([1024, 176])
+        expect(Array.from(ScriptBuffers.read(device.buffers, buffer("// @buffer table 300", "table")).subarray(254, 258))).toEqual([1, 2, 3, 4])
+    })
+    describe("a buffer saved as one blob (before chunks)", () => {
+        const legacySetup = async () => {
+            const rig = setup()
+            const code = "// @buffer table 300"
+            await rig.compile(code)
+            const bufferBox = asInstanceOf(rig.device.buffers.pointerHub.filter()[0].box, ScriptBufferBox)
+            const legacy = Float32Array.from({length: 300}, (entry, index) => index / 300)
+            rig.editing.modify(() => {
+                bufferBox.chunks.pointerHub.filter().forEach(({box}) => box.delete())
+                bufferBox.data.setValue(new Int8Array(legacy.buffer.slice(0)))
+            })
+            return {...rig, bufferBox, legacy, table: rig.buffer(code, "table"), code}
+        }
+        it("is read from the blob while there are no chunks", async () => {
+            const {device, table, legacy} = await legacySetup()
+            expect(Array.from(ScriptBuffers.read(device.buffers, table))).toEqual(Array.from(legacy))
+        })
+        it("moves into chunks on the first write and keeps every other value", async () => {
+            const {device, table, legacy, bufferBox, editing} = await legacySetup()
+            editing.modify(() => ScriptBuffers.write(device.buffers, table, 10, [7]))
+            const values = ScriptBuffers.read(device.buffers, table)
+            expect(values[10]).toBe(7)
+            expect(values[9]).toBe(legacy[9])
+            expect(values[299]).toBe(legacy[299])
+            expect(bufferBox.data.getValue().byteLength).toBe(0)
+            expect(bufferBox.chunks.pointerHub.size()).toBe(2)
+        })
+        it("moves into chunks on a compile", async () => {
+            const {device, table, legacy, bufferBox, compile, code} = await legacySetup()
+            await compile(code, "// @param gain 1")
+            expect(bufferBox.data.getValue().byteLength).toBe(0)
+            expect(Array.from(ScriptBuffers.read(device.buffers, table))).toEqual(Array.from(legacy))
+        })
     })
 })

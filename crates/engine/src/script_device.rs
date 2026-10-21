@@ -167,7 +167,10 @@ pub(crate) const DATA_RESET: u32 = u32::MAX;
 // WASM CONTRACT: a `@buffer` arrives as `data_changed(BUFFER_FLAG | index, values, length, 1)`
 pub(crate) const BUFFER_FLAG: u32 = 0x8000_0000;
 const BUFFER_INDEX_KEY: u16 = 3;
-const BUFFER_DATA_KEY: u16 = 4;
+const BUFFER_LEGACY_DATA_KEY: u16 = 4; // one blob, from before chunks: read only while a buffer has no chunks
+const BUFFER_CHUNKS_KEY: u16 = 5;
+const CHUNK_INDEX_KEY: u16 = 2;
+const CHUNK_DATA_KEY: u16 = 3;
 
 /// A scriptable device's `@collection` data: the `ScriptRecordBox` children of its `records` hub and their
 /// `ScriptValueBox` values. Any change marks it dirty and raises the unit's params signal, the unit reconcile
@@ -251,10 +254,20 @@ impl Engine {
         };
         if binding.buffer_field != 0 {
             for buffer in self.collection_children(device_uuid, binding.buffer_field) {
-                for key in [BUFFER_INDEX_KEY, BUFFER_DATA_KEY] {
+                for key in [BUFFER_INDEX_KEY, BUFFER_LEGACY_DATA_KEY] {
                     let notify = changed(false);
                     subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(buffer, vec![key]),
                         Box::new(move |_graph, _update| notify())));
+                }
+                let notify = changed(true);
+                subs.push(self.graph.subscribe_pointer_hub(Address::of(buffer, vec![BUFFER_CHUNKS_KEY]),
+                    Box::new(move |_graph, _event| notify())));
+                for chunk in self.collection_children(buffer, BUFFER_CHUNKS_KEY) {
+                    for key in [CHUNK_INDEX_KEY, CHUNK_DATA_KEY] {
+                        let notify = changed(false);
+                        subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(chunk, vec![key]),
+                            Box::new(move |_graph, _update| notify())));
+                    }
                 }
             }
         }
@@ -324,10 +337,22 @@ impl Engine {
         if binding.buffer_field != 0 {
             for buffer in self.collection_children(device_uuid, binding.buffer_field) {
                 let index = self.graph.field_value(&Address::of(buffer, vec![BUFFER_INDEX_KEY])).and_then(|value| value.as_int32()).unwrap_or(0).max(0) as u32;
-                let values: Vec<f32> = match self.graph.field_value(&Address::of(buffer, vec![BUFFER_DATA_KEY])) {
-                    Some(FieldValue::Bytes(bytes)) => bytes.chunks_exact(4).map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])).collect(),
-                    _ => Vec::new()
-                };
+                let mut chunks: Vec<(i32, Uuid)> = self.collection_children(buffer, BUFFER_CHUNKS_KEY).into_iter()
+                    .map(|chunk| (self.graph.field_value(&Address::of(chunk, vec![CHUNK_INDEX_KEY])).and_then(|value| value.as_int32()).unwrap_or(0), chunk))
+                    .collect();
+                chunks.sort_by_key(|(chunk_index, _)| *chunk_index);
+                let decode = |bytes: &[u8]| bytes.chunks_exact(4).map(|word| f32::from_le_bytes([word[0], word[1], word[2], word[3]])).collect::<Vec<f32>>();
+                let mut values: Vec<f32> = Vec::new();
+                if chunks.is_empty() {
+                    if let Some(FieldValue::Bytes(bytes)) = self.graph.field_value(&Address::of(buffer, vec![BUFFER_LEGACY_DATA_KEY])) {
+                        values = decode(bytes);
+                    }
+                }
+                for (_, chunk) in chunks {
+                    if let Some(FieldValue::Bytes(bytes)) = self.graph.field_value(&Address::of(chunk, vec![CHUNK_DATA_KEY])) {
+                        values.extend(decode(bytes));
+                    }
+                }
                 call_device_data_changed(data_changed_index, state_ptr, BUFFER_FLAG | index, &values, values.len() as u32, 1);
             }
         }

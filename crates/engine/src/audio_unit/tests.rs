@@ -5615,13 +5615,20 @@ fn script_buffers_deliver_their_floats_with_the_buffer_flag_and_follow_edits() {
     use core::cell::Cell;
     const DEV: Uuid = [60u8; 16];
     const BUFFER: Uuid = [61u8; 16];
+    const CHUNK_A: Uuid = [62u8; 16];
+    const CHUNK_B: Uuid = [63u8; 16];
     let bytes = |values: &[f32]| FieldValue::Bytes(values.iter().flat_map(|value| value.to_le_bytes()).collect());
+    let chunk = |uuid: Uuid, index: i32, values: &[f32]| graph_box(uuid, "ScriptBufferChunkBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(BUFFER, vec![5])))), (2, FieldValue::Int32(index)), (3, bytes(values))
+    ]);
     let mut engine = engine_with_devices();
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook), (15, FieldValue::Hook)]),
         graph_box(BUFFER, "ScriptBufferBox", &[
-            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(2)), (4, bytes(&[0.5, -1.0]))
-        ])
+            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(2)), (4, bytes(&[])), (5, FieldValue::Hook)
+        ]),
+        chunk(CHUNK_B, 1, &[0.75]),
+        chunk(CHUNK_A, 0, &[0.5, -1.0])
     ]);
     let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
     reg.record_collection_field = 14;
@@ -5633,12 +5640,39 @@ fn script_buffers_deliver_their_floats_with_the_buffer_flag_and_follow_edits() {
     let first = take();
     assert_eq!(first.len(), 2, "a reset, then the buffer (no records)");
     assert_eq!(first[0].collection, DATA_RESET);
-    assert_eq!((first[1].collection, first[1].records, first[1].fields), (BUFFER_FLAG | 2, 2, 1));
-    assert_eq!(first[1].values, vec![0.5, -1.0]);
-    engine.graph.transaction(&[Update::Primitive {address: Address::of(BUFFER, vec![4]), old: bytes(&[0.5, -1.0]), new: bytes(&[0.25, 0.75])}],
-        &engine.registry).expect("buffer edit");
-    assert_eq!(signals.get(), 1, "a buffer edit raises the signal");
+    assert_eq!((first[1].collection, first[1].records, first[1].fields), (BUFFER_FLAG | 2, 3, 1));
+    assert_eq!(first[1].values, vec![0.5, -1.0, 0.75], "the chunks concatenated in index order");
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(CHUNK_B, vec![3]), old: bytes(&[0.75]), new: bytes(&[0.25])}],
+        &engine.registry).expect("chunk edit");
+    assert_eq!(signals.get(), 1, "a chunk edit raises the signal");
     engine.flush_record_binding(DEV, reg, 64, &mut binding);
-    assert_eq!(take()[1].values, vec![0.25, 0.75]);
+    assert_eq!(take()[1].values, vec![0.5, -1.0, 0.25]);
     engine.teardown_script_records(binding);
 }
+
+#[test]
+fn a_script_buffer_saved_as_one_blob_is_read_until_it_has_chunks() {
+    use crate::native_data_changed::take;
+    use crate::script_device::BUFFER_FLAG;
+    const DEV: Uuid = [70u8; 16];
+    const BUFFER: Uuid = [71u8; 16];
+    let bytes = |values: &[f32]| FieldValue::Bytes(values.iter().flat_map(|value| value.to_le_bytes()).collect());
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook), (15, FieldValue::Hook)]),
+        graph_box(BUFFER, "ScriptBufferBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(0)),
+            (4, bytes(&[0.5, 0.25, -0.75])), (5, FieldValue::Hook)
+        ])
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.buffer_collection_field = 15;
+    reg.data_changed_index = 1;
+    let binding = engine.bind_script_records(DEV, reg, 64, Rc::new(|| {}));
+    let delivered = take();
+    assert_eq!(delivered[1].collection, BUFFER_FLAG);
+    assert_eq!(delivered[1].values, vec![0.5, 0.25, -0.75], "the legacy blob is delivered");
+    engine.teardown_script_records(binding);
+}
+

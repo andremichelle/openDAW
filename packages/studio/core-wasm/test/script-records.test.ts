@@ -4,7 +4,7 @@
 // `@collection` never gets a `data` property.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, ScriptBufferBox, ScriptRecordBox, ScriptValueBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ScriptBufferBox, ScriptBufferChunkBox, ScriptRecordBox, ScriptValueBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {BoxGraph} from "@opendaw/lib-box"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -129,12 +129,18 @@ class Processor {
     process({out}, {s0, s1}) { for (let i = s0; i < s1; i++) { out[0][i] = this.total; out[1][i] = 0 } }
 }`
         const {source, device, render, edit} = await setup(code, [])
-        await edit(() => ScriptBufferBox.create(source, UUID.generate(), box => {
-            box.owner.refer(device.buffers)
-            box.label.setValue("curve")
-            box.index.setValue(0)
-            box.data.setValue(new Int8Array(new Float32Array([0.25, 0.5, 0.125]).buffer))
-        }))
+        await edit(() => {
+            const buffer = ScriptBufferBox.create(source, UUID.generate(), box => {
+                box.owner.refer(device.buffers)
+                box.label.setValue("curve")
+                box.index.setValue(0)
+            })
+            ScriptBufferChunkBox.create(source, UUID.generate(), box => {
+                box.owner.refer(buffer.chunks)
+                box.index.setValue(0)
+                box.data.setValue(new Int8Array(new Float32Array([0.25, 0.5, 0.125]).buffer))
+            })
+        })
         expect(render().left).toBeCloseTo(0.875, 6)
     })
     it("does not call dataChanged when nothing in the collection changed", async () => {
