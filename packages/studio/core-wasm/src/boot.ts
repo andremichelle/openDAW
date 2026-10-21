@@ -1,7 +1,8 @@
 // Shared WASM-engine boot + resource plumbing for BOTH studio hosts: the realtime worklet processor and
 // the offline render worker. Links the engine + device side-modules (with the script/NAM bridges) and
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
-import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {EngineToClient} from "@opendaw/studio-adapters"
 import {EngineExports, readPanicMessage} from "./engine-exports"
 import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
@@ -48,7 +49,8 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
 
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
                                       sampleRate: number, engineToClient: EngineToClient,
-                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient)): EngineExports => {
+                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient),
+                                      broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null): EngineExports => {
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
@@ -56,7 +58,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
         {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
     engine.init(sampleRate)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
-        (uuid, message) => engineToClient.deviceMessage(uuid, message))
+        (uuid, message) => engineToClient.deviceMessage(uuid, message), broadcaster)
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
     modules.deviceModules.forEach((deviceModule, index) =>

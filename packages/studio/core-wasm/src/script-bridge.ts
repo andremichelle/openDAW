@@ -11,7 +11,9 @@
 // call passes that handle. Buffers are byte offsets into the ONE shared memory; we re-derive `memory.buffer`
 // views EVERY call, since the SharedArrayBuffer can grow / detach (talc), never caching a typed-array view.
 
-import {clamp, isDefined, Nullable, tryCatch, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, isDefined, Nullable, Provider, Terminable, tryCatch, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Address} from "@opendaw/lib-box"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
@@ -38,15 +40,17 @@ const PARAM_KIND_UNIT = 0
 const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutput
 const SIDECHAIN_PORT_BASE = 2 // WASM CONTRACT: a script device's sidechain port id = 2 + its `@sidechain` index
 const DATA_RESET = 0xFFFFFFFF // WASM CONTRACT: `host_script_data` with this collection starts a new snapshot
+const STREAM_KEY_BASE = 0x1000 // a `@stream` is broadcast at the device address + [0x1000 + its index]
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
 type SampleDecl = {label: string, index: number}
 type SidechainDecl = {label: string, index: number}
 type CollectionDecl = {name: string, index: number, fields: ReadonlyArray<{label: string, index: number, defaultValue: number}>}
 type RawCollection = {records: number, fields: number, values: Float32Array}
+type StreamDecl = {name: string, index: number, length: number, kind: "value" | "ring" | "fft"}
 type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>,
     sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, latency?: number, pass: boolean,
-    collections?: ReadonlyArray<CollectionDecl>}
+    collections?: ReadonlyArray<CollectionDecl>, streams?: ReadonlyArray<StreamDecl>}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -79,6 +83,8 @@ class Bridge {
     collections: ReadonlyArray<CollectionDecl> = []
     rawData = new Map<number, RawCollection>()
     pendingData: Nullable<Map<number, RawCollection>> = null
+    // `@stream` packages of the CURRENT Processor, re-registered on every hot-swap
+    streamSubscriptions: ReadonlyArray<Terminable> = []
     readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
@@ -91,7 +97,8 @@ class Bridge {
     missingCalls = 0
     warnedMissing = false
 
-    constructor(readonly uuid: string, readonly kind: number, readonly registryName: string, readonly key: string) {}
+    constructor(readonly handle: number, readonly uuid: string, readonly kind: number, readonly registryName: string,
+                readonly key: string) {}
 }
 
 const resolveMapping = (declaration: ParamDecl): ValueMapping<number> => {
@@ -162,14 +169,19 @@ export class ScriptBridges {
     // uuid + state pointer: a composite's replicas of one unit-level device share the box uuid but are separate
     // instances, each with its own Processor
     readonly #byInstance = new Map<string, number>()
+    readonly #broadcaster: Provider<Nullable<LiveStreamBroadcaster>>
+    // the bridge publishing a uuid's streams: composite replicas share the device address, the first one wins
+    readonly #streamOwners = new Map<string, number>()
     #nextHandle = 1
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
-                onMessage: (uuid: string, message: string) => void = () => {}) {
+                onMessage: (uuid: string, message: string) => void = () => {},
+                broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null) {
         this.#memory = memory
         this.#engine = engine
         this.#sampleRate = sampleRate
         this.#onMessage = onMessage
+        this.#broadcaster = broadcaster
     }
 
     /// The `host_script_*` (+ no engine `host_self_uuid`) closures to bind into each scriptable device's `env`.
@@ -201,7 +213,7 @@ export class ScriptBridges {
         const existingHandle = this.#byInstance.get(key)
         if (isDefined(existingHandle)) {this.#release(existingHandle)}
         const handle = this.#nextHandle++
-        this.#bridges.set(handle, new Bridge(uuid, kind, REGISTRY_BY_KIND[kind] ?? "werkstattProcessors", key))
+        this.#bridges.set(handle, new Bridge(handle, uuid, kind, REGISTRY_BY_KIND[kind] ?? "werkstattProcessors", key))
         this.#byInstance.set(key, handle)
         return handle
     }
@@ -250,6 +262,7 @@ export class ScriptBridges {
                 for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
                 bridge.collections = registry.collections ?? []
                 this.#syncData(bridge, true)
+                this.#bindStreams(bridge, proc, registry.streams ?? [])
             } catch (error) {
                 this.#silence(bridge, `Failed to instantiate Processor: ${error}`)
             }
@@ -473,6 +486,58 @@ export class ScriptBridges {
         }
     }
 
+    // `this.streams.<name>`: a value stream is a Float32Array the processor overwrites, a ring / fft stream takes
+    // `write(channel, s0, s1)` and publishes its latest samples in order. `.active` tells whether a view listens.
+    #bindStreams(bridge: Bridge, proc: any, streams: ReadonlyArray<StreamDecl>): void {
+        this.#unbindStreams(bridge)
+        if (streams.length === 0) {return}
+        const owner = this.#streamOwners.get(bridge.uuid)
+        const publisher = !isDefined(owner) || owner === bridge.handle ? this.#broadcaster() : null
+        if (isDefined(publisher)) {this.#streamOwners.set(bridge.uuid, bridge.handle)}
+        const uuid = UUID.parse(bridge.uuid)
+        const subscriptions: Array<Terminable> = []
+        proc.streams = Object.freeze(Object.fromEntries(streams.map(({name, index, length, kind}) => {
+            const state = {active: false}
+            const address = Address.compose(uuid, STREAM_KEY_BASE + index)
+            if (kind === "value") {
+                const values = new Float32Array(length)
+                Object.defineProperty(values, "active", {get: () => state.active})
+                if (isDefined(publisher)) {
+                    subscriptions.push(publisher.broadcastFloats(address, values, active => {state.active = active}))
+                }
+                return [name, values]
+            }
+            const size = kind === "fft" ? length * 2 : length
+            const ring = new Float32Array(size)
+            const published = new Float32Array(size)
+            const cursor = {index: 0}
+            if (isDefined(publisher)) {
+                subscriptions.push(publisher.broadcastFloats(address, published, active => {
+                    state.active = active
+                    if (!active) {return}
+                    published.set(ring.subarray(cursor.index), 0)
+                    published.set(ring.subarray(0, cursor.index), size - cursor.index)
+                }))
+            }
+            return [name, Object.freeze({
+                get active() {return state.active},
+                write(channel: Float32Array, from: number = 0, to: number = channel.length) {
+                    for (let position = from; position < to; position++) {
+                        ring[cursor.index] = channel[position]
+                        cursor.index = cursor.index + 1 === size ? 0 : cursor.index + 1
+                    }
+                }
+            })]
+        })))
+        bridge.streamSubscriptions = subscriptions
+    }
+
+    #unbindStreams(bridge: Bridge): void {
+        bridge.streamSubscriptions.forEach(subscription => subscription.terminate())
+        bridge.streamSubscriptions = []
+        if (this.#streamOwners.get(bridge.uuid) === bridge.handle) {this.#streamOwners.delete(bridge.uuid)}
+    }
+
     #silence(bridge: Bridge, message: string): void {
         bridge.silenced = true
         this.#onMessage(bridge.uuid, message)
@@ -484,6 +549,7 @@ export class ScriptBridges {
     #release(handle: number): void {
         const bridge = this.#bridges.get(handle)
         if (!isDefined(bridge)) {return}
+        this.#unbindStreams(bridge)
         this.#bridges.delete(handle)
         if (this.#byInstance.get(bridge.key) === handle) {this.#byInstance.delete(bridge.key)}
     }

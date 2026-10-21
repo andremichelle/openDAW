@@ -268,6 +268,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},
         collections: ${JSON.stringify(collections)},
+        streams: ${JSON.stringify(ScriptDeclaration.parseStreams(userCode))},
         readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
         latency: ${ScriptDeclaration.parseLatency(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}

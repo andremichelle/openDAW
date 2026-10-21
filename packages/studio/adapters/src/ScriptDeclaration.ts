@@ -60,6 +60,14 @@ export interface CollectionDeclaration {
     readonly records: ReadonlyArray<ReadonlyArray<number>>
 }
 
+// `// @stream <name> <length> [value|ring|fft]`: processor -> view telemetry, never persisted
+export interface StreamDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly length: number
+    readonly kind: "value" | "ring" | "fft"
+}
+
 export interface GroupDeclaration {
     readonly label: string
     readonly color: string
@@ -85,6 +93,8 @@ const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain|view) .+$/gm
 const VIEW_LINE = /^\/\/ @view\b.*$/gm
 const WINDOW_LINE = /^\/\/ @window\b.*$/gm
 const CLASS_NAME = /^[A-Za-z_$][\w$]*$/
+const STREAM_LINE = /^\/\/ @stream\b.*$/gm
+const STREAM_KINDS: ReadonlyArray<StreamDeclaration["kind"]> = ["value", "ring", "fft"]
 const DATA_LINE = /^\/\/ @(collection|field|record)\b.*$/gm
 const NAME = /^[A-Za-z_$][\w$]*$/
 const DEFAULT_VIEW_CLASS = "View"
@@ -350,6 +360,23 @@ export namespace ScriptDeclaration {
     }
 
     export const parseCollections = parseCollectionDeclarations
+
+    export const parseStreams = (code: string): ReadonlyArray<StreamDeclaration> => {
+        const streams: Array<StreamDeclaration> = []
+        for (const match of code.matchAll(STREAM_LINE)) {
+            const line = match[0]
+            const tokens = line.replace(/^\/\/ @stream\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+            const [name, length, kindToken = "value"] = tokens
+            const kind = STREAM_KINDS.find(candidate => candidate === kindToken)
+            if (tokens.length < 2 || tokens.length > 3 || !NAME.test(name) || !/^\d+$/.test(length) || parseInt(length) < 1
+                || !isDefined(kind)) {
+                throw new Error(`Malformed @stream: '${line}' — expected: // @stream <name> <length> [value|ring|fft]`)
+            }
+            if (streams.some(stream => stream.name === name)) {throw new Error(`Duplicate @stream '${name}'`)}
+            streams.push({name: checkName(name, line), index: streams.length, length: parseInt(length), kind})
+        }
+        return streams
+    }
 
     export const parseViews = (code: string): ReadonlyArray<ViewDeclaration> =>
         Array.from(code.matchAll(VIEW_LINE), match => parseSingleView(match[0]))

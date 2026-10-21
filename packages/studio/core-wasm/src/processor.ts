@@ -141,7 +141,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             })
         this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
         const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
-            this.#memory, sampleRate, this.#engineToClient, this.#wclap)
+            this.#memory, sampleRate, this.#engineToClient, this.#wclap, () => this.#broadcaster ?? null)
         this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
         this.#hrClock = new HRClock(hrClockBuffer)

@@ -109,11 +109,78 @@
             subscribe: observer => subscribe(`data:${name}`, observer)
         })
     }
+    const fft = (real, imag) => {
+        const size = real.length
+        for (let index = 1, swap = 0; index < size; index++) {
+            let bit = size >> 1
+            for (; swap & bit; bit >>= 1) {swap ^= bit}
+            swap ^= bit
+            if (index < swap) {
+                [real[index], real[swap]] = [real[swap], real[index]];
+                [imag[index], imag[swap]] = [imag[swap], imag[index]]
+            }
+        }
+        for (let length = 2; length <= size; length <<= 1) {
+            const angle = -2 * Math.PI / length
+            for (let start = 0; start < size; start += length) {
+                for (let offset = 0; offset < length >> 1; offset++) {
+                    const cos = Math.cos(angle * offset), sin = Math.sin(angle * offset)
+                    const even = start + offset, odd = even + (length >> 1)
+                    const re = real[odd] * cos - imag[odd] * sin
+                    const im = real[odd] * sin + imag[odd] * cos
+                    real[odd] = real[even] - re
+                    imag[odd] = imag[even] - im
+                    real[even] += re
+                    imag[even] += im
+                }
+            }
+        }
+    }
+    const spectrumOf = (state, samples) => {
+        const {real, imag, magnitudes} = state
+        const size = real.length
+        for (let index = 0; index < size; index++) {
+            real[index] = (samples[index] ?? 0) * (0.5 - 0.5 * Math.cos(2 * Math.PI * index / (size - 1)))
+            imag[index] = 0
+        }
+        fft(real, imag)
+        for (let bin = 0; bin < magnitudes.length; bin++) {magnitudes[bin] = Math.hypot(real[bin], imag[bin]) * 4 / size}
+        return magnitudes
+    }
+    const streamStates = new Map()
+    const streams = Object.create(null)
+    for (const {name, length, kind} of config.streams) {
+        const key = `stream:${name}`
+        const isPowerOfTwo = length > 0 && (length & (length - 1)) === 0
+        if (kind === "fft" && !isPowerOfTwo) {reportError(new Error(`@stream ${name}: fft needs a power of two, got ${length}`))}
+        streamStates.set(name, kind === "fft"
+            ? {kind, real: new Float32Array(length * 2), imag: new Float32Array(length * 2), magnitudes: new Float32Array(length)}
+            : {kind})
+        streams[name] = Object.freeze({
+            length, kind,
+            subscribe(observer) {
+                const subscription = subscribe(key, observer)
+                if (observers.get(key).size === 1) {post({type: "stream", action: "subscribe", name})}
+                return Object.freeze({
+                    terminate() {
+                        subscription.terminate()
+                        if (observers.get(key).size === 0) {post({type: "stream", action: "unsubscribe", name})}
+                    }
+                })
+            }
+        })
+    }
+    const preview = Object.freeze({
+        noteOn(pitch, velocity = 0.8) {post({type: "preview", on: true, pitch, velocity})},
+        noteOff(pitch) {post({type: "preview", on: false, pitch})}
+    })
     const host = Object.freeze({
         root: document.body,
         mode: config.mode,
         params: Object.freeze(params),
         data: Object.freeze(data),
+        streams: Object.freeze(streams),
+        preview,
         edit(procedure) {
             const collected = collect(procedure)
             if (collected !== null && collected.length > 0) {post({type: "edit", ops: collected})}
@@ -161,6 +228,10 @@
                 dataValues.set(name, freezeRecords(records))
                 notify(`data:${name}`, dataValues.get(name))
             }
+        } else if (message.type === "stream") {
+            const state = streamStates.get(message.name)
+            if (state === undefined) {return}
+            notify(`stream:${message.name}`, state.kind === "fft" ? spectrumOf(state, message.values) : message.values)
         } else if (message.type === "terminate") {
             try {instance?.terminate?.()} catch (error) {reportError(error)}
         }

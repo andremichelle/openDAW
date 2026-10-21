@@ -661,7 +661,7 @@ class View {
         for (let key = 0; key < KEYS; key++) {
             const black = [1, 3, 6, 8, 10].includes(key % 12)
             const pressed = BASE_PITCH + key === this.held
-            context.fillStyle = pressed ? this.host.color("blue") : this.host.color(black ? "dark" : "cream")
+            context.fillStyle = pressed ? this.host.color("blue") : this.host.color(black ? "black" : "cream")
             context.fillRect(key * cell + 0.5, 0, cell - 1, height)
         }
     }

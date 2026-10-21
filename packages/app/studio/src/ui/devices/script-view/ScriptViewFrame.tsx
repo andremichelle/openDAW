@@ -3,13 +3,15 @@ import {Editing, isDefined, Lifecycle, Nullable, Optional, Procedure, Terminable
 import {Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, Pointers} from "@opendaw/studio-enums"
-import {Field} from "@opendaw/lib-box"
+import {Address, Field} from "@opendaw/lib-box"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {
     AutomatableParameterFieldAdapter,
     CollectionDeclaration,
     ScriptCompiler,
     ScriptRecords,
-    ScriptRecordValues
+    ScriptRecordValues,
+    StreamDeclaration
 } from "@opendaw/studio-adapters"
 import {Fonts} from "@/ui/Fonts"
 
@@ -30,6 +32,10 @@ type Construct = {
     params: ReadonlyArray<ScriptViewParam>
     records: Optional<Field<Pointers.ScriptRecord>>
     collections: ReadonlyArray<CollectionDeclaration>
+    streams: ReadonlyArray<StreamDeclaration>
+    receiver: LiveStreamReceiver
+    address: Address
+    onPreview: (on: boolean, pitch: number, velocity: number) => void
     onError: Procedure<string>
     onWindow: (action: "open" | "close", className: string) => void
 }
@@ -37,6 +43,7 @@ type Construct = {
 type Message = { readonly [key: string]: unknown }
 
 const MAX_OPS = 1024
+const STREAM_KEY_BASE = 0x1000 // mirrors the script bridge: device address + [0x1000 + stream index]
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:"
 
 const isRecord = (value: unknown): value is Message => typeof value === "object" && value !== null
@@ -70,8 +77,9 @@ body { font-family: Rubik, sans-serif; font-size: 11px; color: var(--color-gray)
 
 export const ScriptViewFrame = ({
                                     lifecycle, editing, userCode, className, mode, sampleRate, params, records, collections,
-                                    onError, onWindow
+                                    streams, receiver, address, onPreview, onError, onWindow
                                 }: Construct): HTMLIFrameElement => {
+    const streamsByName = new Map(streams.map(stream => [stream.name, stream]))
     const paramsByName = new Map(params.map(({name, parameter}) => [name, parameter]))
     const collectionsByName = new Map(collections.map(collection => [collection.name, collection]))
     const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> } => isDefined(records)
@@ -81,12 +89,23 @@ export const ScriptViewFrame = ({
         className, mode, sampleRate, colors: colorMap(),
         params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()})),
         collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
+        streams: streams.map(({name, length, kind}) => ({name, length, kind})),
         data: readData()
     }
     const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
     iframe.srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
     const connection = lifecycle.own(new Terminator())
     const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
+    const streamSubscriptions = new Map<string, Terminable>()
+    const heldPitches = new Set<number>()
+    const releasePreview = (): void => {
+        heldPitches.forEach(pitch => onPreview(false, pitch, 0))
+        heldPitches.clear()
+    }
+    const dropStreams = (): void => {
+        streamSubscriptions.forEach(subscription => subscription.terminate())
+        streamSubscriptions.clear()
+    }
     const send = (message: object): void => state.port?.postMessage(message)
     const toValues = (value: unknown): ScriptRecordValues => isRecord(value)
         ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"))
@@ -144,6 +163,28 @@ export const ScriptViewFrame = ({
             }))
         } else if (message.type === "error" && typeof message.message === "string") {
             onError(message.message.slice(0, 4096))
+        } else if (message.type === "stream" && typeof message.name === "string") {
+            const stream = streamsByName.get(message.name)
+            const name = message.name
+            if (!isDefined(stream)) {return}
+            if (message.action === "subscribe" && !streamSubscriptions.has(name)) {
+                streamSubscriptions.set(name, receiver.subscribeFloats(address.append(STREAM_KEY_BASE + stream.index),
+                    values => send({type: "stream", name, values: values.slice()})))
+            } else if (message.action === "unsubscribe") {
+                streamSubscriptions.get(name)?.terminate()
+                streamSubscriptions.delete(name)
+            }
+        } else if (message.type === "preview" && typeof message.pitch === "number" && Number.isInteger(message.pitch)
+            && message.pitch >= 0 && message.pitch <= 127) {
+            if (message.on === true) {
+                const velocity = typeof message.velocity === "number" && Number.isFinite(message.velocity)
+                    ? Math.min(1, Math.max(0, message.velocity)) : 0.8
+                if (heldPitches.has(message.pitch)) {onPreview(false, message.pitch, 0)}
+                heldPitches.add(message.pitch)
+                onPreview(true, message.pitch, velocity)
+            } else if (heldPitches.delete(message.pitch)) {
+                onPreview(false, message.pitch, 0)
+            }
         } else if (message.type === "window" && (message.action === "open" || message.action === "close")
             && typeof message.name === "string") {
             onWindow(message.action, message.name)
@@ -167,6 +208,8 @@ export const ScriptViewFrame = ({
                 send({type: "terminate"})
                 channel.port1.close()
                 state.port = null
+                dropStreams()
+                releasePreview()
             })
         )
         loadFonts()

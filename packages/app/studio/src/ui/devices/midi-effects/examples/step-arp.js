@@ -9,6 +9,7 @@
 // @field steps.velocity  0.8   0    1   linear
 // @field steps.gate      0.5   0.05 1   linear
 // @field steps.transpose 0    -12  12   int  st
+// @stream step 1
 
 class Processor {
     rate = 120
@@ -22,6 +23,7 @@ class Processor {
     }
     reset() {
         this.held = []
+        this.streams.step[0] = -1
     }
     * process(block, events) {
         for (const event of events) {
@@ -38,7 +40,9 @@ class Processor {
         let index = Math.ceil(block.from / this.rate)
         let position = index * this.rate
         while (position < block.to) {
-            const step = steps[index % steps.length]
+            const stepIndex = index % steps.length
+            const step = steps[stepIndex]
+            this.streams.step[0] = stepIndex
             if (step.on) {
                 const order = this.#order(index, count)
                 const source = this.held[order % this.held.length]
@@ -64,12 +68,18 @@ class Processor {
 
 class View {
     gesture = null
+    current = -1
     constructor(host) {
         this.host = host
         this.canvas = document.createElement("canvas")
         this.canvas.style.cssText = "width: 100%; height: 100%; display: block; touch-action: none"
         host.root.append(this.canvas)
         host.data.steps.subscribe(() => this.draw())
+        host.streams.step.subscribe(values => {
+            if (values[0] === this.current) return
+            this.current = values[0]
+            this.draw()
+        })
         new ResizeObserver(() => this.draw()).observe(this.canvas)
         this.canvas.addEventListener("pointerdown", event => this.press(event))
         this.canvas.addEventListener("pointermove", event => this.drag(event))
@@ -119,7 +129,7 @@ class View {
         for (let index = 0; index < steps.length; index++) {
             const step = steps.get(index)
             const x = index * cell
-            context.fillStyle = this.host.color("shadow")
+            context.fillStyle = index === this.current ? this.host.color("cream") : this.host.color("shadow")
             context.fillRect(x + 1, 0, cell - 2, barHeight)
             context.fillStyle = step.on ? this.host.color("blue") : this.host.color("gray")
             context.fillRect(x + 1, barHeight * (1 - step.velocity), cell - 2, barHeight * step.velocity)

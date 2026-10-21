@@ -108,6 +108,20 @@ const data: Property = {
     ].join("\n")
 }
 
+const streams: Property = {
+    name: "streams",
+    keys: "stream",
+    signature: "this.streams.<name>",
+    documentation: [
+        "Each `// @stream <name> <length> [value|ring|fft]`, telemetry for the views, never rendered or saved.",
+        "",
+        "- `value`: a Float32Array of `length`, overwrite it any time, views receive it once per frame",
+        "- `ring` / `fft`: `write(channel, s0, s1)` appends samples, views get the latest `length` in order",
+        "  (`fft`: `length` magnitudes of the latest `2 × length` samples, `length` a power of two)",
+        "- `.active`: true while a view listens, skip the work otherwise"
+    ].join("\n")
+}
+
 const dataChanged: Method = {
     name: "dataChanged",
     generator: false,
@@ -260,6 +274,8 @@ const HOST = parameter("host", "host: ViewHost", "The view's only connection to 
         "`insert(index, values?)`, `remove(index)`, `subscribe(observer)` (called with the new records).",
         "Writes show immediately in `get`, the studio confirms them and every view and the processor follow."
     ].join("\n")),
+    entry("streams", "host.streams.<name>", "Every `@stream` by name: `subscribe(observer)` receives its latest values once per frame (fft: magnitudes)."),
+    entry("preview", "host.preview.noteOn(pitch, velocity?) / noteOff(pitch)", "Plays notes into this device's unit, like the keyboard. Held notes are released when the view goes away."),
     entry("edit", "host.edit(procedure)", "Runs `procedure` and applies every write in it as ONE undo step."),
     entry("gesture", "host.gesture(): {edit(procedure), end()}", "A drag: every `edit` applies live, `end()` closes ONE undo step."),
     entry("openWindow", "host.openWindow(name?)", "Opens the `@window` of the class `name` (default `View`)."),
@@ -294,9 +310,9 @@ export namespace ScriptEntryPointDocs {
         ({className, methods: viewMethods, properties: [], globals: GLOBALS})
 
     export const werkstatt: ScriptEntryPoints.Api =
-        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data], globals: GLOBALS}
+        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data, streams], globals: GLOBALS}
     export const apparat: ScriptEntryPoints.Api =
-        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data], globals: GLOBALS}
+        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data, streams], globals: GLOBALS}
     export const spielwerk: ScriptEntryPoints.Api =
-        {className: "Processor", methods: spielwerkMethods, properties: [data], globals: GLOBALS}
+        {className: "Processor", methods: spielwerkMethods, properties: [data, streams], globals: GLOBALS}
 }

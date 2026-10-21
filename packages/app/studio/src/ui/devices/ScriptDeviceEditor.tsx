@@ -3,6 +3,8 @@ import {
     AutomatableParameterFieldAdapter,
     CollectionDeclaration,
     DeclarationSection,
+    NoteSignal,
+    StreamDeclaration,
     DeviceBoxAdapter,
     DeviceHost,
     GroupDeclaration,
@@ -292,6 +294,14 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const parameter = adapter.parameters.parameters().find(param => param.address.equals(paramBox.value.address))
         return isDefined(parameter) ? [{name, parameter}] : []
     }).flat()
+    const viewStreams = (): ReadonlyArray<StreamDeclaration> => {
+        const result = tryCatch(() => ScriptDeclaration.parseStreams(box.code.getValue()))
+        return result.status === "success" ? result.value : []
+    }
+    const preview = (on: boolean, pitch: number, velocity: number): void => {
+        const uuid = adapter.deviceHost().audioUnitBoxAdapter().box.address.uuid
+        project.engine.noteSignal(on ? NoteSignal.on(uuid, pitch, velocity) : NoteSignal.off(uuid, pitch))
+    }
     const viewCollections = (): ReadonlyArray<CollectionDeclaration> => {
         const result = tryCatch(() => ScriptDeclaration.parseCollections(box.code.getValue()))
         return result.status === "success" ? result.value : []
@@ -302,7 +312,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const frame = ScriptViewFrame({
             lifecycle: terminator, editing, userCode: compiler.stripHeader(box.code.getValue()),
             className: view.className, mode: "inline", sampleRate: service.audioContext.sampleRate,
-            params: viewParams(), records: box.records, collections: viewCollections(),
+            params: viewParams(), records: box.records, collections: viewCollections(), streams: viewStreams(),
+            receiver: project.liveStreamReceiver, address: adapter.address, onPreview: preview,
             onError: showError, onWindow: EmptyExec
         })
         frame.classList.toggle("overflow", ScriptViewLayout.overflows(view))
