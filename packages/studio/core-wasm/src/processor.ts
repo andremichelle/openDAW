@@ -402,6 +402,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }
         }
         engine.render()
+        this.#scriptBridges.afterRender()
         this.#announceRecordingEdges(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
         if (monitoring.length > 0 && monitorOutput !== undefined) {

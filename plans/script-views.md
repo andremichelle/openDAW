@@ -783,8 +783,8 @@ Where the implementation differs from the text above:
    removing the `@window` line closes it.
 6. Views get the stock display colours (`host.color("displayStroke" | "displayFill" | "displayGrid", opacity)`) and
    the studio frames every view like a stock display. The AI starter prompts carry the API and a design guide.
-7. Open for approval (limits rule): the frame host caps one message at 1024 ops (`MAX_OPS`). Messages from
-   `host.send` are unbounded while the device does not render (a bypassed device queues them).
+7. No op cap per view message. A device that did not render in a quantum (bypassed, outside the graph) drops
+   its queued `host.send` messages, so the queue never grows (decided 2026-10-21).
 
 ## 10. Decisions (2026-10-21)
 

@@ -159,6 +159,24 @@ class Processor {
         expect(render().left).toBe(12)
         expect(messages).toEqual([])
     })
+    it("drops messages of a device that did not render this quantum", async () => {
+        const code = `class Processor {
+    value = 0
+    message(data) { this.value += data.add }
+    process({out}, {s0, s1}) { for (let i = s0; i < s1; i++) { out[0][i] = this.value; out[1][i] = 0 } }
+}`
+        const {device, render, scriptBridges} = await setup(code, [])
+        render()
+        scriptBridges.afterRender()
+        const uuid = UUID.toString(device.address.uuid)
+        scriptBridges.message(uuid, {add: 1})
+        scriptBridges.afterRender()
+        scriptBridges.message(uuid, {add: 2})
+        expect(render().left).toBe(2)
+        scriptBridges.afterRender()
+        scriptBridges.message(uuid, {add: 4})
+        expect(render().left).toBe(6)
+    })
     it("silences a device whose message() throws", async () => {
         const code = `class Processor {
     message() { throw new Error("broken") }

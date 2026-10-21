@@ -48,7 +48,6 @@ type Construct = {
 
 type Message = { readonly [key: string]: unknown }
 
-const MAX_OPS = 1024
 const STREAM_KEY_BASE = 0x1000 // mirrors the script bridge: device address + [0x1000 + stream index]
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:"
 
@@ -152,7 +151,7 @@ export const ScriptViewFrame = ({
         }
     }
     const applyOps = (ops: ReadonlyArray<unknown>): void => {
-        for (const op of ops.slice(0, MAX_OPS)) {
+        for (const op of ops) {
             if (isRecord(op)) {applyOp(op)}
         }
     }

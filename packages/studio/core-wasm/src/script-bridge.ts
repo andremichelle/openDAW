@@ -90,6 +90,7 @@ class Bridge {
     streamSubscriptions: ReadonlyArray<Terminable> = []
     // host.send messages, handed to `message()` before the next process call
     readonly messages: Array<unknown> = []
+    renderedThisQuantum = false
     readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
@@ -437,7 +438,17 @@ export class ScriptBridges {
         }
     }
 
+    // A device that did not render this quantum (bypassed, outside the graph) drops its messages, so the queue
+    // never grows. Messages arrive between quanta, a rendering device receives them in the next one.
+    afterRender(): void {
+        for (const bridge of this.#bridges.values()) {
+            if (!bridge.renderedThisQuantum) {bridge.messages.length = 0}
+            bridge.renderedThisQuantum = false
+        }
+    }
+
     #deliverMessages(bridge: Bridge): boolean {
+        bridge.renderedThisQuantum = true
         if (bridge.messages.length === 0) {return true}
         const messages = bridge.messages.splice(0)
         const proc = bridge.proc
