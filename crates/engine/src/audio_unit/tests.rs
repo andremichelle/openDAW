@@ -156,7 +156,7 @@ fn stub_device(kind: u32) -> DeviceReg {
     DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
-        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0,
+        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, data_changed_index: 0,
         sidechain_collection_field: 0
     }
 }
@@ -664,7 +664,7 @@ fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_de
             device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
             paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
             observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-            param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+            param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
         }),
         _ => panic!("expected a leaf chain")
     }
@@ -2539,7 +2539,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");
@@ -5530,4 +5530,80 @@ fn a_sink_inside_an_effect_composite_entry_taps_into_the_bus() {
     edit(&mut engine, Update::Pointer {address: Address::of(COMP, vec![HOST_KEY]), old: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])), new: None});
     assert!(sinks_of(&mut engine, UNIT).is_empty());
     assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0, "no stale tap survives the composite teardown");
+}
+
+#[test]
+fn script_records_deliver_one_sorted_snapshot_per_collection_and_follow_edits() {
+    use crate::native_data_changed::{take, Delivery};
+    use crate::script_device::DATA_RESET;
+    use core::cell::Cell;
+    const DEV: Uuid = [50u8; 16];
+    const RECORD_A: Uuid = [51u8; 16];
+    const RECORD_B: Uuid = [52u8; 16];
+    const VALUE_A0: Uuid = [53u8; 16];
+    const VALUE_B0: Uuid = [54u8; 16];
+    const VALUE_B1: Uuid = [55u8; 16];
+    const RECORD_C: Uuid = [56u8; 16];
+    const VALUE_C0: Uuid = [57u8; 16];
+    let record = |uuid: Uuid, owner: Option<Uuid>, collection: i32, order: i32| graph_box(uuid, "ScriptRecordBox", &[
+        (1, FieldValue::Pointer(owner.map(|device| Address::of(device, vec![14])))),
+        (3, FieldValue::Int32(collection)), (4, FieldValue::Int32(order)), (5, FieldValue::Hook)
+    ]);
+    let value = |uuid: Uuid, record: Option<Uuid>, field: i32, number: f32| graph_box(uuid, "ScriptValueBox", &[
+        (1, FieldValue::Pointer(record.map(|owner| Address::of(owner, vec![5])))),
+        (3, FieldValue::Int32(field)), (4, FieldValue::Float32(number))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook)]),
+        record(RECORD_A, Some(DEV), 0, 1), record(RECORD_B, Some(DEV), 0, 0),
+        value(VALUE_A0, Some(RECORD_A), 0, 0.25),
+        value(VALUE_B0, Some(RECORD_B), 0, 0.5), value(VALUE_B1, Some(RECORD_B), 1, 1.0),
+        record(RECORD_C, None, 1, 0), value(VALUE_C0, None, 0, 7.0)
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.data_changed_index = 1;
+    let signals = Rc::new(Cell::new(0));
+    let counter = signals.clone();
+    let mut binding = engine.bind_script_records(DEV, reg, 64, Rc::new(move || counter.set(counter.get() + 1)));
+    let delivery = |collection: u32, records: u32, fields: u32, values: Vec<f32>| Delivery {state_ptr: 64, collection, records, fields, values};
+    let reset = delivery(DATA_RESET, 0, 0, Vec::new());
+    let first = take();
+    assert_eq!(first.len(), 2, "a reset, then the one present collection");
+    assert_eq!(first[0], reset);
+    assert_eq!((first[1].collection, first[1].records, first[1].fields), (0, 2, 2));
+    assert_eq!(first[1].values[..3], [0.5, 1.0, 0.25], "sorted by order, record-major");
+    assert!(first[1].values[3].is_nan(), "a record without a value box for a field delivers NaN");
+    // a value edit: signal, then exactly one snapshot on flush, none on a second flush
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_A0, vec![4]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.75)}],
+        &engine.registry).expect("value edit");
+    assert_eq!(signals.get(), 1, "a value edit raises the signal");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    let edited = take();
+    assert_eq!(edited.len(), 2);
+    assert_eq!(edited[1].values[2], 0.75);
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert!(take().is_empty(), "a clean binding delivers nothing");
+    // a record joins (structural): delivered, and its own values are watched from then on
+    engine.graph.transaction(&[
+        Update::Pointer {address: Address::of(RECORD_C, vec![1]), old: None, new: Some(Address::of(DEV, vec![14]))},
+        Update::Pointer {address: Address::of(VALUE_C0, vec![1]), old: None, new: Some(Address::of(RECORD_C, vec![5]))}
+    ], &engine.registry).expect("record joins");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    let joined = take();
+    assert_eq!(joined.len(), 3, "reset + both collections");
+    assert_eq!(joined[2], delivery(1, 1, 1, vec![7.0]));
+    let before = signals.get();
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_C0, vec![4]), old: FieldValue::Float32(7.0), new: FieldValue::Float32(8.0)}],
+        &engine.registry).expect("new value edit");
+    assert!(signals.get() > before, "the joined record's value is watched after the re-subscribe");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert_eq!(take()[2].values, vec![8.0]);
+    // teardown: no more signals
+    engine.teardown_script_records(binding);
+    let after_teardown = signals.get();
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_C0, vec![4]), old: FieldValue::Float32(8.0), new: FieldValue::Float32(9.0)}],
+        &engine.registry).expect("edit after teardown");
+    assert_eq!(signals.get(), after_teardown, "a torn-down binding is silent");
 }

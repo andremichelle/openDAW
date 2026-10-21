@@ -66,10 +66,54 @@
             subscribe: observer => subscribe(`param:${name}`, observer)
         })
     }
+    const freezeRecords = records => Object.freeze(records.map(record => Object.freeze({...record})))
+    const dataValues = new Map(config.collections.map(({name}) => [name, freezeRecords(config.data[name] ?? [])]))
+    const checkValues = values => {
+        if (typeof values !== "object" || values === null) {throw new TypeError("expects an object of field values")}
+        for (const [field, value] of Object.entries(values)) {
+            if (typeof value !== "number" || !Number.isFinite(value)) {throw new TypeError(`'${field}' expects a finite number`)}
+        }
+        return {...values}
+    }
+    const checkIndex = (name, index, length) => {
+        if (!Number.isInteger(index) || index < 0 || index >= length) {throw new RangeError(`'${name}' has no record ${index}`)}
+    }
+    const data = Object.create(null)
+    for (const {name, fields} of config.collections) {
+        const defaults = Object.fromEntries(fields.map(({label, defaultValue}) => [label, defaultValue]))
+        const replace = records => dataValues.set(name, freezeRecords(records))
+        data[name] = Object.freeze({
+            get length() {return dataValues.get(name).length},
+            get(index) {return dataValues.get(name)[index]},
+            toArray() {return dataValues.get(name)},
+            set(index, values) {
+                const records = dataValues.get(name)
+                checkIndex(name, index, records.length)
+                const checked = checkValues(values)
+                replace(records.map((record, position) => position === index ? {...record, ...checked} : record))
+                write({type: "record-set", collection: name, index, values: checked})
+            },
+            insert(index, values = {}) {
+                const records = dataValues.get(name)
+                const position = Math.max(0, Math.min(records.length, Math.round(index)))
+                const checked = checkValues(values)
+                replace([...records.slice(0, position), {...defaults, ...checked}, ...records.slice(position)])
+                write({type: "record-insert", collection: name, index: position, values: checked})
+            },
+            remove(index) {
+                const records = dataValues.get(name)
+                checkIndex(name, index, records.length)
+                replace(records.filter((record, position) => position !== index))
+                write({type: "record-remove", collection: name, index})
+            },
+            subscribe: observer => subscribe(`data:${name}`, observer)
+        })
+    }
     const host = Object.freeze({
         root: document.body,
         mode: config.mode,
         params: Object.freeze(params),
+        data: Object.freeze(data),
         edit(procedure) {
             const collected = collect(procedure)
             if (collected !== null && collected.length > 0) {post({type: "edit", ops: collected})}
@@ -111,6 +155,12 @@
         if (message.type === "param") {
             paramValues.set(message.name, message.value)
             notify(`param:${message.name}`, message.value)
+        } else if (message.type === "data") {
+            for (const [name, records] of Object.entries(message.data)) {
+                if (!dataValues.has(name)) {continue}
+                dataValues.set(name, freezeRecords(records))
+                notify(`data:${name}`, dataValues.get(name))
+            }
         } else if (message.type === "terminate") {
             try {instance?.terminate?.()} catch (error) {reportError(error)}
         }

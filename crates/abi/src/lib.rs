@@ -211,6 +211,8 @@ extern "C" {
     // dedup on create either — see the JS side).
     fn host_script_release(handle: u32);
     fn host_script_latency(handle: u32) -> u32;
+    // WASM CONTRACT: one `@collection` snapshot (f32 record-major, NaN = no value box); collection u32::MAX resets all
+    fn host_script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32);
     // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
     // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
     fn host_panic(msg_ptr: u32, msg_len: u32);
@@ -936,6 +938,15 @@ pub fn script_sample(handle: u32, index: u32, sample_handle: u32, present: bool)
     { unsafe { host_script_sample(handle, index, sample_handle, present as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, index, sample_handle, present); }
+}
+
+/// Hand one `@collection` snapshot to the JS bridge (`data_changed` forwards it), see `host_script_data`.
+#[inline]
+pub fn script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_data(handle, collection, ptr, records, fields) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, collection, ptr, records, fields); }
 }
 
 /// Run the user note-transform generator + all stateful tracking (Spielwerk) over the pulled input events,

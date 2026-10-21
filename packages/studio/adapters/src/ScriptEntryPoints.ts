@@ -45,7 +45,7 @@ export namespace ScriptEntryPoints {
     export type Method = Entry & { readonly generator: boolean, readonly parameters: ReadonlyArray<Parameter> }
 
     // `keys`: which declaration names `this.<property>.<key>` must match
-    export type Property = Entry & { readonly keys: Nullable<"sample" | "sidechain"> }
+    export type Property = Entry & { readonly keys: Nullable<"sample" | "sidechain" | "collection"> }
 
     export type Api = {
         readonly className: string
@@ -141,9 +141,11 @@ export namespace ScriptEntryPoints {
         return typos.find(method => method.name.startsWith(name) || name.startsWith(method.name)) ?? typos.at(0) ?? null
     }
 
-    const declaredKeys = (code: string, keys: "sample" | "sidechain"): Nullable<ReadonlyArray<string>> => {
-        const result = tryCatch(() => keys === "sample" ? ScriptDeclaration.parseSamples(code) : ScriptDeclaration.parseSidechains(code))
-        return result.status === "success" ? result.value.map(({label}) => label) : null
+    const declaredKeys = (code: string, keys: "sample" | "sidechain" | "collection"): Nullable<ReadonlyArray<string>> => {
+        const result = tryCatch(() => keys === "sample" ? ScriptDeclaration.parseSamples(code).map(({label}) => label)
+            : keys === "sidechain" ? ScriptDeclaration.parseSidechains(code).map(({label}) => label)
+                : ScriptDeclaration.parseCollections(code).map(({name}) => name))
+        return result.status === "success" ? result.value : null
     }
 
     const methodFindings = (members: ReadonlyArray<Member>, methods: ReadonlyArray<Method>): ReadonlyArray<Finding> =>

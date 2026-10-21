@@ -8,6 +8,7 @@ import {
     StringMapping,
     Strings,
     Terminable,
+    tryCatch,
     ValueMapping
 } from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
@@ -50,6 +51,15 @@ export interface WindowDeclaration {
     readonly height: number
 }
 
+// `// @collection <name> [count]` with its `// @field <name>.<field> ...` and `// @record <name> field=value` lines
+export interface CollectionDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly fields: ReadonlyArray<ParamDeclaration>
+    // the declared records, every field resolved (seed or default)
+    readonly records: ReadonlyArray<ReadonlyArray<number>>
+}
+
 export interface GroupDeclaration {
     readonly label: string
     readonly color: string
@@ -75,6 +85,8 @@ const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain|view) .+$/gm
 const VIEW_LINE = /^\/\/ @view\b.*$/gm
 const WINDOW_LINE = /^\/\/ @window\b.*$/gm
 const CLASS_NAME = /^[A-Za-z_$][\w$]*$/
+const DATA_LINE = /^\/\/ @(collection|field|record)\b.*$/gm
+const NAME = /^[A-Za-z_$][\w$]*$/
 const DEFAULT_VIEW_CLASS = "View"
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
@@ -195,6 +207,72 @@ const parseSingleWindow = (line: string): WindowDeclaration => {
     return {className, width, height}
 }
 
+const parseCollectionDeclarations = (code: string): ReadonlyArray<CollectionDeclaration> => {
+    type Draft = { name: string, count: Nullable<number>, fields: Array<ParamDeclaration>, seeds: Array<{ line: string, values: Map<string, string> }> }
+    const drafts: Array<Draft> = []
+    const find = (name: string, line: string): Draft => {
+        const draft = drafts.find(candidate => candidate.name === name)
+        if (!isDefined(draft)) {throw new Error(`'${line}' — no '// @collection ${name}' declared`)}
+        return draft
+    }
+    for (const match of code.matchAll(DATA_LINE)) {
+        const line = match[0]
+        const tokens = line.replace(/^\/\/ @\w+\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+        if (match[1] === "collection") {
+            if (tokens.length < 1 || tokens.length > 2 || !NAME.test(tokens[0]) || (tokens.length === 2 && !/^\d+$/.test(tokens[1]))) {
+                throw new Error(`Malformed @collection: '${line}' — expected: // @collection <name> [count]`)
+            }
+            const name = checkName(tokens[0], line)
+            if (drafts.some(draft => draft.name === name)) {throw new Error(`Duplicate @collection '${name}'`)}
+            drafts.push({name, count: tokens.length === 2 ? parseInt(tokens[1]) : null, fields: [], seeds: []})
+        } else if (match[1] === "field") {
+            const parts = tokens[0]?.split(".") ?? []
+            const [collection, field] = parts
+            if (parts.length !== 2 || !NAME.test(collection) || !NAME.test(field)) {
+                throw new Error(`Malformed @field: '${line}' — expected: // @field <collection>.<name> [default] [min max type [unit]]`)
+            }
+            const draft = find(collection, line)
+            const parsed = tryCatch(() => parseSingleParam(`// @param ${[field, ...tokens.slice(1)].join(" ")}`))
+            if (parsed.status === "failure") {
+                throw new Error(`Malformed @field: '${line}' — ${String(parsed.error).replace(/^Error: Malformed @param: '[^']*'( — )?/, "")}`)
+            }
+            const declaration = parsed.value
+            if (draft.fields.some(other => other.label === declaration.label)) {throw new Error(`Duplicate @field '${collection}.${field}'`)}
+            draft.fields.push({...declaration, label: checkName(field, line)})
+        } else {
+            if (tokens.length < 1) {throw new Error(`Malformed @record: '${line}' — expected: // @record <collection> [field=value ...]`)}
+            const draft = find(tokens[0], line)
+            const values = new Map<string, string>()
+            for (const assignment of tokens.slice(1)) {
+                const [field, value] = assignment.split("=")
+                if (!isDefined(field) || !isDefined(value) || field.length === 0 || value.length === 0) {
+                    throw new Error(`Malformed @record: '${line}' — '${assignment}' is not field=value`)
+                }
+                values.set(field, value)
+            }
+            draft.seeds.push({line, values})
+        }
+    }
+    return drafts.map(({name, count, fields, seeds}, index) => {
+        if (isDefined(count) && seeds.length > 0) {throw new Error(`@collection '${name}' declares a count AND @record lines, use one`)}
+        const records = seeds.length > 0 ? seeds.map(({line, values}) => {
+            for (const field of values.keys()) {
+                if (!fields.some(declaration => declaration.label === field)) {throw new Error(`'${line}' — no @field '${name}.${field}'`)}
+            }
+            return fields.map(declaration => {
+                const text = values.get(declaration.label)
+                if (!isDefined(text)) {return declaration.defaultValue}
+                const value = text === "true" ? 1 : text === "false" ? 0 : Number(text)
+                if (!Number.isFinite(value) || value < declaration.min - FLOAT_TOLERANCE || value > declaration.max + FLOAT_TOLERANCE) {
+                    throw new Error(`'${line}' — ${declaration.label}=${text} is not a number in [${declaration.min}, ${declaration.max}]`)
+                }
+                return value
+            })
+        }) : Array.from({length: count ?? 0}, () => fields.map(({defaultValue}) => defaultValue))
+        return {name, index, fields, records}
+    })
+}
+
 const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
     a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
 
@@ -270,6 +348,8 @@ export namespace ScriptDeclaration {
         }
         return sidechains
     }
+
+    export const parseCollections = parseCollectionDeclarations
 
     export const parseViews = (code: string): ReadonlyArray<ViewDeclaration> =>
         Array.from(code.matchAll(VIEW_LINE), match => parseSingleView(match[0]))

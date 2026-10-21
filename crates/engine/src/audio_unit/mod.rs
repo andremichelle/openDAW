@@ -539,6 +539,8 @@ pub(crate) struct DeviceParams {
     // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
     pub(crate) param_hub_sub: Option<SubscriptionId>,
     pub(crate) sample_hub_sub: Option<SubscriptionId>,
+    // SCRIPTABLE devices: the `@collection` records, flushed by the unit reconcile; `None` without a records hub
+    pub(crate) records: Option<crate::script_device::RecordBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
     pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
@@ -1023,6 +1025,10 @@ impl Engine {
         // automation re-bind (it pushes on its own), NOT after a chain reconcile: that leaves survivors untouched.
         if params_changed && !automation_changed {
             self.refresh_unit_params(unit);
+        }
+        // a record / value edit raised the light flag: deliver each dirty `@collection` snapshot once
+        if params_changed || automation_changed {
+            self.flush_unit_records(unit);
         }
         set_params_signal(None);
         crate::set_current_unit_note_bits(None);

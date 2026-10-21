@@ -97,6 +97,28 @@ const latency: Property = {
         + "delays every parallel path to match."
 }
 
+const data: Property = {
+    name: "data",
+    keys: "collection",
+    signature: "this.data.<collection>",
+    documentation: [
+        "The records of each `// @collection <name>`: a frozen array of frozen `{field: value}` objects, every",
+        "`@field` present. Replaced (never mutated) on every change, read it in `process` instead of keeping it.",
+        "Read only: the view edits the records, the processor never writes them."
+    ].join("\n")
+}
+
+const dataChanged: Method = {
+    name: "dataChanged",
+    generator: false,
+    signature: "dataChanged(name)",
+    parameters: [parameter("name", "name: string", "The `@collection` whose records changed.")],
+    documentation: [
+        "Called once after construction for every `@collection`, then whenever a collection's records change,",
+        "always between blocks. Rebuild derived state here (a wavetable from partials), never in `process`."
+    ].join("\n")
+}
+
 const GLOBALS: ReadonlyArray<ScriptEntryPoints.Entry> = [{
     name: "sampleRate",
     signature: "sampleRate: number",
@@ -126,6 +148,7 @@ const werkstattMethods: ReadonlyArray<Method> = [
         ].join("\n")
     },
     paramChanged,
+    dataChanged,
     {
         name: "reset",
         generator: false,
@@ -185,6 +208,7 @@ const apparatMethods: ReadonlyArray<Method> = [
         documentation: "Called when a note ends, at its exact sample position. Release the voice with this `id`."
     },
     paramChanged,
+    dataChanged,
     {
         name: "reset",
         generator: false,
@@ -214,6 +238,7 @@ const spielwerkMethods: ReadonlyArray<Method> = [
         ].join("\n")
     },
     paramChanged,
+    dataChanged,
     {
         name: "reset",
         generator: false,
@@ -229,6 +254,11 @@ const HOST = parameter("host", "host: ViewHost", "The view's only connection to 
     entry("params", "host.params.<name>", [
         "Every `@param` by name: `label`, `value` (mapped), `set(value)` (like a knob, one undo step outside",
         "`edit`), `subscribe(observer)` (called with the new value)."
+    ].join("\n")),
+    entry("data", "host.data.<collection>", [
+        "Every `@collection` by name: `length`, `get(index)`, `toArray()`, `set(index, {field: value})`,",
+        "`insert(index, values?)`, `remove(index)`, `subscribe(observer)` (called with the new records).",
+        "Writes show immediately in `get`, the studio confirms them and every view and the processor follow."
     ].join("\n")),
     entry("edit", "host.edit(procedure)", "Runs `procedure` and applies every write in it as ONE undo step."),
     entry("gesture", "host.gesture(): {edit(procedure), end()}", "A drag: every `edit` applies live, `end()` closes ONE undo step."),
@@ -264,9 +294,9 @@ export namespace ScriptEntryPointDocs {
         ({className, methods: viewMethods, properties: [], globals: GLOBALS})
 
     export const werkstatt: ScriptEntryPoints.Api =
-        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency], globals: GLOBALS}
+        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data], globals: GLOBALS}
     export const apparat: ScriptEntryPoints.Api =
-        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains], globals: GLOBALS}
+        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data], globals: GLOBALS}
     export const spielwerk: ScriptEntryPoints.Api =
-        {className: "Processor", methods: spielwerkMethods, properties: [], globals: GLOBALS}
+        {className: "Processor", methods: spielwerkMethods, properties: [data], globals: GLOBALS}
 }

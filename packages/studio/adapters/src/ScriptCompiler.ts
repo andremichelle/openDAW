@@ -1,9 +1,22 @@
-import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, tryCatch, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
-import {ParamDeclaration, SampleDeclaration, ScriptDeclaration, SidechainDeclaration} from "./ScriptDeclaration"
+import {
+    ScriptRecordBox,
+    ScriptValueBox,
+    WerkstattParameterBox,
+    WerkstattSampleBox,
+    WerkstattSidechainBox
+} from "@opendaw/studio-boxes"
+import {
+    CollectionDeclaration,
+    ParamDeclaration,
+    SampleDeclaration,
+    ScriptDeclaration,
+    SidechainDeclaration
+} from "./ScriptDeclaration"
 import {ScriptTopLevel} from "./ScriptTopLevel"
+import {ScriptRecords} from "./ScriptRecords"
 import {DeviceBox} from "./DeviceBox"
 import {Promises} from "@opendaw/lib-runtime"
 
@@ -136,6 +149,75 @@ const reconcileSidechains = (hub: Field<Pointers.ScriptSideChain>, declared: Rea
     })
 }
 
+const recordValues = (record: ScriptRecordBox): Map<string, ScriptValueBox> => new Map(record.values.pointerHub.filter()
+    .map(({box}) => asInstanceOf(box, ScriptValueBox)).map(valueBox => [valueBox.field.getValue(), valueBox]))
+
+// A changed declaration reshapes a collection (grow / shrink at the end, surviving records keep their values), an
+// unchanged one leaves the records the view inserted or removed alone. A changed seed is written only into
+// values that still hold the old seed.
+const reconcileRecords = (hub: Field<Pointers.ScriptRecord>, declared: ReadonlyArray<CollectionDeclaration>,
+                          previous: ReadonlyArray<CollectionDeclaration>): void => {
+    const byCollection = new Map<string, Array<ScriptRecordBox>>()
+    for (const {box} of hub.pointerHub.filter()) {
+        const record = asInstanceOf(box, ScriptRecordBox)
+        const records = byCollection.get(record.collection.getValue()) ?? []
+        records.push(record)
+        byCollection.set(record.collection.getValue(), records)
+    }
+    for (const [name, records] of byCollection) {
+        if (!declared.some(collection => collection.name === name)) {records.forEach(record => record.delete())}
+    }
+    for (const collection of declared) {
+        const records = (byCollection.get(collection.name) ?? [])
+            .sort((left, right) => left.order.getValue() - right.order.getValue())
+        const before = previous.find(candidate => candidate.name === collection.name)
+        const target = collection.records.length
+        const reshape = isDefined(before) ? before.records.length !== target : records.length === 0
+        if (reshape) {
+            while (records.length > target) {records.pop()?.delete()}
+        }
+        records.forEach((record, order) => {
+            if (record.order.getValue() !== order) {record.order.setValue(order)}
+            if (record.collectionIndex.getValue() !== collection.index) {record.collectionIndex.setValue(collection.index)}
+            const values = recordValues(record)
+            for (const [label, valueBox] of values) {
+                if (!collection.fields.some(field => field.label === label)) {valueBox.delete()}
+            }
+            collection.fields.forEach((field, fieldIndex) => {
+                const seed = collection.records[order]?.[fieldIndex] ?? field.defaultValue
+                const valueBox = values.get(field.label)
+                if (!isDefined(valueBox)) {
+                    ScriptValueBox.create(hub.box.graph, UUID.generate(), box => {
+                        box.owner.refer(record.values)
+                        box.field.setValue(field.label)
+                        box.fieldIndex.setValue(fieldIndex)
+                        box.value.setValue(seed)
+                    })
+                    return
+                }
+                if (valueBox.fieldIndex.getValue() !== fieldIndex) {valueBox.fieldIndex.setValue(fieldIndex)}
+                const beforeIndex = before?.fields.findIndex(candidate => candidate.label === field.label) ?? -1
+                const oldSeed = beforeIndex === -1 ? null
+                    : before?.records[order]?.[beforeIndex] ?? before?.fields[beforeIndex].defaultValue ?? null
+                if (isDefined(oldSeed) && oldSeed !== seed && valueBox.value.getValue() === Math.fround(oldSeed)) {
+                    valueBox.value.setValue(seed)
+                }
+                const value = valueBox.value.getValue()
+                const clamped = Math.min(field.max, Math.max(field.min, value))
+                if (clamped !== value) {valueBox.value.setValue(clamped)}
+            })
+        })
+        if (reshape) {
+            for (let order = records.length; order < target; order++) {ScriptRecords.create(hub, collection, order, collection.records[order])}
+        }
+    }
+}
+
+const previousCollections = (code: string, headerPattern: RegExp): ReadonlyArray<CollectionDeclaration> => {
+    const result = tryCatch(() => ScriptDeclaration.parseCollections(parseHeader(code, headerPattern).userCode))
+    return result.status === "success" ? result.value : []
+}
+
 // Wrap the user script for registration into `globalThis.openDAW.<registry>[uuid]`. Beyond `{update, create}`
 // (consumed by the TS core-processors engine), the entry also carries the `@no-pass` verdict (`pass`, read by
 // the Spielwerk bridge) plus the PARSED `@param` / `@sample`
@@ -173,6 +255,9 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         label: declaration.label, index: order.get(declaration.label) ?? 0
     }))
     const sidechains = ScriptDeclaration.parseSidechains(userCode).map(({label}, index) => ({label, index}))
+    const collections = ScriptDeclaration.parseCollections(userCode).map(({name, index, fields}) => ({
+        name, index, fields: fields.map(({label, defaultValue}, fieldIndex) => ({label, index: fieldIndex, defaultValue}))
+    }))
     return `
     if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
@@ -182,6 +267,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         params: ${JSON.stringify(params)},
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},
+        collections: ${JSON.stringify(collections)},
         readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
         latency: ${ScriptDeclaration.parseLatency(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}
@@ -246,6 +332,7 @@ export namespace ScriptCompiler {
         readonly parameters: Field<Pointers.Parameter>
         readonly samples: Field<Pointers.Sample>
         readonly sideChains?: Field<Pointers.ScriptSideChain>
+        readonly records?: Field<Pointers.ScriptRecord>
     }
 
     export type Config = {
@@ -298,6 +385,8 @@ export namespace ScriptCompiler {
                 const samples = ScriptDeclaration.parseSamples(userCode)
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
                 const sidechains = ScriptDeclaration.parseSidechains(userCode)
+                const collections = ScriptDeclaration.parseCollections(userCode)
+                const previous = previousCollections(deviceBox.code.getValue(), headerPattern)
                 const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
                 validateCode(wrappedCode)
                 if (ScriptTopLevel.applies(userCode)) {validateCode(wrapViewScript(userCode))}
@@ -309,6 +398,7 @@ export namespace ScriptCompiler {
                     reconcileParameters(deviceBox, params, order)
                     reconcileSamples(deviceBox, samples, order)
                     if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}
+                    if (isDefined(deviceBox.records)) {reconcileRecords(deviceBox.records, collections, previous)}
                 }
                 if (append) {
                     editing.append(modifier)

@@ -1,6 +1,7 @@
 import css from "./ScriptDeviceEditor.sass?inline"
 import {
     AutomatableParameterFieldAdapter,
+    CollectionDeclaration,
     DeclarationSection,
     DeviceBoxAdapter,
     DeviceHost,
@@ -30,6 +31,7 @@ import {
     Subscription,
     Terminable,
     Terminator,
+    tryCatch,
     UUID
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
@@ -290,13 +292,18 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const parameter = adapter.parameters.parameters().find(param => param.address.equals(paramBox.value.address))
         return isDefined(parameter) ? [{name, parameter}] : []
     }).flat()
-    const createViewElement = (terminator: Terminator, view: ViewDeclaration): Nullable<HTMLElement> => {
+    const viewCollections = (): ReadonlyArray<CollectionDeclaration> => {
+        const result = tryCatch(() => ScriptDeclaration.parseCollections(box.code.getValue()))
+        return result.status === "success" ? result.value : []
+    }
+        const createViewElement = (terminator: Terminator, view: ViewDeclaration): Nullable<HTMLElement> => {
         const area = ScriptViewLayout.visibleArea(view)
         if (!isDefined(area)) {return null}
         const frame = ScriptViewFrame({
             lifecycle: terminator, editing, userCode: compiler.stripHeader(box.code.getValue()),
             className: view.className, mode: "inline", sampleRate: service.audioContext.sampleRate,
-            params: viewParams(), onError: showError, onWindow: EmptyExec
+            params: viewParams(), records: box.records, collections: viewCollections(),
+            onError: showError, onWindow: EmptyExec
         })
         frame.classList.toggle("overflow", ScriptViewLayout.overflows(view))
         return placeInGrid(frame, area)

@@ -63,4 +63,6 @@ export enum Pointers {
     ModulatorCollection,
     ModulatorSource,
     ScriptSideChain,
+    ScriptRecord,
+    ScriptValue,
 }

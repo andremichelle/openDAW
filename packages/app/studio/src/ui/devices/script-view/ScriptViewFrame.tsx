@@ -1,9 +1,16 @@
 import runtimeSource from "./view-runtime.js?raw"
-import {Editing, isDefined, Lifecycle, Nullable, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
+import {Editing, isDefined, Lifecycle, Nullable, Optional, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {Colors} from "@opendaw/studio-enums"
-import {AutomatableParameterFieldAdapter, ScriptCompiler} from "@opendaw/studio-adapters"
+import {Colors, Pointers} from "@opendaw/studio-enums"
+import {Field} from "@opendaw/lib-box"
+import {
+    AutomatableParameterFieldAdapter,
+    CollectionDeclaration,
+    ScriptCompiler,
+    ScriptRecords,
+    ScriptRecordValues
+} from "@opendaw/studio-adapters"
 import {Fonts} from "@/ui/Fonts"
 
 export type ScriptViewMode = "inline" | "window"
@@ -21,6 +28,8 @@ type Construct = {
     mode: ScriptViewMode
     sampleRate: number
     params: ReadonlyArray<ScriptViewParam>
+    records: Optional<Field<Pointers.ScriptRecord>>
+    collections: ReadonlyArray<CollectionDeclaration>
     onError: Procedure<string>
     onWindow: (action: "open" | "close", className: string) => void
 }
@@ -60,24 +69,50 @@ body { font-family: Rubik, sans-serif; font-size: 11px; color: var(--color-gray)
 <script>${inlineScript(userScript)}</script></body></html>`
 
 export const ScriptViewFrame = ({
-                                    lifecycle, editing, userCode, className, mode, sampleRate, params, onError, onWindow
+                                    lifecycle, editing, userCode, className, mode, sampleRate, params, records, collections,
+                                    onError, onWindow
                                 }: Construct): HTMLIFrameElement => {
     const paramsByName = new Map(params.map(({name, parameter}) => [name, parameter]))
+    const collectionsByName = new Map(collections.map(collection => [collection.name, collection]))
+    const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> } => isDefined(records)
+        ? Object.fromEntries(collections.map(collection => [collection.name, ScriptRecords.read(records, collection)]))
+        : {}
     const config = {
         className, mode, sampleRate, colors: colorMap(),
-        params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()}))
+        params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()})),
+        collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
+        data: readData()
     }
     const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
     iframe.srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
     const connection = lifecycle.own(new Terminator())
     const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
     const send = (message: object): void => state.port?.postMessage(message)
+    const toValues = (value: unknown): ScriptRecordValues => isRecord(value)
+        ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"))
+        : {}
+    const applyOp = (op: Message): void => {
+        if (op.type === "param" && typeof op.name === "string") {
+            const parameter = paramsByName.get(op.name)
+            if (!isDefined(parameter) || typeof op.value !== "number" || !Number.isFinite(op.value)) {return}
+            parameter.setUnitValue(parameter.valueMapping.x(op.value))
+            return
+        }
+        if (!isDefined(records) || typeof op.collection !== "string") {return}
+        const collection = collectionsByName.get(op.collection)
+        const index = op.index
+        if (!isDefined(collection) || typeof index !== "number" || !Number.isInteger(index)) {return}
+        if (op.type === "record-set") {
+            ScriptRecords.set(records, collection, index, toValues(op.values))
+        } else if (op.type === "record-insert") {
+            ScriptRecords.insert(records, collection, index, toValues(op.values))
+        } else if (op.type === "record-remove") {
+            ScriptRecords.remove(records, collection, index)
+        }
+    }
     const applyOps = (ops: ReadonlyArray<unknown>): void => {
         for (const op of ops.slice(0, MAX_OPS)) {
-            if (!isRecord(op) || op.type !== "param" || typeof op.name !== "string") {continue}
-            const parameter = paramsByName.get(op.name)
-            if (!isDefined(parameter) || typeof op.value !== "number" || !Number.isFinite(op.value)) {continue}
-            parameter.setUnitValue(parameter.valueMapping.x(op.value))
+            if (isRecord(op)) {applyOp(op)}
         }
     }
     const endGesture = (): void => {
@@ -125,6 +160,9 @@ export const ScriptViewFrame = ({
         connection.ownAll(
             ...params.map(({name, parameter}) =>
                 parameter.subscribe(() => send({type: "param", name, value: parameter.getControlledValue()}))),
+            isDefined(records) && collections.length > 0
+                ? ScriptRecords.observe(records, () => send({type: "data", data: readData()}))
+                : Terminable.Empty,
             Terminable.create(() => {
                 send({type: "terminate"})
                 channel.port1.close()

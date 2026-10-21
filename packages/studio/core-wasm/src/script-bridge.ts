@@ -11,7 +11,7 @@
 // call passes that handle. Buffers are byte offsets into the ONE shared memory; we re-derive `memory.buffer`
 // views EVERY call, since the SharedArrayBuffer can grow / detach (talc), never caching a typed-array view.
 
-import {clamp, isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, isDefined, Nullable, tryCatch, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
@@ -37,12 +37,16 @@ const PARAM_KIND_UNIT = 0
 
 const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutput
 const SIDECHAIN_PORT_BASE = 2 // WASM CONTRACT: a script device's sidechain port id = 2 + its `@sidechain` index
+const DATA_RESET = 0xFFFFFFFF // WASM CONTRACT: `host_script_data` with this collection starts a new snapshot
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
 type SampleDecl = {label: string, index: number}
 type SidechainDecl = {label: string, index: number}
+type CollectionDecl = {name: string, index: number, fields: ReadonlyArray<{label: string, index: number, defaultValue: number}>}
+type RawCollection = {records: number, fields: number, values: Float32Array}
 type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>,
-    sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, latency?: number, pass: boolean}
+    sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, latency?: number, pass: boolean,
+    collections?: ReadonlyArray<CollectionDecl>}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -70,6 +74,11 @@ class Bridge {
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
     readsSidechains = false
     declaredLatency = 0 // `// @latency <ms>`
+    // `@collection` data: the engine delivers a snapshot (reset, then each present collection) off-render, it is
+    // applied to `proc.data` before the next process call, so `dataChanged` never runs mid-transaction
+    collections: ReadonlyArray<CollectionDecl> = []
+    rawData = new Map<number, RawCollection>()
+    pendingData: Nullable<Map<number, RawCollection>> = null
     readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
@@ -96,6 +105,22 @@ const resolveMapping = (declaration: ParamDecl): ValueMapping<number> => {
         case "bool": return ValueMapping.linearInteger(0, 1) as ValueMapping<number>
         default: return ValueMapping.unipolar()
     }
+}
+
+const sameCollection = (left: Nullable<RawCollection> | undefined, right: Nullable<RawCollection> | undefined): boolean => {
+    if (!isDefined(left) || !isDefined(right)) {return !isDefined(left) && !isDefined(right)}
+    if (left.records !== right.records || left.fields !== right.fields) {return false}
+    return left.values.every((value, index) => Object.is(value, right.values[index]))
+}
+
+// One frozen plain object per record, every declared field present (a missing value box is its `@field` default).
+const toRecords = (collection: CollectionDecl, raw: Nullable<RawCollection> | undefined): ReadonlyArray<Readonly<Record<string, number>>> => {
+    if (!isDefined(raw)) {return Object.freeze([])}
+    return Object.freeze(Array.from({length: raw.records}, (unused, record) => Object.freeze(Object.fromEntries(
+        collection.fields.map(({label, index, defaultValue}) => {
+            const value = index < raw.fields ? raw.values[record * raw.fields + index] : NaN
+            return [label, Number.isNaN(value) ? defaultValue : value]
+        })))))
 }
 
 const SIDECHAIN_HINT = "this.sidechains is only available with a // @sidechain <name> declaration"
@@ -162,7 +187,8 @@ export class ScriptBridges {
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
                 this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
             host_script_release: (handle) => this.#release(handle),
-            host_script_latency: (handle) => this.#latency(handle)
+            host_script_latency: (handle) => this.#latency(handle),
+            host_script_data: (handle, collection, ptr, records, fields) => this.#data(handle, collection, ptr, records, fields)
         }
     }
 
@@ -222,6 +248,8 @@ export class ScriptBridges {
                 // through the new script's @param mapping).
                 for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
                 for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+                bridge.collections = registry.collections ?? []
+                this.#syncData(bridge, true)
             } catch (error) {
                 this.#silence(bridge, `Failed to instantiate Processor: ${error}`)
             }
@@ -254,6 +282,7 @@ export class ScriptBridges {
         const proc = this.#ensureProc(bridge)
         if (proc === null) {return mute()}
         const block = {index, p0, p1, s0, s1, bpm, flags}
+        if (!this.#syncData(bridge, false)) {return mute()}
         try {
             if (bridge.sidechains.length > 0) {
                 this.#deliverSidechains(bridge, s0, s1)
@@ -353,13 +382,53 @@ export class ScriptBridges {
         // is transparent rather than a mute button. A `@no-pass` script keeps its silence, as its author asked.
         const forward = (): number => bridge.pass ? copyEvents(this.#memory.buffer, inPtr, inCount, outPtr, outMax) : 0
         const proc = this.#ensureProc(bridge)
-        if (proc === null || bridge.spielwerk === null) {return forward()}
+        if (proc === null || bridge.spielwerk === null || !this.#syncData(bridge, false)) {return forward()}
         try {
             return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1, bridge.pass)
         } catch (error) {
             this.#silence(bridge, `Runtime error: ${error}`)
             return forward()
         }
+    }
+
+    #data(handle: number, collection: number, ptr: number, records: number, fields: number): void {
+        const bridge = this.#bridges.get(handle)
+        if (bridge === undefined) {return}
+        if (collection === DATA_RESET) {
+            bridge.pendingData = new Map()
+            return
+        }
+        const values = new Float32Array(this.#memory.buffer, ptr, records * fields).slice()
+        bridge.pendingData ??= new Map()
+        bridge.pendingData.set(collection, {records, fields, values})
+    }
+
+    // Apply a pending snapshot (or, with `force`, the current one after a hot-swap) to `proc.data` and call
+    // `dataChanged(name)` for every collection whose values changed. A script without `@collection` never
+    // gets a `data` property. Returns false when `dataChanged` threw and silenced the device.
+    #syncData(bridge: Bridge, force: boolean): boolean {
+        const proc = bridge.proc
+        if (proc === null || bridge.collections.length === 0) {
+            if (bridge.pendingData !== null) {
+                bridge.rawData = bridge.pendingData
+                bridge.pendingData = null
+            }
+            return true
+        }
+        const pending = bridge.pendingData
+        if (pending === null && !force) {return true}
+        const next = pending ?? bridge.rawData
+        const changed = bridge.collections.filter(({index}) => force || !sameCollection(bridge.rawData.get(index), next.get(index)))
+        bridge.rawData = next
+        bridge.pendingData = null
+        proc.data = Object.freeze(Object.fromEntries(bridge.collections.map(collection =>
+            [collection.name, toRecords(collection, next.get(collection.index))])))
+        const result = tryCatch(() => changed.forEach(({name}) => proc.dataChanged?.(name)))
+        if (result.status === "failure") {
+            this.#silence(bridge, `Runtime error in dataChanged: ${result.error}`)
+            return false
+        }
+        return true
     }
 
     // Resolve a sample handle's resident planar frames and hand the user proc an AudioData view (no copy).

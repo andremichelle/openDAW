@@ -402,8 +402,14 @@ impl Engine {
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
+        let records = if reg.record_collection_field != 0 {
+            let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            Some(self.bind_script_records(device_uuid, reg, state_ptr, signal))
+        } else {
+            None
+        };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, records, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -732,6 +738,9 @@ impl Engine {
             }
             for sub in params.param_hub_sub.into_iter().chain(params.sample_hub_sub) {
                 self.graph.unsubscribe(sub);
+            }
+            if let Some(records) = params.records {
+                self.teardown_script_records(records);
             }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
