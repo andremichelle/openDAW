@@ -231,6 +231,15 @@
             return opacity >= 1 ? color : color.replace(/^hsl\((.*)\)$/, (match, inner) => `hsla(${inner}, ${Math.max(0, opacity)})`)
         }
     })
+    globalThis.addEventListener("contextmenu", event => {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+    }, {capture: true})
+    for (const kind of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "dblclick"]) {
+        globalThis.addEventListener(kind, event => {
+            if (event.button === 2) {event.stopImmediatePropagation()}
+        }, {capture: true})
+    }
     for (const kind of ["keydown", "keyup"]) {
         globalThis.addEventListener(kind, event => {
             const tag = typeof event.target?.tagName === "string" ? event.target.tagName : ""
