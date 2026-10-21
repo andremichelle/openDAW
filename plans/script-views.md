@@ -296,7 +296,7 @@ interface ViewHost {
     readonly streams: Record<string, ViewStream>
     readonly preview: ViewPreview
     edit(procedure: () => void): void                       // one transaction, one undo step
-    gesture(): {edit(procedure: () => void): void, end(): void} // a drag, one undo step at the end (beginModification)
+    gesture(): {edit(procedure: () => void): void, end(): void} // a drag, one undo step (mark / modify / mark)
     send(message: unknown): void                            // structured clone, size capped, not persisted
     openWindow(name?: string): void                         // a declared @window class, default "View"
     closeWindow(name?: string): void
@@ -734,6 +734,31 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
 13. Monaco: shared `javascriptDefaults`, semantic validation off, only `sampleRate` declared. The view API needs an
     extra lib (`ViewHost` and friends as global types) plus `/** @param {ViewHost} host */` in the examples. Scan
     errors need line markers, today compile errors only reach the device error icon.
+
+### 9.1 Implementation dry run (2026-10-21, branch `script-views`)
+
+1. Template: commit f6192f2b8 (`@sidechain`) is the end-to-end path for a new script collection: schema +
+   `Pointers` (append only), Rust registry, `observe_*_collection_field` export per crate, `DeviceReg` field via
+   a `device_set_*` setter (no `device_register` signature change), linker + engine exports, bridge, compiler
+   reconcile, editor, manual pages, starter prompts, examples.
+2. Rebind risk (finding 10) is a non-issue: a hub add / remove calls `invalidate`, which ends in `rebind_one`
+   (params only). The device `init` never re-runs, so the Processor survives record inserts.
+3. Records hub is field 14 on all three device boxes (Spielwerk has no 13, the same key everywhere is simpler).
+4. Data delivery simplified: no value deltas. Any record / value change marks the device's data dirty, the engine
+   flushes ONE snapshot per collection at the update clock (next to `params_dirty`), through a new device export
+   `data_changed(state_ptr, collection, ptr, records, fields)` that forwards to `host_script_data`. Values are
+   `f32` record-major in field-index order, a missing value box is `NaN` and the bridge fills the `@field` default.
+   Coalescing per update also means a half-applied transaction is never delivered.
+5. Gesture correction: `beginModification` keeps one graph transaction open, so the engine would hear nothing
+   until release. Views use the knob pattern instead: `editing.mark()` on start, `editing.modify(fn, false)` per
+   move, `editing.mark()` on end = one undo step with live updates (`RelativeUnitValueDragging.tsx`).
+6. Streams: `LiveStreamBroadcaster.broadcastFloats(address, values, before)` takes any JS `Float32Array`, and
+   `before(hasSubscribers)` gives `.active` for free. `ScriptBridges` gets the broadcaster from `processor.ts`
+   (offline worker: its own broadcaster, nobody subscribes). Ring and fft streams keep their ring JS-side and
+   linearize into the published array inside `before`.
+7. The worklet has no JS box graph (sync goes straight to Rust), so data MUST go through the Rust engine.
+8. The view runtime is a raw `.js` file imported with `?raw` (like the examples): an opaque-origin `srcdoc` can
+   import nothing, so the runtime carries its own small radix-2 FFT instead of lib-dsp.
 
 ## 10. Decisions (2026-10-21)
 

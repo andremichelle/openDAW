@@ -1,6 +1,6 @@
 import type * as MonacoEditor from "monaco-editor"
 import {isDefined, Lifecycle, Terminable} from "@opendaw/lib-std"
-import {ScriptEntryPoints} from "@opendaw/studio-adapters"
+import {ScriptEntryPoints, ScriptTopLevel} from "@opendaw/studio-adapters"
 
 type Monaco = typeof MonacoEditor
 
@@ -21,8 +21,17 @@ export namespace EntryPointMarkers {
             const end = model.getPositionAt(offset + name.length)
             return {startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column}
         }
+        const topLevelMarkers = (code: string): ReadonlyArray<MonacoEditor.editor.IMarkerData> => {
+            if (!ScriptTopLevel.applies(code)) {return []}
+            return ScriptTopLevel.check(code).violations.map(({offset, message}) => {
+                const {lineNumber, column} = model.getPositionAt(offset)
+                return {startLineNumber: lineNumber, startColumn: column, endLineNumber: lineNumber,
+                    endColumn: model.getLineMaxColumn(lineNumber), severity: monaco.MarkerSeverity.Error, message}
+            })
+        }
         const update = (): void => {
-            const findings = ScriptEntryPoints.analyse(model.getValue(), api)
+            const code = model.getValue()
+            const findings = ScriptEntryPoints.analyse(code, api)
             decorations.set(findings.map(finding => ({
                 range: rangeOf(finding),
                 options: {
@@ -30,9 +39,12 @@ export namespace EntryPointMarkers {
                     hoverMessage: describe(finding.entry)
                 }
             })))
-            monaco.editor.setModelMarkers(model, OWNER, findings.flatMap(finding => isDefined(finding.warning)
-                ? [{...rangeOf(finding), severity: monaco.MarkerSeverity.Warning, message: finding.warning}]
-                : []))
+            monaco.editor.setModelMarkers(model, OWNER, [
+                ...findings.flatMap(finding => isDefined(finding.warning)
+                    ? [{...rangeOf(finding), severity: monaco.MarkerSeverity.Warning, message: finding.warning}]
+                    : []),
+                ...topLevelMarkers(code)
+            ])
         }
         const subscription = model.onDidChangeContent(update)
         update()

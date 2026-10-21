@@ -3,6 +3,7 @@ import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
 import {ParamDeclaration, SampleDeclaration, ScriptDeclaration, SidechainDeclaration} from "./ScriptDeclaration"
+import {ScriptTopLevel} from "./ScriptTopLevel"
 import {DeviceBox} from "./DeviceBox"
 import {Promises} from "@opendaw/lib-runtime"
 
@@ -142,7 +143,27 @@ const reconcileSidechains = (hub: Field<Pointers.ScriptSideChain>, declared: Rea
 // the WASM script bridge needs them to map a param's raw automation value through the right `ValueMapping` and
 // to label each param / sample, since the worklet has no box graph to read those from. The TS engine ignores
 // the extra fields (it resolves mappings + labels from the box adapter), so this stays a pure superset.
-const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string): string => {
+// A script with a view runs in two realms, so its top level must not hold state (ScriptTopLevel): it is strict,
+// the shared globals are shadowed and every top-level value is frozen. Violations refuse a compile, never a load.
+const wrapProcessor = (config: ScriptCompiler.Config, userCode: string, enforce: boolean): string => {
+    if (!ScriptTopLevel.applies(userCode)) {
+        return `(function ${config.functionName}() {
+            ${userCode}
+            return Processor
+        })()`
+    }
+    const {declarations, violations} = ScriptTopLevel.check(userCode)
+    if (enforce && violations.length > 0) {throw new Error(ScriptTopLevel.format(violations))}
+    return `(function ${config.functionName}(globalThis, self, openDAW) {
+            "use strict"
+            ${userCode}
+            ${ScriptTopLevel.freezeSource(declarations)}
+            return Processor
+        })()`
+}
+
+const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string,
+                    enforce: boolean = false): string => {
     const order = ScriptDeclaration.parseDeclarationOrder(userCode)
     const params = ScriptDeclaration.parseParams(userCode).map(declaration => ({
         label: declaration.label, index: order.get(declaration.label) ?? 0, mapping: declaration.mapping,
@@ -157,10 +178,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
     globalThis.openDAW.${config.registryName}["${uuid}"] = {
         update: ${update},
-        create: (function ${config.functionName}() {
-            ${userCode}
-            return Processor
-        })(),
+        create: ${wrapProcessor(config, userCode, enforce)},
         params: ${JSON.stringify(params)},
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},
@@ -262,7 +280,7 @@ export namespace ScriptCompiler {
                 const samples = ScriptDeclaration.parseSamples(userCode)
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
                 const sidechains = ScriptDeclaration.parseSidechains(userCode)
-                const wrappedCode = wrapScript(config, uuid, newUpdate, userCode)
+                const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
                 validateCode(wrappedCode)
                 const label = ScriptDeclaration.parseLabel(userCode)
                 claimRegistration(audioContext, deviceBox, newUpdate)
