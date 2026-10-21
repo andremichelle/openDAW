@@ -149,3 +149,21 @@ describe("ScriptCompiler applies the top-level rule to scripts with a view", () 
         expect(new frozen.create().process()).toBe("frozen")
     })
 })
+
+describe("ScriptCompiler.wrapView", () => {
+    it("hands the declared view and window classes to the runtime", () => {
+        const code = "// @view PatternView 1 1 4 3\n// @window EditorView 900 520\n// @view 5 1 2 3\nclass Processor {}\nclass PatternView {}\nclass View {}"
+        const received: Array<Record<string, unknown>> = []
+        new Function("__openDAWViews", ScriptCompiler.wrapView(code))((registry: Record<string, unknown>) => received.push(registry))
+        expect(received).toHaveLength(1)
+        expect(Object.keys(received[0])).toEqual(["PatternView", "View", "EditorView"])
+        expect(typeof received[0].PatternView).toBe("function")
+        expect(received[0].EditorView).toBeUndefined()
+    })
+    it("freezes the top level in the view realm too", () => {
+        const code = "// @view 1 1 2 3\nconst SCALES = [1, 2]\nclass View { push() { SCALES.push(3) } }"
+        const received: Array<Record<string, new () => { push(): void }>> = []
+        new Function("__openDAWViews", ScriptCompiler.wrapView(code))((registry: Record<string, new () => { push(): void }>) => received.push(registry))
+        expect(() => new received[0].View().push()).toThrow(TypeError)
+    })
+})

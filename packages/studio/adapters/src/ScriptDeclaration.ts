@@ -34,6 +34,22 @@ export interface SidechainDeclaration {
     readonly label: string
 }
 
+// `// @view [Class] <column> <row> <columns> <rows>`, cells are 1-based and relative to the view's section
+export interface ViewDeclaration {
+    readonly className: string
+    readonly column: number
+    readonly row: number
+    readonly columns: number
+    readonly rows: number
+}
+
+// `// @window [Class] <width> <height>`, size in CSS pixels
+export interface WindowDeclaration {
+    readonly className: string
+    readonly width: number
+    readonly height: number
+}
+
 export interface GroupDeclaration {
     readonly label: string
     readonly color: string
@@ -43,6 +59,7 @@ export type DeclarationItem =
     | { readonly type: "param", readonly declaration: ParamDeclaration }
     | { readonly type: "sample", readonly declaration: SampleDeclaration }
     | { readonly type: "sidechain", readonly declaration: SidechainDeclaration }
+    | { readonly type: "view", readonly declaration: ViewDeclaration }
 
 export interface DeclarationSection {
     readonly group: Nullable<GroupDeclaration>
@@ -54,7 +71,11 @@ const PARAM_LINE = /^\/\/ @param .+$/gm
 const SAMPLE_LINE = /^\/\/ @sample .+$/gm
 const SIDECHAIN_LINE = /^\/\/ @sidechain .+$/gm
 const GROUP_LINE = /^\/\/ @group .+$/gm
-const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain) .+$/gm
+const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain|view) .+$/gm
+const VIEW_LINE = /^\/\/ @view\b.*$/gm
+const WINDOW_LINE = /^\/\/ @window\b.*$/gm
+const CLASS_NAME = /^[A-Za-z_$][\w$]*$/
+const DEFAULT_VIEW_CLASS = "View"
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
 const LATENCY_LINE = /^\/\/ @latency\b(.*)$/m
@@ -148,6 +169,32 @@ const parseSingleSidechain = (line: string): SidechainDeclaration => {
     return {label: checkName(tokens[0], line)}
 }
 
+// optional class name, then `count` positive integers
+const parseClassAndIntegers = (line: string, tag: string, count: number, usage: string): [string, ReadonlyArray<number>] => {
+    const tokens = line.replace(new RegExp(`^\\/\\/ @${tag}\\s*`), "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
+        .filter(token => token.length > 0)
+    const named = tokens.length > 0 && !/^\d/.test(tokens[0])
+    const className = named ? tokens[0] : DEFAULT_VIEW_CLASS
+    const numbers = named ? tokens.slice(1) : tokens
+    if (!CLASS_NAME.test(className)) {throw new Error(`Malformed @${tag}: '${line}' — '${className}' is not a class name`)}
+    checkName(className, line)
+    if (numbers.length !== count || numbers.some(token => !/^\d+$/.test(token) || parseInt(token) < 1)) {
+        throw new Error(`Malformed @${tag}: '${line}' — expected: ${usage}`)
+    }
+    return [className, numbers.map(token => parseInt(token))]
+}
+
+const parseSingleView = (line: string): ViewDeclaration => {
+    const [className, [column, row, columns, rows]] =
+        parseClassAndIntegers(line, "view", 4, "// @view [Class] <column> <row> <columns> <rows>")
+    return {className, column, row, columns, rows}
+}
+
+const parseSingleWindow = (line: string): WindowDeclaration => {
+    const [className, [width, height]] = parseClassAndIntegers(line, "window", 2, "// @window [Class] <width> <height>")
+    return {className, width, height}
+}
+
 const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
     a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
 
@@ -224,6 +271,12 @@ export namespace ScriptDeclaration {
         return sidechains
     }
 
+    export const parseViews = (code: string): ReadonlyArray<ViewDeclaration> =>
+        Array.from(code.matchAll(VIEW_LINE), match => parseSingleView(match[0]))
+
+    export const parseWindows = (code: string): ReadonlyArray<WindowDeclaration> =>
+        Array.from(code.matchAll(WINDOW_LINE), match => parseSingleWindow(match[0]))
+
     export const parseDeclarationOrder = (code: string): Map<string, number> => {
         const order = new Map<string, number>()
         let match: Nullable<RegExpExecArray>
@@ -264,6 +317,8 @@ export namespace ScriptDeclaration {
                 currentItems.push({type: "sample", declaration: {label: checkName(tokens[0], line)}})
             } else if (type === "sidechain") {
                 currentItems.push({type: "sidechain", declaration: parseSingleSidechain(line)})
+            } else if (type === "view") {
+                currentItems.push({type: "view", declaration: parseSingleView(line)})
             }
         }
         if (currentItems.length > 0 || currentGroup !== null) {

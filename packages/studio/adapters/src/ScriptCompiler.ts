@@ -189,6 +189,22 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
 `
 }
 
+// The view realm's copy of the script: strict and frozen like the processor's, then it hands every class a
+// `@view` or `@window` line names to the iframe runtime (`__openDAWViews`).
+const wrapViewScript = (userCode: string): string => {
+    const classNames = Array.from(new Set([...ScriptDeclaration.parseViews(userCode), ...ScriptDeclaration.parseWindows(userCode)]
+        .map(({className}) => className)))
+    const registry = classNames
+        .map(name => `${JSON.stringify(name)}: typeof ${name} === "undefined" ? undefined : ${name}`).join(", ")
+    const {declarations} = ScriptTopLevel.check(userCode)
+    return `(function () {
+    "use strict"
+    ${userCode}
+    ${ScriptTopLevel.freezeSource(declarations)}
+    __openDAWViews({${registry}})
+})()`
+}
+
 const validateCode = (wrappedCode: string): void => {new Function(wrappedCode)}
 
 const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: string): Promise<void> => {
@@ -245,6 +261,8 @@ export namespace ScriptCompiler {
 
     export const reconcileSidechainBoxes = reconcileSidechains
 
+    export const wrapView = wrapViewScript
+
     export const create = (config: Config) => {
         const headerPattern = createHeaderPattern(config.headerTag)
         const createHeader = (update: number): string =>
@@ -282,6 +300,7 @@ export namespace ScriptCompiler {
                 const sidechains = ScriptDeclaration.parseSidechains(userCode)
                 const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
                 validateCode(wrappedCode)
+                if (ScriptTopLevel.applies(userCode)) {validateCode(wrapViewScript(userCode))}
                 const label = ScriptDeclaration.parseLabel(userCode)
                 claimRegistration(audioContext, deviceBox, newUpdate)
                 const modifier = () => {

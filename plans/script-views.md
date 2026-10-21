@@ -89,8 +89,12 @@ Decision: one sandboxed `<iframe>` per view instance (inline or window).
   cookies, `localStorage`, IndexedDB, OPFS, service worker. No `allow-popups`, `allow-modals`, `allow-forms`,
   `allow-top-navigation`.
 - `srcdoc` built by the host: CSP meta `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
-  img-src data: blob:; font-src <studio origin>` so `fetch`, websockets and remote images are blocked (no
-  exfiltration of project data). Fonts load from the studio origin only, so a view uses the studio UI font.
+  img-src data: blob:` so `fetch`, websockets, remote images and remote fonts are blocked (no exfiltration of
+  project data). The studio UI font arrives as bytes over the port and the runtime adds it with
+  `new FontFace("Rubik", bytes)` (spike 2026-10-21: a `font-src` URL load from the opaque origin is a CORS request
+  the font server does not answer, the bytes route needs no server change and keeps the CSP closed).
+- No `eval` / `new Function` inside the iframe (no `'unsafe-eval'`, verified): the host embeds the user script as an
+  inline `<script>` in the `srcdoc`, `</script` escaped.
 - Cannot flow into the studio UI: the iframe IS the clip rect. The host sizes it to its grid slot, the script draws
   inside, overflow is physically impossible.
 - One channel: the host transfers a `MessagePort` at boot. Every inbound message is validated against the manifest
@@ -323,8 +327,8 @@ interface ViewStream {
 
 `class View { constructor(host) {...} }`. An optional `terminate()` is called before teardown as a courtesy hook
 (flush transient state), never as a cleanup duty. The `Terminable` a `subscribe` returns is only for dropping a
-subscription while the view lives. Writes outside `edit` / `gesture` are rejected with an error in the device
-error icon.
+subscription while the view lives. A write outside `edit` / `gesture` (`host.params.cutoff.set(1000)`) is its
+own undo step, like a knob click.
 
 ## 6. Example A: Step Arp (Spielwerk)
 
@@ -759,13 +763,19 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
 7. The worklet has no JS box graph (sync goes straight to Rust), so data MUST go through the Rust engine.
 8. The view runtime is a raw `.js` file imported with `?raw` (like the examples): an opaque-origin `srcdoc` can
    import nothing, so the runtime carries its own small radix-2 FFT instead of lib-dsp.
+9. Spike (Chrome, https://localhost:8080, 2026-10-21): the studio page is cross-origin isolated, a
+   `sandbox="allow-scripts"` `srcdoc` iframe with the CSP loads and runs, `self.origin === "null"`,
+   `crossOriginIsolated === false` inside (expected, no SharedArrayBuffer needed), `parent.document`,
+   `localStorage` and `eval` throw, `fetch` is blocked, a transferred `MessagePort` round-trips. Firefox, Safari,
+   WebView2 and WKWebView still to verify.
 
 ## 10. Decisions (2026-10-21)
 
 1. Many views per device, named by class, default `View`, placed explicitly by cell (section 4).
 2. Seeded records with `@record` lines (section 3.1).
 3. No latency alignment for streams.
-4. `font-src` allows the studio origin.
+4. Studio font inside views: `font-src` for the studio origin was decided, but the spike showed the font server
+   refuses the opaque origin (no CORS). Replaced by font bytes over the port + `FontFace`, no CSP change.
 5. Views may write params (like a knob, respects automation).
 6. Collection values are `float32`.
 7. Script windows do not reopen on project load, same as WCLAP windows today.

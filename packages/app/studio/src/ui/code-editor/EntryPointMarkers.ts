@@ -1,6 +1,6 @@
 import type * as MonacoEditor from "monaco-editor"
-import {isDefined, Lifecycle, Terminable} from "@opendaw/lib-std"
-import {ScriptEntryPoints, ScriptTopLevel} from "@opendaw/studio-adapters"
+import {Func, isDefined, Lifecycle, Terminable, tryCatch} from "@opendaw/lib-std"
+import {ScriptDeclaration, ScriptEntryPoints, ScriptTopLevel, ScriptViewLayout} from "@opendaw/studio-adapters"
 
 type Monaco = typeof MonacoEditor
 
@@ -14,6 +14,7 @@ export namespace EntryPointMarkers {
                             editor: MonacoEditor.editor.IStandaloneCodeEditor,
                             model: MonacoEditor.editor.ITextModel,
                             api: ScriptEntryPoints.Api,
+                            viewApi: Func<string, ScriptEntryPoints.Api>,
                             lifecycle: Lifecycle): void => {
         const decorations = editor.createDecorationsCollection()
         const rangeOf = ({offset, name}: ScriptEntryPoints.Finding): MonacoEditor.IRange => {
@@ -21,17 +22,25 @@ export namespace EntryPointMarkers {
             const end = model.getPositionAt(offset + name.length)
             return {startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column}
         }
+        const viewClasses = (code: string): ReadonlyArray<string> => {
+            const result = tryCatch(() => [...ScriptDeclaration.parseViews(code), ...ScriptDeclaration.parseWindows(code)])
+            return result.status === "success" ? Array.from(new Set(result.value.map(({className}) => className))) : []
+        }
+        const lineMarker = (offset: number, message: string, severity: MonacoEditor.MarkerSeverity): MonacoEditor.editor.IMarkerData => {
+            const {lineNumber, column} = model.getPositionAt(offset)
+            return {startLineNumber: lineNumber, startColumn: column, endLineNumber: lineNumber,
+                endColumn: model.getLineMaxColumn(lineNumber), severity, message}
+        }
         const topLevelMarkers = (code: string): ReadonlyArray<MonacoEditor.editor.IMarkerData> => {
             if (!ScriptTopLevel.applies(code)) {return []}
-            return ScriptTopLevel.check(code).violations.map(({offset, message}) => {
-                const {lineNumber, column} = model.getPositionAt(offset)
-                return {startLineNumber: lineNumber, startColumn: column, endLineNumber: lineNumber,
-                    endColumn: model.getLineMaxColumn(lineNumber), severity: monaco.MarkerSeverity.Error, message}
-            })
+            return ScriptTopLevel.check(code).violations
+                .map(({offset, message}) => lineMarker(offset, message, monaco.MarkerSeverity.Error))
         }
         const update = (): void => {
             const code = model.getValue()
-            const findings = ScriptEntryPoints.analyse(code, api)
+            const findings = Array.from(new Map([api, ...viewClasses(code).map(viewApi)]
+                .flatMap(classApi => ScriptEntryPoints.analyse(code, classApi))
+                .map(finding => [`${finding.offset}:${finding.type}`, finding])).values())
             decorations.set(findings.map(finding => ({
                 range: rangeOf(finding),
                 options: {
@@ -43,7 +52,8 @@ export namespace EntryPointMarkers {
                 ...findings.flatMap(finding => isDefined(finding.warning)
                     ? [{...rangeOf(finding), severity: monaco.MarkerSeverity.Warning, message: finding.warning}]
                     : []),
-                ...topLevelMarkers(code)
+                ...topLevelMarkers(code),
+                ...ScriptViewLayout.issues(code).map(({offset, message}) => lineMarker(offset, message, monaco.MarkerSeverity.Warning))
             ])
         }
         const subscription = model.onDidChangeContent(update)

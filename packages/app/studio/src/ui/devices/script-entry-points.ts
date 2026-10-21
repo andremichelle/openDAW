@@ -223,7 +223,46 @@ const spielwerkMethods: ReadonlyArray<Method> = [
     }
 ]
 
+const HOST = parameter("host", "host: ViewHost", "The view's only connection to its device. Everything else the iframe cannot reach.", [
+    entry("root", "host.root: HTMLElement", "The iframe body. Build the view inside it, nothing can leave the iframe."),
+    entry("mode", "host.mode: \"inline\" | \"window\"", "Whether this instance sits in the device panel or in a window."),
+    entry("params", "host.params.<name>", [
+        "Every `@param` by name: `label`, `value` (mapped), `set(value)` (like a knob, one undo step outside",
+        "`edit`), `subscribe(observer)` (called with the new value)."
+    ].join("\n")),
+    entry("edit", "host.edit(procedure)", "Runs `procedure` and applies every write in it as ONE undo step."),
+    entry("gesture", "host.gesture(): {edit(procedure), end()}", "A drag: every `edit` applies live, `end()` closes ONE undo step."),
+    entry("openWindow", "host.openWindow(name?)", "Opens the `@window` of the class `name` (default `View`)."),
+    entry("closeWindow", "host.closeWindow(name?)", "Closes the `@window` of the class `name` (default `View`)."),
+    entry("color", "host.color(name): string", "A studio colour as CSS (`blue`, `orange`, `gray`, `dark`, `shadow`, ...). Also `var(--color-<name>)` in CSS.")
+])
+
+const viewMethods: ReadonlyArray<Method> = [
+    {
+        name: "constructor",
+        generator: false,
+        signature: "constructor(host)",
+        parameters: [HOST],
+        documentation: [
+            "Builds the view. Runs in a sandboxed iframe, never on the audio thread, and shares no variables",
+            "with the Processor: talk to it only through params, collections and streams on `host`.",
+            "",
+            "The iframe is thrown away on recompile and close, nothing needs cleaning up."
+        ].join("\n")
+    },
+    {
+        name: "terminate",
+        generator: false,
+        signature: "terminate()",
+        parameters: [],
+        documentation: "Optional. Called before the iframe is thrown away, for flushing transient state. Not a cleanup duty."
+    }
+]
+
 export namespace ScriptEntryPointDocs {
+    export const view = (className: string): ScriptEntryPoints.Api =>
+        ({className, methods: viewMethods, properties: [], globals: GLOBALS})
+
     export const werkstatt: ScriptEntryPoints.Api =
         {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency], globals: GLOBALS}
     export const apparat: ScriptEntryPoints.Api =
