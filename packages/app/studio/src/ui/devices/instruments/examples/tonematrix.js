@@ -1,6 +1,7 @@
 // Tonematrix for openDAW Apparat
 // A port of github.com/andremichelle/tonematrix: 16x16 steps, sine voices, 3/16 echo, ripple glow.
 //
+// @label Tonematrix
 // @group Voice blue
 // @param release   0.25  0.02  2.0   exp     s
 // @param direct    1     0     1     linear
