@@ -60,11 +60,12 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) 18px; gap: 2px; height: 100vh }
-                canvas { width: 100%; height: 100%; min-height: 0; display: block; touch-action: none; cursor: crosshair }
+                body { margin: 0; box-sizing: border-box; padding: 4px; display: grid; grid-template-rows: minmax(0, 1fr) 16px; gap: 4px; height: 100vh }
+                canvas { width: 100%; height: 100%; min-height: 0; display: block; border-radius: 4px; touch-action: none; cursor: crosshair }
                 div { display: flex; gap: 4px }
-                button { flex: 1; font: inherit; color: var(--color-cream); background: var(--color-black);
-                    border: none; border-radius: 2px; cursor: pointer }
+                button { flex: 1; font: inherit; font-size: 9px; color: var(--color-gray); border: none; border-radius: 2px;
+                    background: hsl(from var(--color-display-stroke) h s l / 0.08); cursor: pointer }
+                button:hover { background: hsl(from var(--color-display-stroke) h s l / 0.16) }
             </style>`
         this.canvas = document.createElement("canvas")
         const buttons = document.createElement("div")
@@ -122,19 +123,29 @@ class View {
         this.canvas.height = height * ratio
         const context = this.canvas.getContext("2d")
         context.scale(ratio, ratio)
-        context.strokeStyle = this.host.color("dark")
+        context.strokeStyle = this.host.color("displayStroke", 0.25)
+        context.setLineDash([2, 2])
         context.beginPath()
         context.moveTo(0, height / 2)
         context.lineTo(width, height / 2)
         context.stroke()
-        context.strokeStyle = this.host.color("orange")
-        context.lineWidth = 1.5
-        context.beginPath()
+        context.setLineDash([])
+        const path = new Path2D()
         for (let index = 0; index < SIZE; index++) {
             const x = index / (SIZE - 1) * width
             const y = (1 - this.host.data.wave.get(index)) / 2 * height
-            index === 0 ? context.moveTo(x, y) : context.lineTo(x, y)
+            index === 0 ? path.moveTo(x, y) : path.lineTo(x, y)
         }
-        context.stroke()
+        context.strokeStyle = this.host.color("displayStroke", 0.9)
+        context.lineWidth = 1
+        context.stroke(path)
+        path.lineTo(width, height / 2)
+        path.lineTo(0, height / 2)
+        const gradient = context.createLinearGradient(0, 0, 0, height)
+        gradient.addColorStop(0, this.host.color("displayStroke", 0.2))
+        gradient.addColorStop(0.5, this.host.color("displayStroke", 0))
+        gradient.addColorStop(1, this.host.color("displayStroke", 0.2))
+        context.fillStyle = gradient
+        context.fill(path)
     }
 }

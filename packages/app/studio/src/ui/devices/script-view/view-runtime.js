@@ -226,7 +226,10 @@
         send(message) {post({type: "send", message})},
         openWindow(name) {post({type: "window", action: "open", name: name ?? "View"})},
         closeWindow(name) {post({type: "window", action: "close", name: name ?? "View"})},
-        color(name) {return config.colors[name] ?? ""}
+        color(name, opacity = 1) {
+            const color = config.colors[name] ?? ""
+            return opacity >= 1 ? color : color.replace(/^hsl\((.*)\)$/, (match, inner) => `hsla(${inner}, ${Math.max(0, opacity)})`)
+        }
     })
     for (const kind of ["keydown", "keyup"]) {
         globalThis.addEventListener(kind, event => {

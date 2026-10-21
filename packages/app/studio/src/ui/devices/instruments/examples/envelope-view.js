@@ -59,7 +59,8 @@ class View {
     constructor(host) {
         this.host = host
         this.canvas = document.createElement("canvas")
-        this.canvas.style.cssText = "width: 100%; height: 100%; display: block; touch-action: none; cursor: ew-resize"
+        host.root.style.cssText = "box-sizing: border-box; padding: 4px"
+        this.canvas.style.cssText = "width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ew-resize"
         host.root.append(this.canvas)
         for (const name of ["attack", "decay", "sustain", "release"]) host.params[name].subscribe(() => this.draw())
         new ResizeObserver(() => this.draw()).observe(this.canvas)
@@ -107,16 +108,21 @@ class View {
         const {attackX, decayX, releaseX} = this.layout()
         const top = 4, bottom = height - 4
         const sustainY = bottom - (bottom - top) * this.host.params.sustain.value
-        context.strokeStyle = this.host.color("orange")
-        context.lineWidth = 1.5
-        context.beginPath()
-        context.moveTo(0, bottom)
-        context.lineTo(attackX, top)
-        context.lineTo(decayX, sustainY)
-        context.lineTo(releaseX, sustainY)
-        context.lineTo(width, bottom)
-        context.stroke()
-        context.fillStyle = this.host.color("cream")
+        const path = new Path2D()
+        path.moveTo(0, bottom)
+        path.lineTo(attackX, top)
+        path.lineTo(decayX, sustainY)
+        path.lineTo(releaseX, sustainY)
+        path.lineTo(width, bottom)
+        const gradient = context.createLinearGradient(0, top, 0, bottom)
+        gradient.addColorStop(0, this.host.color("displayStroke", 0.25))
+        gradient.addColorStop(1, this.host.color("displayStroke", 0))
+        context.fillStyle = gradient
+        context.fill(path)
+        context.strokeStyle = this.host.color("displayStroke", 0.9)
+        context.lineWidth = 1
+        context.stroke(path)
+        context.fillStyle = this.host.color("displayStroke", 0.5)
         for (const [x, y] of [[attackX, top], [decayX, sustainY], [releaseX, sustainY]]) {
             context.fillRect(x - 2, y - 2, 4, 4)
         }

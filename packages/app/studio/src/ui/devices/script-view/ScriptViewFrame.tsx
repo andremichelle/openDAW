@@ -16,6 +16,7 @@ import {
     StreamDeclaration
 } from "@opendaw/studio-adapters"
 import {Fonts} from "@/ui/Fonts"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export type ScriptViewMode = "inline" | "window"
 
@@ -62,12 +63,17 @@ const loadFonts = (): Promise<FontBytes> => fonts.bytes ??= Promise.all(
         .then(response => response.arrayBuffer())
         .then(bytes => ({weight: Number(font["font-weight"]), bytes}))))
 
-const cssVariables = (): string => Object.entries(Colors)
+// the studio colours plus the display colours every stock device display paints with (DisplayPaint)
+const colorMap = (): { [name: string]: string } => ({
+    ...Object.fromEntries(Object.entries(Colors).map(([name, color]) => [name, String(color)])),
+    displayStroke: DisplayPaint.strokeStyle(1.0),
+    displayFill: DisplayPaint.fillStyle(),
+    displayGrid: DisplayPaint.gridStyle(1.0)
+})
+
+const cssVariables = (): string => Object.entries(colorMap())
     .map(([name, color]) => `--color-${name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}: ${color};`)
     .join(" ")
-
-const colorMap = (): { [name: string]: string } =>
-    Object.fromEntries(Object.entries(Colors).map(([name, color]) => [name, String(color)]))
 
 const inlineScript = (source: string): string => source.replace(/<\/(script)/gi, "<\\/$1")
 

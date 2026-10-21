@@ -1,5 +1,6 @@
 import defaultCode from "./apparat-default.js?raw"
 import starterPrompt from "./apparat-starter-prompt.txt?raw"
+import viewsPrompt from "@/ui/devices/script-views-prompt.txt?raw"
 import {DeviceHost, ApparatDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -15,7 +16,7 @@ const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"},
     defaultCode,
     examples: ApparatExamples,
-    starterPrompt,
+    starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,
     entryPoints: ScriptEntryPointDocs.apparat,
     icon: IconSymbol.Code,
     populateMenu: (parent, service, deviceHost) =>

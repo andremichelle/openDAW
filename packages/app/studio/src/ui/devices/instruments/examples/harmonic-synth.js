@@ -83,8 +83,8 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 16px; gap: 2px; height: 100vh }
-                canvas { width: 100%; height: 100%; min-height: 0; display: block; touch-action: none }
+                body { margin: 0; box-sizing: border-box; padding: 4px; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 16px; gap: 2px; height: 100vh }
+                canvas { width: 100%; height: 100%; min-height: 0; display: block; border-radius: 4px; touch-action: none }
             </style>`
         this.bars = this.#canvas()
         this.analyser = this.#canvas()
@@ -161,23 +161,44 @@ class View {
         const {context, width, height} = this.#prepare(this.bars)
         const partials = this.host.data.partials
         const cell = width / partials.length
-        context.fillStyle = this.host.color("blue")
         for (let index = 0; index < partials.length; index++) {
-            const level = partials.get(index).level
-            context.fillRect(index * cell + 1, height * (1 - level), cell - 2, height * level)
+            const top = height * (1 - partials.get(index).level)
+            context.fillStyle = this.host.color("displayStroke", 0.03)
+            context.fillRect(index * cell + 1, 0, cell - 2, height)
+            context.fillStyle = this.host.color("displayStroke", 0.3)
+            context.fillRect(index * cell + 1, top, cell - 2, height - top)
+            context.fillStyle = this.host.color("displayStroke", 0.9)
+            context.fillRect(index * cell + 1, top, cell - 2, 1)
         }
     }
     drawSpectrum() {
         const {context, width, height} = this.#prepare(this.analyser)
-        context.strokeStyle = this.host.color("orange")
+        context.strokeStyle = this.host.color("displayGrid", 0.12)
+        context.setLineDash([2, 2])
         context.beginPath()
+        for (const decibel of [-24, -48]) {
+            context.moveTo(0, height * -decibel / 72)
+            context.lineTo(width, height * -decibel / 72)
+        }
+        context.stroke()
+        context.setLineDash([])
+        const path = new Path2D()
         for (let bin = 1; bin < this.spectrum.length; bin++) {
             const x = Math.log(bin) / Math.log(this.spectrum.length) * width
             const decibel = 20 * Math.log10(this.spectrum[bin] + 1e-9)
             const y = height * Math.min(1, -decibel / 72)
-            bin === 1 ? context.moveTo(x, y) : context.lineTo(x, y)
+            bin === 1 ? path.moveTo(x, y) : path.lineTo(x, y)
         }
-        context.stroke()
+        context.strokeStyle = this.host.color("displayStroke", 0.9)
+        context.lineWidth = 1
+        context.stroke(path)
+        path.lineTo(width, height)
+        path.lineTo(0, height)
+        const gradient = context.createLinearGradient(0, 0, 0, height)
+        gradient.addColorStop(0, this.host.color("displayStroke", 0.25))
+        gradient.addColorStop(1, this.host.color("displayStroke", 0))
+        context.fillStyle = gradient
+        context.fill(path)
     }
     drawKeys() {
         const {context, width, height} = this.#prepare(this.keys)
@@ -185,7 +206,7 @@ class View {
         for (let key = 0; key < KEYS; key++) {
             const black = [1, 3, 6, 8, 10].includes(key % 12)
             const pressed = BASE_PITCH + key === this.held
-            context.fillStyle = pressed ? this.host.color("blue") : this.host.color(black ? "black" : "cream")
+            context.fillStyle = this.host.color("displayStroke", pressed ? 0.6 : black ? 0.04 : 0.14)
             context.fillRect(key * cell + 0.5, 0, cell - 1, height)
         }
     }

@@ -72,7 +72,8 @@ class View {
     constructor(host) {
         this.host = host
         this.canvas = document.createElement("canvas")
-        this.canvas.style.cssText = "width: 100%; height: 100%; display: block; touch-action: none"
+        host.root.style.cssText = "box-sizing: border-box; padding: 4px"
+        this.canvas.style.cssText = "width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: pointer"
         host.root.append(this.canvas)
         host.data.steps.subscribe(() => this.draw())
         host.streams.step.subscribe(values => {
@@ -129,11 +130,14 @@ class View {
         for (let index = 0; index < steps.length; index++) {
             const step = steps.get(index)
             const x = index * cell
-            context.fillStyle = index === this.current ? this.host.color("cream") : this.host.color("shadow")
+            context.fillStyle = this.host.color("displayStroke", index === this.current ? 0.12 : 0.03)
             context.fillRect(x + 1, 0, cell - 2, barHeight)
-            context.fillStyle = step.on ? this.host.color("blue") : this.host.color("gray")
-            context.fillRect(x + 1, barHeight * (1 - step.velocity), cell - 2, barHeight * step.velocity)
-            context.fillStyle = step.on ? this.host.color("orange") : this.host.color("dark")
+            const top = barHeight * (1 - step.velocity)
+            context.fillStyle = this.host.color("displayStroke", step.on ? 0.3 : 0.08)
+            context.fillRect(x + 1, top, cell - 2, barHeight - top)
+            context.fillStyle = this.host.color("displayStroke", step.on ? 0.9 : 0.25)
+            context.fillRect(x + 1, top, cell - 2, 1)
+            context.fillStyle = step.on ? this.host.color("displayStroke", 0.75) : this.host.color("displayGrid", 0.12)
             context.fillRect(x + 1, barHeight + 3, cell - 2, 8)
         }
     }
