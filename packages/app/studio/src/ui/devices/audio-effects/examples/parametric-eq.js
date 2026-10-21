@@ -26,6 +26,17 @@ const MIN_FREQUENCY = 20
 const MAX_FREQUENCY = 20000
 const MAX_GAIN = 18
 const SPECTRUM_FLOOR = -84
+// the @record seeds, for Reset
+const DEFAULT_BANDS = [
+    {type: LOW_CUT, frequency: 30, gain: 0, q: 0.71, on: 0},
+    {type: LOW_SHELF, frequency: 100, gain: 0, q: 0.71, on: 1},
+    {type: BELL, frequency: 500, gain: 0, q: 1, on: 1},
+    {type: BELL, frequency: 2500, gain: 0, q: 1, on: 1},
+    {type: HIGH_SHELF, frequency: 8000, gain: 0, q: 0.71, on: 1},
+    {type: HIGH_CUT, frequency: 18000, gain: 0, q: 0.71, on: 0}
+]
+const WINDOW_BUTTON = -2
+const RESET_BUTTON = -3
 const SUB_BLOCK = 16
 const SMOOTH_SECONDS = 0.02
 
@@ -201,6 +212,7 @@ class View {
     hasGain(type) {return type !== LOW_CUT && type !== HIGH_CUT}
     handleOf(band) {return {x: this.xOf(band.frequency), y: this.yOf(this.hasGain(band.type) ? band.gain : 0)}}
     windowBounds() {return {x: this.width - 46, y: 2, width: 44, height: 14}}
+    resetBounds() {return {x: this.width - (this.host.mode === "inline" ? 82 : 36), y: 2, width: 34, height: 14}}
     bandAt(event) {
         const bands = this.host.data.bands
         let best = -1, distance = 12 * 12
@@ -211,13 +223,28 @@ class View {
         }
         return best
     }
-    isOnWindowButton(event) {
-        const bounds = this.windowBounds()
-        return this.host.mode === "inline" && event.offsetX >= bounds.x && event.offsetY <= bounds.y + bounds.height
+    buttonAt(event) {
+        const inside = ({x, y, width, height}) =>
+            event.offsetX >= x && event.offsetX <= x + width && event.offsetY >= y && event.offsetY <= y + height
+        if (this.host.mode === "inline" && inside(this.windowBounds())) return WINDOW_BUTTON
+        if (inside(this.resetBounds())) return RESET_BUTTON
+        return -1
+    }
+    reset() {
+        const bands = this.host.data.bands
+        this.host.edit(() => {
+            DEFAULT_BANDS.forEach((band, index) => {if (index < bands.length) bands.set(index, band)})
+            this.host.params.output.set(0)
+        })
     }
     press(event) {
-        if (this.isOnWindowButton(event)) {
+        const button = this.buttonAt(event)
+        if (button === WINDOW_BUTTON) {
             this.host.openWindow()
+            return
+        }
+        if (button === RESET_BUTTON) {
+            this.reset()
             return
         }
         const index = this.bandAt(event)
@@ -229,10 +256,11 @@ class View {
     }
     move(event) {
         if (this.gesture === null) {
-            const hovered = this.isOnWindowButton(event) ? -2 : this.bandAt(event)
+            const button = this.buttonAt(event)
+            const hovered = button !== -1 ? button : this.bandAt(event)
             if (hovered !== this.hovered) {
                 this.hovered = hovered
-                this.canvas.style.cursor = hovered === -2 ? "pointer" : hovered >= 0 ? "move" : "default"
+                this.canvas.style.cursor = button !== -1 ? "pointer" : hovered >= 0 ? "move" : "default"
                 this.draw()
             }
             return
@@ -398,12 +426,15 @@ class View {
         }
         if (this.hovered >= 0) {
             context.fillText("Drag: frequency and gain. Wheel: Q. Double-click: on or off.", 4, height - 14)
+        } else if (this.hovered === RESET_BUTTON) {
+            context.fillText("Reset: every band and the output back to the defaults.", 4, height - 14)
         }
-        if (this.host.mode === "inline") {
-            const bounds = this.windowBounds()
-            context.textAlign = "right"
-            context.fillStyle = `rgba(255, 255, 255, ${this.hovered === -2 ? 0.6 : 0.2})`
-            context.fillText("Window", bounds.x + bounds.width - 2, bounds.y + 10)
+        context.textAlign = "right"
+        const label = (bounds, text, button) => {
+            context.fillStyle = `rgba(255, 255, 255, ${this.hovered === button ? 0.6 : 0.2})`
+            context.fillText(text, bounds.x + bounds.width - 2, bounds.y + 10)
         }
+        label(this.resetBounds(), "Reset", RESET_BUTTON)
+        if (this.host.mode === "inline") label(this.windowBounds(), "Window", WINDOW_BUTTON)
     }
 }
