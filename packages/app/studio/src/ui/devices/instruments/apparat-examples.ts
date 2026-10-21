@@ -15,8 +15,8 @@ export const ApparatExamples: ReadonlyArray<CodeEditorExample> = [
     {name: "TB-303 Bass Line", code: TB303},
     {name: "Deminix Random Synth", code: Deminix},
     {name: "Sidechain Gated Sine", code: SidechainGate},
-    {name: "Envelope Synth (View)", code: EnvelopeView},
-    {name: "Harmonic Synth (View)", code: HarmonicSynth},
-    {name: "Wave Draw (View)", code: WaveDraw},
-    {name: "Wavetable (View)", code: Wavetable}
+    {name: "Envelope Synth", code: EnvelopeView},
+    {name: "Harmonic Synth", code: HarmonicSynth},
+    {name: "Wave Draw", code: WaveDraw},
+    {name: "Wavetable", code: Wavetable}
 ]
