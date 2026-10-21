@@ -395,8 +395,13 @@ class Editor {
         const offset = this.selected * SIZE
         const smoothed = Array.from({length: SIZE}, (entry, index) =>
             (this.table[offset + (index + SIZE - 1) % SIZE] + 2 * this.table[offset + index] + this.table[offset + (index + 1) % SIZE]) / 4)
-        this.host.edit(() => this.host.data.table.set(smoothed, offset))
+        this.host.edit(() => this.writeRange(smoothed, offset))
         this.showHint(`Smoothed frame ${this.selected + 1}.`)
+    }
+    // an empty stored table plays the default one, so the first partial edit stores the whole default first
+    writeRange(values, offset) {
+        if (isEmpty(this.host.data.table.toArray())) this.host.data.table.set(this.table)
+        this.host.data.table.set(values, offset)
     }
     select(event) {
         this.selected = Math.max(0, Math.min(FRAMES - 1, Math.floor(event.offsetX / this.strip.clientWidth * FRAMES)))
@@ -425,7 +430,7 @@ class Editor {
         const values = Array.from({length: to - from + 1}, (entry, offset) =>
             this.last.value + (next.value - this.last.value) * (span === 0 ? 1 : (from + offset - this.last.index) / span))
         values.forEach((value, offset) => this.table[this.selected * SIZE + from + offset] = value)
-        this.gesture.edit(() => this.host.data.table.set(values, this.selected * SIZE + from))
+        this.gesture.edit(() => this.writeRange(values, this.selected * SIZE + from))
         this.last = next
         this.drawEditor()
     }
