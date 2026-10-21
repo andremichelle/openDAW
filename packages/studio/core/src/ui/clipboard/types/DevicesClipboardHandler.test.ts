@@ -22,6 +22,9 @@ import {
     VaporisateurDeviceBox,
     ValueEventCollectionBox,
     ValueRegionBox,
+    ScriptBufferBox,
+    ScriptRecordBox,
+    ScriptValueBox,
     WerkstattParameterBox,
     WerkstattSampleBox
 } from "@opendaw/studio-boxes"
@@ -760,6 +763,30 @@ describe("DevicesClipboardHandler", () => {
             expect(deps.filter(box => isInstanceOf(box, WerkstattParameterBox)).length).toBe(2)
             expect(deps.filter(box => isInstanceOf(box, WerkstattSampleBox)).length).toBe(2)
             expect(deps.filter(box => isInstanceOf(box, AudioFileBox)).length).toBe(2)
+        })
+        it("collects script records with their values and script buffers", () => {
+            const audioUnit = createAudioUnit(source)
+            const apparat = addApparatInstrument(source, audioUnit, "Apparat")
+            source.boxGraph.beginTransaction()
+            const record = ScriptRecordBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(apparat.records)
+                box.collection.setValue("steps")
+            })
+            ScriptValueBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(record.values)
+                box.field.setValue("velocity")
+                box.value.setValue(0.5)
+            })
+            ScriptBufferBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(apparat.buffers)
+                box.label.setValue("table")
+                box.data.setValue(new Int8Array(new Float32Array([0.25, -0.5]).buffer))
+            })
+            source.boxGraph.endTransaction()
+            const deps = collectDeviceDependencies(apparat, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, ScriptRecordBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptValueBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptBufferBox)).length).toBe(1)
         })
     })
 

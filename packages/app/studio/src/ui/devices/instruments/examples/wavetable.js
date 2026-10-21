@@ -1,17 +1,18 @@
 // @label Wavetable
 // @param position 0     0     1    linear
-// @param bend     0     0     1    linear
 // @param unison   1     1     7    int
-// @param detune   12    0     50   linear ct
 // @param attack   0.005 0.001 2    exp    s
+// @param bend     0     0     1    linear
+// @param detune   12    0     50   linear ct
 // @param release  0.3   0.01  4    exp    s
-// @view 3 1 10 3
+// @view 3 1 5 3
 // @window Editor 900 520
 // @buffer table 16384
 // @stream frame 1
 
 const FRAMES = 64
 const SIZE = 256
+const STACK_LINES = 32 // frames drawn in the stack, the playing frame is drawn at its exact index on top
 
 // one frame per row, every frame normalized to a peak of 1, shape(t, x): t = frame 0..1, x = phase 0..1
 function buildTable(shape) {
@@ -161,7 +162,7 @@ class Stack {
         this.cache = document.createElement("canvas")
         this.table = defaultTable()
         this.frame = 0
-        this.selected = -1
+        this.marks = []
         this.dirty = true
     }
     setTable(table) {
@@ -174,23 +175,26 @@ class Stack {
         this.frame = frame
         this.draw()
     }
+    // depth 0 is the front frame (bottom left), depth 1 the back one (up right), deeper frames get narrower
     geometry(width, height) {
-        const stepX = width * 0.3 / (FRAMES - 1)
-        const stepY = height * 0.4 / (FRAMES - 1)
-        const waveWidth = width - stepX * (FRAMES - 1) - 8
-        const amplitude = (height - stepY * (FRAMES - 1)) * 0.38
-        return {stepX, stepY, waveWidth, amplitude, baseline: height - amplitude - 4}
+        const depthX = width * 0.28, depthY = height * 0.45
+        const frontWidth = width - depthX - 8
+        const frontAmplitude = (height - depthY) * 0.36
+        return {depthX, depthY, frontWidth, frontAmplitude, baseline: height - frontAmplitude - 6}
     }
     path(frame, width, height) {
-        const {stepX, stepY, waveWidth, amplitude, baseline} = this.geometry(width, height)
-        const x0 = 4 + frame * stepX, y0 = baseline - frame * stepY
+        const {depthX, depthY, frontWidth, frontAmplitude, baseline} = this.geometry(width, height)
+        const depth = frame / (FRAMES - 1)
+        const scale = 1 - 0.18 * depth
+        const x0 = 4 + depth * depthX, y0 = baseline - depth * depthY
+        const waveWidth = frontWidth * scale, amplitude = frontAmplitude * scale
         const path = new Path2D()
         for (let index = 0; index <= SIZE; index++) {
             const x = x0 + index / SIZE * waveWidth
             const y = y0 - this.table[frame * SIZE + index % SIZE] * amplitude
             index === 0 ? path.moveTo(x, y) : path.lineTo(x, y)
         }
-        return {path, x0, y0, x1: x0 + waveWidth}
+        return {path, x0, y0, x1: x0 + waveWidth, amplitude}
     }
     renderCache(width, height, ratio) {
         this.cache.width = width * ratio
@@ -198,15 +202,21 @@ class Stack {
         const context = this.cache.getContext("2d")
         context.scale(ratio, ratio)
         context.lineWidth = 1
-        for (let frame = FRAMES - 1; frame >= 0; frame -= 2) {
-            const {path, x0, y0, x1} = this.path(frame, width, height)
-            const area = new Path2D(path)
-            area.lineTo(x1, y0)
-            area.lineTo(x0, y0)
-            context.fillStyle = this.host.color("panelBackground", 0.85)
-            context.fill(area)
-            context.strokeStyle = this.host.color("displayStroke", 0.12 + 0.33 * (1 - frame / FRAMES))
-            context.stroke(path)
+        const front = this.path(0, width, height), back = this.path(FRAMES - 1, width, height)
+        context.strokeStyle = this.host.color("displayStroke", 0.12)
+        context.beginPath()
+        context.moveTo(front.x0, front.y0)
+        context.lineTo(back.x0, back.y0)
+        context.moveTo(front.x1, front.y0)
+        context.lineTo(back.x1, back.y0)
+        context.moveTo(front.x0, front.y0)
+        context.lineTo(front.x1, front.y0)
+        context.stroke()
+        for (let line = STACK_LINES - 1; line >= 0; line--) {
+            const frame = Math.round(line * (FRAMES - 1) / (STACK_LINES - 1))
+            const nearness = 1 - frame / (FRAMES - 1)
+            context.strokeStyle = this.host.color("displayStroke", 0.05 + 0.3 * Math.pow(nearness, 1.5))
+            context.stroke(this.path(frame, width, height).path)
         }
         this.dirty = false
     }
@@ -220,25 +230,27 @@ class Stack {
         const context = this.canvas.getContext("2d")
         context.drawImage(this.cache, 0, 0)
         context.scale(ratio, ratio)
+        context.lineWidth = 1
         const playing = Math.round(this.frame)
-        if (this.selected >= 0 && this.selected !== playing) {
-            context.strokeStyle = this.host.color("displayStroke", 0.6)
-            context.setLineDash([2, 2])
-            context.stroke(this.path(this.selected, width, height).path)
-            context.setLineDash([])
-        }
-        const {path, x0, y0, x1} = this.path(playing, width, height)
+        context.strokeStyle = this.host.color("displayStroke", 0.6)
+        context.setLineDash([2, 2])
+        for (const frame of this.marks) if (frame !== playing) context.stroke(this.path(frame, width, height).path)
+        context.setLineDash([])
+        const {path, x0, y0, x1, amplitude} = this.path(playing, width, height)
         const area = new Path2D(path)
         area.lineTo(x1, y0)
         area.lineTo(x0, y0)
-        const gradient = context.createLinearGradient(0, y0 - this.geometry(width, height).amplitude, 0, y0)
-        gradient.addColorStop(0, this.host.color("displayStroke", 0.3))
-        gradient.addColorStop(1, this.host.color("displayStroke", 0))
+        const gradient = context.createLinearGradient(0, y0 - amplitude, 0, y0 + amplitude)
+        gradient.addColorStop(0, this.host.color("displayStroke", 0.25))
+        gradient.addColorStop(0.5, this.host.color("displayStroke", 0))
+        gradient.addColorStop(1, this.host.color("displayStroke", 0.25))
         context.fillStyle = gradient
         context.fill(area)
+        context.shadowColor = this.host.color("displayStroke", 0.8)
+        context.shadowBlur = 6
         context.strokeStyle = this.host.color("displayStroke", 1)
-        context.lineWidth = 1
         context.stroke(path)
+        context.shadowBlur = 0
         context.font = "9px Rubik"
         context.fillStyle = "rgba(255, 255, 255, 0.2)"
         context.fillText(`Frame ${playing + 1}`, 6, 12)
@@ -288,9 +300,12 @@ class View {
     }
 }
 
-// The window: generators, the stack, a large editor for the selected frame and a frame strip.
+// The window: generators, the stack, a large editor for the edited frame and a strip to select frames.
 class Editor {
     selected = 0
+    rangeFrom = 0
+    rangeTo = 0
+    anchor = 0
     gesture = null
     last = null
     constructor(host) {
@@ -318,7 +333,7 @@ class Editor {
         this.editor.className = "editor"
         this.strip = document.createElement("canvas")
         this.strip.className = "strip"
-        this.strip.title = "Pick the frame to edit"
+        this.strip.title = "Click a frame to edit it, drag across frames to select a range"
         this.hint = document.createElement("div")
         this.hint.className = "hint"
         host.root.append(nav, stackCanvas, this.editor, this.strip, this.hint)
@@ -327,16 +342,19 @@ class Editor {
             this.button(nav, label, `Replaces all ${FRAMES} frames with ${label}. Undo restores the table.`,
                 () => this.write(buildTable(shape), `Filled all frames with ${label}.`))
         }
-        this.group(nav, "Selected frame")
-        this.button(nav, "Smooth", "Smooths the selected frame (the one in the right panel).", () => this.smoothFrame())
-        this.group(nav, "Between first and last")
-        this.button(nav, "Morph", `Rewrites frames 2 to ${FRAMES - 1} as a blend from frame 1 to frame ${FRAMES}. Draw the two ends first.`,
-            () => this.morphEnds())
-        this.showHint()
+        this.button(nav, "Random", `Replaces all ${FRAMES} frames with a random table that evolves smoothly. Click again for another, undo restores.`,
+            () => this.write(this.randomTable(), "Filled all frames with a random table. Click Random again for another."))
+        this.group(nav, "Selected frames")
+        this.button(nav, "Smooth", () => `Smooths ${this.rangeLabel()}.`, () => this.smoothRange())
+        this.morphButton = this.button(nav, "Morph", () => this.rangeTo - this.rangeFrom < 2
+            ? "Morph needs a range: drag across at least 3 frames in the strip, then it blends between the first and the last."
+            : `Rewrites frames ${this.rangeFrom + 2} to ${this.rangeTo} as a blend from frame ${this.rangeFrom + 1} to frame ${this.rangeTo + 1}.`,
+            () => this.morphRange())
         this.stack = new Stack(host, stackCanvas)
         this.table = defaultTable()
         this.playing = 0
-        this.selected = Math.round(host.params.position.value * (FRAMES - 1))
+        this.selected = this.rangeFrom = this.rangeTo = this.anchor = Math.round(host.params.position.value * (FRAMES - 1))
+        this.showHint()
         this.load()
         host.data.table.subscribe(() => this.load())
         host.streams.frame.subscribe(values => {
@@ -348,7 +366,11 @@ class Editor {
         this.editor.addEventListener("pointerdown", event => this.press(event))
         this.editor.addEventListener("pointermove", event => this.drag(event))
         this.editor.addEventListener("pointerup", () => this.release())
-        this.strip.addEventListener("pointerdown", event => this.select(event))
+        this.strip.addEventListener("pointerdown", event => {
+            this.strip.setPointerCapture(event.pointerId)
+            this.anchor = this.frameAt(event)
+            this.select(event)
+        })
         this.strip.addEventListener("pointermove", event => event.buttons === 1 && this.select(event))
     }
     group(parent, label) {
@@ -360,17 +382,24 @@ class Editor {
         const button = document.createElement("button")
         button.textContent = label
         button.addEventListener("click", action)
-        button.addEventListener("pointerenter", () => this.showHint(hint))
+        button.addEventListener("pointerenter", () => this.showHint(typeof hint === "function" ? hint() : hint))
         button.addEventListener("pointerleave", () => this.showHint())
         parent.append(button)
+        return button
     }
-    showHint(text = `Draw in the right panel to edit frame ${this.selected + 1}. Pick another frame in the strip. Every change can be undone.`) {
-        this.hint.textContent = text
+    rangeLabel() {
+        return this.rangeFrom === this.rangeTo ? `frame ${this.rangeFrom + 1}` : `frames ${this.rangeFrom + 1} to ${this.rangeTo + 1}`
+    }
+    showHint(text) {
+        this.hint.textContent = text ?? (this.rangeFrom === this.rangeTo
+            ? `Draw in the right panel to edit frame ${this.selected + 1}. Drag across the strip to select a range for Smooth and Morph.`
+            : `Frames ${this.rangeFrom + 1} to ${this.rangeTo + 1} selected, drawing edits frame ${this.selected + 1}. Morph blends between the two ends.`)
+        this.morphButton?.style.setProperty("opacity", this.rangeTo - this.rangeFrom < 2 ? "0.4" : "1")
     }
     load() {
         const stored = this.host.data.table.toArray()
         this.table = isEmpty(stored) ? defaultTable() : stored
-        this.stack.selected = this.selected
+        this.stack.marks = [this.rangeFrom, this.rangeTo, this.selected]
         this.stack.setTable(this.table)
         this.drawEditor()
         this.drawStrip()
@@ -381,31 +410,72 @@ class Editor {
         this.load()
         this.showHint(done)
     }
-    morphEnds() {
-        const table = Float32Array.from(this.table)
-        for (let frame = 1; frame < FRAMES - 1; frame++) {
-            const t = frame / (FRAMES - 1)
+    // 4 to 6 random keyframe spectra blended across the frames, one random phase per harmonic for all frames
+    randomTable() {
+        const HARMONICS = 32
+        const phases = Float64Array.from({length: HARMONICS}, () => Math.random())
+        const keyframes = Array.from({length: 4 + Math.floor(Math.random() * 3)}, () => {
+            const tilt = 0.5 + Math.random() * 1.5
+            const peak = 1 + Math.floor(Math.random() * 12)
+            return Float64Array.from({length: HARMONICS}, (entry, index) => {
+                const harmonic = index + 1
+                const resonance = Math.exp(-Math.pow((harmonic - peak) / 3, 2)) * Math.random()
+                return (Math.random() < 0.7 ? 1 : 0) * Math.pow(harmonic, -tilt) + resonance
+            })
+        })
+        return buildTable((t, x) => {
+            const position = t * (keyframes.length - 1)
+            const index = Math.min(keyframes.length - 2, Math.floor(position))
+            const blend = position - index
+            let sum = 0
+            for (let harmonic = 0; harmonic < HARMONICS; harmonic++) {
+                const amplitude = keyframes[index][harmonic] * (1 - blend) + keyframes[index + 1][harmonic] * blend
+                sum += amplitude * Math.sin(2 * Math.PI * ((harmonic + 1) * x + phases[harmonic]))
+            }
+            return sum
+        })
+    }
+    morphRange() {
+        const {rangeFrom: from, rangeTo: to} = this
+        if (to - from < 2) {
+            this.showHint("Morph needs a range: drag across at least 3 frames in the strip first.")
+            return
+        }
+        const values = []
+        for (let frame = from + 1; frame < to; frame++) {
+            const t = (frame - from) / (to - from)
             for (let index = 0; index < SIZE; index++) {
-                table[frame * SIZE + index] = table[index] * (1 - t) + table[(FRAMES - 1) * SIZE + index] * t
+                values.push(this.table[from * SIZE + index] * (1 - t) + this.table[to * SIZE + index] * t)
             }
         }
-        this.write(table, `Morphed frames 2 to ${FRAMES - 1} between frame 1 and frame ${FRAMES}.`)
+        this.host.edit(() => this.writeRange(values, (from + 1) * SIZE))
+        this.showHint(`Morphed frames ${from + 2} to ${to} between frame ${from + 1} and frame ${to + 1}.`)
     }
-    smoothFrame() {
-        const offset = this.selected * SIZE
-        const smoothed = Array.from({length: SIZE}, (entry, index) =>
-            (this.table[offset + (index + SIZE - 1) % SIZE] + 2 * this.table[offset + index] + this.table[offset + (index + 1) % SIZE]) / 4)
-        this.host.edit(() => this.writeRange(smoothed, offset))
-        this.showHint(`Smoothed frame ${this.selected + 1}.`)
+    smoothRange() {
+        const values = []
+        for (let frame = this.rangeFrom; frame <= this.rangeTo; frame++) {
+            const offset = frame * SIZE
+            for (let index = 0; index < SIZE; index++) {
+                values.push((this.table[offset + (index + SIZE - 1) % SIZE] + 2 * this.table[offset + index]
+                    + this.table[offset + (index + 1) % SIZE]) / 4)
+            }
+        }
+        this.host.edit(() => this.writeRange(values, this.rangeFrom * SIZE))
+        this.showHint(`Smoothed ${this.rangeLabel()}.`)
     }
     // an empty stored table plays the default one, so the first partial edit stores the whole default first
     writeRange(values, offset) {
         if (isEmpty(this.host.data.table.toArray())) this.host.data.table.set(this.table)
         this.host.data.table.set(values, offset)
     }
+    frameAt(event) {
+        return Math.max(0, Math.min(FRAMES - 1, Math.floor(event.offsetX / this.strip.clientWidth * FRAMES)))
+    }
     select(event) {
-        this.selected = Math.max(0, Math.min(FRAMES - 1, Math.floor(event.offsetX / this.strip.clientWidth * FRAMES)))
-        this.stack.selected = this.selected
+        this.selected = this.frameAt(event)
+        this.rangeFrom = Math.min(this.anchor, this.selected)
+        this.rangeTo = Math.max(this.anchor, this.selected)
+        this.stack.marks = [this.rangeFrom, this.rangeTo, this.selected]
         this.stack.draw()
         this.drawEditor()
         this.drawStrip()
@@ -495,9 +565,13 @@ class Editor {
         const {context, width, height} = this.prepare(this.strip)
         const cell = width / FRAMES
         for (let frame = 0; frame < FRAMES; frame++) {
-            const opacity = frame === this.selected ? 0.6 : frame === this.playing ? 0.3 : 0.08
+            const inRange = frame >= this.rangeFrom && frame <= this.rangeTo
+            const end = frame === this.rangeFrom || frame === this.rangeTo
+            const opacity = frame === this.selected ? 0.75 : end ? 0.45 : inRange ? 0.25 : 0.08
             context.fillStyle = this.host.color("displayStroke", opacity)
             context.fillRect(frame * cell + 0.5, 0, cell - 1, height)
         }
+        context.fillStyle = this.host.color("displayStroke", 1)
+        context.fillRect(this.playing * cell + 0.5, height - 2, cell - 1, 2)
     }
 }

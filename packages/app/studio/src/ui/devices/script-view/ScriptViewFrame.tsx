@@ -105,7 +105,9 @@ export const ScriptViewFrame = ({
         collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
         streams: streams.map(({name, length, kind}) => ({name, length, kind})),
         buffers: bufferDeclarations.map(({name, length}) => ({name, length})),
-        data: readData()
+        // the config travels as JSON, which turns a Float32Array into an object: buffers go as plain arrays
+        data: Object.fromEntries(Object.entries(readData()).map(([name, values]) =>
+            [name, values instanceof Float32Array ? Array.from(values) : values]))
     }
     const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
     iframe.srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
