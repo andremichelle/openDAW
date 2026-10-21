@@ -110,7 +110,9 @@ export const ScriptViewFrame = ({
             [name, values instanceof Float32Array ? Array.from(values) : values]))
     }
     const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
-    iframe.srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
+    const srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
+    const loading = {expected: true}
+    iframe.srcdoc = srcdoc
     const connection = lifecycle.own(new Terminator())
     const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
     const streamSubscriptions = new Map<string, Terminable>()
@@ -178,7 +180,8 @@ export const ScriptViewFrame = ({
             } else if (message.phase === "end") {
                 endGesture()
             }
-        } else if (message.type === "key" && (message.kind === "keydown" || message.kind === "keyup") && isRecord(message.init)) {
+        } else if (message.type === "key" && (message.kind === "keydown" || message.kind === "keyup") && isRecord(message.init)
+            && iframe.ownerDocument.activeElement === iframe) {
             const {key, code, metaKey, ctrlKey, shiftKey, altKey, repeat} = message.init
             globalThis.dispatchEvent(new KeyboardEvent(message.kind, {
                 key: String(key), code: String(code), metaKey: metaKey === true, ctrlKey: ctrlKey === true,
@@ -240,15 +243,27 @@ export const ScriptViewFrame = ({
                 releasePreview()
             })
         )
-        // a re-attached iframe reloads with its creation srcdoc, so every connect sends the current state
+        // every connect is a fresh realm, so it sends the current state
         params.forEach(({name, parameter}) => send({type: "param", name, value: parameter.getControlledValue()}))
         if (collections.length > 0 || bufferDeclarations.length > 0) {send({type: "data", data: readData()})}
         loadFonts()
             .then(fonts => target.postMessage({fonts}, "*", [channel.port2]))
             .catch(() => target.postMessage({fonts: []}, "*", [channel.port2]))
     }
+    // only a load of our own srcdoc gets the port, anything the frame navigated to is replaced by it
+    const onLoad = (): void => {
+        if (!loading.expected) {
+            connection.terminate()
+            endGesture()
+            loading.expected = true
+            iframe.srcdoc = srcdoc
+            return
+        }
+        loading.expected = false
+        connect()
+    }
     lifecycle.ownAll(
-        Events.subscribe(iframe, "load", connect),
+        Events.subscribe(iframe, "load", onLoad),
         Terminable.create(endGesture)
     )
     return iframe

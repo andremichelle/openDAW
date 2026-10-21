@@ -10,7 +10,34 @@
     let ops = null
     const queued = []
     const post = message => port === null ? queued.push(message) : port.postMessage(message)
-    const reportError = error => post({type: "error", message: error instanceof Error ? `${error.name}: ${error.message}` : String(error)})
+    const frames = new Set()
+    const nativeRequestFrame = globalThis.requestAnimationFrame.bind(globalThis)
+    const nativeCancelFrame = globalThis.cancelAnimationFrame.bind(globalThis)
+    let halted = false
+    globalThis.requestAnimationFrame = callback => {
+        if (halted) {return 0}
+        const id = nativeRequestFrame(time => {
+            frames.delete(id)
+            callback(time)
+        })
+        frames.add(id)
+        return id
+    }
+    globalThis.cancelAnimationFrame = id => {
+        frames.delete(id)
+        nativeCancelFrame(id)
+    }
+    // the first script error stops the view: no more frames, no more callbacks, one report
+    const reportError = (error, fatal = true) => {
+        if (halted) {return}
+        if (fatal) {
+            halted = true
+            frames.forEach(nativeCancelFrame)
+            frames.clear()
+            observers.clear()
+        }
+        post({type: "error", message: error instanceof Error ? `${error.name}: ${error.message}` : String(error)})
+    }
     globalThis.addEventListener("error", event => reportError(event.error ?? event.message))
     globalThis.addEventListener("unhandledrejection", event => reportError(event.reason))
     globalThis.__openDAWViews = registry => {classes = registry}
@@ -23,6 +50,7 @@
         return Object.freeze({terminate: () => set.delete(observer)})
     }
     const notify = (key, value) => {
+        if (halted) {return}
         const set = observers.get(key)
         if (set === undefined) {return}
         for (const observer of [...set]) {
@@ -243,7 +271,7 @@
     for (const kind of ["keydown", "keyup"]) {
         globalThis.addEventListener(kind, event => {
             const tag = typeof event.target?.tagName === "string" ? event.target.tagName : ""
-            if (event.defaultPrevented || tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable === true) {return}
+            if (!event.isTrusted || event.defaultPrevented || tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable === true) {return}
             if (event.metaKey || event.ctrlKey) {event.preventDefault()}
             post({
                 type: "key", kind, init: {
@@ -274,7 +302,7 @@
     const start = async ({fonts}) => {
         for (const {weight, bytes} of fonts) {
             const face = new FontFace("Rubik", bytes, {weight: String(weight)})
-            try {document.fonts.add(await face.load())} catch (error) {reportError(error)}
+            try {document.fonts.add(await face.load())} catch (error) {reportError(error, false)}
         }
         const ViewClass = classes?.[config.className]
         if (typeof ViewClass !== "function") {
