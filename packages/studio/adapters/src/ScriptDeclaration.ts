@@ -57,6 +57,7 @@ const GROUP_LINE = /^\/\/ @group .+$/gm
 const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain) .+$/gm
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
+const LATENCY_LINE = /^\/\/ @latency\b(.*)$/m
 const FLOAT_TOLERANCE = 1e-6
 const VALID_MAPPINGS: ReadonlyArray<string> = ["linear", "exp", "int", "bool"]
 
@@ -171,6 +172,18 @@ export namespace ScriptDeclaration {
         if (match === null) {return true}
         if (match[1].trim().length > 0) {throw new Error("Malformed @no-pass: expected: // @no-pass")}
         return false
+    }
+
+    // `// @latency <ms>`: the delay the processor adds to its output, which delay compensation aligns
+    export const parseLatency = (code: string): number => {
+        const match = LATENCY_LINE.exec(code)
+        if (match === null) {return 0}
+        const text = match[1].replace(/\s+\/\/.*$/, "").trim()
+        const value = Number(text)
+        if (text.length === 0 || !Number.isFinite(value) || value < 0) {
+            throw new Error(`Malformed @latency: '${match[0]}' — expected: // @latency <milliseconds>`)
+        }
+        return value
     }
 
     export const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {

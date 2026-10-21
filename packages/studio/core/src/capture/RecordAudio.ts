@@ -58,6 +58,7 @@ export namespace RecordAudio {
         let takeNumber: int = 0
         let firstRecordingTick: Option<number> = Option.None
         let placementLatency: Latency = startLatency
+        let isSaved: boolean = false
 
         const {env: {audioContext}, engine: {preferences: {settings: {recording}}}} = project
         const {sampleRate} = audioContext
@@ -172,10 +173,12 @@ export namespace RecordAudio {
                 .map(firstQuantumTime => {
                     const {outputLatency, inputLatency} = placementLatency
                     const seconds = contextTime - firstQuantumTime + outputLatency + inputLatency
+                        + engine.compensationLatency.getValue()
                     return Math.max(0, Math.round(seconds * sampleRate))
                 })).unwrapOrElse(deliveredFrames)
         }
         recordingWorklet.onSaved = () => {
+            isSaved = true
             disconnectSource()
             project.trackUserCreatedSample(fileUuid)
             editing.mark()
@@ -207,6 +210,7 @@ export namespace RecordAudio {
                     if (deliveredFrames < numberOfFrames) {
                         const waitMillis = ((numberOfFrames - deliveredFrames) / sampleRate + TAIL_WAIT_SECONDS) * 1000
                         Runtime.scheduleTimeout(() => {
+                            if (isSaved) {return}
                             const arrivedFrames = recordingWorklet.numberOfFrames
                             if (arrivedFrames >= numberOfFrames) {return}
                             console.warn("[RecordAudio] input tail never arrived", {numberOfFrames, arrivedFrames})
@@ -272,6 +276,7 @@ export namespace RecordAudio {
                         console.debug(`[RecordAudio] outputLatency=${outputLatency} inputLatency=${inputLatency} `
                             + `source=${placed ? "placement" : "start"}`)
                         const startOffset = contextTime - firstQuantumTime.unwrap() + outputLatency + inputLatency
+                            + engine.compensationLatency.getValue()
                         // region position is an integer field: the fraction moves into the offset
                         takePosition = Math.floor(position)
                         waveformOffset = startOffset - tempoMap.intervalToSeconds(takePosition, position)
@@ -303,7 +308,7 @@ export namespace RecordAudio {
                             : wallclockSinceWorklet
                         takePosition = currentPosition
                         waveformOffset = headStartSeconds + countInSeconds
-                            + startLatency.outputLatency + startLatency.inputLatency
+                            + startLatency.outputLatency + startLatency.inputLatency + engine.compensationLatency.getValue()
                         console.debug(`[RecordAudio] anchor fallback: recordingStart=${recordingStart.nonEmpty()} `
                             + `firstQuantumTime=${firstQuantumTime.nonEmpty()} takePosition=${takePosition} `
                             + `waveformOffset=${waveformOffset}`)

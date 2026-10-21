@@ -2658,11 +2658,8 @@ fn a_suspended_lane_still_receives_its_modulation() {
     let path = [5u16];
     let mut graph = deep_automation_graph(&path);
     let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
-    let state = Rc::new(ModulatorState {
-        enabled: core::cell::Cell::new(true), bipolar: core::cell::Cell::new(false),
-        amount: core::cell::Cell::new(1.0), kind: ModulatorKind::Macro(MacroState::new()),
-        broadcast: RefCell::new(None), broadcast_active: Rc::new(core::cell::Cell::new(false))
-    });
+    let state = Rc::new(ModulatorState::of(ModulatorKind::Macro(MacroState::new())));
+    state.bipolar.set(false);
     let chain: ModulationChain = Rc::from(alloc::vec![BoundModulation {
         modulator: state, depth: Rc::new(core::cell::Cell::new(0.5)),
         depth_handle: None, enabled: Rc::new(core::cell::Cell::new(true))
@@ -3238,7 +3235,7 @@ fn a_value_track_on_the_mute_field_installs_the_strip_mute_automation() {
     let muted_at_zero = {
         let mute_source = unit.strip_automation.mute.borrow();
         let mute_source = mute_source.as_ref().expect("a mute value track installs the strip mute automation source");
-        mute_source(0.0, true) >= 0.5
+        mute_source(0.0, true, 0) >= 0.5
     };
     assert!(muted_at_zero, "the mute curve (event 1.0) resolves to muted at position 0");
     engine.teardown_unit(unit);

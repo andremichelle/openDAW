@@ -20,6 +20,7 @@ import {
     EngineSettingsSchema,
     NoteSignal,
     PreferencesFacade,
+    SignalGraph,
     WclapGuiInfo,
     WclapGuiSize,
     WclapPluginInfo,
@@ -36,6 +37,7 @@ export class EngineFacade implements Engine {
     readonly #lifecycle: Terminator = this.#terminator.own(new Terminator())
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
+    readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
@@ -60,6 +62,7 @@ export class EngineFacade implements Engine {
         this.#lifecycle.ownAll(
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
+            worklet.compensationLatency.catchupAndSubscribe(owner => this.#compensationLatency.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
             worklet.recordingStart.catchupAndSubscribe(option => option.match({
                 none: () => this.#recordingStart.clear(),
@@ -107,6 +110,7 @@ export class EngineFacade implements Engine {
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get playbackTimestamp(): ObservableValue<ppqn> {return this.#playbackTimestamp}
     get countInBeatsRemaining(): ObservableValue<int> {return this.#countInBeatsRemaining}
+    get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
@@ -143,6 +147,9 @@ export class EngineFacade implements Engine {
         return this.#worklet.mapOr(worklet => worklet.wclapDescribe(url), Promise.resolve([]))
     }
     wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
+    querySignalGraph(): Promise<SignalGraph> {
+        return this.#worklet.mapOr(worklet => worklet.querySignalGraph(), Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}))
+    }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }

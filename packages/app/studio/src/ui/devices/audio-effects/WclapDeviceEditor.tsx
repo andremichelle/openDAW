@@ -101,6 +101,32 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         nameLabel.classList.toggle("empty", clapId.length === 0)
         nameLabel.textContent = clapId.length === 0 ? "No plugin loaded" : state.info?.name ?? clapId
     }
+    const successor: { plugin: Option<CloudPlugin> } = {plugin: Option.None}
+    const updateGroup: HTMLElement = (
+        <div className="group hidden">
+            <Button lifecycle={lifecycle}
+                    onClick={() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))}
+                    appearance={{
+                        framed: true,
+                        cursor: "pointer",
+                        color: Colors.green,
+                        tooltip: "Load the newer build of this plugin from the openDAW cloud"
+                    }}>
+                <span className="button-label">Update</span>
+            </Button>
+        </div>
+    )
+    const showUpdate = (url: string, clapId: string): void => {
+        successor.plugin = Option.None
+        updateGroup.classList.add("hidden")
+        if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
+        OpenWclapAPI.get().successorOf(WclapStorage.idOf(url)).then(entry => entry.ifSome(({uuid, name, plugins}) => {
+            const info = plugins.find(plugin => plugin.clapId === clapId)
+            if (adapter.urlField.getValue() !== url || !isDefined(info)) {return}
+            successor.plugin = Option.wrap({uuid, label: name, info})
+            updateGroup.classList.remove("hidden")
+        }))
+    }
     const showPlugin = (): void => {
         const url = adapter.urlField.getValue()
         const clapId = adapter.clapIdField.getValue()
@@ -109,6 +135,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         vendorLabel.classList.remove("failed")
         showName()
         showCredits(url)
+        showUpdate(url, clapId)
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
             if (adapter.clapIdField.getValue() !== clapId) {return}
@@ -445,6 +472,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                           <span className="button-label">Load Plugin</span>
                                       </MenuButton>
                                   </div>
+                                  {updateGroup}
                                   {pluginButtons}
                                   {audioInGroup}
                               </div>

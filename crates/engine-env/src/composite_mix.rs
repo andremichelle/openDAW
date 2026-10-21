@@ -22,6 +22,8 @@ use crate::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
 use crate::audio_generator::AudioGenerator;
 use crate::audio_input::AudioInput;
 use crate::block::Block;
+use crate::compensation::{CompensationDelay, CompensationLimits};
+use crate::engine_context::NodeId;
 use crate::frequency_split::FrequencySplitter;
 use crate::telemetry::{broadcast_slot, BroadcastSlot};
 use dsp::analyser::{AudioAnalyser, NUM_BINS};
@@ -29,7 +31,7 @@ use alloc::boxed::Box;
 use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
-use crate::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use crate::ppqn::pulses_to_samples;
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
 use crate::ramp::LinearRamp;
@@ -237,9 +239,13 @@ pub struct DryWetMixProcessor {
     params: Rc<DryWetParams>,
     meter: crate::meter::Meter, // peaks/RMS of the composite's OUTPUT (a broadcast slot), like any device
     automation: Rc<StripAutomation>,
+    automation_lag: u32,
     output: SharedAudioBuffer,
     tap: SharedAudioBuffer,
     wet_sum: SharedAudioBuffer,
+    junction: Option<[NodeId; 2]>,
+    compensation: [Option<CompensationDelay>; 2],
+    compensated: [SharedAudioBuffer; 2],
     dry_gain: LinearRamp,
     wet_gain: LinearRamp,
     sample_rate: f32,
@@ -254,9 +260,13 @@ impl DryWetMixProcessor {
             params,
             meter: crate::meter::Meter::new(sample_rate),
             automation,
+            automation_lag: 0,
             output: shared_audio_buffer(),
             tap,
             wet_sum,
+            junction: None,
+            compensation: [None, None],
+            compensated: [shared_audio_buffer(), shared_audio_buffer()],
             dry_gain: LinearRamp::linear(sample_rate),
             wet_gain: LinearRamp::linear(sample_rate),
             sample_rate,
@@ -279,11 +289,11 @@ impl DryWetMixProcessor {
 
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let dry_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.dry_db.get()
         };
         let wet_db = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.wet_db.get()
         };
         self.retarget(dry_db, wet_db);
@@ -344,8 +354,44 @@ impl AudioGenerator for DryWetMixProcessor {
     }
 }
 
+impl DryWetMixProcessor {
+    /// The nodes producing the dry tap and the wet sum, so compensation can align them.
+    pub fn set_junction_nodes(&mut self, dry: NodeId, wet: NodeId) {
+        self.junction = Some([dry, wet]);
+    }
+
+    fn compensated_input(&mut self, index: usize, source: &SharedAudioBuffer) -> SharedAudioBuffer {
+        match self.compensation[index].as_mut() {
+            Some(delay) => {
+                delay.process(&source.borrow(), &mut self.compensated[index].borrow_mut(), 0, RENDER_QUANTUM);
+                self.compensated[index].clone()
+            }
+            None => source.clone()
+        }
+    }
+}
+
 impl Processor for DryWetMixProcessor {
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
+    fn junction_sources(&self) -> Option<Vec<NodeId>> {
+        self.junction.map(|nodes| nodes.to_vec())
+    }
+
+    fn set_junction_delays(&mut self, delays: &[u32], limits: CompensationLimits) {
+        for (slot, &frames) in self.compensation.iter_mut().zip(delays) {
+            if frames > 0 || slot.is_some() {
+                slot.get_or_insert_with(CompensationDelay::new).set_delay(frames, limits);
+            }
+        }
+    }
+
     fn reset(&mut self) {
+        for delay in self.compensation.iter_mut().flatten() {
+            delay.clear();
+        }
         self.output.borrow_mut().clear();
         self.meter.clear();
     }
@@ -354,8 +400,9 @@ impl Processor for DryWetMixProcessor {
         // Clone the handles before borrowing: a borrow taken straight off `self` would freeze `self` and block
         // the `&mut self` retargets below (the aux send does the same).
         let output = self.output.clone();
-        let tap = self.tap.clone();
-        let wet_sum = self.wet_sum.clone();
+        let (tap, wet_sum) = (self.tap.clone(), self.wet_sum.clone());
+        let tap = self.compensated_input(0, &tap);
+        let wet_sum = self.compensated_input(1, &wet_sum);
         let mut output = output.borrow_mut();
         let dry = tap.borrow();
         let wet = wet_sum.borrow();
@@ -388,7 +435,7 @@ impl Processor for DryWetMixProcessor {
             }
             let mut cursor = s0;
             self.retarget_at(block.p0);
-            let mut position = first_update_position(block.p0);
+            let mut position = crate::update_clock::first_update(block.p0, self.automation_lag);
             while position < block.p1 {
                 let offset = self.sample_offset(position, block).clamp(cursor, s1);
                 if offset > cursor {
@@ -396,7 +443,7 @@ impl Processor for DryWetMixProcessor {
                     cursor = offset;
                 }
                 self.retarget_at(position);
-                position += UPDATE_CLOCK_RATE;
+                position = crate::update_clock::next_update(position, self.automation_lag);
             }
             if cursor < s1 {
                 self.apply(&dry, &wet, &mut output, cursor, s1);

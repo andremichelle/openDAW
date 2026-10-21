@@ -205,6 +205,7 @@ fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
     if init_index == 0 {
         return; // the device exports no `init`; index 0 is the "none" sentinel
     }
+    calling_device(state_ptr);
     let init: extern "C" fn(u32, f32) = unsafe { core::mem::transmute(init_index as usize) };
     init(state_ptr, sample_rate);
 }
@@ -221,6 +222,7 @@ fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, i
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
     unsafe { *PARAM_PUSHES.get() = PARAM_PUSHES.get().wrapping_add(1); }
+    calling_device(state_ptr);
     let parameter_changed: extern "C" fn(u32, u32, u32, f32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
     parameter_changed(state_ptr, id, kind, value, modulation);
 }
@@ -236,6 +238,7 @@ fn call_device_field_changed(field_changed_index: u32, state_ptr: u32, id: u32, 
     if field_changed_index == 0 {
         return; // the device exports no `field_changed`; index 0 is the "none" sentinel
     }
+    calling_device(state_ptr);
     let field_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(field_changed_index as usize) };
     field_changed(state_ptr, id, kind, bits, len);
 }
@@ -329,6 +332,7 @@ const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits p
 const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
+mod playhead_history;
 mod monitor;
 mod frozen;
 use metronome::Metronome;
@@ -505,6 +509,31 @@ shared_static! {
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 shared_static! {
     static PULL: PullContext = PullContext::new();
+}
+// Where the playhead was during the last quanta, for automation behind delay compensation (#482).
+shared_static! {
+    static PLAYHEAD: playhead_history::PlayheadHistory = playhead_history::PlayheadHistory::new();
+}
+
+pub(crate) fn playhead_lagged(position: f64, lag: u32) -> Option<playhead_history::Lagged> {
+    unsafe { PLAYHEAD.get() }.lagged(position, lag)
+}
+
+// The update clock of a reader whose audio is `lag` frames late: the current pulse where the position that audio
+// was rendered at crosses the grid, so its automation steps on the same sample of the audio as without latency.
+fn lagged_update_position(position: f64, lag: u32, strict: bool) -> f64 {
+    let history = unsafe { PLAYHEAD.get() };
+    let Some(lagged) = history.lagged(position, lag) else { return f64::INFINITY };
+    let grid = if strict {
+        (math::floor(lagged.modulation / UPDATE_CLOCK_RATE) + 1.0) * UPDATE_CLOCK_RATE
+    } else {
+        first_update_position(lagged.modulation)
+    };
+    match history.lead(grid, lag) {
+        Some(lead) if !strict || lead > position => lead,
+        Some(_) => history.lead(grid + UPDATE_CLOCK_RATE, lag).unwrap_or(f64::INFINITY),
+        None => f64::INFINITY
+    }
 }
 // The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
@@ -700,6 +729,8 @@ struct PullContext {
     // returns real grid points (and the render fragments); otherwise it returns INFINITY (no fragmentation).
     params: Vec<ParamHandle>,
     clock_armed: bool,
+    // frames the CURRENT device's input is late through delay compensation, its automation follows that audio
+    automation_lag: u32,
     // The CURRENT CONSUMER's unit note-bits slot (TS `NoteEventInstrument`'s 128-bit `NoteBroadcaster`):
     // resolved note starts/completes set/clear pitch bits. Set by `PluginInstrument` around its device call;
     // cleared during a MidiFx descent so nested pulls mark only their own producers.
@@ -710,7 +741,7 @@ impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false, note_bits: None
+            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0
         }
     }
 }
@@ -849,6 +880,9 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     if !pull.clock_armed {
         return f64::INFINITY;
     }
+    if pull.automation_lag > 0 && quantum_transporting() {
+        return lagged_update_position(at, pull.automation_lag, false);
+    }
     if quantum_transporting() || modulation_armed(pull) {
         return first_update_position(at);
     }
@@ -867,6 +901,9 @@ pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
     if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
+    }
+    if pull.automation_lag > 0 && quantum_transporting() {
+        return lagged_update_position(after, pull.automation_lag, true);
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).
     let mut position = ((after / UPDATE_CLOCK_RATE) as i64 + 1) as f64 * UPDATE_CLOCK_RATE;
@@ -1015,6 +1052,32 @@ pub extern "C" fn host_base_frequency() -> f32 {
     unsafe { *BASE_FREQUENCY.get() }
 }
 
+// The state block of the device the engine is calling, and the latency cell of every live plugin node by its
+// state block, so `host_set_latency` lands in the calling device's node without allocating.
+shared_static! {
+    static CALLING_STATE: u32 = 0;
+}
+shared_static! {
+    static LATENCY_CHANGED: bool = false;
+}
+shared_static! {
+    pub(crate) static LATENCIES: BTreeMap<u32, Rc<Cell<u32>>> = BTreeMap::new();
+}
+
+#[inline]
+pub(crate) fn calling_device(state_ptr: u32) {
+    unsafe { *CALLING_STATE.get() = state_ptr; }
+}
+
+#[no_mangle]
+pub extern "C" fn host_set_latency(frames: u32) {
+    if let Some(cell) = unsafe { LATENCIES.get() }.get(unsafe { CALLING_STATE.get() }) {
+        if cell.replace(frames) != frames {
+            unsafe { *LATENCY_CHANGED.get() = true; }
+        }
+    }
+}
+
 /// Host import a device calls (on a clock event) to pull its AUTOMATED parameters that changed at `position`.
 /// For each parameter with an automation track, the engine resolves its value, diffs against the last value
 /// it handed out, and writes the changed `(id, value)` into `out` (a `ParamChange` scratch in the device's
@@ -1031,11 +1094,15 @@ fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
     let mut count = 0;
     // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
     let automation_position = if quantum_transporting() {position} else {song_position()};
+    let lagged = if pull.automation_lag == 0 {None} else {playhead_lagged(position, pull.automation_lag)};
     for param in &pull.params {
         if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind, modulation) = param.resolve_split(automation_position, position);
+        let (value, kind, modulation) = match &lagged {
+            Some(lagged) => param.resolve_lagged(lagged),
+            None => param.resolve_split(automation_position, position)
+        };
         if param.changed(value, modulation) {
             param.mark(value, modulation);
             if count >= out.len() {
@@ -1269,6 +1336,11 @@ struct Engine {
     output_bus: Option<SharedAudioBuffer>,
     master: Option<Rc<RefCell<AudioBusProcessor>>>, // the output bus, retained so units wire into it live
     master_id: NodeId,
+    output_node: NodeId,
+    output_latency: u32,
+    metronome_delay: Option<engine_env::compensation::CompensatedInput>,
+    stem_compensation: Vec<Option<engine_env::compensation::CompensatedInput>>,
+    metronome_buffer: SharedAudioBuffer,
     audio_units: Vec<AudioUnitBinding>, // one per connected AudioUnitBox, maintained reactively
     // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
     // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
@@ -1319,6 +1391,9 @@ struct Engine {
 
 impl Engine {
     fn new(sample_rate: f32) -> Self {
+        let quanta = engine_env::compensation::max_compensation_frames(sample_rate) as usize / RENDER_QUANTUM + 2;
+        unsafe { PLAYHEAD.get() }.reserve(quanta, MAX_BLOCKS_PER_QUANTUM);
+        engine_env::update_clock::install_lagged_clock(lagged_update_position);
         Self {
             graph: BoxGraph::from_boxes(Vec::new()),
             registry: registry(),
@@ -1350,6 +1425,11 @@ impl Engine {
             output_bus: None,
             master: None,
             master_id: 0,
+            output_node: 0,
+            output_latency: 0,
+            metronome_delay: None,
+            stem_compensation: Vec::new(),
+            metronome_buffer: shared_audio_buffer(),
             audio_units: Vec::new(),
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
             clip_read: engine_env::note_sequencer::ClipRead::Advance,
@@ -1524,9 +1604,35 @@ impl Engine {
     }
 
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
+    fn compensate_latencies(&mut self) {
+        use engine_env::compensation::{max_compensation_frames, CompensationLimits, COMPENSATION_CROSSFADE_SECONDS};
+        let fade_frames = (COMPENSATION_CROSSFADE_SECONDS * self.sample_rate) as u32;
+        let limits = CompensationLimits {max_frames: max_compensation_frames(self.sample_rate), fade_frames};
+        self.context.compensate(limits);
+        self.output_latency = self.context.arrival_of(self.output_node);
+        if self.output_latency > 0 || self.metronome_delay.is_some() {
+            self.metronome_delay.get_or_insert_with(engine_env::compensation::CompensatedInput::new)
+                .set_delay(self.output_latency, limits);
+        }
+        self.stem_compensation.resize_with(self.stem_exports.len(), || None);
+        for (index, entry) in self.stem_exports.iter().enumerate() {
+            let arrival = self.audio_units.iter().find(|unit| unit.unit == entry.uuid)
+                .and_then(|unit| unit.stem_tap(entry))
+                .map_or(self.output_latency, |(node, _)| self.context.arrival_of(node));
+            let frames = self.output_latency.saturating_sub(arrival);
+            let slot = &mut self.stem_compensation[index];
+            if frames > 0 || slot.is_some() {
+                slot.get_or_insert_with(engine_env::compensation::CompensatedInput::new).set_delay(frames, limits);
+            }
+        }
+    }
+
     fn render(&mut self, output: &mut [f32], analysis: &mut [f32], state: &mut [u8]) {
         for sample in output.iter_mut() {
             *sample = 0.0
+        }
+        if core::mem::take(unsafe { LATENCY_CHANGED.get() }) || self.context.compensation_dirty() {
+            self.compensate_latencies();
         }
         // apply the latest timeline values recorded by the subscriptions
         self.transport.set_bpm(self.controls.bpm.get());
@@ -1562,7 +1668,7 @@ impl Engine {
             self.resolve_automated_solo(self.transport.position());
         }
         self.advance_modulation();
-        let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
+        let Engine {transport, metronome, metronome_staging, metronome_delay, metronome_buffer, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, audio_units, clip_sequencer, ..} = self;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
@@ -1645,6 +1751,7 @@ impl Engine {
                 bpm: paused.bpm
             });
         }
+        unsafe { PLAYHEAD.get() }.record_quantum(blocks.as_slice(), transport.position(), RENDER_QUANTUM as u32);
         // Queue a switchMarkerState notification when the active marker (or its play count) moved
         // this quantum (TS raises `markerChanged` and notifies once per `process`).
         if transport.take_marker_changed() {
@@ -1669,6 +1776,18 @@ impl Engine {
         }
         // the master analysis taps read the mix without the metronome (summing order is bit-identical: 0 + a + b)
         analysis.copy_from_slice(output);
+        if let Some(delay) = metronome_delay.as_mut() {
+            {
+                let mut buffer = metronome_buffer.borrow_mut();
+                buffer.left.copy_from_slice(&metronome_staging[..RENDER_QUANTUM]);
+                buffer.right.copy_from_slice(&metronome_staging[RENDER_QUANTUM..]);
+            }
+            delay.process(metronome_buffer);
+            let delayed = delay.output();
+            let delayed = delayed.borrow();
+            metronome_staging[..RENDER_QUANTUM].copy_from_slice(&delayed.left);
+            metronome_staging[RENDER_QUANTUM..].copy_from_slice(&delayed.right);
+        }
         for index in 0..RENDER_QUANTUM * 2 {
             output[index] += metronome_staging[index];
         }
@@ -1983,6 +2102,7 @@ impl Engine {
         // Fallback until the output unit reconciles (in `observe_audio_units` below): render the raw master sum.
         // The output unit reconciles like any bus (`reconcile_bus`) and republishes `output_bus` to its strip.
         self.output_bus = Some(output_buffer);
+        self.output_node = self.master_id;
         // The MIDI-out targets must register BEFORE the units reconcile (inside `observe_audio_units`): a
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
@@ -2035,6 +2155,7 @@ impl Engine {
                 modulators.anchor(self.tempo_map.borrow().ppqn_to_seconds(free_running), position);
             }
             modulators.refresh_params(position, free_running);
+            modulators.record_history();
             modulators.publish_phases();
         }
         self.modulation_free = free_running + quantum_pulses;
@@ -2533,6 +2654,43 @@ pub extern "C" fn profile_report(out_ptr: u32, max: u32) -> u32 {
         core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, count);
         count as u32
     }
+}
+
+/// Signal graph as tab-separated lines (`sr`, `n` per node, `e` per edge), returns the full length to retry with.
+#[no_mangle]
+pub extern "C" fn signal_graph_report(out_ptr: u32, max: u32) -> u32 {
+    unsafe {
+        let Some(engine) = ENGINE.get().as_mut() else { return 0 };
+        let graph = engine.context.signal_graph();
+        let max_frames = engine_env::compensation::max_compensation_frames(engine.sample_rate);
+        let mut text = alloc::format!("sr\t{}\t{}\n", engine.sample_rate, max_frames);
+        for node in &graph.nodes {
+            let owner = node.owner.map_or(alloc::string::String::from("-"),
+                |uuid| uuid.iter().map(|byte| alloc::format!("{byte:02x}")).collect());
+            text.push_str(&alloc::format!("n\t{}\t{}\t{}\t{}\t{}\n", node.id, node.latency, node.arrival, owner, node.label));
+        }
+        for edge in &graph.edges {
+            text.push_str(&alloc::format!("e\t{}\t{}\t{}\t{}\n", edge.source, edge.target, edge.data as u8, edge.delay));
+        }
+        let bytes = text.as_bytes();
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, bytes.len().min(max as usize));
+        bytes.len() as u32
+    }
+}
+
+/// 1 while a reported latency or a graph change still awaits the compensation pass of the next render.
+#[no_mangle]
+pub extern "C" fn compensation_pending() -> u32 {
+    unsafe {
+        let changed = *LATENCY_CHANGED.get();
+        ENGINE.get().as_ref().map_or(0, |engine| (changed || engine.context.compensation_dirty()) as u32)
+    }
+}
+
+/// Frames by which the heard output lags the timeline through plugin delay compensation.
+#[no_mangle]
+pub extern "C" fn compensation_latency() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.output_latency) }
 }
 
 /// Refresh the 32-byte checksum buffer from the current graph and return its pointer. Computing the

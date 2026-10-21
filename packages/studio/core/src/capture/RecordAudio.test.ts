@@ -1,6 +1,7 @@
 import {afterEach, describe, expect, it, vi} from "vitest"
-import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {AudioFileBox} from "@opendaw/studio-boxes"
 import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
@@ -30,6 +31,7 @@ const sampleManager = () => ({
 const createFakeWorklet = () => ({
     playbackTimestamp: new DefaultObservableValue(0),
     countInBeatsRemaining: new DefaultObservableValue(0),
+    compensationLatency: new DefaultObservableValue(0),
     position: new DefaultObservableValue<ppqn>(0),
     bpm: new DefaultObservableValue(120),
     isPlaying: new DefaultObservableValue(false),
@@ -378,6 +380,29 @@ describe("RecordAudio", () => {
             deliver(4.53)
             vi.advanceTimersByTime(2000)
             expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE)])
+        })
+
+        it("keeps the take once the tail arrived and the worklet saved and released its chunks (#483)", async () => {
+            vi.useFakeTimers()
+            const {project, regions, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop} =
+                await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            stop(5.5)
+            // the tail reaches the limit: RecordingWorklet saves, then clears its chunks so numberOfFrames reads 0
+            deliver(4.53)
+            recordingWorklet.saved.unwrap()()
+            recordingWorklet.numberOfFrames = 0
+            vi.advanceTimersByTime(2000)
+            expect(regions().length).toBe(1)
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.0, 5)
+            expect(recordingWorklet.limits).toEqual([Math.round(4.53 * SAMPLE_RATE)])
+            const fileBox = asInstanceOf(project.boxGraph.findBox(recordingWorklet.uuid).unwrap("fileBox"), AudioFileBox)
+            expect(fileBox.endInSeconds.getValue()).toBeCloseTo(4.53, 5)
         })
 
         it("ignores an earlier recording's stop when the take ends while the engine still records", async () => {

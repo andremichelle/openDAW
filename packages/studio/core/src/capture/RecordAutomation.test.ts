@@ -43,6 +43,7 @@ const createFakeWorklet = () => ({
     suspendAutomation(uuid: UUID.Bytes): void {this.suspended.push(uuid)},
     playbackTimestamp: new DefaultObservableValue(0),
     countInBeatsRemaining: new DefaultObservableValue(0),
+    compensationLatency: new DefaultObservableValue(0),
     position: new DefaultObservableValue<ppqn>(0),
     bpm: new DefaultObservableValue(120),
     isPlaying: new DefaultObservableValue(false),

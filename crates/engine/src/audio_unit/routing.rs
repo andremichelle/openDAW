@@ -56,7 +56,7 @@ impl Engine {
     /// push the device its current sidechain sources. See `resolve_sidechains` for the why.
     pub(crate) fn resolve_one_sidechain(&mut self, binding: &mut SidechainBinding) {
         let mut changed = self.sync_sidechain_collection(binding);
-        let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
+        let mut sources: Vec<(u32, NodeId, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
             let target = self.graph.target_of(&port.address).cloned();
             let resolution = target.and_then(|target| {
@@ -88,13 +88,13 @@ impl Engine {
                     self.context.remove_edge(old, binding.node_id);
                 }
                 if let Some(new) = source_node {
-                    self.context.register_edge(new, binding.node_id);
+                    self.context.register_order_edge(new, binding.node_id);
                 }
                 port.resolved = source_node;
                 changed = true;
             }
-            if let Some((_, buffer)) = resolution {
-                sources.push((port.port_id, buffer));
+            if let Some((node, buffer)) = resolution {
+                sources.push((port.port_id, node, buffer));
             }
         }
         if changed {
@@ -160,7 +160,7 @@ impl Engine {
         if self.context.would_cycle(strip_id, sum_id) {
             return; // a feedback loop: leave unrouted (silent); a later edit can fix it
         }
-        sum_rc.borrow_mut().add_audio_source(strip_output.clone());
+        sum_rc.borrow_mut().add_audio_source(strip_output.clone(), strip_id);
         self.context.register_edge(strip_id, sum_id);
         unit.routed = Some(Routed {bus: target_bus, sum_id, strip_id, strip_output});
     }
@@ -223,6 +223,7 @@ impl Engine {
         let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
         self.context.set_label(node_id, format!("aux-send {:02x}{:02x}", send_uuid[0], send_uuid[1]));
+        self.context.set_owner(node_id, send_uuid);
         let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, routing, subs, automation,
             param_subs: Vec::new(), param_collections: Vec::new()};
         self.bind_send_automation(&mut send, invalidate);
@@ -314,7 +315,7 @@ impl Engine {
         if self.context.would_cycle(sink.node_id, sum_id) {
             return;
         }
-        sum.borrow_mut().add_audio_source(sink.proc.borrow().tap_output());
+        sum.borrow_mut().add_audio_source(sink.proc.borrow().tap_output(), sink.node_id);
         self.context.register_edge(sink.node_id, sum_id);
         sink.target = Some((bus, sum_id));
     }
@@ -421,7 +422,7 @@ impl Engine {
             send.target = None; // a feedback loop: leave unrouted
             return;
         }
-        sum_rc.borrow_mut().add_audio_source(send.proc.borrow().audio_output());
+        sum_rc.borrow_mut().add_audio_source(send.proc.borrow().audio_output(), send.node_id);
         self.context.register_edge(send.node_id, sum_id);
         send.target = Some(new_target);
     }

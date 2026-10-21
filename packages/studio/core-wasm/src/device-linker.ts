@@ -23,7 +23,7 @@ const HOST_IMPORTS: ReadonlyArray<string> = [
     "host_resolve_soundfont", "host_observe_soundfont",
     "host_observe_field", "host_observe_target_string",
     "host_bind_sidechain", "host_resolve_input", "host_self_uuid", "host_panic",
-    "host_base_frequency"
+    "host_base_frequency", "host_set_latency"
 ]
 
 // The device exports the linker touches. `state_size` takes the sample rate (devices size their state from

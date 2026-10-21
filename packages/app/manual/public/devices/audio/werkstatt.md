@@ -166,7 +166,43 @@ const [keyL, keyR] = this.sidechains.Key
 
 ---
 
-## 4. Keyboard Shortcuts
+## 4. Latency
+
+Some processors cannot answer a sample right away. An FFT needs a full window before it can transform it, and a look-ahead limiter looks at audio that has not been played yet. Both output their audio later than it came in, which shifts the track against the rest of the mix.
+
+Declare that delay in milliseconds and the engine compensates for it:
+
+```javascript
+// @latency 21.3
+```
+
+The engine then delays every parallel path by the same amount, so the track stays in time with the rest of the mix. Automation and modulation on devices after Werkstatt follow the delayed audio, and mixdowns and stems start in time as well. The footer shows the total compensation as **PDC**.
+
+- The value is in milliseconds and may have decimals. The engine converts it to frames at the project sample rate.
+- Omitting `@latency` means no delay. A missing, negative or non-numeric value is a compile error.
+- The engine compensates up to 100 ms per path.
+
+If the delay changes while the script runs, for example when an FFT size parameter changes, set it in frames instead. A positive `this.latency` overrides the declaration:
+
+```javascript
+class Processor {
+    constructor() {
+        this.latency = 1024
+    }
+    paramChanged(label, value) {
+        if (label === "size") {this.latency = 256 << Math.round(value * 4)}
+    }
+    process(io, block) {
+        // ...
+    }
+}
+```
+
+The engine reads `this.latency` after every block, so a change takes effect immediately.
+
+---
+
+## 5. Keyboard Shortcuts
 
 | Shortcut            | Action                              |
 |---------------------|-------------------------------------|
@@ -175,7 +211,7 @@ const [keyL, keyR] = this.sidechains.Key
 
 ---
 
-## 5. Safety
+## 6. Safety
 
 The engine validates your output on every audio block:
 
@@ -187,7 +223,7 @@ When silenced, the device outputs silence until the next successful compile.
 
 ---
 
-## 6. API Reference
+## 7. API Reference
 
 Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates and `reset` to clear state on transport stop.
 
@@ -224,6 +260,7 @@ class Processor {
     reset() {
         // optional, called when the transport stops: clear buffers and tails
     }
+    // this.latency: optional, the output delay in frames (overrides // @latency, see Latency)
 }
 ```
 
@@ -231,12 +268,12 @@ Pressing Stop silences the device. If your script has no `reset`, the Processor 
 
 ---
 
-## 7. Examples
+## 8. Examples
 
 Select **Examples** in the code editor toolbar to load ready-made processors (Hard Clipper, Ring Modulator, Simple Delay, Biquad Lowpass).
 
 ---
 
-## 8. AI Assistance
+## 9. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Werkstatt processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.

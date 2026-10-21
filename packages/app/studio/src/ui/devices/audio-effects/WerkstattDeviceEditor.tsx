@@ -9,12 +9,14 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {WerkstattExamples} from "./werkstatt-examples"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"},
     defaultCode,
     examples: WerkstattExamples,
     starterPrompt,
+    entryPoints: ScriptEntryPointDocs.werkstatt,
     icon: EffectFactories.AudioNamed.Werkstatt.defaultIcon,
     populateMenu: (parent, service, deviceHost, adapter) =>
         MenuItems.forEffectDevice(parent, service, deviceHost, adapter as WerkstattDeviceBoxAdapter),

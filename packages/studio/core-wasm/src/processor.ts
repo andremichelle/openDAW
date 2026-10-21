@@ -25,6 +25,7 @@ import {
     MonitoringMapEntry,
     NoteSignal,
     PreferencesClient,
+    SignalGraph,
     WclapBundle,
     WclapGuiInfo,
     WclapGuiSize,
@@ -37,7 +38,7 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, takeReportMessage} from "./engine-exports"
+import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
@@ -155,6 +156,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.isCountingIn = view.getUint8(17) === 1
             state.isRecording = view.getUint8(18) === 1
             state.recordingStopTime = this.#recordingStopTime
+            state.compensationLatency = engine.compensation_latency() / sampleRate
             if (this.#measureLoad) {
                 state.perfBuffer.set(this.#perfBuffer)
                 state.perfIndex = this.#perfWriteIndex
@@ -248,6 +250,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapSaveState: (uuid: UUID.Bytes): void => this.#guarded(() => this.#wclap.saveState(UUID.toString(uuid))),
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 wclapRetry: (url: string): void => this.#wclap.retry(url),
+                querySignalGraph: (): Promise<SignalGraph> => Promise.resolve(readSignalGraph(engine, this.#memory)),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
@@ -377,9 +380,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
 
     #render(inputs: Array<Array<Float32Array>>, [mainOutput, monitorOutput]: Array<Array<Float32Array>>): void {
         if (this.#panic) {return panic("Manual Panic")}
-        // DSP-load measurement (TS EngineProcessor.render): start() returns the PREVIOUS quantum's
-        // validated elapsed time; end() signals the HRClock worker for this one.
-        const elapsed = this.#measureLoad ? this.#hrClock.start() : 0
+        if (this.#measureLoad) {this.#hrClock.start()}
         const engine = this.#engine
         // EFFECTS monitoring: stage the live input channels for the in-chain injectors, render, then hand
         // each mapped unit's strip output back on the 2nd worklet output (the MonitoringRouter return).
@@ -428,9 +429,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (this.#loudnessActive) {this.#loudness.process(chLeft, chRight)}
         this.#syncBroadcasts()
         if (this.#measureLoad) {
-            this.#hrClock.end()
-            this.#perfBuffer[this.#perfWriteIndex] = elapsed
-            this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+            const elapsed = this.#hrClock.end()
+            if (elapsed > 0.0) {
+                this.#perfBuffer[this.#perfWriteIndex] = elapsed
+                this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+            }
         }
         this.#broadcaster.flush()
         this.#stateSender.tryWrite()

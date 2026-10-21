@@ -14,6 +14,7 @@ import {Header} from "@/ui/header/Header"
 import {ErrorsPage} from "@/ui/pages/ErrorsPage.tsx"
 import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
+import {SignalGraphPage} from "@/ui/pages/SignalGraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
@@ -63,6 +64,7 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
+                    {path: "/signal-graph", factory: SignalGraphPage},
                     {path: "/stats", factory: DashboardPage},
                     {
                         path: "/users", factory: (context) => {

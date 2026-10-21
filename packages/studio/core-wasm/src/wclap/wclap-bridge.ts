@@ -78,6 +78,8 @@ type Loaded = {
     emitsParams: boolean // the plugin reported a PARAM_VALUE itself, polling is never needed
     reported: Map<number, number> // last value per id the plugin reported (its GUI, a preset), f32
     lastModulation: Map<number, number> // last PARAM_MOD amount per id, to clear it once the sum returns to 0
+    latencyExt: number
+    latency: number // frames the plugin reports through clap.latency, read after activate
     gestures: Set<number> // ids the plugin's GUI is dragging
     state: number
     params: number
@@ -110,6 +112,7 @@ class Plugin {
     receivedSinceProcess: boolean = false
     flushRequested: boolean = false
     callbackRequested: boolean = false
+    restartRequested: boolean = false
     // host-side values per clap id, kept before the plugin is up and pushed with its first process call
     readonly pendingParams = new Map<number, PendingParam>()
 
@@ -144,6 +147,7 @@ export class WclapBridges {
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
             host_wclap_state: (handle, ptr, len) => this.#state(handle, ptr, len),
             host_wclap_reset: (handle) => this.#reset(handle),
+            host_wclap_latency: (handle) => this.#latency(handle),
             host_wclap_release: (handle) => this.#release(handle)
         }
     }
@@ -486,6 +490,7 @@ export class WclapBridges {
             plugin: 0, webview: 0, gui: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
             inputs: [0, 0], outputs: [0, 0], inputPorts: 0, inputPortInfos: [], auxInputs: [], auxFed: [], auxSilent: [], scratchPtr: 0, scratchSize: 0, steadyTime: 0,
             eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
+            latencyExt: 0, latency: 0,
             gestures: new Set(), state: 0, params: 0, inEvents: 0, outEvents: 0, istream: 0, ostream: 0,
             readSource: null, writeChunks: [], logCount: 0
         }
@@ -520,6 +525,7 @@ export class WclapBridges {
         loaded.gui = this.#extension(loaded, ClapAbi.Ext.GUI)
         loaded.state = this.#extension(loaded, ClapAbi.Ext.STATE)
         loaded.params = this.#extension(loaded, ClapAbi.Ext.PARAMS)
+        loaded.latencyExt = this.#extension(loaded, ClapAbi.Ext.LATENCY)
         loaded.uriPtr = malloc(URI_CAPACITY)
         loaded.sizePtr = malloc(ClapAbi.ResizeHints.SIZE)
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
@@ -532,6 +538,7 @@ export class WclapBridges {
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
             throw new Error("plugin.activate failed")
         }
+        this.#readLatency(loaded)
         this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.START_PROCESSING, loaded.plugin))
         return loaded
     }
@@ -565,7 +572,9 @@ export class WclapBridges {
         const hoveredExt = malloc(ClapAbi.HostParamHovered.SIZE)
         const guiExt = malloc(ClapAbi.HostGui.SIZE)
         const paramsExt = malloc(ClapAbi.HostParams.SIZE)
+        const latencyExt = malloc(ClapAbi.HostLatency.SIZE)
         const extensions = new Map<string, number>([
+            [ClapAbi.Ext.LATENCY, latencyExt],
             [ClapAbi.Ext.WEBVIEW, webviewExt], [ClapAbi.Ext.LOG, logExt],
             [ClapAbi.Ext.THREAD_CHECK, threadCheckExt], [ClapAbi.Ext.STATE, stateExt],
             [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt], [ClapAbi.Ext.GUI, guiExt]
@@ -621,7 +630,8 @@ export class WclapBridges {
         view.setUint32(host + ClapAbi.Host.VERSION, version, true)
         this.#setFn(loaded, host + ClapAbi.Host.GET_EXTENSION, trampoline(["i32", "i32"], ["i32"],
             (_host: number, idPtr: number) => extensions.get(this.#cstr(memory, idPtr)) ?? 0))
-        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {plugin.restartRequested = true}))
+        this.#setFn(loaded, latencyExt + ClapAbi.HostLatency.CHANGED, trampoline(["i32"], [], () => this.#readLatency(loaded)))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_PROCESS, trampoline(["i32"], [], () => {}))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {plugin.callbackRequested = true}))
         this.#setFn(loaded, webviewExt + ClapAbi.HostWebview.SEND, trampoline(["i32", "i32", "i32"], ["i32"],
@@ -791,6 +801,7 @@ export class WclapBridges {
         if (!isDefined(plugin) || isNull(plugin.loaded)) {return 0}
         const loaded = plugin.loaded
         return this.#contain(plugin, 0, () => {
+            if (plugin.restartRequested) {this.#restart(plugin, loaded)}
             const engine = this.#memory.buffer
             const [inLeft, inRight, outLeft, outRight] = this.#audio(loaded)
             inLeft.set(new Float32Array(engine, in0, frames))
@@ -817,6 +828,28 @@ export class WclapBridges {
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
             return 1
         })
+    }
+
+    #readLatency(loaded: Loaded): void {
+        loaded.latency = loaded.latencyExt === 0
+            ? 0 : this.#call(loaded, loaded.latencyExt + ClapAbi.PluginLatency.GET, loaded.plugin) >>> 0
+    }
+
+    // clap request_restart: deactivate and activate again, where a plugin may change its latency
+    #restart(plugin: Plugin, loaded: Loaded): void {
+        plugin.restartRequested = false
+        this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.STOP_PROCESSING, loaded.plugin))
+        this.#call(loaded, loaded.plugin + ClapAbi.Plugin.DEACTIVATE, loaded.plugin)
+        if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
+            throw new Error("plugin.activate failed on restart")
+        }
+        this.#readLatency(loaded)
+        this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.START_PROCESSING, loaded.plugin))
+    }
+
+    #latency(handle: number): number {
+        const plugin = this.#plugins.get(handle)
+        return !isDefined(plugin) || isNull(plugin.loaded) ? 0 : plugin.loaded.latency
     }
 
     // clap request_callback: on_main_thread between render quanta, at most once per quantum

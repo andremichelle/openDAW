@@ -295,8 +295,8 @@ impl Engine {
         collections.extend(new_collections);
         let resolver: Option<StripValueSource> = if handle.track.is_some() || handle.modulation.is_some() {
             let handle = handle.clone();
-            Some(Rc::new(move |position: f64, transporting: bool| {
-                let (value, kind, modulation) = handle.resolve_held(position, transporting);
+            Some(Rc::new(move |position: f64, transporting: bool, lag: u32| {
+                let (value, kind, modulation) = handle.resolve_held_lagged(position, transporting, lag);
                 map(value, kind, modulation)
             }))
         } else {

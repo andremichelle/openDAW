@@ -10,7 +10,9 @@ Writing style (all channels)
 • Opening paragraph states what the thing is and what it does, in plain words. No hype openers
   like "a proper convolution reverb" or "your track sits right in it", also not on Discord.
 • No long text. Handle every subject brief and to the point.
-• No technical details unless the prompt asks for them.
+• No technical details unless the prompt asks for them. No numbers like "5 ms" in an example.
+• No stiff inserted clauses like "A limiter, for example, does X". Short sentences in the order
+  things happen, concrete first, no abstract openers.
 • Always include the education angle, unless the prompt says otherwise. Exception: Discord never
   gets the education angle unless the prompt asks for it.
 

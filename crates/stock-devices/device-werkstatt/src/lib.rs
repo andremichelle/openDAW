@@ -29,7 +29,8 @@ fn panic(info: &PanicInfo) -> ! {
 pub struct WerkstattState {
     uuid: [u8; 16],
     handle: u32,
-    sample_rate: f32
+    sample_rate: f32,
+    latency: u32
 }
 
 #[no_mangle]
@@ -151,5 +152,10 @@ pub extern "C" fn process(desc_ptr: u32) {
         }
         abi::script_audio(handle, src_l, src_r, out_l, out_r,
             &Block {index: block.index, flags, p0: sub_p0, p1: block.p1, s0: sub_s0, s1: block.s1, bpm: block.bpm});
+    }
+    let latency = abi::script_latency(handle);
+    if latency != state.latency {
+        state.latency = latency;
+        abi::set_latency(latency);
     }
 }

@@ -10,6 +10,7 @@ import {
     SampleDeclaration,
     ScriptCompiler,
     ScriptDeclaration,
+    ScriptEntryPoints,
     SidechainDeclaration
 } from "@opendaw/studio-adapters"
 import {
@@ -76,6 +77,7 @@ export type ScriptDeviceEditorConfig = {
     readonly defaultCode: string
     readonly examples: ReadonlyArray<CodeEditorExample>
     readonly starterPrompt: string
+    readonly entryPoints: ScriptEntryPoints.Api
     readonly icon: IconSymbol
     readonly populateMenu: (parent: MenuItem, service: StudioService, deviceHost: DeviceHost, adapter: ScriptAdapter) => void
     readonly populateMeter: (construct: {
@@ -132,7 +134,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
                 previousScreen: service.layout.screen.getValue(),
                 examples: config.examples,
-                starterPrompt: config.starterPrompt
+                starterPrompt: config.starterPrompt,
+                entryPoints: config.entryPoints
             })
         }
     }

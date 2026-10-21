@@ -17,6 +17,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 import {CodeEditorExample} from "./CodeEditorState"
+import {EntryPointMarkers} from "./EntryPointMarkers"
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPanel")
 
@@ -69,6 +70,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                         monaco, lifecycle, language: "javascript",
                         uri: "file:///werkstatt.js", initialCode
                     })
+                    if (isDefined(state)) {EntryPointMarkers.install(monaco, editor, model, state.entryPoints, lifecycle)}
                     const compileCode = async () => {
                         if (!isDefined(handler)) {
                             setStatus("No handler connected", "error")
