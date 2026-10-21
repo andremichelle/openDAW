@@ -185,7 +185,7 @@ class View {
         this.host = host
         this.coefficients = new Float64Array(5)
         this.canvas = document.createElement("canvas")
-        host.root.style.cssText = `box-sizing: border-box; padding: 4px; border: 0.5px solid ${host.color("displayGrid", 0.12)}; border-radius: 8px`
+        host.root.style.cssText = `box-sizing: border-box; margin: 1px; width: calc(100% - 2px); height: calc(100% - 2px); padding: 4px; border: 0.5px solid ${host.color("displayGrid", 0.12)}; border-radius: 8px`
         this.canvas.style.cssText = "width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none"
         host.root.append(this.canvas)
         host.data.bands.subscribe(() => this.draw())

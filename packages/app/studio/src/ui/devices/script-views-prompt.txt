@@ -62,7 +62,9 @@ The view must look like it was always part of openDAW. Derived from the stock de
 
 1. Frame: the studio adds no frame, the view draws its own like the stock displays. On host.root set
    box-sizing border-box, padding 4px, a 0.5px border in host.color("displayGrid", 0.12) and an 8px radius.
-   Round the canvas 4px. Background transparent, the device panel shows through.
+   Keep the frame 1px inside the page (margin 1px, width and height calc(100% - 2px)): at a fractional
+   browser zoom the outermost pixel of a view can be cut off. Round the canvas 4px. Background transparent,
+   the device panel shows through.
 2. Colours: draw data with host.color("displayStroke", opacity), never with arbitrary colours.
    - main curve: opacity 0.75 to 1.0
    - secondary curves and handles: 0.4 to 0.5
