@@ -36,16 +36,29 @@ the processor never sees it. That must be impossible, not a convention. Two laye
    - `const NAME = <expression>` (simple identifiers, no destructuring)
 
    Rejected with line number and a fix hint: top-level `let` / `var`, expression statements (`init()`,
-   `SCALES.push(...)`), destructuring `const`, `export` / `import`. Example message:
+   `SCALES.push(...)`), destructuring `const`, `export` / `import`, private static fields (`static #count = 0`,
+   freeze cannot reach them, private static METHODS stay allowed). Example message:
    `Line 4: top-level 'let current' would exist separately in the processor and the view. Move it into the class.`
 2. Runtime freeze, in both realms. The compiler appends, after the user code inside the wrapper, a deep
-   `Object.freeze` over every top-level `const` value, every top-level function and every class (constructor and
-   prototype). So:
+   `Object.freeze` over every top-level `const` value, every top-level function and every class constructor
+   (statics). Class prototypes are NOT frozen: a frozen prototype breaks `this.draw = this.draw.bind(this)` in a
+   constructor (the JS "override mistake"), a very common View pattern. So:
    - `SCALES.push(7)` throws, `Helper.cache = x` and `static counter` writes throw (the wrapper is strict mode).
+   - `Map`, `Set`, `WeakMap`, `Date`, `ArrayBuffer` values are rejected at compile: `Object.freeze` does not freeze
+     their contents, `const CACHE = new Map()` would silently stay shared mutable state (verified in the prototype).
    - A top-level `const TABLE = new Float32Array(2048)` fails at compile with
      `typed arrays are mutable, create 'TABLE' in the constructor` (freeze cannot freeze a non-empty typed array,
      which is exactly the right verdict).
    - Duplicated immutable constants and pure helpers in both realms are fine, they cannot diverge.
+   - Closures created at top level are rejected: a `const` whose value contains a function (directly or inside an
+     object / array) must spell every function as a literal (`function`, arrow, `class`, method). If its
+     initializer CALLS something (`makeCounter()`, an IIFE), the compile fails with
+     `'next' is a function created by a call, it can hold hidden state. Declare it as a function or move it into the class.`
+     The check is the scanner's verdict (initializer contains a call) combined with the runtime walk over the frozen
+     value (contains a function). Non-intrusive: `const TABLE = Array.from({length: 16}, (entry, index) => index * 2)`
+     and `const ROOT = Math.pow(2, 1 / 12)` still pass, because their values hold no function.
+   - What stays possible is only deliberate and not accidental: mutating a prototype from inside a method
+     (`Object.getPrototypeOf(this).shared = 1`). Documented, not policed.
 3. Implicit and explicit globals: the wrapper is `"use strict"`, so assignments to undeclared names throw. The
    wrapper shadows `globalThis`, `self`, `window`, `openDAW` and `sampleRate`-adjacent registries as parameters
    set to `undefined` (`sampleRate` and the documented globals stay). This is a correctness guard against
@@ -70,13 +83,14 @@ directives), Monaco declarations for `View` and `host`, the AI starter prompt, t
 
 ## 2. Isolation of the view (issue 1)
 
-Decision: one sandboxed `<iframe>` per device view.
+Decision: one sandboxed `<iframe>` per view instance (inline or window).
 
 - `sandbox="allow-scripts"` WITHOUT `allow-same-origin`: opaque origin, no access to `parent`, studio DOM,
   cookies, `localStorage`, IndexedDB, OPFS, service worker. No `allow-popups`, `allow-modals`, `allow-forms`,
   `allow-top-navigation`.
 - `srcdoc` built by the host: CSP meta `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
-  img-src data: blob:` so `fetch`, websockets, remote images and fonts are blocked (no exfiltration of project data).
+  img-src data: blob:; font-src <studio origin>` so `fetch`, websockets and remote images are blocked (no
+  exfiltration of project data). Fonts load from the studio origin only, so a view uses the studio UI font.
 - Cannot flow into the studio UI: the iframe IS the clip rect. The host sizes it to its grid slot, the script draws
   inside, overflow is physically impossible.
 - One channel: the host transfers a `MessagePort` at boot. Every inbound message is validated against the manifest
@@ -116,12 +130,29 @@ Anything that must affect the rendered result is a param or a collection, never 
 // @field steps.transpose 0    -12  12   int  st
 ```
 
-- `@field` reuses the `@param` token grammar exactly (default min max mapping unit), one parser.
-- `16` is the INITIAL record count created on first compile, not a limit. Records can be inserted / removed.
+- `@field` reuses the `@param` token grammar exactly (default min max mapping unit), one parser. Values are
+  stored as `float32` (ints exact up to 2^24).
+- Two ways to declare the records, mutually exclusive per collection:
+  - `// @collection steps 16`: 16 records, every field at its `@field` default.
+  - `// @collection partials` followed by one `// @record partials level=1` line per record: every record seeded
+    explicitly, fields not named in a line take their `@field` default. Order of the lines = record order.
+- The declaration is the TARGET shape, not a limit. The view can still insert / remove records at runtime.
+- Recompile with a changed declaration (16 to 32, or 16 to 8, or edited `@record` lines): grow appends new
+  records (defaults or seeds), shrink removes trailing records, every surviving record keeps its current values
+  (the data is carried over, nothing is re-created). Side effects, and how they are contained:
+  - Only a CHANGED declaration reshapes. The compiler parses the declaration from the previous code in the box
+    and compares. Recompiling with the same declaration leaves a pattern whose length the user changed in the
+    view (16 to 12 steps) alone, otherwise every compile would snap it back.
+  - An edited `@record` seed is written only into records that still hold the OLD seed value, user edits win.
+  - Shrinking deletes the trailing records' user data. It is the same transaction as the code change, so one
+    undo restores both.
 - Values are numbers (int, float, bool), mapped and clamped like params. No strings in v1.
-- Boxes, hub + child boxes as everywhere else:
-  - `ScriptRecordBox { owner -> device.records, collection: string, index: int32 }`
-  - `ScriptValueBox  { owner -> record.values, field: string, value: float32 }`
+- Boxes, hub + child boxes as everywhere else. Each carries the label (reconcile by name, robust against
+  reordering) AND the declaration index (the wire id, so Rust never decodes strings), like `WerkstattParameterBox`:
+  - `ScriptRecordBox { owner -> device.records, collection: string, collection-index: int32, order: int32 }`
+  - `ScriptValueBox  { owner -> record.values, field: string, field-index: int32, value: float32 }`
+  - `order` is the record position. Inserting in the middle rewrites `order` of every following record (N field
+    writes in one transaction). Acceptable for patterns, revisit if collections grow large.
   - Fine-grained: one value edit = one field change, merges in Live rooms, undo per gesture.
 - Reconcile on compile like `reconcileParameters`: new field = value boxes with defaults in every record, removed
   field = value boxes deleted, changed min/max = values clamped, removed collection = records deleted.
@@ -129,10 +160,17 @@ Anything that must affect the rendered result is a param or a collection, never 
   the transaction (update clock, never mid-block). `dataChanged(name)` is called after a rebuild and once after
   construction. The processor never writes data (the audio thread must not create transactions, and composite
   replicas would write N times).
-- TS engine: the adapter in the worklet reads the box replica directly.
-- WASM engine: the device crate binds the `records` hub (like params / samples), on change writes a compact
-  snapshot (record count, field count, f32 values in manifest order) and calls a new
-  `host_script_data(handle, collection, ptr, records, fields)`. `// WASM CONTRACT:` markers on both sides.
+- Engine: scripts only run in the WASM engine (the TS script processors are gone, `core-processors` has none). The
+  three crates export `observe_record_collection_field() -> <hub key>`, and `crates/engine/src/script_device.rs`
+  gets `observe_script_records` next to `observe_script_params` / `observe_script_samples`, reusing
+  `collection_children` twice (records of the device, values of each record). On any change it delivers deltas:
+  `host_script_value(handle, collection, order, field, value)` for a value edit, and a full
+  `host_script_data(handle, collection, ptr, records, fields)` snapshot for structural changes (insert / remove /
+  reorder). `// WASM CONTRACT:` markers on both sides.
+- The bridge caches the collections like `rawParams` (data arrives before the Processor exists, and must survive a
+  hot-swap), replays them after construction, then calls `dataChanged` for every collection. A value delta
+  replaces only that record object (copy on write) and the outer array, so references the processor holds to
+  an old array stay consistent.
 
 Later (phase 6), bulk data: `// @buffer wave 2048` = `ScriptBufferBox { owner, label, data: bytes }`, replaced
 whole per edit, for drawable wavetables or curves where one box per value would be absurd.
@@ -142,12 +180,22 @@ whole per edit, for drawable wavetables or curves where one box per value would 
 ```
 // @stream step 1          value: fixed Float32Array the processor overwrites
 // @stream scope 1024 ring ring: the processor appends blocks, the view receives the latest 1024 in order
+// @stream spectrum 512 fft  fft: the processor appends blocks like ring, the view receives 512 magnitudes
 ```
 
-- Processor: `this.streams.step[0] = index`, `this.streams.scope.write(channel, s0, s1)`.
-- Shipped over the existing device live-data path (LiveStream, fixed-size packets, which fits the fixed declared
-  length). The view receives at most one packet per animation frame.
-- Composite replicas: only the first instance broadcasts.
+- Processor: `this.streams.step[0] = index`, `this.streams.scope.write(channel, s0, s1)` (`fft` streams too).
+- `fft` is a ring of `2 × bins` samples on the wire. The view runtime inside the iframe applies a Hann window and
+  the lib-dsp FFT (bundled into the runtime, not exposed) and hands the subscriber `bins` linear magnitudes.
+  Nothing is computed on the audio thread, and the host API stays I/O only (no math utilities on `host`).
+- Not through the Rust broadcast ABI: `abi::bind_broadcast` binds in the crate's `init`, before the script is
+  loaded, while streams change with every compile. Instead the script bridge registers them directly on the
+  worklet's JS `LiveStreamBroadcaster` (`core-wasm/src/processor.ts`, same scope as the bridge, passed into
+  `ScriptBridges`), at the device address + `[0x1000 + stream index]`, re-registered on hot-swap. No ABI change.
+- No latency alignment: packets are shown as they arrive. A step highlight may lead the audio by the output
+  latency, accepted.
+- `this.streams.scope.active` mirrors the subscription state, so a processor skips stream work while no view is open.
+  The view receives at most one packet per animation frame.
+- Composite replicas share the device address: only the first instance (lowest handle) broadcasts.
 - Offline render: streams are not shipped.
 
 ### 3.3 Preview
@@ -160,13 +208,18 @@ device's audio unit (Apparat, and Spielwerk through its downstream instrument). 
 The three-row grid stays. One new item:
 
 ```
-// @view 10
+// @view 10                 class View, 10 columns
+// @view PatternView 10     class PatternView, 10 columns
+// @view ScopeView 4        class ScopeView, 4 columns
 ```
 
+- A device can have many views. The optional first token names the class to instantiate, default `View`. Each
+  view class is an entry point the editor can jump to.
 - Takes a slot in directive order, exactly like a param or sample, also inside a `@group`.
 - Always spans all 3 rows (11em = 3 × 3.5em + 2 × 0.25em), `10` = width in grid columns
   (10 × 3.5em + 9 × 0.25em gaps). `grid-row: span 3` so it always starts a fresh column.
-- Exactly one view per device in v1.
+- Several views on one device are independent instances (own iframe each). They coordinate only through params,
+  collections and streams, never directly, which is the same rule as view and processor.
 - The iframe follows the UI zoom because its size is in em, the view reacts with a native `ResizeObserver`.
 
 ### 4.1 Larger window
@@ -175,25 +228,26 @@ A script can open a bigger editor (full pattern editor, large spectrum, wavetabl
 or a native window on desktop.
 
 ```
-// @window 900 520
+// @window 900 520              class View in a window
+// @window EditorView 900 520   class EditorView in a window
 ```
 
-- Declares that the device has a window and its initial size in CSS px. Resizable, the last size is per device
-  and saved like WCLAP window sizes.
-- Opened from a window button in the device header (always there when `@window` is declared), or from the inline
-  view with `host.openWindow()`. `host.closeWindow()` closes it. Opening an already open window focuses it.
-- The SAME `class View` is instantiated a second time in its own sandboxed iframe, with `host.mode === "window"`
-  (inline instance: `"inline"`). One class, two layouts, so no new entry point. Both instances read and write the
-  same boxes, so they stay in sync without any code (draw a step in the window, the inline grid updates).
+- Declares a window and its initial size in CSS px, the optional first token names the class (default `View`).
+  Resizable, the last size is per device and saved like WCLAP window sizes. Many windows per device are allowed.
+- Opened from a window button in the device header (one menu entry per declared window), or from any view with
+  `host.openWindow(name?)`. `host.closeWindow(name?)` closes it. Opening an already open window focuses it.
+- A class can serve both: `// @view View 10` plus `// @window View 900 520` instantiates the same class twice,
+  `host.mode` tells it `"inline"` or `"window"`. Both instances read and write the same boxes, so they stay in
+  sync without any code (draw a step in the window, the inline grid updates).
 - A `@window` without `@view` is valid: no inline element, only the header button (a big editor that does not
   cost grid space).
 - Where it opens:
   1. Browser: `FloatingWindow` inside the studio surface, exactly like WCLAP plugin GUIs (`WclapWindows.tsx`).
   2. Desktop (Tauri): a native child window hosting the same sandboxed page.
   3. Later, browser: Document Picture-in-Picture (Chrome) for a real OS window that floats above the studio
-     (second monitor).
-- Window lifecycle: closes when the device is deleted or the project closes, reopens on project load if it was
-  open (optional, open question).
+     (second monitor). `FloatingWindow` stays the browser default, PiP is a later option.
+- Window lifecycle: closes when the device is deleted or the project closes. Not reopened on project load, same
+  as WCLAP windows today.
 - Rendering stays isolated: the window is just a bigger iframe with the same CSP, port and validation.
 
 Reuse: `WclapWindows.tsx` already hosts third-party pages in iframes inside `FloatingWindow` with a separate frame
@@ -212,12 +266,11 @@ interface ViewHost {
     readonly data: Record<string, ViewCollection>
     readonly streams: Record<string, ViewStream>
     readonly preview: ViewPreview
-    readonly dsp: {fft(real: Float32Array, imag: Float32Array): void}
     edit(procedure: () => void): void                       // one transaction, one undo step
     gesture(): {edit(procedure: () => void): void, end(): void} // a drag, one undo step at the end (beginModification)
     send(message: unknown): void                            // structured clone, size capped, not persisted
-    openWindow(): void                                      // requires // @window
-    closeWindow(): void
+    openWindow(name?: string): void                         // a declared @window class, default "View"
+    closeWindow(name?: string): void
     color(name: string): string
 }
 interface ViewParam {
@@ -395,9 +448,17 @@ class View {
 // @param attack  0.005 0.001 2   exp  s
 // @param release 0.3   0.01  4   exp  s
 // @view 12
-// @collection partials 16
-// @field partials.level 0.5 0 1 linear
-// @stream scope 1024 ring
+// @collection partials
+// @field partials.level 0 0 1 linear
+// @record partials level=1
+// @record partials level=0.5
+// @record partials level=0.33
+// @record partials level=0.25
+// @record partials level=0.2
+// @record partials level=0.16
+// @record partials level=0.14
+// @record partials level=0.12
+// @stream spectrum 512 fft
 
 const TABLE_SIZE = 2048
 
@@ -415,7 +476,7 @@ class Processor {
         const table = new Float32Array(TABLE_SIZE)
         this.data.partials.forEach((partial, index) => {
             const harmonic = index + 1
-            const gain = partial.level / harmonic
+            const gain = partial.level
             for (let sample = 0; sample < TABLE_SIZE; sample++) {
                 table[sample] += gain * Math.sin(2 * Math.PI * harmonic * sample / TABLE_SIZE)
             }
@@ -453,7 +514,7 @@ class Processor {
             outR[s] = sum
         }
         this.voices = this.voices.filter(voice => voice.gate || voice.level > 0.0001)
-        this.streams.scope.write(outL, block.s0, block.s1)
+        this.streams.spectrum.write(outL, block.s0, block.s1)
     }
 }
 
@@ -474,11 +535,9 @@ class View {
         this.bars = this.#canvas()
         this.analyser = this.#canvas()
         this.keys = this.#canvas()
-        this.real = new Float32Array(1024)
-        this.imag = new Float32Array(1024)
         this.subscriptions = [
             host.data.partials.subscribe(() => this.drawBars()),
-            host.streams.scope.subscribe(samples => this.analyse(samples))
+            host.streams.spectrum.subscribe(magnitudes => this.analyse(magnitudes))
         ]
         new ResizeObserver(() => this.drawAll()).observe(host.root)
         this.bars.addEventListener("pointerdown", event => this.pressBar(event))
@@ -535,16 +594,9 @@ class View {
         this.held = -1
         this.drawKeys()
     }
-    analyse(samples) {
-        const {real, imag, spectrum} = this
-        for (let index = 0; index < samples.length; index++) {
-            real[index] = samples[index] * (0.5 - 0.5 * Math.cos(2 * Math.PI * index / (samples.length - 1)))
-            imag[index] = 0
-        }
-        this.host.dsp.fft(real, imag)
-        for (let bin = 0; bin < spectrum.length; bin++) {
-            const magnitude = Math.hypot(real[bin], imag[bin]) / samples.length
-            spectrum[bin] = Math.max(spectrum[bin] * 0.85, magnitude)
+    analyse(magnitudes) {
+        for (let bin = 0; bin < magnitudes.length; bin++) {
+            this.spectrum[bin] = Math.max(this.spectrum[bin] * 0.85, magnitudes[bin])
         }
         this.drawSpectrum()
     }
@@ -594,31 +646,88 @@ class View {
 
 ## 8. Phases
 
-1. Top-level rule: scanner + deep freeze in the existing wrappers, tests over every shipped example. Existing
-   examples that break the rule are fixed in the same pass (nothing must break: audit which presets in the wild
-   use top-level `let`, decide a migration before enforcing). Shipped examples already pass: only top-level
-   `const` numbers (alienator) and a `const` array of functions (deminix).
+1. Top-level rule: scanner + deep freeze, active only for scripts with `class View` / `@view` / `@window`
+   (finding 1), so no migration. Tests over every shipped example plus the edge-case suite from the prototype.
 2. `@view` slot + sandboxed iframe runtime + `host.params` + theme + key forwarding. Example: a param-driven
    envelope display.
-3. `@collection` / `@field`: boxes, reconcile, TS engine `this.data` + `dataChanged`, view collection API with
-   `edit` / `gesture`. Example A without the step highlight. Undo + Live-room tests.
-4. WASM engine: `records` hub binding in the three crates, `host_script_data`, parity tests vs the TS engine
-   (render Example A in node through both engines, bit-identical).
-5. `@stream` (value + ring) over device live data, `host.preview`, `host.dsp.fft`. Example A complete, Example B.
+3. `@collection` / `@field`: boxes, reconcile, view collection API with `edit` / `gesture`. Undo, Live-room,
+   clipboard and delete-cascade tests.
+4. Engine: `observe_script_records`, `host_script_value` / `host_script_data`, bridge cache + `this.data` +
+   `dataChanged`. Example A without the step highlight, rendered headless in node (core-wasm harness): editing a
+   step changes the render, a hot-swap keeps the data.
+5. `@stream` (value, ring, fft) over device live data, `host.preview`. Example A complete, Example B.
 6. `@buffer` bulk data (bytes box), `send` / `message`.
 7. `@window`: header button, `host.openWindow()`, `mode`, FloatingWindow in the browser, native window in Tauri,
    later Document Picture-in-Picture.
 
-## 9. Open questions
+## 9. Dry run findings (2026-10-21)
 
-1. Is one view per device enough for v1, or do we need named views (`// @view pattern 8`, `// @view scope 4`)?
-2. Seeded collection defaults (first partial 1, rest 0) are not expressible with one default per field.
-   Allow an `@record` line per index, or accept uniform defaults?
-3. Stream timing: the processor renders ahead, the step highlight leads the audio by the output latency.
-   Delay stream packets by the reported output latency on the host side?
-4. Fonts inside the iframe: CSP blocks the studio fonts. Inline the UI font as a data URL in `srcdoc`, or allow
-   `font-src` for the studio origin?
-5. Should a view be allowed to write params at all, or read only (knobs stay the only writers)?
-6. Field values as `float32` (ints exact up to 2^24) or `float64`?
-7. Reopen script windows on project load if they were open when saved?
-8. Document Picture-in-Picture as the browser default for `@window` where available, or FloatingWindow first?
+Walked every phase against the real touch points, plus a scanner / freeze prototype in node
+(21 shipped examples, both plan scripts, 22 edge cases).
+
+1. Opt-in enforcement. A processor-only script has no second realm, so no sharing hazard. The top-level rule,
+   strict mode and freeze apply only when the script declares `class View`, `@view` or `@window`. Existing scripts
+   stay bit-identical, top-level `let` in them keeps working, no migration needed.
+2. Strict mode is already live. The worklet registers scripts via `audioWorklet.addModule` (a module, always
+   strict). The offline worker evaluates the same code with `new Function(code)()` (`offline-worker.ts:355`,
+   sloppy). A `"use strict"` inside the wrapper aligns offline with live, any script that runs live survives it.
+3. Freeze: constructors only, not prototypes (override mistake breaks `this.draw = this.draw.bind(this)`).
+   `Map` / `Set` contents survive `Object.freeze`, so they are rejected. Empty typed arrays freeze fine.
+4. Escape routes the scanner + freeze do NOT catch (both verified):
+   - `class Counter { static #count = 0 }`: private statics are not properties, freeze cannot reach them.
+   - `const next = (() => { let count = 0; return () => ++count })()`: closure state inside a const initializer.
+   Closed in section 1.1 without acorn and without a call whitelist: private static fields are rejected by the
+   scanner (class body depth), closures produced by a call are rejected by the scanner verdict plus the runtime
+   walk. Public static fields stay allowed (frozen, writes throw).
+5. Scanner prototype (`scan.mjs` in the session scratchpad, ~150 lines): all shipped examples and both plan scripts
+   pass. Edge cases pass (multi-line const, leading-dot and ternary continuations, regex containing `{`, nested
+   template literals, `let` in comments and inside classes, division vs regex, async / generator functions,
+   IIFE, `if`, `export`, `const A = 1; let b`). The single deviation, `const A = 1\n(function () {})()`, is
+   rejected. That is JS's own ASI hazard (it parses as calling `1`), rejecting it is better than passing it.
+6. Editor rebuild destroys the iframe. `ScriptDeviceEditor.scheduleRebuild` runs on every add / remove in the
+   param, sample and sidechain hubs plus every code change, and `rebuildControls` calls `replaceChildren()`. A
+   compile that adds 5 params would reload the view 6 times, and moving an iframe in the DOM reloads it anyway
+   (`moveBefore` preserves it, Chrome only). Fix: coalesce rebuilds to one per transaction, keep the iframe as a
+   stable child of the controls container, position everything with CSS `order` (works with grid auto-flow),
+   recreate the iframe only when the script `update` counter changes. Views inside a `@group` live in the group's
+   own grid, so a rebuild must also keep group containers whose section did not change (diff sections by their
+   label + items), otherwise the iframe is moved and reloads. Where the section really changed, use `moveBefore`
+   when available, else accept one reload (state lives in boxes, only transient view state is lost).
+7. Frame host reuse is partial. WCLAP pages load from a separate origin page (`wclap-frame.html` + service
+   worker, empty origin in dev), script views are sandboxed `srcdoc` with an opaque origin. Inbound checks become
+   `event.source === iframe.contentWindow` with origin `"null"`, the port goes out with target `"*"`. Reusable:
+   `FloatingWindow`, key / wheel / context-menu forwarding, the message-guard pattern, window size persistence.
+8. Cross-origin isolation. The studio runs COOP `same-origin` + COEP `require-corp` (`index.html`,
+   `vite.config.ts`). `srcdoc` documents inherit the policy container, but a sandboxed opaque-origin `srcdoc` under
+   COEP must be verified in Chrome, Firefox, Safari, WebView2 and WKWebView (Tauri). One spike page before phase 2.
+9. Preview notes can stick. The host tracks held preview pitches per view instance and sends `note-off` for all
+   of them on view terminate, iframe reload (recompile) and window close.
+10. Rebind risk. Verify that adding / removing a child under a script hub does not re-run the device `init`:
+    `init` calls `script_create`, which replaces the bridge, so the Processor would be rebuilt and every voice
+    lost on each step insert from the view. Records need the lightest path, never a device rebind.
+11. Copy and delete. `BoxGraph.dependenciesOf` follows incoming mandatory pointers, so record and value boxes
+    (mandatory `owner`) should travel with device copies and be deleted with the device. Test both levels
+    (device, record, value) in `DevicesClipboardHandler.test.ts` and the composite copy paths.
+12. Never scan on load. `ScriptCompiler.load` runs for every script device at project load. The rule is enforced
+    on compile only, so a future, stricter scanner can never refuse to load a saved project.
+13. Monaco: shared `javascriptDefaults`, semantic validation off, only `sampleRate` declared. The view API needs an
+    extra lib (`ViewHost` and friends as global types) plus `/** @param {ViewHost} host */` in the examples. Scan
+    errors need line markers, today compile errors only reach the device error icon.
+
+## 10. Decisions (2026-10-21)
+
+1. Many views per device, named by class (`// @view PatternView 10`), default `View`.
+2. Seeded records with `@record` lines (section 3.1).
+3. No latency alignment for streams.
+4. `font-src` allows the studio origin.
+5. Views may write params (like a knob, respects automation).
+6. Collection values are `float32`.
+7. Script windows do not reopen on project load, same as WCLAP windows today.
+8. `FloatingWindow` first, Document Picture-in-Picture later.
+9. A changed collection declaration grows and shrinks, surviving records keep their data (section 3.1).
+10. Escape routes closed as far as possible without being intrusive (section 1.1).
+11. `@view` is allowed inside `@group` (finding 6).
+
+## 11. Open questions
+
+None yet. New ones go here as implementation surfaces them.
