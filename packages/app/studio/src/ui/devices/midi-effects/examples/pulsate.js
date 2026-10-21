@@ -19,6 +19,9 @@ const RETIRE_RADIUS = 2.5
 const CONTACT = 1e-9
 const MAX_EVENTS = 100000
 const PENTATONIC = [0, 2, 5, 7, 9]
+// a circle sounds at most once per 1/64 note, so a block never exceeds 64 notes
+const RETRIGGER = 60
+const CLICK_RADIUS = 3
 const ACTIVE = 1
 const RETIRED = 2
 
@@ -147,7 +150,11 @@ class Solver {
         this.refresh(second)
     }
     distance(first, second) {return this.distances[first * MAX_CIRCLES + second]}
-    isExternal(first, second, radiusA, radiusB) {return radiusA + radiusB <= this.distance(first, second) + CONTACT}
+    // coincident circles are nested, they share one ring and never touch
+    isExternal(first, second, radiusA, radiusB) {
+        const distance = this.distance(first, second)
+        return distance > CONTACT && radiusA + radiusB <= distance + CONTACT
+    }
     refresh(index) {
         const {size, time} = this
         const radius = this.radiusAt(index, time), velocity = this.velocity[index]
@@ -214,8 +221,14 @@ class Processor {
         this.solver = new Solver()
         this.solver.setSpeed(0.125 / BAR)
         this.offset = 0
-        this.collect = (time, first, second) => this.hits.push(time + this.offset,
-            this.solver.radiusAt(first, time), this.solver.radiusAt(second, time))
+        this.sounded = new Float64Array(MAX_CIRCLES).fill(-Infinity)
+        this.collect = (time, first, second) => {
+            for (const index of [first, second]) {
+                if (time - this.sounded[index] < RETRIGGER) continue
+                this.sounded[index] = time
+                this.hits.push(time + this.offset, this.solver.radiusAt(index, time))
+            }
+        }
     }
     paramChanged(name, value) {
         if (name === "growth") this.solver.setSpeed(value / BAR)
@@ -223,7 +236,9 @@ class Processor {
         if (name === "velocity") this.velocity = value
     }
     dataChanged(name) {
-        if (name === "circles") this.solver.sync(this.data.circles)
+        if (name !== "circles") return
+        this.solver.sync(this.data.circles)
+        this.sounded.fill(-Infinity)
     }
     * process(block, events) {
         const {solver} = this
@@ -232,11 +247,9 @@ class Processor {
             this.offset = block.from - solver.time
             this.hits.length = 0
             solver.advance(solver.time + span, this.collect)
-            for (let index = 0; index < this.hits.length; index += 3) {
+            for (let index = 0; index < this.hits.length; index += 2) {
                 const position = Math.max(block.from, this.hits[index])
-                for (const radius of [this.hits[index + 1], this.hits[index + 2]]) {
-                    yield {position, duration: this.length, pitch: radiusToPitch(radius), velocity: this.velocity, cent: 0}
-                }
+                yield {position, duration: this.length, pitch: radiusToPitch(this.hits[index + 1]), velocity: this.velocity, cent: 0}
             }
         }
         if (!this.streams.state.active) return
@@ -282,6 +295,10 @@ class View {
         }
         const x = (event.offsetX - left) / scale, y = (event.offsetY - top) / scale
         if (x < 0 || x > WIDTH || y < 0 || y > HEIGHT) return
+        for (let index = 0; index < circles.length; index++) {
+            const circle = circles.get(index)
+            if (this.isVisible(index) && Math.hypot((circle.x * WIDTH - x) * scale, (circle.y * HEIGHT - y) * scale) <= CLICK_RADIUS) return
+        }
         const values = {x: x / WIDTH, y: y / HEIGHT}
         if (circles.length < MAX_CIRCLES) {
             circles.insert(circles.length, values)
