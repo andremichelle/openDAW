@@ -51,14 +51,30 @@ function isEmpty(table) {
     return table.every(value => value === 0)
 }
 
-function lookup(table, frameA, frameB, blend, phase) {
+const SMOOTHING = 0.005 // seconds a position or bend change takes, a jump between frames would click
+const MAX_UNISON = 7
+
+// 4-point Hermite inside one frame, wrapping around the cycle
+function hermite(table, offset, index, fraction) {
+    const before = table[offset + (index + SIZE - 1) % SIZE]
+    const current = table[offset + index]
+    const next = table[offset + (index + 1) % SIZE]
+    const after = table[offset + (index + 2) % SIZE]
+    const c1 = 0.5 * (next - before)
+    const c2 = before - 2.5 * current + 2 * next - 0.5 * after
+    const c3 = 0.5 * (after - before) + 1.5 * (current - next)
+    return ((c3 * fraction + c2) * fraction + c1) * fraction + current
+}
+
+// `frame` is fractional (0 to FRAMES - 1), neighbouring frames are crossfaded
+function lookup(table, frame, phase) {
+    const frameA = Math.min(FRAMES - 2, frame | 0)
+    const blend = frame - frameA
     const position = phase * SIZE
     const index = position | 0
     const fraction = position - index
-    const next = (index + 1) % SIZE
-    const a = frameA * SIZE, b = frameB * SIZE
-    const valueA = table[a + index] + (table[a + next] - table[a + index]) * fraction
-    const valueB = table[b + index] + (table[b + next] - table[b + index]) * fraction
+    const valueA = hermite(table, frameA * SIZE, index, fraction)
+    const valueB = hermite(table, (frameA + 1) * SIZE, index, fraction)
     return valueA + (valueB - valueA) * blend
 }
 
@@ -70,17 +86,33 @@ class Processor {
     detune = 12
     attack = 0.005
     release = 0.3
+    smoothPosition = 0
+    smoothBend = 0
+    ratios = new Float64Array(MAX_UNISON)
+    pans = new Float64Array(MAX_UNISON)
     table = defaultTable()
+    constructor() {
+        this.updateUnison()
+    }
     paramChanged(label, value) {
         this[label] = value
+        if (label === "unison" || label === "detune") this.updateUnison()
+    }
+    updateUnison() {
+        const count = Math.round(this.unison)
+        for (let index = 0; index < MAX_UNISON; index++) {
+            const spread = count > 1 ? index / (count - 1) * 2 - 1 : 0
+            this.ratios[index] = Math.pow(2, spread * this.detune / 1200)
+            this.pans[index] = spread
+        }
     }
     dataChanged(name) {
         if (name === "table") this.table = isEmpty(this.data.table) ? defaultTable() : this.data.table
     }
     noteOn(pitch, velocity, cent, id) {
         const frequency = 440 * Math.pow(2, (pitch - 69 + cent / 100) / 12)
-        const phases = Float64Array.from({length: 7}, (entry, index) => index / 7)
-        this.voices.push({id, velocity, frequency, phases, gate: true, level: 0})
+        const phases = Float64Array.from({length: MAX_UNISON}, (entry, index) => index / MAX_UNISON)
+        this.voices.push({id, velocity, step: frequency / sampleRate, phases, gate: true, level: 0})
     }
     noteOff(id) {
         for (const voice of this.voices) if (voice.id === id) voice.gate = false
@@ -90,34 +122,34 @@ class Processor {
     }
     process(output, block) {
         const [outL, outR] = output
-        const frame = this.position * (FRAMES - 1)
-        const frameA = Math.min(FRAMES - 2, frame | 0)
-        const blend = frame - frameA
-        const exponent = 1 + this.bend * 4
+        const table = this.table
         const unison = Math.round(this.unison)
-        const gain = 0.2 / Math.sqrt(unison)
+        const gain = (unison > 1 ? 0.2 : 0.1) / Math.sqrt(unison)
         const rise = 1 / (this.attack * sampleRate)
         const fall = Math.exp(-1 / (this.release * sampleRate))
-        for (const voice of this.voices) {
-            for (let s = block.s0; s < block.s1; s++) {
+        const coefficient = 1 - Math.exp(-1 / (SMOOTHING * sampleRate))
+        for (let s = block.s0; s < block.s1; s++) {
+            this.smoothPosition += (this.position - this.smoothPosition) * coefficient
+            this.smoothBend += (this.bend - this.smoothBend) * coefficient
+            const frame = this.smoothPosition * (FRAMES - 1)
+            const exponent = 1 + this.smoothBend * 4
+            for (const voice of this.voices) {
                 voice.level = voice.gate ? Math.min(1, voice.level + rise) : voice.level * fall
                 let left = 0, right = 0
                 for (let index = 0; index < unison; index++) {
-                    const spread = unison > 1 ? index / (unison - 1) * 2 - 1 : 0
-                    const step = voice.frequency * Math.pow(2, spread * this.detune / 1200) / sampleRate
                     const phase = voice.phases[index]
-                    const value = lookup(this.table, frameA, frameA + 1, blend, Math.pow(phase, exponent))
-                    left += value * (1 - spread) * 0.5
-                    right += value * (1 + spread) * 0.5
-                    voice.phases[index] = (phase + step) % 1
+                    const value = lookup(table, frame, exponent === 1 ? phase : Math.pow(phase, exponent))
+                    left += value * (1 - this.pans[index])
+                    right += value * (1 + this.pans[index])
+                    voice.phases[index] = (phase + voice.step * this.ratios[index]) % 1
                 }
-                const amplitude = voice.level * voice.velocity * gain * (unison > 1 ? 2 : 1)
+                const amplitude = voice.level * voice.velocity * gain
                 outL[s] += left * amplitude
                 outR[s] += right * amplitude
             }
         }
         this.voices = this.voices.filter(voice => voice.gate || voice.level > 0.0001)
-        this.streams.frame[0] = frame
+        this.streams.frame[0] = this.smoothPosition * (FRAMES - 1)
     }
 }
 
@@ -217,11 +249,21 @@ class View {
     gesture = null
     constructor(host) {
         this.host = host
-        host.root.style.cssText = "box-sizing: border-box; padding: 4px"
+        host.root.innerHTML = `
+            <style>
+                body { margin: 0; box-sizing: border-box; padding: 4px; height: 100vh; position: relative }
+                canvas { width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ns-resize }
+                button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 9px; color: var(--color-gray);
+                    border: none; border-radius: 2px; padding: 1px 6px; cursor: pointer;
+                    background: hsl(from var(--color-display-stroke) h s l / 0.1) }
+                button:hover { background: hsl(from var(--color-display-stroke) h s l / 0.2) }
+            </style>`
         const canvas = document.createElement("canvas")
-        canvas.style.cssText = "width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ns-resize"
-        canvas.title = "Drag to scan the table, double-click for the editor"
-        host.root.append(canvas)
+        canvas.title = "Drag up and down to scan the table. Double-click opens the editor."
+        const open = document.createElement("button")
+        open.textContent = "Edit Table"
+        open.addEventListener("click", () => host.openWindow("Editor"))
+        host.root.append(canvas, open)
         this.stack = new Stack(host, canvas)
         this.stack.setTable(host.data.table.toArray())
         host.data.table.subscribe(() => this.stack.setTable(host.data.table.toArray()))
@@ -256,14 +298,19 @@ class Editor {
         host.root.innerHTML = `
             <style>
                 body { margin: 0; box-sizing: border-box; padding: 4px; height: 100vh; display: grid; gap: 4px;
-                    grid-template-rows: 18px minmax(0, 1fr) 16px; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) }
-                nav { grid-column: 1 / -1; display: flex; gap: 4px }
+                    grid-template-rows: 18px minmax(0, 1fr) 16px 12px; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) }
+                nav { grid-column: 1 / -1; display: flex; gap: 4px; align-items: stretch }
+                nav span { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255, 255, 255, 0.3);
+                    align-self: center; padding: 0 2px 0 8px; white-space: nowrap }
+                nav span:first-child { padding-left: 2px }
                 button { flex: 1; font: inherit; font-size: 9px; color: var(--color-gray); border: none; border-radius: 2px;
-                    background: hsl(from var(--color-display-stroke) h s l / 0.08); cursor: pointer }
+                    background: hsl(from var(--color-display-stroke) h s l / 0.08); cursor: pointer; white-space: nowrap }
                 button:hover { background: hsl(from var(--color-display-stroke) h s l / 0.16) }
                 canvas { width: 100%; height: 100%; min-height: 0; display: block; border-radius: 4px; touch-action: none }
                 .strip { grid-column: 1 / -1; cursor: pointer }
                 .editor { cursor: crosshair }
+                .hint { grid-column: 1 / -1; font-size: 9px; color: rgba(255, 255, 255, 0.3); white-space: nowrap;
+                    overflow: hidden; text-overflow: ellipsis }
             </style>`
         const nav = document.createElement("nav")
         const stackCanvas = document.createElement("canvas")
@@ -271,10 +318,21 @@ class Editor {
         this.editor.className = "editor"
         this.strip = document.createElement("canvas")
         this.strip.className = "strip"
-        host.root.append(nav, stackCanvas, this.editor, this.strip)
-        for (const [label, shape] of GENERATORS) this.button(nav, label, () => this.write(buildTable(shape)))
-        this.button(nav, "Morph Ends", () => this.morphEnds())
-        this.button(nav, "Smooth Frame", () => this.smoothFrame())
+        this.strip.title = "Pick the frame to edit"
+        this.hint = document.createElement("div")
+        this.hint.className = "hint"
+        host.root.append(nav, stackCanvas, this.editor, this.strip, this.hint)
+        this.group(nav, "Fill all frames")
+        for (const [label, shape] of GENERATORS) {
+            this.button(nav, label, `Replaces all ${FRAMES} frames with ${label}. Undo restores the table.`,
+                () => this.write(buildTable(shape), `Filled all frames with ${label}.`))
+        }
+        this.group(nav, "Selected frame")
+        this.button(nav, "Smooth", "Smooths the selected frame (the one in the right panel).", () => this.smoothFrame())
+        this.group(nav, "Between first and last")
+        this.button(nav, "Morph", `Rewrites frames 2 to ${FRAMES - 1} as a blend from frame 1 to frame ${FRAMES}. Draw the two ends first.`,
+            () => this.morphEnds())
+        this.showHint()
         this.stack = new Stack(host, stackCanvas)
         this.table = defaultTable()
         this.playing = 0
@@ -293,11 +351,21 @@ class Editor {
         this.strip.addEventListener("pointerdown", event => this.select(event))
         this.strip.addEventListener("pointermove", event => event.buttons === 1 && this.select(event))
     }
-    button(parent, label, action) {
+    group(parent, label) {
+        const span = document.createElement("span")
+        span.textContent = label
+        parent.append(span)
+    }
+    button(parent, label, hint, action) {
         const button = document.createElement("button")
         button.textContent = label
         button.addEventListener("click", action)
+        button.addEventListener("pointerenter", () => this.showHint(hint))
+        button.addEventListener("pointerleave", () => this.showHint())
         parent.append(button)
+    }
+    showHint(text = `Draw in the right panel to edit frame ${this.selected + 1}. Pick another frame in the strip. Every change can be undone.`) {
+        this.hint.textContent = text
     }
     load() {
         const stored = this.host.data.table.toArray()
@@ -307,10 +375,11 @@ class Editor {
         this.drawEditor()
         this.drawStrip()
     }
-    write(table) {
+    write(table, done) {
         this.host.edit(() => this.host.data.table.set(table))
         this.table = table
         this.load()
+        this.showHint(done)
     }
     morphEnds() {
         const table = Float32Array.from(this.table)
@@ -320,13 +389,14 @@ class Editor {
                 table[frame * SIZE + index] = table[index] * (1 - t) + table[(FRAMES - 1) * SIZE + index] * t
             }
         }
-        this.write(table)
+        this.write(table, `Morphed frames 2 to ${FRAMES - 1} between frame 1 and frame ${FRAMES}.`)
     }
     smoothFrame() {
         const offset = this.selected * SIZE
         const smoothed = Array.from({length: SIZE}, (entry, index) =>
             (this.table[offset + (index + SIZE - 1) % SIZE] + 2 * this.table[offset + index] + this.table[offset + (index + 1) % SIZE]) / 4)
         this.host.edit(() => this.host.data.table.set(smoothed, offset))
+        this.showHint(`Smoothed frame ${this.selected + 1}.`)
     }
     select(event) {
         this.selected = Math.max(0, Math.min(FRAMES - 1, Math.floor(event.offsetX / this.strip.clientWidth * FRAMES)))
@@ -334,6 +404,7 @@ class Editor {
         this.stack.draw()
         this.drawEditor()
         this.drawStrip()
+        this.showHint()
     }
     point(event) {
         const index = Math.max(0, Math.min(SIZE - 1, Math.round(event.offsetX / this.editor.clientWidth * (SIZE - 1))))
@@ -410,8 +481,10 @@ class Editor {
         context.fillStyle = gradient
         context.fill(path)
         context.font = "9px Rubik"
-        context.fillStyle = "rgba(255, 255, 255, 0.2)"
-        context.fillText(`Frame ${this.selected + 1}`, 6, 12)
+        context.fillStyle = this.host.color("panelBackground", 0.8)
+        context.fillRect(2, 2, 104, 14)
+        context.fillStyle = "rgba(255, 255, 255, 0.3)"
+        context.fillText(`Frame ${this.selected + 1}, draw to edit`, 6, 12)
     }
     drawStrip() {
         const {context, width, height} = this.prepare(this.strip)
