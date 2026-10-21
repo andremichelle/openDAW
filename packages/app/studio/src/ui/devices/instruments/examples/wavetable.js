@@ -198,9 +198,8 @@ class Stack {
         const frontAmplitude = (height - depthY) * 0.36
         return {depthX, depthY, frontWidth, frontAmplitude, baseline: height - frontAmplitude - 6}
     }
-    path(frame, width, height) {
+    path(frame, width, height, depth = frame / (FRAMES - 1)) {
         const {depthX, depthY, frontWidth, frontAmplitude, baseline} = this.geometry(width, height)
-        const depth = frame / (FRAMES - 1)
         const scale = 1 - 0.18 * depth
         const x0 = 4 + depth * depthX, y0 = baseline - depth * depthY
         const waveWidth = frontWidth * scale, amplitude = frontAmplitude * scale
@@ -228,11 +227,11 @@ class Stack {
         context.moveTo(front.x0, front.y0)
         context.lineTo(front.x1, front.y0)
         context.stroke()
+        // evenly spaced lines, each showing its nearest frame, 64 frames do not split evenly into 32 lines
         for (let line = STACK_LINES - 1; line >= 0; line--) {
-            const frame = Math.round(line * (FRAMES - 1) / (STACK_LINES - 1))
-            const nearness = 1 - frame / (FRAMES - 1)
-            context.strokeStyle = this.host.color("displayStroke", 0.05 + 0.3 * Math.pow(nearness, 1.5))
-            context.stroke(this.path(frame, width, height).path)
+            const depth = line / (STACK_LINES - 1)
+            context.strokeStyle = this.host.color("displayStroke", 0.05 + 0.3 * Math.pow(1 - depth, 1.5))
+            context.stroke(this.path(Math.round(depth * (FRAMES - 1)), width, height, depth).path)
         }
         this.dirty = false
     }
