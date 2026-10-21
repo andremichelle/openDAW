@@ -208,6 +208,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         return dispatcher.dispatchAndReturn(this.wclapDescribe, url)
                     }
                     wclapRetry(url: string): void {dispatcher.dispatchAndForget(this.wclapRetry, url)}
+                    scriptMessage(uuid: UUID.Bytes, message: unknown): void {dispatcher.dispatchAndForget(this.scriptMessage, uuid, message)}
                     querySignalGraph(): Promise<SignalGraph> {return dispatcher.dispatchAndReturn(this.querySignalGraph)}
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
@@ -342,6 +343,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     wclapRetry(url: string): void {this.#commands.wclapRetry(url)}
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#commands.scriptMessage(uuid, message)}
     querySignalGraph(): Promise<SignalGraph> {return this.#commands.querySignalGraph()}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {

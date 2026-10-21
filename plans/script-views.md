@@ -89,8 +89,12 @@ Decision: one sandboxed `<iframe>` per view instance (inline or window).
   cookies, `localStorage`, IndexedDB, OPFS, service worker. No `allow-popups`, `allow-modals`, `allow-forms`,
   `allow-top-navigation`.
 - `srcdoc` built by the host: CSP meta `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
-  img-src data: blob:; font-src <studio origin>` so `fetch`, websockets and remote images are blocked (no
-  exfiltration of project data). Fonts load from the studio origin only, so a view uses the studio UI font.
+  img-src data: blob:` so `fetch`, websockets, remote images and remote fonts are blocked (no exfiltration of
+  project data). The studio UI font arrives as bytes over the port and the runtime adds it with
+  `new FontFace("Rubik", bytes)` (spike 2026-10-21: a `font-src` URL load from the opaque origin is a CORS request
+  the font server does not answer, the bytes route needs no server change and keeps the CSP closed).
+- No `eval` / `new Function` inside the iframe (no `'unsafe-eval'`, verified): the host embeds the user script as an
+  inline `<script>` in the `srcdoc`, `</script` escaped.
 - Cannot flow into the studio UI: the iframe IS the clip rect. The host sizes it to its grid slot, the script draws
   inside, overflow is physically impossible.
 - One channel: the host transfers a `MessagePort` at boot. Every inbound message is validated against the manifest
@@ -296,7 +300,7 @@ interface ViewHost {
     readonly streams: Record<string, ViewStream>
     readonly preview: ViewPreview
     edit(procedure: () => void): void                       // one transaction, one undo step
-    gesture(): {edit(procedure: () => void): void, end(): void} // a drag, one undo step at the end (beginModification)
+    gesture(): {edit(procedure: () => void): void, end(): void} // a drag, one undo step (mark / modify / mark)
     send(message: unknown): void                            // structured clone, size capped, not persisted
     openWindow(name?: string): void                         // a declared @window class, default "View"
     closeWindow(name?: string): void
@@ -323,8 +327,8 @@ interface ViewStream {
 
 `class View { constructor(host) {...} }`. An optional `terminate()` is called before teardown as a courtesy hook
 (flush transient state), never as a cleanup duty. The `Terminable` a `subscribe` returns is only for dropping a
-subscription while the view lives. Writes outside `edit` / `gesture` are rejected with an error in the device
-error icon.
+subscription while the view lives. A write outside `edit` / `gesture` (`host.params.cutoff.set(1000)`) is its
+own undo step, like a knob click.
 
 ## 6. Example A: Step Arp (Spielwerk)
 
@@ -555,8 +559,8 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; display: grid; grid-template-rows: 1fr 1fr 16px; gap: 2px; height: 100vh }
-                canvas { width: 100%; height: 100%; display: block; touch-action: none }
+                body { margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 16px; gap: 2px; height: 100vh }
+                canvas { width: 100%; height: 100%; min-height: 0; display: block; touch-action: none }
             </style>`
         this.bars = this.#canvas()
         this.analyser = this.#canvas()
@@ -657,7 +661,7 @@ class View {
         for (let key = 0; key < KEYS; key++) {
             const black = [1, 3, 6, 8, 10].includes(key % 12)
             const pressed = BASE_PITCH + key === this.held
-            context.fillStyle = pressed ? this.host.color("blue") : this.host.color(black ? "dark" : "cream")
+            context.fillStyle = pressed ? this.host.color("blue") : this.host.color(black ? "black" : "cream")
             context.fillRect(key * cell + 0.5, 0, cell - 1, height)
         }
     }
@@ -735,12 +739,60 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
     extra lib (`ViewHost` and friends as global types) plus `/** @param {ViewHost} host */` in the examples. Scan
     errors need line markers, today compile errors only reach the device error icon.
 
+### 9.1 Implementation dry run (2026-10-21, branch `script-views`)
+
+1. Template: commit f6192f2b8 (`@sidechain`) is the end-to-end path for a new script collection: schema +
+   `Pointers` (append only), Rust registry, `observe_*_collection_field` export per crate, `DeviceReg` field via
+   a `device_set_*` setter (no `device_register` signature change), linker + engine exports, bridge, compiler
+   reconcile, editor, manual pages, starter prompts, examples.
+2. Rebind risk (finding 10) is a non-issue: a hub add / remove calls `invalidate`, which ends in `rebind_one`
+   (params only). The device `init` never re-runs, so the Processor survives record inserts.
+3. Records hub is field 14 on all three device boxes (Spielwerk has no 13, the same key everywhere is simpler).
+4. Data delivery simplified: no value deltas. Any record / value change marks the device's data dirty, the engine
+   flushes ONE snapshot per collection at the update clock (next to `params_dirty`), through a new device export
+   `data_changed(state_ptr, collection, ptr, records, fields)` that forwards to `host_script_data`. Values are
+   `f32` record-major in field-index order, a missing value box is `NaN` and the bridge fills the `@field` default.
+   Coalescing per update also means a half-applied transaction is never delivered.
+5. Gesture correction: `beginModification` keeps one graph transaction open, so the engine would hear nothing
+   until release. Views use the knob pattern instead: `editing.mark()` on start, `editing.modify(fn, false)` per
+   move, `editing.mark()` on end = one undo step with live updates (`RelativeUnitValueDragging.tsx`).
+6. Streams: `LiveStreamBroadcaster.broadcastFloats(address, values, before)` takes any JS `Float32Array`, and
+   `before(hasSubscribers)` gives `.active` for free. `ScriptBridges` gets the broadcaster from `processor.ts`
+   (offline worker: its own broadcaster, nobody subscribes). Ring and fft streams keep their ring JS-side and
+   linearize into the published array inside `before`.
+7. The worklet has no JS box graph (sync goes straight to Rust), so data MUST go through the Rust engine.
+8. The view runtime is a raw `.js` file imported with `?raw` (like the examples): an opaque-origin `srcdoc` can
+   import nothing, so the runtime carries its own small radix-2 FFT instead of lib-dsp.
+9. Spike (Chrome, https://localhost:8080, 2026-10-21): the studio page is cross-origin isolated, a
+   `sandbox="allow-scripts"` `srcdoc` iframe with the CSP loads and runs, `self.origin === "null"`,
+   `crossOriginIsolated === false` inside (expected, no SharedArrayBuffer needed), `parent.document`,
+   `localStorage` and `eval` throw, `fetch` is blocked, a transferred `MessagePort` round-trips. Firefox, Safari,
+   WebView2 and WKWebView still to verify.
+
+### 9.2 Implementation notes (branch `script-views`, phases 1 to 7 done)
+
+Where the implementation differs from the text above:
+
+1. A write outside `edit` / `gesture` is its own undo step (not rejected).
+2. Gestures use the knob pattern (mark / modify / mark), not `beginModification` (9.1 item 5).
+3. The studio font reaches views as bytes over the port (`FontFace`), no `font-src` (9.1 item 9).
+4. `@buffer` values arrive in `this.data.<name>` next to the collections (one namespace, one `dataChanged`),
+   names must be unique across `@collection` and `@buffer`.
+5. `@window` opens from the device menu ("<Class> Window") and `host.openWindow`, not a header button. Window
+   sizes are kept per session, not saved with the project. A recompile rebuilds the view inside the open window,
+   removing the `@window` line closes it.
+6. Views get the stock display colours (`host.color("displayStroke" | "displayFill" | "displayGrid", opacity)`) and
+   the studio frames every view like a stock display. The AI starter prompts carry the API and a design guide.
+7. No op cap per view message. A device that did not render in a quantum (bypassed, outside the graph) drops
+   its queued `host.send` messages, so the queue never grows (decided 2026-10-21).
+
 ## 10. Decisions (2026-10-21)
 
 1. Many views per device, named by class, default `View`, placed explicitly by cell (section 4).
 2. Seeded records with `@record` lines (section 3.1).
 3. No latency alignment for streams.
-4. `font-src` allows the studio origin.
+4. Studio font inside views: `font-src` for the studio origin was decided, but the spike showed the font server
+   refuses the opaque origin (no CORS). Replaced by font bytes over the port + `FontFace`, no CSP change.
 5. Views may write params (like a knob, respects automation).
 6. Collection values are `float32`.
 7. Script windows do not reopen on project load, same as WCLAP windows today.

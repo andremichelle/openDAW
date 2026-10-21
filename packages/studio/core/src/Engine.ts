@@ -41,6 +41,7 @@ export interface Engine extends Terminable {
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
     wclapRetry(url: string): void
     querySignalGraph(): Promise<SignalGraph>
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void

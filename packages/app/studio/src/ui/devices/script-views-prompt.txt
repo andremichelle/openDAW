@@ -1,0 +1,113 @@
+## Custom views (optional)
+
+A script can draw its own editor element next to the knobs, store custom data and show live telemetry. The
+script stays ONE file: the directive header, `class Processor` and one or more view classes.
+
+The whole script runs twice: the Processor on the audio thread, every view class in its own sandboxed iframe
+on the main thread. They share NO variables. Talk only through params, data and streams. A script that
+declares a view must keep its top level free of state: only `class`, `function` and `const NAME = ...` are
+allowed there (no `let`, no `var`, no top-level statements, no private static fields). Every top-level value
+is frozen. Create mutable things (typed arrays, Maps) in the constructor.
+
+### Declarations
+
+// @view [Class] <column> <row> <columns> <rows>
+    Places the class (default View) into the device panel grid. Cells are 3.5em squares in 3 rows, 1-based.
+    The knobs fill the remaining free cells. Example: 3 params fill column 1, so start the view at column 2.
+// @window [Class] <width> <height>
+    A resizable floating window in CSS pixels, opened from the device header or host.openWindow(name).
+// @collection <name> [count]
+// @field <name>.<field> [default] [min max type [unit]]   (the @param grammar)
+// @record <name> field=value ...                          (seed one record per line, instead of a count)
+    Persistent, undoable records the view edits and the processor reads.
+// @buffer <name> <length>
+    Persistent floats (a wavetable, a curve) the view writes and the processor reads.
+// @stream <name> <length> [value|ring|fft]
+    Processor to view telemetry (current step, scope, spectrum). Never saved, never rendered.
+
+### Processor side
+
+- this.data.<name>: a frozen array of frozen records ({field: value}) per @collection, a Float32Array per
+  @buffer. Read only. Replaced on every change, read it where you need it.
+- dataChanged(name): called once after construction and after every change, between blocks. Rebuild derived
+  state here (a wavetable from partials), never allocate in process().
+- this.streams.<name>: value streams are a Float32Array you overwrite, ring and fft streams take
+  write(channel, s0, s1). `.active` is true while a view listens, skip the work otherwise.
+- message(data): called with every host.send(data) before the next process() call. Transient.
+
+### View side
+
+class View {
+    constructor(host) { ... }   // build everything inside host.root
+    terminate() { }             // optional, the iframe is thrown away anyway, nothing needs cleaning up
+}
+
+host.root, host.mode ("inline" | "window")
+host.params.<name>: label, value, set(value), subscribe(observer)
+host.data.<collection>: length, get(index), toArray(), set(index, {field: value}), insert(index, values?),
+    remove(index), subscribe(observer)
+host.data.<buffer>: length, get(index), toArray(), set(values, offset?), subscribe(observer)
+host.streams.<name>.subscribe(observer)   (fft streams arrive as magnitudes)
+host.edit(procedure)                      (all writes inside become ONE undo step)
+host.gesture() -> {edit(procedure), end()} (a drag: live edits, ONE undo step at the end)
+host.preview.noteOn(pitch, velocity?), host.preview.noteOff(pitch)
+host.send(data), host.openWindow(name?), host.closeWindow(name?)
+host.color(name, opacity?)
+
+A write outside edit or gesture is its own undo step, like a knob click. Use a gesture for every drag.
+
+### Design guide (match the stock devices)
+
+The view must look like it was always part of openDAW. Derived from the stock device displays:
+
+1. Frame: the studio frames every view (hairline outline, 8px radius). Keep 4px padding inside it and round
+   the canvas 4px. Background transparent, the device panel shows through.
+2. Colours: draw data with host.color("displayStroke", opacity), never with arbitrary colours.
+   - main curve: opacity 0.75 to 1.0
+   - secondary curves and handles: 0.4 to 0.5
+   - reference lines (zero, threshold): 0.25, dashed setLineDash([2, 2])
+   - area under a curve: a vertical gradient from displayStroke at 0.2 to 0.3 down to transparent
+   - grid lines: host.color("displayGrid", 0.12)
+   - selection or a playing step: a faint fill, displayStroke at 0.03 to 0.1
+   Studio accent colours (blue, orange, green, purple) only for small state marks, never for large areas.
+3. Lines: 1 CSS pixel. Scale the context by devicePixelRatio once, then use lineWidth = 1.
+4. Text: inherit the font (Rubik, 11px). Scale labels 8 to 9px in white at 0.2 opacity. No new fonts, no bold.
+5. Canvas size: let CSS size the canvas (width and height 100%, min-height 0, grid rows minmax(0, 1fr)), then
+   in a ResizeObserver set canvas.width/height = clientWidth/Height × devicePixelRatio and redraw. Never let the
+   drawing size feed back into the layout.
+6. Redraw on change only: from subscribe callbacks and the ResizeObserver. No free-running animation loop
+   unless a stream is drawn, then draw in the stream callback.
+7. Interaction: pointer events with setPointerCapture, touch-action none, a clear cursor (ew-resize, crosshair).
+   Keep the hit areas generous. Every drag is a host.gesture(), every click a single write.
+8. Compact: the panel is 3 rows of 3.5em. Show what the sound does (a curve, a pattern, a spectrum), leave
+   numbers to the knobs. Keep the view narrow, 4 to 6 columns: small devices are easier to read and to handle
+   in the device chain. Put large editing into a @window instead of widening the view.
+
+### Pitfalls (mistakes that already happened, avoid them)
+
+1. Empty data as "use the default": if a script treats an all-zero @buffer (or an empty @collection) as "use a
+   built-in default", the FIRST partial edit must store the whole default first (in the same edit), then the
+   change. Otherwise everything outside the edited range becomes silence.
+2. Write only what changed: during a drag call `host.data.<buffer>.set(values, offset)` with just the touched
+   range, never the whole buffer per pointer move. Every write is kept in the undo history and sent to the
+   engine.
+3. Parameters jump once per block: a param that selects or morphs between shapes (table position, waveform,
+   morph) must be smoothed per sample (a few milliseconds), or fast moves and automation click.
+4. Interpolate properly: read tables with 4-point Hermite (or better) and crossfade between neighbouring frames,
+   linear lookups sound grainy when scanning.
+5. Guard degenerate values: `Math.round` on an int param can give 0, a division by a count can become a
+   division by zero. Clamp every value you divide by or index with (at least 1, inside the table). A single NaN
+   silences the device.
+6. Deterministic processor: never use Math.random() in the Processor for anything audible that must render the
+   same offline (an export) as live. Random generators belong in the view, their result stored as data.
+7. Canvas feedback: never size the layout from the canvas you draw (grid rows minmax(0, 1fr), min-height 0),
+   or the view grows with every redraw.
+8. Stacked or 3D drawings: draw lines with opacity fading by depth, never fill the area under each line to hide
+   the ones behind. Overlapping fills create dark patches that look broken.
+9. Buttons must say what they change: group buttons by their target ("Fill all frames", "Selected frames"),
+   explain the hovered button in a hint line, confirm what happened. A button that silently replaces all data
+   is a surprise. Make selections (a frame, a range) explicit and visible.
+10. Discoverable windows: a @window needs a visible button in the inline view (not only a double-click) and
+    a short hint how to open it.
+11. Fresh data: host.data.<buffer>.toArray() returns a copy. Re-read it in the subscribe callback instead of
+    keeping an old array, or a reopened view or another view's edit shows stale data.

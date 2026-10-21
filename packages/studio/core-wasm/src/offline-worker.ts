@@ -183,7 +183,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 pending.add(guarded)
                 guarded.finally(() => pending.delete(guarded))
             }
-            const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
+            const {engine} = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
                 createWclapBridges(memory, config.sampleRate, engineToClient, track))
             // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
             // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
@@ -329,6 +329,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 wclapSaveState: (_uuid: UUID.Bytes): void => {},
                 wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 wclapRetry: (_url: string): void => {},
+                scriptMessage: (_uuid: UUID.Bytes, _message: unknown): void => {},
                 querySignalGraph: (): Promise<SignalGraph> =>
                     Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}),
                 terminate: (): void => {}

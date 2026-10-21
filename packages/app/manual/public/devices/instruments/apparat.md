@@ -286,12 +286,49 @@ The host clears the output buffer before each block. You write to it with `=` or
 
 ---
 
-## 8. Examples
+## 8. Custom Views
+
+A script can place its own editor element into the device panel, store custom data and show live telemetry.
+Everything stays in the one script: the directive header, `class Processor` and the view classes.
+
+```javascript
+// @view 2 1 8 3                   class View at column 2, row 1, 8 columns wide, 3 rows high
+// @window Editor 900 520          a resizable floating window for the class Editor
+// @collection steps 16            16 records ...
+// @field steps.velocity 0.8 0 1 linear
+// @buffer wave 256                256 floats
+// @stream spectrum 512 fft        processor -> view telemetry
+```
+
+| Directive | What it does |
+|-----------|--------------|
+| `@view [Class] <column> <row> <columns> <rows>` | Places a view into the 3-row panel grid, the knobs fill the free cells. Overlapping views are marked red. |
+| `@window [Class] <width> <height>` | A floating window, opened from the device header or `host.openWindow()`. |
+| `@collection` / `@field` / `@record` | Records the view edits and the processor reads (`this.data.<name>`). Saved with the project, undoable. |
+| `@buffer <name> <length>` | Floats the view writes and the processor reads (`this.data.<name>`, a Float32Array). |
+| `@stream <name> <length> [value\|ring\|fft]` | Live values from the processor to the view (`this.streams.<name>`). Never saved. |
+
+Every view runs in its own sandboxed frame: it cannot reach the studio, the network or your files, and it shares
+no variables with the Processor. A script with a view therefore keeps its top level free of state: only `class`,
+`function` and `const` declarations, every top-level value is frozen. The code editor marks violations as you type.
+
+In the view, the class receives `host`: `host.params`, `host.data`, `host.streams`, `host.edit` and
+`host.gesture` (one undo step), `host.preview` (play notes), `host.send` (reaches `message(data)` of the
+Processor) and `host.color` (the studio and display colours). Hover any of them in the code editor for details.
+
+Examples with views: Envelope Synth, Harmonic Synth (drawable partials, preview keys, live spectrum) and Wave Draw (a drawable wavetable).
+
+---
+
+## 9. Examples
 
 Select **Examples** in the code editor toolbar to load ready-made instruments (Simple Sine Synth, Grain Synthesizer).
 
 ---
 
-## 9. AI Assistance
+## 10. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Apparat instruments. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.
+
+The prompt also covers custom views and carries a design guide derived from the stock devices, so a view the AI writes
+looks like part of openDAW.

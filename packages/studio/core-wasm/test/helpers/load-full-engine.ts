@@ -2,6 +2,7 @@
 // same way the AudioWorklet does (engine-processor.ts), so a test can drive the actual DSP graph — not the
 // bare engine with an empty device table. Reuse this for any test that needs real devices / composites.
 
+import type {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {createRequire} from "node:module"
@@ -24,6 +25,7 @@ export type FullEngine = {
     engine: any
     memory: WebAssembly.Memory
     namBridges: NamBridges
+    scriptBridges: ScriptBridges
     deviceBuilds(): number
     // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
     // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
@@ -33,7 +35,8 @@ export type FullEngine = {
 }
 
 export const loadFullEngine = async (sampleRate = 48000,
-                                     onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
+                                     onScriptMessage: (uuid: string, message: string) => void = () => {},
+                                     broadcaster: () => LiveStreamBroadcaster | null = () => null): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(DIST, "wasm", "engine.wasm")))
@@ -46,7 +49,7 @@ export const loadFullEngine = async (sampleRate = 48000,
     // scriptable devices behave exactly as in the worklet.
     ;(globalThis as any).sampleRate = sampleRate
     // The script bridge runs the scriptable devices' user JavaScript over the shared memory (see script-bridge.ts).
-    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage)
+    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage, broadcaster)
     // The nam bridge runs the NeuralAmp devices' nam-wasm inference; in node the binary comes from the package.
     const namBridges = new NamBridges(memory, async () => {
         const namWasmPath = createRequire(path.join(__dirname, "load-full-engine.ts")).resolve("@opendaw/nam-wasm/nam.wasm")
@@ -109,5 +112,5 @@ export const loadFullEngine = async (sampleRate = 48000,
         }
         return satisfied
     }
-    return {engine, memory, namBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
+    return {engine, memory, namBridges, scriptBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }

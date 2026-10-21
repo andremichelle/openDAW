@@ -402,8 +402,14 @@ impl Engine {
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
+        let records = if reg.record_collection_field != 0 || reg.buffer_collection_field != 0 {
+            let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            Some(self.bind_script_records(device_uuid, reg, state_ptr, signal))
+        } else {
+            None
+        };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, records, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -733,6 +739,9 @@ impl Engine {
             for sub in params.param_hub_sub.into_iter().chain(params.sample_hub_sub) {
                 self.graph.unsubscribe(sub);
             }
+            if let Some(records) = params.records {
+                self.teardown_script_records(records);
+            }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
@@ -883,8 +892,8 @@ impl Engine {
         // handles line up by index). Fresh handles start at `last = NaN`, which would re-push EVERY parameter;
         // carrying `last` over means `refresh_params` only pushes the ones whose value actually changed — so a
         // parameter (or whole plugin) unaffected by this automation edit is never re-pushed (and never glides).
-        let previous_last: Vec<(f32, f32)> = params.handles.iter()
-            .map(|handle| (handle.last.get(), handle.last_modulation.get())).collect();
+        let previous_last: Vec<(u32, f32, f32)> = params.handles.iter()
+            .map(|handle| (handle.id, handle.last.get(), handle.last_modulation.get())).collect();
         for sub in core::mem::take(&mut params.field_subs) {
             self.graph.unsubscribe(sub);
         }
@@ -901,8 +910,9 @@ impl Engine {
             collections.append(&mut script_collections);
             armed |= script_armed;
         }
-        for (handle, (last, last_modulation)) in handles.iter().zip(previous_last) {
-            handle.mark(last, last_modulation);
+        // carried over only for an unchanged id: a re-numbered script param must be pushed again under its new id
+        for (handle, (id, last, last_modulation)) in handles.iter().zip(previous_last) {
+            if handle.id == id {handle.mark(last, last_modulation);}
         }
         params.sink.set_params(handles.clone(), armed);
         refresh_params(&handles, params.reg, params.state_ptr, position);

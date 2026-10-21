@@ -1,138 +1,12 @@
 import {int, isDefined, Nullable, Optional, tryCatch} from "@opendaw/lib-std"
 import {ScriptDeclaration} from "./ScriptDeclaration"
+import {ScriptTokenizer} from "./ScriptTokenizer"
 
-type Token = {
-    readonly kind: "word" | "punct" | "literal"
-    readonly text: string
-    readonly offset: int
-    readonly lineStart: boolean
-}
+type Token = ScriptTokenizer.Token
 
-const REGEX_KEYWORDS: ReadonlyArray<string> = [
-    "return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw", "yield", "await", "instanceof"
-]
-const MODIFIERS: ReadonlyArray<string> = ["static", "async", "get", "set"]
-const CONTINUATIONS: ReadonlyArray<string> = ["=", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "!", "?", ":", ",", ".", "(", "[", "~"]
-const IDENTIFIER = /[\p{ID_Start}$_#][\p{ID_Continue}$‌‍]*/uy
-const NUMBER = /\.?\d[\w.]*/y
-
-const regexAllowedAfter = (previous: Optional<Token>): boolean => {
-    if (!isDefined(previous)) {return true}
-    if (previous.kind === "literal") {return false}
-    if (previous.kind === "word") {return REGEX_KEYWORDS.includes(previous.text)}
-    return previous.text !== ")" && previous.text !== "]" && previous.text !== "}"
-}
-
-const tokenize = (code: string): ReadonlyArray<Token> => {
-    const tokens: Array<Token> = []
-    const templateDepths: Array<int> = []
-    let index = 0
-    let braceDepth = 0
-    let lineStart = true
-    const push = (kind: Token["kind"], text: string, offset: int): void => {
-        tokens.push({kind, text, offset, lineStart})
-        lineStart = false
-    }
-    const scanTemplateChunk = (): void => {
-        const start = index
-        while (index < code.length) {
-            const char = code[index]
-            if (char === "\\") {
-                index += 2
-            } else if (char === "`") {
-                index++
-                break
-            } else if (char === "$" && code[index + 1] === "{") {
-                index += 2
-                templateDepths.push(braceDepth)
-                break
-            } else {
-                index++
-            }
-        }
-        push("literal", code.slice(start, index), start)
-    }
-    while (index < code.length) {
-        const char = code[index]
-        if (char === " " || char === "\t" || char === "\n" || char === "\r") {
-            if (char === "\n") {lineStart = true}
-            index++
-            continue
-        }
-        if (char === "/" && code[index + 1] === "/") {
-            const end = code.indexOf("\n", index)
-            index = end === -1 ? code.length : end
-            continue
-        }
-        if (char === "/" && code[index + 1] === "*") {
-            const end = code.indexOf("*/", index + 2)
-            const stop = end === -1 ? code.length : end + 2
-            if (code.slice(index, stop).includes("\n")) {lineStart = true}
-            index = stop
-            continue
-        }
-        if (char === "\"" || char === "'") {
-            const start = index++
-            while (index < code.length && code[index] !== char && code[index] !== "\n") {
-                index += code[index] === "\\" ? 2 : 1
-            }
-            index++
-            push("literal", code.slice(start, index), start)
-            continue
-        }
-        if (char === "`") {
-            index++
-            scanTemplateChunk()
-            continue
-        }
-        if (char === "/" && regexAllowedAfter(tokens.at(-1))) {
-            const start = index++
-            let inClass = false
-            while (index < code.length && code[index] !== "\n") {
-                const current = code[index]
-                if (current === "\\") {
-                    index += 2
-                    continue
-                }
-                if (current === "[") {inClass = true}
-                if (current === "]") {inClass = false}
-                index++
-                if (current === "/" && !inClass) {break}
-            }
-            while (index < code.length && /[a-z]/i.test(code[index])) {index++}
-            push("literal", code.slice(start, index), start)
-            continue
-        }
-        if (char === "}" && templateDepths.length > 0 && templateDepths[templateDepths.length - 1] === braceDepth) {
-            templateDepths.pop()
-            index++
-            scanTemplateChunk()
-            continue
-        }
-        IDENTIFIER.lastIndex = index
-        const identifier = IDENTIFIER.exec(code)
-        if (identifier !== null) {
-            push("word", identifier[0], index)
-            index += identifier[0].length
-            continue
-        }
-        NUMBER.lastIndex = index
-        const number = NUMBER.exec(code)
-        if (number !== null) {
-            push("literal", number[0], index)
-            index += number[0].length
-            continue
-        }
-        if (char === "{") {braceDepth++}
-        if (char === "}") {braceDepth--}
-        push("punct", char, index)
-        index++
-    }
-    return tokens
-}
-
-const isPunct = (token: Optional<Token>, text: string): boolean =>
-    isDefined(token) && token.kind === "punct" && token.text === text
+const {
+    closingBrace, closingParenthesis, CONTINUATIONS, isPunct, MODIFIERS, REGEX_KEYWORDS, splitTopLevel, tokenize
+} = ScriptTokenizer
 
 const isMemberBoundary = (previous: Optional<Token>, token: Token): boolean => {
     if (!isDefined(previous)) {return false}
@@ -141,43 +15,6 @@ const isMemberBoundary = (previous: Optional<Token>, token: Token): boolean => {
     if (!token.lineStart) {return false}
     if (previous.kind === "punct") {return !CONTINUATIONS.includes(previous.text)}
     return previous.kind === "literal" || !REGEX_KEYWORDS.includes(previous.text)
-}
-
-const closingParenthesis = (tokens: ReadonlyArray<Token>, open: int): int => {
-    let depth = 0
-    for (let index = open; index < tokens.length; index++) {
-        if (isPunct(tokens[index], "(")) {depth++}
-        if (isPunct(tokens[index], ")") && --depth === 0) {return index}
-    }
-    return -1
-}
-
-const closingBrace = (tokens: ReadonlyArray<Token>, open: int): int => {
-    let depth = 0
-    for (let index = open; index < tokens.length; index++) {
-        if (isPunct(tokens[index], "{")) {depth++}
-        if (isPunct(tokens[index], "}") && --depth === 0) {return index}
-    }
-    return tokens.length
-}
-
-// token index ranges [start, end) between `from` and `to`, split at commas outside nested brackets
-const splitTopLevel = (tokens: ReadonlyArray<Token>, from: int, to: int): ReadonlyArray<[int, int]> => {
-    const ranges: Array<[int, int]> = []
-    let depth = 0
-    let start = from
-    for (let index = from; index < to; index++) {
-        const token = tokens[index]
-        if (token.kind !== "punct") {continue}
-        if (token.text === "{" || token.text === "(" || token.text === "[") {depth++}
-        if (token.text === "}" || token.text === ")" || token.text === "]") {depth--}
-        if (token.text === "," && depth === 0) {
-            if (index > start) {ranges.push([start, index])}
-            start = index + 1
-        }
-    }
-    if (to > start) {ranges.push([start, to])}
-    return ranges
 }
 
 const editDistance = (left: string, right: string): int => {
@@ -208,7 +45,7 @@ export namespace ScriptEntryPoints {
     export type Method = Entry & { readonly generator: boolean, readonly parameters: ReadonlyArray<Parameter> }
 
     // `keys`: which declaration names `this.<property>.<key>` must match
-    export type Property = Entry & { readonly keys: Nullable<"sample" | "sidechain"> }
+    export type Property = Entry & { readonly keys: Nullable<"sample" | "sidechain" | "collection" | "stream"> }
 
     export type Api = {
         readonly className: string
@@ -304,9 +141,12 @@ export namespace ScriptEntryPoints {
         return typos.find(method => method.name.startsWith(name) || name.startsWith(method.name)) ?? typos.at(0) ?? null
     }
 
-    const declaredKeys = (code: string, keys: "sample" | "sidechain"): Nullable<ReadonlyArray<string>> => {
-        const result = tryCatch(() => keys === "sample" ? ScriptDeclaration.parseSamples(code) : ScriptDeclaration.parseSidechains(code))
-        return result.status === "success" ? result.value.map(({label}) => label) : null
+    const declaredKeys = (code: string, keys: NonNullable<Property["keys"]>): Nullable<ReadonlyArray<string>> => {
+        const result = tryCatch(() => keys === "sample" ? ScriptDeclaration.parseSamples(code).map(({label}) => label)
+            : keys === "sidechain" ? ScriptDeclaration.parseSidechains(code).map(({label}) => label)
+                : keys === "collection" ? [...ScriptDeclaration.parseCollections(code), ...ScriptDeclaration.parseBuffers(code)].map(({name}) => name)
+                    : ScriptDeclaration.parseStreams(code).map(({name}) => name))
+        return result.status === "success" ? result.value : null
     }
 
     const methodFindings = (members: ReadonlyArray<Member>, methods: ReadonlyArray<Method>): ReadonlyArray<Finding> =>
@@ -342,9 +182,10 @@ export namespace ScriptEntryPoints {
             const declared = declaredKeys(code, property.keys)
             if (!isDefined(declared) || declared.includes(access.key.name)) {return [known]}
             const list = declared.length === 0 ? "none" : declared.join(", ")
+            const tag = property.keys === "collection" ? "collection or @buffer" : property.keys
             return [known, {
                 type: "undeclared", name: access.key.name, offset: access.key.offset, entry: property,
-                warning: `No '// @${property.keys} ${access.key.name}' declared (declared: ${list})`
+                warning: `No '// @${tag} ${access.key.name}' declared (declared: ${list})`
             }]
         })
 

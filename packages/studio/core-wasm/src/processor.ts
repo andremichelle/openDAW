@@ -42,6 +42,7 @@ import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-export
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {ScriptBridges} from "./script-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
@@ -64,6 +65,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #stateSender: SyncStream.Writer
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #broadcaster: LiveStreamBroadcaster
+    readonly #scriptBridges: ScriptBridges
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
@@ -140,9 +142,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
         this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
-        const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
-            this.#memory, sampleRate, this.#engineToClient, this.#wclap)
+        const {engine, scriptBridges} = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
+            this.#memory, sampleRate, this.#engineToClient, this.#wclap, () => this.#broadcaster ?? null)
         this.#engine = engine
+        this.#scriptBridges = scriptBridges
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
         this.#hrClock = new HRClock(hrClockBuffer)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, state => {
@@ -250,6 +253,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapSaveState: (uuid: UUID.Bytes): void => this.#guarded(() => this.#wclap.saveState(UUID.toString(uuid))),
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 wclapRetry: (url: string): void => this.#wclap.retry(url),
+                scriptMessage: (uuid: UUID.Bytes, message: unknown): void => this.#scriptBridges.message(UUID.toString(uuid), message),
                 querySignalGraph: (): Promise<SignalGraph> => Promise.resolve(readSignalGraph(engine, this.#memory)),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
@@ -398,6 +402,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }
         }
         engine.render()
+        this.#scriptBridges.afterRender()
         this.#announceRecordingEdges(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
         if (monitoring.length > 0 && monitorOutput !== undefined) {

@@ -76,7 +76,12 @@ struct DeviceReg {
     param_collection_field: u16,
     sample_collection_field: u16,
     // the hub of `WerkstattSidechainBox` children, each one a sidechain port; 0 = none
-    sidechain_collection_field: u16
+    sidechain_collection_field: u16,
+    // the hub of `ScriptRecordBox` children (`@collection` data) and the slot of the device's `data_changed`; 0 = none
+    record_collection_field: u16,
+    // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
+    buffer_collection_field: u16,
+    data_changed_index: u32
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -253,6 +258,49 @@ fn call_device_field_changed(field_changed_index: u32, _state_ptr: u32, id: u32,
     }
     #[cfg(not(test))]
     let _ = (field_changed_index, id, kind, bits, len);
+}
+
+// Call a device's `data_changed(state_ptr, collection, ptr, records, fields)` export to deliver one `@collection`
+// snapshot (`values` record-major, `records * fields` long). Called only off-render (the unit reconcile).
+#[cfg(target_family = "wasm")]
+#[inline]
+pub(crate) fn call_device_data_changed(data_changed_index: u32, state_ptr: u32, collection: u32, values: &[f32], records: u32, fields: u32) {
+    if data_changed_index == 0 {
+        return;
+    }
+    let data_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(data_changed_index as usize) };
+    data_changed(state_ptr, collection, values.as_ptr() as u32, records, fields);
+}
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn call_device_data_changed(data_changed_index: u32, state_ptr: u32, collection: u32, values: &[f32], records: u32, fields: u32) {
+    #[cfg(test)]
+    native_data_changed::record(data_changed_index, state_ptr, collection, values, records, fields);
+    #[cfg(not(test))]
+    let _ = (data_changed_index, state_ptr, collection, values, records, fields);
+}
+
+// Native TEST SEAM: what `call_device_data_changed` delivered.
+#[cfg(all(test, not(target_family = "wasm")))]
+pub(crate) mod native_data_changed {
+    use alloc::vec::Vec;
+    #[derive(Clone, Debug, PartialEq)]
+    pub(crate) struct Delivery {
+        pub(crate) state_ptr: u32,
+        pub(crate) collection: u32,
+        pub(crate) records: u32,
+        pub(crate) fields: u32,
+        pub(crate) values: Vec<f32>
+    }
+    std::thread_local! {
+        static DELIVERIES: core::cell::RefCell<Vec<Delivery>> = const { core::cell::RefCell::new(Vec::new()) };
+    }
+    pub(crate) fn record(_index: u32, state_ptr: u32, collection: u32, values: &[f32], records: u32, fields: u32) {
+        let delivery = Delivery {state_ptr, collection, records, fields, values: values.to_vec()};
+        DELIVERIES.with(|deliveries| deliveries.borrow_mut().push(delivery));
+    }
+    pub(crate) fn take() -> Vec<Delivery> {
+        DELIVERIES.with(|deliveries| core::mem::take(&mut *deliveries.borrow_mut()))
+    }
 }
 
 // Call a device's `sample_changed(state_ptr, id, handle, present)` export to deliver an observed sample (the
@@ -1475,8 +1523,16 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0});
         id
+    }
+
+    fn set_device_record_collection(&mut self, device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.record_collection_field = record_field as u16;
+            reg.buffer_collection_field = buffer_field as u16;
+            reg.data_changed_index = data_changed_index;
+        }
     }
 
     fn set_device_sidechain_collection_field(&mut self, device_id: u32, field: u32) {
@@ -3331,6 +3387,18 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
         let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.set_device_box_type(String::from(name), device_id as usize);
+        }
+    }
+}
+
+/// Set the field keys of a registered device's record and buffer COLLECTION hubs (`observe_record_collection_field`,
+/// `observe_buffer_collection_field`, 0 = none) and the slot of its `data_changed` export. Call after
+/// `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_record_collection(device_id, record_field, buffer_field, data_changed_index);
         }
     }
 }

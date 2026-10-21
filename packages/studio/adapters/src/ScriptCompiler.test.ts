@@ -108,3 +108,62 @@ describe("ScriptCompiler registers each script version once per audio context", 
         expect(modules.length).toBe(1)
     })
 })
+
+describe("ScriptCompiler applies the top-level rule to scripts with a view", () => {
+    const VIEW_CODE = "// @view 1 1 4 3\nconst SCALES = [[0, 2], [0, 3]]\nclass Processor {\n    process() { return typeof globalThis }\n}\nclass View {}"
+    const evaluateRegistry = (wrapped: string, uuid: string) => {
+        new Function(wrapped)()
+        const registry = (globalThis as unknown as Record<string, Record<string, Record<string, { create: new () => { process(): string } }>>>)
+            .openDAW.werkstattProcessors
+        return registry[uuid]
+    }
+
+    it("leaves scripts without a view byte-identical", () => {
+        const wrapped = ScriptCompiler.wrap(CONFIG, "uuid", 1, CODE_A)
+        expect(wrapped).toContain(`create: (function werkstatt() {\n            ${CODE_A}\n            return Processor\n        })(),`)
+        expect(wrapped).not.toContain("use strict")
+    })
+
+    it("refuses to compile a view script with top-level state", async () => {
+        const {context, modules} = createContext()
+        const {editing, device} = createDevice()
+        const compile = ScriptCompiler.create(CONFIG).compile(context, editing, device, `// @view 1 1 4 3\nlet current = 0\n${CODE_A}`)
+        await expect(compile).rejects.toThrow("Line 2: Top-level 'let current' would exist separately")
+        expect(modules.length).toBe(0)
+        expect(device.code.getValue()).toBe("")
+    })
+
+    it("still loads a stored view script that breaks the rule", async () => {
+        const {context, modules} = createContext()
+        const {device} = createDevice(`// @werkstatt js 1 3\n// @view 1 1 4 3\nlet current = 0\n${CODE_A}`)
+        await ScriptCompiler.create(CONFIG).load(context, device)
+        expect(modules.length).toBe(1)
+    })
+
+    it("wraps a view script strict, with shadowed globals and frozen top-level values", () => {
+        const shadowed = evaluateRegistry(ScriptCompiler.wrap(CONFIG, "view-uuid", 1, VIEW_CODE), "view-uuid")
+        expect(new shadowed.create().process()).toBe("undefined")
+        const probe = VIEW_CODE.replace("return typeof globalThis",
+            "return Object.isFrozen(SCALES) && Object.isFrozen(SCALES[0]) ? \"frozen\" : \"open\"")
+        const frozen = evaluateRegistry(ScriptCompiler.wrap(CONFIG, "frozen-uuid", 1, probe), "frozen-uuid")
+        expect(new frozen.create().process()).toBe("frozen")
+    })
+})
+
+describe("ScriptCompiler.wrapView", () => {
+    it("hands the declared view and window classes to the runtime", () => {
+        const code = "// @view PatternView 1 1 4 3\n// @window EditorView 900 520\n// @view 5 1 2 3\nclass Processor {}\nclass PatternView {}\nclass View {}"
+        const received: Array<Record<string, unknown>> = []
+        new Function("__openDAWViews", ScriptCompiler.wrapView(code))((registry: Record<string, unknown>) => received.push(registry))
+        expect(received).toHaveLength(1)
+        expect(Object.keys(received[0])).toEqual(["PatternView", "View", "EditorView"])
+        expect(typeof received[0].PatternView).toBe("function")
+        expect(received[0].EditorView).toBeUndefined()
+    })
+    it("freezes the top level in the view realm too", () => {
+        const code = "// @view 1 1 2 3\nconst SCALES = [1, 2]\nclass View { push() { SCALES.push(3) } }"
+        const received: Array<Record<string, new () => { push(): void }>> = []
+        new Function("__openDAWViews", ScriptCompiler.wrapView(code))((registry: Record<string, new () => { push(): void }>) => received.push(registry))
+        expect(() => new received[0].View().push()).toThrow(TypeError)
+    })
+})

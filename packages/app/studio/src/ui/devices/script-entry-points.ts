@@ -97,6 +97,55 @@ const latency: Property = {
         + "delays every parallel path to match."
 }
 
+const data: Property = {
+    name: "data",
+    keys: "collection",
+    signature: "this.data.<collection>",
+    documentation: [
+        "The records of each `// @collection <name>`: a frozen array of frozen `{field: value}` objects, every",
+        "`@field` present. Each `// @buffer <name> <length>`: a Float32Array copy.",
+        "Replaced (never mutated) on every change, read it in `process` instead of keeping it.",
+        "Read only: the view edits the data, the processor never writes it."
+    ].join("\n")
+}
+
+const streams: Property = {
+    name: "streams",
+    keys: "stream",
+    signature: "this.streams.<name>",
+    documentation: [
+        "Each `// @stream <name> <length> [value|ring|fft]`, telemetry for the views, never rendered or saved.",
+        "",
+        "- `value`: a Float32Array of `length`, overwrite it any time, views receive it once per frame",
+        "- `ring` / `fft`: `write(channel, s0, s1)` appends samples, views get the latest `length` in order",
+        "  (`fft`: `length` magnitudes of the latest `2 × length` samples, `length` a power of two)",
+        "- `.active`: true while a view listens, skip the work otherwise"
+    ].join("\n")
+}
+
+const dataChanged: Method = {
+    name: "dataChanged",
+    generator: false,
+    signature: "dataChanged(name)",
+    parameters: [parameter("name", "name: string", "The `@collection` whose records changed.")],
+    documentation: [
+        "Called once after construction for every `@collection`, then whenever a collection's records change,",
+        "always between blocks. Rebuild derived state here (a wavetable from partials), never in `process`."
+    ].join("\n")
+}
+
+const message: Method = {
+    name: "message",
+    generator: false,
+    signature: "message(data)",
+    parameters: [parameter("data", "data: unknown", "What the view passed to `host.send`, structured-cloned.")],
+    documentation: [
+        "Called with every `host.send(data)` of a view, before the next `process` call, in order.",
+        "Transient: never saved, never undone, never part of an offline render. Anything that must affect the",
+        "rendered sound belongs in a `@param`, `@collection` or `@buffer`."
+    ].join("\n")
+}
+
 const GLOBALS: ReadonlyArray<ScriptEntryPoints.Entry> = [{
     name: "sampleRate",
     signature: "sampleRate: number",
@@ -126,6 +175,8 @@ const werkstattMethods: ReadonlyArray<Method> = [
         ].join("\n")
     },
     paramChanged,
+    dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -185,6 +236,8 @@ const apparatMethods: ReadonlyArray<Method> = [
         documentation: "Called when a note ends, at its exact sample position. Release the voice with this `id`."
     },
     paramChanged,
+    dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -214,6 +267,8 @@ const spielwerkMethods: ReadonlyArray<Method> = [
         ].join("\n")
     },
     paramChanged,
+    dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -223,11 +278,59 @@ const spielwerkMethods: ReadonlyArray<Method> = [
     }
 ]
 
+const HOST = parameter("host", "host: ViewHost", "The view's only connection to its device. Everything else the iframe cannot reach.", [
+    entry("root", "host.root: HTMLElement", "The iframe body. Build the view inside it, nothing can leave the iframe."),
+    entry("mode", "host.mode: \"inline\" | \"window\"", "Whether this instance sits in the device panel or in a window."),
+    entry("params", "host.params.<name>", [
+        "Every `@param` by name: `label`, `value` (mapped), `set(value)` (like a knob, one undo step outside",
+        "`edit`), `subscribe(observer)` (called with the new value)."
+    ].join("\n")),
+    entry("data", "host.data.<collection>", [
+        "Every `@collection` by name: `length`, `get(index)`, `toArray()`, `set(index, {field: value})`,",
+        "`insert(index, values?)`, `remove(index)`, `subscribe(observer)` (called with the new records).",
+        "Every `@buffer` by name: `length`, `get(index)`, `toArray()` (a copy), `set(values, offset?)`, `subscribe(observer)`.",
+        "Writes show immediately in `get`, the studio confirms them and every view and the processor follow."
+    ].join("\n")),
+    entry("streams", "host.streams.<name>", "Every `@stream` by name: `subscribe(observer)` receives its latest values once per frame (fft: magnitudes)."),
+    entry("preview", "host.preview.noteOn(pitch, velocity?) / noteOff(pitch)", "Plays notes into this device's unit, like the keyboard. Held notes are released when the view goes away."),
+    entry("send", "host.send(data)", "Hands `data` to the Processor's `message(data)` before its next process call. Transient, never saved."),
+    entry("edit", "host.edit(procedure)", "Runs `procedure` and applies every write in it as ONE undo step."),
+    entry("gesture", "host.gesture(): {edit(procedure), end()}", "A drag: every `edit` applies live, `end()` closes ONE undo step."),
+    entry("openWindow", "host.openWindow(name?)", "Opens the `@window` of the class `name` (default `View`)."),
+    entry("closeWindow", "host.closeWindow(name?)", "Closes the `@window` of the class `name` (default `View`)."),
+    entry("color", "host.color(name): string", "A studio colour as CSS (`blue`, `orange`, `gray`, `dark`, `shadow`, ...). Also `var(--color-<name>)` in CSS.")
+])
+
+const viewMethods: ReadonlyArray<Method> = [
+    {
+        name: "constructor",
+        generator: false,
+        signature: "constructor(host)",
+        parameters: [HOST],
+        documentation: [
+            "Builds the view. Runs in a sandboxed iframe, never on the audio thread, and shares no variables",
+            "with the Processor: talk to it only through params, collections and streams on `host`.",
+            "",
+            "The iframe is thrown away on recompile and close, nothing needs cleaning up."
+        ].join("\n")
+    },
+    {
+        name: "terminate",
+        generator: false,
+        signature: "terminate()",
+        parameters: [],
+        documentation: "Optional. Called before the iframe is thrown away, for flushing transient state. Not a cleanup duty."
+    }
+]
+
 export namespace ScriptEntryPointDocs {
+    export const view = (className: string): ScriptEntryPoints.Api =>
+        ({className, methods: viewMethods, properties: [], globals: GLOBALS})
+
     export const werkstatt: ScriptEntryPoints.Api =
-        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency], globals: GLOBALS}
+        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data, streams], globals: GLOBALS}
     export const apparat: ScriptEntryPoints.Api =
-        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains], globals: GLOBALS}
+        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data, streams], globals: GLOBALS}
     export const spielwerk: ScriptEntryPoints.Api =
-        {className: "Processor", methods: spielwerkMethods, properties: [], globals: GLOBALS}
+        {className: "Processor", methods: spielwerkMethods, properties: [data, streams], globals: GLOBALS}
 }

@@ -8,6 +8,7 @@ import {
     StringMapping,
     Strings,
     Terminable,
+    tryCatch,
     ValueMapping
 } from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
@@ -34,6 +35,46 @@ export interface SidechainDeclaration {
     readonly label: string
 }
 
+// `// @view [Class] <column> <row> <columns> <rows>`, cells are 1-based and relative to the view's section
+export interface ViewDeclaration {
+    readonly className: string
+    readonly column: number
+    readonly row: number
+    readonly columns: number
+    readonly rows: number
+}
+
+// `// @window [Class] <width> <height>`, size in CSS pixels
+export interface WindowDeclaration {
+    readonly className: string
+    readonly width: number
+    readonly height: number
+}
+
+// `// @collection <name> [count]` with its `// @field <name>.<field> ...` and `// @record <name> field=value` lines
+export interface CollectionDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly fields: ReadonlyArray<ParamDeclaration>
+    // the declared records, every field resolved (seed or default)
+    readonly records: ReadonlyArray<ReadonlyArray<number>>
+}
+
+// `// @buffer <name> <length>`: `length` floats the view writes and the processor reads (this.data.<name>)
+export interface BufferDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly length: number
+}
+
+// `// @stream <name> <length> [value|ring|fft]`: processor -> view telemetry, never persisted
+export interface StreamDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly length: number
+    readonly kind: "value" | "ring" | "fft"
+}
+
 export interface GroupDeclaration {
     readonly label: string
     readonly color: string
@@ -43,6 +84,7 @@ export type DeclarationItem =
     | { readonly type: "param", readonly declaration: ParamDeclaration }
     | { readonly type: "sample", readonly declaration: SampleDeclaration }
     | { readonly type: "sidechain", readonly declaration: SidechainDeclaration }
+    | { readonly type: "view", readonly declaration: ViewDeclaration }
 
 export interface DeclarationSection {
     readonly group: Nullable<GroupDeclaration>
@@ -54,7 +96,16 @@ const PARAM_LINE = /^\/\/ @param .+$/gm
 const SAMPLE_LINE = /^\/\/ @sample .+$/gm
 const SIDECHAIN_LINE = /^\/\/ @sidechain .+$/gm
 const GROUP_LINE = /^\/\/ @group .+$/gm
-const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain) .+$/gm
+const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain|view) .+$/gm
+const VIEW_LINE = /^\/\/ @view\b.*$/gm
+const WINDOW_LINE = /^\/\/ @window\b.*$/gm
+const CLASS_NAME = /^[A-Za-z_$][\w$]*$/
+const BUFFER_LINE = /^\/\/ @buffer\b.*$/gm
+const STREAM_LINE = /^\/\/ @stream\b.*$/gm
+const STREAM_KINDS: ReadonlyArray<StreamDeclaration["kind"]> = ["value", "ring", "fft"]
+const DATA_LINE = /^\/\/ @(collection|field|record)\b.*$/gm
+const NAME = /^[A-Za-z_$][\w$]*$/
+const DEFAULT_VIEW_CLASS = "View"
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
 const LATENCY_LINE = /^\/\/ @latency\b(.*)$/m
@@ -148,6 +199,98 @@ const parseSingleSidechain = (line: string): SidechainDeclaration => {
     return {label: checkName(tokens[0], line)}
 }
 
+// optional class name, then `count` positive integers
+const parseClassAndIntegers = (line: string, tag: string, count: number, usage: string): [string, ReadonlyArray<number>] => {
+    const tokens = line.replace(new RegExp(`^\\/\\/ @${tag}\\s*`), "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
+        .filter(token => token.length > 0)
+    const named = tokens.length > 0 && !/^\d/.test(tokens[0])
+    const className = named ? tokens[0] : DEFAULT_VIEW_CLASS
+    const numbers = named ? tokens.slice(1) : tokens
+    if (!CLASS_NAME.test(className)) {throw new Error(`Malformed @${tag}: '${line}' — '${className}' is not a class name`)}
+    checkName(className, line)
+    if (numbers.length !== count || numbers.some(token => !/^\d+$/.test(token) || parseInt(token) < 1)) {
+        throw new Error(`Malformed @${tag}: '${line}' — expected: ${usage}`)
+    }
+    return [className, numbers.map(token => parseInt(token))]
+}
+
+const parseSingleView = (line: string): ViewDeclaration => {
+    const [className, [column, row, columns, rows]] =
+        parseClassAndIntegers(line, "view", 4, "// @view [Class] <column> <row> <columns> <rows>")
+    return {className, column, row, columns, rows}
+}
+
+const parseSingleWindow = (line: string): WindowDeclaration => {
+    const [className, [width, height]] = parseClassAndIntegers(line, "window", 2, "// @window [Class] <width> <height>")
+    return {className, width, height}
+}
+
+const parseCollectionDeclarations = (code: string): ReadonlyArray<CollectionDeclaration> => {
+    type Draft = { name: string, count: Nullable<number>, fields: Array<ParamDeclaration>, seeds: Array<{ line: string, values: Map<string, string> }> }
+    const drafts: Array<Draft> = []
+    const find = (name: string, line: string): Draft => {
+        const draft = drafts.find(candidate => candidate.name === name)
+        if (!isDefined(draft)) {throw new Error(`'${line}' — no '// @collection ${name}' declared`)}
+        return draft
+    }
+    for (const match of code.matchAll(DATA_LINE)) {
+        const line = match[0]
+        const tokens = line.replace(/^\/\/ @\w+\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+        if (match[1] === "collection") {
+            if (tokens.length < 1 || tokens.length > 2 || !NAME.test(tokens[0]) || (tokens.length === 2 && !/^\d+$/.test(tokens[1]))) {
+                throw new Error(`Malformed @collection: '${line}' — expected: // @collection <name> [count]`)
+            }
+            const name = checkName(tokens[0], line)
+            if (drafts.some(draft => draft.name === name)) {throw new Error(`Duplicate @collection '${name}'`)}
+            drafts.push({name, count: tokens.length === 2 ? parseInt(tokens[1]) : null, fields: [], seeds: []})
+        } else if (match[1] === "field") {
+            const parts = tokens[0]?.split(".") ?? []
+            const [collection, field] = parts
+            if (parts.length !== 2 || !NAME.test(collection) || !NAME.test(field)) {
+                throw new Error(`Malformed @field: '${line}' — expected: // @field <collection>.<name> [default] [min max type [unit]]`)
+            }
+            const draft = find(collection, line)
+            const parsed = tryCatch(() => parseSingleParam(`// @param ${[field, ...tokens.slice(1)].join(" ")}`))
+            if (parsed.status === "failure") {
+                throw new Error(`Malformed @field: '${line}' — ${String(parsed.error).replace(/^Error: Malformed @param: '[^']*'( — )?/, "")}`)
+            }
+            const declaration = parsed.value
+            if (draft.fields.some(other => other.label === declaration.label)) {throw new Error(`Duplicate @field '${collection}.${field}'`)}
+            draft.fields.push({...declaration, label: checkName(field, line)})
+        } else {
+            if (tokens.length < 1) {throw new Error(`Malformed @record: '${line}' — expected: // @record <collection> [field=value ...]`)}
+            const draft = find(tokens[0], line)
+            const values = new Map<string, string>()
+            for (const assignment of tokens.slice(1)) {
+                const [field, value] = assignment.split("=")
+                if (!isDefined(field) || !isDefined(value) || field.length === 0 || value.length === 0) {
+                    throw new Error(`Malformed @record: '${line}' — '${assignment}' is not field=value`)
+                }
+                values.set(field, value)
+            }
+            draft.seeds.push({line, values})
+        }
+    }
+    return drafts.map(({name, count, fields, seeds}, index) => {
+        if (isDefined(count) && seeds.length > 0) {throw new Error(`@collection '${name}' declares a count AND @record lines, use one`)}
+        const records = seeds.length > 0 ? seeds.map(({line, values}) => {
+            for (const field of values.keys()) {
+                if (!fields.some(declaration => declaration.label === field)) {throw new Error(`'${line}' — no @field '${name}.${field}'`)}
+            }
+            return fields.map(declaration => {
+                const text = values.get(declaration.label)
+                if (!isDefined(text)) {return declaration.defaultValue}
+                const value = text === "true" ? 1 : text === "false" ? 0 : Number(text)
+                if (!Number.isFinite(value) || value < declaration.min - FLOAT_TOLERANCE || value > declaration.max + FLOAT_TOLERANCE) {
+                    throw new Error(`'${line}' — ${declaration.label}=${text} is not a number in [${declaration.min}, ${declaration.max}]`)
+                }
+                return value
+            })
+        }) : Array.from({length: count ?? 0}, () => fields.map(({defaultValue}) => defaultValue))
+        return {name, index, fields, records}
+    })
+}
+
 const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
     a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
 
@@ -224,6 +367,49 @@ export namespace ScriptDeclaration {
         return sidechains
     }
 
+    export const parseCollections = parseCollectionDeclarations
+
+    export const parseBuffers = (code: string): ReadonlyArray<BufferDeclaration> => {
+        const collections = parseCollectionDeclarations(code).map(({name}) => name)
+        const buffers: Array<BufferDeclaration> = []
+        for (const match of code.matchAll(BUFFER_LINE)) {
+            const line = match[0]
+            const tokens = line.replace(/^\/\/ @buffer\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+            const [name, length] = tokens
+            if (tokens.length !== 2 || !NAME.test(name) || !/^\d+$/.test(length) || parseInt(length) < 1) {
+                throw new Error(`Malformed @buffer: '${line}' — expected: // @buffer <name> <length>`)
+            }
+            if (buffers.some(buffer => buffer.name === name) || collections.includes(name)) {
+                throw new Error(`Duplicate data name '${name}' (@buffer and @collection share this.data)`)
+            }
+            buffers.push({name: checkName(name, line), index: buffers.length, length: parseInt(length)})
+        }
+        return buffers
+    }
+
+    export const parseStreams = (code: string): ReadonlyArray<StreamDeclaration> => {
+        const streams: Array<StreamDeclaration> = []
+        for (const match of code.matchAll(STREAM_LINE)) {
+            const line = match[0]
+            const tokens = line.replace(/^\/\/ @stream\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+            const [name, length, kindToken = "value"] = tokens
+            const kind = STREAM_KINDS.find(candidate => candidate === kindToken)
+            if (tokens.length < 2 || tokens.length > 3 || !NAME.test(name) || !/^\d+$/.test(length) || parseInt(length) < 1
+                || !isDefined(kind)) {
+                throw new Error(`Malformed @stream: '${line}' — expected: // @stream <name> <length> [value|ring|fft]`)
+            }
+            if (streams.some(stream => stream.name === name)) {throw new Error(`Duplicate @stream '${name}'`)}
+            streams.push({name: checkName(name, line), index: streams.length, length: parseInt(length), kind})
+        }
+        return streams
+    }
+
+    export const parseViews = (code: string): ReadonlyArray<ViewDeclaration> =>
+        Array.from(code.matchAll(VIEW_LINE), match => parseSingleView(match[0]))
+
+    export const parseWindows = (code: string): ReadonlyArray<WindowDeclaration> =>
+        Array.from(code.matchAll(WINDOW_LINE), match => parseSingleWindow(match[0]))
+
     export const parseDeclarationOrder = (code: string): Map<string, number> => {
         const order = new Map<string, number>()
         let match: Nullable<RegExpExecArray>
@@ -264,6 +450,8 @@ export namespace ScriptDeclaration {
                 currentItems.push({type: "sample", declaration: {label: checkName(tokens[0], line)}})
             } else if (type === "sidechain") {
                 currentItems.push({type: "sidechain", declaration: parseSingleSidechain(line)})
+            } else if (type === "view") {
+                currentItems.push({type: "view", declaration: parseSingleView(line)})
             }
         }
         if (currentItems.length > 0 || currentGroup !== null) {
