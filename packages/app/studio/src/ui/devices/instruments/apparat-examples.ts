@@ -6,6 +6,7 @@ import SidechainGate from "./examples/sidechain-gate.js?raw"
 import EnvelopeView from "./examples/envelope-view.js?raw"
 import HarmonicSynth from "./examples/harmonic-synth.js?raw"
 import WaveDraw from "./examples/wave-draw.js?raw"
+import Wavetable from "./examples/wavetable.js?raw"
 import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 
 export const ApparatExamples: ReadonlyArray<CodeEditorExample> = [
@@ -16,5 +17,6 @@ export const ApparatExamples: ReadonlyArray<CodeEditorExample> = [
     {name: "Sidechain Gated Sine", code: SidechainGate},
     {name: "Envelope Synth (View)", code: EnvelopeView},
     {name: "Harmonic Synth (View)", code: HarmonicSynth},
-    {name: "Wave Draw (View)", code: WaveDraw}
+    {name: "Wave Draw (View)", code: WaveDraw},
+    {name: "Wavetable (View)", code: Wavetable}
 ]
