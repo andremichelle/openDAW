@@ -6,6 +6,7 @@ import Alienator from "./examples/alienator.js?raw"
 import Beautifier from "./examples/beautifier.js?raw"
 import SidechainMixer from "./examples/sidechain-mixer.js?raw"
 import SidechainDucker from "./examples/sidechain-ducker.js?raw"
+import ParametricEq from "./examples/parametric-eq.js?raw"
 import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 
 export const WerkstattExamples: ReadonlyArray<CodeEditorExample> = [
@@ -16,5 +17,6 @@ export const WerkstattExamples: ReadonlyArray<CodeEditorExample> = [
     {name: "Alienator", code: Alienator},
     {name: "Beautifier", code: Beautifier},
     {name: "Sidechain Mixer", code: SidechainMixer},
-    {name: "Sidechain Ducker", code: SidechainDucker}
+    {name: "Sidechain Ducker", code: SidechainDucker},
+    {name: "Parametric EQ", code: ParametricEq}
 ]
