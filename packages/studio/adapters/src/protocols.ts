@@ -72,6 +72,8 @@ export interface EngineCommands extends Terminable {
     // loads every failed plugin of this url again (its bundle became available)
     wclapRetry(url: string): void
     querySignalGraph(): Promise<SignalGraph>
+    // a script view's host.send(message): handed to the device's Processor.message() before its next process call
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void
 }
 
 export interface EngineToClient {

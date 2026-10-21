@@ -103,8 +103,9 @@ const data: Property = {
     signature: "this.data.<collection>",
     documentation: [
         "The records of each `// @collection <name>`: a frozen array of frozen `{field: value}` objects, every",
-        "`@field` present. Replaced (never mutated) on every change, read it in `process` instead of keeping it.",
-        "Read only: the view edits the records, the processor never writes them."
+        "`@field` present. Each `// @buffer <name> <length>`: a Float32Array copy.",
+        "Replaced (never mutated) on every change, read it in `process` instead of keeping it.",
+        "Read only: the view edits the data, the processor never writes it."
     ].join("\n")
 }
 
@@ -130,6 +131,18 @@ const dataChanged: Method = {
     documentation: [
         "Called once after construction for every `@collection`, then whenever a collection's records change,",
         "always between blocks. Rebuild derived state here (a wavetable from partials), never in `process`."
+    ].join("\n")
+}
+
+const message: Method = {
+    name: "message",
+    generator: false,
+    signature: "message(data)",
+    parameters: [parameter("data", "data: unknown", "What the view passed to `host.send`, structured-cloned.")],
+    documentation: [
+        "Called with every `host.send(data)` of a view, before the next `process` call, in order.",
+        "Transient: never saved, never undone, never part of an offline render. Anything that must affect the",
+        "rendered sound belongs in a `@param`, `@collection` or `@buffer`."
     ].join("\n")
 }
 
@@ -163,6 +176,7 @@ const werkstattMethods: ReadonlyArray<Method> = [
     },
     paramChanged,
     dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -223,6 +237,7 @@ const apparatMethods: ReadonlyArray<Method> = [
     },
     paramChanged,
     dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -253,6 +268,7 @@ const spielwerkMethods: ReadonlyArray<Method> = [
     },
     paramChanged,
     dataChanged,
+    message,
     {
         name: "reset",
         generator: false,
@@ -272,10 +288,12 @@ const HOST = parameter("host", "host: ViewHost", "The view's only connection to 
     entry("data", "host.data.<collection>", [
         "Every `@collection` by name: `length`, `get(index)`, `toArray()`, `set(index, {field: value})`,",
         "`insert(index, values?)`, `remove(index)`, `subscribe(observer)` (called with the new records).",
+        "Every `@buffer` by name: `length`, `get(index)`, `toArray()` (a copy), `set(values, offset?)`, `subscribe(observer)`.",
         "Writes show immediately in `get`, the studio confirms them and every view and the processor follow."
     ].join("\n")),
     entry("streams", "host.streams.<name>", "Every `@stream` by name: `subscribe(observer)` receives its latest values once per frame (fft: magnitudes)."),
     entry("preview", "host.preview.noteOn(pitch, velocity?) / noteOff(pitch)", "Plays notes into this device's unit, like the keyboard. Held notes are released when the view goes away."),
+    entry("send", "host.send(data)", "Hands `data` to the Processor's `message(data)` before its next process call. Transient, never saved."),
     entry("edit", "host.edit(procedure)", "Runs `procedure` and applies every write in it as ONE undo step."),
     entry("gesture", "host.gesture(): {edit(procedure), end()}", "A drag: every `edit` applies live, `end()` closes ONE undo step."),
     entry("openWindow", "host.openWindow(name?)", "Opens the `@window` of the class `name` (default `View`)."),

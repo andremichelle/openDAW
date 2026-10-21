@@ -4,7 +4,7 @@
 // `@collection` never gets a `data` property.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, ScriptRecordBox, ScriptValueBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ScriptBufferBox, ScriptRecordBox, ScriptValueBox, VaporisateurDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {BoxGraph} from "@opendaw/lib-box"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -23,7 +23,7 @@ class Processor {
         this.calls++
         this.sum = this.data[name].reduce((total, record) => total + record.value, 0)
         if (this.data[name].some(record => record.unused !== 0.5)) this.sum = -1
-        if (!Object.isFrozen(this.data[name]) || !Object.isFrozen(this.data[name][0] ?? {})) this.sum = -2
+        if (!Object.isFrozen(this.data[name]) || !this.data[name].every(record => Object.isFrozen(record))) this.sum = -2
     }
     process({out}, {s0, s1}) {
         const [left, right] = out
@@ -57,7 +57,7 @@ const setup = async (code: string, values: ReadonlyArray<number>) => {
     source.endTransaction()
     new Function(ScriptCompiler.wrap(WERKSTATT, UUID.toString(device.address.uuid), 1, code))()
     const messages: Array<string> = []
-    const {engine, memory} = await loadFullEngine(48000, (_uuid, message) => messages.push(message))
+    const {engine, memory, scriptBridges} = await loadFullEngine(48000, (_uuid, message) => messages.push(message))
     const sync = connectSyncToEngine(engine, memory, source)
     await sync.settle(); engine.bind(); await sync.settle()
     engine.set_metronome_enabled(0)
@@ -74,7 +74,7 @@ const setup = async (code: string, values: ReadonlyArray<number>) => {
         source.endTransaction()
         await sync.settle()
     }
-    return {source, device, records, render, edit, messages}
+    return {source, device, records, render, edit, messages, scriptBridges}
 }
 
 const addRecord = (source: BoxGraph, device: WerkstattDeviceBox, order: number, value: number) => {
@@ -113,11 +113,62 @@ describe("script @collection data reaches the Processor", () => {
         expect(left).toBeCloseTo(0.625, 6)
         expect(right).toBeCloseTo(0.04, 6)
     })
+    it("delivers an emptied collection as an empty array", async () => {
+        const {records, render, edit} = await setup(SUMMING, [0.125, 0.25])
+        render()
+        await edit(() => records.forEach(({record}) => record.delete()))
+        const {left, right} = render()
+        expect(left).toBe(0)
+        expect(right).toBeCloseTo(0.02, 6)
+    })
+    it("hands a @buffer to the Processor as a Float32Array next to the collections", async () => {
+        const code = `// @buffer curve 3
+class Processor {
+    total = 0
+    dataChanged(name) { if (name === "curve") this.total = this.data.curve.reduce((sum, value) => sum + value, 0) + (this.data.curve instanceof Float32Array ? 0 : 100) }
+    process({out}, {s0, s1}) { for (let i = s0; i < s1; i++) { out[0][i] = this.total; out[1][i] = 0 } }
+}`
+        const {source, device, render, edit} = await setup(code, [])
+        await edit(() => ScriptBufferBox.create(source, UUID.generate(), box => {
+            box.owner.refer(device.buffers)
+            box.label.setValue("curve")
+            box.index.setValue(0)
+            box.data.setValue(new Int8Array(new Float32Array([0.25, 0.5, 0.125]).buffer))
+        }))
+        expect(render().left).toBeCloseTo(0.875, 6)
+    })
     it("does not call dataChanged when nothing in the collection changed", async () => {
         const {device, render, edit} = await setup(SUMMING, [0.125])
         render()
         await edit(() => device.label.setValue("Renamed"))
         expect(render().right).toBeCloseTo(0.01, 6)
+    })
+    it("hands host.send messages to message() before the next process call, in order", async () => {
+        const code = `class Processor {
+    value = 0
+    message(data) { this.value = this.value * 10 + data.digit }
+    process({out}, {s0, s1}) { for (let i = s0; i < s1; i++) { out[0][i] = this.value; out[1][i] = 0 } }
+}`
+        const {device, render, scriptBridges, messages} = await setup(code, [])
+        render()
+        const uuid = UUID.toString(device.address.uuid)
+        scriptBridges.message(uuid, {digit: 1})
+        scriptBridges.message(uuid, {digit: 2})
+        expect(render().left).toBe(12)
+        scriptBridges.message(UUID.toString(UUID.generate()), {digit: 9})
+        expect(render().left).toBe(12)
+        expect(messages).toEqual([])
+    })
+    it("silences a device whose message() throws", async () => {
+        const code = `class Processor {
+    message() { throw new Error("broken") }
+    process({out}, {s0, s1}) { for (let i = s0; i < s1; i++) { out[0][i] = 1; out[1][i] = 1 } }
+}`
+        const {device, render, scriptBridges, messages} = await setup(code, [])
+        expect(render().left).toBe(1)
+        scriptBridges.message(UUID.toString(device.address.uuid), {})
+        expect(render().left).toBe(0)
+        expect(messages).toEqual([expect.stringContaining("Runtime error in message: Error: broken")])
     })
     it("leaves scripts without @collection without a data property", async () => {
         const {render, messages} = await setup(PLAIN, [])

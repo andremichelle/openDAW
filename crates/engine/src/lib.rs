@@ -79,6 +79,8 @@ struct DeviceReg {
     sidechain_collection_field: u16,
     // the hub of `ScriptRecordBox` children (`@collection` data) and the slot of the device's `data_changed`; 0 = none
     record_collection_field: u16,
+    // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
+    buffer_collection_field: u16,
     data_changed_index: u32
 }
 
@@ -1521,13 +1523,14 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0, record_collection_field: 0, data_changed_index: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0});
         id
     }
 
-    fn set_device_record_collection(&mut self, device_id: u32, field: u32, data_changed_index: u32) {
+    fn set_device_record_collection(&mut self, device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
         if let Some(reg) = self.devices.get_mut(device_id as usize) {
-            reg.record_collection_field = field as u16;
+            reg.record_collection_field = record_field as u16;
+            reg.buffer_collection_field = buffer_field as u16;
             reg.data_changed_index = data_changed_index;
         }
     }
@@ -3388,13 +3391,14 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
     }
 }
 
-/// Set the field key of a registered device's record COLLECTION hub (`observe_record_collection_field`) and the
-/// slot of its `data_changed` export. Call after `device_register`, before `bind`.
+/// Set the field keys of a registered device's record and buffer COLLECTION hubs (`observe_record_collection_field`,
+/// `observe_buffer_collection_field`, 0 = none) and the slot of its `data_changed` export. Call after
+/// `device_register`, before `bind`.
 #[no_mangle]
-pub extern "C" fn device_set_record_collection(device_id: u32, field: u32, data_changed_index: u32) {
+pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
-            engine.set_device_record_collection(device_id, field, data_changed_index);
+            engine.set_device_record_collection(device_id, record_field, buffer_field, data_changed_index);
         }
     }
 }

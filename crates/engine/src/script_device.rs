@@ -16,6 +16,7 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
+use boxgraph::field::FieldValue;
 use boxgraph::subscription::{Propagation, SubscriptionId};
 use crate::audio_unit::{resolve_and_deliver_sample, visit_member_params, AudioUnitBinding, DeviceParams, SidechainBinding, SidechainPort, Wired};
 use crate::param_automation::ParamHandle;
@@ -154,6 +155,10 @@ const VALUE_FIELD_INDEX_KEY: u16 = 3;
 const VALUE_KEY: u16 = 4;
 // WASM CONTRACT: a `data_changed` call with this collection resets every collection before a snapshot
 pub(crate) const DATA_RESET: u32 = u32::MAX;
+// WASM CONTRACT: a `@buffer` arrives as `data_changed(BUFFER_FLAG | index, values, length, 1)`
+pub(crate) const BUFFER_FLAG: u32 = 0x8000_0000;
+const BUFFER_INDEX_KEY: u16 = 3;
+const BUFFER_DATA_KEY: u16 = 4;
 
 /// A scriptable device's `@collection` data: the `ScriptRecordBox` children of its `records` hub and their
 /// `ScriptValueBox` values. Any change marks it dirty and raises the unit's params signal, the unit reconcile
@@ -161,7 +166,8 @@ pub(crate) const DATA_RESET: u32 = u32::MAX;
 /// delivered. A structural change (a record or value added / removed) re-subscribes the children first.
 pub(crate) struct RecordBinding {
     pub(crate) hub_field: u16,
-    pub(crate) hub_sub: SubscriptionId,
+    pub(crate) buffer_field: u16,
+    pub(crate) hub_subs: Vec<SubscriptionId>,
     pub(crate) child_subs: Vec<SubscriptionId>,
     dirty: Rc<Cell<bool>>,
     structure_dirty: Rc<Cell<bool>>,
@@ -200,22 +206,25 @@ impl Engine {
     /// Bind a scriptable device's `@collection` records: watch the hub and every record / value, and deliver the
     /// first snapshot right away (the device's `init` has run, its bridge exists).
     pub(crate) fn bind_script_records(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, signal: Rc<dyn Fn()>) -> RecordBinding {
-        let hub_field = reg.record_collection_field;
+        let (hub_field, buffer_field) = (reg.record_collection_field, reg.buffer_collection_field);
         let dirty = Rc::new(Cell::new(false));
         let structure_dirty = Rc::new(Cell::new(false));
         let muted = Rc::new(Cell::new(true));
-        let hub_signal = (dirty.clone(), structure_dirty.clone(), muted.clone(), signal.clone());
-        let hub_sub = self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![hub_field]),
-            Box::new(move |_graph, _event| {
-                if hub_signal.2.get() {return}
-                hub_signal.0.set(true);
-                hub_signal.1.set(true);
-                (hub_signal.3)();
-            }));
-        let mut binding = RecordBinding {hub_field, hub_sub, child_subs: Vec::new(), dirty, structure_dirty, muted, signal};
+        let mut hub_subs = Vec::new();
+        for field in [hub_field, buffer_field].into_iter().filter(|field| *field != 0) {
+            let hub_signal = (dirty.clone(), structure_dirty.clone(), muted.clone(), signal.clone());
+            hub_subs.push(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![field]),
+                Box::new(move |_graph, _event| {
+                    if hub_signal.2.get() {return}
+                    hub_signal.0.set(true);
+                    hub_signal.1.set(true);
+                    (hub_signal.3)();
+                })));
+        }
+        let mut binding = RecordBinding {hub_field, buffer_field, hub_subs, child_subs: Vec::new(), dirty, structure_dirty, muted, signal};
         binding.child_subs = self.subscribe_record_children(device_uuid, &binding);
         binding.muted.set(false);
-        self.deliver_script_records(device_uuid, hub_field, reg.data_changed_index, state_ptr);
+        self.deliver_script_records(device_uuid, &binding, reg.data_changed_index, state_ptr);
         binding
     }
 
@@ -231,6 +240,18 @@ impl Engine {
                 signal();
             }
         };
+        if binding.buffer_field != 0 {
+            for buffer in self.collection_children(device_uuid, binding.buffer_field) {
+                for key in [BUFFER_INDEX_KEY, BUFFER_DATA_KEY] {
+                    let notify = changed(false);
+                    subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(buffer, vec![key]),
+                        Box::new(move |_graph, _update| notify())));
+                }
+            }
+        }
+        if binding.hub_field == 0 {
+            return subs;
+        }
         for record in self.collection_children(device_uuid, binding.hub_field) {
             for key in [RECORD_COLLECTION_INDEX_KEY, RECORD_ORDER_KEY] {
                 let notify = changed(false);
@@ -268,7 +289,7 @@ impl Engine {
             binding.child_subs = self.subscribe_record_children(device_uuid, binding);
             binding.muted.set(false);
         }
-        self.deliver_script_records(device_uuid, binding.hub_field, reg.data_changed_index, state_ptr);
+        self.deliver_script_records(device_uuid, binding, reg.data_changed_index, state_ptr);
     }
 
     /// Flush every dirty record binding of a unit's devices.
@@ -279,7 +300,9 @@ impl Engine {
     }
 
     pub(crate) fn teardown_script_records(&mut self, binding: RecordBinding) {
-        self.graph.unsubscribe(binding.hub_sub);
+        for sub in binding.hub_subs {
+            self.graph.unsubscribe(sub);
+        }
         for sub in binding.child_subs {
             self.graph.unsubscribe(sub);
         }
@@ -287,8 +310,22 @@ impl Engine {
 
     /// Reset every collection, then deliver each present one as `f32` record-major in field-index order (`NaN`
     /// where a record has no value box for a field; the bridge fills the `@field` default).
-    fn deliver_script_records(&self, device_uuid: Uuid, hub_field: u16, data_changed_index: u32, state_ptr: u32) {
+    fn deliver_script_records(&self, device_uuid: Uuid, binding: &RecordBinding, data_changed_index: u32, state_ptr: u32) {
         call_device_data_changed(data_changed_index, state_ptr, DATA_RESET, &[], 0, 0);
+        if binding.buffer_field != 0 {
+            for buffer in self.collection_children(device_uuid, binding.buffer_field) {
+                let index = self.graph.field_value(&Address::of(buffer, vec![BUFFER_INDEX_KEY])).and_then(|value| value.as_int32()).unwrap_or(0).max(0) as u32;
+                let values: Vec<f32> = match self.graph.field_value(&Address::of(buffer, vec![BUFFER_DATA_KEY])) {
+                    Some(FieldValue::Bytes(bytes)) => bytes.chunks_exact(4).map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])).collect(),
+                    _ => Vec::new()
+                };
+                call_device_data_changed(data_changed_index, state_ptr, BUFFER_FLAG | index, &values, values.len() as u32, 1);
+            }
+        }
+        if binding.hub_field == 0 {
+            return;
+        }
+        let hub_field = binding.hub_field;
         let int_at = |uuid: Uuid, key: u16| self.graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0);
         let mut collections: BTreeMap<u32, Vec<(i32, Vec<(u32, f32)>)>> = BTreeMap::new();
         for record in self.collection_children(device_uuid, hub_field) {

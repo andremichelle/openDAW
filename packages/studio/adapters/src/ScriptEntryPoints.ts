@@ -144,7 +144,7 @@ export namespace ScriptEntryPoints {
     const declaredKeys = (code: string, keys: NonNullable<Property["keys"]>): Nullable<ReadonlyArray<string>> => {
         const result = tryCatch(() => keys === "sample" ? ScriptDeclaration.parseSamples(code).map(({label}) => label)
             : keys === "sidechain" ? ScriptDeclaration.parseSidechains(code).map(({label}) => label)
-                : keys === "collection" ? ScriptDeclaration.parseCollections(code).map(({name}) => name)
+                : keys === "collection" ? [...ScriptDeclaration.parseCollections(code), ...ScriptDeclaration.parseBuffers(code)].map(({name}) => name)
                     : ScriptDeclaration.parseStreams(code).map(({name}) => name))
         return result.status === "success" ? result.value : null
     }
@@ -182,9 +182,10 @@ export namespace ScriptEntryPoints {
             const declared = declaredKeys(code, property.keys)
             if (!isDefined(declared) || declared.includes(access.key.name)) {return [known]}
             const list = declared.length === 0 ? "none" : declared.join(", ")
+            const tag = property.keys === "collection" ? "collection or @buffer" : property.keys
             return [known, {
                 type: "undeclared", name: access.key.name, offset: access.key.offset, entry: property,
-                warning: `No '// @${property.keys} ${access.key.name}' declared (declared: ${list})`
+                warning: `No '// @${tag} ${access.key.name}' declared (declared: ${list})`
             }]
         })
 

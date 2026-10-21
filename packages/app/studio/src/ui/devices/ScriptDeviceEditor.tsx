@@ -1,6 +1,7 @@
 import css from "./ScriptDeviceEditor.sass?inline"
 import {
     AutomatableParameterFieldAdapter,
+    BufferDeclaration,
     CollectionDeclaration,
     DeclarationSection,
     NoteSignal,
@@ -294,6 +295,10 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const parameter = adapter.parameters.parameters().find(param => param.address.equals(paramBox.value.address))
         return isDefined(parameter) ? [{name, parameter}] : []
     }).flat()
+    const viewBuffers = (): ReadonlyArray<BufferDeclaration> => {
+        const result = tryCatch(() => ScriptDeclaration.parseBuffers(box.code.getValue()))
+        return result.status === "success" ? result.value : []
+    }
     const viewStreams = (): ReadonlyArray<StreamDeclaration> => {
         const result = tryCatch(() => ScriptDeclaration.parseStreams(box.code.getValue()))
         return result.status === "success" ? result.value : []
@@ -312,8 +317,10 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const frame = ScriptViewFrame({
             lifecycle: terminator, editing, userCode: compiler.stripHeader(box.code.getValue()),
             className: view.className, mode: "inline", sampleRate: service.audioContext.sampleRate,
-            params: viewParams(), records: box.records, collections: viewCollections(), streams: viewStreams(),
+            params: viewParams(), records: box.records, collections: viewCollections(),
+            buffers: box.buffers, bufferDeclarations: viewBuffers(), streams: viewStreams(),
             receiver: project.liveStreamReceiver, address: adapter.address, onPreview: preview,
+            onSend: message => project.engine.scriptMessage(box.address.uuid, message),
             onError: showError, onWindow: EmptyExec
         })
         frame.classList.toggle("overflow", ScriptViewLayout.overflows(view))

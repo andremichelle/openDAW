@@ -25,6 +25,7 @@ export type FullEngine = {
     engine: any
     memory: WebAssembly.Memory
     namBridges: NamBridges
+    scriptBridges: ScriptBridges
     deviceBuilds(): number
     // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
     // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
@@ -111,5 +112,5 @@ export const loadFullEngine = async (sampleRate = 48000,
         }
         return satisfied
     }
-    return {engine, memory, namBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
+    return {engine, memory, namBridges, scriptBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }

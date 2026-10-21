@@ -60,6 +60,13 @@ export interface CollectionDeclaration {
     readonly records: ReadonlyArray<ReadonlyArray<number>>
 }
 
+// `// @buffer <name> <length>`: `length` floats the view writes and the processor reads (this.data.<name>)
+export interface BufferDeclaration {
+    readonly name: string
+    readonly index: number
+    readonly length: number
+}
+
 // `// @stream <name> <length> [value|ring|fft]`: processor -> view telemetry, never persisted
 export interface StreamDeclaration {
     readonly name: string
@@ -93,6 +100,7 @@ const DIRECTIVE_LINE = /^\/\/ @(group|param|sample|sidechain|view) .+$/gm
 const VIEW_LINE = /^\/\/ @view\b.*$/gm
 const WINDOW_LINE = /^\/\/ @window\b.*$/gm
 const CLASS_NAME = /^[A-Za-z_$][\w$]*$/
+const BUFFER_LINE = /^\/\/ @buffer\b.*$/gm
 const STREAM_LINE = /^\/\/ @stream\b.*$/gm
 const STREAM_KINDS: ReadonlyArray<StreamDeclaration["kind"]> = ["value", "ring", "fft"]
 const DATA_LINE = /^\/\/ @(collection|field|record)\b.*$/gm
@@ -360,6 +368,24 @@ export namespace ScriptDeclaration {
     }
 
     export const parseCollections = parseCollectionDeclarations
+
+    export const parseBuffers = (code: string): ReadonlyArray<BufferDeclaration> => {
+        const collections = parseCollectionDeclarations(code).map(({name}) => name)
+        const buffers: Array<BufferDeclaration> = []
+        for (const match of code.matchAll(BUFFER_LINE)) {
+            const line = match[0]
+            const tokens = line.replace(/^\/\/ @buffer\s*/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/).filter(token => token.length > 0)
+            const [name, length] = tokens
+            if (tokens.length !== 2 || !NAME.test(name) || !/^\d+$/.test(length) || parseInt(length) < 1) {
+                throw new Error(`Malformed @buffer: '${line}' — expected: // @buffer <name> <length>`)
+            }
+            if (buffers.some(buffer => buffer.name === name) || collections.includes(name)) {
+                throw new Error(`Duplicate data name '${name}' (@buffer and @collection share this.data)`)
+            }
+            buffers.push({name: checkName(name, line), index: buffers.length, length: parseInt(length)})
+        }
+        return buffers
+    }
 
     export const parseStreams = (code: string): ReadonlyArray<StreamDeclaration> => {
         const streams: Array<StreamDeclaration> = []

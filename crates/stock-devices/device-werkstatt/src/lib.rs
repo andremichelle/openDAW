@@ -64,6 +64,12 @@ pub extern "C" fn observe_record_collection_field() -> u32 {
     14
 }
 
+/// The `buffers` hub field key: `ScriptBufferBox` children (`@buffer` data), delivered through `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_buffer_collection_field() -> u32 {
+    15
+}
+
 /// One `@collection` snapshot for the user `Processor` (`this.data`), forwarded to the JS bridge.
 #[no_mangle]
 pub extern "C" fn data_changed(state_ptr: u32, collection: u32, ptr: u32, records: u32, fields: u32) {

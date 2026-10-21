@@ -40,6 +40,7 @@ const PARAM_KIND_UNIT = 0
 const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutput
 const SIDECHAIN_PORT_BASE = 2 // WASM CONTRACT: a script device's sidechain port id = 2 + its `@sidechain` index
 const DATA_RESET = 0xFFFFFFFF // WASM CONTRACT: `host_script_data` with this collection starts a new snapshot
+const BUFFER_FLAG = 0x80000000 // WASM CONTRACT: a `@buffer` arrives as collection BUFFER_FLAG | index
 const STREAM_KEY_BASE = 0x1000 // a `@stream` is broadcast at the device address + [0x1000 + its index]
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
@@ -48,9 +49,10 @@ type SidechainDecl = {label: string, index: number}
 type CollectionDecl = {name: string, index: number, fields: ReadonlyArray<{label: string, index: number, defaultValue: number}>}
 type RawCollection = {records: number, fields: number, values: Float32Array}
 type StreamDecl = {name: string, index: number, length: number, kind: "value" | "ring" | "fft"}
+type BufferDecl = {name: string, index: number, length: number}
 type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>,
     sidechains?: ReadonlyArray<SidechainDecl>, readsSidechains?: boolean, latency?: number, pass: boolean,
-    collections?: ReadonlyArray<CollectionDecl>, streams?: ReadonlyArray<StreamDecl>}
+    collections?: ReadonlyArray<CollectionDecl>, streams?: ReadonlyArray<StreamDecl>, buffers?: ReadonlyArray<BufferDecl>}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -81,10 +83,13 @@ class Bridge {
     // `@collection` data: the engine delivers a snapshot (reset, then each present collection) off-render, it is
     // applied to `proc.data` before the next process call, so `dataChanged` never runs mid-transaction
     collections: ReadonlyArray<CollectionDecl> = []
+    buffers: ReadonlyArray<BufferDecl> = []
     rawData = new Map<number, RawCollection>()
     pendingData: Nullable<Map<number, RawCollection>> = null
     // `@stream` packages of the CURRENT Processor, re-registered on every hot-swap
     streamSubscriptions: ReadonlyArray<Terminable> = []
+    // host.send messages, handed to `message()` before the next process call
+    readonly messages: Array<unknown> = []
     readonly sidechainSilence = new Map<number, ReadonlyArray<Float32Array>>()
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
@@ -128,6 +133,13 @@ const toRecords = (collection: CollectionDecl, raw: Nullable<RawCollection> | un
             const value = index < raw.fields ? raw.values[record * raw.fields + index] : NaN
             return [label, Number.isNaN(value) ? defaultValue : value]
         })))))
+}
+
+// a fresh copy each change (typed arrays cannot be frozen), padded with zeros to the declared length
+const toBuffer = (buffer: BufferDecl, raw: Nullable<RawCollection> | undefined): Float32Array => {
+    const values = new Float32Array(buffer.length)
+    if (isDefined(raw)) {values.set(raw.values.subarray(0, buffer.length))}
+    return values
 }
 
 const SIDECHAIN_HINT = "this.sidechains is only available with a // @sidechain <name> declaration"
@@ -261,6 +273,7 @@ export class ScriptBridges {
                 for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
                 for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
                 bridge.collections = registry.collections ?? []
+                bridge.buffers = registry.buffers ?? []
                 this.#syncData(bridge, true)
                 this.#bindStreams(bridge, proc, registry.streams ?? [])
             } catch (error) {
@@ -295,7 +308,7 @@ export class ScriptBridges {
         const proc = this.#ensureProc(bridge)
         if (proc === null) {return mute()}
         const block = {index, p0, p1, s0, s1, bpm, flags}
-        if (!this.#syncData(bridge, false)) {return mute()}
+        if (!this.#syncData(bridge, false) || !this.#deliverMessages(bridge)) {return mute()}
         try {
             if (bridge.sidechains.length > 0) {
                 this.#deliverSidechains(bridge, s0, s1)
@@ -395,7 +408,7 @@ export class ScriptBridges {
         // is transparent rather than a mute button. A `@no-pass` script keeps its silence, as its author asked.
         const forward = (): number => bridge.pass ? copyEvents(this.#memory.buffer, inPtr, inCount, outPtr, outMax) : 0
         const proc = this.#ensureProc(bridge)
-        if (proc === null || bridge.spielwerk === null || !this.#syncData(bridge, false)) {return forward()}
+        if (proc === null || bridge.spielwerk === null || !this.#syncData(bridge, false) || !this.#deliverMessages(bridge)) {return forward()}
         try {
             return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1, bridge.pass)
         } catch (error) {
@@ -404,9 +417,10 @@ export class ScriptBridges {
         }
     }
 
-    #data(handle: number, collection: number, ptr: number, records: number, fields: number): void {
+    #data(handle: number, signedCollection: number, ptr: number, records: number, fields: number): void {
         const bridge = this.#bridges.get(handle)
         if (bridge === undefined) {return}
+        const collection = signedCollection >>> 0 // wasm hands u32 over as a signed i32
         if (collection === DATA_RESET) {
             bridge.pendingData = new Map()
             return
@@ -416,12 +430,32 @@ export class ScriptBridges {
         bridge.pendingData.set(collection, {records, fields, values})
     }
 
+    // A script view's host.send: queued for every instance of the device (composite replicas included).
+    message(uuid: string, message: unknown): void {
+        for (const bridge of this.#bridges.values()) {
+            if (bridge.uuid === uuid && bridge.proc !== null) {bridge.messages.push(message)}
+        }
+    }
+
+    #deliverMessages(bridge: Bridge): boolean {
+        if (bridge.messages.length === 0) {return true}
+        const messages = bridge.messages.splice(0)
+        const proc = bridge.proc
+        if (proc === null || typeof proc.message !== "function") {return true}
+        const result = tryCatch(() => messages.forEach(message => proc.message(message)))
+        if (result.status === "failure") {
+            this.#silence(bridge, `Runtime error in message: ${result.error}`)
+            return false
+        }
+        return true
+    }
+
     // Apply a pending snapshot (or, with `force`, the current one after a hot-swap) to `proc.data` and call
     // `dataChanged(name)` for every collection whose values changed. A script without `@collection` never
     // gets a `data` property. Returns false when `dataChanged` threw and silenced the device.
     #syncData(bridge: Bridge, force: boolean): boolean {
         const proc = bridge.proc
-        if (proc === null || bridge.collections.length === 0) {
+        if (proc === null || (bridge.collections.length === 0 && bridge.buffers.length === 0)) {
             if (bridge.pendingData !== null) {
                 bridge.rawData = bridge.pendingData
                 bridge.pendingData = null
@@ -431,11 +465,16 @@ export class ScriptBridges {
         const pending = bridge.pendingData
         if (pending === null && !force) {return true}
         const next = pending ?? bridge.rawData
-        const changed = bridge.collections.filter(({index}) => force || !sameCollection(bridge.rawData.get(index), next.get(index)))
+        const changed = [
+            ...bridge.collections.map(({name, index}) => ({name, key: index})),
+            ...bridge.buffers.map(({name, index}) => ({name, key: (BUFFER_FLAG | index) >>> 0}))
+        ].filter(({key}) => force || !sameCollection(bridge.rawData.get(key), next.get(key)))
         bridge.rawData = next
         bridge.pendingData = null
-        proc.data = Object.freeze(Object.fromEntries(bridge.collections.map(collection =>
-            [collection.name, toRecords(collection, next.get(collection.index))])))
+        proc.data = Object.freeze(Object.fromEntries([
+            ...bridge.collections.map(collection => [collection.name, toRecords(collection, next.get(collection.index))]),
+            ...bridge.buffers.map(buffer => [buffer.name, toBuffer(buffer, next.get((BUFFER_FLAG | buffer.index) >>> 0))])
+        ]))
         const result = tryCatch(() => changed.forEach(({name}) => proc.dataChanged?.(name)))
         if (result.status === "failure") {
             this.#silence(bridge, `Runtime error in dataChanged: ${result.error}`)

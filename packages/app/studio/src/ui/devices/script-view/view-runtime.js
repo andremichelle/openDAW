@@ -79,6 +79,28 @@
         if (!Number.isInteger(index) || index < 0 || index >= length) {throw new RangeError(`'${name}' has no record ${index}`)}
     }
     const data = Object.create(null)
+    for (const {name, length} of config.buffers) {
+        dataValues.set(name, Float32Array.from(config.data[name] ?? new Float32Array(length)))
+        data[name] = Object.freeze({
+            length,
+            get(index) {return dataValues.get(name)[index]},
+            toArray() {return dataValues.get(name).slice()},
+            set(values, offset = 0) {
+                if (!Number.isInteger(offset)) {throw new TypeError(`'${name}' expects an integer offset`)}
+                const numbers = Array.from(values, value => {
+                    if (typeof value !== "number" || !Number.isFinite(value)) {throw new TypeError(`'${name}' expects finite numbers`)}
+                    return value
+                })
+                const current = dataValues.get(name)
+                numbers.forEach((value, index) => {
+                    const position = offset + index
+                    if (position >= 0 && position < length) {current[position] = value}
+                })
+                write({type: "buffer-set", buffer: name, offset, values: numbers})
+            },
+            subscribe: observer => subscribe(`data:${name}`, observer)
+        })
+    }
     for (const {name, fields} of config.collections) {
         const defaults = Object.fromEntries(fields.map(({label, defaultValue}) => [label, defaultValue]))
         const replace = records => dataValues.set(name, freezeRecords(records))
@@ -201,6 +223,7 @@
                 }
             })
         },
+        send(message) {post({type: "send", message})},
         openWindow(name) {post({type: "window", action: "open", name: name ?? "View"})},
         closeWindow(name) {post({type: "window", action: "close", name: name ?? "View"})},
         color(name) {return config.colors[name] ?? ""}
@@ -223,9 +246,9 @@
             paramValues.set(message.name, message.value)
             notify(`param:${message.name}`, message.value)
         } else if (message.type === "data") {
-            for (const [name, records] of Object.entries(message.data)) {
+            for (const [name, values] of Object.entries(message.data)) {
                 if (!dataValues.has(name)) {continue}
-                dataValues.set(name, freezeRecords(records))
+                dataValues.set(name, values instanceof Float32Array ? values : freezeRecords(values))
                 notify(`data:${name}`, dataValues.get(name))
             }
         } else if (message.type === "stream") {

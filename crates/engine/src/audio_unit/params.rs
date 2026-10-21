@@ -402,7 +402,7 @@ impl Engine {
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
-        let records = if reg.record_collection_field != 0 {
+        let records = if reg.record_collection_field != 0 || reg.buffer_collection_field != 0 {
             let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
             Some(self.bind_script_records(device_uuid, reg, state_ptr, signal))
         } else {

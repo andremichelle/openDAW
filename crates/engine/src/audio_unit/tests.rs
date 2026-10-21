@@ -156,7 +156,7 @@ fn stub_device(kind: u32) -> DeviceReg {
     DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
-        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, data_changed_index: 0,
+        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0,
         sidechain_collection_field: 0
     }
 }
@@ -5606,4 +5606,39 @@ fn script_records_deliver_one_sorted_snapshot_per_collection_and_follow_edits() 
     engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_C0, vec![4]), old: FieldValue::Float32(8.0), new: FieldValue::Float32(9.0)}],
         &engine.registry).expect("edit after teardown");
     assert_eq!(signals.get(), after_teardown, "a torn-down binding is silent");
+}
+
+#[test]
+fn script_buffers_deliver_their_floats_with_the_buffer_flag_and_follow_edits() {
+    use crate::native_data_changed::take;
+    use crate::script_device::{BUFFER_FLAG, DATA_RESET};
+    use core::cell::Cell;
+    const DEV: Uuid = [60u8; 16];
+    const BUFFER: Uuid = [61u8; 16];
+    let bytes = |values: &[f32]| FieldValue::Bytes(values.iter().flat_map(|value| value.to_le_bytes()).collect());
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook), (15, FieldValue::Hook)]),
+        graph_box(BUFFER, "ScriptBufferBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(2)), (4, bytes(&[0.5, -1.0]))
+        ])
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.buffer_collection_field = 15;
+    reg.data_changed_index = 1;
+    let signals = Rc::new(Cell::new(0));
+    let counter = signals.clone();
+    let mut binding = engine.bind_script_records(DEV, reg, 64, Rc::new(move || counter.set(counter.get() + 1)));
+    let first = take();
+    assert_eq!(first.len(), 2, "a reset, then the buffer (no records)");
+    assert_eq!(first[0].collection, DATA_RESET);
+    assert_eq!((first[1].collection, first[1].records, first[1].fields), (BUFFER_FLAG | 2, 2, 1));
+    assert_eq!(first[1].values, vec![0.5, -1.0]);
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(BUFFER, vec![4]), old: bytes(&[0.5, -1.0]), new: bytes(&[0.25, 0.75])}],
+        &engine.registry).expect("buffer edit");
+    assert_eq!(signals.get(), 1, "a buffer edit raises the signal");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert_eq!(take()[1].values, vec![0.25, 0.75]);
+    engine.teardown_script_records(binding);
 }

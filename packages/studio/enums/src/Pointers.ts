@@ -65,4 +65,5 @@ export enum Pointers {
     ScriptSideChain,
     ScriptRecord,
     ScriptValue,
+    ScriptBuffer,
 }

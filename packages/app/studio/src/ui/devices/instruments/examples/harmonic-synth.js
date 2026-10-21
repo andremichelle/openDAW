@@ -83,8 +83,8 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; display: grid; grid-template-rows: 1fr 1fr 16px; gap: 2px; height: 100vh }
-                canvas { width: 100%; height: 100%; display: block; touch-action: none }
+                body { margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 16px; gap: 2px; height: 100vh }
+                canvas { width: 100%; height: 100%; min-height: 0; display: block; touch-action: none }
             </style>`
         this.bars = this.#canvas()
         this.analyser = this.#canvas()

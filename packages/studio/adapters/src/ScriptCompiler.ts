@@ -17,6 +17,7 @@ import {
 } from "./ScriptDeclaration"
 import {ScriptTopLevel} from "./ScriptTopLevel"
 import {ScriptRecords} from "./ScriptRecords"
+import {ScriptBuffers} from "./ScriptBuffers"
 import {DeviceBox} from "./DeviceBox"
 import {Promises} from "@opendaw/lib-runtime"
 
@@ -269,6 +270,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         sidechains: ${JSON.stringify(sidechains)},
         collections: ${JSON.stringify(collections)},
         streams: ${JSON.stringify(ScriptDeclaration.parseStreams(userCode))},
+        buffers: ${JSON.stringify(ScriptDeclaration.parseBuffers(userCode))},
         readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
         latency: ${ScriptDeclaration.parseLatency(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}
@@ -334,6 +336,7 @@ export namespace ScriptCompiler {
         readonly samples: Field<Pointers.Sample>
         readonly sideChains?: Field<Pointers.ScriptSideChain>
         readonly records?: Field<Pointers.ScriptRecord>
+        readonly buffers?: Field<Pointers.ScriptBuffer>
     }
 
     export type Config = {
@@ -387,6 +390,7 @@ export namespace ScriptCompiler {
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
                 const sidechains = ScriptDeclaration.parseSidechains(userCode)
                 const collections = ScriptDeclaration.parseCollections(userCode)
+                const buffers = ScriptDeclaration.parseBuffers(userCode)
                 const previous = previousCollections(deviceBox.code.getValue(), headerPattern)
                 const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
                 validateCode(wrappedCode)
@@ -400,6 +404,7 @@ export namespace ScriptCompiler {
                     reconcileSamples(deviceBox, samples, order)
                     if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}
                     if (isDefined(deviceBox.records)) {reconcileRecords(deviceBox.records, collections, previous)}
+                    if (isDefined(deviceBox.buffers)) {ScriptBuffers.reconcile(deviceBox.buffers, buffers)}
                 }
                 if (append) {
                     editing.append(modifier)

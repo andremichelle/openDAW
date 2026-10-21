@@ -7,8 +7,10 @@ import {Address, Field} from "@opendaw/lib-box"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {
     AutomatableParameterFieldAdapter,
+    BufferDeclaration,
     CollectionDeclaration,
     ScriptCompiler,
+    ScriptBuffers,
     ScriptRecords,
     ScriptRecordValues,
     StreamDeclaration
@@ -32,10 +34,13 @@ type Construct = {
     params: ReadonlyArray<ScriptViewParam>
     records: Optional<Field<Pointers.ScriptRecord>>
     collections: ReadonlyArray<CollectionDeclaration>
+    buffers: Optional<Field<Pointers.ScriptBuffer>>
+    bufferDeclarations: ReadonlyArray<BufferDeclaration>
     streams: ReadonlyArray<StreamDeclaration>
     receiver: LiveStreamReceiver
     address: Address
     onPreview: (on: boolean, pitch: number, velocity: number) => void
+    onSend: Procedure<unknown>
     onError: Procedure<string>
     onWindow: (action: "open" | "close", className: string) => void
 }
@@ -77,19 +82,24 @@ body { font-family: Rubik, sans-serif; font-size: 11px; color: var(--color-gray)
 
 export const ScriptViewFrame = ({
                                     lifecycle, editing, userCode, className, mode, sampleRate, params, records, collections,
-                                    streams, receiver, address, onPreview, onError, onWindow
+                                    buffers, bufferDeclarations, streams, receiver, address, onPreview, onSend, onError, onWindow
                                 }: Construct): HTMLIFrameElement => {
     const streamsByName = new Map(streams.map(stream => [stream.name, stream]))
     const paramsByName = new Map(params.map(({name, parameter}) => [name, parameter]))
     const collectionsByName = new Map(collections.map(collection => [collection.name, collection]))
-    const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> } => isDefined(records)
-        ? Object.fromEntries(collections.map(collection => [collection.name, ScriptRecords.read(records, collection)]))
-        : {}
+    const buffersByName = new Map(bufferDeclarations.map(buffer => [buffer.name, buffer]))
+    const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> | Float32Array } => ({
+        ...(isDefined(records)
+            ? Object.fromEntries(collections.map(collection => [collection.name, ScriptRecords.read(records, collection)])) : {}),
+        ...(isDefined(buffers)
+            ? Object.fromEntries(bufferDeclarations.map(buffer => [buffer.name, ScriptBuffers.read(buffers, buffer)])) : {})
+    })
     const config = {
         className, mode, sampleRate, colors: colorMap(),
         params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()})),
         collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
         streams: streams.map(({name, length, kind}) => ({name, length, kind})),
+        buffers: bufferDeclarations.map(({name, length}) => ({name, length})),
         data: readData()
     }
     const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
@@ -115,6 +125,12 @@ export const ScriptViewFrame = ({
             const parameter = paramsByName.get(op.name)
             if (!isDefined(parameter) || typeof op.value !== "number" || !Number.isFinite(op.value)) {return}
             parameter.setUnitValue(parameter.valueMapping.x(op.value))
+            return
+        }
+        if (op.type === "buffer-set" && isDefined(buffers) && typeof op.buffer === "string" && Array.isArray(op.values)
+            && typeof op.offset === "number" && Number.isInteger(op.offset)) {
+            const buffer = buffersByName.get(op.buffer)
+            if (isDefined(buffer)) {ScriptBuffers.write(buffers, buffer, op.offset, op.values.map(value => typeof value === "number" ? value : 0))}
             return
         }
         if (!isDefined(records) || typeof op.collection !== "string") {return}
@@ -174,6 +190,8 @@ export const ScriptViewFrame = ({
                 streamSubscriptions.get(name)?.terminate()
                 streamSubscriptions.delete(name)
             }
+        } else if (message.type === "send") {
+            onSend(message.message)
         } else if (message.type === "preview" && typeof message.pitch === "number" && Number.isInteger(message.pitch)
             && message.pitch >= 0 && message.pitch <= 127) {
             if (message.on === true) {
@@ -203,6 +221,9 @@ export const ScriptViewFrame = ({
                 parameter.subscribe(() => send({type: "param", name, value: parameter.getControlledValue()}))),
             isDefined(records) && collections.length > 0
                 ? ScriptRecords.observe(records, () => send({type: "data", data: readData()}))
+                : Terminable.Empty,
+            isDefined(buffers) && bufferDeclarations.length > 0
+                ? ScriptBuffers.observe(buffers, () => send({type: "data", data: readData()}))
                 : Terminable.Empty,
             Terminable.create(() => {
                 send({type: "terminate"})

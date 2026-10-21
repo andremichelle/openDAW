@@ -50,7 +50,8 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
                                       sampleRate: number, engineToClient: EngineToClient,
                                       wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient),
-                                      broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null): EngineExports => {
+                                      broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null)
+    : { engine: EngineExports, scriptBridges: ScriptBridges } => {
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
@@ -65,7 +66,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))
     modules.effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
-    return engine
+    return {engine, scriptBridges}
 }
 
 // Pop every sample/soundfont the engine queued and run the load handshake for each: fetch + decode over
