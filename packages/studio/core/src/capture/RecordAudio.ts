@@ -58,6 +58,7 @@ export namespace RecordAudio {
         let takeNumber: int = 0
         let firstRecordingTick: Option<number> = Option.None
         let placementLatency: Latency = startLatency
+        let isSaved: boolean = false
 
         const {env: {audioContext}, engine: {preferences: {settings: {recording}}}} = project
         const {sampleRate} = audioContext
@@ -177,6 +178,7 @@ export namespace RecordAudio {
                 })).unwrapOrElse(deliveredFrames)
         }
         recordingWorklet.onSaved = () => {
+            isSaved = true
             disconnectSource()
             project.trackUserCreatedSample(fileUuid)
             editing.mark()
@@ -208,6 +210,7 @@ export namespace RecordAudio {
                     if (deliveredFrames < numberOfFrames) {
                         const waitMillis = ((numberOfFrames - deliveredFrames) / sampleRate + TAIL_WAIT_SECONDS) * 1000
                         Runtime.scheduleTimeout(() => {
+                            if (isSaved) {return}
                             const arrivedFrames = recordingWorklet.numberOfFrames
                             if (arrivedFrames >= numberOfFrames) {return}
                             console.warn("[RecordAudio] input tail never arrived", {numberOfFrames, arrivedFrames})
