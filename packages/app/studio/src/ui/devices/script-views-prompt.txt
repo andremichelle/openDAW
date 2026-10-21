@@ -80,7 +80,8 @@ The view must look like it was always part of openDAW. Derived from the stock de
 7. Interaction: pointer events with setPointerCapture, touch-action none, a clear cursor (ew-resize, crosshair).
    Keep the hit areas generous. Every drag is a host.gesture(), every click a single write.
 8. Compact: the panel is 3 rows of 3.5em. Show what the sound does (a curve, a pattern, a spectrum), leave
-   numbers to the knobs.
+   numbers to the knobs. Keep the view narrow, 4 to 6 columns: small devices are easier to read and to handle
+   in the device chain. Put large editing into a @window instead of widening the view.
 
 ### Pitfalls (mistakes that already happened, avoid them)
 

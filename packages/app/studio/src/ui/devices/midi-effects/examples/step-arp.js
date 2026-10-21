@@ -1,9 +1,9 @@
 // @label Step Arp
 // @no-pass
-// @param rate    120  30  480  int
-// @param mode    0    0   2    int
-// @param octaves 1    1   4    int
-// @view 2 1 10 3
+// @param division 16  1   32   int
+// @param mode     0   0   2    int
+// @param octaves  1   1   4    int
+// @view 2 1 6 3
 // @collection steps 16
 // @field steps.on        true
 // @field steps.velocity  0.8   0    1   linear
@@ -12,12 +12,12 @@
 // @stream step 1
 
 class Processor {
-    rate = 120
+    rate = 240
     mode = 0
     octaves = 1
     held = []
     paramChanged(name, value) {
-        if (name === "rate") this.rate = value
+        if (name === "division") this.rate = Math.max(1, Math.round(3840 / Math.max(1, value)))
         if (name === "mode") this.mode = value
         if (name === "octaves") this.octaves = value
     }
@@ -50,7 +50,7 @@ class Processor {
                     position,
                     duration: Math.max(1, Math.floor(this.rate * step.gate)),
                     pitch: Math.max(0, Math.min(127, source.pitch + Math.floor(order / this.held.length) * 12 + step.transpose)),
-                    velocity: source.velocity * step.velocity,
+                    velocity: step.velocity,
                     cent: source.cent
                 }
             }

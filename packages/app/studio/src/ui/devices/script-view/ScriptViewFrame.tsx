@@ -240,6 +240,9 @@ export const ScriptViewFrame = ({
                 releasePreview()
             })
         )
+        // a re-attached iframe reloads with its creation srcdoc, so every connect sends the current state
+        params.forEach(({name, parameter}) => send({type: "param", name, value: parameter.getControlledValue()}))
+        if (collections.length > 0 || bufferDeclarations.length > 0) {send({type: "data", data: readData()})}
         loadFonts()
             .then(fonts => target.postMessage({fonts}, "*", [channel.port2]))
             .catch(() => target.postMessage({fonts: []}, "*", [channel.port2]))

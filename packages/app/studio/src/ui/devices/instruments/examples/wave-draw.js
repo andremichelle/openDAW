@@ -1,7 +1,7 @@
 // @label Wave Draw
 // @param attack  0.005 0.001 1   exp  s
 // @param release 0.2   0.01  2   exp  s
-// @view 2 1 10 3
+// @view 2 1 6 3
 // @buffer wave 256
 
 const SIZE = 256
