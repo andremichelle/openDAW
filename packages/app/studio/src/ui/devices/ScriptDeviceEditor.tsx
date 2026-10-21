@@ -1,11 +1,7 @@
 import css from "./ScriptDeviceEditor.sass?inline"
 import {
     AutomatableParameterFieldAdapter,
-    BufferDeclaration,
-    CollectionDeclaration,
     DeclarationSection,
-    NoteSignal,
-    StreamDeclaration,
     DeviceBoxAdapter,
     DeviceHost,
     GroupDeclaration,
@@ -58,7 +54,7 @@ import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
 import {SidechainSelector} from "@/ui/devices/SidechainSelector"
-import {ScriptViewFrame, ScriptViewParam} from "@/ui/devices/script-view/ScriptViewFrame"
+import {ScriptViews, ScriptWindows} from "@/ui/devices/script-view/ScriptViews"
 
 const className = Html.adoptStyleSheet(css, "ScriptDeviceEditor")
 
@@ -291,37 +287,12 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         element.style.gridRow = `${row} / span ${rows}`
         return element
     }
-    const viewParams = (): ReadonlyArray<ScriptViewParam> => Array.from(paramBoxesByLabel, ([name, paramBox]) => {
-        const parameter = adapter.parameters.parameters().find(param => param.address.equals(paramBox.value.address))
-        return isDefined(parameter) ? [{name, parameter}] : []
-    }).flat()
-    const viewBuffers = (): ReadonlyArray<BufferDeclaration> => {
-        const result = tryCatch(() => ScriptDeclaration.parseBuffers(box.code.getValue()))
-        return result.status === "success" ? result.value : []
-    }
-    const viewStreams = (): ReadonlyArray<StreamDeclaration> => {
-        const result = tryCatch(() => ScriptDeclaration.parseStreams(box.code.getValue()))
-        return result.status === "success" ? result.value : []
-    }
-    const preview = (on: boolean, pitch: number, velocity: number): void => {
-        const uuid = adapter.deviceHost().audioUnitBoxAdapter().box.address.uuid
-        project.engine.noteSignal(on ? NoteSignal.on(uuid, pitch, velocity) : NoteSignal.off(uuid, pitch))
-    }
-    const viewCollections = (): ReadonlyArray<CollectionDeclaration> => {
-        const result = tryCatch(() => ScriptDeclaration.parseCollections(box.code.getValue()))
-        return result.status === "success" ? result.value : []
-    }
-        const createViewElement = (terminator: Terminator, view: ViewDeclaration): Nullable<HTMLElement> => {
+    const createViewElement = (terminator: Terminator, view: ViewDeclaration): Nullable<HTMLElement> => {
         const area = ScriptViewLayout.visibleArea(view)
         if (!isDefined(area)) {return null}
-        const frame = ScriptViewFrame({
-            lifecycle: terminator, editing, userCode: compiler.stripHeader(box.code.getValue()),
-            className: view.className, mode: "inline", sampleRate: service.audioContext.sampleRate,
-            params: viewParams(), records: box.records, collections: viewCollections(),
-            buffers: box.buffers, bufferDeclarations: viewBuffers(), streams: viewStreams(),
-            receiver: project.liveStreamReceiver, address: adapter.address, onPreview: preview,
-            onSend: message => project.engine.scriptMessage(box.address.uuid, message),
-            onError: showError, onWindow: EmptyExec
+        const frame = ScriptViews.createFrame({
+            lifecycle: terminator, service, adapter, userCode: () => compiler.stripHeader(box.code.getValue()),
+            className: view.className, mode: "inline", onError: showError
         })
         frame.classList.toggle("overflow", ScriptViewLayout.overflows(view))
         return placeInGrid(frame, area)
@@ -457,7 +428,16 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
-                      populateMenu={parent => config.populateMenu(parent, service, deviceHost, adapter)}
+                      populateMenu={parent => {
+                          config.populateMenu(parent, service, deviceHost, adapter)
+                          const windows = tryCatch(() => ScriptDeclaration.parseWindows(box.code.getValue()))
+                          if (windows.status === "failure") {return}
+                          windows.value.forEach(({className}, index) => parent.addMenuItem(MenuItem.default({
+                              label: `${className} Window`, checked: ScriptWindows.isOpen(adapter, className), separatorBefore: index === 0
+                          }).setTriggerProcedure(() => ScriptWindows.isOpen(adapter, className)
+                              ? ScriptWindows.close(adapter, className)
+                              : ScriptWindows.open(service, adapter, () => compiler.stripHeader(box.code.getValue()), className))))
+                      }}
                       populateControls={() => controlsContainer}
                       populateMeter={() => config.populateMeter({lifecycle, service, adapter})}
                       icon={config.icon}/>

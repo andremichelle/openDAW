@@ -2,6 +2,7 @@
 // @param attack  0.005 0.001 2   exp  s
 // @param release 0.3   0.01  4   exp  s
 // @view 2 1 12 3
+// @window 720 360
 // @collection partials
 // @field partials.level 0 0 1 linear
 // @record partials level=1

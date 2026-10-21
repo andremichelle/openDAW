@@ -769,6 +769,23 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
    `localStorage` and `eval` throw, `fetch` is blocked, a transferred `MessagePort` round-trips. Firefox, Safari,
    WebView2 and WKWebView still to verify.
 
+### 9.2 Implementation notes (branch `script-views`, phases 1 to 7 done)
+
+Where the implementation differs from the text above:
+
+1. A write outside `edit` / `gesture` is its own undo step (not rejected).
+2. Gestures use the knob pattern (mark / modify / mark), not `beginModification` (9.1 item 5).
+3. The studio font reaches views as bytes over the port (`FontFace`), no `font-src` (9.1 item 9).
+4. `@buffer` values arrive in `this.data.<name>` next to the collections (one namespace, one `dataChanged`),
+   names must be unique across `@collection` and `@buffer`.
+5. `@window` opens from the device menu ("<Class> Window") and `host.openWindow`, not a header button. Window
+   sizes are kept per session, not saved with the project. A recompile rebuilds the view inside the open window,
+   removing the `@window` line closes it.
+6. Views get the stock display colours (`host.color("displayStroke" | "displayFill" | "displayGrid", opacity)`) and
+   the studio frames every view like a stock display. The AI starter prompts carry the API and a design guide.
+7. Open for approval (limits rule): the frame host caps one message at 1024 ops (`MAX_OPS`). Messages from
+   `host.send` are unbounded while the device does not render (a bypassed device queues them).
+
 ## 10. Decisions (2026-10-21)
 
 1. Many views per device, named by class, default `View`, placed explicitly by cell (section 4).
