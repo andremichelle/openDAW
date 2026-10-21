@@ -150,6 +150,22 @@ describe("ScriptCompiler applies the top-level rule to scripts with a view", () 
     })
 })
 
+describe("ScriptCompiler tolerates malformed data directives on load", () => {
+    const MALFORMED = "// @stream\n// @buffer wave\n// @collection 1steps\nclass Processor { process() {} }"
+    it("loads a stored script whose comments look like broken data directives", () => {
+        const wrapped = ScriptCompiler.wrap(CONFIG, "malformed-uuid", 1, MALFORMED)
+        new Function(wrapped)()
+        const registry = (globalThis as unknown as Record<string, Record<string, Record<string, Record<string, unknown>>>>)
+            .openDAW.werkstattProcessors["malformed-uuid"]
+        expect(registry.collections).toEqual([])
+        expect(registry.streams).toEqual([])
+        expect(registry.buffers).toEqual([])
+    })
+    it("still refuses to compile them", () => {
+        expect(() => ScriptCompiler.wrap(CONFIG, "malformed-uuid", 2, MALFORMED, true)).toThrow()
+    })
+})
+
 describe("ScriptCompiler.wrapView", () => {
     it("hands the declared view and window classes to the runtime", () => {
         const code = "// @view PatternView 1 1 4 3\n// @window EditorView 900 520\n// @view 5 1 2 3\nclass Processor {}\nclass PatternView {}\nclass View {}"

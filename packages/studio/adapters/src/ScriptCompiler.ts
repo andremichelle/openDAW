@@ -245,6 +245,15 @@ const wrapProcessor = (config: ScriptCompiler.Config, userCode: string, enforce:
         })()`
 }
 
+// a saved project must always load: on load a malformed data directive declares nothing instead of throwing
+const parseOnLoad = <T>(enforce: boolean, parse: () => ReadonlyArray<T>): ReadonlyArray<T> => {
+    if (enforce) {return parse()}
+    const result = tryCatch(parse)
+    if (result.status === "success") {return result.value}
+    console.warn("[ScriptCompiler] ignoring a malformed data directive on load", result.error)
+    return []
+}
+
 const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string,
                     enforce: boolean = false): string => {
     const order = ScriptDeclaration.parseDeclarationOrder(userCode)
@@ -256,7 +265,7 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         label: declaration.label, index: order.get(declaration.label) ?? 0
     }))
     const sidechains = ScriptDeclaration.parseSidechains(userCode).map(({label}, index) => ({label, index}))
-    const collections = ScriptDeclaration.parseCollections(userCode).map(({name, index, fields}) => ({
+    const collections = parseOnLoad(enforce, () => ScriptDeclaration.parseCollections(userCode)).map(({name, index, fields}) => ({
         name, index, fields: fields.map(({label, defaultValue}, fieldIndex) => ({label, index: fieldIndex, defaultValue}))
     }))
     return `
@@ -269,8 +278,8 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},
         collections: ${JSON.stringify(collections)},
-        streams: ${JSON.stringify(ScriptDeclaration.parseStreams(userCode))},
-        buffers: ${JSON.stringify(ScriptDeclaration.parseBuffers(userCode))},
+        streams: ${JSON.stringify(parseOnLoad(enforce, () => ScriptDeclaration.parseStreams(userCode)))},
+        buffers: ${JSON.stringify(parseOnLoad(enforce, () => ScriptDeclaration.parseBuffers(userCode)))},
         readsSidechains: ${/\bthis\.sidechains\b/.test(userCode)},
         latency: ${ScriptDeclaration.parseLatency(userCode)},
         pass: ${ScriptDeclaration.parsePassThrough(userCode)}
