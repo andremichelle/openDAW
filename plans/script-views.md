@@ -211,22 +211,45 @@ device's audio unit (Apparat, and Spielwerk through its downstream instrument). 
 
 ## 4. Layout (issue 4)
 
-The three-row grid stays. One new item:
+The three-row grid stays and fills top to bottom, column by column, as today. A view claims a rectangle of
+cells, and every other control fills the remaining free cells in the usual order, skipping the occupied ones.
 
 ```
-// @view 10                 class View, 10 columns
-// @view PatternView 10     class PatternView, 10 columns
-// @view ScopeView 4        class ScopeView, 4 columns
+// @param rate 120 30 480 int
+// @param mode 0 0 2 int
+// @param swing 0
+// @param octaves 1 1 4 int
+// @view PatternView 2 1 8 2    class PatternView at column 2, row 1, 8 × 2 cells
+// @view ScopeView 2 3 4 1      class ScopeView below it, 4 × 1 cells
 ```
 
-- A device can have many views. The optional first token names the class to instantiate, default `View`. Each
-  view class is an entry point the editor can jump to.
-- Takes a slot in directive order, exactly like a param or sample, also inside a `@group`.
-- Always spans all 3 rows (11em = 3 × 3.5em + 2 × 0.25em), `10` = width in grid columns
-  (10 × 3.5em + 9 × 0.25em gaps). `grid-row: span 3` so it always starts a fresh column.
-- Several views on one device are independent instances (own iframe each). They coordinate only through params,
-  collections and streams, never directly, which is the same rule as view and processor.
-- The iframe follows the UI zoom because its size is in em, the view reacts with a native `ResizeObserver`.
+```
+        col 1    col 2 .. 5        col 6 .. 9
+row 1   rate     PatternView ................
+row 2   mode     PatternView ................
+row 3   swing    ScopeView         octaves, then the free cells
+```
+
+`rate`, `mode`, `swing` fill column 1. `PatternView` takes columns 2 to 9 of rows 1 and 2, `ScopeView` columns
+2 to 5 of row 3. Auto-flow continues in column order and skips occupied cells, so `octaves` lands in row 3 of
+column 6 and the next controls take row 3 of columns 7 to 9 before a new column starts.
+
+- `// @view [Class] <column> <row> <columns> <rows>`, 1-based like the cells you count on screen, default class
+  `View`. `row + rows - 1` must not exceed 3, `column` is open-ended (the section grows to the right).
+- Native CSS grid: a view gets `grid-column: <column> / span <columns>` and `grid-row: <row> / span <rows>`.
+  Explicitly placed items are placed first, the auto-flow controls (`grid-auto-flow: column`) then take the free
+  cells in their declaration order. No custom layout code, the browser does the skipping.
+- Size of a view: `columns × 3.5em + (columns - 1) × 0.25em` by `rows × 3.5em + (rows - 1) × 0.25em`. It
+  follows the UI zoom because it is in em, the view reacts with a native `ResizeObserver`.
+- Coordinates are relative to the section the `@view` line belongs to: the ungrouped run or the `@group` it is in,
+  since each section is its own grid today. Column 1 is the first column of that section.
+- Overlap: two views claiming a shared cell are both shown, with a red rectangle over the shared cells, and the
+  `@view` lines get a warning marker in the code editor naming the other view. Same for a view leaving the 3 rows
+  (`row + rows - 1 > 3`): the overflowing part is clipped and marked red. The layout never refuses to render.
+- Line order of `@view` no longer matters for its position, only for the order of the remaining controls.
+- A device can have many views, each class an entry point the editor can jump to. Several views are
+  independent instances (own iframe each), they coordinate only through params, collections and streams, never
+  directly, the same rule as view and processor.
 
 ### 4.1 Larger window
 
@@ -310,7 +333,7 @@ error icon.
 // @param rate    120  30  480  int
 // @param mode    0    0   2    int
 // @param octaves 1    1   4    int
-// @view 10
+// @view 2 1 10 3
 // @collection steps 16
 // @field steps.on        true
 // @field steps.velocity  0.8   0    1   linear
@@ -450,7 +473,7 @@ class View {
 // @label Harmonic Synth
 // @param attack  0.005 0.001 2   exp  s
 // @param release 0.3   0.01  4   exp  s
-// @view 12
+// @view 2 1 12 3
 // @collection partials
 // @field partials.level 0 0 1 linear
 // @record partials level=1
@@ -685,11 +708,12 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
    param, sample and sidechain hubs plus every code change, and `rebuildControls` calls `replaceChildren()`. A
    compile that adds 5 params would reload the view 6 times, and moving an iframe in the DOM reloads it anyway
    (`moveBefore` preserves it, Chrome only). Fix: coalesce rebuilds to one per transaction, keep the iframe as a
-   stable child of the controls container, position everything with CSS `order` (works with grid auto-flow),
-   recreate the iframe only when the script `update` counter changes. Views inside a `@group` live in the group's
-   own grid, so a rebuild must also keep group containers whose section did not change (diff sections by their
-   label + items), otherwise the iframe is moved and reloads. Where the section really changed, use `moveBefore`
-   when available, else accept one reload (state lives in boxes, only transient view state is lost).
+   stable child of its section's grid, recreate it only when the script `update` counter changes. Explicit
+   placement makes this simple: a view's position comes from its `grid-column` / `grid-row`, not its DOM position,
+   so the rebuild replaces the auto-flow controls around the iframe and never moves it. Views inside a `@group`
+   live in the group's own grid, so a rebuild keeps group containers whose section did not change (diff sections
+   by label + items). Where the section really changed, use `moveBefore` when available, else accept one reload
+   (state lives in boxes, only transient view state is lost).
 7. Frame host reuse is partial. WCLAP pages load from a separate origin page (`wclap-frame.html` + service
    worker, empty origin in dev), script views are sandboxed `srcdoc` with an opaque origin. Inbound checks become
    `event.source === iframe.contentWindow` with origin `"null"`, the port goes out with target `"*"`. Reusable:
@@ -713,7 +737,7 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
 
 ## 10. Decisions (2026-10-21)
 
-1. Many views per device, named by class (`// @view PatternView 10`), default `View`.
+1. Many views per device, named by class, default `View`, placed explicitly by cell (section 4).
 2. Seeded records with `@record` lines (section 3.1).
 3. No latency alignment for streams.
 4. `font-src` allows the studio origin.
@@ -723,7 +747,9 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
 8. `FloatingWindow` first, Document Picture-in-Picture later.
 9. A changed collection declaration grows and shrinks, surviving records keep their data (section 3.1).
 10. Escape routes closed as far as possible without being intrusive (section 1.1).
-11. `@view` is allowed inside `@group` (finding 6).
+11. `@view` is allowed inside `@group`, coordinates relative to the group (section 4, finding 6).
+12. Views declare column, row, columns and rows, the remaining controls fill the free cells, overlaps are shown
+    with a red rectangle (2026-10-21).
 
 ## 11. Open questions
 
