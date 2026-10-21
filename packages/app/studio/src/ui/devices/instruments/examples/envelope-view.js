@@ -59,7 +59,7 @@ class View {
     constructor(host) {
         this.host = host
         this.canvas = document.createElement("canvas")
-        host.root.style.cssText = "box-sizing: border-box; padding: 4px"
+        host.root.style.cssText = `box-sizing: border-box; padding: 4px; border: 0.5px solid ${host.color("displayGrid", 0.12)}; border-radius: 8px`
         this.canvas.style.cssText = "width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ew-resize"
         host.root.append(this.canvas)
         for (const name of ["attack", "decay", "sustain", "release"]) host.params[name].subscribe(() => this.draw())

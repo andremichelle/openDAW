@@ -279,7 +279,7 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; box-sizing: border-box; padding: 4px; height: 100vh; position: relative }
+                body { margin: 0; box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: 100vh; position: relative }
                 canvas { width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ns-resize }
                 button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 9px; color: var(--color-gray);
                     border: none; border-radius: 2px; padding: 1px 6px; cursor: pointer;
@@ -330,7 +330,7 @@ class Editor {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; box-sizing: border-box; padding: 4px; height: 100vh; display: grid; gap: 4px;
+                body { margin: 0; box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: 100vh; display: grid; gap: 4px;
                     grid-template-rows: 18px minmax(0, 1fr) 16px 12px; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) }
                 nav { grid-column: 1 / -1; display: flex; gap: 4px; align-items: stretch }
                 nav span { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255, 255, 255, 0.3);

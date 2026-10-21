@@ -782,7 +782,8 @@ Where the implementation differs from the text above:
    sizes are kept per session, not saved with the project. A recompile rebuilds the view inside the open window,
    removing the `@window` line closes it.
 6. Views get the stock display colours (`host.color("displayStroke" | "displayFill" | "displayGrid", opacity)`) and
-   the studio frames every view like a stock display. The AI starter prompts carry the API and a design guide.
+   no frame from the studio: every view draws its own (0.5px displayGrid border, 8px radius), the examples and the
+   design guide in the AI starter prompts show how.
 7. No op cap per view message. A device that did not render in a quantum (bypassed, outside the graph) drops
    its queued `host.send` messages, so the queue never grows (decided 2026-10-21).
 
