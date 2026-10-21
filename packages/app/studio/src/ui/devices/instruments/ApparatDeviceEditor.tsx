@@ -8,6 +8,7 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 import {ApparatExamples} from "./apparat-examples"
 
 const config: ScriptDeviceEditorConfig = {
@@ -15,6 +16,7 @@ const config: ScriptDeviceEditorConfig = {
     defaultCode,
     examples: ApparatExamples,
     starterPrompt,
+    entryPoints: ScriptEntryPointDocs.apparat,
     icon: IconSymbol.Code,
     populateMenu: (parent, service, deviceHost) =>
         MenuItems.forAudioUnitInput(parent, service, deviceHost),
