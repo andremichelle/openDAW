@@ -2,7 +2,7 @@
 // @param position 0     0     1    linear
 // @param unison   1     1     7    int
 // @param attack   0.005 0.001 2    exp    s
-// @param bend     0     0     1    linear
+// @param bend     0     -1    1    linear
 // @param detune   12    0     50   linear ct
 // @param release  0.3   0.01  4    exp    s
 // @view 3 1 5 3
@@ -65,6 +65,15 @@ function hermite(table, offset, index, fraction) {
     const c2 = before - 2.5 * current + 2 * next - 0.5 * after
     const c3 = 0.5 * (after - before) + 1.5 * (current - next)
     return ((c3 * fraction + c2) * fraction + c1) * fraction + current
+}
+
+// Serum-style bipolar bend, symmetric around the middle of the cycle: `curve` > 1 spends more of the cycle around
+// the middle, < 1 more at the edges. The ends and the middle stay put, so the phase stays continuous.
+function bendPhase(phase, curve) {
+    const centered = 2 * phase - 1
+    const distance = Math.abs(centered)
+    const bent = distance / (distance + curve * (1 - distance))
+    return 0.5 + 0.5 * Math.sign(centered) * bent
 }
 
 // `frame` is fractional (0 to FRAMES - 1), neighbouring frames are crossfaded
@@ -133,13 +142,13 @@ class Processor {
             this.smoothPosition += (this.position - this.smoothPosition) * coefficient
             this.smoothBend += (this.bend - this.smoothBend) * coefficient
             const frame = this.smoothPosition * (FRAMES - 1)
-            const exponent = 1 + this.smoothBend * 4
+            const curve = Math.pow(16, this.smoothBend)
             for (const voice of this.voices) {
                 voice.level = voice.gate ? Math.min(1, voice.level + rise) : voice.level * fall
                 let left = 0, right = 0
                 for (let index = 0; index < unison; index++) {
                     const phase = voice.phases[index]
-                    const value = lookup(table, frame, exponent === 1 ? phase : Math.pow(phase, exponent))
+                    const value = lookup(table, frame, bendPhase(phase, curve))
                     left += value * (1 - this.pans[index])
                     right += value * (1 + this.pans[index])
                     voice.phases[index] = (phase + voice.step * this.ratios[index]) % 1
@@ -163,7 +172,14 @@ class Stack {
         this.table = defaultTable()
         this.frame = 0
         this.marks = []
+        this.curve = 1
         this.dirty = true
+    }
+    // draws every frame through the same bend the processor plays
+    setBend(bend) {
+        this.curve = Math.pow(16, bend)
+        this.dirty = true
+        this.draw()
     }
     setTable(table) {
         this.table = isEmpty(table) ? defaultTable() : table
@@ -191,7 +207,7 @@ class Stack {
         const path = new Path2D()
         for (let index = 0; index <= SIZE; index++) {
             const x = x0 + index / SIZE * waveWidth
-            const y = y0 - this.table[frame * SIZE + index % SIZE] * amplitude
+            const y = y0 - lookup(this.table, frame, bendPhase(index / SIZE, this.curve)) * amplitude
             index === 0 ? path.moveTo(x, y) : path.lineTo(x, y)
         }
         return {path, x0, y0, x1: x0 + waveWidth, amplitude}
@@ -281,6 +297,8 @@ class View {
         host.data.table.subscribe(() => this.stack.setTable(host.data.table.toArray()))
         host.params.position.subscribe(value => this.stack.setFrame(value * (FRAMES - 1)))
         host.streams.frame.subscribe(values => this.stack.setFrame(values[0]))
+        this.stack.setBend(host.params.bend.value)
+        host.params.bend.subscribe(value => this.stack.setBend(value))
         new ResizeObserver(() => this.stack.draw()).observe(canvas)
         canvas.addEventListener("dblclick", () => host.openWindow("Editor"))
         canvas.addEventListener("pointerdown", event => {
@@ -351,6 +369,11 @@ class Editor {
             : `Rewrites frames ${this.rangeFrom + 2} to ${this.rangeTo} as a blend from frame ${this.rangeFrom + 1} to frame ${this.rangeTo + 1}.`,
             () => this.morphRange())
         this.stack = new Stack(host, stackCanvas)
+        this.stack.setBend(host.params.bend.value)
+        host.params.bend.subscribe(value => {
+            this.stack.setBend(value)
+            this.drawEditor()
+        })
         this.table = defaultTable()
         this.playing = 0
         this.selected = this.rangeFrom = this.rangeTo = this.anchor = Math.round(host.params.position.value * (FRAMES - 1))
@@ -555,6 +578,19 @@ class Editor {
         gradient.addColorStop(1, this.host.color("displayStroke", 0.2))
         context.fillStyle = gradient
         context.fill(path)
+        const curve = Math.pow(16, this.host.params.bend.value)
+        if (Math.abs(curve - 1) > 0.001) {
+            const bent = new Path2D()
+            for (let index = 0; index < SIZE; index++) {
+                const x = index / (SIZE - 1) * width
+                const y = (1 - lookup(this.table, this.selected, bendPhase(index / (SIZE - 1), curve))) / 2 * height
+                index === 0 ? bent.moveTo(x, y) : bent.lineTo(x, y)
+            }
+            context.strokeStyle = this.host.color("displayStroke", 0.35)
+            context.setLineDash([3, 3])
+            context.stroke(bent)
+            context.setLineDash([])
+        }
         context.font = "9px Rubik"
         context.fillStyle = this.host.color("panelBackground", 0.8)
         context.fillRect(2, 2, 104, 14)
