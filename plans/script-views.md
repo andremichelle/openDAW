@@ -99,6 +99,12 @@ Decision: one sandboxed `<iframe>` per view instance (inline or window).
 - The view can only reach its own device: the host resolves names to THIS device's boxes, there is no address,
   uuid or box in the API.
 - Recompile = new `srcdoc` = fresh realm. Nothing is lost because all persistent state lives in boxes.
+- The view realm is disposable, one realm per view instance, never re-instantiated in place. Recompile, close or
+  device removal throws the iframe away, and every `ResizeObserver`, event listener, timer and animation frame
+  of the script dies with it. The script owes no cleanup.
+- The host owns everything on its side: on iframe teardown it terminates every subscription the view created
+  (`host.data` / `host.streams` / `host.params`), approves an open `gesture`, releases held preview notes and
+  closes the port. It never relies on the script, so a throwing or careless view cannot leak.
 - Studio shortcuts: the runtime forwards `keydown` events the view did not `preventDefault()` to the host
   (space = play keeps working while the view has focus).
 - Theme: the host injects the current colour scheme as CSS variables into the iframe, `host.color("blue")` reads them.
@@ -292,8 +298,10 @@ interface ViewStream {
 }
 ```
 
-`class View { constructor(host) {...}; terminate() {...} }`. Writes outside `edit` / `gesture` are rejected with an
-error in the device error icon.
+`class View { constructor(host) {...} }`. An optional `terminate()` is called before teardown as a courtesy hook
+(flush transient state), never as a cleanup duty. The `Terminable` a `subscribe` returns is only for dropping a
+subscription while the view lives. Writes outside `edit` / `gesture` are rejected with an error in the device
+error icon.
 
 ## 6. Example A: Step Arp (Spielwerk)
 
@@ -373,14 +381,12 @@ class View {
         this.canvas = document.createElement("canvas")
         this.canvas.style.cssText = "width: 100%; height: 100%; display: block; touch-action: none"
         host.root.append(this.canvas)
-        this.subscriptions = [
-            host.data.steps.subscribe(() => this.draw()),
-            host.streams.step.subscribe(values => {
-                if (values[0] === this.current) return
-                this.current = values[0]
-                this.draw()
-            })
-        ]
+        host.data.steps.subscribe(() => this.draw())
+        host.streams.step.subscribe(values => {
+            if (values[0] === this.current) return
+            this.current = values[0]
+            this.draw()
+        })
         new ResizeObserver(() => this.draw()).observe(this.canvas)
         this.canvas.addEventListener("pointerdown", event => this.press(event))
         this.canvas.addEventListener("pointermove", event => this.drag(event))
@@ -434,9 +440,6 @@ class View {
             context.fillStyle = step.on ? host.color("orange") : host.color("dark")
             context.fillRect(x + 1, height + 3, cell - 2, 8)
         }
-    }
-    terminate() {
-        this.subscriptions.forEach(subscription => subscription.terminate())
     }
 }
 ```
@@ -535,10 +538,8 @@ class View {
         this.bars = this.#canvas()
         this.analyser = this.#canvas()
         this.keys = this.#canvas()
-        this.subscriptions = [
-            host.data.partials.subscribe(() => this.drawBars()),
-            host.streams.spectrum.subscribe(magnitudes => this.analyse(magnitudes))
-        ]
+        host.data.partials.subscribe(() => this.drawBars())
+        host.streams.spectrum.subscribe(magnitudes => this.analyse(magnitudes))
         new ResizeObserver(() => this.drawAll()).observe(host.root)
         this.bars.addEventListener("pointerdown", event => this.pressBar(event))
         this.bars.addEventListener("pointermove", event => this.dragBar(event))
@@ -637,10 +638,6 @@ class View {
             context.fillRect(key * cell + 0.5, 0, cell - 1, height)
         }
     }
-    terminate() {
-        this.releaseKey()
-        this.subscriptions.forEach(subscription => subscription.terminate())
-    }
 }
 ```
 
@@ -701,7 +698,7 @@ Walked every phase against the real touch points, plus a scanner / freeze protot
    `vite.config.ts`). `srcdoc` documents inherit the policy container, but a sandboxed opaque-origin `srcdoc` under
    COEP must be verified in Chrome, Firefox, Safari, WebView2 and WKWebView (Tauri). One spike page before phase 2.
 9. Preview notes can stick. The host tracks held preview pitches per view instance and sends `note-off` for all
-   of them on view terminate, iframe reload (recompile) and window close.
+   of them on iframe teardown (recompile, window close, device removal), never through the script.
 10. Rebind risk. Verify that adding / removing a child under a script hub does not re-run the device `init`:
     `init` calls `script_create`, which replaces the bridge, so the Processor would be rebuilt and every voice
     lost on each step insert from the view. Records need the lightest path, never a device rebind.
