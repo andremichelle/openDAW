@@ -6,11 +6,13 @@ This experimental feature runs locally and needs a browser with WebGPU and FP16 
 ## Convert an audio file
 
 1. Choose **Audio to MIDI** on the dashboard, or **openDAW → Import → Audio to MIDI (MuScriptor)...**.
-2. Pick an audio file. openDAW adds it to a source audio track.
-3. Read the model information and choose **Convert**.
+2. Pick an audio file.
+3. If the model is not cached, read the download size and model terms. Choose **Download & Continue**, or **Cancel** to stop.
+4. openDAW adds the source audio track and starts conversion.
 
-Before conversion, a prominent **Model download: 616.3 MB** notice shows the first-use download size.
-The files download from Hugging Face and are cached in this browser for later conversions.
+Before the first download, a **Download required** popup shows the missing files' size in MB and the full model size of 616.3 MB.
+Nothing downloads until you choose **Download & Continue**. Cancel also leaves your project unchanged.
+The files download from Hugging Face and are cached in this browser for later conversions; a complete cache skips the popup.
 Download progress also shows the total size in MB; cached loading is labeled separately.
 Your audio is processed on your computer and is not uploaded. Progress shows downloading, model loading and transcription.
 

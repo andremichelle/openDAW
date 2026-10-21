@@ -1,4 +1,5 @@
-import {InstrumentTranscription, MenuItem, Project, TranscriptionSource} from "@opendaw/studio-core"
+import {MenuItem, Project} from "@opendaw/studio-core"
+import {InstrumentTranscription, TranscriptionSource} from "@/service/InstrumentTranscription"
 import {NeuralTranscription} from "@/service/NeuralTranscription"
 
 export const instrumentTranscriptionMenuItem = (project: Project, source: TranscriptionSource): MenuItem =>

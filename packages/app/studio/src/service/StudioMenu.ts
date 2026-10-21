@@ -10,7 +10,7 @@ import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
-import {NeuralTranscription} from "@/service/NeuralTranscription"
+import {MUSCRIPTOR_ENABLED, NeuralTranscription} from "@/service/NeuralTranscription"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
 
@@ -58,8 +58,8 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => service.importStems()),
                             MenuItem.default({label: "Neural Demux..."})
                                 .setTriggerProcedure(() => NeuralDemux.run(service).catch(EmptyExec)),
-                            MenuItem.default({label: "Audio to MIDI (MuScriptor)..."})
-                                .setTriggerProcedure(() => NeuralTranscription.browse(service).catch(EmptyExec)),
+                            ...(MUSCRIPTOR_ENABLED ? [MenuItem.default({label: "Audio to MIDI (MuScriptor)..."})
+                                .setTriggerProcedure(() => NeuralTranscription.browse(service).catch(EmptyExec))] : []),
                             MenuItem.default({label: "Soundfont Files..."})
                                 .setTriggerProcedure(() => service.soundfontService.browse(true)),
                             MenuItem.default({label: "Project Bundle..."})

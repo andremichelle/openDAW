@@ -1,12 +1,13 @@
 import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
 import {extname, resolve} from "path"
-import {defineConfig} from "vite"
+import {defineConfig, loadEnv} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
 import {BuildInfo} from "./src/BuildInfo"
 import {existsSync} from "node:fs"
 
-export default defineConfig(({command}) => {
+export default defineConfig(({command, mode}) => {
+    const enableMuScriptor = loadEnv(mode, __dirname, "VITE_").VITE_ENABLE_MUSCRIPTOR === "true"
     const uuid = generateUUID()
     console.debug(uuid)
 
@@ -27,9 +28,13 @@ export default defineConfig(({command}) => {
             "import.meta.env.BUILD_UUID": JSON.stringify(uuid)
         },
         resolve: {
-            alias: {
-                "@": resolve(__dirname, "./src")
-            }
+            alias: [
+                ...(!enableMuScriptor ? [{
+                    find: "@/service/MuScriptorTranscription",
+                    replacement: resolve(__dirname, "./src/service/MuScriptorDisabled.ts")
+                }] : []),
+                {find: "@", replacement: resolve(__dirname, "./src")}
+            ]
         },
         optimizeDeps: {
             exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web",

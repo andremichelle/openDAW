@@ -5,6 +5,13 @@ import {MuScriptorInput, MuScriptorNote, MuScriptorProgress, MuScriptorWorkerReq
 export class MuScriptor {
     static readonly downloadBytes = Object.values(MUSCRIPTOR_ASSETS).reduce((sum, asset) => sum + asset.bytes, 0)
 
+    /** Probe metadata only; no weights are read or downloaded. */
+    static readonly requiredDownloadBytes = async (): Promise<number> => {
+        const sizes = await Promise.all(Object.entries(MUSCRIPTOR_ASSETS).map(async ([name, descriptor]) =>
+            await ModelStore.isCached(`muscriptor/${name}`, descriptor) ? 0 : descriptor.bytes))
+        return sizes.reduce((sum, bytes) => sum + bytes, 0)
+    }
+
     static readonly checkSupport = async (): Promise<void> => {
         const gpu = (navigator as Navigator & {gpu?: {requestAdapter(): Promise<{features: Set<string>} | null>}}).gpu
         const adapter = await gpu?.requestAdapter()
@@ -14,6 +21,7 @@ export class MuScriptor {
     }
 
     static readonly run = async (input: MuScriptorInput, options: {
+        allowDownload: boolean,
         signal: AbortSignal, progress: (value: MuScriptorProgress) => void, workerFactory?: () => Worker
     }): Promise<ReadonlyArray<MuScriptorNote>> => {
         const {signal, progress} = options
@@ -26,7 +34,7 @@ export class MuScriptor {
             signal.throwIfAborted()
             const cached = await ModelStore.isCached(`muscriptor/${name}`, descriptor)
             assets[name] = await ModelStore.ensure(`muscriptor/${name}`, descriptor, {
-                signal, progress: value => progress({phase: cached ? "cache" : "download",
+                signal, allowDownload: options.allowDownload === true, progress: value => progress({phase: cached ? "cache" : "download",
                     value: (loaded + value * descriptor.bytes) / MuScriptor.downloadBytes})
             })
             loaded += descriptor.bytes

@@ -1,6 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
 import {MuScriptor} from "./MuScriptor"
 import {ModelStore} from "./ModelStore"
+import {MUSCRIPTOR_ASSETS} from "./muscriptor/Model"
 
 class TestWorker extends EventTarget {
     readonly terminate = vi.fn()
@@ -20,14 +21,34 @@ describe("MuScriptor worker lifecycle", () => {
     })
     afterEach(() => {vi.restoreAllMocks(); vi.unstubAllGlobals()})
 
+    it("reports missing asset bytes without fetching weights", async () => {
+        expect(await MuScriptor.requiredDownloadBytes()).toBe(616274526)
+        vi.mocked(ModelStore.isCached).mockImplementation(async key => !key.endsWith("model.onnx.data"))
+        expect(await MuScriptor.requiredDownloadBytes()).toBe(MUSCRIPTOR_ASSETS["model.onnx.data"].bytes)
+        vi.mocked(ModelStore.isCached).mockResolvedValue(true)
+        expect(await MuScriptor.requiredDownloadBytes()).toBe(0)
+        expect(ModelStore.ensure).not.toHaveBeenCalled()
+    })
+
+    it("uses cache-only model reads when no download was approved", async () => {
+        vi.mocked(ModelStore.isCached).mockResolvedValue(true)
+        const worker = new TestWorker()
+        const result = MuScriptor.run(input, {allowDownload: false, signal: new AbortController().signal, progress() {},
+            workerFactory: () => worker as unknown as Worker})
+        await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce())
+        worker.respond({kind: "result", notes: []})
+        await result
+        expect(vi.mocked(ModelStore.ensure).mock.calls.every(([, , options]) => options?.allowDownload === false)).toBe(true)
+    })
+
     it("rejects unsupported GPUs before downloading weights", async () => {
         vi.stubGlobal("navigator", {})
-        await expect(MuScriptor.run(input, {signal: new AbortController().signal, progress() {}})).rejects.toThrow(/FP16/)
+        await expect(MuScriptor.run(input, {allowDownload: true, signal: new AbortController().signal, progress() {}})).rejects.toThrow(/FP16/)
         expect(ModelStore.ensure).not.toHaveBeenCalled()
     })
     it("returns notes and releases the dedicated worker on success", async () => {
         const worker = new TestWorker(), progress = vi.fn()
-        const result = MuScriptor.run(input, {signal: new AbortController().signal, progress,
+        const result = MuScriptor.run(input, {allowDownload: true, signal: new AbortController().signal, progress,
             workerFactory: () => worker as unknown as Worker})
         await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce())
         worker.respond({kind: "result", notes: []})
@@ -38,7 +59,7 @@ describe("MuScriptor worker lifecycle", () => {
     })
     it("cancellation terminates an in-flight GPU worker immediately", async () => {
         const worker = new TestWorker(), controller = new AbortController()
-        const result = MuScriptor.run(input, {signal: controller.signal, progress() {},
+        const result = MuScriptor.run(input, {allowDownload: true, signal: controller.signal, progress() {},
             workerFactory: () => worker as unknown as Worker})
         await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce())
         const rejected = expect(result).rejects.toThrow()
@@ -49,7 +70,7 @@ describe("MuScriptor worker lifecycle", () => {
     it("identifies cached model loading without calling it a download", async () => {
         vi.mocked(ModelStore.isCached).mockResolvedValue(true)
         const worker = new TestWorker(), progress = vi.fn()
-        const result = MuScriptor.run(input, {signal: new AbortController().signal, progress,
+        const result = MuScriptor.run(input, {allowDownload: true, signal: new AbortController().signal, progress,
             workerFactory: () => worker as unknown as Worker})
         await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce())
         worker.respond({kind: "result", notes: []})
@@ -58,7 +79,7 @@ describe("MuScriptor worker lifecycle", () => {
     })
     it("releases the worker on model errors without fabricating a result", async () => {
         const worker = new TestWorker()
-        const result = MuScriptor.run(input, {signal: new AbortController().signal, progress() {},
+        const result = MuScriptor.run(input, {allowDownload: true, signal: new AbortController().signal, progress() {},
             workerFactory: () => worker as unknown as Worker})
         await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce())
         worker.respond({kind: "error", message: "GPU memory exhausted"})
@@ -68,7 +89,7 @@ describe("MuScriptor worker lifecycle", () => {
     it("cancellation while downloading never starts a GPU worker", async () => {
         const controller = new AbortController(), factory = vi.fn()
         vi.mocked(ModelStore.ensure).mockImplementation(async () => {controller.abort(); return new Uint8Array(1)})
-        await expect(MuScriptor.run(input, {signal: controller.signal, progress() {}, workerFactory: factory})).rejects.toThrow()
+        await expect(MuScriptor.run(input, {allowDownload: true, signal: controller.signal, progress() {}, workerFactory: factory})).rejects.toThrow()
         expect(factory).not.toHaveBeenCalled()
     })
 })

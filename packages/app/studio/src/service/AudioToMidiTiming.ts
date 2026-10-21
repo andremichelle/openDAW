@@ -1,5 +1,5 @@
 import {TempoMap} from "@opendaw/lib-dsp"
-import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
+import {WarpMarkerTemplate} from "@opendaw/studio-core"
 
 /** A snapshot of the clip's local musical-time <-> file-time mapping. */
 export class AudioToMidiTiming {

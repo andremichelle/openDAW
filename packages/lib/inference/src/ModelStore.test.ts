@@ -82,6 +82,19 @@ describe("ModelStore", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
+    it("never fetches without approval, including if a probed cache entry disappears", async () => {
+        const fetchMock = vi.fn(async () => makeFetchResponse(bytes))
+        vi.stubGlobal("fetch", fetchMock)
+        await expect(ModelStore.ensure("test-task", model, {allowDownload: false})).rejects.toThrow(/confirmation/)
+        expect(fetchMock).not.toHaveBeenCalled()
+        await ModelStore.ensure("test-task", model)
+        expect(await ModelStore.isCached("test-task", model)).toBe(true)
+        expect(await ModelStore.ensure("test-task", model, {allowDownload: false})).toEqual(bytes)
+        opfs.files.delete("inference/models/test-task/v1/model.onnx")
+        await expect(ModelStore.ensure("test-task", model, {allowDownload: false})).rejects.toThrow(/confirmation/)
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
     it("re-downloads when sha256 in meta does not match", async () => {
         const fetchMock = vi.fn(async () => makeFetchResponse(bytes))
         vi.stubGlobal("fetch", fetchMock)

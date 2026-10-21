@@ -43,6 +43,9 @@
       ],
       "outputs": [
         "dist/**"
+      ],
+      "env": [
+        "VITE_ENABLE_MUSCRIPTOR"
       ]
     },
     "@opendaw/studio-icons#build": {

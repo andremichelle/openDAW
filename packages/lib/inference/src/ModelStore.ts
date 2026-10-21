@@ -7,6 +7,8 @@ import {requireInferenceConfig} from "./InferenceConfig"
 export interface FetchOptions {
     readonly progress?: Procedure<unitValue>
     readonly signal?: AbortSignal
+    /** False permits cache reads only, including if a previously probed cache entry disappears. */
+    readonly allowDownload?: boolean
 }
 
 interface ModelMeta {
@@ -35,6 +37,7 @@ export namespace ModelStore {
             options?.progress?.(1.0)
             return cached.unwrap()
         }
+        if (options?.allowDownload === false) {throw new Error("Model download requires confirmation. Please try again.")}
         const bytes = await download(model, options)
         const digest = await sha256Hex(bytes)
         if (digest !== model.sha256) {

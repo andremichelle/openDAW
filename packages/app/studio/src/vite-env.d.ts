@@ -7,6 +7,7 @@ declare module "*.sass?inline" {
 
 interface ImportMetaEnv {
     readonly BUILD_UUID: string
+    readonly VITE_ENABLE_MUSCRIPTOR?: string
 }
 
 interface ImportMeta {

@@ -21,6 +21,7 @@ import {Browser} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {instrumentTranscriptionMenuItem} from "@/ui/timeline/InstrumentTranscriptionMenu"
+import {MUSCRIPTOR_ENABLED} from "@/service/NeuralTranscription"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
@@ -226,6 +227,6 @@ export const installRegionContextMenu =
                 }),
                 DebugMenus.debugBox(region.box)
             )
-            if (region.type === "audio-region") {addItems(instrumentTranscriptionMenuItem(project, region))}
+            if (MUSCRIPTOR_ENABLED && region.type === "audio-region") {addItems(instrumentTranscriptionMenuItem(project, region))}
         })
     }

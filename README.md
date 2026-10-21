@@ -18,6 +18,9 @@ Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular update
 New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
 each other.
 
+MuScriptor audio-to-MIDI is an optional Studio build feature, disabled by default because its model weights
+have separate non-commercial terms. See [build configuration and SDK boundaries](packages/app/studio/MUSCRIPTOR.md).
+
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
 </p>

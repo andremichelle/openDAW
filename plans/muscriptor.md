@@ -7,6 +7,11 @@ Related request: [openDAW #452](https://github.com/andremichelle/openDAW/issues/
 
 ## User flow
 
+The feature is opt-in and disabled by default. Builders must set
+`VITE_ENABLE_MUSCRIPTOR=true`; see [build and licensing boundaries](../packages/app/studio/MUSCRIPTOR.md).
+Disabled builds omit the controls and exclude the implementation, worker and model URLs,
+including from source maps. The SDK and `studio-core` have no changes in this contribution.
+
 The dashboard's **Audio to MIDI** action and Import → **Audio to MIDI (MuScriptor)...**
 accept an audio file, retain it on a source audio track, and transcribe it locally.
 Arrangement regions and session audio clips also expose **Convert Instruments to MIDI...**.
@@ -15,6 +20,11 @@ One new track and matching MIDI region/clip are created per nonempty detected in
 directly below the source. Arrangement placement, trim, warp mapping, loops, pitch changes and
 session slot/loop triggering are preserved. The result is selected and its first editor opened.
 All generated tracks are one undoable edit. The file entry's source import is a separate edit.
+Before the first model download, a popup states the missing size in MB, the full **616.3 MB**,
+Hugging Face as the source, cache reuse and the non-commercial weight terms.
+**Download & Continue** starts conversion; **Cancel**, closing the popup or Escape stops it.
+For file imports this happens before creating a project or source track. Fully cached models
+skip the popup. Cache-only execution cannot silently download files if another tab evicts them.
 Cancelled/failed/empty analysis leaves no generated tracks. Source or tempo edits, deletion,
 project switching and shutdown discard pending results.
 
@@ -32,7 +42,7 @@ The [community ONNX export](https://huggingface.co/cursedhelm/cubaser-muscriptor
 is a format conversion of Kyutai/Mirelo MuScriptor Medium, not a new checkpoint.
 Revision `18b368334ddaeafed4446377eb7d0b63d14ccc1f` is pinned in `muscriptor/Model.ts`.
 The four assets total 616274526 bytes and are cached through the existing SHA-256-verified
-`ModelStore`/OPFS infrastructure. No weights are committed. The initial dialog discloses download
+`ModelStore`/OPFS infrastructure. No weights are committed. The download dialog discloses download
 size, local processing, experimental output and CC BY-NC 4.0 (non-commercial) weight licensing.
 The first-use size is displayed prominently in decimal megabytes (**616.3 MB**), including in
 download/cache progress messages, with the Hugging Face source and browser cache behavior explained.
@@ -59,8 +69,10 @@ BOS only and generates its own prologue. It forces each subsequent chunk's tie p
 actual unfinished notes, matching the official source's boundary approach;
 held notes are not split at five seconds. Drum hits are onset-only. Output is clipped to the requested
 range. Unknown/unclosed final notes get only the available duration, not invented full-clip sustains.
-Core orchestration accepts an analyzer callback, maps file seconds back through the source timing,
-and inserts results atomically; core has no dependency on model code.
+App-local orchestration accepts an analyzer callback, maps file seconds back through the source timing,
+and inserts results atomically. The helpers live in Studio's `src/service/InstrumentTranscription.ts`
+and `AudioToMidiTiming.ts`; neither is exported by the SDK or core. The generic inference entry
+point does not export MuScriptor; the enabled app loads its optional `/muscriptor` subpath.
 
 ## Validation
 
@@ -73,9 +85,11 @@ and inserts results atomically; core has no dependency on model code.
 - Focused tests cover low-pass audio preparation, model feature shape, polyphonic instrument identity,
   ties/retriggers, final range clipping, worker cancellation/errors, multi-track insertion, timing,
   session slots, stale-result rejection, first-editor focus and undo/redo.
-- Final Studio dependency build passed all 25 tasks. Inference tests passed 80/80, focused core/timing
-  tests passed 16/16, and manual registration tests passed 3/3 (99 tests total). Changed-file lint
-  and whitespace checks passed; JSX factory imports retain the repository's usual unused-import warning.
+- Consent/build-boundary revision: inference tests passed 84/84; focused Studio tests passed 21/21,
+  covering consent, cancellation before import, cache-only execution, build gating, MIDI insertion
+  and timing. Disabled Studio build passed 25 tasks; enabled Studio + manual build passed 26 tasks.
+  Output audits found no MuScriptor model URLs, worker or conversion controls in the disabled build's
+  223 scripts/maps, and confirmed the integration and worker in the enabled build's 231 scripts/maps.
 - Actual production import/conversion ran in both the in-app browser and desktop Chrome, producing
   aligned source + Drums, Electric Bass and Distorted Electric Guitar tracks. Live undo removed all
   generated tracks together and redo restored them. Temporary integration fixture controls were

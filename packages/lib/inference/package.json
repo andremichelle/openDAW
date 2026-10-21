@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./muscriptor": {
+      "types": "./dist/muscriptor/index.d.ts",
+      "default": "./dist/muscriptor/index.js"
     }
   },
   "files": [

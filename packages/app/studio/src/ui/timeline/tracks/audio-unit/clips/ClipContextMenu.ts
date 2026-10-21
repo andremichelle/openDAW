@@ -9,6 +9,7 @@ import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-box
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
 import {instrumentTranscriptionMenuItem} from "@/ui/timeline/InstrumentTranscriptionMenu"
+import {MUSCRIPTOR_ENABLED} from "@/service/NeuralTranscription"
 
 type Creation = {
     element: HTMLElement
@@ -169,6 +170,6 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                     }
                 }),
                 DebugMenus.debugBox(clip.box))
-            if (clip.type === "audio-clip") {collector.addItems(instrumentTranscriptionMenuItem(project, clip))}
+            if (MUSCRIPTOR_ENABLED && clip.type === "audio-clip") {collector.addItems(instrumentTranscriptionMenuItem(project, clip))}
         }
     })

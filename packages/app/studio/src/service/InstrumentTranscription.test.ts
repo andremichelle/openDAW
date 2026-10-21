@@ -1,11 +1,19 @@
+// @vitest-environment jsdom
 import {afterEach, describe, expect, it, vi} from "vitest"
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {isDefined, Option, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioClipBoxAdapter, AudioRegionBoxAdapter, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioFileBox, AudioUnitBox, NoteClipBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {InstrumentTranscription, InstrumentAnalyzer, InstrumentNote} from "./InstrumentTranscription"
-import {AudioContentFactory} from "./project/audio/AudioContentFactory"
-import type {ProjectEnv} from "./project/ProjectEnv"
+import {AudioContentFactory} from "@opendaw/studio-core"
+import type {ProjectEnv} from "@opendaw/studio-core"
+
+vi.hoisted(() => {Reflect.set(globalThis, "AudioWorkletNode", class {})})
+// Use the headless core modules; the public barrel also installs browser UI styles.
+vi.mock("@opendaw/studio-core", async () => ({
+    ...await import("../../../../studio/core/src/project/Project"),
+    ...await import("../../../../studio/core/src/project/audio/AudioContentFactory")
+}))
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
 const data = AudioData.create(44100, 44100, 1)
@@ -19,7 +27,7 @@ const create = async (clip = false) => {
             state: {type: "loaded"}, subscribe: () => Terminable.Empty, invalidate() {}}),
         record() {}, invalidate() {}, remove() {}, register: () => Terminable.Empty
     }} as unknown as ProjectEnv
-    const {Project} = await import("./project/Project")
+    const {Project} = await import("@opendaw/studio-core")
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const project = Project.fromSkeleton(env, skeleton)
     project.follow(skeleton.mandatoryBoxes.userInterfaceBoxes[0])

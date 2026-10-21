@@ -2,8 +2,8 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {AudioClipBoxAdapter, AudioRegionBoxAdapter, InstrumentFactories} from "@opendaw/studio-adapters"
 import {AudioUnitBox, NoteClipBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import {DefaultObservableValue, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {Project} from "./project/Project"
-import {AudioToMidiTiming} from "./project/audio/AudioToMidiTiming"
+import {Project} from "@opendaw/studio-core"
+import {AudioToMidiTiming} from "./AudioToMidiTiming"
 
 export type TranscriptionSource = AudioClipBoxAdapter | AudioRegionBoxAdapter
 export interface InstrumentNote {
