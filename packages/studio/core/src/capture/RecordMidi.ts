@@ -87,7 +87,7 @@ export namespace RecordMidi {
         }
 
         const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
-            takeCount++
+            takeCount = RecordTrack.nextTakeNumber(capture.audioUnitBox, takeCount)
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const duration = takeDuration(position, writePosition)
@@ -98,7 +98,7 @@ export namespace RecordMidi {
                 box.duration.setValue(duration)
                 box.loopDuration.setValue(duration)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
-                box.label.setValue(`Take ${takeCount}`)
+                box.label.setValue(RecordTrack.takeLabel(takeCount))
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)

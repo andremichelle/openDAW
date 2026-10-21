@@ -1,8 +1,10 @@
 import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
-import {asInstanceOf, Editing, int, Nullable, UUID} from "@opendaw/lib-std"
-import {TrackType} from "@opendaw/studio-adapters"
+import {asInstanceOf, Editing, int, isDefined, Nullable, UUID} from "@opendaw/lib-std"
+import {TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 
 export namespace RecordTrack {
+    const TAKE_LABEL = /^Take (\d+)$/
+
     export const findOrCreate = (editing: Editing,
                                  audioUnitBox: AudioUnitBox,
                                  type: TrackType,
@@ -25,5 +27,20 @@ export namespace RecordTrack {
             box.tracks.refer(audioUnitBox.tracks)
             box.target.refer(audioUnitBox)
         })).unwrap("Could not create TrackBox")
+    }
+
+    export const takeLabel = (takeNumber: int): string => `Take ${takeNumber}`
+
+    export const nextTakeNumber = (audioUnitBox: AudioUnitBox, lastInRecording: int): int => {
+        let highest: int = lastInRecording
+        for (const {box: trackBox} of audioUnitBox.tracks.pointerHub.incoming()) {
+            for (const {box} of asInstanceOf(trackBox, TrackBox).regions.pointerHub.incoming()) {
+                const match = TAKE_LABEL.exec(UnionBoxTypes.asRegionBox(box).label.getValue())
+                if (!isDefined(match)) {continue}
+                const takeNumber = parseInt(match[1])
+                if (Number.isSafeInteger(takeNumber)) {highest = Math.max(highest, takeNumber)}
+            }
+        }
+        return highest + 1
     }
 }

@@ -1,8 +1,8 @@
 import {afterEach, describe, expect, it, vi} from "vitest"
 import {asInstanceOf, DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {AudioFileBox} from "@opendaw/studio-boxes"
-import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {AudioFileBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
 import type {RecordingStart, RecordingStop} from "../Engine"
@@ -296,6 +296,35 @@ describe("RecordAudio", () => {
             audioContext.currentTime = 10.3
             tick(PPQN.Bar + 80)
             expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.6 + 0.020 + 0.010, 6)
+        })
+    })
+
+    describe("take labels", () => {
+        it("numbers the take after the takes already on the audio unit", async () => {
+            const {project, regions, tick, record, startAt, firstQuantumAt, deliver} = await setup()
+            project.editing.modify(() => {
+                const {boxGraph} = project
+                const audioUnitBox = project.primaryAudioUnitBox
+                const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+                    box.type.setValue(TrackType.Notes)
+                    box.tracks.refer(audioUnitBox.tracks)
+                    box.target.refer(audioUnitBox)
+                })
+                const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+                NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                    box.duration.setValue(PPQN.Bar)
+                    box.loopDuration.setValue(PPQN.Bar)
+                    box.regions.refer(trackBox.regions)
+                    box.events.refer(events.owners)
+                    box.label.setValue("Take 3")
+                })
+            })
+            firstQuantumAt(1.0)
+            startAt(1.5, PPQN.Bar)
+            deliver(0.6)
+            record()
+            tick(PPQN.Bar + 40)
+            expect(regions().map(region => region.box.label.getValue())).toEqual(["Take 4"])
         })
     })
 

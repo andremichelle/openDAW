@@ -77,7 +77,7 @@ export namespace RecordAudio {
         }
 
         const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
-            takeNumber++
+            takeNumber = RecordTrack.nextTakeNumber(capture.audioUnitBox, takeNumber)
             console.debug("[RecordAudio] createTakeRegion", {takeNumber, position, waveformOffset})
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
@@ -88,7 +88,7 @@ export namespace RecordAudio {
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Audio))
                 box.timeBase.setValue(TimeBase.Seconds)
-                box.label.setValue(`Take ${takeNumber}`)
+                box.label.setValue(RecordTrack.takeLabel(takeNumber))
                 box.waveformOffset.setValue(waveformOffset)
                 box.duration.setValue(minTakeSeconds)
                 box.loopDuration.setValue(minTakeSeconds)

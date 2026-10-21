@@ -64,7 +64,8 @@ const setup = async ({outputLatency = 0.020}: {outputLatency?: number} = {}) => 
     project.engine.setWorklet(worklet as unknown as EngineWorklet)
     const notifier = new Notifier<NoteSignal>()
     const capture = {audioUnitBox: primaryAudioUnitBox, addRecordedRegion: () => {}} as unknown as Capture
-    const recorder = RecordMidi.start({notifier, project, capture})
+    let recorder = RecordMidi.start({notifier, project, capture})
+    const restart = () => {recorder = RecordMidi.start({notifier, project, capture})}
     const regions = (): ReadonlyArray<NoteRegionBoxAdapter> => audioUnit.tracks.values()
         .flatMap(track => track.regions.collection.asArray())
         .filter(region => region.isNoteRegion())
@@ -91,7 +92,7 @@ const setup = async ({outputLatency = 0.020}: {outputLatency?: number} = {}) => 
         loopArea.to.setValue(to)
         loopArea.enabled.setValue(true)
     })
-    return {project, regions, notes, validate, at, tick, record, noteOn, noteOff, noteOnStamped, noteOffStamped, stop, loop}
+    return {project, regions, notes, validate, at, tick, record, noteOn, noteOff, noteOnStamped, noteOffStamped, stop, restart, loop}
 }
 
 describe("RecordMidi", () => {
@@ -149,6 +150,34 @@ describe("RecordMidi", () => {
             tick(PPQN.Bar - 5)
             expect(regions().length).toBe(1)
             expect(regions()[0].complete).toBe(PPQN.Bar)
+        })
+    })
+
+    describe("take labels", () => {
+        it("numbers a new recording's take after the takes already on the audio unit", async () => {
+            const {regions, tick, record, stop, restart} = await setup()
+            record()
+            tick(PPQN.Bar)
+            stop()
+            restart()
+            record()
+            tick(2 * PPQN.Bar)
+            expect(regions().map(region => region.label)).toEqual(["Take 1", "Take 2"])
+        })
+
+        it("keeps counting through the loop wraps of a later recording", async () => {
+            const {regions, tick, record, stop, restart, loop} = await setup()
+            loop(0, PPQN.Bar)
+            record()
+            tick(10)
+            tick(PPQN.Bar - 10)
+            stop()
+            restart()
+            record()
+            tick(10)
+            tick(PPQN.Bar - 10)
+            tick(5)
+            expect(regions().map(region => region.label)).toEqual(["Take 1", "Take 2", "Take 3"])
         })
     })
 
