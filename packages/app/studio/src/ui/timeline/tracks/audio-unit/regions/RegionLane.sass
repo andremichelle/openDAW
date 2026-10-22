@@ -7,7 +7,7 @@ component
   @include colors.panel-background
   @include mixins.clips-aware
 
-  &.focused
+  .modulator &.focused, .editing &
     background-color: color-mix(in srgb, var(--color-panel-background) 98.5%, white)
 
   &.deactive

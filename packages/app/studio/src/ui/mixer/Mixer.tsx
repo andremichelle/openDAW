@@ -1,11 +1,12 @@
+import {draggedUnits, installTrackSelection, resolveGroupDrop, markGroupDrop} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import css from "./Mixer.sass?inline"
-import {clamp, isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import { isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip.tsx"
-import {IndexedBox, Vertex} from "@opendaw/lib-box"
+import {Vertex} from "@opendaw/lib-box"
 import {Orientation, Scroller} from "@/ui/components/Scroller.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -55,7 +56,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     )
     const scrollModel = new ScrollModel()
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-group-surface="mixer">
             {/*<TimelineNavigation lifecycle={lifecycle} service={service} />*/}
             {channelStripWrapper}
             <Scroller lifecycle={lifecycle} model={scrollModel} orientation={Orientation.horizontal} floating/>
@@ -72,8 +73,9 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     const updateDom = deferNextFrame(() => {
         Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
-        const sorted = audioUnits.values()
-            .toSorted((a, b) => a.adapter.indexField.getValue() - b.adapter.indexField.getValue())
+        const order = AudioUnitGroups.ordered(project.rootBox)
+        const sorted = audioUnits.values().filter(({adapter}) => !AudioUnitGroups.hidden(adapter.box))
+            .toSorted((a, b) => order.indexOf(a.adapter.box) - order.indexOf(b.adapter.box))
         sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
         anchorLifecycle.terminate()
         const first = sorted.at(0)
@@ -105,7 +107,11 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 const terminator = lifecycle.spawn()
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
                                                           compact={false}/>
+                editor.dataset.unit = UUID.toString(adapter.uuid)
+                installTrackSelection(terminator, project, editor, adapter.box)
                 terminator.ownAll(
+                    adapter.box.groupParent.subscribe(() => updateDom.request()),
+                    adapter.box.groupCollapsed.subscribe(() => updateDom.request()),
                     Events.subscribe(editor, "pointerdown", () => {
                         scrollIntoViewEnabled = false
                         if (!project.userEditingManager.audioUnit.isEditing(adapter.box.editing)) {
@@ -125,13 +131,17 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             },
             onReorder: (_adapter: AudioUnitBoxAdapter) => updateDom.request()
         }),
+        project.trackSelection.value.subscribe(() => {
+            audioUnits.values().forEach(({adapter, editor}) => editor.classList.toggle("editing", project.trackSelection.has(adapter.box)))
+        }),
         project.userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex.match({
             none: removeEditingIndicator,
             some: (vertex: Vertex) => {
                 removeEditingIndicator()
                 const uuid = project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().uuid
                 audioUnits.opt(uuid).ifSome(({editor}) => {
-                    editor.classList.add("editing")
+                    audioUnits.values().forEach(({adapter, editor}) => editor.classList.toggle("editing", project.trackSelection.hasExplicitSelection
+                        ? project.trackSelection.has(adapter.box) : UUID.equals(adapter.uuid, uuid)))
                     if (scrollIntoViewEnabled) {
                         editor.scrollIntoView({behavior: "smooth", inline: "center"})
                     }
@@ -167,38 +177,23 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             drag: (event: DragEvent, dragData: AnyDragData): boolean => {
                 const {type} = dragData
                 if (type !== "channelstrip") {return false}
-                const optAdapter = project.boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                if (optAdapter.isEmpty()) {return false}
-                const limit = optAdapter.unwrap().indicesLimit()
-                const [index, successor] = DragAndDrop.findInsertLocation(event, element, limit)
-                const delta = index - dragData.start_index
-                if (delta < 0 || delta > 1) {
-                    if (insertMarker.nextSibling !== successor) {
-                        channelStripContainer.insertBefore(insertMarker, successor)
-                    }
-                } else if (insertMarker.isConnected) {
-                    insertMarker.remove()
-                }
-                return true
+                const target = resolveGroupDrop(project, channelStripContainer, event, true)
+                const allowed = !!target && project.grouping.canMove(draggedUnits(project, dragData), target.parent)
+                markGroupDrop(channelStripContainer, allowed ? target : undefined)
+                return allowed
             },
             drop: (event: DragEvent, dragData: AnyDragData) => {
                 if (insertMarker.isConnected) {insertMarker.remove()}
                 const {type} = dragData
                 if (type !== "channelstrip") {return}
-                const optAdapter = project.boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                const [min, max] = optAdapter.unwrap("optAdapter").indicesLimit()
-                if (min === max) {return}
-                const [index] = DragAndDrop.findInsertLocation(event, element)
-                const delta = clamp(index, min, max) - dragData.start_index
-                if (delta < 0 || delta > 1) { // if delta is zero or one, it has no effect on the order
-                    service.project.editing.modify(() =>
-                        IndexedBox.moveIndex(project.rootBox.audioUnits, dragData.start_index, delta))
-                }
+                const target = resolveGroupDrop(project, channelStripContainer, event, true)
+                markGroupDrop(channelStripContainer)
+                if (!target) {return}
+                project.editing.modify(() => project.grouping.move(draggedUnits(project, dragData), target.parent, target.before))
             },
             enter: () => {},
             leave: () => {
+                markGroupDrop(channelStripContainer)
                 if (insertMarker.isConnected) {insertMarker.remove()}
             }
         }),

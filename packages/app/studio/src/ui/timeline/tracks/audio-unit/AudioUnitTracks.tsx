@@ -1,5 +1,5 @@
 import css from "./AudioUnitTracks.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Vertex} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
@@ -20,15 +20,17 @@ export const AudioUnitTracks = ({lifecycle, project, adapter}: Construct) => {
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
     const element: HTMLElement = (<div className={Html.buildClassList(className,
-        isAux && "aux", isBus && "bus", isOutput && "output")} data-drag/>)
+        isAux && "aux", isBus && "bus", isOutput && "output")} data-drag data-unit={UUID.toString(adapter.uuid)}/>)
     const audioUnitEditing = project.userEditingManager.audioUnit
+    const refreshSelection = () => element.classList.toggle("editing", project.trackSelection.hasExplicitSelection
+        ? project.trackSelection.has(adapter.box) : audioUnitEditing.isEditing(adapter.box.editing))
     lifecycle.ownAll(
-        adapter.indexField.catchupAndSubscribe(field => element.style.gridRow = `${field.getValue() + 1}`),
+        project.trackSelection.value.catchupAndSubscribe(refreshSelection),
         audioUnitEditing.catchupAndSubscribe(optVertex => optVertex.match({
-            none: () => element.classList.remove("editing"),
+            none: refreshSelection,
             some: (vertex: Vertex) => {
                 const editing = project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter()
-                element.classList.toggle("editing", editing === adapter)
+                element.classList.toggle("editing", project.trackSelection.hasExplicitSelection ? project.trackSelection.has(adapter.box) : editing === adapter)
             }
         }))
     )
