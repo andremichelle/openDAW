@@ -13,7 +13,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {
     AudioUnitBoxAdapter,
-    AudioUnitOrdering,
+    AudioUnitGroups,
     isModulatorBox,
     RootBoxAdapter,
     TransferUtils,
@@ -121,13 +121,13 @@ export namespace AudioUnitsClipboard {
                 if (!getEnabled()) {return false}
                 const optAudioUnit = getEditedAudioUnit()
                 if (optAudioUnit.isEmpty()) {return false}
-                return !optAudioUnit.unwrap().isOutput
+                return !optAudioUnit.unwrap().isOutput && !optAudioUnit.unwrap().box.isGroup.getValue()
             },
             canCut: (): boolean => {
                 if (!getEnabled()) {return false}
                 const optAudioUnit = getEditedAudioUnit()
                 if (optAudioUnit.isEmpty()) {return false}
-                return !optAudioUnit.unwrap().isOutput
+                return !optAudioUnit.unwrap().isOutput && !optAudioUnit.unwrap().box.isGroup.getValue()
             },
             canPaste: (entry: ClipboardEntry): boolean => getEnabled() && entry.type === "audio-units",
             copy: copyAudioUnit,
@@ -246,23 +246,13 @@ export namespace AudioUnitsClipboard {
                                          insertAfterIndex: int,
                                          rootBoxAdapter: RootBoxAdapter): void => {
         const rootBox = rootBoxAdapter.box
-        const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
-        allAudioUnits.toSorted((a, b) => {
-            const orderA = AudioUnitOrdering[a.type.getValue()]
-            const orderB = AudioUnitOrdering[b.type.getValue()]
-            const orderDiff = orderA - orderB
-            if (orderDiff !== 0) {return orderDiff}
-            const aIsPasted = a === pastedAudioUnit
-            const bIsPasted = b === pastedAudioUnit
-            if (aIsPasted && !bIsPasted) {
-                if (insertAfterIndex === -1) {return -1}
-                return b.index.getValue() <= insertAfterIndex ? 1 : -1
-            }
-            if (bIsPasted && !aIsPasted) {
-                if (insertAfterIndex === -1) {return 1}
-                return a.index.getValue() <= insertAfterIndex ? -1 : 1
-            }
-            return a.index.getValue() - b.index.getValue()
-        }).forEach((box, index) => box.index.setValue(index))
+        const existing = AudioUnitGroups.ordered(rootBox).filter(unit => unit !== pastedAudioUnit)
+        let position = existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
+            && !isDefined(AudioUnitGroups.parent(unit)))
+        if (position === -1) {position = existing.length}
+        const output = existing.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)
+        if (output >= 0) {position = Math.min(position, output)}
+        existing.splice(position, 0, pastedAudioUnit)
+        existing.forEach((unit, index) => unit.index.setValue(index))
     }
 }

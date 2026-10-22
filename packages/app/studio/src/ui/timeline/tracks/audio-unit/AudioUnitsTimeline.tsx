@@ -1,6 +1,5 @@
-import {draggedUnits, resolveGroupDrop, markGroupDrop} from "./TrackGrouping"
 import css from "./AudioUnitsTimeline.sass?inline"
-import { DefaultObservableValue, int, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -174,11 +173,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                     }
                     return true
                 }
-                if (dragData.type !== "channelstrip") {return false}
-                const target = resolveGroupDrop(service.project, scrollContainer, event)
-                const allowed = !!target && service.project.grouping.canMove(draggedUnits(service.project, dragData), target.parent)
-                markGroupDrop(scrollContainer, allowed ? target : undefined)
-                return allowed
+                return false
             },
             drop: (event: DragEvent, dragData: AnyDragData) => {
                 if (insertLine.isConnected) {insertLine.remove()}
@@ -197,16 +192,9 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                         trackBoxAdapter.indexField.setValue(indexValues[order])))
                     return
                 }
-                if (dragData.type !== "channelstrip") {return}
-                const target = resolveGroupDrop(service.project, scrollContainer, event)
-                markGroupDrop(scrollContainer)
-                if (!target) {return}
-                service.project.editing.modify(() => service.project.grouping.move(
-                    draggedUnits(service.project, dragData), target.parent, target.before))
             },
             enter: () => {},
             leave: () => {
-                markGroupDrop(scrollContainer)
                 if (insertLine.isConnected) {insertLine.remove()}
             }
         }),

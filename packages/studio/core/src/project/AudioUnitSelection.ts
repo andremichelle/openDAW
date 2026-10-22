@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Optional, Terminator} from "@opendaw/lib-std"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "@opendaw/studio-adapters"
 import {AudioUnitType} from "@opendaw/studio-enums"
@@ -8,7 +8,7 @@ import type {Project} from "./Project"
 export class AudioUnitSelection {
     readonly value = new DefaultObservableValue<ReadonlyArray<AudioUnitBox>>([])
     readonly #subscriptions = new Terminator()
-    #anchor: AudioUnitBox | undefined
+    #anchor: Optional<AudioUnitBox>
     #hasExplicitSelection = false
     constructor(readonly project: Project) {}
     get hasExplicitSelection(): boolean {return this.#hasExplicitSelection}
@@ -23,7 +23,7 @@ export class AudioUnitSelection {
     }
     click(unit: AudioUnitBox, {shiftKey, metaKey, ctrlKey}: {shiftKey: boolean, metaKey: boolean, ctrlKey: boolean}): void {
         const order = AudioUnitGroups.ordered(this.project.rootBox).filter(item => !AudioUnitGroups.hidden(item))
-        const anchorIndex = this.#anchor ? order.indexOf(this.#anchor) : -1
+        const anchorIndex = isDefined(this.#anchor) ? order.indexOf(this.#anchor) : -1
         const end = order.indexOf(unit)
         if (shiftKey && anchorIndex >= 0 && end >= 0) {
             const range = order.slice(Math.min(anchorIndex, end), Math.max(anchorIndex, end) + 1)

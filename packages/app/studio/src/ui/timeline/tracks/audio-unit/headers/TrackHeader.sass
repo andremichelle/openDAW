@@ -24,7 +24,7 @@ component
   // it stays out of the header grid. Hidden unless `.visible` (head lane of a unit that has automation).
   > svg.collapse-automation
     position: absolute
-    left: 22px
+    left: calc(22px + var(--folder-depth, 0) * 14px)
     bottom: calc(100% - var(--track-min-height) + 2px)
     font-size: 0.7em
     color: var(--color)
@@ -46,7 +46,7 @@ component
     content: ""
     display: var(--guide-display, block)
     position: absolute
-    left: 47px
+    left: calc(47px + var(--folder-depth, 0) * 14px)
     top: var(--guide-top, 50%)
     bottom: var(--guide-bottom, 0px)
     width: 1px
@@ -56,7 +56,7 @@ component
     content: ""
     display: var(--guide-display, block)
     position: absolute
-    left: 47px
+    left: calc(47px + var(--folder-depth, 0) * 14px)
     top: var(--stub-top, calc(50% + 7px))
     width: 6px
     height: 1px

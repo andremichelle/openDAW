@@ -65,6 +65,10 @@ export class TracksManager implements Terminable {
     readonly #tracks: SortedSet<UUID.Bytes, TrackContext>
     readonly #maxClipsIndex: DefaultObservableValue<int>
 
+    #initializing = true
+    #layoutQueued = false
+    #terminated = false
+
     #currentClipModifier: Option<ClipModifier> = Option.None
     #currentRegionModifier: Option<RegionModifier> = Option.None
     #orderedByIndex: Option<ReadonlyArray<TrackContext>> = Option.None
@@ -87,6 +91,8 @@ export class TracksManager implements Terminable {
         this.#tracks = UUID.newSet(({trackBoxAdapter: {uuid}}) => uuid)
         this.#maxClipsIndex = this.#terminator.own(new DefaultObservableValue(8))
         this.#terminator.own(this.#subscribe())
+        this.#initializing = false
+        this.#invalidateOrder()
     }
 
     startClipModifier(option: Option<ClipModifier>): Option<Dragging.Process> {
@@ -183,6 +189,7 @@ export class TracksManager implements Terminable {
     numTracks(): int {return this.tracks().length}
 
     terminate(): void {
+        this.#terminated = true
         this.#audioUnits.clear()
         this.#modulators.clear()
         this.#orderedByIndex = Option.None
@@ -234,10 +241,10 @@ export class TracksManager implements Terminable {
                             })
                             syntheticLifecycle.own({terminate: () => laneElement.remove()})
                             unitTracks.prepend(laneElement)
-                            this.#refreshHeaderDedup()
+                            this.#invalidateOrder()
                         } else if (!wants && mounted) {
                             syntheticLifecycle.terminate()
-                            this.#refreshHeaderDedup()
+                            this.#invalidateOrder()
                         }
                     }
                     audioUnitLifecycle.ownAll(
@@ -267,7 +274,7 @@ export class TracksManager implements Terminable {
                                 trackLifecycle.own({terminate: () => element.remove()})
                                 trackLifecycle.own(trackBoxAdapter.catchupAndSubscribePath(option => {
                                     track.path = option
-                                    this.#refreshHeaderDedup()
+                                    this.#invalidateOrder()
                                 }))
                                 this.#invalidateOrder()
                                 updateSynthetic()
@@ -331,7 +338,7 @@ export class TracksManager implements Terminable {
                                 trackLifecycle.own({terminate: () => element.remove()})
                                 trackLifecycle.own(trackBoxAdapter.catchupAndSubscribePath(option => {
                                     track.path = option
-                                    this.#refreshHeaderDedup()
+                                    this.#invalidateOrder()
                                 }))
                                 this.#restackModulatorLanes()
                                 this.#invalidateOrder()
@@ -432,6 +439,20 @@ export class TracksManager implements Terminable {
 
     #invalidateOrder(): void {
         this.#orderedByIndex = Option.None
+        if (this.#initializing || this.#terminated || this.#layoutQueued) {return}
+        const {boxGraph} = this.#service.project
+        if (boxGraph.inTransaction()) {
+            this.#layoutQueued = true
+            boxGraph.subscribeEndTransaction(() => {
+                this.#layoutQueued = false
+                if (!this.#terminated) {this.#refreshOrder()}
+            })
+        } else {
+            this.#refreshOrder()
+        }
+    }
+
+    #refreshOrder(): void {
         const ordered = AudioUnitGroups.ordered(this.#service.project.rootBox)
         let row = 0
         ordered.forEach(unit => this.#audioUnits.opt(unit.address.uuid).ifSome(({unitTracks}) => {
@@ -544,15 +565,15 @@ export class TracksManager implements Terminable {
     }
 
     #toSortedTrackScopes(): ReadonlyArray<TrackContext> {
-        const order = AudioUnitGroups.ordered(this.#service.project.rootBox)
+        const order = new Map(AudioUnitGroups.ordered(this.#service.project.rootBox).map((unit, index) => [unit, index]))
         return this.#tracks.values()
             .filter(scope => !this.#isCollapsedAway(scope))
             .toSorted((a: TrackContext, b: TrackContext) => {
                 // Modulator lanes sit after every audio unit, so the two collections never interleave.
                 if (a.owner.type !== b.owner.type) {return a.owner.type === "modulator" ? 1 : -1}
                 const unitDiff = IndexComparator(
-                    a.owner.type === "audio-unit" ? order.indexOf(a.owner.adapter.box) : a.owner.adapter.indexField.getValue(),
-                    b.owner.type === "audio-unit" ? order.indexOf(b.owner.adapter.box) : b.owner.adapter.indexField.getValue())
+                    a.owner.type === "audio-unit" ? (order.get(a.owner.adapter.box) ?? -1) : a.owner.adapter.indexField.getValue(),
+                    b.owner.type === "audio-unit" ? (order.get(b.owner.adapter.box) ?? -1) : b.owner.adapter.indexField.getValue())
                 if (unitDiff !== 0) {return unitDiff}
                 if (a.owner.type === "modulator") {
                     return IndexComparator(a.trackBoxAdapter.indexField.getValue(),

@@ -5,11 +5,11 @@ import {AudioUnitBoxAdapter, AudioUnitGroups, TrackType} from "@opendaw/studio-a
 import {CanvasPainter, TimeGrid} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {RegionLaneClassName} from "./TrackStyles"
+import {affectsGroupOverview} from "./GroupOverviewUpdates"
 import {groupOverviewLayout} from "./GroupOverviewLayout"
 
 type Construct = {lifecycle: Lifecycle, service: StudioService, unit: AudioUnitBox}
 
-/** Read-only arrangement summary, including descendants hidden by nested folders. */
 export const GroupOverview = ({lifecycle, service, unit}: Construct): HTMLElement => {
     const {project, timeline: {range}} = service
     const canvas: HTMLCanvasElement = <canvas aria-label="Child clip overview"/>
@@ -39,10 +39,8 @@ export const GroupOverview = ({lifecycle, service, unit}: Construct): HTMLElemen
     }))
     lifecycle.ownAll(
         range.subscribe(painter.requestUpdate),
-        // Graph updates include region colors/timing, hierarchy, undo, and remote edits. CanvasPainter
-        // coalesces them into one frame; no idle polling or per-descendant subscriptions are needed.
-        project.boxGraph.subscribeToAllUpdates({onUpdate: () => {
-            if (unit.groupCollapsed.getValue()) {painter.requestUpdate()}
+        project.boxGraph.subscribeToAllUpdates({onUpdate: update => {
+            if (unit.groupCollapsed.getValue() && affectsGroupOverview(project.boxGraph, update)) {painter.requestUpdate()}
         }}),
         unit.groupCollapsed.subscribe(painter.requestUpdate),
         project.timelineBoxAdapter.signatureTrack.subscribe(painter.requestUpdate)

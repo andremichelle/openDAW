@@ -42,8 +42,8 @@ export namespace DevicePanelDragAndDrop {
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
                 const {type} = dragData
                 if (deviceHost instanceof AudioUnitBoxAdapter && deviceHost.box.isGroup.getValue()
-                    && (type === "instrument" || type === "midi-effect" || type === "preset"
-                        && dragData.category !== "audio-effect" && dragData.category !== "audio-effect-chain")) {return false}
+                    && (type === "instrument" || type === "midi-effect" || (type === "preset"
+                        && dragData.category !== "audio-effect" && dragData.category !== "audio-effect-chain"))) {return false}
                 if (type === "preset") {
                     if (dragData.category === "audio-unit" && deviceHost.isAudioUnit) {
                         instrumentContainer.style.opacity = "0.5"

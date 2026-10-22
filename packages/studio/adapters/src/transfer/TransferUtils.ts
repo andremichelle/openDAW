@@ -19,6 +19,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
+import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 
@@ -164,24 +165,20 @@ export namespace TransferUtils {
                 .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         const targetSet = new Set<AudioUnitBox>(targets)
-        const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
-        const existing = allAudioUnits.filter(box => !targetSet.has(box))
+        const existing = AudioUnitGroups.ordered(rootBox).filter(box => !targetSet.has(box))
         let ordered: ReadonlyArray<AudioUnitBox>
         if (isDefined(insertIndex)) {
             const position = clamp(insertIndex, 0, existing.length)
             ordered = [...existing.slice(0, position), ...targets, ...existing.slice(position)]
         } else {
-            // Place by AudioUnitOrdering, not by current index: the primary Output unit (highest order)
-            // can sit at a low index, so findIndex over the index-sorted list would insert the copy
-            // before it. Sort existing by order first so the copy lands among its own kind (e.g. an
-            // instrument after the other instruments but before the Output unit).
-            const byOrder = existing.toSorted((a, b) =>
-                (AudioUnitOrdering[a.type.getValue()] ?? 0) - (AudioUnitOrdering[b.type.getValue()] ?? 0))
+            const stable = existing.toSorted((left, right) =>
+                Number(left.type.getValue() === "output") - Number(right.type.getValue() === "output"))
             const maxOrder = targets.reduce((max, box) =>
                 Math.max(max, AudioUnitOrdering[box.type.getValue()] ?? 0), 0)
-            let position = byOrder.findIndex(box => (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
-            if (position === -1) {position = byOrder.length}
-            ordered = [...byOrder.slice(0, position), ...targets, ...byOrder.slice(position)]
+            let position = stable.findIndex(box => !isDefined(AudioUnitGroups.parent(box))
+                && !box.isGroup.getValue() && (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
+            if (position === -1) {position = stable.length}
+            ordered = [...stable.slice(0, position), ...targets, ...stable.slice(position)]
         }
         ordered.forEach((box, index) => box.index.setValue(index))
     }

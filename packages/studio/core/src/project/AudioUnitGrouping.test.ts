@@ -1,6 +1,9 @@
-import {describe, expect, it} from "vitest"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioUnitGroups, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, DeviceHost, TransferAudioUnits} from "@opendaw/studio-adapters"
+import {describe, expect, it, vi} from "vitest"
+import {asDefined, asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioBusFactory, AudioUnitGroups, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, DeviceHost, TransferAudioUnits} from "@opendaw/studio-adapters"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
+import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
 import {EffectFactories} from "../EffectFactories"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {Project} from "./Project"
@@ -45,6 +48,69 @@ const setup = async () => {
 }
 
 describe("track folders", () => {
+    it("preserves existing hierarchy when pasting a channel and disables folder copy/cut", async () => {
+        const {project, units: [first, second, outside]} = await setup()
+        const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
+        let edited = project.boxAdapters.adapterFor(outside, AudioUnitBoxAdapter)
+        const handler = AudioUnitsClipboard.createHandler({
+            getEnabled: () => true, editing: project.editing, boxGraph: project.boxGraph,
+            rootBoxAdapter: project.rootBoxAdapter, audioUnitEditing: project.userEditingManager.audioUnit,
+            getEditedAudioUnit: () => Option.wrap(edited)
+        })
+        const before = AudioUnitGroups.ordered(project.rootBox)
+        handler.paste(handler.copy().unwrap())
+        const ordered = AudioUnitGroups.ordered(project.rootBox)
+        const pasted = asDefined(ordered.find(unit => !before.includes(unit)))
+        expect(ordered.filter(unit => unit !== pasted)).toEqual(before)
+        expect(ordered.indexOf(pasted)).toBe(ordered.indexOf(outside) + 1)
+        expect(AudioUnitGroups.subtree(project.rootBox, folder)).toEqual([folder, first, second])
+        edited = project.boxAdapters.adapterFor(folder, AudioUnitBoxAdapter)
+        expect(handler.canCopy({clientX: 0, clientY: 0})).toBe(false)
+        expect(handler.canCut({clientX: 0, clientY: 0})).toBe(false)
+        project.terminate()
+    })
+    it("creates channels without sorting away a user's mixed channel order", async () => {
+        const {project, units: [, , , last]} = await setup()
+        const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "Bus", IconSymbol.Folder, AudioUnitType.Bus, Colors.blue)).unwrap()
+        const busUnit = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
+        project.editing.modify(() => project.grouping.move([last]))
+        const before = AudioUnitGroups.ordered(project.rootBox)
+        expect(before.indexOf(last)).toBeGreaterThan(before.indexOf(busUnit))
+        const created = project.editing.modify(() =>
+            project.api.createAnyInstrument(InstrumentFactories.Vaporisateur).audioUnitBox).unwrap()
+        expect(AudioUnitGroups.ordered(project.rootBox).filter(unit => unit !== created)).toEqual(before)
+        expect(AudioUnitGroups.ordered(project.rootBox).at(-1)).toBe(project.primaryAudioUnitBox)
+        project.terminate()
+    })
+    it("preserves a custom output when moving into and out of a group", async () => {
+        const {project, units: [source, destination, member]} = await setup()
+        const custom = project.editing.modify(() => project.grouping.create([destination])).unwrap()
+        const folder = project.editing.modify(() => project.grouping.create([member])).unwrap()
+        expect(custom).toBeDefined()
+        expect(folder).toBeDefined()
+        const bus = AudioUnitGroups.bus(custom!)!
+        project.editing.modify(() => source.output.refer(bus.input))
+        project.editing.modify(() => project.grouping.move([source], folder))
+        expect(source.output.targetVertex.unwrap().box).toBe(bus)
+        project.editing.modify(() => project.grouping.move([source]))
+        expect(source.output.targetVertex.unwrap().box).toBe(bus)
+        project.boxGraph.verifyPointers()
+        project.terminate()
+    })
+    it("keeps existing folder order during transfers and ignores unrelated channels in subtree queries", async () => {
+        const {project, units: [first, second, third, fourth]} = await setup()
+        const folder = project.editing.modify(() => project.grouping.create([first, second])).unwrap()!
+        const before = AudioUnitGroups.ordered(project.rootBox)
+        const [copy] = project.editing.modify(() => TransferAudioUnits.transfer([fourth], project.skeleton)).unwrap()
+        expect(AudioUnitGroups.ordered(project.rootBox).filter(unit => unit !== copy)).toEqual(before)
+        const incoming = vi.spyOn(project.rootBox.audioUnits.pointerHub, "incoming")
+        expect(AudioUnitGroups.subtree(project.rootBox, folder)).toEqual([folder, first, second])
+        expect(incoming).not.toHaveBeenCalled()
+        incoming.mockRestore()
+        expect(third.isAttached()).toBe(true)
+        project.terminate()
+    })
     it("duplicates a child independently without leaving a stale original folder reference", async () => {
         const {project, units: [a]} = await setup()
         project.editing.modify(() => project.grouping.create([a]))
