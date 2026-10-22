@@ -1018,12 +1018,12 @@ class ToneView {
             ['partialTime', 'PARTIAL DECAY', 'Partial decay', 'Decay', 'Upper-overtone fade time'],
             ['fmEnv', 'FM', 'FM accent', 'Amount', 'Initial FM boost'],
             ['fmTime', 'FM', 'FM decay', 'Decay', 'FM boost fade time'],
-            ['detune', 'MOTION', 'Detune', 'Detune', 'Detune multiplier'],
-            ['tremolo', 'MOTION', 'Tremolo', 'Trem', 'Tremolo depth multiplier'],
-            ['vibrato', 'MOTION', 'Vibrato', 'Vib', 'Vibrato depth multiplier'],
+            ['detune', 'MOTION', 'Detune', 'Detune', 'Amount applied'],
+            ['tremolo', 'MOTION', 'Tremolo', 'Tremolo', 'Amount applied'],
+            ['vibrato', 'MOTION', 'Vibrato', 'Vibrato', 'Amount applied'],
             ['width', 'OUTPUT / EXPRESSION', 'Stereo width', 'Width', 'Stereo spread; 0 = mono'],
             ['saturation', 'OUTPUT / EXPRESSION', 'Saturation', 'Drive', 'Soft-clipping drive'],
-            ['velocityTimbre', 'OUTPUT / EXPRESSION', 'Velocity → Timbre', 'Vel', 'Velocity sensitivity of brightness and FM']
+            ['velocityTimbre', 'OUTPUT / EXPRESSION', 'Velocity → Timbre', 'Velocity', 'Velocity sensitivity of brightness and FM']
         ]
         const groups = new Map()
         for (const caption of new Set(definitions.map(([, group]) => group))) {
@@ -1047,7 +1047,7 @@ class ToneView {
             value.className = 'value'
             const input = document.createElement('input')
             input.type = 'range'; input.min = 0; input.max = 1; input.step = .001
-            input.setAttribute('aria-label', caption)
+            input.setAttribute('aria-label', `${caption} ${shortLabel}`)
             input.setAttribute('aria-orientation', 'vertical')
             const control = {name, input, value, gesture:null, drag:null}
             let dragged = false
