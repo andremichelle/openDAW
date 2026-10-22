@@ -316,6 +316,21 @@ In the view, the class receives `host`: `host.params`, `host.data`, `host.stream
 `host.gesture` (one undo step), `host.preview` (play notes), `host.send` (reaches `message(data)` of the
 Processor) and `host.color` (the studio and display colours). Hover any of them in the code editor for details.
 
+A parameter the view controls itself does not need a knob. Mark it with `[omit-default-ui]` and attach it to the
+element that controls it, so a right click there opens the regular parameter menu (automation, modulation, MIDI
+learn, reset):
+
+```javascript
+// @param cutoff 1000 20 20000 exp Hz [omit-default-ui]
+```
+
+```javascript
+host.attachParameter(cutoffHandle, "cutoff")
+```
+
+The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
+whether it is automated or modulated, `value` already includes both.
+
 Examples with views: Envelope Synth, Harmonic Synth (drawable partials, preview keys, live spectrum) and Wave Draw (a drawable wavetable).
 
 ---

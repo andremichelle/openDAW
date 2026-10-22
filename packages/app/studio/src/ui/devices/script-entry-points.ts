@@ -283,7 +283,13 @@ const HOST = parameter("host", "host: ViewHost", "The view's only connection to 
     entry("mode", "host.mode: \"inline\" | \"window\"", "Whether this instance sits in the device panel or in a window."),
     entry("params", "host.params.<name>", [
         "Every `@param` by name: `label`, `value` (mapped), `set(value)` (like a knob, one undo step outside",
-        "`edit`), `subscribe(observer)` (called with the new value)."
+        "`edit`), `subscribe(observer)` (called with the new value).",
+        "`value` includes automation and modulation. `sources` lists what controls it (`automated`, `modulated`,",
+        "`midi`, `external`), `subscribeSources(observer)` is called with every change."
+    ].join("\n")),
+    entry("attachParameter", "host.attachParameter(element, name): {terminate()}", [
+        "A right click on `element` (or inside it) opens the parameter menu of `@param name`: automation,",
+        "modulation, MIDI learn, reset. Pair it with `[omit-default-ui]` when the view is the only control."
     ].join("\n")),
     entry("data", "host.data.<collection>", [
         "Every `@collection` by name: `length`, `get(index)`, `toArray()`, `set(index, {field: value})`,",

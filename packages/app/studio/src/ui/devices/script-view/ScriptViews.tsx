@@ -6,6 +6,7 @@ import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {FloatingWindow, FloatingWindowHandle} from "@/ui/components/FloatingWindow"
 import {ScriptViewFrame, ScriptViewMode, ScriptViewParam} from "@/ui/devices/script-view/ScriptViewFrame"
+import {parameterContextItems} from "@/ui/menu/automation.ts"
 
 export type ScriptViewDevice = DeviceBoxAdapter & {
     readonly box: ScriptCompiler.ScriptDeviceBox
@@ -53,7 +54,9 @@ export namespace ScriptViews {
             onError,
             onWindow: (action, windowClass) => action === "open"
                 ? ScriptWindows.open(service, adapter, userCode, windowClass)
-                : ScriptWindows.close(adapter, windowClass)
+                : ScriptWindows.close(adapter, windowClass),
+            parameterMenu: parameter => parameterContextItems(project.editing, project.midiLearning,
+                adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter)
         })
     }
 }

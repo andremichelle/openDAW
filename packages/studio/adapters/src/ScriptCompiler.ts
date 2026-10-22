@@ -1,4 +1,4 @@
-import {asInstanceOf, Editing, isDefined, tryCatch, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
@@ -368,6 +368,49 @@ export namespace ScriptCompiler {
         const createHeader = (update: number): string =>
             `// @${config.headerTag} js ${COMPILER_VERSION} ${update}\n`
         let maxUpdate = 0
+        const compileInto = async (audioContext: BaseAudioContext,
+                                   editing: Editing,
+                                   deviceBox: ScriptDeviceBox,
+                                   source: string,
+                                   append: boolean,
+                                   previousCode: string): Promise<void> => {
+            const userCode = parseHeader(source, headerPattern).userCode
+            const currentUpdate = parseHeader(deviceBox.code.getValue(), headerPattern).update
+            maxUpdate = Math.max(maxUpdate, currentUpdate)
+            const newUpdate = maxUpdate + 1
+            maxUpdate = newUpdate
+            const uuid = UUID.toString(deviceBox.address.uuid)
+            const params = ScriptDeclaration.parseParams(userCode)
+            const samples = ScriptDeclaration.parseSamples(userCode)
+            const order = ScriptDeclaration.parseDeclarationOrder(userCode)
+            const sidechains = ScriptDeclaration.parseSidechains(userCode)
+            const collections = ScriptDeclaration.parseCollections(userCode)
+            const buffers = ScriptDeclaration.parseBuffers(userCode)
+            const previous = previousCollections(previousCode, headerPattern)
+            const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
+            validateCode(wrappedCode)
+            if (ScriptTopLevel.applies(userCode)) {validateCode(wrapViewScript(userCode))}
+            const label = ScriptDeclaration.parseLabel(userCode)
+            claimRegistration(audioContext, deviceBox, newUpdate)
+            const modifier = () => {
+                deviceBox.code.setValue(createHeader(newUpdate) + userCode)
+                label.ifSome(name => deviceBox.label.setValue(name))
+                reconcileParameters(deviceBox, params, order)
+                reconcileSamples(deviceBox, samples, order)
+                if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}
+                if (isDefined(deviceBox.records)) {reconcileRecords(deviceBox.records, collections, previous)}
+                if (isDefined(deviceBox.buffers)) {ScriptBuffers.reconcile(deviceBox.buffers, buffers)}
+            }
+            if (append) {
+                editing.append(modifier)
+            } else {
+                editing.modify(modifier)
+            }
+            return registerClaimed(audioContext, deviceBox, newUpdate, wrappedCode)
+        }
+        const compile = (audioContext: BaseAudioContext, editing: Editing, deviceBox: ScriptDeviceBox,
+                         source: string, append: boolean = false): Promise<void> =>
+            compileInto(audioContext, editing, deviceBox, source, append, deviceBox.code.getValue())
         return {
             stripHeader: (source: string): string => parseHeader(source, headerPattern).userCode,
             load: async (audioContext: BaseAudioContext, deviceBox: ScriptDeviceBox): Promise<void> => {
@@ -383,44 +426,26 @@ export namespace ScriptCompiler {
                 if (!claimRegistration(audioContext, deviceBox, update)) {return}
                 return registerClaimed(audioContext, deviceBox, update, wrappedCode)
             },
-            compile: async (audioContext: BaseAudioContext,
+            compile,
+            // swaps deviceBox for the fresh device `create` builds and compiles source into it, ONE undo step
+            replace: async (audioContext: BaseAudioContext,
                             editing: Editing,
                             deviceBox: ScriptDeviceBox,
                             source: string,
-                            append: boolean = false): Promise<void> => {
+                            create: Provider<ScriptDeviceBox>): Promise<ScriptDeviceBox> => {
                 const userCode = parseHeader(source, headerPattern).userCode
-                const currentUpdate = parseHeader(deviceBox.code.getValue(), headerPattern).update
-                maxUpdate = Math.max(maxUpdate, currentUpdate)
-                const newUpdate = maxUpdate + 1
-                maxUpdate = newUpdate
-                const uuid = UUID.toString(deviceBox.address.uuid)
-                const params = ScriptDeclaration.parseParams(userCode)
-                const samples = ScriptDeclaration.parseSamples(userCode)
-                const order = ScriptDeclaration.parseDeclarationOrder(userCode)
-                const sidechains = ScriptDeclaration.parseSidechains(userCode)
-                const collections = ScriptDeclaration.parseCollections(userCode)
-                const buffers = ScriptDeclaration.parseBuffers(userCode)
-                const previous = previousCollections(deviceBox.code.getValue(), headerPattern)
-                const wrappedCode = wrapScript(config, uuid, newUpdate, userCode, true)
-                validateCode(wrappedCode)
+                validateCode(wrapScript(config, UUID.toString(deviceBox.address.uuid), 0, userCode, true))
                 if (ScriptTopLevel.applies(userCode)) {validateCode(wrapViewScript(userCode))}
-                const label = ScriptDeclaration.parseLabel(userCode)
-                claimRegistration(audioContext, deviceBox, newUpdate)
-                const modifier = () => {
-                    deviceBox.code.setValue(createHeader(newUpdate) + userCode)
-                    label.ifSome(name => deviceBox.label.setValue(name))
-                    reconcileParameters(deviceBox, params, order)
-                    reconcileSamples(deviceBox, samples, order)
-                    if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}
-                    if (isDefined(deviceBox.records)) {reconcileRecords(deviceBox.records, collections, previous)}
-                    if (isDefined(deviceBox.buffers)) {ScriptBuffers.reconcile(deviceBox.buffers, buffers)}
-                }
-                if (append) {
-                    editing.append(modifier)
-                } else {
-                    editing.modify(modifier)
-                }
-                return registerClaimed(audioContext, deviceBox, newUpdate, wrappedCode)
+                ScriptDeclaration.parseLabel(userCode)
+                const fresh = editing.modify(() => {
+                    const created = create()
+                    // no header: an editor mounting in between loads nothing until the compile below registers
+                    created.code.setValue(userCode)
+                    deviceBox.delete()
+                    return created
+                }).unwrap("replace did not apply")
+                await compileInto(audioContext, editing, fresh, userCode, true, "")
+                return fresh
             }
         }
     }

@@ -1,5 +1,16 @@
 import runtimeSource from "./view-runtime.js?raw"
-import {Editing, isDefined, Lifecycle, Nullable, Optional, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
+import {
+    ControlSource,
+    Editing,
+    Func,
+    isDefined,
+    Lifecycle,
+    Nullable,
+    Optional,
+    Procedure,
+    Terminable,
+    Terminator
+} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, Pointers} from "@opendaw/studio-enums"
@@ -15,6 +26,7 @@ import {
     ScriptRecordValues,
     StreamDeclaration
 } from "@opendaw/studio-adapters"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Fonts} from "@/ui/Fonts"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
@@ -44,6 +56,7 @@ type Construct = {
     onSend: Procedure<unknown>
     onError: Procedure<string>
     onWindow: (action: "open" | "close", className: string) => void
+    parameterMenu: Func<AutomatableParameterFieldAdapter<number>, ReadonlyArray<MenuItem>>
 }
 
 type Message = { readonly [key: string]: unknown }
@@ -87,10 +100,28 @@ body { font-family: Rubik, sans-serif; font-size: 11px; color: var(--color-gray)
 
 export const ScriptViewFrame = ({
                                     lifecycle, editing, userCode, className, mode, sampleRate, params, records, collections,
-                                    buffers, bufferDeclarations, streams, receiver, address, onPreview, onSend, onError, onWindow
+                                    buffers, bufferDeclarations, streams, receiver, address, onPreview, onSend, onError, onWindow,
+                                    parameterMenu
                                 }: Construct): HTMLIFrameElement => {
     const streamsByName = new Map(streams.map(stream => [stream.name, stream]))
     const paramsByName = new Map(params.map(({name, parameter}) => [name, parameter]))
+    const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
+    const send = (message: object): void => state.port?.postMessage(message)
+    const sourceCounts = new Map<string, Map<ControlSource, number>>()
+    const sourcesOf = (name: string): ReadonlyArray<ControlSource> => Array.from(sourceCounts.get(name)?.keys() ?? [])
+    lifecycle.ownAll(...params.map(({name, parameter}) => {
+        const counts = new Map<ControlSource, number>()
+        sourceCounts.set(name, counts)
+        const update = (source: ControlSource, delta: number): void => {
+            const count = (counts.get(source) ?? 0) + delta
+            if (count > 0) {counts.set(source, count)} else {counts.delete(source)}
+            send({type: "param-sources", name, sources: sourcesOf(name)})
+        }
+        return parameter.catchupAndSubscribeControlSources({
+            onControlSourceAdd: source => update(source, 1),
+            onControlSourceRemove: source => update(source, -1)
+        })
+    }))
     const collectionsByName = new Map(collections.map(collection => [collection.name, collection]))
     const buffersByName = new Map(bufferDeclarations.map(buffer => [buffer.name, buffer]))
     const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> | Float32Array } => ({
@@ -101,7 +132,8 @@ export const ScriptViewFrame = ({
     })
     const config = {
         className, mode, sampleRate, colors: colorMap(),
-        params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()})),
+        params: params.map(({name, parameter}) =>
+            ({name, label: parameter.name, value: parameter.getControlledValue(), sources: sourcesOf(name)})),
         collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
         streams: streams.map(({name, length, kind}) => ({name, length, kind})),
         buffers: bufferDeclarations.map(({name, length}) => ({name, length})),
@@ -114,7 +146,7 @@ export const ScriptViewFrame = ({
     const loading = {expected: true}
     iframe.srcdoc = srcdoc
     const connection = lifecycle.own(new Terminator())
-    const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
+    const menu: { parameter: Optional<AutomatableParameterFieldAdapter<number>> } = {parameter: undefined}
     const streamSubscriptions = new Map<string, Terminable>()
     const heldPitches = new Set<number>()
     const releasePreview = (): void => {
@@ -125,7 +157,6 @@ export const ScriptViewFrame = ({
         streamSubscriptions.forEach(subscription => subscription.terminate())
         streamSubscriptions.clear()
     }
-    const send = (message: object): void => state.port?.postMessage(message)
     const toValues = (value: unknown): ScriptRecordValues => isRecord(value)
         ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"))
         : {}
@@ -216,6 +247,14 @@ export const ScriptViewFrame = ({
         } else if (message.type === "window" && (message.action === "open" || message.action === "close")
             && typeof message.name === "string") {
             onWindow(message.action, message.name)
+        } else if (message.type === "param-menu" && typeof message.name === "string"
+            && typeof message.x === "number" && typeof message.y === "number") {
+            menu.parameter = paramsByName.get(message.name)
+            if (!isDefined(menu.parameter)) {return}
+            const rect = iframe.getBoundingClientRect()
+            iframe.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true, cancelable: true, clientX: rect.left + message.x, clientY: rect.top + message.y
+            }))
         }
     }
     const connect = (): void => {
@@ -244,7 +283,10 @@ export const ScriptViewFrame = ({
             })
         )
         // every connect is a fresh realm, so it sends the current state
-        params.forEach(({name, parameter}) => send({type: "param", name, value: parameter.getControlledValue()}))
+        params.forEach(({name, parameter}) => {
+            send({type: "param", name, value: parameter.getControlledValue()})
+            send({type: "param-sources", name, sources: sourcesOf(name)})
+        })
         if (collections.length > 0 || bufferDeclarations.length > 0) {send({type: "data", data: readData()})}
         loadFonts()
             .then(fonts => target.postMessage({fonts}, "*", [channel.port2]))
@@ -264,6 +306,11 @@ export const ScriptViewFrame = ({
     }
     lifecycle.ownAll(
         Events.subscribe(iframe, "load", onLoad),
+        ContextMenu.subscribe(iframe, collector => {
+            const parameter = menu.parameter
+            menu.parameter = undefined
+            if (isDefined(parameter)) {collector.addItems(...parameterMenu(parameter))}
+        }),
         Terminable.create(endGesture)
     )
     return iframe

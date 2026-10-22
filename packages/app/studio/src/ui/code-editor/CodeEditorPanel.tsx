@@ -175,8 +175,9 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                             .addMenuItem(...examples
                                                 .map(example => MenuItem.default({label: example.name})
                                                     .setTriggerProcedure(() => {
-                                                        editor.setValue(example.code)
-                                                        compileCode().finally()
+                                                        if (!isDefined(handler)) {return}
+                                                        handler.loadExample(example.code)
+                                                            .catch((reason: unknown) => setStatus(String(reason), "error"))
                                                     }))))}
                                                 appearance={{tinyTriangle: true, color: Colors.dark}}>
                                         <span>Examples</span>

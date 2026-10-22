@@ -81,11 +81,14 @@
         return collected
     }
     const paramValues = new Map(config.params.map(({name, value}) => [name, value]))
+    const paramSources = new Map(config.params.map(({name, sources}) => [name, Object.freeze([...sources])]))
     const params = Object.create(null)
     for (const {name, label} of config.params) {
         params[name] = Object.freeze({
             label,
             get value() {return paramValues.get(name)},
+            get sources() {return paramSources.get(name)},
+            subscribeSources: observer => subscribe(`sources:${name}`, observer),
             set(value) {
                 if (typeof value !== "number" || !Number.isFinite(value)) {throw new TypeError(`'${name}' expects a finite number`)}
                 paramValues.set(name, value)
@@ -220,6 +223,7 @@
             }
         })
     }
+    const attachedParams = new WeakMap()
     const preview = Object.freeze({
         noteOn(pitch, velocity = 0.8) {post({type: "preview", on: true, pitch, velocity})},
         noteOff(pitch) {post({type: "preview", on: false, pitch})}
@@ -254,6 +258,16 @@
         send(message) {post({type: "send", message})},
         openWindow(name) {post({type: "window", action: "open", name: name ?? "View"})},
         closeWindow(name) {post({type: "window", action: "close", name: name ?? "View"})},
+        attachParameter(element, name) {
+            if (!(element instanceof Element)) {throw new TypeError("attachParameter expects an element")}
+            if (!paramValues.has(name)) {throw new Error(`attachParameter: no @param '${name}'`)}
+            attachedParams.set(element, name)
+            return Object.freeze({
+                terminate: () => {
+                    if (attachedParams.get(element) === name) {attachedParams.delete(element)}
+                }
+            })
+        },
         color(name, opacity = 1) {
             const color = config.colors[name] ?? ""
             return opacity >= 1 ? color : color.replace(/^hsl\((.*)\)$/, (match, inner) => `hsla(${inner}, ${Math.max(0, opacity)})`)
@@ -262,10 +276,14 @@
     globalThis.addEventListener("contextmenu", event => {
         event.preventDefault()
         event.stopImmediatePropagation()
+        const target = event.composedPath().find(node => attachedParams.has(node))
+        if (target !== undefined) {post({type: "param-menu", name: attachedParams.get(target), x: event.clientX, y: event.clientY})}
     }, {capture: true})
+    // on macOS a Control+Click is the secondary click, it arrives as the primary button
+    const isMacOS = navigator.userAgent.includes("Mac OS X")
     for (const kind of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "dblclick"]) {
         globalThis.addEventListener(kind, event => {
-            if (event.button === 2) {event.stopImmediatePropagation()}
+            if (event.button === 2 || (isMacOS && event.button === 0 && event.ctrlKey)) {event.stopImmediatePropagation()}
         }, {capture: true})
     }
     for (const kind of ["keydown", "keyup"]) {
@@ -285,6 +303,10 @@
         if (message.type === "param") {
             paramValues.set(message.name, message.value)
             notify(`param:${message.name}`, message.value)
+        } else if (message.type === "param-sources") {
+            if (!paramSources.has(message.name)) {return}
+            paramSources.set(message.name, Object.freeze([...message.sources]))
+            notify(`sources:${message.name}`, paramSources.get(message.name))
         } else if (message.type === "data") {
             for (const [name, values] of Object.entries(message.data)) {
                 if (!dataValues.has(name)) {continue}

@@ -84,6 +84,7 @@ export type ScriptDeviceEditorConfig = {
     readonly starterPrompt: string
     readonly entryPoints: ScriptEntryPoints.Api
     readonly icon: IconSymbol
+    readonly renew: (box: ScriptCompiler.ScriptDeviceBox, uuid: UUID.Bytes) => ScriptCompiler.ScriptDeviceBox
     readonly populateMenu: (parent: MenuItem, service: StudioService, deviceHost: DeviceHost, adapter: ScriptAdapter) => void
     readonly populateMeter: (construct: {
         lifecycle: Lifecycle,
@@ -91,6 +92,9 @@ export type ScriptDeviceEditorConfig = {
         adapter: ScriptAdapter
     }) => Nullable<HTMLElement>
 }
+
+// an example replaces the device: the replaced device keeps the code editor open, the new one takes it over
+const codeEditorHandover = {replaced: new Set<string>(), opening: new Set<string>()}
 
 type Construct = {
     lifecycle: Lifecycle
@@ -115,33 +119,48 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             throw result.error
         }
     }
+    const loadExample = async (code: string): Promise<void> => {
+        const uuid = UUID.generate()
+        const oldKey = UUID.toString(adapter.uuid), newKey = UUID.toString(uuid)
+        codeEditorHandover.replaced.add(oldKey)
+        codeEditorHandover.opening.add(newKey)
+        const result = await Promises.tryCatch(compiler.replace(service.audioContext, editing, box, code,
+            () => config.renew(box, uuid)))
+        if (result.status === "rejected") {
+            codeEditorHandover.replaced.delete(oldKey)
+            codeEditorHandover.opening.delete(newKey)
+            throw result.error
+        }
+    }
     if (storedCode.length > 0) {
         compiler.load(service.audioContext, box).finally(EmptyExec)
     } else {
         compiler.compile(service.audioContext, editing, box, userCode, true).finally(EmptyExec)
     }
+    const isEditorActive = (): boolean => service.activeCodeEditor
+        .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+    const openEditor = () => service.openCodeEditor({
+        handler: {
+            uuid: adapter.uuid,
+            name: adapter.labelField,
+            compile,
+            loadExample,
+            subscribeErrors: observer =>
+                service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer),
+            subscribeCode: observer =>
+                box.code.subscribe(owner => observer(compiler.stripHeader(owner.getValue())))
+        },
+        initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
+        previousScreen: service.layout.screen.getValue(),
+        examples: config.examples,
+        starterPrompt: config.starterPrompt,
+        entryPoints: config.entryPoints
+    })
     const toggleEditor = () => {
-        const isActive = service.activeCodeEditor
-            .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
-        if (isActive) {
+        if (isEditorActive()) {
             service.closeCodeEditor()
         } else {
-            service.openCodeEditor({
-                handler: {
-                    uuid: adapter.uuid,
-                    name: adapter.labelField,
-                    compile,
-                    subscribeErrors: observer =>
-                        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer),
-                    subscribeCode: observer =>
-                        box.code.subscribe(owner => observer(compiler.stripHeader(owner.getValue())))
-                },
-                initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
-                previousScreen: service.layout.screen.getValue(),
-                examples: config.examples,
-                starterPrompt: config.starterPrompt,
-                entryPoints: config.entryPoints
-            })
+            openEditor()
         }
     }
     const resolveGroupColor = (colorName: string): Color => {
@@ -303,7 +322,9 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         for (const item of section.items) {
             switch (item.type) {
                 case "param":
-                    controls.appendChild(createParamElement(terminator, item.declaration, section.group))
+                    if (item.declaration.omitDefaultUi !== true) {
+                        controls.appendChild(createParamElement(terminator, item.declaration, section.group))
+                    }
                     break
                 case "sample":
                     controls.appendChild(createSampleElement(terminator, item.declaration))
@@ -400,9 +421,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         Terminable.create(() => rebuild.alive = false),
         {
             terminate: () => {
-                const isActive = service.activeCodeEditor
-                    .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
-                if (isActive) {service.closeCodeEditor()}
+                const replaced = codeEditorHandover.replaced.delete(UUID.toString(adapter.uuid))
+                if (isEditorActive() && !replaced) {service.closeCodeEditor()}
             }
         },
         adapter.codeChanged.subscribe(() => {
@@ -424,6 +444,9 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         lifecycle.own(adapter.sideChains.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}))
     }
     rebuildNow()
+    if (codeEditorHandover.opening.delete(UUID.toString(adapter.uuid))) {
+        queueMicrotask(() => {if (rebuild.alive && !isEditorActive()) {openEditor()}})
+    }
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}

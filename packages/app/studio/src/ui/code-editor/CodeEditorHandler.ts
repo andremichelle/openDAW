@@ -5,6 +5,7 @@ export interface CodeEditorHandler {
     readonly name: MutableObservableValue<string>
 
     compile(code: string): Promise<void>
+    loadExample(code: string): Promise<void>
     subscribeErrors(observer: Procedure<string>): Subscription
     subscribeCode(observer: Procedure<string>): Subscription
 }

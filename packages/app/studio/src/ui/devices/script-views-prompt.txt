@@ -24,6 +24,9 @@ is frozen. Create mutable things (typed arrays, Maps) in the constructor.
     Persistent floats (a wavetable, a curve) the view writes and the processor reads.
 // @stream <name> <length> [value|ring|fft]
     Processor to view telemetry (current step, scope, spectrum). Never saved, never rendered.
+// @param <name> ... [omit-default-ui]
+    The parameter gets no knob, the view is its only control. It stays automatable, modulatable and MIDI
+    learnable. Give its control host.attachParameter(element, name) so a right click opens the parameter menu.
 
 ### Processor side
 
@@ -43,7 +46,10 @@ class View {
 }
 
 host.root, host.mode ("inline" | "window")
-host.params.<name>: label, value, set(value), subscribe(observer)
+host.params.<name>: label, value, set(value), subscribe(observer),
+    sources, subscribeSources(observer)   (value includes automation and modulation, sources lists
+    "automated", "modulated", "midi", "external")
+host.attachParameter(element, name) -> {terminate()}   (right click on element opens the parameter menu)
 host.data.<collection>: length, get(index), toArray(), set(index, {field: value}), insert(index, values?),
     remove(index), subscribe(observer)
 host.data.<buffer>: length, get(index), toArray(), set(values, offset?), subscribe(observer)

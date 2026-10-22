@@ -1,8 +1,9 @@
 import defaultCode from "./apparat-default.js?raw"
 import starterPrompt from "./apparat-starter-prompt.txt?raw"
 import viewsPrompt from "@/ui/devices/script-views-prompt.txt?raw"
-import {DeviceHost, ApparatDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Lifecycle} from "@opendaw/lib-std"
+import {DeviceHost, ApparatDeviceBoxAdapter, InstrumentFactories} from "@opendaw/studio-adapters"
+import {asInstanceOf, Lifecycle} from "@opendaw/lib-std"
+import {ApparatDeviceBox} from "@opendaw/studio-boxes"
 import {createElement} from "@opendaw/lib-jsx"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -19,6 +20,15 @@ const config: ScriptDeviceEditorConfig = {
     starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,
     entryPoints: ScriptEntryPointDocs.apparat,
     icon: IconSymbol.Code,
+    renew: (box, uuid) => {
+        const device = asInstanceOf(box, ApparatDeviceBox)
+        const {defaultName, defaultIcon} = InstrumentFactories.Apparat
+        return ApparatDeviceBox.create(device.graph, uuid, fresh => {
+            fresh.host.refer(device.host.targetVertex.unwrap("apparat host"))
+            fresh.label.setValue(defaultName)
+            fresh.icon.setValue(IconSymbol.toName(defaultIcon))
+        })
+    },
     populateMenu: (parent, service, deviceHost) =>
         MenuItems.forAudioUnitInput(parent, service, deviceHost),
     populateMeter: ({lifecycle, service, adapter}) => (

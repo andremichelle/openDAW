@@ -111,6 +111,54 @@ describe("ScriptDeclaration", () => {
         })
     })
 
+    describe("[omit-default-ui]", () => {
+        const parse = (line: string) => ScriptDeclaration.parseParams(line)[0]
+        it("is absent on every existing form", () => {
+            expect(parse("// @param gain").omitDefaultUi).toBeUndefined()
+            expect(parse("// @param cutoff 1000 20 20000 exp Hz").omitDefaultUi).toBeUndefined()
+        })
+        it("is accepted after every form and leaves the declaration unchanged", () => {
+            const forms = ["gain", "gain 0.5", "bypass true", "bypass bool", "level 0.4 bool", "freq 440 20 20000",
+                "mode 0 0 3 int", "time 500 1 2000 linear", "cutoff 1000 20 20000 exp Hz"]
+            for (const form of forms) {
+                expect(parse(`// @param ${form} [omit-default-ui]`)).toEqual({...parse(`// @param ${form}`), omitDefaultUi: true})
+            }
+        })
+        it("is accepted between tokens and before a trailing comment", () => {
+            expect(parse("// @param cutoff [omit-default-ui] 1000 20 20000 exp Hz"))
+                .toEqual({label: "cutoff", defaultValue: 1000, min: 20, max: 20000, mapping: "exp", unit: "Hz", omitDefaultUi: true})
+            expect(parse("// @param cutoff 1000 20 20000 exp Hz [omit-default-ui]   // the view draws it").omitDefaultUi).toBe(true)
+        })
+        it("is never read as the unit", () => {
+            expect(parse("// @param cutoff 1000 20 20000 exp [omit-default-ui]").unit).toBe("")
+        })
+        it("rejects unknown flags", () => {
+            expect(() => parse("// @param gain 0.5 [hide]")).toThrow("unknown flag '[hide]'")
+            expect(() => parse("// @param gain 0.5 [omit-default-ui"))
+                .toThrow("unknown flag '[omit-default-ui'")
+        })
+        it("still validates the positional tokens", () => {
+            expect(() => parse("// @param x 0.5 0 1 cubic [omit-default-ui]")).toThrow("unknown mapping 'cubic'")
+            expect(() => parse("// @param x 5 0 1 linear [omit-default-ui]")).toThrow("must be within")
+        })
+        it("travels into parseGroups", () => {
+            const [section] = ScriptDeclaration.parseGroups("// @param a 0.5\n// @param b 0.5 [omit-default-ui]")
+            expect(section.items.map(item => item.type === "param" && item.declaration.omitDefaultUi === true)).toEqual([false, true])
+        })
+        it("keeps the declaration equal, so toggling it keeps the parameter box", () => {
+            expect(ScriptDeclaration.isEqual(parse("// @param a 0.5 0 1 linear"), parse("// @param a 0.5 0 1 linear [omit-default-ui]")))
+                .toBe(true)
+        })
+        it("is rejected on @field", () => {
+            expect(() => ScriptDeclaration.parseCollections("// @collection steps\n// @field steps.on true [omit-default-ui]"))
+                .toThrow("only applies to @param")
+        })
+        it("does not change the declaration order", () => {
+            expect([...ScriptDeclaration.parseDeclarationOrder("// @param a [omit-default-ui]\n// @param b").entries()])
+                .toEqual([["a", 0], ["b", 1]])
+        })
+    })
+
     describe("parseSamples", () => {
         it("parses a single sample", () => {
             expect(ScriptDeclaration.parseSamples("// @sample kick")).toEqual([{label: "kick"}])

@@ -25,6 +25,7 @@ export interface ParamDeclaration {
     readonly max: number
     readonly mapping: ParamMapping
     readonly unit: string
+    readonly omitDefaultUi?: boolean
 }
 
 export interface SampleDeclaration {
@@ -111,6 +112,7 @@ const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
 const LATENCY_LINE = /^\/\/ @latency\b(.*)$/m
 const FLOAT_TOLERANCE = 1e-6
 const VALID_MAPPINGS: ReadonlyArray<string> = ["linear", "exp", "int", "bool"]
+const OMIT_DEFAULT_UI = "[omit-default-ui]"
 
 const RESERVED_NAMES: ReadonlyArray<string> = ["__proto__"]
 
@@ -131,6 +133,16 @@ const BoolStringMapping: StringMapping<number> = new class implements StringMapp
 
 const parseSingleParam = (line: string): ParamDeclaration => {
     const tokens = line.replace(/^\/\/ @param\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
+    const flags = tokens.slice(1).filter(token => token.startsWith("["))
+    const unknown = flags.find(flag => flag !== OMIT_DEFAULT_UI)
+    if (isDefined(unknown)) {
+        throw new Error(`Malformed @param: '${line}' — unknown flag '${unknown}' (expected: ${OMIT_DEFAULT_UI})`)
+    }
+    const declaration = parseParamTokens(line, tokens.filter((token, index) => index === 0 || !token.startsWith("[")))
+    return flags.length > 0 ? {...declaration, omitDefaultUi: true} : declaration
+}
+
+const parseParamTokens = (line: string, tokens: ReadonlyArray<string>): ParamDeclaration => {
     if (tokens.length === 0) {
         throw new Error(`Malformed @param: '${line}'`)
     }
@@ -255,6 +267,7 @@ const parseCollectionDeclarations = (code: string): ReadonlyArray<CollectionDecl
                 throw new Error(`Malformed @field: '${line}' — ${String(parsed.error).replace(/^Error: Malformed @param: '[^']*'( — )?/, "")}`)
             }
             const declaration = parsed.value
+            if (declaration.omitDefaultUi === true) {throw new Error(`Malformed @field: '${line}' — ${OMIT_DEFAULT_UI} only applies to @param`)}
             if (draft.fields.some(other => other.label === declaration.label)) {throw new Error(`Duplicate @field '${collection}.${field}'`)}
             draft.fields.push({...declaration, label: checkName(field, line)})
         } else {
