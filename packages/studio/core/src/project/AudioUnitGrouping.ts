@@ -8,10 +8,11 @@ import type {Project} from "./Project"
 export class AudioUnitGrouping {
     constructor(readonly project: Project) {}
 
-    canMove(units: ReadonlyArray<AudioUnitBox>, parent?: AudioUnitBox): boolean {
+    canMove(units: ReadonlyArray<AudioUnitBox>, parent?: AudioUnitBox, before?: AudioUnitBox): boolean {
         if (units.length === 0 || units.some(unit => !unit.isAttached() || unit.type.getValue() === AudioUnitType.Output)) {return false}
         if (isDefined(parent) && (!parent.isAttached() || !parent.isGroup.getValue())) {return false}
         const roots = AudioUnitGroups.roots(units)
+        if (isDefined(before) && (!before.isAttached() || AudioUnitGroups.parent(before) !== parent || roots.includes(before))) {return false}
         if (isDefined(parent) && roots.some(unit => unit === parent || AudioUnitGroups.ancestors(parent).includes(unit))) {return false}
         // Follow primary routes and sends from the destination: adding a route must never feed itself.
         const visited = new Set<AudioUnitBox>()
@@ -29,6 +30,18 @@ export class AudioUnitGrouping {
             })
         }
         return !isDefined(parent) || !reachesSource(parent)
+    }
+
+    /** Boundary drops must retain their exact sibling slot. */
+    canDrop(units: ReadonlyArray<AudioUnitBox>, parent?: AudioUnitBox, before?: AudioUnitBox): boolean {
+        if (!this.canMove(units, parent, before)) {return false}
+        const roots = AudioUnitGroups.roots(units)
+        const siblings = AudioUnitGroups.children(this.project.rootBox, parent).filter(unit => !roots.includes(unit))
+        const index = isDefined(before) ? siblings.indexOf(before) : siblings.length
+        const previous = siblings[index - 1], next = siblings[index]
+        const categories = roots.map(AudioUnitGroups.category)
+        return (!isDefined(previous) || AudioUnitGroups.category(previous) <= Math.min(...categories))
+            && (!isDefined(next) || Math.max(...categories) <= AudioUnitGroups.category(next))
     }
 
     create(units: ReadonlyArray<AudioUnitBox>): Optional<AudioUnitBox> {
@@ -56,12 +69,10 @@ export class AudioUnitGrouping {
         const {rootBox, primaryAudioBusBox} = this.project
         const roots = new Set(AudioUnitGroups.roots(units))
         const moving = AudioUnitGroups.ordered(rootBox).filter(unit => roots.has(unit))
-        if (!this.canMove(moving, parent)) {return false}
-        if (isDefined(before) && AudioUnitGroups.parent(before) !== parent) {return false}
+        if (!this.canMove(moving, parent, before)) {return false}
         const destination = isDefined(parent) ? AudioUnitGroups.bus(parent) : primaryAudioBusBox
         if (!isDefined(destination)) {return false}
         const siblings = AudioUnitGroups.children(rootBox, parent).filter(unit => !moving.includes(unit))
-        if (isDefined(before) && moving.includes(before)) {return false}
         const slot = isDefined(before) ? siblings.indexOf(before) : siblings.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)
         const outputIndex = siblings.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)
         const position = slot < 0 ? siblings.length : slot

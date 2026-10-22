@@ -147,7 +147,9 @@ export const installGroupTrackDrag = (handle: HTMLElement, project: Project, uni
                 clear()
                 surface = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-group-surface]") ?? undefined
                 target = isDefined(surface) ? resolveGroupDrop(project, surface, event, surface.dataset.groupSurface === "mixer") : undefined
-                if (isDefined(target) && !project.grouping.canMove(units, target.parent)) {target = undefined}
+                if (isDefined(target) && !(target.inside
+                    ? project.grouping.canMove(units, target.parent)
+                    : project.grouping.canDrop(units, target.parent, target.before))) {target = undefined}
                 if (isDefined(surface)) {markGroupDrop(surface, target)}
             },
             approve: () => {

@@ -125,7 +125,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
             folderToggle.title = field.getValue() ? "Expand group" : "Collapse group"
         }))
-        iconElement.prepend(folderToggle)
+        iconElement.appendChild(folderToggle)
     }
     const classList = Html.buildClassList(className,
         isGroup && "group", isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")

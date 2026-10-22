@@ -36,7 +36,7 @@ component
 
   button.folder-toggle
     position: absolute
-    left: -4px
+    right: -4px
     top: 0
     width: 24px
     height: 100%
@@ -48,8 +48,12 @@ component
     font-size: 18px
 
   &.editing
-    border-top: 0.125em var(--color) solid
+    box-shadow: inset 3px 0 var(--color), 0 2px 4px 0 rgba(black, 0.1)
     background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)
+
+    > h5.input
+      background: color-mix(in srgb, var(--color) 20%, transparent)
+      outline-color: var(--color)
 
   &.compact
     padding: 0.5em

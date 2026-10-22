@@ -51,7 +51,7 @@ export class GroupRails implements Terminable {
             }
             const {button} = asDefined(this.#rails.get(unit))
             button.style.setProperty("--rail-depth", String(depth))
-            button.style.gridRow = this.horizontal ? "8" : `${start + 1} / ${end + 1}`
+            button.style.gridRow = this.horizontal ? "1" : `${start + 1} / ${end + 1}`
             button.style.gridColumn = this.horizontal ? `${start + 2} / ${end + 2}` : "1"
             if (button.parentElement !== this.container) {this.container.appendChild(button)}
         })
