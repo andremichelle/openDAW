@@ -16,7 +16,7 @@ The Capture MIDI button sits in the header next to the Manuals icon. It has two 
 - **Bright** — at least one note has been captured on an armed MIDI track. Clicking commits the buffer into a new region
   and clears it.
 
-The keyboard shortcut for committing is {key:Ctrl+Shift+M}.
+The keyboard shortcut for committing is **⌘+Shift+M**.
 
 ## How buffering works
 
@@ -70,7 +70,7 @@ delete it immediately.
 
 - Arm your MIDI track at the start of a session and forget about it. The buffer is silent and does nothing until you
   decide to commit.
-- For ideas that came together during playback, hit {key:Space} to stop, then {key:Ctrl+Shift+M} to commit. The region
+- For ideas that came together during playback, hit **Space** to stop, then **⌘+Shift+M** to commit. The region
   lands where you played it.
 - For ideas you noodled without playback running, position the playhead where you want the region to start, then
   commit.
