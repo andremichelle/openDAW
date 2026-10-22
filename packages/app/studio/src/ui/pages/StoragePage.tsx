@@ -15,6 +15,7 @@ import {RadioGroup} from "@/ui/components/RadioGroup"
 import {StorageInspector} from "@/storage/StorageInspector"
 import {StorageReport} from "@/storage/StorageReport"
 import {StorageDeletion} from "@/storage/StorageDeletion"
+import {DeleteUnusedDialog} from "@/ui/pages/DeleteUnusedDialog"
 
 const className = Html.adoptStyleSheet(css, "StoragePage")
 
@@ -81,7 +82,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         const deleted: Array<StorageScan.Asset> = []
         if (orphans.length > 0 && await confirm("Delete Unused Assets?",
             `${orphans.length} asset${orphans.length === 1 ? " was" : "s were"} only used by '${item.name}' `
-            + `(${Bytes.toString(orphans.reduce((sum, {size}) => sum + size, 0))}):\n`
+            + `(${Bytes.toString(StorageReport.sizeOf(orphans))}):\n`
             + `${orphans.slice(0, 8).map(({name}) => name).join(", ")}${orphans.length > 8 ? ", ..." : ""}\n${Consequence}`,
             "Delete them", "Keep them")) {
             for (const orphan of orphans) {
@@ -89,6 +90,31 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             }
         }
         update(deleted.reduce(StorageReport.withoutAsset, StorageReport.withoutItem(report, item)))
+    }
+    const removeUnused = async (): Promise<void> => {
+        const report = current.unwrap("no report")
+        const selection = await Promises.tryCatch(DeleteUnusedDialog.show(StorageReport.unusedOf(report), Consequence))
+        if (selection.status === "rejected" || selection.value.length === 0) {return}
+        const assets = selection.value
+        if (assets.some(({kind}) => kind === "sample")) {playback.eject()}
+        const progress = new DefaultObservableValue(0.0)
+        const dialog = RuntimeNotifier.progress({headline: "Deleting Unused", message: "", progress})
+        const deleted: Array<StorageScan.Asset> = []
+        const failed: Array<string> = []
+        for (const [index, asset] of assets.entries()) {
+            dialog.message = asset.name
+            const result = await Promises.tryCatch(StorageDeletion.deleteAsset(asset))
+            if (result.status === "resolved") {deleted.push(asset)} else {failed.push(`${asset.name}: ${String(result.error)}`)}
+            progress.setValue((index + 1) / assets.length)
+        }
+        dialog.terminate()
+        update(deleted.reduce(StorageReport.withoutAsset, report))
+        if (failed.length > 0) {
+            return RuntimeNotifier.info({
+                headline: "Could not delete",
+                message: `${failed.length} of ${assets.length} could not be deleted:\n${failed.join("\n")}`
+            })
+        }
     }
     const deleteButton = (procedure: () => Promise<void>): HTMLElement => {
         const element: HTMLElement = <div className="delete" title="Delete"><Icon symbol={IconSymbol.Delete}/></div>
@@ -152,12 +178,19 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
     const renderReport = (report: StorageScan.Report): void => {
         reportTerminator.terminate()
         Html.empty(summary)
+        const unused = StorageReport.unusedOf(report)
         summary.append(
             <span>{`openDAW files: ${Bytes.toString(report.total)}`}</span>,
             <span className="estimate"/>,
             report.failures.length > 0
                 ? <span className="failures" title={report.failures.join("\n")}>{`${report.failures.length} unreadable`}</span>
                 : <span/>,
+            unused.length === 0 ? <span/> : (
+                <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}
+                        appearance={{color: Colors.red, framed: true}}>
+                    <span>{`Delete unused (${unused.length}, ${Bytes.toString(StorageReport.sizeOf(unused))})...`}</span>
+                </Button>
+            ),
             <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
                 <span>Rescan</span>
             </Button>)

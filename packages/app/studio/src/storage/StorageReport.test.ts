@@ -59,6 +59,30 @@ describe("StorageReport", () => {
         expect(StorageReport.orphansOf(report, {kind: "project", id: "p2"})).toEqual([])
     })
 
+    it("lists unused assets grouped by kind, largest first", () => {
+        const assets: ReadonlyArray<StorageScan.Asset> = [
+            {...asset("w", []), kind: "wclap", size: 99},
+            {...asset("s1", []), size: 5},
+            {...asset("used", [{kind: "preset", id: "x"}]), size: 1000},
+            {...asset("f", []), kind: "soundfont", size: 1},
+            {...asset("s2", []), size: 50}
+        ]
+        const unused = StorageReport.unusedOf({...report, assets})
+        expect(unused.map(({id}) => id)).toEqual(["s2", "s1", "f", "w"])
+        expect(StorageReport.sizeOf(unused)).toBe(155)
+        expect(StorageReport.sizeOf([])).toBe(0)
+    })
+
+    it("never lists an asset the open project uses as unused", () => {
+        expect(StorageReport.unusedOf(report).map(({id}) => id)).toEqual(["b"])
+        expect(StorageReport.unusedOf(StorageReport.withOpenProject(report, "p2", [{kind: "sample", id: "b"}]))).toEqual([])
+    })
+
+    it("lists an asset as unused once its only user is deleted", () => {
+        expect(StorageReport.unusedOf(StorageReport.withoutItem(report, {kind: "project", id: "p1"}))
+            .map(({id}) => id)).toEqual(["a", "b"])
+    })
+
     it("summarizes long user lists", () => {
         expect(StorageReport.summarize(["A"])).toBe("A")
         expect(StorageReport.summarize(["A", "B", "C"])).toBe("A, B, C")

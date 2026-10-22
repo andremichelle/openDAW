@@ -57,6 +57,15 @@ export namespace StorageReport {
         assets: report.assets.map(asset => ({...asset, usedBy: asset.usedBy.filter(user => !isSame(user, ref))}))
     })
 
+    export const AssetKinds: ReadonlyArray<StorageScan.AssetKind> = ["sample", "soundfont", "wclap"]
+
+    export const sizeOf = (entries: ReadonlyArray<{ size: number }>): number =>
+        entries.reduce((sum, {size}) => sum + size, 0)
+
+    export const unusedOf = (report: StorageScan.Report): ReadonlyArray<StorageScan.Asset> =>
+        report.assets.filter(({usedBy}) => usedBy.length === 0)
+            .toSorted((a, b) => AssetKinds.indexOf(a.kind) - AssetKinds.indexOf(b.kind) || b.size - a.size)
+
     // assets nothing but this item uses, so deleting the item leaves them unused
     export const orphansOf = (report: StorageScan.Report, ref: StorageScan.ItemRef): ReadonlyArray<StorageScan.Asset> =>
         report.assets.filter(({usedBy}) => usedBy.length > 0 && usedBy.every(user => isSame(user, ref)))
