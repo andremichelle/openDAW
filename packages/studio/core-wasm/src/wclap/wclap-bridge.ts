@@ -41,6 +41,8 @@ const LOG_LIMIT = 200 // console lines per plugin instance before its output is 
 const PARAM_KIND_UNIT = 0 // abi::PARAM_KIND_UNIT: a 0..1 automation value to map into the parameter's range
 const PPQN_QUARTER = 960 // WASM CONTRACT: lib-dsp PPQN.Quarter
 const BLOCK_FLAG_PLAYING = 1 << 2 // abi::BlockFlags::PLAYING
+const MAX_AUDIO_PORTS = 32 // per direction: the declared layout sizes allocations in the plugin's memory
+const MAX_PORT_CHANNELS = 1024
 
 type Loaded = {
     memory: WebAssembly.Memory
@@ -531,9 +533,10 @@ export class WclapBridges {
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
         this.#loadState(plugin, loaded)
         const audioPorts = this.#extension(loaded, ClapAbi.Ext.AUDIO_PORTS)
-        loaded.inputPortInfos = audioPorts === 0 ? [] : this.#readInputPorts(loaded, audioPorts)
+        loaded.inputPortInfos = audioPorts === 0 ? [] : this.#readPorts(loaded, audioPorts, true)
         loaded.inputPorts = audioPorts === 0 ? 1 : loaded.inputPortInfos.length
-        this.#createProcess(plugin, loaded)
+        const outputPorts = audioPorts === 0 ? [{name: "", channels: 2}] : this.#readPorts(loaded, audioPorts, false)
+        this.#createProcess(plugin, loaded, outputPorts)
         // the engine splits blocks at events, so a chunk may hold any 1..128 frames
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
             throw new Error("plugin.activate failed")
@@ -649,32 +652,40 @@ export class WclapBridges {
         return host
     }
 
-    #readInputPorts(loaded: Loaded, audioPorts: number): Array<WclapAudioPort> {
-        const count = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, 1)
+    #readPorts(loaded: Loaded, audioPorts: number, isInput: boolean): Array<WclapAudioPort> {
+        const direction = isInput ? 1 : 0
+        const side = isInput ? "input" : "output"
+        const count = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, direction) >>> 0
+        if (count > MAX_AUDIO_PORTS) {throw new Error(`${count} ${side} ports, at most ${MAX_AUDIO_PORTS} are supported`)}
         const info = loaded.malloc(ClapAbi.AudioPortInfo.SIZE)
         const ports: Array<WclapAudioPort> = []
         for (let index = 0; index < count; index++) {
-            const ok = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.GET, loaded.plugin, index, 1, info) !== 0
-            ports.push(ok
-                ? {name: this.#cstr(loaded.memory, info + ClapAbi.AudioPortInfo.NAME),
-                    channels: this.#u32(loaded.memory, info + ClapAbi.AudioPortInfo.CHANNEL_COUNT)}
-                : {name: "", channels: 2})
+            if (this.#call(loaded, audioPorts + ClapAbi.AudioPorts.GET, loaded.plugin, index, direction, info) === 0) {
+                throw new Error(`${side} port ${index} has no info`)
+            }
+            const channels = this.#u32(loaded.memory, info + ClapAbi.AudioPortInfo.CHANNEL_COUNT)
+            if (channels > MAX_PORT_CHANNELS) {
+                throw new Error(`${side} port ${index} has ${channels} channels, at most ${MAX_PORT_CHANNELS} are supported`)
+            }
+            ports.push({name: this.#cstr(loaded.memory, info + ClapAbi.AudioPortInfo.NAME), channels})
         }
         return ports
     }
 
-    // Allocate the clap_process block once: an audio buffer per input port, the stereo output, the event lists
+    // Allocate the clap_process block once: an audio buffer per input port, one per output port, the event lists
     // and a transport event
-    #createProcess(plugin: Plugin, loaded: Loaded): void {
+    #createProcess(plugin: Plugin, loaded: Loaded, outputPorts: ReadonlyArray<WclapAudioPort>): void {
         const {malloc} = loaded
         const processPtr = malloc(ClapAbi.Process.SIZE)
         const inputCount = Math.max(1, loaded.inputPorts)
         const audioIn = malloc(ClapAbi.AudioBuffer.SIZE * inputCount)
-        const audioOut = malloc(ClapAbi.AudioBuffer.SIZE)
+        const audioOut = malloc(ClapAbi.AudioBuffer.SIZE * Math.max(1, outputPorts.length))
         const inData = malloc(8)
-        const outData = malloc(8)
+        const outData = outputPorts.map(({channels}) => malloc(Math.max(1, channels) * 4))
+        const scratch = malloc(RENDER_QUANTUM * 4)
         loaded.inputs = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
-        loaded.outputs = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
+        const outLeft = malloc(RENDER_QUANTUM * 4)
+        loaded.outputs = [outLeft, outputPorts[0]?.channels === 1 ? outLeft : malloc(RENDER_QUANTUM * 4)]
         const inEvents = malloc(ClapAbi.InputEvents.SIZE)
         const outEvents = malloc(ClapAbi.OutputEvents.SIZE)
         loaded.transportPtr = malloc(ClapAbi.TransportEvent.SIZE)
@@ -684,15 +695,10 @@ export class WclapBridges {
         let view = this.#view(loaded)
         view.setUint32(inData, loaded.inputs[0], true)
         view.setUint32(inData + 4, loaded.inputs[1], true)
-        view.setUint32(outData, loaded.outputs[0], true)
-        view.setUint32(outData + 4, loaded.outputs[1], true)
-        for (const [buffer, data] of [[audioIn, inData], [audioOut, outData]]) {
-            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, data, true)
-            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
-            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, 2, true)
-            view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
-            view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
-        }
+        view.setUint32(audioIn + ClapAbi.AudioBuffer.DATA32, inData, true)
+        view.setUint32(audioIn + ClapAbi.AudioBuffer.DATA64, 0, true)
+        view.setUint32(audioIn + ClapAbi.AudioBuffer.LATENCY, 0, true)
+        view.setBigUint64(audioIn + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
         const channelsOf = (index: number): number => Math.min(2, Math.max(1, loaded.inputPortInfos[index]?.channels ?? 2))
         view.setUint32(audioIn + ClapAbi.AudioBuffer.CHANNEL_COUNT, channelsOf(0), true)
         loaded.auxInputs = [[0, 0]]
@@ -713,6 +719,18 @@ export class WclapBridges {
             loaded.auxInputs.push(channels)
         }
         view = this.#view(loaded)
+        for (const buffer of [...loaded.outputs, scratch]) {new Float32Array(loaded.memory.buffer, buffer, RENDER_QUANTUM).fill(0.0)}
+        outputPorts.forEach(({channels}, port) => {
+            const buffer = audioOut + port * ClapAbi.AudioBuffer.SIZE
+            for (let channel = 0; channel < channels; channel++) {
+                view.setUint32(outData[port] + channel * 4, port === 0 && channel < 2 ? loaded.outputs[channel] : scratch, true)
+            }
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, outData[port], true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channels, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
+            view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
+        })
         loaded.auxFed = loaded.auxInputs.map(() => false)
         loaded.auxSilent = loaded.auxInputs.map(() => true)
         new Uint8Array(loaded.memory.buffer, loaded.transportPtr, ClapAbi.TransportEvent.SIZE).fill(0)
@@ -752,7 +770,7 @@ export class WclapBridges {
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS, audioIn, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS, audioOut, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS_COUNT, loaded.inputPorts, true)
-        view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS_COUNT, 1, true)
+        view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS_COUNT, outputPorts.length, true)
         view.setUint32(processPtr + ClapAbi.Process.IN_EVENTS, inEvents, true)
         view.setUint32(processPtr + ClapAbi.Process.OUT_EVENTS, outEvents, true)
         loaded.processPtr = processPtr
