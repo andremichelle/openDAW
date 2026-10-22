@@ -97,7 +97,7 @@ range.showUnitInterval(0, PPQN.fromSignature(9, 1))
 const snapping = new Snapping(range)
 
 // The offline analyzer (transient descriptors, tempo, material features) the core worker instantiates once.
-const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/${import.meta.env.BUILD_UUID}/wasm/stretch_wasm.wasm`
+const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`
 
 export class StudioService implements ProjectEnv {
     readonly layout = {

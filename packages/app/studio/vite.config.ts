@@ -110,14 +110,14 @@ export default defineConfig(({command}) => {
             },
             {
                 // The WASM engine binaries (built by @opendaw/studio-core-wasm's build-wasm.sh into its
-                // dist/wasm/) served under /wasm-engine/<build-uuid>/: live from the package dist in dev (so a Rust rebuild
+                // dist/wasm/) served under /wasm-engine/: live from the package dist in dev (so a Rust rebuild
                 // is picked up without restarting), copied into the bundle at build. When they are absent
                 // (e.g. a CI runner without the Rust toolchain) the studio still builds; the engine toggle
                 // then reports the WASM engine as unavailable.
                 name: "wasm-engine-assets",
                 configureServer(server) {
                     const sourceDir = resolve(__dirname, "../../studio/core-wasm/dist")
-                    server.middlewares.use(`/wasm-engine/${uuid}`, (req, res, next) => {
+                    server.middlewares.use("/wasm-engine", (req, res, next) => {
                         const name = (req.url ?? "").split("?")[0].replace(/^\//, "")
                         const file = resolve(sourceDir, name)
                         if (!isWasmEngineAsset(name) || !existsSync(file)) {return next()}
@@ -137,7 +137,7 @@ export default defineConfig(({command}) => {
                             entry.isDirectory() ? walk(`${relative}/${entry.name}`) : [`${relative}/${entry.name}`])
                     walk("wasm").filter(isWasmEngineAsset).forEach(name => this.emitFile({
                         type: "asset",
-                        fileName: `wasm-engine/${uuid}/${name}`,
+                        fileName: `wasm-engine/${name}`,
                         source: readFileSync(resolve(sourceDir, name))
                     }))
                 }
