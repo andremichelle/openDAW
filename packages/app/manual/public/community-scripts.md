@@ -15,7 +15,7 @@ shows up in every openDAW Studio, without a Studio update.
 
 Every script links to its folder on GitHub, where you can read its history or suggest an improvement.
 
-Community WebCLAP plugins appear in a **Community** folder in the WebCLAP browser and in the WebCLAP device.
+Community WebCLAP plugins have their own page, [Community WebCLAPs](/manuals/community-webclaps).
 
 ## Sharing your own script
 
@@ -94,16 +94,6 @@ request, and once it is merged everybody gets the new version. The folder name s
 2. A script is at most 256 KB.
 3. Device scripts are plain JavaScript without imports. A project script may start with imports for your own editor,
    everything before its first comment line is dropped, exactly like the Studio does when you paste it.
-
-## WebCLAP plugins
-
-WebCLAP plugins are shared as source code in `wclaps/<slug>/source/`, never as a built file. The check builds them
-with a fixed toolchain, so the plugin people load always matches the reviewed code. The repository's
-[CONTRIBUTING.md](https://github.com/andremichelle/opendaw-commons/blob/main/CONTRIBUTING.md) explains the build
-script, and `wclaps/simple-sine` is a complete example.
-
-To try a WebCLAP pull request, open its check on GitHub, download **wclap-bundles** from the run's summary page and
-unzip it. In the Studio, add a WebCLAP device, click **Load Plugin > Import WebCLAP...** and pick the file.
 
 ## Let an AI open the pull request
 
