@@ -1147,7 +1147,7 @@ class ToneView {
         for (const control of this.controls) {
             const value = tone[control.name]
             control.input.value = toneStep(control.name, value) / 1000
-            control.value.textContent = isToneTime(control.name) ? (value < .1 ? (value * 1000).toFixed(1) + ' ms' : value.toFixed(3) + ' s') : ['detune', 'tremolo', 'vibrato'].includes(control.name) ? value.toFixed(3) + '×' : (value * 100).toFixed(1).replace(/\.0$/, '') + '%'
+            control.value.textContent = isToneTime(control.name) ? (value < .1 ? (value * 1000).toFixed(1) + ' ms' : value.toFixed(3) + ' s') : (value * 100).toFixed(1).replace(/\.0$/, '') + '%'
             control.input.setAttribute('aria-valuetext', control.value.textContent)
         }
     }
