@@ -1,3 +1,4 @@
+import {Int32Field} from "@opendaw/lib-box"
 import {asDefined, clamp, Lifecycle, Option} from "@opendaw/lib-std"
 import {AnimationFrame, Dragging, Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
@@ -11,11 +12,11 @@ const AutoScrollPadding = 24
 const AutoScrollSpeed = 6.0 // px/s per px of depth into the padding
 
 export const installTrackResize = (lifecycle: Lifecycle, service: StudioService, trackManager: TracksManager,
-                                   adapter: TrackBoxAdapter, element: HTMLElement): void => {
+                                   adapter: TrackBoxAdapter | Int32Field, element: HTMLElement): void => {
     const resizer: HTMLElement = <div className="track-resizer" title="Drag to resize track; double-click to reset"/>
     const header = asDefined(element.querySelector<HTMLElement>(`.${TrackHeaderClassName}`))
     header.appendChild(resizer)
-    const {height} = adapter.box
+    const height = adapter instanceof Int32Field ? adapter : adapter.box.height
     const {editing} = service.project
     const {scrollableContainer, scrollModel} = trackManager
     const reset = () => {if (height.getValue() !== 0) {editing.modify(() => height.setValue(0))}}

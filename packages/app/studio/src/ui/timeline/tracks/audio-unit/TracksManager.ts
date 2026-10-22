@@ -18,7 +18,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {
-    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter,
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitGroups, AudioUnitInputAdapter,
     IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter,
     TrackBoxAdapter, TrackType
@@ -202,6 +202,11 @@ export class TracksManager implements Terminable {
                         adapter: audioUnitBoxAdapter
                     })
                     this.#scrollContainer.appendChild(unitTracks)
+                    audioUnitLifecycle.ownAll(
+                        audioUnitBoxAdapter.box.groupParent.subscribe(() => this.#invalidateOrder()),
+                        audioUnitBoxAdapter.box.groupCollapsed.subscribe(() => this.#invalidateOrder()),
+                        audioUnitBoxAdapter.box.isGroup.subscribe(() => this.#invalidateOrder())
+                    )
                     audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     this.#watchLayers(audioUnitLifecycle, audioUnitBoxAdapter.input.adapter())
@@ -224,6 +229,7 @@ export class TracksManager implements Terminable {
                             const laneElement = UnitLane({
                                 lifecycle: syntheticLifecycle,
                                 service: this.#service,
+                                trackManager: this,
                                 audioUnitBoxAdapter
                             })
                             syntheticLifecycle.own({terminate: () => laneElement.remove()})
@@ -426,6 +432,20 @@ export class TracksManager implements Terminable {
 
     #invalidateOrder(): void {
         this.#orderedByIndex = Option.None
+        const ordered = AudioUnitGroups.ordered(this.#service.project.rootBox)
+        let row = 0
+        ordered.forEach(unit => this.#audioUnits.opt(unit.address.uuid).ifSome(({unitTracks}) => {
+            const hidden = AudioUnitGroups.hidden(unit)
+            unitTracks.classList.toggle("folder-hidden", hidden)
+            unitTracks.style.setProperty("--folder-depth", String(AudioUnitGroups.depth(unit)))
+            unitTracks.style.gridRow = hidden ? "" : String(++row)
+        }))
+        const containers = ordered.flatMap(unit => this.#audioUnits.opt(unit.address.uuid).mapOr(entry => [entry.unitTracks], []))
+        const current = Array.from(this.#scrollContainer.children).filter(child => child.hasAttribute("data-unit"))
+        if (containers.some((container, index) => container !== current[index])) {
+            containers.forEach(container => this.#scrollContainer.appendChild(container))
+        }
+        this.#restackModulatorLanes()
         // The sorted order drives the hit-test index and the DOM order (grid auto-placement), so display,
         // DOM and interaction always agree. The DOM is only touched when a container's order actually
         // deviates: appendChild MOVES a node, and moving the element a native drag was just pressed on
@@ -518,19 +538,21 @@ export class TracksManager implements Terminable {
     // sorted set entirely (no hit-test, no display order) and their element is display:none'd.
     #isCollapsedAway(track: TrackContext): boolean {
         if (track.owner.type === "modulator") {return this.#modulatorsCollapsed.getValue()}
-        return track.trackBoxAdapter.type === TrackType.Value
-            && track.audioUnitBoxAdapter.mapOr(unit => unit.automationCollapsed.getValue(), false)
+        return track.audioUnitBoxAdapter.mapOr(unit => AudioUnitGroups.hidden(unit.box)
+            || track.trackBoxAdapter.type === TrackType.Value && (unit.automationCollapsed.getValue()
+                || unit.box.isGroup.getValue() && unit.box.groupCollapsed.getValue()), false)
     }
 
     #toSortedTrackScopes(): ReadonlyArray<TrackContext> {
+        const order = AudioUnitGroups.ordered(this.#service.project.rootBox)
         return this.#tracks.values()
             .filter(scope => !this.#isCollapsedAway(scope))
             .toSorted((a: TrackContext, b: TrackContext) => {
                 // Modulator lanes sit after every audio unit, so the two collections never interleave.
                 if (a.owner.type !== b.owner.type) {return a.owner.type === "modulator" ? 1 : -1}
                 const unitDiff = IndexComparator(
-                    a.owner.adapter.indexField.getValue(),
-                    b.owner.adapter.indexField.getValue())
+                    a.owner.type === "audio-unit" ? order.indexOf(a.owner.adapter.box) : a.owner.adapter.indexField.getValue(),
+                    b.owner.type === "audio-unit" ? order.indexOf(b.owner.adapter.box) : b.owner.adapter.indexField.getValue())
                 if (unitDiff !== 0) {return unitDiff}
                 if (a.owner.type === "modulator") {
                     return IndexComparator(a.trackBoxAdapter.indexField.getValue(),

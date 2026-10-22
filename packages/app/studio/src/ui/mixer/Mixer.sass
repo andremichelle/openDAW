@@ -40,3 +40,12 @@ component
           justify-content: right
           color: rgba(white, 0.4)
           pointer-events: none
+  [data-unit].group-drop-inside
+    outline: 2px solid var(--color-blue)
+    outline-offset: -2px
+
+  [data-unit].group-drop-before
+    box-shadow: inset 2px 0 var(--color-blue)
+
+  [data-unit].group-drop-after
+    box-shadow: inset -2px 0 var(--color-blue)

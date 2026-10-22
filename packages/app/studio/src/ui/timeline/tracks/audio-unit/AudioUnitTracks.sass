@@ -32,3 +32,25 @@ component
     border-radius: 2px 0 0 2px
     border-left: 4px var(--color-black) solid
     @include colors.panel-background
+  &.folder-hidden
+    display: none
+
+  &.group-drop-inside
+    outline: 2px solid var(--color-blue)
+    outline-offset: -2px
+
+  &.group-drop-before:after, &.group-drop-after:after
+    content: ""
+    position: absolute
+    left: var(--drop-indent, 0px)
+    right: 0
+    height: 2px
+    background: var(--color-blue)
+    pointer-events: none
+    z-index: 5
+
+  &.group-drop-before:after
+    top: 0
+
+  &.group-drop-after:after
+    bottom: 0

@@ -8,19 +8,20 @@ import {
     Terminable,
     tryCatch
 } from "@opendaw/lib-std"
+import {Devices} from "@opendaw/studio-adapters"
 import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
-import {DeviceHost, Devices, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {DevicePanelShortcuts, DevicePanelShortcutsFactory} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {duplicateSelectedTracks, groupSelectedTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 import {ShortcutStorage} from "@/service/ShortcutStorage"
@@ -73,6 +74,7 @@ export namespace StudioShortcutManager {
         const gs = GlobalShortcuts
         if (ShortcutStorage.load(Contexts, localStorage)) {console.debug("Custom shortcuts loaded.")}
         return Terminable.many(
+            gc.register(gs["group-tracks"].shortcut, () => service.runIfProject(groupSelectedTracks)),
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo()), {allowRepeat: true}),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo()), {allowRepeat: true}),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
@@ -154,16 +156,7 @@ export namespace StudioShortcutManager {
                     }))),
             gc.register(gs["add-instrument"].shortcut, () => {if (service.hasProfile) {CreateTrack.instrument(service)}}),
             gc.register(gs["add-audio-track"].shortcut, () => {if (service.hasProfile) {CreateTrack.audioTrack(service)}}),
-            gc.register(gs["copy-device"].shortcut,() => service.runIfProject(
-                ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
-                    .ifSome(({box}) => {
-                        const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)
-                        const audioUnitBoxAdapter = deviceHost.audioUnitBoxAdapter()
-                        if (audioUnitBoxAdapter.isOutput) {return}
-                        const copies = editing.modify(() => TransferAudioUnits
-                            .transfer([audioUnitBoxAdapter.box], skeleton), false).unwrap("copyUnit")
-                        Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
-                    }))),
+            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(duplicateSelectedTracks)),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
                     const keys: Array<Workspace.ScreenKeys> = Object.entries(DefaultWorkspace)

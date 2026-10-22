@@ -115,7 +115,7 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
         })
     )
     return (
-        <div className={className} data-no-auto-scroll>
+        <div className={className} data-track-controls data-no-auto-scroll>
             <header>
                 <div className="channel-mix">
                     {volumeControl}
