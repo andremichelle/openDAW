@@ -23,7 +23,7 @@ import {ScriptLink, ScriptLinkFile} from "@/opendaw-api/ScriptLink"
 
 const className = Html.adoptStyleSheet(css, "CommunityScriptBrowser")
 
-const ContributeUrl = "https://github.com/andremichelle/opendaw-commons/blob/main/CONTRIBUTING.md"
+const ContributeUrl = "/manuals/community-scripts"
 
 export type CommunityScriptPick = { readonly name: string, readonly source: string }
 
@@ -202,7 +202,7 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
                                            appearance={{color: Colors.shadow, cursor: "pointer", tooltip: "Load the script from GitHub without saving it"}}>
                                        Load
                                    </Button>
-                                   <a href={ContributeUrl} target="_blank" rel="noopener">How to contribute?</a>
+                                   <a href={ContributeUrl} target="manuals">How to contribute?</a>
                                </div>
                            </div>
                        )
