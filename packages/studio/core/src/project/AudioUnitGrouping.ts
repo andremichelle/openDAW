@@ -115,6 +115,14 @@ export class AudioUnitGrouping {
         return roots.map(unit => mapping.get(unit)!)
     }
 
+    deleteGroup(group: AudioUnitBox): void {
+        if (!group.isAttached() || !group.isGroup.getValue()) {return}
+        const {rootBox} = this.project
+        // Delete leaves before their parents so folder membership cannot promote surviving children.
+        AudioUnitGroups.subtree(rootBox, group).toReversed().forEach(unit => unit.delete())
+        AudioUnitGroups.ordered(rootBox).forEach((unit, index) => unit.index.setValue(index))
+    }
+
     ungroup(group: AudioUnitBox): void {
         if (!group.isAttached() || !group.isGroup.getValue()) {return}
         const {rootBox} = this.project
