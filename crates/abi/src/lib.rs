@@ -1076,7 +1076,7 @@ pub fn wclap_input(handle: u32, index: u32, input: [&[f32]; 2]) {
 }
 
 /// Run `frames` stereo samples through the plugin with the block's transport (tempo, pulse position, playing).
-/// `false` = not ready, the device must pass its input through.
+/// `false` = no plugin output, the device must pass its input through.
 #[inline]
 pub fn wclap_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize, block: &Block) -> bool {
     #[cfg(target_family = "wasm")]

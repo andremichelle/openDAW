@@ -794,7 +794,7 @@ export class WclapBridges {
         }
     }
 
-    // One chunk through the plugin, 0 = not ready (the device passes through)
+    // One chunk through the plugin, 0 = no plugin output (the device passes through)
     #process(handle: number, in0: number, in1: number, out0: number, out1: number, frames: number,
              bpm: number, position: number, flags: number): number {
         const plugin = this.#plugins.get(handle)
@@ -813,7 +813,8 @@ export class WclapBridges {
             this.#writeTransport(loaded, view, bpm, position, flags)
             this.#writeEvents(plugin, loaded, view)
             this.#silenceUnfedInputs(loaded)
-            this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
+            const status = this.#onAudioThread(() =>
+                this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
             loaded.eventCount = 0
             plugin.receivedSinceProcess = false
             plugin.flushRequested = false
@@ -823,6 +824,7 @@ export class WclapBridges {
                 plugin.dirtyCountdown = -1
                 this.#host.requestSave(plugin.uuid)
             }
+            if (status === ClapAbi.ProcessStatus.ERROR) {return 0}
             const [, , afterLeft, afterRight] = this.#audio(loaded)
             new Float32Array(engine, out0, frames).set(afterLeft.subarray(0, frames))
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
@@ -1039,11 +1041,12 @@ export class WclapBridges {
     }
 
     // CLAP's [audio-thread] calls, answered as such by the thread-check extension (clap-helpers asserts on it)
-    #onAudioThread(procedure: () => void): void {
+    #onAudioThread<T>(procedure: () => T): T {
         this.#inProcess = true
         const result = tryCatch(procedure)
         this.#inProcess = false
         if (result.status === "failure") {throw result.error}
+        return result.value
     }
 
     // The plugin memory's DataView and audio views, renewed after the memory grew (a grow detaches them)

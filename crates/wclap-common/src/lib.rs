@@ -58,7 +58,7 @@ impl WclapLink {
     pub fn reset(&self) {abi::wclap_reset(self.bridge)}
     pub fn release(&self) {abi::wclap_release(self.bridge)}
 
-    /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough while it is not ready.
+    /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough when it has no output.
     pub fn process_effect(&mut self, in_left: &[f32], in_right: &[f32],
                           out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize, block: &Block) {
         let frames = s1 - s0;
