@@ -19,19 +19,19 @@ component
       width: max-content
       padding: 0.5em
       display: grid
-      grid-template-rows: auto auto auto auto 40px 1fr auto var(--group-rail-height, 0px)
+      grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto 40px 1fr auto
       grid-auto-flow: column dense
       justify-content: start
       row-gap: 4px
       column-gap: 8px
 
       > [data-unit]
-        grid-row: 1 / 8
+        grid-row: 2 / 9
 
       > div.headers
         display: grid
         grid-template-rows: subgrid
-        grid-row: 1 / 8
+        grid-row: 2 / 9
         grid-column: 1
         padding: 0 0.5em 0.5em 1em
         border-radius: 0.125em

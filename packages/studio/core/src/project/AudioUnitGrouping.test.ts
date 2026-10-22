@@ -52,6 +52,25 @@ const expectOrder = (actual: ReadonlyArray<AudioUnitBox>, expected: ReadonlyArra
 }
 
 describe("track folders", () => {
+    it("rejects drop previews on the source, descendants and invalid channel sections", async () => {
+        const {project, units: [first, second, third, fourth]} = await setup()
+        const group = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
+        const nested = asDefined(project.editing.modify(() => project.grouping.create([first])).unwrap())
+        const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "FX", IconSymbol.Effects, AudioUnitType.Aux, Colors.green)).unwrap()
+        const fx = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
+        expect(project.grouping.canDrop([group], undefined, group)).toBe(false)
+        expect(project.grouping.canDrop([group], nested, first)).toBe(false)
+        expect(project.grouping.canDrop([group, first], group, second)).toBe(false)
+        expect(project.grouping.canDrop([third], undefined, group)).toBe(false)
+        expect(project.grouping.canDrop([third], undefined, project.primaryAudioUnitBox)).toBe(false)
+        expect(project.grouping.canDrop([third], undefined, fourth)).toBe(true)
+        expect(project.grouping.canDrop([third], undefined, fx)).toBe(true)
+        expect(project.grouping.canDrop([fourth], group, first)).toBe(false)
+        expect(project.grouping.canDrop([fourth], group, second)).toBe(true)
+        expect(project.editing.modify(() => project.grouping.move([group], undefined, group)).unwrap()).toBe(false)
+        project.terminate()
+    })
     it("falls back to the active editor highlight after clearing the selection", async () => {
         const {project, units: [first, second, third]} = await setup()
         const selection = project.trackSelection
