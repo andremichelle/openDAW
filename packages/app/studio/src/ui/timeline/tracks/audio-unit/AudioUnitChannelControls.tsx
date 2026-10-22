@@ -7,6 +7,7 @@ import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
+import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {AudioUnitBoxAdapter} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AutomationControl} from "@/ui/components/AutomationControl"
@@ -63,11 +64,13 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
             </Checkbox>
         </AutomationControl>
     )
+    const exclusiveSolo = ExclusiveSolo.create(editing, adapter, () => project.rootBoxAdapter.audioUnits.adapters())
     const soloControl = (
         <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                            tracks={tracks} parameter={solo}>
             <Checkbox lifecycle={lifecycle}
-                      model={EditWrapper.forAutomatableParameter(editing, solo)}
+                      model={exclusiveSolo.model}
+                      onInit={exclusiveSolo.onInit}
                       appearance={{activeColor: Colors.yellow, framed: true}}>
                 <Icon symbol={IconSymbol.Solo}/>
             </Checkbox>
