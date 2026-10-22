@@ -198,9 +198,8 @@ class Stack {
         const frontAmplitude = (height - depthY) * 0.36
         return {depthX, depthY, frontWidth, frontAmplitude, baseline: height - frontAmplitude - 6}
     }
-    path(frame, width, height) {
+    path(frame, width, height, depth = frame / (FRAMES - 1)) {
         const {depthX, depthY, frontWidth, frontAmplitude, baseline} = this.geometry(width, height)
-        const depth = frame / (FRAMES - 1)
         const scale = 1 - 0.18 * depth
         const x0 = 4 + depth * depthX, y0 = baseline - depth * depthY
         const waveWidth = frontWidth * scale, amplitude = frontAmplitude * scale
@@ -228,11 +227,11 @@ class Stack {
         context.moveTo(front.x0, front.y0)
         context.lineTo(front.x1, front.y0)
         context.stroke()
+        // evenly spaced lines, each showing its nearest frame, 64 frames do not split evenly into 32 lines
         for (let line = STACK_LINES - 1; line >= 0; line--) {
-            const frame = Math.round(line * (FRAMES - 1) / (STACK_LINES - 1))
-            const nearness = 1 - frame / (FRAMES - 1)
-            context.strokeStyle = this.host.color("displayStroke", 0.05 + 0.3 * Math.pow(nearness, 1.5))
-            context.stroke(this.path(frame, width, height).path)
+            const depth = line / (STACK_LINES - 1)
+            context.strokeStyle = this.host.color("displayStroke", 0.05 + 0.3 * Math.pow(1 - depth, 1.5))
+            context.stroke(this.path(Math.round(depth * (FRAMES - 1)), width, height, depth).path)
         }
         this.dirty = false
     }
@@ -258,7 +257,7 @@ class Stack {
         area.lineTo(x0, y0)
         const gradient = context.createLinearGradient(0, y0 - amplitude, 0, y0 + amplitude)
         gradient.addColorStop(0, this.host.color("displayStroke", 0.25))
-        gradient.addColorStop(0.5, this.host.color("displayStroke", 0))
+        gradient.addColorStop(0.5, this.host.color("displayStroke", 0.1))
         gradient.addColorStop(1, this.host.color("displayStroke", 0.25))
         context.fillStyle = gradient
         context.fill(area)
@@ -279,7 +278,7 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: 100vh; position: relative }
+                body { margin: 1px; width: calc(100% - 2px); box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: calc(100vh - 2px); position: relative }
                 canvas { width: 100%; height: 100%; display: block; border-radius: 4px; touch-action: none; cursor: ns-resize }
                 button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 9px; color: var(--color-gray);
                     border: none; border-radius: 2px; padding: 1px 6px; cursor: pointer;
@@ -330,7 +329,7 @@ class Editor {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: 100vh; display: grid; gap: 4px;
+                body { margin: 1px; width: calc(100% - 2px); box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; height: calc(100vh - 2px); display: grid; gap: 4px;
                     grid-template-rows: 18px minmax(0, 1fr) 16px 12px; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) }
                 nav { grid-column: 1 / -1; display: flex; gap: 4px; align-items: stretch }
                 nav span { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255, 255, 255, 0.3);
@@ -574,7 +573,7 @@ class Editor {
         path.lineTo(0, height / 2)
         const gradient = context.createLinearGradient(0, 0, 0, height)
         gradient.addColorStop(0, this.host.color("displayStroke", 0.2))
-        gradient.addColorStop(0.5, this.host.color("displayStroke", 0))
+        gradient.addColorStop(0.5, this.host.color("displayStroke", 0.08))
         gradient.addColorStop(1, this.host.color("displayStroke", 0.2))
         context.fillStyle = gradient
         context.fill(path)

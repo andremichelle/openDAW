@@ -330,6 +330,32 @@ describe("OpfsWorker", () => {
             warn.mockRestore()
             vi.useRealTimers()
         })
+        it("a lone hanging operation names its own step after 5s", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            // no second caller, so no waiter warning can fire
+            const hangingRoot = {getFileHandle: async () => ({createSyncAccessHandle: () => new Promise(() => {})})}
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
+            void protocol.read("alone.json")
+            await vi.advanceTimersByTimeAsync(4900)
+            expect(warn).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(200)
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toMatch(/^\[OPFS] read 'alone\.json' runs for \d+\.\ds at 'create sync access handle'$/)
+            await vi.advanceTimersByTimeAsync(20000)
+            expect(warn).toHaveBeenCalledTimes(1)
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a failing operation clears its hold warning", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await expect(protocol.read("missing.json")).rejects.toBeDefined()
+            await vi.advanceTimersByTimeAsync(10000)
+            expect(warn).not.toHaveBeenCalled()
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
     })
 
     describe("path parsing", () => {

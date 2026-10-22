@@ -60,7 +60,7 @@ class View {
         this.host = host
         host.root.innerHTML = `
             <style>
-                body { margin: 0; box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; display: grid; grid-template-rows: minmax(0, 1fr) 16px; gap: 4px; height: 100vh }
+                body { margin: 1px; width: calc(100% - 2px); box-sizing: border-box; padding: 4px; border: 0.5px solid hsl(from var(--color-display-grid) h s l / 0.12); border-radius: 8px; display: grid; grid-template-rows: minmax(0, 1fr) 16px; gap: 4px; height: calc(100vh - 2px) }
                 canvas { width: 100%; height: 100%; min-height: 0; display: block; border-radius: 4px; touch-action: none; cursor: crosshair }
                 div { display: flex; gap: 4px }
                 button { flex: 1; font: inherit; font-size: 9px; color: var(--color-gray); border: none; border-radius: 2px;
