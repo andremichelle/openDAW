@@ -48,6 +48,35 @@ const setup = async () => {
 }
 
 describe("track folders", () => {
+    it("moves out only the selected members of the chosen folder", async () => {
+        const {project, units: [first, second, other, outside]} = await setup()
+        const left = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
+        const right = asDefined(project.editing.modify(() => project.grouping.create([other])).unwrap())
+        project.editing.modify(() => project.grouping.moveOutOfGroup(first, [first, other]))
+        expect(AudioUnitGroups.parent(first)).toBeUndefined()
+        expect(AudioUnitGroups.parent(other)).toBe(right)
+        expect(AudioUnitGroups.children(project.rootBox)).toEqual([left, first, right, outside, project.primaryAudioUnitBox])
+        expect(AudioUnitGroups.children(project.rootBox, left)).toEqual([second])
+        project.terminate()
+    })
+    it("pastes before Output when no channel is being edited", async () => {
+        const {project, units: [first, second, outside]} = await setup()
+        project.editing.modify(() => project.grouping.create([first, second]))
+        const entry = AudioUnitsClipboard.copyEntry(project.boxAdapters.adapterFor(outside, AudioUnitBoxAdapter)).unwrap()
+        const before = AudioUnitGroups.ordered(project.rootBox)
+        const handler = AudioUnitsClipboard.createHandler({
+            getEnabled: () => true, editing: project.editing, boxGraph: project.boxGraph,
+            rootBoxAdapter: project.rootBoxAdapter, audioUnitEditing: project.userEditingManager.audioUnit,
+            getEditedAudioUnit: () => Option.None
+        })
+        handler.paste(entry)
+        const after = AudioUnitGroups.ordered(project.rootBox)
+        const copy = asDefined(after.find(unit => !before.includes(unit)))
+        expect(after.filter(unit => unit !== copy)).toEqual(before)
+        expect(after.at(-2)).toBe(copy)
+        expect(after.at(-1)).toBe(project.primaryAudioUnitBox)
+        project.terminate()
+    })
     it("spans visible nested subtrees without gaps and retains folded child state", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const outer = asDefined(project.editing.modify(() => project.grouping.create([first, second, third])).unwrap())

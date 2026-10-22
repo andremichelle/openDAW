@@ -122,6 +122,15 @@ export class AudioUnitGrouping {
         return roots.map(unit => asDefined(mapping.get(unit)))
     }
 
+    moveOutOfGroup(unit: AudioUnitBox, selection: ReadonlyArray<AudioUnitBox> = [unit]): boolean {
+        const parent = AudioUnitGroups.parent(unit)
+        if (!isDefined(parent)) {return false}
+        const outer = AudioUnitGroups.parent(parent)
+        const siblings = AudioUnitGroups.children(this.project.rootBox, outer)
+        const members = selection.filter(selected => AudioUnitGroups.parent(selected) === parent)
+        return this.move(members, outer, siblings[siblings.indexOf(parent) + 1])
+    }
+
     deleteGroup(group: AudioUnitBox): void {
         if (!group.isAttached() || !group.isGroup.getValue()) {return}
         const {rootBox} = this.project

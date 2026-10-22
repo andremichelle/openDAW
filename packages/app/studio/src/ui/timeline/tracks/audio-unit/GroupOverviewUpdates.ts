@@ -12,6 +12,7 @@ export const affectsGroupOverview = (graph: BoxGraph, update: Update): boolean =
     }
     if (box instanceof TrackBox) {
         return box.enabled.address.equals(update.address) || box.tracks.address.equals(update.address)
+            || box.index.address.equals(update.address)
     }
     return box instanceof NoteRegionBox || box instanceof AudioRegionBox
 }
