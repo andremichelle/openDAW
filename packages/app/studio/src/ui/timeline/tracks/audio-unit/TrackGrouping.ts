@@ -65,7 +65,7 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
             pendingSingle = false
         }),
         ContextMenu.subscribe(header, collector => {
-            if (populateMenu) {
+            if (isDefined(populateMenu)) {
                 const root = MenuItem.root()
                 populateMenu(root)
                 collector.addItems(...root.collectChildren())
@@ -121,7 +121,7 @@ export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void 
     container.querySelectorAll(".group-drop-inside,.group-drop-before,.group-drop-after").forEach(row =>
         row.classList.remove("group-drop-inside", "group-drop-before", "group-drop-after"))
     if (!isDefined(target)) {return}
-    target.row.style.setProperty("--drop-indent", `${target.parent ? 14 * (AudioUnitGroups.depth(target.parent) + 1) : 0}px`)
+    target.row.style.setProperty("--drop-indent", `${isDefined(target.parent) ? 14 * (AudioUnitGroups.depth(target.parent) + 1) : 0}px`)
     target.row.classList.add(target.inside ? "group-drop-inside" : target.after ? "group-drop-after" : "group-drop-before")
 }
 

@@ -47,7 +47,26 @@ const setup = async () => {
     return {project, units}
 }
 
+const expectOrder = (actual: ReadonlyArray<AudioUnitBox>, expected: ReadonlyArray<AudioUnitBox>): void => {
+    expect(actual.map(unit => UUID.toString(unit.address.uuid))).toEqual(expected.map(unit => UUID.toString(unit.address.uuid)))
+}
+
 describe("track folders", () => {
+    it("falls back to the active editor highlight after clearing the selection", async () => {
+        const {project, units: [first, second, third]} = await setup()
+        const selection = project.trackSelection
+        project.userEditingManager.audioUnit.edit(third.editing)
+        selection.set([first, second])
+        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([true, true, false])
+        selection.set([])
+        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([false, false, true])
+        expect(selection.hasExplicitSelection).toBe(true)
+        project.userEditingManager.audioUnit.edit(first.editing)
+        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([true, false, false])
+        project.userEditingManager.audioUnit.clear()
+        expect([first, second, third].some(unit => selection.isHighlighted(unit))).toBe(false)
+        project.terminate()
+    })
     it("moves out only the selected members of the chosen folder", async () => {
         const {project, units: [first, second, other, outside]} = await setup()
         const left = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
@@ -55,8 +74,8 @@ describe("track folders", () => {
         project.editing.modify(() => project.grouping.moveOutOfGroup(first, [first, other]))
         expect(AudioUnitGroups.parent(first)).toBeUndefined()
         expect(AudioUnitGroups.parent(other)).toBe(right)
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([left, first, right, outside, project.primaryAudioUnitBox])
-        expect(AudioUnitGroups.children(project.rootBox, left)).toEqual([second])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [left, right, first, outside, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox, left), [second])
         project.terminate()
     })
     it("pastes before Output when no channel is being edited", async () => {
@@ -102,17 +121,35 @@ describe("track folders", () => {
         const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
             "FX", IconSymbol.Effects, AudioUnitType.Aux, Colors.green)).unwrap()
         const fx = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([folder, third, fourth, fx, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [folder, third, fourth, fx, project.primaryAudioUnitBox])
         const send = project.editing.modify(() => AuxSendBox.create(project.boxGraph, UUID.generate(), box => {
             box.audioUnit.refer(third.auxSends)
             box.targetBus.refer(bus.input)
             box.index.setValue(0)
         })).unwrap()
         project.editing.modify(() => project.grouping.move([fx], undefined, third))
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([folder, fx, third, fourth, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [folder, third, fourth, fx, project.primaryAudioUnitBox])
         expect(fx.output.targetVertex.unwrap().box).toBe(project.primaryAudioBusBox)
         expect(send.targetBus.targetVertex.unwrap().box).toBe(bus)
         project.boxGraph.verifyPointers()
+        project.terminate()
+    })
+    it("keeps instrument moves before FX buses at the root and inside a folder", async () => {
+        const {project, units: [first, second, third]} = await setup()
+        const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "FX", IconSymbol.Effects, AudioUnitType.Aux, Colors.green)).unwrap()
+        const fx = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
+        project.editing.modify(() => project.grouping.move([first]))
+        expect(AudioUnitGroups.children(project.rootBox).indexOf(first)).toBeLessThan(AudioUnitGroups.children(project.rootBox).indexOf(fx))
+        const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second, fx])).unwrap())
+        project.editing.modify(() => project.grouping.move([third], folder))
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [second, first, third, fx])
+        const copies = project.editing.modify(() => project.grouping.duplicate([first, fx])).unwrap()
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [second, first, copies[0], third, fx, copies[1]])
+        expect(project.editing.undo()).toBe(true)
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [second, first, third, fx])
+        expect(project.editing.redo()).toBe(true)
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [second, first, copies[0], third, fx, copies[1]])
         project.terminate()
     })
     it("preserves existing hierarchy when pasting a channel and disables folder copy/cut", async () => {
@@ -136,7 +173,7 @@ describe("track folders", () => {
         expect(handler.canCut({clientX: 0, clientY: 0})).toBe(false)
         project.terminate()
     })
-    it("creates channels without sorting away a user's mixed channel order", async () => {
+    it("keeps instruments before FX buses when moving and creating channels", async () => {
         const {project, units: [, , , last]} = await setup()
         const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
             "Bus", IconSymbol.Folder, AudioUnitType.Bus, Colors.blue)).unwrap()
@@ -191,13 +228,13 @@ describe("track folders", () => {
     it("duplicates a top-level track immediately after its source and supports undo/redo", async () => {
         const {project, units: [a, b, c, d]} = await setup()
         const [copy] = project.editing.modify(() => project.grouping.duplicate([b])).unwrap()
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([a, b, copy, c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [a, b, copy, c, d, project.primaryAudioUnitBox])
         expect(copy.output.targetVertex.unwrap().box).toBe(b.output.targetVertex.unwrap().box)
         project.editing.undo()
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([a, b, c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [a, b, c, d, project.primaryAudioUnitBox])
         project.editing.redo()
-        const restored = project.boxGraph.findBox(copy.address.uuid).unwrap()
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([a, b, restored, c, d, project.primaryAudioUnitBox])
+        const restored = asInstanceOf(project.boxGraph.findBox(copy.address.uuid).unwrap(), AudioUnitBox)
+        expectOrder(AudioUnitGroups.children(project.rootBox), [a, b, restored, c, d, project.primaryAudioUnitBox])
         project.boxGraph.verifyPointers()
         project.terminate()
     })
@@ -206,10 +243,10 @@ describe("track folders", () => {
         const outer = project.editing.modify(() => project.grouping.create([a, b, c])!).unwrap()
         const inner = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
         const [copy] = project.editing.modify(() => project.grouping.duplicate([a])).unwrap()
-        expect(AudioUnitGroups.children(project.rootBox, inner)).toEqual([a, copy, b])
+        expectOrder(AudioUnitGroups.children(project.rootBox, inner), [a, copy, b])
         expect(AudioUnitGroups.parent(copy)).toBe(inner)
         expect(copy.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(inner))
-        expect(AudioUnitGroups.children(project.rootBox, outer)).toEqual([inner, c])
+        expectOrder(AudioUnitGroups.children(project.rootBox, outer), [inner, c])
         const decoded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
         const loadedCopy = decoded.boxGraph.findBox(copy.address.uuid).unwrap() as typeof copy
         expect(AudioUnitGroups.parent(loadedCopy)?.address.equals(inner.address)).toBe(true)
@@ -219,7 +256,7 @@ describe("track folders", () => {
     it("duplicates a reversed noncontiguous selection as a block after the last selected sibling", async () => {
         const {project, units: [a, b, c, d]} = await setup()
         const [copyA, copyC] = project.editing.modify(() => project.grouping.duplicate([c, a])).unwrap()
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([a, b, c, copyA, copyC, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [a, b, c, copyA, copyC, d, project.primaryAudioUnitBox])
         project.terminate()
     })
     it("duplicates nested subtrees only once and places cross-folder selections in their own folders", async () => {
@@ -227,8 +264,8 @@ describe("track folders", () => {
         const outer = project.editing.modify(() => project.grouping.create([a, b, c])!).unwrap()
         const inner = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
         const [copyInner, copyC, copyD] = project.editing.modify(() => project.grouping.duplicate([d, a, inner, c])).unwrap()
-        expect(AudioUnitGroups.children(project.rootBox, outer)).toEqual([inner, c, copyInner, copyC])
-        expect(AudioUnitGroups.children(project.rootBox)).toEqual([outer, d, copyD, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox, outer), [inner, copyInner, c, copyC])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [outer, d, copyD, project.primaryAudioUnitBox])
         const children = AudioUnitGroups.children(project.rootBox, copyInner)
         expect(children).toHaveLength(2)
         expect(AudioUnitGroups.parent(copyInner)).toBe(outer)
@@ -244,8 +281,8 @@ describe("track folders", () => {
         const right = project.editing.modify(() => project.grouping.create([b])!).unwrap()
         const combined = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
         expect(AudioUnitGroups.parent(combined)).toBe(outer)
-        expect(AudioUnitGroups.children(project.rootBox, combined)).toEqual([a, b])
-        expect(AudioUnitGroups.children(project.rootBox, outer)).toEqual([combined, left, right, c, d])
+        expectOrder(AudioUnitGroups.children(project.rootBox, combined), [a, b])
+        expectOrder(AudioUnitGroups.children(project.rootBox, outer), [combined, left, right, c, d])
         expect(AudioUnitGroups.parent(c)).toBe(outer)
         project.boxGraph.verifyPointers()
         project.terminate()
@@ -267,11 +304,11 @@ describe("track folders", () => {
         project.boxGraph.verifyPointers()
         project.terminate()
     })
-    it("groups at the first selected position, routes through a unity bus, and keeps instruments and clips", async () => {
+    it("places groups before instruments, routes through a unity bus, and keeps instruments and clips", async () => {
         const {project, units: [a, b, c, d]} = await setup()
         const group = project.editing.modify(() => project.grouping.create([b, c])!).unwrap()
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([a, group, b, c, d, project.primaryAudioUnitBox])
-        expect(AudioUnitGroups.children(project.rootBox, group)).toEqual([b, c])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [group, b, c, a, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox, group), [b, c])
         expect(group.volume.getValue()).toBe(0)
         expect(b.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(group))
         expect(b.input.pointerHub.incoming()[0].box.name).toBe("VaporisateurDeviceBox")
@@ -290,14 +327,14 @@ describe("track folders", () => {
         expect(AudioUnitGroups.parent(inner)).toBe(outer)
         expect(inner.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(outer))
         project.editing.modify(() => project.grouping.move([d], inner, b))
-        expect(AudioUnitGroups.children(project.rootBox, inner)).toEqual([d, b])
+        expectOrder(AudioUnitGroups.children(project.rootBox, inner), [d, b])
         expect(project.grouping.canMove([outer], inner)).toBe(false)
         expect(project.grouping.canMove([inner], inner)).toBe(false)
         expect(project.grouping.canMove([project.primaryAudioUnitBox], inner)).toBe(false)
         project.editing.modify(() => project.grouping.move([d], undefined, outer))
         expect(AudioUnitGroups.parent(d)).toBeUndefined()
         expect(d.output.targetVertex.unwrap().box).toBe(project.primaryAudioBusBox)
-        expect(AudioUnitGroups.ordered(project.rootBox)[0]).toBe(d)
+        expectOrder(AudioUnitGroups.children(project.rootBox), [outer, d, project.primaryAudioUnitBox])
         // independent audio route from the target back to source is rejected too
         project.editing.modify(() => inner.output.refer(AudioUnitGroups.bus(outer)!.input))
         expect(project.grouping.canMove([outer], inner)).toBe(false)
@@ -307,7 +344,7 @@ describe("track folders", () => {
         const {project, units: [a, b, c, d]} = await setup()
         const group = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
         project.editing.modify(() => project.grouping.move([a, group], undefined))
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([c, d, group, a, b, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [group, a, b, c, d, project.primaryAudioUnitBox])
         project.terminate()
     })
     it("collapse survives project serialization and never changes audio routes", async () => {
@@ -343,7 +380,7 @@ describe("track folders", () => {
             .map(box => box.address.uuid)
         project.editing.modify(() => project.api.deleteAudioUnit(group))
         expect(removed.every(uuid => project.boxGraph.findBox(uuid).isEmpty())).toBe(true)
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [c, d, project.primaryAudioUnitBox])
         project.boxGraph.verifyPointers()
         expect(project.editing.undo()).toBe(true)
         expect(removed.every(uuid => project.boxGraph.findBox(uuid).nonEmpty())).toBe(true)
@@ -357,7 +394,7 @@ describe("track folders", () => {
         project.boxGraph.verifyPointers()
         expect(project.editing.redo()).toBe(true)
         expect(removed.every(uuid => project.boxGraph.findBox(uuid).isEmpty())).toBe(true)
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [c, d, project.primaryAudioUnitBox])
         project.terminate()
     })
     it("deleting an inner group preserves its parent, siblings, and outside tracks", async () => {
@@ -365,8 +402,8 @@ describe("track folders", () => {
         const outer = project.editing.modify(() => project.grouping.create([a, b, c])!).unwrap()
         const inner = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
         project.editing.modify(() => project.api.deleteAudioUnit(inner))
-        expect(AudioUnitGroups.children(project.rootBox, outer)).toEqual([c])
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([outer, c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.children(project.rootBox, outer), [c])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [outer, c, d, project.primaryAudioUnitBox])
         expect([a, b, inner].every(unit => project.boxGraph.findBox(unit.address.uuid).isEmpty())).toBe(true)
         project.boxGraph.verifyPointers()
         project.terminate()
@@ -379,7 +416,7 @@ describe("track folders", () => {
         expect(AudioUnitGroups.parent(a)).toBeUndefined()
         expect(AudioUnitGroups.parent(inner)).toBeUndefined()
         expect(AudioUnitGroups.parent(b)).toBe(inner)
-        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([a, inner, b, c, d, project.primaryAudioUnitBox])
+        expectOrder(AudioUnitGroups.ordered(project.rootBox), [inner, b, a, c, d, project.primaryAudioUnitBox])
         expect(project.editing.undo()).toBe(true)
         const restored = project.boxGraph.findBox(group.address.uuid).unwrap() as typeof group
         expect(AudioUnitGroups.children(project.rootBox, restored).length).toBe(2)

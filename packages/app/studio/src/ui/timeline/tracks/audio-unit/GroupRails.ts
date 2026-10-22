@@ -63,8 +63,7 @@ export class GroupRails implements Terminable {
     }
     #refreshSelection(): void {
         this.#rails.forEach(({button}, unit) => button.classList.toggle("selected",
-            this.project.trackSelection.hasExplicitSelection ? this.project.trackSelection.has(unit)
-                : this.project.userEditingManager.audioUnit.isEditing(unit.editing)))
+            this.project.trackSelection.isHighlighted(unit)))
     }
     terminate(): void {
         this.#lifecycle.terminate()
