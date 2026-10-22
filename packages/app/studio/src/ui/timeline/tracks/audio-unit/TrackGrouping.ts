@@ -103,7 +103,7 @@ export const resolveGroupDrop = (project: Project, container: HTMLElement, event
     let parent = AudioUnitGroups.parent(unit)
     // Moving left across a tree guide lifts the insertion out of that folder.
     if (!horizontal) {
-        const indent = Math.max(0, Math.floor((event.clientX - rect.left - 12) / 14))
+        const indent = Math.max(0, Math.floor((event.clientX - rect.left - 12) / 5))
         while (isDefined(parent) && AudioUnitGroups.depth(parent) >= indent) {parent = AudioUnitGroups.parent(parent)}
     }
     let sibling = unit
@@ -121,7 +121,7 @@ export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void 
     container.querySelectorAll(".group-drop-inside,.group-drop-before,.group-drop-after").forEach(row =>
         row.classList.remove("group-drop-inside", "group-drop-before", "group-drop-after"))
     if (!isDefined(target)) {return}
-    target.row.style.setProperty("--drop-indent", `${isDefined(target.parent) ? 14 * (AudioUnitGroups.depth(target.parent) + 1) : 0}px`)
+    target.row.style.setProperty("--drop-indent", `${isDefined(target.parent) ? 5 * (AudioUnitGroups.depth(target.parent) + 1) : 0}px`)
     target.row.classList.add(target.inside ? "group-drop-inside" : target.after ? "group-drop-after" : "group-drop-before")
 }
 
