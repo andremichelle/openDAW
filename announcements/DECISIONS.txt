@@ -187,3 +187,16 @@ Feature framing (WebCLAP)
   be rebuilt that way (JUCE kit).
 • Lead with what WebCLAP gives, then contrast with VST. Never open a paragraph with what VST cannot do,
   nobody asked that question.
+
+Feature framing (Community Scripts)
+• A public GitHub repository, opendaw-commons, holds scripts for Werkstatt, Apparat, Spielwerk and the
+  code editor. Anyone adds one with a pull request, after the merge it is in every Studio within minutes,
+  without a Studio update.
+• Anyone can try a pull request in the Studio before the merge by pasting its link (Load button).
+• LinkedIn: no school or education angle. Engaging call for contributions ("Call for scripts"), the story
+  is that community made devices reach the studio in no time.
+• Credit Chaosmeister for Deminix 3 when it is mentioned.
+• Never say "a few lines of JavaScript" or anything about how little code a device needs. Real scripts
+  run to hundreds of lines (Deminix 3 is over a thousand). Say the devices run your own JavaScript.
+• Manual: https://opendaw.studio/manuals/community-scripts
+• Repository: https://github.com/andremichelle/opendaw-commons
