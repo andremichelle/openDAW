@@ -55,7 +55,7 @@ export namespace RecordAudio {
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = 0
-        let takeNumber: int = 0
+        let takeNumber: int = RecordTrack.lastTakeNumber(capture.audioUnitBox)
         let firstRecordingTick: Option<number> = Option.None
         let placementLatency: Latency = startLatency
         let isSaved: boolean = false
@@ -77,7 +77,7 @@ export namespace RecordAudio {
         }
 
         const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
-            takeNumber = RecordTrack.nextTakeNumber(capture.audioUnitBox, takeNumber)
+            takeNumber++
             console.debug("[RecordAudio] createTakeRegion", {takeNumber, position, waveformOffset})
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
@@ -88,7 +88,7 @@ export namespace RecordAudio {
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Audio))
                 box.timeBase.setValue(TimeBase.Seconds)
-                box.label.setValue(RecordTrack.takeLabel(takeNumber))
+                box.label.setValue(`Take ${takeNumber}`)
                 box.waveformOffset.setValue(waveformOffset)
                 box.duration.setValue(minTakeSeconds)
                 box.loopDuration.setValue(minTakeSeconds)

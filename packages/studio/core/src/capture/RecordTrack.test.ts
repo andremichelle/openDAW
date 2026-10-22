@@ -29,22 +29,18 @@ const audioUnitWithRegions = (labels: ReadonlyArray<string>) => {
     return primaryAudioUnitBox
 }
 
-describe("RecordTrack.nextTakeNumber", () => {
-    it("starts at 1 on an audio unit without takes", () => {
-        expect(RecordTrack.nextTakeNumber(audioUnitWithRegions([]), 0)).toBe(1)
+describe("RecordTrack.lastTakeNumber", () => {
+    it("is 0 on an audio unit without takes", () => {
+        expect(RecordTrack.lastTakeNumber(audioUnitWithRegions([]))).toBe(0)
     })
 
-    it("continues after the highest take on the audio unit and ignores regions not named as takes", () => {
+    it("is the highest take on the audio unit and ignores regions not named as takes", () => {
         const audioUnitBox = audioUnitWithRegions(["Take 2", "Vocals", "Take 10", "Take 3 (copy)", "take 4"])
-        expect(RecordTrack.nextTakeNumber(audioUnitBox, 0)).toBe(11)
-    })
-
-    it("never gives a number at or below the last one the recording gave", () => {
-        expect(RecordTrack.nextTakeNumber(audioUnitWithRegions(["Take 1"]), 5)).toBe(6)
+        expect(RecordTrack.lastTakeNumber(audioUnitBox)).toBe(10)
     })
 
     it("ignores a take number too large to count on from", () => {
         const audioUnitBox = audioUnitWithRegions(["Take 2", "Take 20261021154434123", `Take 1${"0".repeat(400)}`])
-        expect(RecordTrack.nextTakeNumber(audioUnitBox, 0)).toBe(3)
+        expect(RecordTrack.lastTakeNumber(audioUnitBox)).toBe(2)
     })
 })

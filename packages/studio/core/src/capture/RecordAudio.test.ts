@@ -59,8 +59,8 @@ const createFakeRecordingWorklet = () => ({
 
 // `inputLatency` is the engine preference, not the resolved term: the provider resolves it the way
 // CaptureAudio does, so `InputLatency.EqualsOutput` derives it from whichever output latency was read.
-const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
-                     {outputLatency?: number, inputLatency?: number} = {}) => {
+const setup = async ({outputLatency = 0.020, inputLatency = 0.010, existingTake}:
+                     {outputLatency?: number, inputLatency?: number, existingTake?: string} = {}) => {
     const {Project} = await import("../project/Project")
     const {RecordAudio} = await import("./RecordAudio")
     const audioContext = {currentTime: 0, sampleRate: SAMPLE_RATE}
@@ -80,6 +80,24 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
     const worklet = createFakeWorklet()
     project.engine.setWorklet(worklet as unknown as EngineWorklet)
     project.editing.modify(() => project.timelineBox.loopArea.enabled.setValue(false))
+    if (isDefined(existingTake)) {
+        project.editing.modify(() => {
+            const {boxGraph} = project
+            const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+                box.type.setValue(TrackType.Notes)
+                box.tracks.refer(primaryAudioUnitBox.tracks)
+                box.target.refer(primaryAudioUnitBox)
+            })
+            const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+            NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                box.duration.setValue(PPQN.Bar)
+                box.loopDuration.setValue(PPQN.Bar)
+                box.regions.refer(trackBox.regions)
+                box.events.refer(events.owners)
+                box.label.setValue(existingTake)
+            })
+        })
+    }
     const recordingWorklet = createFakeRecordingWorklet()
     const sourceNode = {disconnects: 0, disconnect(): void {this.disconnects++}}
     const capture = {
@@ -301,24 +319,7 @@ describe("RecordAudio", () => {
 
     describe("take labels", () => {
         it("numbers the take after the takes already on the audio unit", async () => {
-            const {project, regions, tick, record, startAt, firstQuantumAt, deliver} = await setup()
-            project.editing.modify(() => {
-                const {boxGraph} = project
-                const audioUnitBox = project.primaryAudioUnitBox
-                const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
-                    box.type.setValue(TrackType.Notes)
-                    box.tracks.refer(audioUnitBox.tracks)
-                    box.target.refer(audioUnitBox)
-                })
-                const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-                NoteRegionBox.create(boxGraph, UUID.generate(), box => {
-                    box.duration.setValue(PPQN.Bar)
-                    box.loopDuration.setValue(PPQN.Bar)
-                    box.regions.refer(trackBox.regions)
-                    box.events.refer(events.owners)
-                    box.label.setValue("Take 3")
-                })
-            })
+            const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup({existingTake: "Take 3"})
             firstQuantumAt(1.0)
             startAt(1.5, PPQN.Bar)
             deliver(0.6)

@@ -54,7 +54,7 @@ export namespace RecordMidi {
         let lastPosition: ppqn = 0
         let lastPositionTime: number = performance.now()
         let positionOffset: ppqn = 0
-        let takeCount: int = 0
+        let takeCount: int = RecordTrack.lastTakeNumber(capture.audioUnitBox)
 
         // engine.position moves only on animation frames: extrapolate it, but not across a loop end the engine wraps at
         const writePositionAt = (timeStamp: number): ppqn => {
@@ -87,7 +87,7 @@ export namespace RecordMidi {
         }
 
         const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
-            takeCount = RecordTrack.nextTakeNumber(capture.audioUnitBox, takeCount)
+            takeCount++
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const duration = takeDuration(position, writePosition)
@@ -98,7 +98,7 @@ export namespace RecordMidi {
                 box.duration.setValue(duration)
                 box.loopDuration.setValue(duration)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
-                box.label.setValue(RecordTrack.takeLabel(takeCount))
+                box.label.setValue(`Take ${takeCount}`)
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
