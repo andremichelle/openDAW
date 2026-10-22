@@ -13,6 +13,7 @@ import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {installTrackSelection} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "mixer")
@@ -67,13 +68,23 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     }
     const audioUnits = UUID.newSet<AudioUnitEntry>(entry => entry.adapter.uuid)
     const anchorLifecycle = lifecycle.own(new Terminator())
+    const groupRails = lifecycle.own(new GroupRails(project, channelStripContainer, true, unit => {
+        audioUnits.opt(unit.address.uuid).ifSome(({editor}) => {
+            scrollModel.position += editor.getBoundingClientRect().left - channelStripWrapper.getBoundingClientRect().left
+        })
+    }))
     const updateDom = deferNextFrame(() => {
-        Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
         const order = new Map(AudioUnitGroups.ordered(project.rootBox).map((unit, index) => [unit, index]))
         const sorted = audioUnits.values().filter(({adapter}) => !AudioUnitGroups.hidden(adapter.box))
             .toSorted((left, right) => (order.get(left.adapter.box) ?? -1) - (order.get(right.adapter.box) ?? -1))
-        sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
+        const visible = new Set(sorted.map(({editor}) => editor))
+        audioUnits.values().forEach(({editor}) => {if (!visible.has(editor)) {editor.remove()}})
+        sorted.forEach(({editor}, index) => {
+            if (editor instanceof HTMLElement) {editor.style.gridColumn = String(index + 2)}
+            channelStripContainer.appendChild(editor)
+        })
+        groupRails.update(sorted.map(({adapter}) => adapter.box))
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
