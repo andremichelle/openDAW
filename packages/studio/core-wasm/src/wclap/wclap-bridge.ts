@@ -64,7 +64,7 @@ type Loaded = {
     outputs: [number, number]
     inputPorts: number
     inputPortInfos: Array<WclapAudioPort>
-    auxInputs: Array<[number, number]> // channel buffers of input ports 1+, index 0 unused (fed by in0/in1)
+    auxInputs: Array<[number, number]> // the first two channel buffers per input port, port 0's are `inputs`
     auxFed: Array<boolean> // the device fed this port for the coming process call
     auxSilent: Array<boolean>
     scratchPtr: number
@@ -678,48 +678,38 @@ export class WclapBridges {
         const {malloc} = loaded
         const processPtr = malloc(ClapAbi.Process.SIZE)
         const inputCount = Math.max(1, loaded.inputPorts)
+        const inputChannels = Array.from({length: inputCount}, (_port, index) => loaded.inputPortInfos[index]?.channels ?? 2)
         const audioIn = malloc(ClapAbi.AudioBuffer.SIZE * inputCount)
         const audioOut = malloc(ClapAbi.AudioBuffer.SIZE * Math.max(1, outputPorts.length))
-        const inData = malloc(8)
+        const inData = inputChannels.map(channels => malloc(Math.max(1, channels) * 4))
         const outData = outputPorts.map(({channels}) => malloc(Math.max(1, channels) * 4))
         const scratch = malloc(RENDER_QUANTUM * 4)
+        const silence = malloc(RENDER_QUANTUM * 4)
         loaded.inputs = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
         const outLeft = malloc(RENDER_QUANTUM * 4)
         loaded.outputs = [outLeft, outputPorts[0]?.channels === 1 ? outLeft : malloc(RENDER_QUANTUM * 4)]
+        loaded.auxInputs = [loaded.inputs]
+        for (let index = 1; index < inputCount; index++) {loaded.auxInputs.push([malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)])}
         const inEvents = malloc(ClapAbi.InputEvents.SIZE)
         const outEvents = malloc(ClapAbi.OutputEvents.SIZE)
         loaded.transportPtr = malloc(ClapAbi.TransportEvent.SIZE)
         loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
-        // taken after the allocations, and again after the loop's below: malloc may grow the memory, which detaches
-        // every earlier view
-        let view = this.#view(loaded)
-        view.setUint32(inData, loaded.inputs[0], true)
-        view.setUint32(inData + 4, loaded.inputs[1], true)
-        view.setUint32(audioIn + ClapAbi.AudioBuffer.DATA32, inData, true)
-        view.setUint32(audioIn + ClapAbi.AudioBuffer.DATA64, 0, true)
-        view.setUint32(audioIn + ClapAbi.AudioBuffer.LATENCY, 0, true)
-        view.setBigUint64(audioIn + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
-        const channelsOf = (index: number): number => Math.min(2, Math.max(1, loaded.inputPortInfos[index]?.channels ?? 2))
-        view.setUint32(audioIn + ClapAbi.AudioBuffer.CHANNEL_COUNT, channelsOf(0), true)
-        loaded.auxInputs = [[0, 0]]
-        for (let index = 1; index < inputCount; index++) {
-            const buffer = audioIn + index * ClapAbi.AudioBuffer.SIZE
-            const data = malloc(8)
-            const channels: [number, number] = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
-            new Float32Array(loaded.memory.buffer, channels[0], RENDER_QUANTUM).fill(0.0)
-            new Float32Array(loaded.memory.buffer, channels[1], RENDER_QUANTUM).fill(0.0)
-            const ports = new DataView(loaded.memory.buffer)
-            ports.setUint32(data, channels[0], true)
-            ports.setUint32(data + 4, channels[1], true)
-            ports.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, data, true)
-            ports.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
-            ports.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channelsOf(index), true)
-            ports.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
-            ports.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
-            loaded.auxInputs.push(channels)
+        // taken after the allocations: malloc may grow the memory, which detaches every earlier view
+        const view = this.#view(loaded)
+        for (const buffer of [...loaded.auxInputs.flat(), ...loaded.outputs, scratch, silence]) {
+            new Float32Array(loaded.memory.buffer, buffer, RENDER_QUANTUM).fill(0.0)
         }
-        view = this.#view(loaded)
-        for (const buffer of [...loaded.outputs, scratch]) {new Float32Array(loaded.memory.buffer, buffer, RENDER_QUANTUM).fill(0.0)}
+        inputChannels.forEach((channels, port) => {
+            const buffer = audioIn + port * ClapAbi.AudioBuffer.SIZE
+            for (let channel = 0; channel < channels; channel++) {
+                view.setUint32(inData[port] + channel * 4, channel < 2 ? loaded.auxInputs[port][channel] : silence, true)
+            }
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, inData[port], true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channels, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
+            view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
+        })
         outputPorts.forEach(({channels}, port) => {
             const buffer = audioOut + port * ClapAbi.AudioBuffer.SIZE
             for (let channel = 0; channel < channels; channel++) {
@@ -822,8 +812,14 @@ export class WclapBridges {
             if (plugin.restartRequested) {this.#restart(plugin, loaded)}
             const engine = this.#memory.buffer
             const [inLeft, inRight, outLeft, outRight] = this.#audio(loaded)
-            inLeft.set(new Float32Array(engine, in0, frames))
-            inRight.set(new Float32Array(engine, in1, frames))
+            const sourceLeft = new Float32Array(engine, in0, frames)
+            const sourceRight = new Float32Array(engine, in1, frames)
+            if (loaded.inputPortInfos[0]?.channels === 1) {
+                for (let frame = 0; frame < frames; frame++) {inLeft[frame] = (sourceLeft[frame] + sourceRight[frame]) * 0.5}
+            } else {
+                inLeft.set(sourceLeft)
+                inRight.set(sourceRight)
+            }
             const view = this.#view(loaded)
             this.#writeU64(view, loaded.processPtr + ClapAbi.Process.STEADY_TIME, loaded.steadyTime)
             view.setUint32(loaded.processPtr + ClapAbi.Process.FRAMES_COUNT, frames, true)
