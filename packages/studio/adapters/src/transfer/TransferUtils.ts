@@ -86,7 +86,8 @@ export namespace TransferUtils {
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
         uuidMap.addMany([
             ...audioUnitBoxes
-                .filter(({output: {targetAddress}}) => targetAddress.nonEmpty())
+                .filter(({output: {targetAddress}}) => targetAddress.nonEmpty()
+                    && !dependencies.some(dependency => UUID.equals(dependency.address.uuid, targetAddress.unwrap().uuid)))
                 .map(box => ({
                     source: box.output.targetAddress.unwrap().uuid,
                     target: masterBusBoxUUID
@@ -130,8 +131,9 @@ export namespace TransferUtils {
             return false
         }
         PointerField.decodeWith({
-            map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
-                address.flatMap(addr => uuidMap.opt(addr.uuid).match({
+            map: (pointer: PointerField, address: Option<Address>): Option<Address> =>
+                address.flatMap(addr => pointer.pointerType === Pointers.GroupMember && !uuidMap.hasKey(addr.uuid)
+                    ? Option.None : uuidMap.opt(addr.uuid).match({
                     some: ({target}) => Option.wrap(addr.moveTo(target)),
                     none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
                 }))

@@ -81,7 +81,7 @@ export namespace AudioUnitsClipboard {
         }).boxes))
 
     export const copyEntry = (audioUnitAdapter: AudioUnitBoxAdapter): Option<ClipboardAudioUnits> => {
-        if (audioUnitAdapter.type === AudioUnitType.Output) {return Option.None}
+        if (audioUnitAdapter.type === AudioUnitType.Output || audioUnitAdapter.box.isGroup.getValue()) {return Option.None}
         const audioUnitBox = audioUnitAdapter.box
         const dependencies = collectDependencies(audioUnitBox, false)
         const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
