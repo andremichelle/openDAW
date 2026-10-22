@@ -148,10 +148,16 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
             RuntimeNotifier.notify({message: `The link holds no ${target} script.`, icon: "Info"})
             return
         }
-        const added: ReadonlyArray<Entry> = fitting.map(file => ({
-            kind: "link", key: `${file.owner}/${file.repo}/${file.ref}/${file.path}`,
-            name: file.path.split("/").at(-2) ?? file.path, file
-        }))
+        const loaded = await Promises.tryCatch(Promise.all(fitting.map(file => ScriptLink.load(file))))
+        if (loaded.status === "rejected") {
+            RuntimeNotifier.notify({message: String(loaded.error), icon: "Warning"})
+            return
+        }
+        const added: ReadonlyArray<Entry> = fitting.map((file, index) => {
+            const key = `${file.owner}/${file.repo}/${file.ref}/${file.path}`
+            sources.set(key, Promise.resolve(loaded.value[index].source))
+            return {kind: "link", key, name: loaded.value[index].name, file}
+        })
         linkEntries.splice(0, linkEntries.length, ...added)
         linkField.value = ""
         selection.wrap(added[0])
