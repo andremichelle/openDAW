@@ -74,7 +74,7 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
     const name: HTMLElement = <div className="name">No script selected</div>
     const description: HTMLElement = <div className="description">Select a script on the left, or paste a GitHub link below.</div>
     const facts: HTMLElement = <div className="facts">Author, tags and a link to GitHub</div>
-    const code: HTMLElement = <pre className="code">The code appears here.</pre>
+    const code: HTMLElement = <pre className="code"/>
     const detail: HTMLElement = (
         <div className="detail empty">
             <div className="label">Name:</div>
