@@ -1,4 +1,4 @@
-import {Optional, isDefined} from "@opendaw/lib-std"
+import {asDefined, Optional, isDefined} from "@opendaw/lib-std"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 
@@ -43,6 +43,22 @@ export namespace AudioUnitGroups {
         }
         byParent.get(undefined)?.forEach(visit)
         units.forEach(visit) // malformed imported membership must not lose tracks
+        return result
+    }
+    export type Span = {unit: AudioUnitBox, start: number, end: number, depth: number}
+    export const spans = (visible: ReadonlyArray<AudioUnitBox>): Span[] => {
+        const result: Span[] = [], stack: Span[] = []
+        visible.forEach((unit, index) => {
+            const level = depth(unit)
+            while (stack.length > 0 && stack[stack.length - 1].depth >= level) {
+                asDefined(stack.pop()).end = index
+            }
+            if (unit.isGroup.getValue()) {
+                const span = {unit, start: index, end: visible.length, depth: level}
+                result.push(span)
+                stack.push(span)
+            }
+        })
         return result
     }
     export const roots = (units: ReadonlyArray<AudioUnitBox>): AudioUnitBox[] => {

@@ -25,7 +25,8 @@ component
 
   &:before
     content: ""
-    width: 100%
+    left: calc(var(--folder-depth, 0) * 14px)
+    width: calc(100% - var(--folder-depth, 0) * 14px)
     height: 100%
     grid-column: 1 / 2
     position: absolute

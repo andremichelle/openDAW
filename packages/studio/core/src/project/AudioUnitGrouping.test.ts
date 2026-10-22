@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from "vitest"
 import {asDefined, asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitGroups, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, DeviceHost, TransferAudioUnits} from "@opendaw/studio-adapters"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox} from "@opendaw/studio-boxes"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
 import {EffectFactories} from "../EffectFactories"
@@ -48,6 +48,44 @@ const setup = async () => {
 }
 
 describe("track folders", () => {
+    it("spans visible nested subtrees without gaps and retains folded child state", async () => {
+        const {project, units: [first, second, third, fourth]} = await setup()
+        const outer = asDefined(project.editing.modify(() => project.grouping.create([first, second, third])).unwrap())
+        const inner = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
+        const visible = () => AudioUnitGroups.ordered(project.rootBox).filter(unit => !AudioUnitGroups.hidden(unit))
+        expect(visible()).toEqual([outer, inner, first, second, third, fourth, project.primaryAudioUnitBox])
+        expect(AudioUnitGroups.spans(visible())).toEqual([
+            {unit: outer, start: 0, end: 5, depth: 0}, {unit: inner, start: 1, end: 4, depth: 1}
+        ])
+        project.editing.modify(() => inner.groupCollapsed.setValue(true))
+        expect(AudioUnitGroups.spans(visible())).toEqual([
+            {unit: outer, start: 0, end: 3, depth: 0}, {unit: inner, start: 1, end: 2, depth: 1}
+        ])
+        project.editing.modify(() => outer.groupCollapsed.setValue(true))
+        expect(AudioUnitGroups.spans(visible())).toEqual([{unit: outer, start: 0, end: 1, depth: 0}])
+        project.editing.modify(() => outer.groupCollapsed.setValue(false))
+        expect(inner.groupCollapsed.getValue()).toBe(true)
+        project.terminate()
+    })
+    it("creates FX buses after folders and instruments, and moves them without rerouting sends", async () => {
+        const {project, units: [first, second, third, fourth]} = await setup()
+        const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
+        const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "FX", IconSymbol.Effects, AudioUnitType.Aux, Colors.green)).unwrap()
+        const fx = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
+        expect(AudioUnitGroups.children(project.rootBox)).toEqual([folder, third, fourth, fx, project.primaryAudioUnitBox])
+        const send = project.editing.modify(() => AuxSendBox.create(project.boxGraph, UUID.generate(), box => {
+            box.audioUnit.refer(third.auxSends)
+            box.targetBus.refer(bus.input)
+            box.index.setValue(0)
+        })).unwrap()
+        project.editing.modify(() => project.grouping.move([fx], undefined, third))
+        expect(AudioUnitGroups.children(project.rootBox)).toEqual([folder, fx, third, fourth, project.primaryAudioUnitBox])
+        expect(fx.output.targetVertex.unwrap().box).toBe(project.primaryAudioBusBox)
+        expect(send.targetBus.targetVertex.unwrap().box).toBe(bus)
+        project.boxGraph.verifyPointers()
+        project.terminate()
+    })
     it("preserves existing hierarchy when pasting a channel and disables folder copy/cut", async () => {
         const {project, units: [first, second, outside]} = await setup()
         const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second])).unwrap())
