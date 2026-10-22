@@ -26,8 +26,8 @@ export namespace AudioUnitFactory {
     export const orderAndGetIndex = (rootBox: RootBox, type: AudioUnitType): int => {
         const boxes = AudioUnitGroups.ordered(rootBox)
         const order = AudioUnitOrdering[type]
-        let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box))
-            && (box.isGroup.getValue() || AudioUnitOrdering[box.type.getValue()] > order))
+        let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box)) && !box.isGroup.getValue()
+            && AudioUnitOrdering[box.type.getValue()] > order)
         if (index < 0) {index = boxes.length}
         boxes.forEach((box, position) => box.index.setValue(position < index ? position : position + 1))
         return index

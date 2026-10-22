@@ -35,6 +35,7 @@ import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx"
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
+import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 
 export interface TrackFactory {
@@ -63,6 +64,7 @@ export class TracksManager implements Terminable {
     readonly #modulatorLanes: HTMLElement
     readonly #modulatorsCollapsed: DefaultObservableValue<boolean>
     readonly #tracks: SortedSet<UUID.Bytes, TrackContext>
+    readonly #groupRails: GroupRails
     readonly #maxClipsIndex: DefaultObservableValue<int>
 
     #initializing = true
@@ -89,6 +91,11 @@ export class TracksManager implements Terminable {
         }))
         this.#terminator.own(this.#modulatorsCollapsed.subscribe(() => this.#invalidateOrder()))
         this.#tracks = UUID.newSet(({trackBoxAdapter: {uuid}}) => uuid)
+        this.#groupRails = this.#terminator.own(new GroupRails(service.project, scrollContainer, false, unit => {
+            this.#audioUnits.opt(unit.address.uuid).ifSome(({unitTracks}) => {
+                this.#scrollModel.position += unitTracks.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top
+            })
+        }))
         this.#maxClipsIndex = this.#terminator.own(new DefaultObservableValue(8))
         this.#terminator.own(this.#subscribe())
         this.#initializing = false
@@ -453,6 +460,7 @@ export class TracksManager implements Terminable {
     }
 
     #refreshOrder(): void {
+        this.#orderedByIndex = Option.None
         const ordered = AudioUnitGroups.ordered(this.#service.project.rootBox)
         let row = 0
         ordered.forEach(unit => this.#audioUnits.opt(unit.address.uuid).ifSome(({unitTracks}) => {
@@ -466,6 +474,8 @@ export class TracksManager implements Terminable {
         if (containers.some((container, index) => container !== current[index])) {
             containers.forEach(container => this.#scrollContainer.appendChild(container))
         }
+        this.#groupRails.update(ordered.filter(unit => !AudioUnitGroups.hidden(unit)
+            && this.#audioUnits.opt(unit.address.uuid).mapOr(entry => entry.unitTracks.childElementCount > 0, false)))
         this.#restackModulatorLanes()
         // The sorted order drives the hit-test index and the DOM order (grid auto-placement), so display,
         // DOM and interaction always agree. The DOM is only touched when a container's order actually
@@ -551,7 +561,9 @@ export class TracksManager implements Terminable {
             context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
             context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
             context.element.classList.toggle("no-guide",
-                context.path.mapOr(path => path[1].trim().length === 0, true))
+                context.path.mapOr(path => path[1].trim().length === 0, true)
+                || !previous.mapOr(scope => sameGroup(scope, context), false)
+                && !next.mapOr(scope => sameGroup(scope, context), false))
         })
     }
 

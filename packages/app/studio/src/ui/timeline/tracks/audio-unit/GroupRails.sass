@@ -1,0 +1,26 @@
+component
+  padding: 0
+  border: none
+  border-radius: 2px
+  min-width: 0
+  min-height: 0
+  background: var(--color)
+  opacity: 0.3
+  cursor: pointer
+  pointer-events: all
+  z-index: 6
+  outline: none
+
+  &.selected, &:hover, &:focus-visible
+    opacity: 1
+
+  &.vertical
+    width: 4px
+    justify-self: start
+    align-self: stretch
+    margin-left: calc(var(--rail-depth) * 14px)
+
+  &.horizontal
+    height: 4px
+    align-self: end
+    margin-bottom: calc(var(--rail-depth) * 6px)
