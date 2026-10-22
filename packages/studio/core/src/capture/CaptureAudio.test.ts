@@ -23,6 +23,7 @@ type FakeNode = {
     pan: {value: number}
     channelCount: number
     channelCountMode: string
+    channelInterpretation: string
 }
 
 const createFakeNode = (): FakeNode => ({
@@ -33,7 +34,8 @@ const createFakeNode = (): FakeNode => ({
     gain: {value: 0},
     pan: {value: 0},
     channelCount: 2,
-    channelCountMode: "explicit"
+    channelCountMode: "explicit",
+    channelInterpretation: "speakers"
 })
 
 // The audio chain's silent sink is the only node the source is connected to that has its gain at zero:
@@ -222,6 +224,38 @@ describe("CaptureAudio", () => {
             await expect(capture.prepareRecording()).rejects.toBeDefined()
             expect(getUserMediaCalls()).toBe(0)
             expect(preparedWorklets.length).toBe(0)
+        })
+    })
+
+    describe("monitoring with effects", () => {
+        // issue #461: the engine splits the registered node discretely, so a raw stereo source kept only the left input
+        it("registers a speakers mixdown, not the raw source, when mono is forced", async () => {
+            const {capture, project, createdSourceNodes} = await setup()
+            const register = vi.spyOn(project.engine, "registerMonitoringSource")
+            project.editing.modify(() => {capture.requestChannels = 1})
+            capture.monitoringMode = "effects"
+            await armAndAwaitChain(capture)
+            const [, node, numChannels] = register.mock.lastCall ?? []
+            const mixdown = node as unknown as FakeNode
+            expect(numChannels).toBe(1)
+            expect(mixdown).not.toBe(createdSourceNodes.at(-1))
+            expect(createdSourceNodes.at(-1)?.connected).toContain(mixdown)
+            expect(mixdown.channelCount).toBe(1)
+            expect(mixdown.channelCountMode).toBe("explicit")
+            expect(mixdown.channelInterpretation).toBe("speakers")
+            expect(mixdown.gain.value).toBe(1)
+        })
+
+        it("registers a stereo mixdown at unity gain for a stereo capture", async () => {
+            const {capture, project} = await setup()
+            const register = vi.spyOn(project.engine, "registerMonitoringSource")
+            capture.monitoringMode = "effects"
+            await armAndAwaitChain(capture)
+            const [, node, numChannels] = register.mock.lastCall ?? []
+            const mixdown = node as unknown as FakeNode
+            expect(numChannels).toBe(2)
+            expect(mixdown.channelCount).toBe(2)
+            expect(mixdown.gain.value).toBe(1)
         })
     })
 

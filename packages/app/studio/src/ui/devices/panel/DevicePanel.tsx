@@ -13,7 +13,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {appendChildren, createElement} from "@opendaw/lib-jsx"
+import {appendChildren, createElement, JsxValue} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {AudioUnitBox, BoxVisitor, InstrumentCompositeCellBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
 import {
@@ -46,6 +46,29 @@ import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
+
+type MovableParent = Element & { moveBefore(node: Node, child: Nullable<Node>): void }
+
+const canMoveBefore = (element: Element): element is MovableParent => typeof Reflect.get(element, "moveBefore") === "function"
+
+const flattenElements = (values: ReadonlyArray<JsxValue>): ReadonlyArray<Element> =>
+    values.flatMap(value => Array.isArray(value) ? flattenElements(value) : isInstanceOf(value, Element) ? [value] : [])
+
+// Detaching an editor reloads its iframes (script views), so surviving editors stay attached and only move if needed.
+const reconcileChildren = (container: Element, ...values: ReadonlyArray<JsxValue>): void => {
+    const children = flattenElements(values)
+    const keep = new Set<Element>(children)
+    Array.from(container.children).forEach(child => {if (!keep.has(child)) {child.remove()}})
+    children.forEach((child, index) => {
+        const current = container.children.item(index)
+        if (current === child) {return}
+        if (child.isConnected && container.isConnected && canMoveBefore(container)) {
+            container.moveBefore(child, current)
+        } else {
+            container.insertBefore(child, current)
+        }
+    })
+}
 
 type Construct = {
     lifecycle: Lifecycle
@@ -118,44 +141,46 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         const previouslyFocused: Nullable<HTMLElement> = isInstanceOf(activeElement, HTMLElement)
             && element.contains(activeElement) ? activeElement : null
         Html.empty(cellContainer)
-        Html.empty(midiEffectsContainer)
-        Html.empty(instrumentContainer)
-        Html.empty(audioEffectsContainer)
         Html.empty(channelStripContainer)
         chainLifecycle.terminate()
+        const clearChains = (): void => [midiEffectsContainer, instrumentContainer, audioEffectsContainer].forEach(Html.empty)
         const profile = service.projectProfileService.getValue()
-        if (profile.isEmpty()) {return}
+        if (profile.isEmpty()) {
+            clearChains()
+            return
+        }
         const {project} = profile.unwrap()
         const optEditing = project.userEditingManager.audioUnit.get()
         noAudioUnitSelectedPlaceholder.classList.toggle("hidden", optEditing.nonEmpty())
         noEffectPlaceholder.classList.toggle("hidden", optEditing.isEmpty())
-        if (optEditing.isEmpty()) {return}
+        if (optEditing.isEmpty()) {
+            clearChains()
+            return
+        }
         const {deviceHost, instrument} = getContext(project, optEditing.unwrap().box)
         if (deviceHost.hostsInstrument && deviceHost.asCompositeCell().nonEmpty()) {
             appendChildren(cellContainer, <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>)
         }
-        if (instrument.nonEmpty()) {
-            const input = instrument.unwrap()
-            if (input.accepts === "midi") {
-                appendChildren(midiEffectsContainer, (
+        const midiLead: JsxValue = instrument.match({
+            none: () => null,
+            some: (input: AudioUnitInputAdapter) => input.accepts === "midi"
+                ? (
                     <div style={{margin: "1.125rem 0 0 0"}}>
                         <DeviceMidiMeter lifecycle={chainLifecycle}
                                          receiver={project.liveStreamReceiver}
                                          address={deviceHost.audioUnitBoxAdapter().address}/>
                     </div>
-                ))
-            } else {
+                )
                 // Same footprint as the midi meter (8px + 0.25em margins), so every instrument-hosting chain
                 // (a Playfield slot, Tape) aligns with the midi-metered ones.
-                appendChildren(midiEffectsContainer, <div style={{width: "1em"}}/>)
-            }
-        }
+                : <div style={{width: "1em"}}/>
+        })
         // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
         const midiAdapters = deviceHost.midiEffects.mapOr(chain => chain.adapters(), [])
-        appendChildren(midiEffectsContainer, midiAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
+        reconcileChildren(midiEffectsContainer, midiLead, midiAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
         // A composite entry's back editor is AUDIO, so its slot line reads blue, not the instrument green.
         instrumentContainer.classList.toggle("as-audio", instrument.isEmpty() && !deviceHost.hostsInstrument)
-        appendChildren(instrumentContainer, instrument.match({
+        reconcileChildren(instrumentContainer, instrument.match({
             // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
             none: () => deviceHost.hostsInstrument
                 ? <div/>
@@ -163,7 +188,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))
         const audioAdapters = deviceHost.audioEffects.mapOr(chain => chain.adapters(), [])
-        appendChildren(audioEffectsContainer, audioAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
+        reconcileChildren(audioEffectsContainer, audioAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
         const hidden = !optEditing.nonEmpty() || midiAdapters.length > 0 || audioAdapters.length > 0
         noEffectPlaceholder.classList.toggle("hidden", hidden)
         appendChildren(channelStripContainer, (

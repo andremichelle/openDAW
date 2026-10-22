@@ -15,7 +15,7 @@ use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
 use crate::meter::Meter;
-use crate::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use crate::ppqn::pulses_to_samples;
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
 use crate::ramp::LinearRamp;
@@ -25,6 +25,7 @@ use crate::RENDER_QUANTUM;
 pub struct AudioSinkProcessor {
     params: Rc<SendParams>, // `gain_db` = the pass level (pan unused)
     automation: Rc<StripAutomation>, // `volume` = the pass automation override
+    automation_lag: u32,
     output: SharedAudioBuffer,
     tap: SharedAudioBuffer,
     input: Option<SharedAudioBuffer>,
@@ -40,6 +41,7 @@ impl AudioSinkProcessor {
         Self {
             params,
             automation,
+            automation_lag: 0,
             output: shared_audio_buffer(),
             tap: shared_audio_buffer(),
             input: None,
@@ -61,7 +63,7 @@ impl AudioSinkProcessor {
 
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let gain_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.gain_db.get()
         };
         self.retarget(gain_db);
@@ -131,6 +133,10 @@ impl AudioGenerator for AudioSinkProcessor {
 }
 
 impl Processor for AudioSinkProcessor {
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
         self.tap.borrow_mut().clear();
@@ -168,7 +174,7 @@ impl Processor for AudioSinkProcessor {
             }
             let mut cursor = s0;
             self.retarget_resolved(block.p0, true);
-            let mut position = first_update_position(block.p0);
+            let mut position = crate::update_clock::first_update(block.p0, self.automation_lag);
             while position < block.p1 {
                 let offset = self.sample_offset(position, block).clamp(cursor, s1);
                 if offset > cursor {
@@ -176,7 +182,7 @@ impl Processor for AudioSinkProcessor {
                     cursor = offset;
                 }
                 self.retarget_resolved(position, true);
-                position += UPDATE_CLOCK_RATE;
+                position = crate::update_clock::next_update(position, self.automation_lag);
             }
             if cursor < s1 {
                 self.apply(&source, &mut output, cursor, s1);

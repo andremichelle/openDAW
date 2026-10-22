@@ -17,6 +17,8 @@ import {Surface} from "@/ui/surface/Surface"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 import {CodeEditorExample} from "./CodeEditorState"
+import {EntryPointMarkers} from "./EntryPointMarkers"
+import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPanel")
 
@@ -50,6 +52,10 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
     }
+    const compileState: {compiling: boolean, compiled: boolean, pendingError: Nullable<string>} =
+        {compiling: false, compiled: false, pendingError: null}
+    const showError = (message: string) =>
+        setStatus(compileState.compiled ? `Successfully compiled, but ${message}` : message, "error")
     const nameSpan: HTMLSpanElement = (<span className="name">Code Editor</span>)
     if (isDefined(handler)) {
         lifecycle.own(handler.name.catchupAndSubscribe(owner => nameSpan.textContent = owner.getValue()))
@@ -65,20 +71,35 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                         monaco, lifecycle, language: "javascript",
                         uri: "file:///werkstatt.js", initialCode
                     })
+                    if (isDefined(state)) {EntryPointMarkers.install(monaco, editor, model, state.entryPoints, ScriptEntryPointDocs.view, lifecycle)}
                     const compileCode = async () => {
                         if (!isDefined(handler)) {
                             setStatus("No handler connected", "error")
                             return
                         }
+                        Object.assign(compileState, {compiling: true, compiled: false, pendingError: null})
                         try {
                             await handler.compile(editor.getValue())
-                            setStatus("Successfully compiled", "success")
+                            compileState.compiled = true
+                            if (isDefined(compileState.pendingError)) {
+                                showError(compileState.pendingError)
+                            } else {
+                                setStatus("Successfully compiled", "success")
+                            }
                         } catch (reason: unknown) {
                             setStatus(String(reason), "error")
+                        } finally {
+                            compileState.compiling = false
                         }
                     }
                     if (isDefined(handler)) {
-                        lifecycle.own(handler.subscribeErrors(message => setStatus(message, "error")))
+                        lifecycle.own(handler.subscribeErrors(message => {
+                            if (compileState.compiling) {
+                                compileState.pendingError = message
+                            } else {
+                                showError(message)
+                            }
+                        }))
                         lifecycle.own(handler.subscribeCode(code => {
                             if (editor.getValue() !== code) {editor.setValue(code)}
                         }))

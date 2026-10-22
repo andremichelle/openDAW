@@ -168,6 +168,7 @@ extern "C" {
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
+    fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
     // worklet; the bridge copies each chunk between the two memories. See the `nam_*` wrappers below.
@@ -190,6 +191,7 @@ extern "C" {
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
     fn host_wclap_reset(handle: u32);
+    fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
@@ -208,6 +210,9 @@ extern "C" {
     // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
     // dedup on create either — see the JS side).
     fn host_script_release(handle: u32);
+    fn host_script_latency(handle: u32) -> u32;
+    // WASM CONTRACT: one `@collection` snapshot (f32 record-major, NaN = no value box); collection u32::MAX resets all
+    fn host_script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32);
     // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
     // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
     fn host_panic(msg_ptr: u32, msg_len: u32);
@@ -276,6 +281,24 @@ pub fn base_frequency() -> f32 {
     { unsafe { host_base_frequency() } }
     #[cfg(not(target_family = "wasm"))]
     { f32::from_bits(NATIVE_BASE_FREQUENCY.load(core::sync::atomic::Ordering::Relaxed)) }
+}
+
+/// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
+#[inline]
+pub fn set_latency(frames: u32) {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_set_latency(frames) }
+    #[cfg(not(target_family = "wasm"))]
+    NATIVE_LATENCY.store(frames, core::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_LATENCY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Native TEST SEAM: the latency the last [`set_latency`] call reported.
+#[cfg(not(target_family = "wasm"))]
+pub fn native_latency() -> u32 {
+    NATIVE_LATENCY.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// Native TEST SEAM: set what [`base_frequency`] returns (a device test detunes, then restores 440).
@@ -861,6 +884,15 @@ pub fn script_note_off(handle: u32, id: u32) {
     { let _ = (handle, id); }
 }
 
+/// The frames the user `Processor` declares through `this.latency` (0 when unset). Native stub 0.
+#[inline]
+pub fn script_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_script_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
+}
+
 /// Tell the user `Processor` to reset (transport stop). Native stub no-op.
 #[inline]
 pub fn script_reset(handle: u32) {
@@ -906,6 +938,15 @@ pub fn script_sample(handle: u32, index: u32, sample_handle: u32, present: bool)
     { unsafe { host_script_sample(handle, index, sample_handle, present as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, index, sample_handle, present); }
+}
+
+/// Hand one `@collection` snapshot to the JS bridge (`data_changed` forwards it), see `host_script_data`.
+#[inline]
+pub fn script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_data(handle, collection, ptr, records, fields) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, collection, ptr, records, fields); }
 }
 
 /// Run the user note-transform generator + all stateful tracking (Spielwerk) over the pulled input events,
@@ -1088,6 +1129,15 @@ pub fn wclap_state(handle: u32, base64: &str) {
     { unsafe { host_wclap_state(handle, base64.as_ptr() as u32, base64.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, base64); }
+}
+
+/// The frames the loaded plugin reports through `clap.latency` (0 until it is ready). Native stub 0.
+#[inline]
+pub fn wclap_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_wclap_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
 }
 
 /// Transport stop: `clap_plugin.reset`. Native stub no-op.

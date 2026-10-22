@@ -46,6 +46,7 @@ impl Engine {
         let player_output = player.borrow().audio_output();
         let player_id = self.context.register_processor(player);
         self.context.set_label(player_id, format!("frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(player_id, unit.unit);
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(player_output.clone());
         let strip_output = strip.borrow().audio_output();
@@ -53,6 +54,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(player_id, strip_id);
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         unit.wired = Some(Wired::Frozen(FrozenWired {
@@ -100,6 +102,7 @@ impl Engine {
             let sum = Rc::new(RefCell::new(AudioBusProcessor::new(buffer.clone())));
             let id = self.context.register_processor(sum.clone());
             self.context.set_label(id, format!("bus-sum {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+            self.context.set_owner(id, bus_uuid);
             (sum, id, buffer)
         };
         self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
@@ -162,6 +165,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+        self.context.set_owner(strip_id, bus_uuid);
         self.context.register_edge(source_id, strip_id);
         edges.push((source_id, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
@@ -169,6 +173,7 @@ impl Engine {
         // rebuild so `render` reads the current chain (an added / removed master effect takes effect live).
         if is_output {
             self.output_bus = Some(strip_output.clone());
+            self.output_node = strip_id;
         }
         let sum_node = if is_output { None } else { Some(sum_id) };
         unit.wired = Some(Wired::Bus(BusWired {
@@ -266,6 +271,7 @@ impl Engine {
             }
         });
         self.context.set_label(player_id, format!("region-player {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(player_id, unit.unit);
         // Live telemetry: the tape's raw output peaks, registered under the TapeDeviceBox (the device column).
         let player_meter = player.borrow().meter_slot();
         self.broadcasts.register(instrument_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &player_meter);
@@ -317,6 +323,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:tape {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
@@ -463,6 +470,7 @@ impl Engine {
         }
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, format!("midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(node_id, unit.unit);
         // The node's (silent) output under the device box uuid, so a sidechain pointer targeting the device
         // resolves like it does for every built device (TS registers every processor's audioOutput).
         self.output_registry.register(Address::of(instrument_uuid, vec![]), node_output.clone(), node_id);
@@ -485,6 +493,7 @@ impl Engine {
             let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
             let mixer_id = self.context.register_processor(mixer);
             self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, unit.unit);
             self.context.register_edge(output_node, mixer_id);
             edges.push((output_node, mixer_id));
             output_node = mixer_id;
@@ -519,6 +528,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
@@ -637,6 +647,7 @@ impl Engine {
             let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
             let mixer_id = self.context.register_processor(mixer);
             self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, unit.unit);
             self.context.register_edge(output_node, mixer_id);
             tail_edges.push((output_node, mixer_id));
             output_node = mixer_id;
@@ -673,6 +684,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(pre_strip_node, strip_id);
         tail_edges.push((pre_strip_node, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
@@ -768,6 +780,7 @@ impl Engine {
                 self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
                 let strip_id = self.context.register_processor(strip.clone());
                 self.context.set_label(strip_id, format!("strip:leaf {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+                self.context.set_owner(strip_id, unit.unit);
                 (strip, strip_id, strip_output)
             }
         };
@@ -820,6 +833,7 @@ impl Engine {
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         // The instrument's RAW output under its box uuid, so a sidechain pointer targeting THIS device taps it
         // directly (TS: every device processor registers `adapter.address -> output`). A composite SLOT child
         // overwrites this with its post-fx cluster output right after (its child uuid IS the instrument uuid).
@@ -828,7 +842,7 @@ impl Engine {
         // 128-bit note set broadcasts separately (the binding's `note_bits`, marked from the pull path).
         let meter_slot = instrument.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, instrument.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, instrument.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
@@ -892,29 +906,41 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         // The effect's own output under its box uuid, so a sidechain pointer targeting THIS device taps it
         // directly (TS: every device processor registers `adapter.address -> output`).
         self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, node.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, node.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
     /// The device's declared sidechain ports with their pointer monitors; the resolve pass wires the edges.
-    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], node_id: NodeId, sink: Rc<RefCell<dyn SidechainSink>>,
-                       signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
-        if paths.is_empty() { return None; }
+    /// A device with a sidechain COLLECTION hub gets its child ports on the first resolve (and on every hub edit).
+    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], collection_field: u16, node_id: NodeId,
+                       sink: Rc<RefCell<dyn SidechainSink>>, signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
+        if paths.is_empty() && collection_field == 0 { return None; }
         let mut ports = Vec::new();
         for (index, path) in paths.iter().cloned().enumerate() {
+            let address = Address::of(uuid, path);
             let port_signal = signal.clone();
-            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
+            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, address.clone(),
                 Box::new(move |_graph, _update| port_signal()));
-            ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+            ports.push(SidechainPort {port_id: index as u32 + 2, address, resolved: None, pointer_sub, child: None});
         }
-        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports})
+        let collection = (collection_field != 0).then(|| {
+            let hub_signal = signal.clone();
+            let armed = Rc::new(core::cell::Cell::new(false)); // the catch-up `Added`s must not re-enqueue the unit being built
+            let hub_armed = armed.clone();
+            let hub_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![collection_field]),
+                Box::new(move |_graph, _event| if hub_armed.get() { hub_signal() }));
+            armed.set(true);
+            SidechainCollection {hub_field: collection_field, bound_count: paths.len() as u32, hub_sub, signal: signal.clone()}
+        });
+        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports, collection})
     }
 
     /// Reuse the pooled audio sink (its target binding survives, `resolve_sinks` diffs it) or build a fresh one:
@@ -935,6 +961,7 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the tap's peaks (what the bus receives), under the device address like any effect.
         let meter_slot = node.borrow().meter_slot();
@@ -995,6 +1022,7 @@ impl Engine {
             let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
             let mixer_id = self.context.register_processor(mixer);
             self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, instrument_uuid);
             self.context.register_edge(output_node, mixer_id);
             edges.push((output_node, mixer_id));
             output_node = mixer_id;

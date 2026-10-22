@@ -1,4 +1,6 @@
 import {Option} from "@opendaw/lib-std"
+import {RenderQuantum} from "@opendaw/lib-dsp"
+import {SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
@@ -13,6 +15,8 @@ export type EngineExports = {
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    device_set_sidechain_collection_field: (deviceId: number, field: number) => void
+    device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
@@ -157,6 +161,7 @@ export type EngineExports = {
     // The project's tuning reference in Hz (TS EngineContext.baseFrequency, RootBox.baseFrequency): a device
     // whose TS counterpart tunes against it (the Vaporisateur) pulls it per note-on.
     host_base_frequency: () => number
+    host_set_latency: (frames: number) => void
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -175,6 +180,10 @@ export type EngineExports = {
     report_message_ptr: () => number
     report_message_len: () => number
     report_message_clear: () => void
+    // the signal graph as text lines (see engine `signal_graph_report`), returns the full length
+    signal_graph_report: (outPtr: number, max: number) => number
+    compensation_latency: () => number // frames the heard output lags the timeline through delay compensation
+    compensation_pending: () => number // 1 while a latency change awaits the next render's compensation pass
 }
 
 // Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
@@ -192,4 +201,42 @@ export const takeReportMessage = (exports: EngineExports, memory: WebAssembly.Me
     const message = decodeUtf8(new Uint8Array(memory.buffer, exports.report_message_ptr(), length))
     exports.report_message_clear()
     return Option.wrap(message)
+}
+
+export const readSignalGraph = (exports: EngineExports, memory: WebAssembly.Memory): SignalGraph => {
+    const read = (capacity: number): string => {
+        const pointer = exports.input_reserve(capacity)
+        const length = exports.signal_graph_report(pointer, capacity)
+        return length > capacity ? read(length) : decodeUtf8(new Uint8Array(memory.buffer, pointer, length))
+    }
+    const [header, ...lines] = read(1 << 16).split("\n").map(line => line.split("\t"))
+    const nodes: Array<SignalGraphNode> = []
+    const edges: Array<SignalGraphEdge> = []
+    for (const fields of lines) {
+        if (fields[0] === "n") {
+            const [, id, latency, arrival, owner, ...label] = fields
+            nodes.push({
+                id: Number(id), label: label.join("\t"), latency: Number(latency), arrival: Number(arrival),
+                owner: owner === "-" ? null : Uint8Array.from(owner.match(/../g) ?? [], hex => parseInt(hex, 16))
+            })
+        } else if (fields[0] === "e") {
+            const [, source, target, data, delay] = fields
+            edges.push({source: Number(source), target: Number(target), data: data === "1", delay: Number(delay)})
+        }
+    }
+    return {sampleRate: Number(header[1]), maxCompensation: Number(header[2]), nodes, edges}
+}
+
+// Before an offline render: idle quanta until every device reported its latency (a script or a hosted plug-in
+// reports on its first process) and no compensation pass is pending, then reset to `position`, so the render is
+// aligned from its first frame. Returns the frames to trim from the start.
+export const settleCompensation = (exports: EngineExports, sampleRate: number, position: number, playing: boolean,
+                                   render: () => void): number => {
+    exports.pause()
+    const limit = Math.ceil(sampleRate / RenderQuantum)
+    for (let quantum = 0; quantum < limit && (quantum < 2 || exports.compensation_pending() !== 0); quantum++) {render()}
+    exports.stop()
+    exports.set_position(position)
+    if (playing) {exports.play()}
+    return exports.compensation_latency()
 }

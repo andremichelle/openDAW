@@ -21,7 +21,8 @@ pub struct WclapLink {
     clap_id: [u8; CLAP_ID_CAPACITY],
     clap_id_len: usize,
     scratch_in: [[f32; RENDER_QUANTUM]; 2],
-    scratch_out: [[f32; RENDER_QUANTUM]; 2]
+    scratch_out: [[f32; RENDER_QUANTUM]; 2],
+    latency: u32
 }
 
 impl WclapLink {
@@ -94,8 +95,14 @@ impl WclapLink {
 
     fn run(&mut self, frames: usize, block: &Block) -> bool {
         let [scratch_out_left, scratch_out_right] = &mut self.scratch_out;
-        abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
-                           [scratch_out_left, scratch_out_right], frames, block)
+        let processed = abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
+                           [scratch_out_left, scratch_out_right], frames, block);
+        let latency = abi::wclap_latency(self.bridge);
+        if latency != self.latency {
+            self.latency = latency;
+            abi::set_latency(latency);
+        }
+        processed
     }
 }
 

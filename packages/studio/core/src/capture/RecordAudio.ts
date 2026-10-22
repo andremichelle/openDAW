@@ -10,6 +10,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN, RenderQuantum, TimeBase} from "@opendaw/lib-dsp"
+import {Runtime} from "@opendaw/lib-runtime"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
@@ -39,6 +40,7 @@ export namespace RecordAudio {
     }
 
     const ANCHOR_WAIT_SECONDS = 0.25
+    const TAIL_WAIT_SECONDS = 1.0
 
     export const start = (
         {recordingWorklet, sourceNode, sampleManager, project, capture, readLatency}: RecordAudioContext)
@@ -53,8 +55,10 @@ export namespace RecordAudio {
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = 0
-        let takeNumber: int = 0
+        let takeNumber: int = RecordTrack.lastTakeNumber(capture.audioUnitBox)
         let firstRecordingTick: Option<number> = Option.None
+        let placementLatency: Latency = startLatency
+        let isSaved: boolean = false
 
         const {env: {audioContext}, engine: {preferences: {settings: {recording}}}} = project
         const {sampleRate} = audioContext
@@ -148,47 +152,73 @@ export namespace RecordAudio {
             currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, previousTrack))
         }
 
+        const disconnectSource = () => tryCatch(() => sourceNode.disconnect(recordingWorklet))
+        const resizeTake = (totalSeconds: number) => currentTake.ifSome(({regionBox}) => {
+            if (!regionBox.isAttached()) {return}
+            const takeSeconds = totalSeconds - currentWaveformOffset
+            if (takeSeconds <= 0) {
+                console.debug("[RecordAudio] stop: deleting zero-duration region", {takeNumber})
+                editing.modify(() => regionBox.delete(), false)
+                currentTake = Option.None
+            } else {
+                editing.modify(() => {
+                    regionBox.duration.setValue(takeSeconds)
+                    regionBox.loopDuration.setValue(takeSeconds)
+                }, false)
+            }
+        })
+        const stopFrames = (deliveredFrames: int): int => {
+            if (engine.isRecording.getValue()) {return deliveredFrames}
+            return engine.recordingStop.flatMap(({contextTime}) => recordingWorklet.firstQuantumTime
+                .map(firstQuantumTime => {
+                    const {outputLatency, inputLatency} = placementLatency
+                    const seconds = contextTime - firstQuantumTime + outputLatency + inputLatency
+                        + engine.compensationLatency.getValue()
+                    return Math.max(0, Math.round(seconds * sampleRate))
+                })).unwrapOrElse(deliveredFrames)
+        }
         recordingWorklet.onSaved = () => {
+            isSaved = true
+            disconnectSource()
             project.trackUserCreatedSample(fileUuid)
             editing.mark()
         }
         terminator.ownAll(
             Terminable.create(() => {
-                tryCatch(() => sourceNode.disconnect(recordingWorklet))
-                const numberOfFrames = recordingWorklet.numberOfFrames
+                const deliveredFrames = recordingWorklet.numberOfFrames
+                const numberOfFrames = stopFrames(deliveredFrames)
                 const totalSeconds = numberOfFrames / sampleRate
                 // fixes #840: short recordings (e.g. count-in) can leave zero-duration regions
-                currentTake.ifSome(({regionBox}) => {
-                    if (!regionBox.isAttached()) {return}
-                    const takeSeconds = totalSeconds - currentWaveformOffset
-                    if (takeSeconds <= 0) {
-                        console.debug("[RecordAudio] stop: deleting zero-duration region", {takeNumber})
-                        editing.modify(() => regionBox.delete(), false)
-                        currentTake = Option.None
-                    } else {
-                        editing.modify(() => {
-                            regionBox.duration.setValue(takeSeconds)
-                            regionBox.loopDuration.setValue(takeSeconds)
-                        }, false)
-                    }
-                })
+                resizeTake(totalSeconds)
                 const hasTakes = fileBox.mapOr(box => box.isAttached() && !box.pointerHub.isEmpty(), false)
                 if (numberOfFrames === 0 || !hasTakes) {
                     console.debug("[RecordAudio] abort", {numberOfFrames, hasTakes})
+                    disconnectSource()
                     sampleManager.remove(fileUuid)
                     recordingWorklet.terminate()
                     fileBox.ifSome(box => {
                         if (box.isAttached()) {editing.modify(() => box.delete(), false)}
                     })
                 } else {
-                    console.debug("[RecordAudio] stop", {takeNumber, totalSeconds, numberOfFrames})
-                    // keep every delivered frame: a limit above them would never be reached and the recording never finalize
-                    recordingWorklet.limit(numberOfFrames)
-                    fileBox.ifSome(box => {
-                        if (box.isAttached()) {
-                            box.endInSeconds.setValue(totalSeconds)
-                        }
+                    console.debug("[RecordAudio] stop", {takeNumber, totalSeconds, numberOfFrames, deliveredFrames})
+                    const setEnd = (seconds: number) => fileBox.ifSome(box => {
+                        if (box.isAttached()) {editing.modify(() => box.endInSeconds.setValue(seconds), false)}
                     })
+                    // the source stays connected until the input still in flight at the stop has arrived
+                    recordingWorklet.limit(numberOfFrames)
+                    setEnd(totalSeconds)
+                    if (deliveredFrames < numberOfFrames) {
+                        const waitMillis = ((numberOfFrames - deliveredFrames) / sampleRate + TAIL_WAIT_SECONDS) * 1000
+                        Runtime.scheduleTimeout(() => {
+                            if (isSaved) {return}
+                            const arrivedFrames = recordingWorklet.numberOfFrames
+                            if (arrivedFrames >= numberOfFrames) {return}
+                            console.warn("[RecordAudio] input tail never arrived", {numberOfFrames, arrivedFrames})
+                            resizeTake(arrivedFrames / sampleRate)
+                            setEnd(arrivedFrames / sampleRate)
+                            recordingWorklet.limit(arrivedFrames)
+                        }, waitMillis)
+                    }
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
@@ -241,10 +271,12 @@ export namespace RecordAudio {
                         const placedLatency = readLatency()
                         const placed = Number.isFinite(placedLatency.outputLatency)
                             && placedLatency.outputLatency > 0
-                        const {outputLatency, inputLatency} = placed ? placedLatency : startLatency
+                        placementLatency = placed ? placedLatency : startLatency
+                        const {outputLatency, inputLatency} = placementLatency
                         console.debug(`[RecordAudio] outputLatency=${outputLatency} inputLatency=${inputLatency} `
                             + `source=${placed ? "placement" : "start"}`)
                         const startOffset = contextTime - firstQuantumTime.unwrap() + outputLatency + inputLatency
+                            + engine.compensationLatency.getValue()
                         // region position is an integer field: the fraction moves into the offset
                         takePosition = Math.floor(position)
                         waveformOffset = startOffset - tempoMap.intervalToSeconds(takePosition, position)
@@ -276,7 +308,7 @@ export namespace RecordAudio {
                             : wallclockSinceWorklet
                         takePosition = currentPosition
                         waveformOffset = headStartSeconds + countInSeconds
-                            + startLatency.outputLatency + startLatency.inputLatency
+                            + startLatency.outputLatency + startLatency.inputLatency + engine.compensationLatency.getValue()
                         console.debug(`[RecordAudio] anchor fallback: recordingStart=${recordingStart.nonEmpty()} `
                             + `firstQuantumTime=${firstQuantumTime.nonEmpty()} takePosition=${takePosition} `
                             + `waveformOffset=${waveformOffset}`)

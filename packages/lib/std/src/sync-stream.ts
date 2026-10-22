@@ -21,7 +21,7 @@ export namespace SyncStream {
         Atomics.store(array, 0, State.READ)
         return {
             tryWrite: () => {
-                if (Atomics.compareExchange(array, 0, State.READ, State.WRITING) === State.WRITING) {
+                if (Atomics.compareExchange(array, 0, State.READ, State.WRITING) === State.READ) {
                     populate(io.object)
                     output.position = 0
                     io.write(output)
@@ -40,7 +40,7 @@ export namespace SyncStream {
         return {
             buffer,
             tryRead: () => {
-                if (Atomics.compareExchange(array, 0, State.WRITTEN, State.READING) === State.READING) {
+                if (Atomics.compareExchange(array, 0, State.WRITTEN, State.READING) === State.WRITTEN) {
                     input.position = 0
                     io.read(input)
                     procedure(io.object)

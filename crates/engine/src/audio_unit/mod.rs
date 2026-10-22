@@ -539,6 +539,8 @@ pub(crate) struct DeviceParams {
     // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
     pub(crate) param_hub_sub: Option<SubscriptionId>,
     pub(crate) sample_hub_sub: Option<SubscriptionId>,
+    // SCRIPTABLE devices: the `@collection` records, flushed by the unit reconcile; `None` without a records hub
+    pub(crate) records: Option<crate::script_device::RecordBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
     pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
@@ -546,7 +548,7 @@ pub(crate) struct DeviceParams {
 
 /// A device node that takes resolved sidechain buffers: an audio effect, or an instrument with an audio input.
 pub(crate) trait SidechainSink {
-    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]);
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]);
 }
 
 /// A persistent sidechain binding kept by the owning unit: a device that declared sidechain ports, the
@@ -557,18 +559,28 @@ pub(crate) struct SidechainBinding {
     pub(crate) sink: Rc<RefCell<dyn SidechainSink>>,
     pub(crate) node_id: NodeId,
     pub(crate) device_uuid: Uuid,
-    pub(crate) ports: Vec<SidechainPort>
+    pub(crate) ports: Vec<SidechainPort>,
+    pub(crate) collection: Option<SidechainCollection>
 }
 
-/// One declared sidechain port: its id (2+), the device-relative pointer path to follow, the source node it
+/// A scriptable device's hub of `WerkstattSidechainBox` children: each child is one port, synced on resolve.
+pub(crate) struct SidechainCollection {
+    pub(crate) hub_field: u16,
+    pub(crate) bound_count: u32,
+    pub(crate) hub_sub: SubscriptionId,
+    pub(crate) signal: Rc<dyn Fn()>
+}
+
+/// One declared sidechain port: its id (2+), the pointer address to follow, the source node it
 /// is currently wired to (`None` = unresolved, kept so the resolve pass can diff + tear down the old edge),
 /// and a TARGETED `This` monitor on the device's sidechain pointer field so a re-point / detach enqueues the
 /// owning unit (no all-updates listener).
 pub(crate) struct SidechainPort {
     pub(crate) port_id: u32,
-    pub(crate) path: Vec<u16>,
+    pub(crate) address: Address,
     pub(crate) resolved: Option<NodeId>,
-    pub(crate) pointer_sub: SubscriptionId
+    pub(crate) pointer_sub: SubscriptionId,
+    pub(crate) child: Option<(Uuid, SubscriptionId)> // a collection port: its child box + `index` monitor
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -669,22 +681,22 @@ impl AudioUnitBinding {
     /// `useInstrumentOutput` (the instrument / tape player / composite sum / bus sum output — pre-fx by
     /// construction, since the fx write their OWN buffers), the pre-strip (post-fx) buffer for
     /// `skipChannelStrip`, else the channel-strip output.
-    pub(crate) fn stem_tap(&self, entry: &crate::StemEntry) -> Option<SharedAudioBuffer> {
+    pub(crate) fn stem_tap(&self, entry: &crate::StemEntry) -> Option<(NodeId, SharedAudioBuffer)> {
         let wired = self.wired.as_ref()?;
         if entry.use_instrument_output {
             return Some(match wired {
-                Wired::Leaf(chain) => chain.instrument.output.clone()?,
-                Wired::Tape(tape) => tape.player.borrow().audio_output(),
-                Wired::Composite(composite) => composite.binding.sum_buffer.clone(),
-                Wired::Bus(bus) => bus.sum_buffer.clone(),
-                Wired::Frozen(frozen) => frozen.pre_strip.clone(),
-                Wired::MidiOut(midi) => midi.node.borrow().audio_output() // silent by construction
+                Wired::Leaf(chain) => (chain.instrument.node_id?, chain.instrument.output.clone()?),
+                Wired::Tape(tape) => (tape.player_id, tape.player.borrow().audio_output()),
+                Wired::Composite(composite) => (composite.binding.sum_id, composite.binding.sum_buffer.clone()),
+                Wired::Bus(bus) => (bus.sum_node.unwrap_or(bus.pre_strip_node), bus.sum_buffer.clone()),
+                Wired::Frozen(frozen) => (frozen.player_id, frozen.pre_strip.clone()),
+                Wired::MidiOut(midi) => (midi.node_id, midi.node.borrow().audio_output()) // silent by construction
             });
         }
         if entry.skip_channel_strip {
-            return Some(wired.pre_strip().1);
+            return Some(wired.pre_strip());
         }
-        Some(wired.strip().1)
+        Some(wired.strip())
     }
 }
 
@@ -730,7 +742,14 @@ impl Engine {
         let stems = core::mem::take(&mut self.stem_exports);
         for (index, entry) in stems.iter().enumerate() {
             let Some(unit) = self.audio_units.iter().find(|unit| unit.unit == entry.uuid) else { continue };
-            let Some(tap) = unit.stem_tap(entry) else { continue };
+            let Some((_, tap)) = unit.stem_tap(entry) else { continue };
+            let tap = match self.stem_compensation.get_mut(index).and_then(Option::as_mut) {
+                Some(compensation) => {
+                    compensation.process(&tap);
+                    compensation.output()
+                }
+                None => tap
+            };
             let buffer = tap.borrow();
             let base = index * 2 * engine_env::RENDER_QUANTUM;
             self.stem_staging[base..base + engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.left);
@@ -918,7 +937,7 @@ impl Engine {
         let mut changed = false;
         for unit in &self.audio_units {
             let soloed = match unit.strip_automation.solo.borrow().as_ref() {
-                Some(source) => source(position, true) >= 0.5, // TS `ValueMapping.bool.y`
+                Some(source) => source(position, true, 0) >= 0.5, // TS `ValueMapping.bool.y`
                 None => continue
             };
             if unit.strip_params.solo.get() != soloed {
@@ -1006,6 +1025,10 @@ impl Engine {
         // automation re-bind (it pushes on its own), NOT after a chain reconcile: that leaves survivors untouched.
         if params_changed && !automation_changed {
             self.refresh_unit_params(unit);
+        }
+        // a record / value edit raised the light flag: deliver each dirty `@collection` snapshot once
+        if params_changed || automation_changed {
+            self.flush_unit_records(unit);
         }
         set_params_signal(None);
         crate::set_current_unit_note_bits(None);
@@ -1181,9 +1204,7 @@ impl Engine {
             self.context.remove_processor(node_id);
         }
         if let Some(sidechain) = member.sidechain {
-            for port in sidechain.ports {
-                self.graph.unsubscribe(port.pointer_sub);
-            }
+            self.teardown_sidechain(sidechain);
         }
         self.graph.unsubscribe(member.enabled_sub);
         if let Some(params) = member.params {

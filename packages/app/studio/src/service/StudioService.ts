@@ -247,7 +247,7 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "No stems to export.", icon: "Info"})
                     return
                 }
-                const {status: dialogStatus, error: dialogError, value: config} =
+                const {status: dialogStatus, error: dialogError, value: result} =
                     await Promises.tryCatch(ProjectDialogs.showExportStemsDialog(project))
                 if (dialogStatus === "rejected") {
                     if (Errors.isAbort(dialogError)) {return}
@@ -255,9 +255,10 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                     return
                 }
-                ExportConfiguration.sanitizeExportNamesInPlace(config)
+                const {configuration, section} = result
+                ExportConfiguration.sanitizeExportNamesInPlace(configuration)
                 await this.audioContext.suspend()
-                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
+                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, configuration, section))
                 if (status === "rejected" && !Errors.isAbort(error)) {
                     console.warn(error)
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})

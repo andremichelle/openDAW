@@ -18,6 +18,7 @@ vi.mock("@opendaw/lib-dom", () => ({
     }}
 }))
 import {installAutoScroll} from "./AutoScroll"
+import {Config} from "./timeline/Config"
 
 class TestElement {
     constructor(readonly resize: boolean) {}
@@ -57,6 +58,28 @@ describe("timeline resize auto-scroll exclusion", () => {
         expect(scroller).toHaveBeenCalledWith(0, 30)
         harness.listeners.find(entry => entry.type === "pointerup")?.listener({})
         expect(harness.frames).toHaveLength(0)
+        subscription.terminate()
+    })
+})
+
+// a knob or button in a track header (volume, pan, mute, solo) is a value drag, not a content drag: no scrolling
+class ControlElement {
+    constructor(readonly inControls: boolean) {}
+    closest(selector: string) {
+        return this.inControls && selector.split(",").map(part => part.trim()).includes("[data-no-auto-scroll]") ? this : null
+    }
+    getBoundingClientRect() {return {top: 0, left: 0, right: 100, bottom: 100}}
+}
+
+describe("timeline auto-scroll leaves the track header controls alone", () => {
+    it("does not scroll while a knob is dragged past the edge", () => {
+        vi.stubGlobal("Element", ControlElement)
+        const scroller = vi.fn()
+        const subscription = installAutoScroll(new ControlElement(false) as unknown as Element, scroller,
+            {ignorePointerSelector: Config.AutoScrollIgnore})
+        harness.listeners.find(entry => entry.type === "pointerdown")?.listener({target: new ControlElement(true)})
+        expect(harness.listeners.find(entry => entry.type === "pointermove")).toBeUndefined()
+        expect(scroller).not.toHaveBeenCalled()
         subscription.terminate()
     })
 })

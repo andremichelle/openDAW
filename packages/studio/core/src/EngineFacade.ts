@@ -20,13 +20,14 @@ import {
     EngineSettingsSchema,
     NoteSignal,
     PreferencesFacade,
+    SignalGraph,
     WclapGuiInfo,
     WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
-import {Engine, RecordingStart} from "./Engine"
+import {Engine, RecordingStart, RecordingStop} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
 import {Preferences} from "@opendaw/lib-fusion"
@@ -36,6 +37,7 @@ export class EngineFacade implements Engine {
     readonly #lifecycle: Terminator = this.#terminator.own(new Terminator())
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
+    readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
@@ -60,6 +62,7 @@ export class EngineFacade implements Engine {
         this.#lifecycle.ownAll(
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
+            worklet.compensationLatency.catchupAndSubscribe(owner => this.#compensationLatency.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
             worklet.recordingStart.catchupAndSubscribe(option => option.match({
                 none: () => this.#recordingStart.clear(),
@@ -100,12 +103,14 @@ export class EngineFacade implements Engine {
 
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
+    get recordingStop(): Option<RecordingStop> {return this.#worklet.flatMap(worklet => worklet.recordingStop)}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get playbackTimestamp(): ObservableValue<ppqn> {return this.#playbackTimestamp}
     get countInBeatsRemaining(): ObservableValue<int> {return this.#countInBeatsRemaining}
+    get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
@@ -142,6 +147,10 @@ export class EngineFacade implements Engine {
         return this.#worklet.mapOr(worklet => worklet.wclapDescribe(url), Promise.resolve([]))
     }
     wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#worklet.ifSome(worklet => worklet.scriptMessage(uuid, message))}
+    querySignalGraph(): Promise<SignalGraph> {
+        return this.#worklet.mapOr(worklet => worklet.querySignalGraph(), Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}))
+    }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }

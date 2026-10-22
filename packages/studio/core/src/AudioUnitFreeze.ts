@@ -2,7 +2,7 @@ import {DefaultObservableValue, Errors, isInstanceOf, Notifier, Observer, Option
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioSinkDeviceBoxAdapter, AudioUnitBoxAdapter, ExportConfiguration} from "@opendaw/studio-adapters"
-import {AudioSinkDeviceBox} from "@opendaw/studio-boxes"
+import {AudioSinkDeviceBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
 import {Address} from "@opendaw/lib-box"
@@ -58,7 +58,10 @@ export class AudioUnitFreeze implements Terminable {
                 ...otherUnit.inputAdapter.mapOr(input => [input.box], []),
                 ...otherUnit.audioEffects.unwrap("audioEffects").adapters().map(effect => effect.box)
             ]
-            for (const device of devices) {
+            const sidechainBoxes = devices.flatMap(device => device.incomingEdges()
+                .map(pointer => pointer.box)
+                .filter(box => isInstanceOf(box, WerkstattSidechainBox)))
+            for (const device of [...devices, ...sidechainBoxes]) {
                 for (const [_, target] of edges.outgoingEdgesOf(device)) {
                     if (targetAddresses.some(addr => addr.equals(target))) {
                         return true

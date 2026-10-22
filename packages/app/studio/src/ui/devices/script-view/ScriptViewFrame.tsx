@@ -1,0 +1,270 @@
+import runtimeSource from "./view-runtime.js?raw"
+import {Editing, isDefined, Lifecycle, Nullable, Optional, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
+import {Events} from "@opendaw/lib-dom"
+import {createElement} from "@opendaw/lib-jsx"
+import {Colors, Pointers} from "@opendaw/studio-enums"
+import {Address, Field} from "@opendaw/lib-box"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
+import {
+    AutomatableParameterFieldAdapter,
+    BufferDeclaration,
+    CollectionDeclaration,
+    ScriptCompiler,
+    ScriptBuffers,
+    ScriptRecords,
+    ScriptRecordValues,
+    StreamDeclaration
+} from "@opendaw/studio-adapters"
+import {Fonts} from "@/ui/Fonts"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
+
+export type ScriptViewMode = "inline" | "window"
+
+export type ScriptViewParam = {
+    readonly name: string
+    readonly parameter: AutomatableParameterFieldAdapter<number>
+}
+
+type Construct = {
+    lifecycle: Lifecycle
+    editing: Editing
+    userCode: string
+    className: string
+    mode: ScriptViewMode
+    sampleRate: number
+    params: ReadonlyArray<ScriptViewParam>
+    records: Optional<Field<Pointers.ScriptRecord>>
+    collections: ReadonlyArray<CollectionDeclaration>
+    buffers: Optional<Field<Pointers.ScriptBuffer>>
+    bufferDeclarations: ReadonlyArray<BufferDeclaration>
+    streams: ReadonlyArray<StreamDeclaration>
+    receiver: LiveStreamReceiver
+    address: Address
+    onPreview: (on: boolean, pitch: number, velocity: number) => void
+    onSend: Procedure<unknown>
+    onError: Procedure<string>
+    onWindow: (action: "open" | "close", className: string) => void
+}
+
+type Message = { readonly [key: string]: unknown }
+
+const STREAM_KEY_BASE = 0x1000 // mirrors the script bridge: device address + [0x1000 + stream index]
+const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:"
+
+const isRecord = (value: unknown): value is Message => typeof value === "object" && value !== null
+
+type FontBytes = ReadonlyArray<{ weight: number, bytes: ArrayBuffer }>
+
+const fonts: { bytes: Nullable<Promise<FontBytes>> } = {bytes: null}
+
+const loadFonts = (): Promise<FontBytes> => fonts.bytes ??= Promise.all(
+    [Fonts.Rubik, Fonts.RubikBold].map(font => fetch(String(font.src))
+        .then(response => response.arrayBuffer())
+        .then(bytes => ({weight: Number(font["font-weight"]), bytes}))))
+
+// the studio colours plus the display colours every stock device display paints with (DisplayPaint)
+const colorMap = (): { [name: string]: string } => ({
+    ...Object.fromEntries(Object.entries(Colors).map(([name, color]) => [name, String(color)])),
+    displayStroke: DisplayPaint.strokeStyle(1.0),
+    displayFill: DisplayPaint.fillStyle(),
+    displayGrid: DisplayPaint.gridStyle(1.0)
+})
+
+const cssVariables = (): string => Object.entries(colorMap())
+    .map(([name, color]) => `--color-${name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}: ${color};`)
+    .join(" ")
+
+const inlineScript = (source: string): string => source.replace(/<\/(script)/gi, "<\\/$1")
+
+const buildSrcdoc = (config: object, userScript: string): string => `<!doctype html>
+<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">
+<style>:root { color-scheme: dark; ${cssVariables()} }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent }
+body { font-family: Rubik, sans-serif; font-size: 11px; color: var(--color-gray) }</style></head>
+<body><script>globalThis.__openDAWConfig = ${JSON.stringify(config).replace(/</g, "\\u003c")}</script>
+<script>${inlineScript(runtimeSource)}</script>
+<script>${inlineScript(userScript)}</script></body></html>`
+
+export const ScriptViewFrame = ({
+                                    lifecycle, editing, userCode, className, mode, sampleRate, params, records, collections,
+                                    buffers, bufferDeclarations, streams, receiver, address, onPreview, onSend, onError, onWindow
+                                }: Construct): HTMLIFrameElement => {
+    const streamsByName = new Map(streams.map(stream => [stream.name, stream]))
+    const paramsByName = new Map(params.map(({name, parameter}) => [name, parameter]))
+    const collectionsByName = new Map(collections.map(collection => [collection.name, collection]))
+    const buffersByName = new Map(bufferDeclarations.map(buffer => [buffer.name, buffer]))
+    const readData = (): { [name: string]: ReadonlyArray<ScriptRecordValues> | Float32Array } => ({
+        ...(isDefined(records)
+            ? Object.fromEntries(collections.map(collection => [collection.name, ScriptRecords.read(records, collection)])) : {}),
+        ...(isDefined(buffers)
+            ? Object.fromEntries(bufferDeclarations.map(buffer => [buffer.name, ScriptBuffers.read(buffers, buffer)])) : {})
+    })
+    const config = {
+        className, mode, sampleRate, colors: colorMap(),
+        params: params.map(({name, parameter}) => ({name, label: parameter.name, value: parameter.getControlledValue()})),
+        collections: collections.map(({name, fields}) => ({name, fields: fields.map(({label, defaultValue}) => ({label, defaultValue}))})),
+        streams: streams.map(({name, length, kind}) => ({name, length, kind})),
+        buffers: bufferDeclarations.map(({name, length}) => ({name, length})),
+        // the config travels as JSON, which turns a Float32Array into an object: buffers go as plain arrays
+        data: Object.fromEntries(Object.entries(readData()).map(([name, values]) =>
+            [name, values instanceof Float32Array ? Array.from(values) : values]))
+    }
+    const iframe: HTMLIFrameElement = (<iframe className="script-view" sandbox="allow-scripts"/>)
+    const srcdoc = buildSrcdoc(config, ScriptCompiler.wrapView(userCode))
+    const loading = {expected: true}
+    iframe.srcdoc = srcdoc
+    const connection = lifecycle.own(new Terminator())
+    const state: { port: Nullable<MessagePort>, gesture: boolean } = {port: null, gesture: false}
+    const streamSubscriptions = new Map<string, Terminable>()
+    const heldPitches = new Set<number>()
+    const releasePreview = (): void => {
+        heldPitches.forEach(pitch => onPreview(false, pitch, 0))
+        heldPitches.clear()
+    }
+    const dropStreams = (): void => {
+        streamSubscriptions.forEach(subscription => subscription.terminate())
+        streamSubscriptions.clear()
+    }
+    const send = (message: object): void => state.port?.postMessage(message)
+    const toValues = (value: unknown): ScriptRecordValues => isRecord(value)
+        ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"))
+        : {}
+    const applyOp = (op: Message): void => {
+        if (op.type === "param" && typeof op.name === "string") {
+            const parameter = paramsByName.get(op.name)
+            if (!isDefined(parameter) || typeof op.value !== "number" || !Number.isFinite(op.value)) {return}
+            parameter.setUnitValue(parameter.valueMapping.x(op.value))
+            return
+        }
+        if (op.type === "buffer-set" && isDefined(buffers) && typeof op.buffer === "string" && Array.isArray(op.values)
+            && typeof op.offset === "number" && Number.isInteger(op.offset)) {
+            const buffer = buffersByName.get(op.buffer)
+            if (isDefined(buffer)) {ScriptBuffers.write(buffers, buffer, op.offset, op.values.map(value => typeof value === "number" ? value : 0))}
+            return
+        }
+        if (!isDefined(records) || typeof op.collection !== "string") {return}
+        const collection = collectionsByName.get(op.collection)
+        const index = op.index
+        if (!isDefined(collection) || typeof index !== "number" || !Number.isInteger(index)) {return}
+        if (op.type === "record-set") {
+            ScriptRecords.set(records, collection, index, toValues(op.values))
+        } else if (op.type === "record-insert") {
+            ScriptRecords.insert(records, collection, index, toValues(op.values))
+        } else if (op.type === "record-remove") {
+            ScriptRecords.remove(records, collection, index)
+        }
+    }
+    const applyOps = (ops: ReadonlyArray<unknown>): void => {
+        for (const op of ops) {
+            if (isRecord(op)) {applyOp(op)}
+        }
+    }
+    const endGesture = (): void => {
+        if (!state.gesture) {return}
+        state.gesture = false
+        editing.mark()
+    }
+    const receive = (message: unknown): void => {
+        if (!isRecord(message)) {return}
+        if (message.type === "edit" && Array.isArray(message.ops)) {
+            const ops: ReadonlyArray<unknown> = message.ops
+            editing.modify(() => applyOps(ops))
+        } else if (message.type === "gesture") {
+            if (message.phase === "begin") {
+                endGesture()
+                editing.mark()
+                state.gesture = true
+            } else if (message.phase === "edit" && state.gesture && Array.isArray(message.ops)) {
+                const ops: ReadonlyArray<unknown> = message.ops
+                editing.modify(() => applyOps(ops), false)
+            } else if (message.phase === "end") {
+                endGesture()
+            }
+        } else if (message.type === "key" && (message.kind === "keydown" || message.kind === "keyup") && isRecord(message.init)
+            && iframe.ownerDocument.activeElement === iframe) {
+            const {key, code, metaKey, ctrlKey, shiftKey, altKey, repeat} = message.init
+            globalThis.dispatchEvent(new KeyboardEvent(message.kind, {
+                key: String(key), code: String(code), metaKey: metaKey === true, ctrlKey: ctrlKey === true,
+                shiftKey: shiftKey === true, altKey: altKey === true, repeat: repeat === true
+            }))
+        } else if (message.type === "error" && typeof message.message === "string") {
+            onError(message.message.slice(0, 4096))
+        } else if (message.type === "stream" && typeof message.name === "string") {
+            const stream = streamsByName.get(message.name)
+            const name = message.name
+            if (!isDefined(stream)) {return}
+            if (message.action === "subscribe" && !streamSubscriptions.has(name)) {
+                streamSubscriptions.set(name, receiver.subscribeFloats(address.append(STREAM_KEY_BASE + stream.index),
+                    values => send({type: "stream", name, values: values.slice()})))
+            } else if (message.action === "unsubscribe") {
+                streamSubscriptions.get(name)?.terminate()
+                streamSubscriptions.delete(name)
+            }
+        } else if (message.type === "send") {
+            onSend(message.message)
+        } else if (message.type === "preview" && typeof message.pitch === "number" && Number.isInteger(message.pitch)
+            && message.pitch >= 0 && message.pitch <= 127) {
+            if (message.on === true) {
+                const velocity = typeof message.velocity === "number" && Number.isFinite(message.velocity)
+                    ? Math.min(1, Math.max(0, message.velocity)) : 0.8
+                if (heldPitches.has(message.pitch)) {onPreview(false, message.pitch, 0)}
+                heldPitches.add(message.pitch)
+                onPreview(true, message.pitch, velocity)
+            } else if (heldPitches.delete(message.pitch)) {
+                onPreview(false, message.pitch, 0)
+            }
+        } else if (message.type === "window" && (message.action === "open" || message.action === "close")
+            && typeof message.name === "string") {
+            onWindow(message.action, message.name)
+        }
+    }
+    const connect = (): void => {
+        connection.terminate()
+        endGesture()
+        const target = iframe.contentWindow
+        if (!isDefined(target)) {return}
+        const channel = new MessageChannel()
+        state.port = channel.port1
+        channel.port1.onmessage = event => receive(event.data)
+        connection.ownAll(
+            ...params.map(({name, parameter}) =>
+                parameter.subscribe(() => send({type: "param", name, value: parameter.getControlledValue()}))),
+            isDefined(records) && collections.length > 0
+                ? ScriptRecords.observe(records, () => send({type: "data", data: readData()}))
+                : Terminable.Empty,
+            isDefined(buffers) && bufferDeclarations.length > 0
+                ? ScriptBuffers.observe(buffers, () => send({type: "data", data: readData()}))
+                : Terminable.Empty,
+            Terminable.create(() => {
+                send({type: "terminate"})
+                channel.port1.close()
+                state.port = null
+                dropStreams()
+                releasePreview()
+            })
+        )
+        // every connect is a fresh realm, so it sends the current state
+        params.forEach(({name, parameter}) => send({type: "param", name, value: parameter.getControlledValue()}))
+        if (collections.length > 0 || bufferDeclarations.length > 0) {send({type: "data", data: readData()})}
+        loadFonts()
+            .then(fonts => target.postMessage({fonts}, "*", [channel.port2]))
+            .catch(() => target.postMessage({fonts: []}, "*", [channel.port2]))
+    }
+    // only a load of our own srcdoc gets the port, anything the frame navigated to is replaced by it
+    const onLoad = (): void => {
+        if (!loading.expected) {
+            connection.terminate()
+            endGesture()
+            loading.expected = true
+            iframe.srcdoc = srcdoc
+            return
+        }
+        loading.expected = false
+        connect()
+    }
+    lifecycle.ownAll(
+        Events.subscribe(iframe, "load", onLoad),
+        Terminable.create(endGesture)
+    )
+    return iframe
+}

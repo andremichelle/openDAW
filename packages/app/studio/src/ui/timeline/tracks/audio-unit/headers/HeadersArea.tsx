@@ -22,5 +22,5 @@ export const HeadersArea = ({lifecycle, scrollModel}: Construct) => (
          tabIndex={-1}
          onInit={element => lifecycle.own(
              installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}},
-                 {dragPadding: Config.AutoScrollDragPaddingVertical, ignorePointerSelector: ".track-resizer"}))}/>
+                 {dragPadding: Config.AutoScrollDragPaddingVertical, ignorePointerSelector: Config.AutoScrollIgnore}))}/>
 )

@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, it} from "vitest"
-import {BooleanField, BoxGraph, Field} from "./"
+import {BooleanField, BoxGraph, Field, Update} from "./"
 import {PointerField, UnreferenceableType} from "./pointer"
 import {Box, BoxConstruct} from "./box"
 import {NoPointers, VertexVisitor} from "./vertex"
@@ -1106,6 +1106,82 @@ describe("#306 each automation-node placement is its own undo step", () => {
         scene.editing.undo() // one more step removes placement 1
         expect(scene.graph.findBox(firstUuid).nonEmpty()).false
         expect(scene.editing.canUndo()).false
+    })
+})
+describe("#480 a pointer write through a box instance that undo replaced", () => {
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+        target: MandatoryBox
+        holder: RefBox
+        stale: BarBox
+        live: BarBox
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        scene.graph = createGraphWithFactory()
+        scene.editing = new BoxEditing(scene.graph)
+        const {target, holder, stale} = scene.editing.modify(() => {
+            const target = MandatoryBox.create(scene.graph, UUID.generate())
+            const holder = RefBox.create(scene.graph, UUID.generate(), box => box.target.refer(target))
+            const stale = BarBox.create(scene.graph, UUID.generate())
+            return {target, holder, stale}
+        }).unwrap()
+        scene.editing.modify(() => stale.delete())
+        scene.editing.undo()
+        scene.target = target
+        scene.holder = holder
+        scene.stale = stale
+        scene.live = scene.graph.findBox<BarBox>(stale.address.uuid).unwrap()
+    })
+
+    const createSecondTarget = (scene: TestScene): MandatoryBox => scene.editing.modify(() => {
+        const second = MandatoryBox.create(scene.graph, UUID.generate())
+        RefBox.create(scene.graph, UUID.generate(), box => box.target.refer(second))
+        return second
+    }).unwrap()
+
+    it("undo restores a new instance and the old one reports detached", (scene: TestScene) => {
+        expect(scene.live).not.toBe(scene.stale)
+        expect(scene.live.isAttached()).true
+        expect(scene.stale.isAttached()).false
+    })
+
+    it("leaves no ghost edge on the target", (scene: TestScene) => {
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        expect(scene.live.pointer.isEmpty()).true
+        expect(scene.target.pointerHub.size()).toBe(1)
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
+    })
+
+    it("emits no update, so a synced copy cannot diverge", (scene: TestScene) => {
+        const updates: Array<Update> = []
+        const subscription = scene.graph.subscribeToAllUpdates({onUpdate: update => updates.push(update)})
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        subscription.terminate()
+        expect(updates.length).toBe(0)
+    })
+
+    it("the ghost does not keep a mandatory target alive once its real user is gone", (scene: TestScene) => {
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        scene.editing.modify(() => scene.holder.delete())
+        expect(scene.holder.isAttached()).false
+        expect(scene.target.isAttached()).false
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
+    })
+
+    it("a live edge survives a stale write elsewhere and both targets stay deletable", (scene: TestScene) => {
+        const second = createSecondTarget(scene)
+        scene.editing.modify(() => scene.live.pointer.refer(scene.target))
+        scene.editing.modify(() => scene.stale.pointer.refer(second))
+        expect(second.pointerHub.size()).toBe(1)
+        expect(scene.graph.edges().isConnected(scene.live.pointer, scene.target.address)).true
+        expect(() => scene.editing.modify(() => second.delete())).not.toThrow()
+        expect(scene.graph.edges().isConnected(scene.live.pointer, scene.target.address)).true
+        expect(() => scene.editing.modify(() => scene.live.pointer.defer())).not.toThrow()
+        expect(() => scene.editing.modify(() => scene.target.delete())).not.toThrow()
+        expect(scene.graph.findBox(scene.target.address.uuid).isEmpty()).true
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
     })
 })
 

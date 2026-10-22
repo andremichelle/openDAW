@@ -36,6 +36,11 @@ import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
 import {WerkstattParameterBox} from "./audio-effects/WerkstattParameterBox"
 import {WerkstattSampleBox} from "./audio-effects/WerkstattSampleBox"
+import {WerkstattSidechainBox} from "./audio-effects/WerkstattSidechainBox"
+import {ScriptRecordBox} from "./audio-effects/ScriptRecordBox"
+import {ScriptValueBox} from "./audio-effects/ScriptValueBox"
+import {ScriptBufferBox} from "./audio-effects/ScriptBufferBox"
+import {ScriptBufferChunkBox} from "./audio-effects/ScriptBufferChunkBox"
 import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {CubedDeviceBox} from "./instruments/CubedDeviceBox"
@@ -91,6 +96,11 @@ export const DeviceDefinitions = [
     WerkstattDeviceBox,
     WerkstattParameterBox,
     WerkstattSampleBox,
+    WerkstattSidechainBox,
+    ScriptRecordBox,
+    ScriptValueBox,
+    ScriptBufferBox,
+    ScriptBufferChunkBox,
     SpielwerkDeviceBox,
     ApparatDeviceBox,
     CubedDeviceBox,

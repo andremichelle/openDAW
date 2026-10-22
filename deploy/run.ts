@@ -2,6 +2,7 @@ import SftpClient from "ssh2-sftp-client"
 import * as fs from "fs"
 import {execSync} from "child_process"
 import Anthropic from "@anthropic-ai/sdk"
+import {chunkFiles, DistFile} from "./chunks"
 
 const config = {
     host: process.env.SFTP_HOST,
@@ -125,31 +126,51 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
 </IfModule>
 `
 
-// Uploads a dist folder as one tarball and lets extract.php unpack it next to the tarball.
+// The server's unpack gets killed under load (tar exit 9), so a dist goes up in chunks, each unpacked before the next
+// under the one name extract.php accepts; a chunk that fails is sent again.
+const ChunkBytes = 16 * 1024 * 1024
+// the server kills an unpack that runs long, many small files take longer than few large ones
+const ChunkFiles = 150
+const ChunkAttempts = 3
+const RetryDelay = 30_000
+
+const listFiles = (dir: string, prefix: string = ""): Array<DistFile> =>
+    fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => entry.isDirectory()
+        ? listFiles(`${dir}/${entry.name}`, `${prefix}${entry.name}/`)
+        : [{path: `${prefix}${entry.name}`, size: fs.statSync(`${dir}/${entry.name}`).size}])
+
+const extractOnServer = async (remoteTarball: string): Promise<{ ok: boolean, text: string }> => {
+    const response = await fetch(`https://${domain}/extract.php?file=${encodeURIComponent(remoteTarball)}`)
+    const text = (await response.text()).trim()
+    console.log(text)
+    return {ok: response.ok && text.startsWith("✅"), text: `${response.status} ${text}`}
+}
+
 const uploadDist = async (localDir: string, remoteDir: string): Promise<void> => {
     console.log("creating", remoteDir)
     await sftp.mkdir(remoteDir, true).catch(() => {})
-    console.log(`compressing ${localDir}...`)
+    const chunks = chunkFiles(listFiles(localDir), ChunkBytes, ChunkFiles)
+    console.log(`uploading ${localDir} to ${remoteDir} in ${chunks.length} chunks...`)
     const tarballPath = "./dist.tar.gz"
-    execSync(`tar -czf ${tarballPath} -C ${localDir} .`)
-    console.log(`uploading to ${remoteDir}...`)
+    const listPath = "./dist.files"
     const remoteTarball = `${remoteDir}/dist.tar.gz`
     const startTime = Date.now()
-    await sftp.put(tarballPath, remoteTarball)
-    console.log(`Upload took ${((Date.now() - startTime) / 1000).toFixed(1)}s`)
+    for (const [index, chunk] of chunks.entries()) {
+        fs.writeFileSync(listPath, chunk.join("\n"))
+        execSync(`tar -czf ${tarballPath} -C ${localDir} -T ${listPath}`)
+        for (let attempt = 1; ; attempt++) {
+            const {ok, text} = await sftp.put(tarballPath, remoteTarball)
+                .then(() => extractOnServer(remoteTarball))
+                .catch((error: unknown) => ({ok: false, text: String(error)}))
+            if (ok) {break}
+            if (attempt === ChunkAttempts) {throw new Error(`Extraction of chunk ${index + 1}/${chunks.length} failed: ${text}`)}
+            console.warn(`chunk ${index + 1}/${chunks.length} failed (${text}), attempt ${attempt + 1} of ${ChunkAttempts}`)
+            await new Promise(resolve => setTimeout(resolve, RetryDelay))
+        }
+    }
     fs.unlinkSync(tarballPath)
-    console.log("extracting on server via PHP...")
-    const extractUrl = `https://${domain}/extract.php?file=${encodeURIComponent(remoteTarball)}`
-    const extractResponse = await fetch(extractUrl)
-    const extractText = await extractResponse.text()
-    console.log(extractText)
-    if (!extractResponse.ok) {
-        throw new Error(`Extraction failed: ${extractResponse.status} - ${extractText}`)
-    }
-    // Verify extraction was fully successful (must start with ✅, not ⚠️)
-    if (!extractText.trim().startsWith("✅")) {
-        throw new Error(`Extraction incomplete: ${extractText}`)
-    }
+    fs.unlinkSync(listPath)
+    console.log(`Upload took ${((Date.now() - startTime) / 1000).toFixed(1)}s`)
 }
 
 // The manual is unpacked over its previous version, so anything that no longer exists locally must go.
@@ -268,13 +289,12 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
     console.log(`✅ Release uploaded and activated: ${releaseDir}`)
 
     const webhookUrl = process.env.DISCORD_WEBHOOK
-    if (webhookUrl) {
+    if (webhookUrl && isMainEnv) {
         const commitLog = previousCommit && previousCommit !== currentCommit ? readCommitLog(previousCommit) : null
         const summary = commitLog ? await generateSummary(commitLog) : null
         const now = Math.floor(Date.now() / 1000)
-        const branchInfo = isMainEnv ? "" : ` (\`${branchName}\`)`
         const content =
-            `🚀 **openDAW** deployed <https://${domain}>${branchInfo} using release \`${uuid}\` <t:${now}:R>.`
+            `🚀 **openDAW** deployed <https://${domain}> using release \`${uuid}\` <t:${now}:R>.`
             + (summary ? `\n\nwhat's new:\n${summary}` : "")
         try {
             const response = await fetch(webhookUrl, {

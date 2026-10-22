@@ -1,6 +1,7 @@
 import {Editing, EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
 import {
+    AudioBounce,
     AudioConsolidation,
     AudioContentModifier,
     ContextMenu,
@@ -23,6 +24,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
+import {Bounces} from "@/service/Bounces"
 
 type Construct = {
     element: Element
@@ -116,10 +118,14 @@ export const installRegionContextMenu =
                             AudioConsolidation.flatten(project, service.sampleService, audioRegions)
                                 .then(EmptyExec, console.warn)
                         } else {
-                            editing.modify(() =>
-                                region.flatten(selection.selected()).ifSome(box => project.selection.select(box)))
+                            const {truncateNotesAtRegionEnd} = service.engine.preferences.settings.playback
+                            editing.modify(() => region.flatten(selection.selected(), truncateNotesAtRegionEnd)
+                                .ifSome(box => project.selection.select(box)))
                         }
                     }),
+                MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounce(selection.selected())})
+                    .setTriggerProcedure(() => Bounces.bounceRegions(service, selection.selected().slice())
+                        .then(EmptyExec, console.warn)),
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)

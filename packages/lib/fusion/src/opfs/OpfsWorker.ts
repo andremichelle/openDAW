@@ -5,6 +5,7 @@ import {OpfsProtocol} from "./OpfsProtocol"
 export namespace OpfsWorker {
     const DEBUG = false
     const LockWarnMillis = 2000
+    const HoldWarnMillis = 5000
 
     type LockHolder = { readonly operation: string, readonly since: number, step: string }
 
@@ -127,9 +128,12 @@ export namespace OpfsWorker {
                     const holder: LockHolder = {operation, since: performance.now(), step: "start"}
                     this.#locks.set(path, lockPromise)
                     this.#holders.set(path, holder)
+                    const holdWarning = setTimeout(() => console.warn(`[OPFS] ${operation} '${path}' runs for ${
+                        ((performance.now() - holder.since) / 1000).toFixed(1)}s at '${holder.step}'`), HoldWarnMillis)
                     try {
                         return await task(step => holder.step = step)
                     } finally {
+                        clearTimeout(holdWarning)
                         if (this.#locks.get(path) === lockPromise) {
                             this.#locks.delete(path)
                         }

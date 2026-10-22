@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.1](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.0...@opendaw/app-studio@0.3.1) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+# [0.3.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.6...@opendaw/app-studio@0.3.0) (2026-10-19)
+
+### Bug Fixes
+
+- align clip drop preview with resized track rows ([2af2fe8](https://github.com/andremichelle/openDAW/commit/2af2fe8d6ea59b8c295385deba98c98fb43f8d87))
+- preserve clip layout and add smooth horizontal scrolling ([f302d1d](https://github.com/andremichelle/openDAW/commit/f302d1d97849379043b468cb11e5ae5c12f4b0e9))
+- preserve track lookup when creating clips ([c54b124](https://github.com/andremichelle/openDAW/commit/c54b124141476b2d22fb2c13dc0a41842137b7c0))
+
+### Features
+
+- resize timeline tracks from the control header ([acc7f24](https://github.com/andremichelle/openDAW/commit/acc7f2442e5421611e06749d8b84f97c28c60eff))
+
 ## [0.2.6](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.5...@opendaw/app-studio@0.2.6) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/app-studio

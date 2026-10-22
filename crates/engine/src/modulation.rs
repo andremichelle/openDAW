@@ -260,13 +260,43 @@ pub(crate) struct ModulatorState {
     pub(crate) amount: Cell<f32>,
     pub(crate) kind: ModulatorKind,
     pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>,
-    pub(crate) broadcast_active: Rc<Cell<bool>>
+    pub(crate) broadcast_active: Rc<Cell<bool>>,
+    // the value of the last quanta, newest at `history_head - 1`, for readers behind delay compensation
+    history: RefCell<Vec<f32>>,
+    history_head: Cell<usize>,
+    history_filled: Cell<bool>
 }
 
+// quanta of modulator history the compensation cap needs at the highest common sample rate
+const MODULATION_HISTORY: usize =
+    (engine_env::compensation::MAX_COMPENSATION_SECONDS * 192_000.0 / engine_env::RENDER_QUANTUM as f32) as usize + 2;
+
 impl ModulatorState {
-    fn of(kind: ModulatorKind) -> Self {
+    pub(crate) fn of(kind: ModulatorKind) -> Self {
         Self {enabled: Cell::new(true), bipolar: Cell::new(true), amount: Cell::new(1.0), kind,
-            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false)),
+            history: RefCell::new(alloc::vec![0.0; MODULATION_HISTORY]), history_head: Cell::new(0),
+            history_filled: Cell::new(false)}
+    }
+
+    pub(crate) fn record(&self) {
+        let value = self.value_at();
+        let mut history = self.history.borrow_mut();
+        if !self.history_filled.replace(true) {
+            history.fill(value);
+        }
+        let head = self.history_head.get();
+        history[head] = value;
+        self.history_head.set((head + 1) % history.len());
+    }
+
+    pub(crate) fn value_lagged(&self, quanta_back: usize) -> f32 {
+        if quanta_back == 0 || !self.history_filled.get() {
+            return self.value_at();
+        }
+        let history = self.history.borrow();
+        let back = quanta_back.min(history.len() - 1);
+        history[(self.history_head.get() + history.len() - 1 - back) % history.len()]
     }
 
     pub(crate) fn lfo() -> Self {Self::of(ModulatorKind::Lfo(LfoState::new()))}
@@ -408,6 +438,12 @@ pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> 
 
 pub(crate) fn modulation_sum_split(chain: Option<&ModulationChain>, automation_position: f64,
                                    position: f64) -> f32 {
+    modulation_sum_lagged(chain, automation_position, position, 0)
+}
+
+/// The modulation as it was `quanta_back` quanta ago, for a reader whose audio is that late (#482).
+pub(crate) fn modulation_sum_lagged(chain: Option<&ModulationChain>, automation_position: f64,
+                                    position: f64, quanta_back: usize) -> f32 {
     let chain = match chain {
         Some(chain) => chain,
         None => return f32::NAN
@@ -418,7 +454,7 @@ pub(crate) fn modulation_sum_split(chain: Option<&ModulationChain>, automation_p
         if !bound.enabled.get() || !bound.modulator.enabled.get() {
             continue;
         }
-        sum += bound.depth_at(automation_position, position) * bound.modulator.value_at();
+        sum += bound.depth_at(automation_position, position) * bound.modulator.value_lagged(quanta_back);
         contributes = true;
     }
     if contributes {sum} else {f32::NAN}
@@ -571,6 +607,12 @@ impl ModulatorTable {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub(crate) fn record_history(&self) {
+        for entry in self.entries.iter() {
+            entry.state.record();
+        }
     }
 
     pub(crate) fn publish_phases(&self) {
@@ -981,9 +1023,7 @@ mod tests {
 
     #[test]
     fn the_sum_is_nan_until_something_actually_contributes() {
-        let state = Rc::new(ModulatorState {enabled: Cell::new(true), bipolar: Cell::new(true),
-            amount: Cell::new(1.0), kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)),
-            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))});
+        let state = Rc::new(ModulatorState::of(ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR))));
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),
             depth: Rc::new(Cell::new(depth)),

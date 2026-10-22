@@ -1,5 +1,6 @@
 import defaultCode from "./spielwerk-default.js?raw"
 import starterPrompt from "./spielwerk-starter-prompt.txt?raw"
+import viewsPrompt from "@/ui/devices/script-views-prompt.txt?raw"
 import {DeviceHost, SpielwerkDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -8,12 +9,14 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {StudioService} from "@/service/StudioService"
 import {SpielwerkExamples} from "./spielwerk-examples"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"},
     defaultCode,
     examples: SpielwerkExamples,
-    starterPrompt,
+    starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,
+    entryPoints: ScriptEntryPointDocs.spielwerk,
     icon: IconSymbol.Code,
     populateMenu: (parent, service, deviceHost, adapter) =>
         MenuItems.forEffectDevice(parent, service, deviceHost, adapter as SpielwerkDeviceBoxAdapter),

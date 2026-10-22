@@ -7,6 +7,8 @@
 //! device PULLS its own events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
+use core::cell::Cell;
 use alloc::string::String;
 use boxgraph::address::Uuid;
 use alloc::vec;
@@ -14,6 +16,7 @@ use alloc::vec::Vec;
 use abi::EventRecord;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
+use engine_env::engine_context::NodeId;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
@@ -67,7 +70,8 @@ pub(crate) struct PluginInstrument {
     device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
-    descriptor: Box<[u32]>
+    descriptor: Box<[u32]>,
+    latency: Rc<Cell<u32>>
 }
 
 impl PluginInstrument {
@@ -97,6 +101,8 @@ impl PluginInstrument {
             0, 0,
             sample_rate.to_bits()
         ].into_boxed_slice();
+        let latency = Rc::new(Cell::new(0));
+        unsafe { crate::LATENCIES.get() }.insert(device_state.as_ptr() as u32, latency.clone());
         Self {
             process_index: device.process_index,
             reset_index: device.reset_index,
@@ -118,7 +124,8 @@ impl PluginInstrument {
             device_events,
             device_state,
             out_offsets,
-            descriptor
+            descriptor,
+            latency
         }
     }
 
@@ -155,10 +162,10 @@ impl ParamSink for PluginInstrument {
 }
 
 impl SidechainSink for PluginInstrument {
-    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]) {
         self.input_ports.clear();
         self.sidechain_buffers.clear();
-        for (port_id, source) in sources {
+        for (port_id, _, source) in sources {
             let buffer = source.borrow();
             let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
             drop(buffer);
@@ -180,7 +187,17 @@ impl AudioGenerator for PluginInstrument {
     }
 }
 
+impl Drop for PluginInstrument {
+    fn drop(&mut self) {
+        unsafe { crate::LATENCIES.get() }.remove(&(self.device_state.as_ptr() as u32));
+    }
+}
+
 impl Processor for PluginInstrument {
+    fn latency(&self) -> u32 {
+        self.latency.get()
+    }
+
     fn reset(&mut self) {
         // Transport STOP: drop every active voice (the device clears its voice pool / envelopes), and clear the
         // buffered events.
@@ -217,6 +234,7 @@ impl Processor for PluginInstrument {
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
+        crate::calling_device(self.device_state.as_ptr() as u32);
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
             let pull = unsafe { PULL.get() };

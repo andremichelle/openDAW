@@ -1,23 +1,49 @@
-import {assert, DefaultObservableValue, Errors, Option, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {assert, DefaultObservableValue, Errors, int, Option, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {ExternalLib, OfflineEngineRenderer, ProjectMeta, ProjectProfile} from "@opendaw/studio-core"
+import {
+    ExternalLib,
+    MixdownSection,
+    OfflineEngineRenderer,
+    Project,
+    ProjectMeta,
+    ProjectProfile
+} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
 import {AudioFormatSelector} from "@/ui/components/AudioFormatSelector"
+import {MixdownSectionSelector} from "@/ui/components/MixdownSectionSelector"
 import {AudioFormats} from "@/audio/AudioFormats"
 
 export namespace Mixdowns {
     const mixdownFormat = new DefaultObservableValue<AudioFormats.Format>(AudioFormats.All[0])
+    const mixdownSectionKey = new DefaultObservableValue<string>("song")
+
+    export const render = (project: Project,
+                           optExportConfiguration: Option<ExportConfiguration>,
+                           section: MixdownSection,
+                           progress: DefaultObservableValue<number>,
+                           abortSignal: AbortSignal,
+                           sampleRate: int): Promise<AudioData> => section.type === "song"
+        ? OfflineEngineRenderer.start(project, optExportConfiguration, progress, abortSignal, sampleRate)
+        : OfflineEngineRenderer.renderSection(project, optExportConfiguration, section, progress, abortSignal, sampleRate)
+
+    const fileName = (meta: ProjectMeta, section: MixdownSection): string =>
+        section.type === "song" ? meta.name : `${meta.name} - ${section.label}`
 
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
         const formats = await AudioFormats.available()
         if (!formats.includes(mixdownFormat.getValue())) {mixdownFormat.setValue(formats[0])}
+        const sections = MixdownSection.collect(source)
+        const sectionModel = new DefaultObservableValue(MixdownSection.find(sections, mixdownSectionKey.getValue()))
         const lifecycle = new Terminator()
         const {status: dialogStatus, error: dialogError} = await Promises.tryCatch(Dialogs.show({
             headline: "Export Mixdown",
-            content: AudioFormatSelector({lifecycle, formats, model: mixdownFormat}),
+            content: [
+                MixdownSectionSelector({lifecycle, sections, model: sectionModel}),
+                AudioFormatSelector({lifecycle, formats, model: mixdownFormat})
+            ],
             okText: "Export"
         }))
         lifecycle.terminate()
@@ -26,6 +52,8 @@ export namespace Mixdowns {
             throw dialogError
         }
         const format = mixdownFormat.getValue()
+        const section = sectionModel.getValue()
+        mixdownSectionKey.setValue(section.key)
         const project = source.copy()
         const abortController = new AbortController()
         const progress = new DefaultObservableValue(0.0)
@@ -34,8 +62,8 @@ export namespace Mixdowns {
             progress,
             cancel: () => abortController.abort()
         })
-        const result = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.None, progress, abortController.signal, format.sampleRate))
+        const result = await Promises.tryCatch(
+            render(project, Option.None, section, progress, abortController.signal, format.sampleRate))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -47,12 +75,13 @@ export namespace Mixdowns {
         return Files.saveWithApproval({
             buffer,
             headline: `Save ${format.label}`,
-            suggestedName: `${meta.name}.${format.extension}`
+            suggestedName: `${fileName(meta, section)}.${format.extension}`
         })
     }
 
     export const exportStems = async ({project: source, meta}: ProjectProfile,
-                                      config: ExportConfiguration): Promise<void> => {
+                                      config: ExportConfiguration,
+                                      section: MixdownSection): Promise<void> => {
         const project = source.copy()
         const abortController = new AbortController()
         const progress = new DefaultObservableValue(0.0)
@@ -61,8 +90,8 @@ export namespace Mixdowns {
             progress,
             cancel: () => abortController.abort()
         })
-        const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.wrap(config), progress, abortController.signal, 48_000))
+        const {status, value, error: renderError} = await Promises.tryCatch(
+            render(project, Option.wrap(config), section, progress, abortController.signal, 48_000))
         dialog.terminate()
         if (status === "rejected") {
             if (Errors.isAbort(renderError)) {return}
@@ -71,7 +100,7 @@ export namespace Mixdowns {
             return
         }
         const {status: zipStatus, error: zipError} = await Promises.tryCatch(
-            saveZipFile(value, meta, ExportConfiguration.stemFileNames(config)))
+            saveZipFile(value, fileName(meta, section), ExportConfiguration.stemFileNames(config)))
         if (zipStatus === "rejected") {
             console.warn(zipError)
             RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
@@ -79,7 +108,7 @@ export namespace Mixdowns {
         }
     }
 
-    const saveZipFile = async (audioData: AudioData, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
+    const saveZipFile = async (audioData: AudioData, zipName: string, trackNames: ReadonlyArray<string>) => {
         const libResult = await ExternalLib.JSZip()
         if (libResult.status === "rejected") {
             console.warn(libResult.error)
@@ -117,7 +146,7 @@ export namespace Mixdowns {
             buffer: arrayBuffer,
             headline: "Save Zip",
             message: `Size: ${arrayBuffer.byteLength >> 20}M`,
-            suggestedName: `${meta.name}.zip`
+            suggestedName: `${zipName}.zip`
         })
     }
 }

@@ -50,6 +50,8 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/errors")),
     MenuItem.default({label: "・ Graph"})
         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/graph")),
+    MenuItem.default({label: "・ Signal Graph"})
+        .setTriggerProcedure(() => RouteLocation.get().navigateTo("/signal-graph")),
     MenuItem.default({label: "・ Benchmark"})
         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/performance")),
     MenuItem.default({

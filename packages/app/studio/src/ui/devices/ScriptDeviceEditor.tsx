@@ -9,7 +9,11 @@ import {
     ParameterAdapterSet,
     SampleDeclaration,
     ScriptCompiler,
-    ScriptDeclaration
+    ScriptDeclaration,
+    ScriptViewLayout,
+    ScriptEntryPoints,
+    SidechainDeclaration,
+    ViewDeclaration
 } from "@opendaw/studio-adapters"
 import {
     asInstanceOf,
@@ -24,17 +28,20 @@ import {
     ObservableValue,
     Observer,
     Subscription,
+    Terminable,
     Terminator,
+    tryCatch,
     UUID
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Clipboard, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox, WerkstattSidechainBox} from "@opendaw/studio-boxes"
+import {Field} from "@opendaw/lib-box"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -46,6 +53,8 @@ import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
+import {SidechainSelector} from "@/ui/devices/SidechainSelector"
+import {ScriptViews, ScriptWindows} from "@/ui/devices/script-view/ScriptViews"
 
 const className = Html.adoptStyleSheet(css, "ScriptDeviceEditor")
 
@@ -65,6 +74,7 @@ type ScriptAdapter = DeviceBoxAdapter & {
     readonly box: ScriptCompiler.ScriptDeviceBox
     readonly parameters: ParameterAdapterSet
     readonly codeChanged: Observable<void>
+    readonly sideChains?: Field<Pointers.ScriptSideChain>
 }
 
 export type ScriptDeviceEditorConfig = {
@@ -72,6 +82,7 @@ export type ScriptDeviceEditorConfig = {
     readonly defaultCode: string
     readonly examples: ReadonlyArray<CodeEditorExample>
     readonly starterPrompt: string
+    readonly entryPoints: ScriptEntryPoints.Api
     readonly icon: IconSymbol
     readonly populateMenu: (parent: MenuItem, service: StudioService, deviceHost: DeviceHost, adapter: ScriptAdapter) => void
     readonly populateMeter: (construct: {
@@ -96,21 +107,12 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const box = adapter.box
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? compiler.stripHeader(storedCode) : config.defaultCode
-    let compiling = false
     const compile = async (code: string) => {
-        compiling = true
-        try {
-            const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
-            if (result.status === "resolved") {
-                errorIcon.classList.add("hidden")
-                errorIcon.title = ""
-            } else {
-                errorIcon.classList.remove("hidden")
-                errorIcon.title = String(result.error)
-                throw result.error
-            }
-        } finally {
-            compiling = false
+        const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
+        if (result.status === "rejected") {
+            errorIcon.classList.remove("hidden")
+            errorIcon.title = String(result.error)
+            throw result.error
         }
     }
     if (storedCode.length > 0) {
@@ -137,7 +139,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
                 previousScreen: service.layout.screen.getValue(),
                 examples: config.examples,
-                starterPrompt: config.starterPrompt
+                starterPrompt: config.starterPrompt,
+                entryPoints: config.entryPoints
             })
         }
     }
@@ -163,6 +166,11 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         </Button>
     )
     let lastErrorMessage = ""
+    const showError = (message: string): void => {
+        lastErrorMessage = message
+        errorIcon.classList.remove("hidden")
+        errorIcon.title = message
+    }
     const errorIcon: HTMLElement = (
         <div className="error hidden"
              style={{cursor: "pointer"}}
@@ -183,6 +191,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const controlsTerminator = lifecycle.own(new Terminator())
     const paramBoxesByLabel = new Map<string, WerkstattParameterBox>()
     const sampleBoxesByLabel = new Map<string, WerkstattSampleBox>()
+    const sidechainBoxesByLabel = new Map<string, WerkstattSidechainBox>()
     const createParamElement = (terminator: Terminator,
                                 declaration: ParamDeclaration,
                                 group: Nullable<GroupDeclaration>): HTMLElement => {
@@ -261,12 +270,58 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             </Column>
         )
     }
+    const createSidechainElement = (terminator: Terminator, declaration: SidechainDeclaration): HTMLElement => {
+        const sidechain = sidechainBoxesByLabel.get(declaration.label)
+        if (!isDefined(sidechain)) {return <div/>}
+        return (
+            <SidechainSelector lifecycle={terminator}
+                               editing={editing}
+                               rootBoxAdapter={project.rootBoxAdapter}
+                               sideChain={sidechain.source}
+                               deviceHost={deviceHost}
+                               label={declaration.label}/>
+        )
+    }
+    const placeInGrid = (element: HTMLElement, {column, row, columns, rows}: ScriptViewLayout.Area): HTMLElement => {
+        element.style.gridColumn = `${column} / span ${columns}`
+        element.style.gridRow = `${row} / span ${rows}`
+        return element
+    }
+    const createViewElement = (terminator: Terminator, view: ViewDeclaration): Nullable<HTMLElement> => {
+        const area = ScriptViewLayout.visibleArea(view)
+        if (!isDefined(area)) {return null}
+        const frame = ScriptViews.createFrame({
+            lifecycle: terminator, service, adapter, userCode: () => compiler.stripHeader(box.code.getValue()),
+            className: view.className, mode: "inline", onError: showError
+        })
+        frame.classList.toggle("overflow", ScriptViewLayout.overflows(view))
+        return placeInGrid(frame, area)
+    }
     const populateSection = (terminator: Terminator, section: DeclarationSection, container: HTMLElement): void => {
         const controls: HTMLElement = (<div className="controls"/>)
+        const views: Array<ViewDeclaration> = []
         for (const item of section.items) {
-            controls.appendChild(item.type === "param"
-                ? createParamElement(terminator, item.declaration, section.group)
-                : createSampleElement(terminator, item.declaration))
+            switch (item.type) {
+                case "param":
+                    controls.appendChild(createParamElement(terminator, item.declaration, section.group))
+                    break
+                case "sample":
+                    controls.appendChild(createSampleElement(terminator, item.declaration))
+                    break
+                case "sidechain":
+                    controls.appendChild(createSidechainElement(terminator, item.declaration))
+                    break
+                case "view": {
+                    const element = createViewElement(terminator, item.declaration)
+                    if (isDefined(element)) {controls.appendChild(element)}
+                    views.push(item.declaration)
+                    break
+                }
+            }
+        }
+        for (const {area} of ScriptViewLayout.overlaps(views)) {
+            const visible = ScriptViewLayout.visibleArea(area)
+            if (isDefined(visible)) {controls.appendChild(placeInGrid(<div className="view-overlap"/>, visible))}
         }
         if (isDefined(section.group)) {
             const color = resolveGroupColor(section.group.color)
@@ -317,17 +372,32 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             sampleBoxesByLabel.set(sample.label.getValue(), sample)
         }
     }
-    const scheduleRebuild = () => {
+    const indexSidechainBoxes = () => {
+        sidechainBoxesByLabel.clear()
+        for (const pointer of adapter.sideChains?.pointerHub.incoming() ?? []) {
+            const sidechain = asInstanceOf(pointer.box, WerkstattSidechainBox)
+            sidechainBoxesByLabel.set(sidechain.label.getValue(), sidechain)
+        }
+    }
+    const rebuildNow = () => {
         indexParamBoxes()
         indexSampleBoxes()
+        indexSidechainBoxes()
         rebuildControls()
     }
+    // one rebuild per change: a compile adds its param, sample and sidechain boxes one by one
+    const rebuild = {pending: false, alive: true}
+    const scheduleRebuild = () => {
+        if (rebuild.pending) {return}
+        rebuild.pending = true
+        queueMicrotask(() => {
+            rebuild.pending = false
+            if (rebuild.alive) {rebuildNow()}
+        })
+    }
     lifecycle.ownAll(
-        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), message => {
-            lastErrorMessage = message
-            errorIcon.classList.remove("hidden")
-            errorIcon.title = message
-        }),
+        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), showError),
+        Terminable.create(() => rebuild.alive = false),
         {
             terminate: () => {
                 const isActive = service.activeCodeEditor
@@ -336,7 +406,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             }
         },
         adapter.codeChanged.subscribe(() => {
-            if (!compiling) {compiler.load(service.audioContext, box).finally(EmptyExec)}
+            compiler.load(service.audioContext, box).finally(EmptyExec)
         }),
         service.activeCodeEditor.catchupAndSubscribe(option => {
             const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
@@ -344,14 +414,30 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         }),
         box.parameters.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
         box.samples.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
-        box.code.subscribe(scheduleRebuild)
+        box.code.subscribe(scheduleRebuild),
+        box.code.subscribe(() => {
+            errorIcon.classList.add("hidden")
+            errorIcon.title = ""
+        })
     )
-    scheduleRebuild()
+    if (isDefined(adapter.sideChains)) {
+        lifecycle.own(adapter.sideChains.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}))
+    }
+    rebuildNow()
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
-                      populateMenu={parent => config.populateMenu(parent, service, deviceHost, adapter)}
+                      populateMenu={parent => {
+                          config.populateMenu(parent, service, deviceHost, adapter)
+                          const windows = tryCatch(() => ScriptDeclaration.parseWindows(box.code.getValue()))
+                          if (windows.status === "failure") {return}
+                          windows.value.forEach(({className}, index) => parent.addMenuItem(MenuItem.default({
+                              label: `${className} Window`, checked: ScriptWindows.isOpen(adapter, className), separatorBefore: index === 0
+                          }).setTriggerProcedure(() => ScriptWindows.isOpen(adapter, className)
+                              ? ScriptWindows.close(adapter, className)
+                              : ScriptWindows.open(service, adapter, () => compiler.stripHeader(box.code.getValue()), className))))
+                      }}
                       populateControls={() => controlsContainer}
                       populateMeter={() => config.populateMeter({lifecycle, service, adapter})}
                       icon={config.icon}/>

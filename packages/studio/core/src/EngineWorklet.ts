@@ -37,6 +37,7 @@ import {
     PERF_BUFFER_SIZE,
     PreferencesHost,
     ProcessorOptions,
+    SignalGraph,
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
@@ -48,7 +49,7 @@ import {
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Engine, RecordingStart} from "./Engine"
+import {Engine, RecordingStart, RecordingStop} from "./Engine"
 import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
@@ -72,11 +73,13 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
+    readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
+    #recordingStop: Option<RecordingStop> = Option.None
     #recordingGeneration: int = 0
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
@@ -105,9 +108,15 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         const budgetMs = (RenderQuantum / context.sampleRate) * 1000
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
+            const {recordingStopTime} = state
+            if (this.#recordingStop.mapOr(stop => stop.contextTime !== recordingStopTime, true)) {
+                this.#recordingStop = Number.isFinite(recordingStopTime)
+                    ? Option.wrap({contextTime: recordingStopTime}) : Option.None
+            }
             this.#isRecording.setValue(state.isRecording)
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
+            this.#compensationLatency.setValue(state.compensationLatency)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
@@ -199,6 +208,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         return dispatcher.dispatchAndReturn(this.wclapDescribe, url)
                     }
                     wclapRetry(url: string): void {dispatcher.dispatchAndForget(this.wclapRetry, url)}
+                    scriptMessage(uuid: UUID.Bytes, message: unknown): void {dispatcher.dispatchAndForget(this.scriptMessage, uuid, message)}
+                    querySignalGraph(): Promise<SignalGraph> {return dispatcher.dispatchAndReturn(this.querySignalGraph)}
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
         this.#frozenAudioWriter = isDefined(variant.connectFrozenAudio)
@@ -207,7 +218,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
 
         const {port, sab} =
             this.#terminator.own(MIDIReceiver.create(
-                () => context instanceof AudioContext ? context.outputLatency * 1000 : 20,
+                () => (context instanceof AudioContext ? context.outputLatency * 1000 : 20)
+                    + this.#compensationLatency.getValue() * 1000,
                 (deviceId, data, relativeTimeInMs) =>
                     this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
         this.#commands.setupMIDI(port, sab)
@@ -289,7 +301,12 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             } satisfies EngineToClient
         )
         this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
+        const clockLease = this.#terminator.own(new Terminator())
         this.#terminator.ownAll(
+            this.#preferences.catchupAndSubscribe(measure => {
+                clockLease.terminate()
+                if (measure) {clockLease.own(HRClockWorker.get().lease())}
+            }, "debug", "dspLoadMeasurement"),
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
@@ -326,6 +343,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     wclapRetry(url: string): void {this.#commands.wclapRetry(url)}
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#commands.scriptMessage(uuid, message)}
+    querySignalGraph(): Promise<SignalGraph> {return this.#commands.querySignalGraph()}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {
             this.#commands.setFrozenAudio(uuid, audioData)
@@ -338,8 +357,10 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
+    get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
+    get recordingStop(): Option<RecordingStop> {return this.#recordingStop}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}

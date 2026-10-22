@@ -51,6 +51,25 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
     11
 }
 
+/// The `records` hub field key: the engine observes its `ScriptRecordBox` children and hands each `@collection`
+/// snapshot to `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_record_collection_field() -> u32 {
+    14
+}
+
+/// The `buffers` hub field key: `ScriptBufferBox` children (`@buffer` data), delivered through `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_buffer_collection_field() -> u32 {
+    15
+}
+
+/// One `@collection` snapshot for the user `Processor` (`this.data`), forwarded to the JS bridge.
+#[no_mangle]
+pub extern "C" fn data_changed(state_ptr: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    unsafe { abi::with_state::<SpielwerkState>(state_ptr, |state| abi::script_data(state.handle, collection, ptr, records, fields)) }
+}
+
 #[no_mangle]
 pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
     unsafe {

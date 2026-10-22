@@ -23,7 +23,7 @@ export const ClipPlaybackButton = ({lifecycle, engine, adapter, state}: Construc
         <div className={className}
              ondblclick={event => event.stopPropagation()}
              onclick={() => {
-                 if (state.getValue() !== ClipState.Idle) {
+                 if (state.getValue() !== ClipState.Idle && engine.isPlaying.getValue()) {
                      engine.scheduleClipStop([adapter.trackBoxAdapter.unwrap("trackBoxAdapter").uuid])
                  } else {
                      // A MUTED clip launches like any other — it schedules, plays and loops normally, it just

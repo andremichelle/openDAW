@@ -155,9 +155,9 @@ struct CompositeChild {
 /// Sync a child's sum membership to its `enabled`: add its output as a source when it should be summed but is
 /// not, remove it when it should not be but is. Returns the new `summed` state. The one bypass invariant, shared
 /// by the build / slot-reconcile / wholesale-reconcile paths.
-fn sync_sum(sum: &Rc<RefCell<AudioBusProcessor>>, output: &SharedAudioBuffer, summed: bool, enabled: bool) -> bool {
+fn sync_sum(sum: &Rc<RefCell<AudioBusProcessor>>, output: &SharedAudioBuffer, node: NodeId, summed: bool, enabled: bool) -> bool {
     if enabled && !summed {
-        sum.borrow_mut().add_audio_source(output.clone());
+        sum.borrow_mut().add_audio_source(output.clone(), node);
     } else if !enabled && summed {
         sum.borrow_mut().remove_audio_source(output);
     }
@@ -391,6 +391,7 @@ impl Engine {
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
         self.context.set_label(sum_id, alloc::string::String::from("composite-sum"));
+        self.context.set_owner(sum_id, composite_uuid);
         // The composite's raw child SUM under its device uuid, so a sidechain targeting the composite device
         // (e.g. a Playfield clap track) taps its mix — pre the owning unit's fx + strip + mute. Mirrors TS
         // `MixProcessor` registering `device.adapter.address -> output`.
@@ -523,7 +524,7 @@ impl Engine {
                 if let Some(slot_strip) = strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
                     self.bind_slot_strip_params(uuid, slot_strip, spec, invalidate);
                 }
-                let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
+                let summed = sync_sum(&binding.sum, &output, output_node, summed, self.child_enabled(uuid, spec.child_enabled_key));
                 Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, instrument_obs, midi_obs, audio_obs}, strip,
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
             }
@@ -570,7 +571,7 @@ impl Engine {
                 if let Some(slot_strip) = strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
                     self.bind_slot_strip_params(uuid, slot_strip, spec, invalidate);
                 }
-                let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
+                let summed = sync_sum(&binding.sum, &output, output_node, summed, self.child_enabled(uuid, spec.child_enabled_key));
                 Some(CompositeChild {uuid, choke, body: ChildBody::NestedCell {binding: nested, instrument_obs, midi_obs, audio_obs, audio, edges}, strip,
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
             }
@@ -599,7 +600,7 @@ impl Engine {
         if let Some(slot_strip) = child.strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
             self.bind_slot_strip_params(child.uuid, slot_strip, spec, invalidate);
         }
-        child.summed = sync_sum(&binding.sum, &child.output, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
+        child.summed = sync_sum(&binding.sum, &child.output, child.output_node, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
         Some(child)
     }
 
@@ -765,7 +766,7 @@ impl Engine {
             None => (output, output_node)
         };
         self.output_registry.register(Address::of(child_uuid, vec![]), output.clone(), output_node);
-        let summed = sync_sum(&sum, &output, false, self.child_enabled(child_uuid, spec.child_enabled_key));
+        let summed = sync_sum(&sum, &output, output_node, false, self.child_enabled(child_uuid, spec.child_enabled_key));
         self.context.register_edge(output_node, sum_id);
         let enabled_sub = self.subscribe_child_enabled(child_uuid, spec.child_enabled_key, signal);
         // A mute / solo toggle enqueues the owning unit (like `enabled`); the per-child reconcile re-resolves
@@ -790,6 +791,7 @@ impl Engine {
         }
         let strip_id = self.context.register_processor(strip.clone());
         self.context.set_label(strip_id, alloc::string::String::from("slot-strip"));
+        self.context.set_owner(strip_id, child_uuid);
         self.context.register_edge(source_node, strip_id);
         let mut field_subs: Vec<SubscriptionId> = Vec::new();
         if spec.child_volume_key != 0 {

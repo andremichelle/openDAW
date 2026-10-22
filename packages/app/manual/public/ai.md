@@ -12,7 +12,8 @@ building web apps and web audio tools. That foundation is what makes the differe
 
 With these guardrails in place, AI writes the code we would have written ourselves, only much faster. It also lets us
 tackle features that would have been out of reach for a small team, because they lie outside our own expertise. All
-code is developed test-driven, so every feature has to prove itself before it lands.
+code is developed test-driven, so every feature has to prove itself before it lands. Today openDAW is covered by more
+than 3,000 automated tests, around 2,100 for the TypeScript code and around 1,000 for the Rust audio engine.
 
 The best evidence that this works: for two years now, we have not needed any major refactoring to expand the feature
 set. openDAW keeps scaling with new requirements and features, and the codebase still looks like it was written by one

@@ -263,7 +263,7 @@ export class YSync<T> implements Terminable {
             visitArrayField: (_: ArrayField) => panic("Vertex must be either Primitive or Pointer"),
             visitObjectField: (_: ObjectField<any>) => panic("Vertex must be either Primitive or Pointer"),
             visitPointerField: (field: PointerField) => field.fromJSON(targetMap.get(key) as JSONValue),
-            visitPrimitiveField: (field: PrimitiveField) => field.fromJSON(targetMap.get(key) as JSONValue)
+            visitPrimitiveField: (field: PrimitiveField) => YMapper.fromY(field, targetMap.get(key))
         })
         return vertex.box
     }
@@ -363,7 +363,7 @@ export class YSync<T> implements Terminable {
             const field = this.#resolveFieldMap(boxObject, key, update.address.fieldKeys)
             if (field === undefined) {return}
             field.set(String(update.address.fieldKeys[update.address.fieldKeys.length - 1]),
-                update.newValue)
+                YMapper.toY(update.newValue))
         } else if (update.type === "pointer") {
             const key = UUID.toString(update.address.uuid)
             const boxObject = this.#boxes.get(key)

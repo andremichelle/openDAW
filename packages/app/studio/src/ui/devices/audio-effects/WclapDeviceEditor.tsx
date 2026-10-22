@@ -20,6 +20,7 @@ import {
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
@@ -100,6 +101,32 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         nameLabel.classList.toggle("empty", clapId.length === 0)
         nameLabel.textContent = clapId.length === 0 ? "No plugin loaded" : state.info?.name ?? clapId
     }
+    const successor: { plugin: Option<CloudPlugin> } = {plugin: Option.None}
+    const updateGroup: HTMLElement = (
+        <div className="group hidden">
+            <Button lifecycle={lifecycle}
+                    onClick={() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))}
+                    appearance={{
+                        framed: true,
+                        cursor: "pointer",
+                        color: Colors.green,
+                        tooltip: "Load the newer build of this plugin from the openDAW cloud"
+                    }}>
+                <span className="button-label">Update</span>
+            </Button>
+        </div>
+    )
+    const showUpdate = (url: string, clapId: string): void => {
+        successor.plugin = Option.None
+        updateGroup.classList.add("hidden")
+        if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
+        OpenWclapAPI.get().successorOf(WclapStorage.idOf(url)).then(entry => entry.ifSome(({uuid, name, plugins}) => {
+            const info = plugins.find(plugin => plugin.clapId === clapId)
+            if (adapter.urlField.getValue() !== url || !isDefined(info)) {return}
+            successor.plugin = Option.wrap({uuid, label: name, info})
+            updateGroup.classList.remove("hidden")
+        }))
+    }
     const showPlugin = (): void => {
         const url = adapter.urlField.getValue()
         const clapId = adapter.clapIdField.getValue()
@@ -108,6 +135,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         vendorLabel.classList.remove("failed")
         showName()
         showCredits(url)
+        showUpdate(url, clapId)
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
             if (adapter.clapIdField.getValue() !== clapId) {return}
@@ -155,7 +183,13 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const files = await Files.open({...FilePickerAcceptTypes.WclapFiles, multiple: false}).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
-        const archive = await file.arrayBuffer()
+        // Safari fails to read a file it cannot reach, an iCloud file not downloaded yet for one (error 1184)
+        const read = await Promises.tryCatch(file.arrayBuffer())
+        if (read.status === "rejected") {
+            RuntimeNotifier.notify({message: `Could not read ${file.name}. If it lives in iCloud, download it first.`, icon: "Warning"})
+            return
+        }
+        const archive = read.value
         const url = await WclapStorage.urlFor(archive)
         WclapBundles.register(url, archive).catch(EmptyExec)
         const described: ReadonlyArray<WclapPluginInfo> = await describe(url).catch(error => {
@@ -438,6 +472,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                           <span className="button-label">Load Plugin</span>
                                       </MenuButton>
                                   </div>
+                                  {updateGroup}
                                   {pluginButtons}
                                   {audioInGroup}
                               </div>

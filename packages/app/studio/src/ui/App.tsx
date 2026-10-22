@@ -14,6 +14,7 @@ import {Header} from "@/ui/header/Header"
 import {ErrorsPage} from "@/ui/pages/ErrorsPage.tsx"
 import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
+import {SignalGraphPage} from "@/ui/pages/SignalGraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
@@ -26,7 +27,6 @@ import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
-import {SpikeTestPage} from "@/ui/pages/SpikeTestPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -64,6 +64,7 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
+                    {path: "/signal-graph", factory: SignalGraphPage},
                     {path: "/stats", factory: DashboardPage},
                     {
                         path: "/users", factory: (context) => {
@@ -76,7 +77,6 @@ export const App = (service: StudioService) => {
                     {path: "/test", factory: TestPage},
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},
-                    {path: "/spike-test", factory: SpikeTestPage},
                     {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />
