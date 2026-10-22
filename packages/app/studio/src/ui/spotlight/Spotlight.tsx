@@ -190,7 +190,7 @@ export class Spotlight {
             presets.cloudIndex.subscribe(refresh),
             hasProfile ? service.project.userEditingManager.audioUnit.catchupAndSubscribe(refresh) : Terminable.Empty,
             Dragging.attach(element, ({target, clientX, clientY}) => {
-                if (target instanceof Element && target.closest("input, .results") !== null) {return Option.None}
+                if (target instanceof Element && target.closest("input, .results, .manual") !== null) {return Option.None}
                 const {x, y} = position
                 return Option.wrap({
                     update: (event: Dragging.Event) => {
