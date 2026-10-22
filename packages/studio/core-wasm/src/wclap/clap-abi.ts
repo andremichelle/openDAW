@@ -63,6 +63,10 @@ export namespace ClapAbi {
         export const OUT_EVENTS = 36
     }
 
+    export namespace ProcessStatus {
+        export const ERROR = 0
+    }
+
     export namespace AudioBuffer {
         export const SIZE = 24
         export const DATA32 = 0
