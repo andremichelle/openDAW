@@ -4,7 +4,7 @@ import {Files} from "@opendaw/lib-dom"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
 import {FilePickerAcceptTypes, WclapStorage} from "@opendaw/studio-core"
-import {OpenWclapAPI} from "@/opendaw-api"
+import {WclapCatalog} from "@/opendaw-api"
 
 type WclapBox = WclapDeviceBox | WclapInstrumentBox
 
@@ -60,9 +60,9 @@ export namespace WclapMissing {
     // a cloud id is the archive's hash, so a catalogue entry is this very build
     const restoreFromCloud = async (url: string): Promise<boolean> => {
         const id = WclapStorage.idOf(url)
-        const entry = await OpenWclapAPI.get().find(id)
+        const entry = await WclapCatalog.get().find(id)
         if (entry.isEmpty()) {return false}
-        const {status, value: archive, error} = await Promises.tryCatch(OpenWclapAPI.get().load(id))
+        const {status, value: archive, error} = await Promises.tryCatch(WclapCatalog.get().load(id))
         if (status === "rejected") {
             console.warn(`WebCLAP ${id} could not be downloaded:`, error)
             return false

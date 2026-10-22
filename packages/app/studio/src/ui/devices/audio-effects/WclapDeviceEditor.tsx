@@ -38,7 +38,7 @@ import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
-import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
+import {WclapCatalog, WclapIndexFolder} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
 import {populateSidechainMenu} from "@/ui/devices/SidechainButton"
 
@@ -81,7 +81,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         pluginBox.classList.remove("linked")
         pluginBox.title = ""
         if (!WclapStorage.isLocal(url)) {return}
-        OpenWclapAPI.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({credits}) => {
+        WclapCatalog.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({credits}) => {
             if (adapter.urlField.getValue() !== url || credits.length === 0) {return}
             state.credits = credits
             pluginBox.classList.add("linked")
@@ -120,7 +120,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         successor.plugin = Option.None
         updateGroup.classList.add("hidden")
         if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
-        OpenWclapAPI.get().successorOf(WclapStorage.idOf(url)).then(entry => entry.ifSome(({uuid, name, plugins}) => {
+        WclapCatalog.get().successorOf(WclapStorage.idOf(url)).then(entry => entry.ifSome(({uuid, name, plugins}) => {
             const info = plugins.find(plugin => plugin.clapId === clapId)
             if (adapter.urlField.getValue() !== url || !isDefined(info)) {return}
             successor.plugin = Option.wrap({uuid, label: name, info})
@@ -157,7 +157,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             .then(stored => {
                 if (stored) {return WclapStorage.urlOf(uuid)}
                 vendorLabel.textContent = "Downloading…"
-                return OpenWclapAPI.get().load(uuid, progress => {
+                return WclapCatalog.get().load(uuid, progress => {
                     if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
                 }).then(archive => WclapStorage.store(archive))
             })
@@ -294,7 +294,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         {root: EmptyCloudFolder, plugins: [], loaded: false}
     // asked again while the catalogue is empty (it could not be fetched): the next menu then lists it
     const refreshCloud = (): void => {
-        OpenWclapAPI.get().tree().then(({folders}) => {
+        WclapCatalog.get().tree().then(({folders}) => {
             const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
                 name,
                 folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),

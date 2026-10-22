@@ -10,7 +10,7 @@ import {WclapPluginInfo} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
-import {OpenWclapAPI, WclapIndexEntry, WclapIndexFolder} from "@/opendaw-api"
+import {WclapCatalog, WclapIndexEntry, WclapIndexFolder} from "@/opendaw-api"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
@@ -55,7 +55,7 @@ const expandedKeys = new Set<string>()
 const byName = (a: Entry, b: Entry): number => StringComparator(a.name.toLowerCase(), b.name.toLowerCase())
 
 const loadLocal = async (): Promise<ResourceFolder<Entry>> => {
-    const [ids, cloud] = await Promise.all([WclapStorage.list(), OpenWclapAPI.get().all()])
+    const [ids, cloud] = await Promise.all([WclapStorage.list(), WclapCatalog.get().all()])
     // a bundle imported from disk carries no license we know of, one from the cloud carries the published one
     const published = new Map(cloud.map(({uuid, license, credits}) => [uuid, {license, credits}]))
     const items = await Promise.all(ids.map(async id => {
@@ -75,7 +75,7 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
         folders: folder.folders?.map(toFolder) ?? [],
         items: folder.wclaps?.flatMap(entry => toEntries(entry.uuid, entry.size, false, entry, entry.plugins)) ?? []
     })
-    return {name: "", folders: (await OpenWclapAPI.get().tree()).folders.map(toFolder), items: []}
+    return {name: "", folders: (await WclapCatalog.get().tree()).folders.map(toFolder), items: []}
 }
 
 export const WclapBrowser = ({lifecycle}: Construct) => {
