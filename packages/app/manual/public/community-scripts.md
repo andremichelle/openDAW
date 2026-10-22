@@ -5,6 +5,8 @@ for Spielwerk and project scripts for the code editor. They live in a public Git
 [opendaw-commons](https://github.com/andremichelle/opendaw-commons). Anyone can add one, and once it is accepted it
 shows up in every openDAW Studio, without a Studio update.
 
+![Pulsate, Wavetable and Chaos Pad, three community scripts in the device panel](./community-scripts.webp)
+
 ## Using community scripts
 
 1. In Werkstatt, Apparat or Spielwerk, open the code editor and click **Community Scripts** in its toolbar.
