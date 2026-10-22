@@ -56,7 +56,8 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Project Management", path: "/manuals/project-management"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
             {type: "page", label: "Script Editor", path: "/manuals/script-editor"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            {type: "page", label: "Spotlight", path: "/manuals/spotlight"}
         ]
     },
     {

@@ -6,6 +6,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import type {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
 import {Surface} from "@/ui/surface/Surface"
+import {openManual} from "@/ui/manuals"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 import {SpotlightVerbs} from "@/ui/spotlight/SpotlightVerbs"
@@ -162,7 +163,11 @@ export class Spotlight {
                 SpotlightVerbs.List
                     .filter(({verb}) => available.some(entry => entry.verb === verb))
                     .map(({symbol, word}) => <span><b>{symbol}</b> {word}</span>),
-                available.some(browsable) && <span><b>→</b> browse</span>)
+                available.some(browsable) && <span><b>→</b> browse</span>,
+                <span className="manual" title="Open the Spotlight manual" onclick={() => {
+                    close()
+                    openManual("/manuals/spotlight")
+                }}><Icon symbol={IconSymbol.Help}/></span>)
         }
         const refresh = () => {
             entries.setValue([...SpotlightStudioEntries.places(service), ...SpotlightStudioEntries.actions(service),

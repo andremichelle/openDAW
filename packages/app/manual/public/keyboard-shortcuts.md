@@ -2,6 +2,8 @@
 
 Most shortcuts can be listed and customized in the [Shortcut Manager](/preferences).
 
+Press Shift+Enter or ⌘+F to open the [Spotlight](/manuals/spotlight), the quickest way to create devices and get anywhere.
+
 ## Modifier Keys
 
 ### General
