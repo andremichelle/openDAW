@@ -10,10 +10,11 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const config: ScriptDeviceEditorConfig = {
-    compiler: {headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"},
+    compiler: ScriptCompilers.Apparat,
     defaultCode,
     communityTarget: "apparat",
     starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,

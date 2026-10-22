@@ -1,32 +1,47 @@
 @use "@/mixins"
 
+$ACTIVE: var(--color-menu-active)
+
 component
   @include mixins.floating
-
   font-size: 1.125rem
   position: fixed
-  display: grid
-  grid-template-columns: 2em 1fr
-  column-gap: 0.25rem
+  top: 0
+  left: -16rem
+  width: 32rem
+  flex-direction: column
   row-gap: 0.5rem
-  padding: 0.5rem 0.25rem
-  width: 28rem
-  left: -14rem
+  padding: 0.5rem
   color: var(--color-gray)
+  pointer-events: all
 
   > header
-    grid-column: 1 / -1
-    display: grid
-    grid-template-columns: subgrid
+    display: flex
     align-items: center
+    column-gap: 0.5rem
 
-    > svg
-      width: 1.25rem
-      height: 1.25rem
-      justify-self: center
+    > div.verb, div.scope
+      display: flex
+      align-items: center
+      column-gap: 0.25rem
+      flex: 0 0 auto
+      padding: 0.125rem 0.375rem
+      border-radius: 0.25rem
+      font-size: 0.75em
+      color: white
+      background-color: $ACTIVE
+
+      > svg
+        width: 1em
+        height: 1em
+
+    > div.scope
+      color: var(--color-bright)
+      background-color: rgba(white, 0.08)
 
     > input
-      color: inherit
+      flex: 1
+      color: var(--color-bright)
       font-size: inherit
       font-weight: inherit
       font-family: inherit
@@ -35,32 +50,78 @@ component
       background: none
       padding: 0
       outline: none
-      width: 100%
 
       &::placeholder
         color: var(--color-shadow)
 
-  > div.result
-    grid-column: 1 / -1
-    display: grid
-    grid-template-columns: subgrid
-    height: 12rem
-    align-content: start
+  > div.results
+    display: flex
+    flex-direction: column
+    max-height: 18em
     overflow: hidden auto
     border-top: 1px rgba(white, 0.06) solid
-    padding: 0.5rem 0 0 0
+    padding-top: 0.5rem
+    font-size: 0.75em
 
-    > div.result-item
-      grid-column: 1 / -1
-      display: grid
-      grid-template-columns: subgrid
+    > div.empty
+      padding: 0.25em 0.5em
+      color: var(--color-shadow)
+
+    > div.entry
+      flex: 0 0 2em
+      display: flex
       align-items: center
-      height: 1.5em
-      border-radius: 0.125em
+      column-gap: 0.5em
+      padding: 0 0.5em
+      border-radius: 0.25em
+      white-space: nowrap
+      cursor: pointer
 
       &.selected
         color: white
-        background-color: rgba(white, 0.06)
+        background-color: $ACTIVE
+
+      &.disabled
+        color: color-mix(in srgb, var(--color-gray) 40%, transparent)
+        cursor: default
+
+        &.selected
+          background-color: rgba(white, 0.04)
 
       > svg
-        justify-self: center
+        flex: 0 0 1.25em
+        width: 1.25em
+        height: 1.25em
+
+      > span.label
+        flex: 1
+        overflow: hidden
+        text-overflow: ellipsis
+
+      > span.detail
+        opacity: 0.5
+
+      > span.children
+        display: flex
+        align-items: center
+        column-gap: 0.125em
+        padding: 0.125em 0.25em
+        border-radius: 0.25em
+        opacity: 0.5
+
+        &:hover
+          opacity: 1
+          background-color: rgba(white, 0.08)
+
+        > svg
+          width: 1em
+          height: 1em
+
+  > footer
+    display: flex
+    column-gap: 1em
+    font-size: 0.625em
+    color: var(--color-shadow)
+
+    > span > b
+      color: var(--color-gray)

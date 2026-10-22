@@ -26,7 +26,7 @@ import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
-import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
+import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
@@ -122,7 +122,7 @@ export class StudioService implements ProjectEnv {
     } as const
     readonly menu = populateStudioMenu(this)
     readonly panelLayout = new PanelContents(createPanelFactory(this))
-    readonly spotlightDataSupplier = new SpotlightDataSupplier()
+    readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
@@ -177,7 +177,6 @@ export class StudioService implements ProjectEnv {
         this.#navigation = new StudioNavigation(this.layout.screen, this.#projectProfileService)
         this.#listenProject()
         this.#installConsoleCommands()
-        this.#populateSpotlightData()
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
@@ -557,12 +556,6 @@ export class StudioService implements ProjectEnv {
             })
         ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
-    }
-
-    #populateSpotlightData(): void {
-        this.spotlightDataSupplier.registerAction("Create Synth", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create Drumcomputer", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create ModularSystem", EmptyExec)
     }
 
     #configBeforeUnload(): void {

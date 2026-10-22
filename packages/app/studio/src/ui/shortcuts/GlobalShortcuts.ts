@@ -141,6 +141,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "show-preferences": {
         shortcut: Shortcut.of(Key.Comma, {ctrl}),
         description: "Open preferences"
+    },
+    "open-spotlight": {
+        shortcut: Shortcut.of(Key.Enter, {shift}),
+        description: "Open or close the spotlight"
+    },
+    "open-spotlight-alt": {
+        shortcut: Shortcut.of(Key.KeyF, {ctrl}),
+        description: "Open or close the spotlight"
     }
 })
 

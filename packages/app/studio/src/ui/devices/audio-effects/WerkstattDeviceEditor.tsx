@@ -10,10 +10,11 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const config: ScriptDeviceEditorConfig = {
-    compiler: {headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"},
+    compiler: ScriptCompilers.Werkstatt,
     defaultCode,
     communityTarget: "werkstatt",
     starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,

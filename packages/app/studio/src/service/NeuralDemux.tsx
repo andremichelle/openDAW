@@ -127,7 +127,7 @@ const pickSelection = async (Inference: typeof InferenceNamespace,
 }
 
 export namespace NeuralDemux {
-    export const explain = async (service: StudioService): Promise<void> => {
+    export const run = async (service: StudioService): Promise<void> => {
         const approved = await RuntimeNotifier.approve({
             headline: "Neural Demux",
             message: "Separates an audio file into drums, bass, vocals and other, and turns it into an openDAW project.",
@@ -135,10 +135,6 @@ export namespace NeuralDemux {
             cancelText: "Cancel"
         })
         if (!approved) {return}
-        return run(service)
-    }
-
-    export const run = async (service: StudioService): Promise<void> => {
         const fileResult = await Promises.tryCatch(Files.open({
             types: [{
                 description: "audio",

@@ -10,10 +10,11 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {StudioService} from "@/service/StudioService"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
+import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const config: ScriptDeviceEditorConfig = {
-    compiler: {headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"},
+    compiler: ScriptCompilers.Spielwerk,
     defaultCode,
     communityTarget: "spielwerk",
     starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,
