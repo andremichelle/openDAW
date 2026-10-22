@@ -1,6 +1,7 @@
 // The WCLAP host bridge against the real Signalsmith Basics bundle (MIT, test/assets/basics.wclap.tar.gz):
 // describe, load, audio, parameter mapping (ids above 2^31, unit/real kinds, folded modulation and its
 // clearing), values queued before the plugin is up, state round trip, fault containment, load tracking.
+// Audio port layouts against a minimal test plugin (test/assets/audio-ports.c).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
@@ -11,6 +12,9 @@ import {WclapBridges, WclapHostCallbacks} from "../src/wclap/wclap-bridge"
 import {createWclapDescriber} from "../src/wclap/wclap-describer"
 
 const BASICS = path.resolve(__dirname, "assets", "basics.wclap.tar.gz")
+// audio-ports.c, one plugin per layout, silent unless given exactly what it declared: out<ports>x<channels> writes
+// 0.5 / (1 + port * 16 + channel), in<ports>x<channels> plays input port 0's first channel left, all others summed right
+const AUDIO_PORTS = path.resolve(__dirname, "assets", "audio-ports.wasm")
 const REVERB = "uk.co.signalsmith.basics.reverb"
 const IN0 = 4096, IN1 = 4096 + 512, OUT0 = 4096 + 1024, OUT1 = 4096 + 1536
 const UNIT = 0, FLOAT = 2
@@ -37,6 +41,7 @@ const untar = (bytes: Uint8Array): Array<WclapBundleFile> => {
 }
 
 const basics: WclapBundle = {files: untar(gunzipSync(readFileSync(BASICS)))}
+const audioPortsBundle: WclapBundle = {files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(AUDIO_PORTS))}]}
 
 type Host = {
     bridges: WclapBridges
@@ -358,5 +363,67 @@ describe("wclap bridge", () => {
         expect(resized.width).toBeGreaterThan(0)
         expect(host.statuses.at(-1)?.state).toBe("ready")
         expect(process(host, handle)).toBe(1)
+    })
+
+    const loadAudioPorts = (shape: string): [Host, number] => {
+        const host = createHost(audioPortsBundle)
+        new Float32Array(host.memory.buffer, IN0, 128).fill(0.25)
+        new Float32Array(host.memory.buffer, IN1, 128).fill(0.75)
+        return [host, load(host, `test.audio-ports.${shape}`, "audio-ports")]
+    }
+
+    const played = (host: Host): [Array<number>, Array<number>] =>
+        [Array.from(new Float32Array(host.memory.buffer, OUT0, 128)), Array.from(new Float32Array(host.memory.buffer, OUT1, 128))]
+
+    const audioPorts = async (shape: string): Promise<[Array<number>, Array<number>]> => {
+        const [host, handle] = loadAudioPorts(shape)
+        await ready(host, handle)
+        return played(host)
+    }
+
+    it("plays a mono output port on both channels", async () => {
+        const [left, right] = await audioPorts("out1x1")
+        expect(left).toEqual(new Array(128).fill(0.5))
+        expect(right).toEqual(new Array(128).fill(0.5))
+    })
+
+    it("gives every declared output port a buffer and plays port 0", async () => {
+        const [left, right] = await audioPorts("out2x2")
+        expect(left).toEqual(new Array(128).fill(0.5))
+        expect(right).toEqual(new Array(128).fill(Math.fround(0.25)))
+    })
+
+    it("gives an output port all its channels and plays the first two", async () => {
+        const [left, right] = await audioPorts("out1x8")
+        expect(left).toEqual(new Array(128).fill(0.5))
+        expect(right).toEqual(new Array(128).fill(Math.fround(0.25)))
+    })
+
+    it("refuses a plugin that declares more channels than the limit", async () => {
+        const [host] = loadAudioPorts("out1x1025")
+        await Promise.all(host.loads)
+        expect(host.statuses.at(-1)?.state).toBe("failed")
+        expect(host.statuses.at(-1)?.message).toContain("output port 0 has 1025 channels")
+    })
+
+    it("feeds a mono input port the average of left and right", async () => {
+        const [left, right] = await audioPorts("in1x1")
+        expect(left).toEqual(new Array(128).fill(0.5))
+        expect(right).toEqual(new Array(128).fill(0))
+    })
+
+    it("gives an input port all its channels, silent past the first two", async () => {
+        const [left, right] = await audioPorts("in1x8")
+        expect(left).toEqual(new Array(128).fill(0.25))
+        expect(right).toEqual(new Array(128).fill(0.75))
+    })
+
+    it("gives every declared input port its channels", async () => {
+        const [host, handle] = loadAudioPorts("in2x2")
+        await ready(host, handle)
+        expect(played(host)).toEqual([new Array(128).fill(0.25), new Array(128).fill(0.75)])
+        host.imports.host_wclap_input(handle, 1, IN0, IN1, 128)
+        expect(process(host, handle)).toBe(1)
+        expect(played(host)).toEqual([new Array(128).fill(0.25), new Array(128).fill(1.75)])
     })
 })
