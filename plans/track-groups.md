@@ -17,7 +17,8 @@ Groups may contain other groups.
 - Duplicate keeps copies inside their original parent. Selected sibling copies form one block after the last
   selected sibling, in display order. Selections across folders create a block in each original folder.
   Selecting a folder and its descendant copies the subtree once. New copies become the track selection.
-- Ungroup (Keep Tracks), including deleting a folder, promotes its children and removes the group's processing.
+- Delete removes the folder and its complete nested subtree in one undoable action.
+- Ungroup (Keep Tracks) promotes the children and removes only the group's processing.
 
 ## Model and routing
 
@@ -72,3 +73,5 @@ Validation on the submission branch is recorded in the PR. Coverage includes:
   overview lines, resizing, renaming, duplicate placement, equal right-click/button menus, and save/reopen.
 
 Synthetic render checks do not establish a subjective listening assessment or full native-DAW parity.
+
+Group-delete follow-up: Delete and Ungroup are distinct. A leaf-first subtree deletion removes descendant tracks, content and processing; Undo restores the hierarchy and routes. Core: 766 tests passed; real WASM: 2 tests passed, including silence after deleting a live nested group.
