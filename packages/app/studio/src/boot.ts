@@ -92,7 +92,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     WasmEngine.install({
         processorUrl: wasmProcessorUrl,
         offlineWorkerUrl: wasmOfflineWorkerUrl,
-        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
+        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine/${import.meta.env.BUILD_UUID}`
     })
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
