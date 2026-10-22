@@ -1,19 +1,28 @@
 import {DefaultObservableValue, isDefined, Optional, Terminator} from "@opendaw/lib-std"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {AudioUnitGroups} from "@opendaw/studio-adapters"
+import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import type {Project} from "./Project"
 
 /** Track selection is local UI state, separate from clip/device selection and the active editor. */
 export class AudioUnitSelection {
-    readonly value = new DefaultObservableValue<ReadonlyArray<AudioUnitBox>>([])
-    readonly #subscriptions = new Terminator()
+    readonly value: DefaultObservableValue<ReadonlyArray<AudioUnitBox>>
+    readonly #subscriptions: Terminator
     #anchor: Optional<AudioUnitBox>
     #hasExplicitSelection = false
-    constructor(readonly project: Project) {}
+    constructor(readonly project: Project) {
+        this.value = new DefaultObservableValue<ReadonlyArray<AudioUnitBox>>([])
+        this.#subscriptions = new Terminator()
+    }
     get hasExplicitSelection(): boolean {return this.#hasExplicitSelection}
     get selected(): ReadonlyArray<AudioUnitBox> {return this.value.getValue().filter(unit => unit.isAttached())}
     has(unit: AudioUnitBox): boolean {return this.selected.includes(unit)}
+    isHighlighted(unit: AudioUnitBox): boolean {
+        const selected = this.selected
+        if (selected.length > 0) {return selected.includes(unit)}
+        return this.project.userEditingManager.audioUnit.get().mapOr(vertex =>
+            this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box === unit, false)
+    }
     set(units: ReadonlyArray<AudioUnitBox>): void {
         this.#hasExplicitSelection = true
         this.#subscriptions.terminate()

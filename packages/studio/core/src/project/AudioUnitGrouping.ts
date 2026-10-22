@@ -66,6 +66,7 @@ export class AudioUnitGrouping {
         const outputIndex = siblings.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)
         const position = slot < 0 ? siblings.length : slot
         siblings.splice(outputIndex < 0 ? position : Math.min(position, outputIndex), 0, ...moving)
+        siblings.sort(AudioUnitGroups.compareCategories)
         moving.forEach(unit => {
             const previous = AudioUnitGroups.parent(unit)
             const previousBus = isDefined(previous) ? AudioUnitGroups.bus(previous) : primaryAudioBusBox
@@ -109,9 +110,12 @@ export class AudioUnitGrouping {
         const parents = new Set(roots.map(unit => AudioUnitGroups.parent(unit)))
         parents.forEach(parent => {
             const siblings = asDefined(children.get(parent))
-            const last = siblings.findLastIndex(unit => roots.includes(unit))
-            const block = roots.filter(unit => AudioUnitGroups.parent(unit) === parent).map(unit => asDefined(mapping.get(unit)))
-            siblings.splice(last + 1, 0, ...block)
+            const categories = new Set(roots.filter(unit => AudioUnitGroups.parent(unit) === parent).map(AudioUnitGroups.category))
+            categories.forEach(category => {
+                const sources = roots.filter(unit => AudioUnitGroups.parent(unit) === parent && AudioUnitGroups.category(unit) === category)
+                const last = siblings.findLastIndex(unit => sources.includes(unit))
+                siblings.splice(last + 1, 0, ...sources.map(unit => asDefined(mapping.get(unit))))
+            })
         })
         let index = 0
         const walk = (parent?: AudioUnitBox): void => children.get(parent)?.forEach(unit => {
