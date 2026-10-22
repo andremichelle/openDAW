@@ -247,7 +247,7 @@ export namespace AudioUnitsClipboard {
                                          rootBoxAdapter: RootBoxAdapter): void => {
         const rootBox = rootBoxAdapter.box
         const existing = AudioUnitGroups.ordered(rootBox).filter(unit => unit !== pastedAudioUnit)
-        let position = existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
+        let position = insertAfterIndex < 0 ? -1 : existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
             && !isDefined(AudioUnitGroups.parent(unit)))
         if (position === -1) {position = existing.length}
         const output = existing.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)

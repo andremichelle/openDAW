@@ -38,13 +38,8 @@ export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuIte
         MenuItem.default({label: "Ungroup (Keep Tracks)", hidden: !unit.isGroup.getValue()})
             .setTriggerProcedure(() => project.editing.modify(() => project.grouping.ungroup(unit))),
         MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit))})
-            .setTriggerProcedure(() => project.editing.modify(() => {
-                const parent = AudioUnitGroups.parent(unit)
-                if (!isDefined(parent)) {return}
-                const outer = AudioUnitGroups.parent(parent)
-                const siblings = AudioUnitGroups.children(project.rootBox, outer)
-                project.grouping.move(project.trackSelection.has(unit) ? project.trackSelection.selected : [unit], outer, siblings[siblings.indexOf(parent) + 1])
-            }))
+            .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,
+                project.trackSelection.has(unit) ? project.trackSelection.selected : [unit])))
     ]
 }
 
