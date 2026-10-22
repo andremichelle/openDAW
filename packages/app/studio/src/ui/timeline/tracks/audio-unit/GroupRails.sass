@@ -4,15 +4,14 @@ component
   border-radius: 2px
   min-width: 0
   min-height: 0
-  background: var(--color)
-  opacity: 0.3
+  background: color-mix(in srgb, var(--color) 30%, var(--color-black))
   cursor: pointer
   pointer-events: all
   z-index: 6
   outline: none
 
   &.selected, &:hover, &:focus-visible
-    opacity: 1
+    background: var(--color)
 
   &.vertical
     width: 4px
