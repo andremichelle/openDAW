@@ -1,4 +1,5 @@
 import {asDefined, Optional, isDefined} from "@opendaw/lib-std"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 
@@ -9,14 +10,23 @@ export namespace AudioUnitGroups {
         const box = unit.groupParent.targetVertex.unwrapOrNull()?.box
         return box instanceof AudioUnitBox && box.isGroup.getValue() ? box : undefined
     }
+    export const category = (unit: AudioUnitBox): number => {
+        switch (unit.type.getValue()) {
+            case AudioUnitType.Bus: return 0
+            case AudioUnitType.Instrument: return 1
+            case AudioUnitType.Aux: return 2
+            default: return 3
+        }
+    }
+    export const compareCategories = (left: AudioUnitBox, right: AudioUnitBox): number => category(left) - category(right)
     export const children = (root: RootBox, group?: AudioUnitBox): AudioUnitBox[] =>
-        isDefined(group)
+        (isDefined(group)
             ? IndexedBox.collectIndexedBoxes(group.groupChildren, AudioUnitBox).filter(unit => parent(unit) === group)
-            : all(root).filter(unit => !isDefined(parent(unit)))
+            : all(root).filter(unit => !isDefined(parent(unit)))).sort(compareCategories)
     export const ancestors = (unit: AudioUnitBox): AudioUnitBox[] => {
         const result: AudioUnitBox[] = []
         const seen = new Set([unit])
-        for (let next = parent(unit); next && !seen.has(next); next = parent(next)) {
+        for (let next = parent(unit); isDefined(next) && !seen.has(next); next = parent(next)) {
             seen.add(next)
             result.push(next)
         }
@@ -35,6 +45,7 @@ export namespace AudioUnitGroups {
             if (!byParent.has(key)) {byParent.set(key, siblings)}
             siblings.push(unit)
         })
+        byParent.forEach(siblings => siblings.sort(compareCategories))
         const visit = (unit: AudioUnitBox): void => {
             if (seen.has(unit)) {return}
             seen.add(unit)

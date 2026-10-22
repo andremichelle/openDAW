@@ -90,9 +90,8 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
     })
-    const removeEditingIndicator = () => channelStripContainer
-        .querySelectorAll(".editing")
-        .forEach(({classList}) => classList.remove("editing"))
+    const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) =>
+        editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box)))
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
     lifecycle.ownAll(
@@ -138,17 +137,13 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             },
             onReorder: (_adapter: AudioUnitBoxAdapter) => updateDom.request()
         }),
-        project.trackSelection.value.subscribe(() => {
-            audioUnits.values().forEach(({adapter, editor}) => editor.classList.toggle("editing", project.trackSelection.has(adapter.box)))
-        }),
+        project.trackSelection.value.subscribe(refreshEditingIndicators),
         project.userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex.match({
-            none: removeEditingIndicator,
+            none: refreshEditingIndicators,
             some: (vertex: Vertex) => {
-                removeEditingIndicator()
+                refreshEditingIndicators()
                 const uuid = project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().uuid
                 audioUnits.opt(uuid).ifSome(({editor}) => {
-                    audioUnits.values().forEach(({adapter, editor}) => editor.classList.toggle("editing", project.trackSelection.hasExplicitSelection
-                        ? project.trackSelection.has(adapter.box) : UUID.equals(adapter.uuid, uuid)))
                     if (scrollIntoViewEnabled) {
                         editor.scrollIntoView({behavior: "smooth", inline: "center"})
                     }
