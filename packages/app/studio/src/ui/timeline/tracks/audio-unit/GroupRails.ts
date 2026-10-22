@@ -57,7 +57,7 @@ export class GroupRails implements Terminable {
         })
         if (this.container instanceof HTMLElement && this.horizontal) {
             this.container.style.setProperty("--group-rail-height", `${spans.length === 0 ? 0 :
-                8 + Math.max(...spans.map(span => span.depth)) * 6}px`)
+                8 + Math.max(...spans.map(span => span.depth)) * 5}px`)
         }
         this.#refreshSelection()
     }

@@ -19,9 +19,7 @@ component
 
   &.editing
     --wash-color: var(--color)
-
-  &.editing:before
-    border-left: 4px var(--color) solid
+    --unit-border-color: var(--color)
 
   &:before
     content: ""
@@ -31,7 +29,10 @@ component
     grid-column: 1 / 2
     position: absolute
     border-radius: 0
-    border-left: 4px var(--color-black) solid
+    background-image: linear-gradient(var(--unit-border-color, var(--color-black)), var(--unit-border-color, var(--color-black)))
+    background-position: calc(var(--folder-depth, 0) * 5px) 0
+    background-size: 4px 100%
+    background-repeat: no-repeat
     @include colors.panel-background
   &.folder-hidden
     display: none
