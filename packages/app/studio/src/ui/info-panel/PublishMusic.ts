@@ -1,6 +1,15 @@
 import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
 import {WavFile} from "@opendaw/lib-dsp"
-import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress, RuntimeNotifier} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    isDefined,
+    Option,
+    panic,
+    Procedure,
+    Progress,
+    RuntimeNotifier,
+    tryCatch
+} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace PublishMusic {
@@ -41,7 +50,8 @@ export namespace PublishMusic {
             for (let offset = 0; offset < bytes.byteLength; offset += UploadChunkSize) {
                 const chunk = bytes.slice(offset, offset + UploadChunkSize)
                 await Promises.guardedRetry(() => post(`${MusicApi}/upload-chunk.php?upload=${upload}&file=${file}&offset=${offset}`,
-                    chunk, "application/octet-stream"), (_, count) => count < 3)
+                    chunk, "application/octet-stream", loaded => uploadProgress((before + offset + loaded) / total)),
+                    (_, count) => count < 3)
                 uploadProgress((before + offset + chunk.byteLength) / total)
             }
         }
@@ -63,11 +73,28 @@ export namespace PublishMusic {
         return id
     }
 
-    const post = async (url: string, body: BodyInit, contentType: string): Promise<{ id?: string }> => {
-        const response = await fetch(url, {method: "POST", headers: {"Content-Type": contentType}, body})
-        const result = await response.json().catch(() => ({}))
-        if (!response.ok) {return panic(String(result?.error ?? `${response.status} ${response.statusText}`))}
-        return result
+    const post = (url: string, body: XMLHttpRequestBodyInit, contentType: string,
+                  progress: Procedure<number> = () => {}): Promise<{ id?: string, error?: string }> => {
+        const {resolve, reject, promise} = Promise.withResolvers<{ id?: string, error?: string }>()
+        const xhr = new XMLHttpRequest()
+        xhr.upload.addEventListener("progress", event => {
+            if (event.lengthComputable) {progress(event.loaded)}
+        })
+        xhr.addEventListener("load", () => {
+            const parsed = tryCatch(() => JSON.parse(xhr.responseText))
+            const result = parsed.status === "success" ? parsed.value : {}
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(result)
+            } else {
+                reject(new Error(String(result?.error ?? `${xhr.status} ${xhr.statusText}`)))
+            }
+        })
+        xhr.addEventListener("error", () => reject(new Error("Network error")))
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")))
+        xhr.open("POST", url)
+        xhr.setRequestHeader("Content-Type", contentType)
+        xhr.send(body)
+        return promise
     }
 
     export const deleteMusic = async (token: string): Promise<void> => {
