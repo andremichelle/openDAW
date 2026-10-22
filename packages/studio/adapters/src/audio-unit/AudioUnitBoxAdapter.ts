@@ -59,8 +59,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get captureBox(): Option<CaptureAudioBox | CaptureMidiBox> {return this.#box.capture.targetVertex as Option<CaptureAudioBox | CaptureMidiBox>}
     get tracks(): AudioUnitTracks {return this.#tracks}
     get input(): AudioUnitInput {return this.#input}
-    // An audio unit hosts BOTH chain kinds, so these are always present (a one-sided host, e.g. a composite
-    // entry, returns `None` for the kind it does not host — see `DeviceHost`).
+    // Group audio units host audio effects only.
     get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {
         return this.#box.isGroup.getValue() ? Option.None : Option.wrap(this.#midiEffects)
     }
