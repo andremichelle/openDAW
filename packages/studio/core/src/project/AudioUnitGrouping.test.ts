@@ -194,6 +194,50 @@ describe("track folders", () => {
         expect(loadedA.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(loadedGroup))
         project.terminate()
     })
+    it("deleting a collapsed group removes its full subtree and content, with undo/redo", async () => {
+        const {project, units: [a, b, c, d]} = await setup()
+        const group = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
+        const inner = project.editing.modify(() => project.grouping.create([b])!).unwrap()
+        const content = project.editing.modify(() => {
+            const track = project.boxAdapters.adapterFor(b, AudioUnitBoxAdapter).tracks.values()[0].box
+            const clip = project.api.createNoteClip(track, 0)
+            const region = project.api.createNoteRegion({trackBox: track, position: 0, duration: 960})
+            const effect = project.api.insertEffect(group.audioEffects, EffectFactories.AudioNamed.StereoTool)
+            group.groupCollapsed.setValue(true)
+            return [track, clip, region, effect]
+        }).unwrap()
+        const removed = [group, inner, a, b, AudioUnitGroups.bus(group)!, AudioUnitGroups.bus(inner)!, ...content]
+            .map(box => box.address.uuid)
+        project.editing.modify(() => project.api.deleteAudioUnit(group))
+        expect(removed.every(uuid => project.boxGraph.findBox(uuid).isEmpty())).toBe(true)
+        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([c, d, project.primaryAudioUnitBox])
+        project.boxGraph.verifyPointers()
+        expect(project.editing.undo()).toBe(true)
+        expect(removed.every(uuid => project.boxGraph.findBox(uuid).nonEmpty())).toBe(true)
+        const restored = project.boxGraph.findBox(group.address.uuid).unwrap() as typeof group
+        const restoredInner = project.boxGraph.findBox(inner.address.uuid).unwrap() as typeof inner
+        const restoredB = project.boxGraph.findBox(b.address.uuid).unwrap() as typeof b
+        expect(restored.groupCollapsed.getValue()).toBe(true)
+        expect(AudioUnitGroups.parent(restoredInner)).toBe(restored)
+        expect(AudioUnitGroups.parent(restoredB)).toBe(restoredInner)
+        expect(restoredB.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(restoredInner))
+        project.boxGraph.verifyPointers()
+        expect(project.editing.redo()).toBe(true)
+        expect(removed.every(uuid => project.boxGraph.findBox(uuid).isEmpty())).toBe(true)
+        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([c, d, project.primaryAudioUnitBox])
+        project.terminate()
+    })
+    it("deleting an inner group preserves its parent, siblings, and outside tracks", async () => {
+        const {project, units: [a, b, c, d]} = await setup()
+        const outer = project.editing.modify(() => project.grouping.create([a, b, c])!).unwrap()
+        const inner = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
+        project.editing.modify(() => project.api.deleteAudioUnit(inner))
+        expect(AudioUnitGroups.children(project.rootBox, outer)).toEqual([c])
+        expect(AudioUnitGroups.ordered(project.rootBox)).toEqual([outer, c, d, project.primaryAudioUnitBox])
+        expect([a, b, inner].every(unit => project.boxGraph.findBox(unit.address.uuid).isEmpty())).toBe(true)
+        project.boxGraph.verifyPointers()
+        project.terminate()
+    })
     it("ungroup keeps children and nested groups and supports undo/redo", async () => {
         const {project, units: [a, b, c, d]} = await setup()
         const group = project.editing.modify(() => project.grouping.create([a, b])!).unwrap()
