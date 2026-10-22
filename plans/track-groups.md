@@ -31,9 +31,8 @@ registry must be rebuilt together after schema changes.
 membership, ordering, routing and duplication operations. `Project.trackSelection` is local UI state,
 independent of active device editing and clip/region selection. Hidden rows leave timeline hit testing.
 
-Moving into a folder routes the moved root to its bus. Moving out routes it to the new parent or primary
-output. This replaces custom output routing when membership changes; a moved subtree keeps its internal
-routes. Containment and primary-route/aux-send feedback checks reject invalid destinations. Cross-folder
+Moving between folders updates the output only when it follows the previous folder or primary bus.
+Custom output routes remain intact; a moved subtree keeps its internal routes. Containment and primary-route/aux-send feedback checks reject invalid destinations. Cross-folder
 grouping uses the closest common ancestor.
 
 New buses initialize at their final output destination. Retargeting a new box in its construction transaction
@@ -44,9 +43,6 @@ independent-copy semantics. Ordering uses a pre-transfer tree snapshot before de
 Timeline and mixer use captured-pointer channel dragging with cancellation. Native device/internal-lane
 payloads remain separate. Region canvases repaint on visibility re-entry: hiding can clear a previously drawn
 canvas even when its data has not changed. Group overview paints coalesce graph/range changes into a frame.
-
-Realtime, offline and stretch WASM URLs and emitted paths include the Studio build UUID. This prevents an
-already-cached older engine from loading with a new editor/processor after a schema update.
 
 ## Limits
 
@@ -74,4 +70,21 @@ Validation on the submission branch is recorded in the PR. Coverage includes:
 
 Synthetic render checks do not establish a subjective listening assessment or full native-DAW parity.
 
-Group-delete follow-up: Delete and Ungroup are distinct. A leaf-first subtree deletion removes descendant tracks, content and processing; Undo restores the hierarchy and routes. Core: 766 tests passed; real WASM: 2 tests passed, including silence after deleting a live nested group.
+## Performance and ordering
+
+Hierarchy ordering builds parent buckets once. Subtree queries visit child hubs instead of scanning unrelated
+channels. Timeline changes coalesce at the graph transaction boundary, before painting and hit testing.
+Timeline and mixer sorts use an index map. Folded overviews ignore effect and mixer parameter edits.
+
+A synthetic browser project with 80 folders and 160 instrument children measured duplicate-to-second-frame
+latency of 27.15 seconds before these changes and 0.47 seconds after them. Single-track deletion measured
+0.69 seconds before and 0.33 seconds after. These single-run measurements include the browser display cycle
+and temporary timing instrumentation; they are not guarantees for other projects or hardware.
+
+Folder order is independent of channel type. New channels, transfers and clipboard paste preserve existing
+hierarchy order; Output remains the final top-level channel during ordinary placement. Mixer folders use
+the same persistent collapse state as the arrangement and keep their volume, mute, solo and effects controls.
+
+General audio-unit transfers expand group roots to full subtrees, including cross-project and delete-source
+transfers. Internal membership is mapped; external membership is omitted unless same-project duplication
+explicitly preserves it.
