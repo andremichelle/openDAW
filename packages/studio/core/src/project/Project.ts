@@ -78,6 +78,8 @@ import {ProjectEnv} from "./ProjectEnv"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
+import {AudioUnitGrouping} from "./AudioUnitGrouping"
+import {AudioUnitSelection} from "./AudioUnitSelection"
 import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
 import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
@@ -147,6 +149,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly primaryAudioUnitBox: AudioUnitBox
     readonly timelineBox: TimelineBox
 
+    readonly grouping: AudioUnitGrouping
+    readonly trackSelection: AudioUnitSelection
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
     readonly editing: Editing
@@ -191,6 +195,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
+        this.grouping = new AudioUnitGrouping(this)
+        this.trackSelection = this.#terminator.own(new AudioUnitSelection(this))
         this.editing = env.createEditing?.(this.boxGraph)
             ?? new BoxEditing(this.boxGraph, box => box instanceof WclapParameterBox)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
