@@ -1,6 +1,6 @@
 import {AudioUnitType} from "@opendaw/studio-enums"
-import {int, Option, UUID} from "@opendaw/lib-std"
-import {BoxGraph, IndexedBox} from "@opendaw/lib-box"
+import {int, isDefined, Option, UUID} from "@opendaw/lib-std"
+import {BoxGraph} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, CaptureAudioBox, CaptureMidiBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {AudioUnitOrdering} from "./AudioUnitOrdering"
@@ -24,17 +24,13 @@ export namespace AudioUnitFactory {
     }
 
     export const orderAndGetIndex = (rootBox: RootBox, type: AudioUnitType): int => {
-        const boxes = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
-        const order: int = AudioUnitOrdering[type]
-        let index = 0 | 0
-        for (; index < boxes.length; index++) {
-            if (!AudioUnitGroups.parent(boxes[index]) && (boxes[index].isGroup.getValue() || AudioUnitOrdering[boxes[index].type.getValue()] > order)) {break}
-        }
-        const insertIndex = index
-        while (index < boxes.length) {
-            boxes[index].index.setValue(++index)
-        }
-        return insertIndex
+        const boxes = AudioUnitGroups.ordered(rootBox)
+        const order = AudioUnitOrdering[type]
+        let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box))
+            && (box.isGroup.getValue() || AudioUnitOrdering[box.type.getValue()] > order))
+        if (index < 0) {index = boxes.length}
+        boxes.forEach((box, position) => box.index.setValue(position < index ? position : position + 1))
+        return index
     }
 
     export const trackTypeToCapture = (boxGraph: BoxGraph, trackType: TrackType): Option<CaptureBox> => {

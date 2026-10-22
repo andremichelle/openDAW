@@ -1,6 +1,5 @@
-import {draggedUnits, installTrackSelection, resolveGroupDrop, markGroupDrop} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import css from "./Mixer.sass?inline"
-import { isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -9,13 +8,11 @@ import {ChannelStrip} from "@/ui/mixer/ChannelStrip.tsx"
 import {Vertex} from "@opendaw/lib-box"
 import {Orientation, Scroller} from "@/ui/components/Scroller.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
-import {DragAndDrop} from "@/ui/DragAndDrop"
-import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
-import {InsertMarker} from "@/ui/components/InsertMarker"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {installTrackSelection} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "mixer")
@@ -73,9 +70,9 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     const updateDom = deferNextFrame(() => {
         Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
-        const order = AudioUnitGroups.ordered(project.rootBox)
+        const order = new Map(AudioUnitGroups.ordered(project.rootBox).map((unit, index) => [unit, index]))
         const sorted = audioUnits.values().filter(({adapter}) => !AudioUnitGroups.hidden(adapter.box))
-            .toSorted((a, b) => order.indexOf(a.adapter.box) - order.indexOf(b.adapter.box))
+            .toSorted((left, right) => (order.get(left.adapter.box) ?? -1) - (order.get(right.adapter.box) ?? -1))
         sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
         anchorLifecycle.terminate()
         const first = sorted.at(0)
@@ -85,7 +82,6 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     const removeEditingIndicator = () => channelStripContainer
         .querySelectorAll(".editing")
         .forEach(({classList}) => classList.remove("editing"))
-    const insertMarker: HTMLElement = <InsertMarker/>
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
     lifecycle.ownAll(
@@ -108,7 +104,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
                                                           compact={false}/>
                 editor.dataset.unit = UUID.toString(adapter.uuid)
-                installTrackSelection(terminator, project, editor, adapter.box)
+                installTrackSelection(terminator, project, editor, adapter.box, () => {})
                 terminator.ownAll(
                     adapter.box.groupParent.subscribe(() => updateDom.request()),
                     adapter.box.groupCollapsed.subscribe(() => updateDom.request()),
@@ -173,30 +169,6 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 }, {capture: true, passive: false})
             )
         })(),
-        DragAndDrop.installTarget(element, {
-            drag: (event: DragEvent, dragData: AnyDragData): boolean => {
-                const {type} = dragData
-                if (type !== "channelstrip") {return false}
-                const target = resolveGroupDrop(project, channelStripContainer, event, true)
-                const allowed = !!target && project.grouping.canMove(draggedUnits(project, dragData), target.parent)
-                markGroupDrop(channelStripContainer, allowed ? target : undefined)
-                return allowed
-            },
-            drop: (event: DragEvent, dragData: AnyDragData) => {
-                if (insertMarker.isConnected) {insertMarker.remove()}
-                const {type} = dragData
-                if (type !== "channelstrip") {return}
-                const target = resolveGroupDrop(project, channelStripContainer, event, true)
-                markGroupDrop(channelStripContainer)
-                if (!target) {return}
-                project.editing.modify(() => project.grouping.move(draggedUnits(project, dragData), target.parent, target.before))
-            },
-            enter: () => {},
-            leave: () => {
-                markGroupDrop(channelStripContainer)
-                if (insertMarker.isConnected) {insertMarker.remove()}
-            }
-        }),
         installAutoScroll(channelStripWrapper, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]})
     )
     return element
