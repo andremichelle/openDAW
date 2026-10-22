@@ -19,8 +19,8 @@
   },
   "files": [
     "dist/**/*",
-    "src/script/api.declaration.d.ts",
-    "src/script/library.d.ts",
+    "src/api.declaration.d.ts",
+    "src/library.d.ts",
     "./dist/ScriptWorker.js"
   ],
   "scripts": {
