@@ -14,8 +14,8 @@ Groups may contain other groups.
 - Collapse hides descendants without changing playback. The folded arrangement row shows thin lines for
   descendant note/audio regions at their original times and colors. Group rows resize and retain their height.
 - Double-click a group title to rename it. Right-click and the three-dot button use the same track menu.
-- Duplicate keeps copies inside their original parent. Selected sibling copies form one block after the last
-  selected sibling, in display order. Selections across folders create a block in each original folder.
+- Duplicate keeps copies inside their original parent. Selected sibling copies form one block per channel category after the last
+  selected sibling in that category, in display order. Selections across folders create a block in each original folder.
   Selecting a folder and its descendant copies the subtree once. New copies become the track selection.
 - Delete removes the folder and its complete nested subtree in one undoable action.
 - Ungroup (Keep Tracks) promotes the children and removes only the group's processing.
@@ -55,11 +55,8 @@ canvas even when its data has not changed. Group overview paints coalesce graph/
 
 ## Validation and AI-assisted process
 
-This feature was implemented with Codex and iterated from manual founder testing. Feedback drove the unfold
-redraw fix, folded overview, group resizing, header drag area, selection highlight, direct rename, duplicate
-placement, and matching header menus. The implementation and tests are included for maintainer review.
-
-Validation on the submission branch is recorded in the PR. Coverage includes:
+Codex assisted implementation, regression tests and browser verification. Iterative testing informed the
+interaction and rendering changes. Current validation results are recorded in the PR. Coverage includes:
 
 - Core regressions for grouping, nesting, routing, invalid moves, serialization, selection, duplication and undo/redo.
 - Existing adapter transfer regressions and Studio tests, plus overview layout and canvas re-entry regressions.
@@ -81,8 +78,9 @@ latency of 27.15 seconds before these changes and 0.44 seconds after them. Singl
 0.69 seconds before and 0.31 seconds after. These single-run measurements include the browser display cycle
 and temporary timing instrumentation; they are not guarantees for other projects or hardware.
 
-Folder order is independent of channel type. New channels, transfers and clipboard paste preserve existing
-hierarchy order; Output remains the final top-level channel during ordinary placement. Mixer folders use
+Each sibling list follows group buses, instruments, FX buses, then Output. Positioned moves and duplication
+preserve relative order within each category. Category boundaries also apply inside folders. Output remains
+the final top-level channel. Mixer folders use
 the same persistent collapse state as the arrangement and keep their volume, mute, solo and effects controls.
 
 General audio-unit transfers expand group roots to full subtrees, including cross-project and delete-source
@@ -99,8 +97,8 @@ The mixer mirrors the boundary below its strips, with space reserved for each ne
 
 Single-lane devices no longer show an isolated tree stub. Captured-pointer mixer handles suppress the
 browser focus outline. New-channel insertion skips complete folder subtrees; new instruments follow
-folders, and new FX buses follow instruments before Output. Existing user moves remain stable rather
-than silently sorting the whole project by channel type.
+folders, and new FX buses follow instruments before Output. Explicit moves retain their requested position
+within the destination category; folder subtrees remain contiguous.
 
 Browser checks used the maintainer's examples: create an FX send/bus, drag that bus to another root boundary,
 verify its output and the source send remain intact, fold/unfold nested mixer strips, and click long group
