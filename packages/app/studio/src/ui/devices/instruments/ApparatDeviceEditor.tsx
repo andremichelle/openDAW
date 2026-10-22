@@ -11,12 +11,11 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
 import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
-import {ApparatExamples} from "./apparat-examples"
 
 const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"},
     defaultCode,
-    examples: ApparatExamples,
+    communityTarget: "apparat",
     starterPrompt: `${starterPrompt}\n\n${viewsPrompt}`,
     entryPoints: ScriptEntryPointDocs.apparat,
     icon: IconSymbol.Code,

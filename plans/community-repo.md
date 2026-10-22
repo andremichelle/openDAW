@@ -5,6 +5,10 @@ Anyone can open a PR. After a merge the content is live in the Studio, with no S
 
 Samples, soundfonts and ranking are out of scope for the first iteration (see Later).
 
+Update 2026-10-22: templates and presets are dropped for now. The repo holds scripts and WebCLAPs only.
+Phases 1 to 3 are live, `assets.opendaw.studio/community/{scripts,wclaps}/index.json`. Phase 4 below replaces
+the old phases 4 and 5.
+
 ## Decision: deploy generated indices, never read the repo at runtime
 
 The Studio could read the repo directly. One Git Trees API call (`/git/trees/main?recursive=1`) lists every file.
@@ -109,6 +113,27 @@ GitHub file limits and the validator enforces them.
 5. Script browser replacing the dropdowns. Templates section.
 6. Move all bundled script examples into the repo as the first content.
 7. WebCLAP source builds in CI.
+
+## Phase 4: community scripts in the Studio
+
+What it does for the user:
+
+1. Every script editor (code editor, Werkstatt, Apparat, Spielwerk) gets a script browser instead of the
+   Examples dropdown. Search, tags, description, author, a code preview, "Open", and a link to the item on GitHub.
+   Each editor lists only the scripts of its own target.
+2. "Open from link": paste a GitHub link to a script (main, a branch, a fork or a pull request) and the Studio
+   loads it into the editor without saving. A reviewer tries a pull request before the merge, nothing is uploaded.
+3. A project script that starts with imports loses everything before its first comment, the same rule as the
+   deploy, whether it is opened, loaded from a link or pasted.
+4. The bundled examples and the stock project scripts go away, Starter stays. Copies already in a user's script
+   list stay where they are.
+
+Checkpoints, each one looked at in the browser before the next:
+
+1. Data layer: `CommunityAPI` (index fetch, cache, `minApi` filter, script download), link resolver for
+   github.com blob, tree and pull URLs plus raw.githubusercontent.com, preamble stripping in one place. Tests.
+2. The script browser dialog.
+3. Wiring into the four editors, removal of the bundled lists, preamble stripping on paste.
 
 ## Repo
 

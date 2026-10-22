@@ -49,7 +49,7 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Icon} from "@/ui/components/Icon"
 import {Column} from "@/ui/devices/Column"
 import {LKR} from "@/ui/devices/constants"
-import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
+import {CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
@@ -80,7 +80,7 @@ type ScriptAdapter = DeviceBoxAdapter & {
 export type ScriptDeviceEditorConfig = {
     readonly compiler: ScriptCompiler.Config
     readonly defaultCode: string
-    readonly examples: ReadonlyArray<CodeEditorExample>
+    readonly communityTarget: CommunityScriptTarget
     readonly starterPrompt: string
     readonly entryPoints: ScriptEntryPoints.Api
     readonly icon: IconSymbol
@@ -152,7 +152,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         },
         initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
         previousScreen: service.layout.screen.getValue(),
-        examples: config.examples,
+        communityTarget: config.communityTarget,
         starterPrompt: config.starterPrompt,
         entryPoints: config.entryPoints
     })

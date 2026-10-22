@@ -31,7 +31,7 @@ Click the **Editor** button on the device panel to open the full-screen code edi
 The toolbar at the top provides:
 
 - **Compile** — Compile and load the code into the engine
-- **Examples** — Load ready-made processors to learn from
+- **Community Scripts** — Browse and load processors shared by the community
 - **From Clipboard** — Paste code from the clipboard into the editor and compile it in one step
 - **Start AI-Prompt** — Copy a device-specific AI starter prompt to the clipboard, ready to paste into an AI assistant (e.g. ChatGPT, Claude) for help writing processors
 - **Close Editor** — Return to the previous view
@@ -339,13 +339,13 @@ host.attachParameter(cutoffHandle, "cutoff")
 The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
 whether it is automated or modulated, `value` already includes both.
 
-Examples with views: Step Arp (a 16-step velocity and gate pattern with a playing-step highlight).
+Community scripts with views: Step Arp (a 16-step velocity and gate pattern with a playing-step highlight).
 
 ---
 
-## 9. Examples
+## 9. Community Scripts
 
-Select **Examples** in the code editor toolbar to load ready-made processors (Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter, 303 Sequencer).
+Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
 
 ---
 

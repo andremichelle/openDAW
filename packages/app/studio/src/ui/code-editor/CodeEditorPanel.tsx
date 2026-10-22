@@ -1,23 +1,22 @@
 import css from "./CodeEditorPanel.sass?inline"
 import defaultCode from "../devices/audio-effects/werkstatt-default.js?raw"
-import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
+import {Errors, isDefined, Lifecycle, Nullable, Optional} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Clipboard, Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {MonacoFactory} from "@/monaco/factory"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
-import {MenuButton} from "@/ui/components/MenuButton"
 import {Dialogs} from "@/ui/components/dialogs"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Surface} from "@/ui/surface/Surface"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {CodeEditorHandler} from "./CodeEditorHandler"
-import {CodeEditorExample} from "./CodeEditorState"
 import {EntryPointMarkers} from "./EntryPointMarkers"
+import {ScriptDialogs} from "@/script/ScriptDialogs"
+import {CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
 import {ScriptEntryPointDocs} from "@/ui/devices/script-entry-points"
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPanel")
@@ -44,7 +43,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
     const state = service.activeCodeEditor.unwrapOrNull()
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
     const initialCode = isDefined(state) ? state.initialCode : defaultCode
-    const examples: ReadonlyArray<CodeEditorExample> = isDefined(state) ? state.examples : []
+    const communityTarget: Optional<CommunityScriptTarget> = isDefined(state) ? state.communityTarget : undefined
     const starterPrompt = isDefined(state) ? state.starterPrompt : ""
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
         statusText = text
@@ -169,19 +168,19 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                         <span>Get Prompt</span> <Icon symbol={IconSymbol.Copy}/>
                                     </Button>
                                 )}
-                                {examples.length > 0 && (
-                                    <MenuButton root={MenuItem.root()
-                                        .setRuntimeChildrenProcedure(parent => parent
-                                            .addMenuItem(...examples
-                                                .map(example => MenuItem.default({label: example.name})
-                                                    .setTriggerProcedure(() => {
-                                                        if (!isDefined(handler)) {return}
-                                                        handler.loadExample(example.code)
-                                                            .catch((reason: unknown) => setStatus(String(reason), "error"))
-                                                    }))))}
-                                                appearance={{tinyTriangle: true, color: Colors.dark}}>
-                                        <span>Examples</span>
-                                    </MenuButton>
+                                {isDefined(communityTarget) && (
+                                    <Button lifecycle={lifecycle}
+                                            onClick={() => {
+                                                if (!isDefined(handler)) {return}
+                                                ScriptDialogs.showCommunityDialog({target: communityTarget})
+                                                    .then(({source}) => handler.loadExample(source), (reason: unknown) => {
+                                                        if (!Errors.isAbort(reason)) {throw reason}
+                                                    })
+                                                    .catch((reason: unknown) => setStatus(String(reason), "error"))
+                                            }}
+                                            appearance={{color: Colors.dark, cursor: "pointer", tooltip: "Browse scripts shared by the community"}}>
+                                        <span>Community Scripts</span>
+                                    </Button>
                                 )}
                             </header>
                             {container}

@@ -1,5 +1,6 @@
 import {Lazy, Option, Progress} from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
+import {HttpStatus, retryTransient} from "./HttpRetry"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {WclapIndex, WclapIndexEntry} from "./WclapIndex"
 
@@ -40,12 +41,3 @@ export class OpenWclapAPI {
                 : Promise.reject(new HttpStatus(response.status))), 4)
     }
 }
-
-class HttpStatus extends Error {
-    constructor(readonly status: number) {super(`HTTP ${status}`)}
-}
-
-// network failures and 5xx are worth another attempt, a 4xx answer will not change
-const retryTransient = <T>(factory: () => Promise<T>, attempts: number): Promise<T> =>
-    Promises.guardedRetry(factory, (error, count) =>
-        count < attempts && !(error instanceof HttpStatus && error.status < 500))

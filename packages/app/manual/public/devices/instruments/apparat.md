@@ -29,7 +29,7 @@ Click the **Editor** button on the device panel to open the full-screen code edi
 The toolbar at the top provides:
 
 - **Compile** — Compile and load the code into the audio engine
-- **Examples** — Load ready-made instruments to learn from
+- **Community Scripts** — Browse and load instruments shared by the community
 - **From Clipboard** — Paste code from the clipboard into the editor and compile it in one step
 - **Start AI-Prompt** — Copy a device-specific AI starter prompt to the clipboard, ready to paste into an AI assistant (e.g. ChatGPT, Claude) for help writing instruments
 - **Close Editor** — Return to the previous view
@@ -331,13 +331,13 @@ host.attachParameter(cutoffHandle, "cutoff")
 The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
 whether it is automated or modulated, `value` already includes both.
 
-Examples with views: Envelope Synth, Harmonic Synth (drawable partials, preview keys, live spectrum) and Wave Draw (a drawable wavetable).
+Community scripts with views: Envelope Synth, Harmonic Synth (drawable partials, preview keys, live spectrum) and Wave Draw (a drawable wavetable).
 
 ---
 
-## 9. Examples
+## 9. Community Scripts
 
-Select **Examples** in the code editor toolbar to load ready-made instruments (Simple Sine Synth, Grain Synthesizer).
+Select **Community Scripts** in the code editor toolbar to browse instruments shared by the openDAW community, for example Simple Sine Synth and Grain Synthesizer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
 
 ---
 

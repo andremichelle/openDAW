@@ -1,5 +1,5 @@
 import css from "./Dialog.sass?inline"
-import {Exec, isDefined, Procedure, safeExecute, Terminator} from "@opendaw/lib-std"
+import {Exec, isDefined, ObservableValue, Procedure, safeExecute, Terminator} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -17,6 +17,7 @@ export type Button = {
     text: string
     onClick: Procedure<DialogHandler>
     primary?: boolean
+    disabled?: ObservableValue<boolean>
 }
 
 type Construct = {
@@ -40,9 +41,13 @@ export const Dialog = (
             {children}
             <footer>
                 {isDefined(leading) && <div className="leading">{leading}</div>}
-                {buttons?.map(({onClick, primary, text}) => (
+                {buttons?.map(({onClick, primary, text, disabled}) => (
                     <Button lifecycle={lifecycle}
-                            onClick={() => onClick({close: () => dialog.close()})}
+                            disabled={disabled}
+                            onClick={() => {
+                                if (disabled?.getValue() === true) {return}
+                                onClick({close: () => dialog.close()})
+                            }}
                             appearance={primary === true ? {
                                 framed: true,
                                 color: Colors.blue
