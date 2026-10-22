@@ -1,4 +1,4 @@
-import {AudioSendRouting, AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {AudioSendRouting, AudioUnitType, MaxTrackHeight, Pointers} from "@opendaw/studio-enums"
 import {BipolarConstraints, ParameterPointerRules} from "./Defaults"
 import {BoxSchema} from "@opendaw/lib-box-forge"
 
@@ -60,11 +60,16 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 name: "capture",
                 pointerType: Pointers.Capture, mandatory: false
             },
+            31: {type: "pointer", name: "group-parent", pointerType: Pointers.GroupMember, mandatory: false},
+            32: {type: "field", name: "group-children", pointerRules: {accepts: [Pointers.GroupMember], mandatory: false}},
+            33: {type: "boolean", name: "is-group"},
+            34: {type: "boolean", name: "group-collapsed"},
             30: {
                 type: "object", name: "user-interface", class: {
                     name: "AudioUnitUserInterface",
                     fields: {
-                        1: {type: "boolean", name: "automation-collapsed"}
+                        1: {type: "boolean", name: "automation-collapsed"},
+                        2: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: MaxTrackHeight}, unit: "px"}
                     }
                 }
             }

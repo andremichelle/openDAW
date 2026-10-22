@@ -9,7 +9,8 @@ export namespace AudioBusFactory {
                            name: string,
                            icon: IconSymbol,
                            type: AudioUnitType,
-                           color: Color): AudioBusBox => {
+                           color: Color,
+                           destination?: AudioBusBox): AudioBusBox => {
         console.debug(`createAudioBus '${name}', type: ${type}, color: ${color}`)
         const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
         assert(rootBox.isAttached(), "rootBox not attached")
@@ -20,7 +21,7 @@ export namespace AudioBusFactory {
             box.icon.setValue(IconSymbol.toName(icon))
             box.color.setValue(color.toString())
         })
-        const audioUnitBox = AudioUnitFactory.create(skeleton, type, Option.None)
+        const audioUnitBox = AudioUnitFactory.create(skeleton, type, Option.None, undefined, destination)
         audioBusBox.output.refer(audioUnitBox.input)
         return audioBusBox
     }
