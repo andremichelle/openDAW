@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-std",
-  "version": "0.0.87",
+  "version": "0.0.88",
   "license": "AGPL-3.0-or-later",
   "sideEffects": false,
   "publishConfig": {

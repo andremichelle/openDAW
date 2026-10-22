@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-dom",
-  "version": "0.0.92",
+  "version": "0.0.93",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,8 +23,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-runtime": "^0.0.88",
-    "@opendaw/lib-std": "^0.0.87",
+    "@opendaw/lib-runtime": "^0.0.89",
+    "@opendaw/lib-std": "^0.0.88",
     "@types/wicg-file-system-access": "^2023.10.6"
   },
   "devDependencies": {
