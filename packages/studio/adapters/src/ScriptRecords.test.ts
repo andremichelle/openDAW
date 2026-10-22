@@ -48,6 +48,15 @@ describe("ScriptCompiler reconciles @collection records", () => {
         expect(values("steps")).toEqual([{on: 1, velocity: 0.8}, {on: 1, velocity: 0.8}, {on: 1, velocity: 0.8}])
         expect(records("steps").map(record => [record.order.getValue(), record.collectionIndex.getValue()])).toEqual([[0, 0], [1, 0], [2, 0]])
     })
+    it("creates the records when the device holds the source without a header (never compiled)", async () => {
+        const {editing, device, compile, values} = setup()
+        const source = [...STEPS, PROCESSOR].join("\n")
+        editing.modify(() => device.code.setValue(source))
+        await compile(...STEPS)
+        expect(values("steps")).toEqual([{on: 1, velocity: 0.8}, {on: 1, velocity: 0.8}, {on: 1, velocity: 0.8}])
+        await compile(...STEPS)
+        expect(values("steps")).toHaveLength(3)
+    })
     it("creates seeded records", async () => {
         const {compile, values} = setup()
         await compile("// @collection partials", "// @field partials.level 0 0 1 linear",

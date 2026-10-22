@@ -214,8 +214,11 @@ const reconcileRecords = (hub: Field<Pointers.ScriptRecord>, declared: ReadonlyA
     }
 }
 
+// code without a header was never compiled, so it declared nothing yet
 const previousCollections = (code: string, headerPattern: RegExp): ReadonlyArray<CollectionDeclaration> => {
-    const result = tryCatch(() => ScriptDeclaration.parseCollections(parseHeader(code, headerPattern).userCode))
+    const {userCode, update} = parseHeader(code, headerPattern)
+    if (update === 0) {return []}
+    const result = tryCatch(() => ScriptDeclaration.parseCollections(userCode))
     return result.status === "success" ? result.value : []
 }
 
