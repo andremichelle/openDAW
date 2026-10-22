@@ -135,6 +135,51 @@ Checkpoints, each one looked at in the browser before the next:
 2. The script browser dialog.
 3. Wiring into the four editors, removal of the bundled lists, preamble stripping on paste.
 
+## Phase 8: automated device screenshots
+
+What it does: every community script shows a picture of its device in the browser, rendered by the Studio itself, so
+it always looks like what the user gets. Contributors add nothing.
+
+When: after the merge, in the deploy build job (the one without secrets). Pull requests stay as they are, a reviewer
+previews the real script with the Load button.
+
+Pieces:
+
+1. Studio preview page: a route that renders one device and nothing else. It gets the target and the script source,
+   creates an empty project, adds the device, compiles the script, waits until a `@view` has drawn, shows the device
+   editor at a fixed size and theme and reports "ready" (or the compile error).
+2. CI: Playwright with headless Chromium opens the preview page of the PROD Studio, hands it each script, screenshots
+   the device element. Contributor code runs in the browser sandbox, in the job without secrets.
+3. Index: `<uuid>-<hash>.png` uploaded like the scripts, a `screenshot` field per entry. Every deploy renders all
+   items again, so the pictures follow Studio restyles.
+4. Studio browser: the detail pane shows the screenshot above the code.
+
+Later: WebCLAPs with their own interface (the plugin window lives on the plugin origin). A WebCLAP without an
+interface only has the generic device panel, worth less.
+
+Dry run (2026-10-22), Playwright with headless Chrome against the PROD Studio, no Studio change: new project,
+add the device, open its code editor, Community Scripts, paste the item's GitHub link, Open, screenshot the device
+element (header included, at device pixel ratio 2).
+
+1. It works for all four tried scripts, views included: Parametric EQ (band display), Hard Clipper, Wavetable
+   (3D frame stack), Step Arp (step grid). AudioWorklet, wasm engine and canvas views run headless.
+2. 6.7 to 9.6 s per item, a fresh browser context each (an unsaved project blocks leaving the page). 40 scripts are
+   about 5 minutes per deploy.
+3. Found on the way: the welcome tour prompt appears after New Project, sometimes later than 2 s. The device order
+   varies (a MIDI effect sits before the instrument), so the code editor is picked by its name, not by position.
+4. Cosmetics: the open code editor lights up the device's Code Editor button, close it before the shot. Text inside
+   some views looks slightly soft, to check whether a view is still fading in.
+5. The link must point at the merged commit (`blob/<sha>/...`), raw.githubusercontent.com caches a branch for up to
+   five minutes and would render the old version right after a merge.
+
+Effort:
+
+1. Without a Studio change (UI automation as in the dry run): about half a day for the deploy step, the upload and
+   the index field, plus about two hours for showing the picture in the browser and a Studio deploy. Brittle: any
+   change to button texts, the welcome prompt or the dialog breaks it, and the job notices only on the next deploy.
+2. With the preview page: about one more day, then 2 to 3 s per item and no dependency on the editor UI. Worth it
+   once the automation breaks for the first time, or when WebCLAP interfaces come in.
+
 ## Repo
 
 `andremichelle/opendaw-commons`, public, owned by André.
