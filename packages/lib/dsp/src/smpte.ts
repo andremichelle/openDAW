@@ -20,15 +20,20 @@ const toSeconds = (time: SMPTETime, fps: FrameRate): number =>
     time.subframes / (fps * SubframesPerFrame)
 
 const fromSeconds = (seconds: number, fps: FrameRate): SMPTETime => {
-    const totalSeconds = Math.floor(seconds)
+    const framesPerSecond = Math.ceil(fps)
+    const wholeSeconds = Math.floor(seconds)
+    const totalFrames = (seconds - wholeSeconds) * fps
+    const flooredFrames = Math.floor(totalFrames)
+    const roundedSubframes = Math.round((totalFrames - flooredFrames) * SubframesPerFrame)
+    const carryFrame = roundedSubframes === SubframesPerFrame
+    const subframes = carryFrame ? 0 : roundedSubframes
+    const frameIndex = flooredFrames + (carryFrame ? 1 : 0)
+    const carrySecond = frameIndex >= framesPerSecond
+    const frames = carrySecond ? 0 : frameIndex
+    const totalSeconds = wholeSeconds + (carrySecond ? 1 : 0)
     const hours = Math.floor(totalSeconds / 3600.0)
     const minutes = Math.floor((totalSeconds % 3600.0) / 60.0)
-    const secs = totalSeconds % 60
-    const fractionalSeconds = seconds - totalSeconds
-    const totalFrames = fractionalSeconds * fps
-    const frames = Math.floor(totalFrames)
-    const subframes = Math.round((totalFrames - frames) * SubframesPerFrame)
-    return {hours, minutes, seconds: secs, frames, subframes}
+    return {hours, minutes, seconds: totalSeconds % 60, frames, subframes}
 }
 
 const toString = (time: SMPTETime): string => {
