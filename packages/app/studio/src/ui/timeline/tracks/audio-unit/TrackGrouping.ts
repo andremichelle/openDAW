@@ -1,5 +1,5 @@
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
+import {AudioUnitGroups, AudioUnitLayout, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
@@ -76,14 +76,17 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
     )
 }
 
-export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean}
+export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number}
 
 /** Header centre means add to folder; row edges mean insert. Pointer indentation chooses the parent at edges. */
 export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Optional<GroupDrop> => {
-    const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
-        .filter(row => row.getClientRects().length > 0)
-        .sort((left, right) => horizontal ? left.getBoundingClientRect().left - right.getBoundingClientRect().left
-            : left.getBoundingClientRect().top - right.getBoundingClientRect().top)
+    const elements = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
+        .map(row => [row.dataset.unit, row]))
+    const layout = project.audioUnitLayout.snapshot
+    const rows = layout.visibleRows.flatMap(row => {
+        const element = elements.get(UUID.toString(row.unit.address.uuid))
+        return isDefined(element) && element.getClientRects().length > 0 ? [element] : []
+    })
     if (rows.length === 0) {return undefined}
     const coord = horizontal ? event.clientX : event.clientY
     const row = rows.find(row => {
@@ -98,30 +101,30 @@ export const resolveGroupDrop = (project: Project, container: HTMLElement, event
     const size = horizontal ? rect.width : Math.min(rect.height, 40)
     const offset = coord - start
     const inside = unit.isGroup.getValue() && offset > size * 0.25 && offset < size * 0.75
-    if (inside) {return {parent: unit, row, inside: true, after: false}}
+    if (inside) {return {parent: unit, row, inside: true, after: false, indent: layout.row(unit).mapOr(item => item.indent + AudioUnitLayout.Indent, 0)}}
     const after = offset >= size / 2
-    let parent = AudioUnitGroups.parent(unit)
+    let parent = layout.row(unit).mapOr(item => item.parent, undefined)
     // Moving left across a tree guide lifts the insertion out of that folder.
     if (!horizontal) {
-        const indent = Math.max(0, Math.floor((event.clientX - rect.left - 12) / 5))
-        while (isDefined(parent) && AudioUnitGroups.depth(parent) >= indent) {parent = AudioUnitGroups.parent(parent)}
+        const indent = Math.max(0, Math.floor((event.clientX - rect.left - 12) / AudioUnitLayout.Indent))
+        while (isDefined(parent) && layout.row(parent).mapOr(item => item.depth, 0) >= indent) {parent = layout.row(parent).mapOr(item => item.parent, undefined)}
     }
     let sibling = unit
-    while (AudioUnitGroups.parent(sibling) !== parent) {
-        const next = AudioUnitGroups.parent(sibling)
+    while (layout.row(sibling).mapOr(item => item.parent, undefined) !== parent) {
+        const next = layout.row(sibling).mapOr(item => item.parent, undefined)
         if (!isDefined(next)) {break}
         sibling = next
     }
-    const siblings = AudioUnitGroups.children(project.rootBox, parent)
+    const siblings = layout.rows.filter(item => item.parent === parent).map(item => item.unit)
     const before = after ? siblings[siblings.indexOf(sibling) + 1] : sibling
-    return {parent, before, row, inside: false, after}
+    return {parent, before, row, inside: false, after, indent: isDefined(parent) ? layout.row(parent).mapOr(item => item.indent + AudioUnitLayout.Indent, 0) : 0}
 }
 
 export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void => {
     container.querySelectorAll(".group-drop-inside,.group-drop-before,.group-drop-after").forEach(row =>
         row.classList.remove("group-drop-inside", "group-drop-before", "group-drop-after"))
     if (!isDefined(target)) {return}
-    target.row.style.setProperty("--drop-indent", `${isDefined(target.parent) ? 5 * (AudioUnitGroups.depth(target.parent) + 1) : 0}px`)
+    target.row.style.setProperty("--drop-indent", `${target.indent}px`)
     target.row.classList.add(target.inside ? "group-drop-inside" : target.after ? "group-drop-after" : "group-drop-before")
 }
 

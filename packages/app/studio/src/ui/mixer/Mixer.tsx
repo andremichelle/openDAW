@@ -3,7 +3,7 @@ import {isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opend
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {AudioUnitBoxAdapter, AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip.tsx"
 import {Vertex} from "@opendaw/lib-box"
 import {Orientation, Scroller} from "@/ui/components/Scroller.tsx"
@@ -75,16 +75,15 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     }))
     const updateDom = deferNextFrame(() => {
         channelStripContainer.appendChild(headers)
-        const order = new Map(AudioUnitGroups.ordered(project.rootBox).map((unit, index) => [unit, index]))
-        const sorted = audioUnits.values().filter(({adapter}) => !AudioUnitGroups.hidden(adapter.box))
-            .toSorted((left, right) => (order.get(left.adapter.box) ?? -1) - (order.get(right.adapter.box) ?? -1))
+        const layout = project.audioUnitLayout.snapshot
+        const sorted = layout.visibleRows.flatMap(row => audioUnits.opt(row.unit.address.uuid).mapOr(entry => [entry], []))
         const visible = new Set(sorted.map(({editor}) => editor))
         audioUnits.values().forEach(({editor}) => {if (!visible.has(editor)) {editor.remove()}})
         sorted.forEach(({editor}, index) => {
             if (editor instanceof HTMLElement) {editor.style.gridColumn = String(index + 2)}
             channelStripContainer.appendChild(editor)
         })
-        groupRails.update(sorted.map(({adapter}) => adapter.box))
+        groupRails.update(layout.boundaries)
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
@@ -116,8 +115,6 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 editor.dataset.unit = UUID.toString(adapter.uuid)
                 installTrackSelection(terminator, project, editor, adapter.box, () => {})
                 terminator.ownAll(
-                    adapter.box.groupParent.subscribe(() => updateDom.request()),
-                    adapter.box.groupCollapsed.subscribe(() => updateDom.request()),
                     Events.subscribe(editor, "pointerdown", () => {
                         scrollIntoViewEnabled = false
                         if (!project.userEditingManager.audioUnit.isEditing(adapter.box.editing)) {
@@ -137,6 +134,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             },
             onReorder: (_adapter: AudioUnitBoxAdapter) => updateDom.request()
         }),
+        project.audioUnitLayout.value.subscribe(() => updateDom.request()),
         project.trackSelection.value.subscribe(refreshEditingIndicators),
         project.userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex.match({
             none: refreshEditingIndicators,
