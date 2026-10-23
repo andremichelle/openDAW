@@ -2,6 +2,7 @@
 import {asDefined, isDefined, panic} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {InferenceSession, Tensor as OrtTensor, env as ortEnv} from "onnxruntime-web"
+import {WASM_FALLBACK_PROVIDER} from "../Task"
 import {Tensor, TensorElementType, TensorMap} from "../Tensor"
 import {MainToWorker, WorkerToMain} from "./protocol"
 
@@ -63,7 +64,7 @@ const handleLoad = async (msg: Extract<MainToWorker, {kind: "load"}>): Promise<v
     let session = sessions.get(msg.taskKey)
     if (!isDefined(session)) {
         session = await InferenceSession.create(msg.modelBytes, {
-            executionProviders: [...msg.executionProviders, "wasm"]
+            executionProviders: [...msg.executionProviders, WASM_FALLBACK_PROVIDER]
         })
         sessions.set(msg.taskKey, session)
     }
