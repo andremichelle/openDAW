@@ -209,6 +209,35 @@ describe("wclap bridge", () => {
         expect(other.states.length).toBe(0)
     })
 
+    it("round-trips the plugin state as raw bytes, before and after the plugin is up", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        host.imports.host_wclap_param(handle, param(host, "dry").id | 0, FLOAT, 0.125, NaN)
+        rms(host, handle, 2)
+        host.bridges.saveState("01020304-0506-0708-090a-0b0c0d0e0f10")
+        const bytes = host.states[0]
+        const before = createHost()
+        const beforeHandle = load(before)
+        new Uint8Array(before.memory.buffer).set(new Uint8Array(bytes), 2048)
+        before.imports.host_wclap_state_bytes(beforeHandle, 2048, bytes.byteLength)
+        await ready(before, beforeHandle)
+        expect(param(before, "dry").value).toBeCloseTo(0.125, 5)
+        before.bridges.saveState("01020304-0506-0708-090a-0b0c0d0e0f10")
+        expect(before.states.length).toBe(0)
+        const after = createHost()
+        const afterHandle = load(after)
+        await ready(after, afterHandle)
+        new Uint8Array(after.memory.buffer).set(new Uint8Array(bytes), 2048)
+        after.imports.host_wclap_state_bytes(afterHandle, 2048, bytes.byteLength)
+        after.reported.length = 0
+        after.bridges.receive("01020304-0506-0708-090a-0b0c0d0e0f10", new TextEncoder().encode("{}").buffer)
+        rms(after, afterHandle, 4)
+        const reports = after.reported.filter(([id]) => id === param(after, "dry").id)
+        expect(reports.length).toBe(1)
+        expect(reports[0][1]).toBeCloseTo(0.125, 5)
+    })
+
     it("reports a failed load and passes through, without throwing into the engine", async () => {
         const host = createHost({files: [{path: "module.wasm", bytes: new Uint8Array([0, 0x61, 0x73, 0x6D, 1, 0, 0, 0])}]})
         const handle = load(host)

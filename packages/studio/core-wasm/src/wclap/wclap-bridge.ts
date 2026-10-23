@@ -147,7 +147,9 @@ export class WclapBridges {
             host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left, right, frames),
             host_wclap_note: (handle, on, key, velocity) => this.#note(handle, on !== 0, key, velocity),
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
-            host_wclap_state: (handle, ptr, len) => this.#state(handle, ptr, len),
+            host_wclap_state: (handle, ptr, len) =>
+                this.#state(handle, decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))),
+            host_wclap_state_bytes: (handle, ptr, len) => this.#state(handle, new Uint8Array(this.#memory.buffer, ptr, len).slice()),
             host_wclap_reset: (handle) => this.#reset(handle),
             host_wclap_latency: (handle) => this.#latency(handle),
             host_wclap_release: (handle) => this.#release(handle)
@@ -343,10 +345,9 @@ export class WclapBridges {
     }
 
     // The box's state blob, applied now or once the plugin is up, skipped when this bridge saved it itself
-    #state(handle: number, ptr: number, len: number): void {
+    #state(handle: number, bytes: Uint8Array): void {
         const plugin = this.#plugins.get(handle)
         if (!isDefined(plugin)) {return}
-        const bytes = decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))
         if (bytes.length === 0 || (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes))) {return}
         plugin.pendingState = bytes
         const loaded = plugin.loaded

@@ -8,6 +8,7 @@ pub const RENDER_QUANTUM: usize = 128;
 const URL_FIELD: [u16; 1] = [10];
 const CLAP_ID_FIELD: [u16; 1] = [11];
 const STATE_FIELD: [u16; 1] = [12];
+const PLUGIN_STATE_FIELD: [u16; 1] = [14];
 const URL_CAPACITY: usize = 1024;
 const CLAP_ID_CAPACITY: usize = 256;
 
@@ -16,6 +17,8 @@ pub struct WclapLink {
     url_field_id: u32,
     clap_id_field_id: u32,
     state_field_id: u32,
+    plugin_state_field_id: u32,
+    has_plugin_state: bool,
     url: [u8; URL_CAPACITY],
     url_len: usize,
     clap_id: [u8; CLAP_ID_CAPACITY],
@@ -30,17 +33,24 @@ impl WclapLink {
         self.bridge = abi::wclap_create(&abi::self_uuid());
         self.url_field_id = abi::observe_field(&URL_FIELD);
         self.clap_id_field_id = abi::observe_field(&CLAP_ID_FIELD);
+        self.plugin_state_field_id = abi::observe_field(&PLUGIN_STATE_FIELD);
         self.state_field_id = abi::observe_field(&STATE_FIELD);
     }
 
     pub fn url(&self) -> &[u8] {&self.url[..self.url_len]}
     pub fn clap_id(&self) -> &[u8] {&self.clap_id[..self.clap_id_len]}
 
-    /// The bridge reloads only when url or clap id changed.
+    /// The bridge reloads only when url or clap id changed. The base64 state counts only while the bytes are empty.
     pub fn apply_field(&mut self, id: u32, value: FieldValue) {
+        if id == self.plugin_state_field_id {
+            let FieldValue::Bytes(bytes) = value else {return};
+            self.has_plugin_state = !bytes.is_empty();
+            abi::wclap_state_bytes(self.bridge, bytes);
+            return;
+        }
         let FieldValue::String(text) = value else {return};
         if id == self.state_field_id {
-            abi::wclap_state(self.bridge, text);
+            if !self.has_plugin_state {abi::wclap_state(self.bridge, text)}
             return;
         }
         if id == self.url_field_id {

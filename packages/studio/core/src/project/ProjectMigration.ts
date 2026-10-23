@@ -15,6 +15,8 @@ import {
     ValueEventBox,
     ValueEventCollectionBox,
     VaporisateurDeviceBox,
+    WclapDeviceBox,
+    WclapInstrumentBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {asInstanceOf, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
@@ -41,6 +43,7 @@ import {
     migrateUnsatisfiedMandatory,
     migrateVaporisateurDeviceBox,
     migrateWarpMarkers,
+    migrateWclapState,
     migrateZeitgeistDeviceBox,
     migrateZeroDurationRegions
 } from "./migration"
@@ -127,7 +130,9 @@ export class ProjectMigration {
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
-            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box)
+            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
+            visitWclapDeviceBox: (box: WclapDeviceBox) => migrateWclapState(boxGraph, box),
+            visitWclapInstrumentBox: (box: WclapInstrumentBox) => migrateWclapState(boxGraph, box)
         }))
         // 3rd pass. Drop content tracks whose type no longer matches their unit's capture device (a MIDI
         // instrument swapped for a Tape leaves note tracks on an audio-capture unit, and vice versa) — they

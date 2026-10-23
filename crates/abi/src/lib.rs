@@ -190,6 +190,7 @@ extern "C" {
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
+    fn host_wclap_state_bytes(handle: u32, ptr: u32, len: u32);
     fn host_wclap_reset(handle: u32);
     fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
@@ -432,6 +433,7 @@ pub const FIELD_KIND_FLOAT: u32 = 1;
 pub const FIELD_KIND_BOOL: u32 = 2;
 pub const FIELD_KIND_STRING: u32 = 3;
 pub const FIELD_KIND_INT_ARRAY: u32 = 4;
+pub const FIELD_KIND_BYTES: u32 = 5;
 
 /// A PLAIN box-field value handed to a device's [`Instrument::field_changed`], ALREADY TYPED (the analog of
 /// [`ParamValue`] for observed fields, not parameters). Mirrors the box graph's field primitives one-to-one:
@@ -445,7 +447,8 @@ pub enum FieldValue<'a> {
     Float(f32),
     Bool(bool),
     String(&'a str),
-    Ints(&'a [i32])
+    Ints(&'a [i32]),
+    Bytes(&'a [u8])
 }
 
 impl<'a> FieldValue<'a> {
@@ -467,6 +470,7 @@ impl<'a> FieldValue<'a> {
                 FieldValue::String(core::str::from_utf8(bytes).expect("field string is not valid UTF-8"))
             }
             FIELD_KIND_INT_ARRAY => FieldValue::Ints(slice::from_raw_parts(bits as *const i32, len as usize)),
+            FIELD_KIND_BYTES => FieldValue::Bytes(slice::from_raw_parts(bits as *const u8, len as usize)),
             _ => panic!("unknown field kind")
         }
     }
@@ -1129,6 +1133,16 @@ pub fn wclap_state(handle: u32, base64: &str) {
     { unsafe { host_wclap_state(handle, base64.as_ptr() as u32, base64.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, base64); }
+}
+
+/// Hand the saved `clap_plugin_state` blob as raw bytes (empty = none) to the bridge, same contract as
+/// [`wclap_state`] without the base64. Native stub no-op.
+#[inline]
+pub fn wclap_state_bytes(handle: u32, bytes: &[u8]) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_state_bytes(handle, bytes.as_ptr() as u32, bytes.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, bytes); }
 }
 
 /// The frames the loaded plugin reports through `clap.latency` (0 until it is ready). Native stub 0.

@@ -119,6 +119,8 @@ pub(crate) fn deliver_field_value(value: &FieldValue, field_changed_index: u32, 
         // stays alive for the synchronous call - the same borrow contract as a string's bytes.
         let flat: Vec<i32> = elements.iter().filter_map(FieldValue::as_int32).collect();
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT_ARRAY, flat.as_ptr() as u32, flat.len() as u32);
+    } else if let FieldValue::Bytes(bytes) = value {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BYTES, bytes.as_ptr() as u32, bytes.len() as u32);
     }
 }
 

@@ -81,3 +81,27 @@ string rewrite on every save. ProTracker will put whole modules (up to ~1 MB) in
 1. How long does the base64 fallback in the bridge stay? One release, then remove with field 12 still deprecated.
 2. Should states above a threshold (say 256 KB) skip the save-after-every-GUI-message debounce and save only on window
    close and project save, to keep Live Room traffic down?
+
+## Result (2026-10-23)
+
+1. **Field 12 is not deprecated.** A deprecated field is skipped by `fromJSON` and by Yjs, so a Live Room created
+   before the update would lose its state on join. Field 12 stays a plain string, the device reads it only while
+   field 14 is empty, and every save writes field 14 and clears field 12 in one step. The base64 path in the bridge
+   stays for good, so boxes that enter without `ProjectMigration` (preset, `.odb`, paste) keep their state anyway.
+2. **Migration.** `MigrateWclapState` runs in `ProjectMigration` (project load and Live Room join). Invalid base64
+   stays in field 12 with a warning.
+3. **Engine.** `FIELD_KIND_BYTES = 5`, `abi::FieldValue::Bytes`, `host_wclap_state_bytes`. `wclap-common` observes
+   field 14 before field 12.
+4. **Undo.** A save still makes no step of its own. An undo right after it restores the previous bytes and the
+   legacy string, as before.
+5. **Tests.**
+   1. `MigrateWclapState.test.ts`: byte exact, 1 MB, empty, invalid, existing bytes, twice, instrument.
+   2. `WclapParameters.collab.test.ts`: byte exact on the other peer, concurrent saves converge, late joiner, no
+      write for an unchanged state, an old room migrates once, a 1 MB state is one update (applied in 0.2 ms) and the
+      room stays under 2 MB after five more saves.
+   3. `WclapParameters.history.test.ts`: undo and redo of a save.
+   4. `wclap-bridge.test.ts`: raw bytes before and after the plugin is up.
+   5. `wclap-state-bytes-mirror.test.ts`: the Rust engine mirror stays in sync through a legacy string, small, 1 MB
+      and empty states.
+   6. Engine: a bytes field reaches the device as `FIELD_KIND_BYTES` with its length, an empty one with length 0.
+6. **Open.** Browser check (Pro54 and Basics in an old project, then a Live Room with two tabs).

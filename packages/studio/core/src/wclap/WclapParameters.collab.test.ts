@@ -129,3 +129,102 @@ describe("WclapParameters in a live room", () => {
         expect(stateOf(owner)).toBe(stateOf(guest))
     })
 })
+
+describe("WclapStates in a live room", () => {
+    const deviceOf = (peer: Peer, deviceUuid: string): WclapDeviceBox =>
+        peer.project.boxGraph.findBox<WclapDeviceBox>(UUID.parse(deviceUuid)).unwrap()
+    const bytesOf = (peer: Peer, deviceUuid: string): Array<number> =>
+        Array.from(new Uint8Array(deviceOf(peer, deviceUuid).pluginState.getValue().slice().buffer))
+
+    // A client joining an existing room, migrated the way YService does it
+    const joinMigrated = async (owner: Peer): Promise<Peer> => {
+        const {Project} = await import("../project/Project")
+        const {ProjectMigration} = await import("../project/ProjectMigration")
+        const doc = new Y.Doc()
+        Y.applyUpdate(doc, Y.encodeStateAsUpdate(owner.doc), owner)
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        const sync = await YSync.joinRoom({boxGraph, boxes: doc.getMap("boxes")})
+        const skeleton = {boxGraph, mandatoryBoxes: ProjectSkeleton.findMandatoryBoxes(boxGraph)}
+        await ProjectMigration.migrate(createEnv(), skeleton)
+        const project = Project.fromSkeleton(createEnv(), skeleton, false)
+        project.own(sync)
+        return {doc, project}
+    }
+
+    it("a state saved on one peer arrives byte exact on the other", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const guest = await join(owner)
+        const source = [0, 1, 127, 128, 255, 3]
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array(source).buffer)
+        converge(owner, guest)
+        expect(bytesOf(guest, deviceUuid)).toStrictEqual(source)
+        expect(deviceOf(guest, deviceUuid).state.getValue()).toBe("")
+    })
+
+    it("both peers saving at once converge to one blob", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const guest = await join(owner)
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array([1, 2, 3]).buffer)
+        WclapStates.store(guest.project, deviceUuid, new Uint8Array([4, 5, 6, 7]).buffer)
+        converge(owner, guest)
+        expect(bytesOf(owner, deviceUuid)).toStrictEqual(bytesOf(guest, deviceUuid))
+        expect([[1, 2, 3], [4, 5, 6, 7]]).toContainEqual(bytesOf(owner, deviceUuid))
+        expect(owner.project.boxGraph.checksum()).toStrictEqual(guest.project.boxGraph.checksum())
+    })
+
+    it("a late joiner receives the current state", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array([1]).buffer)
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array([2, 2]).buffer)
+        const guest = await join(owner)
+        expect(bytesOf(guest, deviceUuid)).toStrictEqual([2, 2])
+    })
+
+    it("storing the same state again writes nothing to the room", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array([1, 2, 3]).buffer)
+        const before = Y.encodeStateVector(owner.doc)
+        WclapStates.store(owner.project, deviceUuid, new Uint8Array([1, 2, 3]).buffer)
+        expect(Array.from(Y.encodeStateVector(owner.doc))).toStrictEqual(Array.from(before))
+    })
+
+    it("a room holding an old base64 state migrates once and nobody writes the string again", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        owner.project.boxGraph.beginTransaction()
+        deviceOf(owner, deviceUuid).state.setValue(btoa(String.fromCharCode(9, 8, 7)))
+        owner.project.boxGraph.endTransaction()
+        const first = await joinMigrated(owner)
+        expect(bytesOf(first, deviceUuid)).toStrictEqual([9, 8, 7])
+        expect(deviceOf(first, deviceUuid).state.getValue()).toBe("")
+        converge(owner, first)
+        expect(bytesOf(owner, deviceUuid)).toStrictEqual([9, 8, 7])
+        expect(deviceOf(owner, deviceUuid).state.getValue()).toBe("")
+        const settled = Array.from(Y.encodeStateVector(owner.doc))
+        const second = await joinMigrated(owner)
+        converge(owner, second)
+        expect(Array.from(Y.encodeStateVector(owner.doc))).toStrictEqual(settled)
+        expect(bytesOf(second, deviceUuid)).toStrictEqual([9, 8, 7])
+    })
+
+    it("a 1 MB state syncs in one update and the room does not grow with every save", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const guest = await join(owner)
+        const size = 1 << 20
+        const blob = (seed: number): ArrayBuffer => Uint8Array.from({length: size}, (_, index) => (index * seed) & 0xFF).buffer
+        const vector = Y.encodeStateVector(guest.doc)
+        WclapStates.store(owner.project, deviceUuid, blob(3))
+        const update = Y.encodeStateAsUpdate(owner.doc, vector)
+        expect(update.length).toBeGreaterThan(size)
+        expect(update.length).toBeLessThan(size + 4096)
+        const start = performance.now()
+        Y.applyUpdate(guest.doc, update, owner)
+        console.debug(`1 MB state applied on the other peer in ${(performance.now() - start).toFixed(1)} ms`)
+        expect(bytesOf(guest, deviceUuid)).toStrictEqual(Array.from(new Uint8Array(blob(3))))
+        for (let seed = 5; seed < 15; seed += 2) {
+            WclapStates.store(owner.project, deviceUuid, blob(seed))
+            converge(owner, guest)
+        }
+        expect(Y.encodeStateAsUpdate(owner.doc).length).toBeLessThan(2 * size)
+        expect(bytesOf(guest, deviceUuid)).toStrictEqual(bytesOf(owner, deviceUuid))
+    })
+})

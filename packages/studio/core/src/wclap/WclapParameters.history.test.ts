@@ -42,3 +42,39 @@ describe("WebCLAP parameters and the undo history", () => {
         expect(device.state.getValue()).toBe("") // the preset load itself is undone
     })
 })
+
+describe("WebCLAP state bytes and the undo history", () => {
+    const setup = async () => {
+        const {Project} = await import("../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const device = project.editing.modify(() => EffectFactories.AudioNamed.Wclap
+            .create(project, skeleton.mandatoryBoxes.primaryAudioUnitBox.audioEffects, 0) as WclapDeviceBox).unwrap()
+        project.editing.modify(() => {
+            device.url.setValue("opfs:plugin")
+            device.clapId.setValue("com.example.plugin")
+            device.state.setValue(btoa(String.fromCharCode(9, 9)))
+        })
+        return {project, device, uuid: UUID.toString(device.address.uuid)}
+    }
+
+    it("a save writes the bytes and clears the legacy string, an undo restores both", async () => {
+        const {project, device, uuid} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1, 2, 3]).buffer)
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([1, 2, 3])
+        expect(device.state.getValue()).toBe("")
+        project.editing.undo()
+        expect(device.pluginState.getValue().length).toBe(0)
+        expect(device.state.getValue()).toBe(btoa(String.fromCharCode(9, 9)))
+        expect(device.url.getValue()).toBe("opfs:plugin")
+    })
+
+    it("a redo restores the saved bytes", async () => {
+        const {project, device, uuid} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([4, 5]).buffer)
+        project.editing.undo()
+        project.editing.redo()
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([4, 5])
+        expect(device.state.getValue()).toBe("")
+    })
+})

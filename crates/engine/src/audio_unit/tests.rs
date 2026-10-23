@@ -5676,3 +5676,17 @@ fn a_script_buffer_saved_as_one_blob_is_read_until_it_has_chunks() {
     engine.teardown_script_records(binding);
 }
 
+
+#[test]
+fn a_bytes_field_is_delivered_as_bytes_with_its_length() {
+    let deliveries = || core::mem::take(unsafe { crate::FIELD_DELIVERIES.get() });
+    deliveries();
+    let bytes = FieldValue::Bytes(vec![0, 1, 127, 128, 255]);
+    params::deliver_field_value(&bytes, 7, 0, 3);
+    let FieldValue::Bytes(inner) = &bytes else {unreachable!()};
+    assert_eq!(deliveries(), vec![(3, abi::FIELD_KIND_BYTES, inner.as_ptr() as u32, 5)]);
+    params::deliver_field_value(&FieldValue::Bytes(vec![]), 7, 0, 4);
+    let delivered = deliveries();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!((delivered[0].0, delivered[0].1, delivered[0].3), (4, abi::FIELD_KIND_BYTES, 0), "an empty field is an empty slice");
+}
