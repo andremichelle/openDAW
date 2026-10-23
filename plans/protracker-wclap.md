@@ -43,11 +43,13 @@ the default speed 6 a beat is 4 rows.
 
 Project and tracker position are locked: the tracker is always where it would be had it played from project beat 0.
 
-1. **Mapping.** A row is a 1/16 note (4 rows per beat), the speed splits it into ticks: a tick lasts
-   `1 / (4 * speed)` beat, speed as the routine has it after the tick. Speed changes refine a row, a pattern delay
-   (`EEx`) lasts its extra rows. `mt_init` leaves the routine 5 ticks before row 0, the snapshot pass runs them
-   silently so row 0 plays at beat 0. The pass records every tick's beat, a seek finds its tick by binary search.
-   Verified: every row of 5 modules (speeds 4, 5, 6) starts on a multiple of 1/4 beat.
+1. **Mapping.** Beats are locked, rows are not: four rows make a beat (a pattern delay `EEx` counts as its extra
+   rows), and every tick of a beat fires at an even share of it. With a constant speed that is a row per 1/16 note.
+   A shuffle (alternating speeds, kc-dancinonamiga plays 5, 3, 5, 3 = 16 ticks a beat) keeps its swing, at 187.5 BPM
+   exactly the Amiga's 50 Hz ticks. `mt_init` leaves the routine 5 ticks before row 0, the snapshot pass runs them
+   silently so row 0 plays at beat 0. The pass records every tick's beat (ending at a beat boundary after the song
+   wrapped), a seek finds its tick by binary search. Past the pass (a looping song) each beat is measured when it
+   starts, on a fork of the machine (snapshot, silent ticks, restore), about 0.1 ms per beat.
 2. **Block range.** Each process call is one engine block, the musical time inside it never jumps. The plugin needs
    the block's start and end. Start is `song_pos_beats`. End comes from standard CLAP fields:
    `end = start + frames * (tempo + tempo_inc * frames / 2) / (60 * sampleRate)`. No bridge change is needed:
