@@ -13,9 +13,14 @@ export class WclapCatalog {
 
     private constructor() {}
 
-    async tree(): Promise<WclapIndex> {
+    async trees(): Promise<{ cloud: WclapIndex, community: WclapIndex }> {
         const [cloud, community] = await Promise.all([OpenWclapAPI.get().tree(), CommunityAPI.get().wclaps()])
-        return {version: 1, folders: [...cloud.folders, ...community.folders.filter(hasContent)]}
+        return {cloud, community: {...community, folders: community.folders.filter(hasContent)}}
+    }
+
+    async tree(): Promise<WclapIndex> {
+        const {cloud, community} = await this.trees()
+        return {version: 1, folders: [...cloud.folders, ...community.folders]}
     }
 
     async all(): Promise<ReadonlyArray<WclapIndexEntry>> {return WclapIndex.flatten(await this.tree())}

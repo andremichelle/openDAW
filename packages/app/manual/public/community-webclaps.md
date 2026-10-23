@@ -8,7 +8,7 @@ shows up in every openDAW Studio, without a Studio update.
 ## Using community WebCLAPs
 
 1. Add a [WebCLAP](/manuals/devices/audio/wclap) instrument or audio effect.
-2. Click **Load Plugin > Cloud** and open the **Community** folder.
+2. Click **Load Plugin > Community**.
 3. Pick a plugin. It is downloaded the first time and stays on your computer afterwards.
 
 The source code and history of every plugin are in its folder on GitHub.

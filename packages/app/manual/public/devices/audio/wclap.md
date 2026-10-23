@@ -31,7 +31,8 @@ The box at the top shows the name and the vendor of the loaded plugin. While a p
 
 Opens the plugin menu. It only lists plugins that fit the device: instruments in an instrument, effects in an audio effect.
 
-- **Cloud** lists the plugins hosted by openDAW, arranged in folders. The **Community** folder holds the [Community WebCLAPs](/manuals/community-webclaps) shared by openDAW users. A plugin is downloaded the first time you pick it and stays on your computer afterwards.
+- **Cloud** lists the plugins hosted by openDAW, arranged in folders. A plugin is downloaded the first time you pick it and stays on your computer afterwards.
+- **Community** lists the [Community WebCLAPs](/manuals/community-webclaps) shared by openDAW users, downloaded and kept the same way.
 - **Local** lists the plugins you imported yourself.
 - **Import WebCLAP...** loads a `.wclap.tar.gz` file from your disk. If the file holds several plugins, pick one from the dropdown in the dialog that follows, the first plugin is preselected.
 
