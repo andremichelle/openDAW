@@ -350,6 +350,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             return true
         }),
         Html.watchResize(element, updateScroller),
+        Html.watchResize(containers, updateScroller),
         scrollModel.subscribe(() => devices.scrollLeft = scrollModel.position),
         Events.subscribe(element, "wheel", (event: WheelEvent) => {
             if (event.altKey) {
