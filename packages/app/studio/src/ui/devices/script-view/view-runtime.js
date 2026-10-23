@@ -328,6 +328,15 @@
             })
         })
     }
+    globalThis.addEventListener("wheel", event => {
+        if (!event.isTrusted || event.defaultPrevented) {return}
+        post({
+            type: "wheel", init: {
+                deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode, clientX: event.clientX, clientY: event.clientY,
+                metaKey: event.metaKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, altKey: event.altKey
+            }
+        })
+    })
     const receive = message => {
         if (message.type === "param") {
             paramValues.set(message.name, message.value)

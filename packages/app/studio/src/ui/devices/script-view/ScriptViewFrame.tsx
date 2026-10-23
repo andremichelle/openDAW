@@ -239,6 +239,15 @@ export const ScriptViewFrame = ({
                 key: String(key), code: String(code), metaKey: metaKey === true, ctrlKey: ctrlKey === true,
                 shiftKey: shiftKey === true, altKey: altKey === true, repeat: repeat === true
             }))
+        } else if (message.type === "wheel" && isRecord(message.init)) {
+            const {deltaX, deltaY, deltaMode, clientX, clientY, metaKey, ctrlKey, shiftKey, altKey} = message.init
+            const number = (value: unknown): number => typeof value === "number" && Number.isFinite(value) ? value : 0
+            const rect = iframe.getBoundingClientRect()
+            iframe.dispatchEvent(new WheelEvent("wheel", {
+                bubbles: true, cancelable: true, deltaX: number(deltaX), deltaY: number(deltaY), deltaMode: number(deltaMode),
+                clientX: rect.left + number(clientX), clientY: rect.top + number(clientY), metaKey: metaKey === true,
+                ctrlKey: ctrlKey === true, shiftKey: shiftKey === true, altKey: altKey === true
+            }))
         } else if (message.type === "error" && typeof message.message === "string") {
             onError(message.message.slice(0, 4096))
         } else if (message.type === "stream" && typeof message.name === "string") {

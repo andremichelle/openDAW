@@ -298,6 +298,9 @@ In the view, the class receives `host`: `host.params`, `host.data`, `host.stream
 `host.gesture` (one undo step), `host.preview` (play notes), `host.send` (reaches `message(data)` of the
 Processor) and `host.color` (the studio and display colours). Hover any of them in the code editor for details.
 
+The mouse wheel over the view scrolls the device panel. A view that uses the wheel itself calls
+`event.preventDefault()` in its wheel listener to keep it.
+
 A parameter the view controls itself does not need a knob. Mark it with `[omit-default-ui]` and attach it to the
 element that controls it, so a right click there opens the regular parameter menu (automation, modulation, MIDI
 learn, reset):
