@@ -18,6 +18,7 @@ import {
 import {
     asInstanceOf,
     Color,
+    DefaultObservableValue,
     Editing,
     EmptyExec,
     isDefined,
@@ -46,7 +47,7 @@ import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {AutomationControl} from "@/ui/components/AutomationControl"
-import {Icon} from "@/ui/components/Icon"
+import {Icon, IconCartridge} from "@/ui/components/Icon"
 import {Column} from "@/ui/devices/Column"
 import {LKR} from "@/ui/devices/constants"
 import {CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
@@ -176,12 +177,13 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         if (suffix.charAt(0) !== suffix.charAt(0).toUpperCase()) {return label}
         return suffix
     }
+    const editorIcon = new DefaultObservableValue(IconSymbol.Code)
     const toggleEditorButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 onClick={toggleEditor}
-                appearance={{framed: true, tooltip: "Toggle Code Editor"}}
-                style={{fontSize: "16px", marginTop: "4px"}}>
-            <Icon symbol={IconSymbol.Code}/>
+                appearance={{tooltip: "Toggle Code Editor", cursor: "pointer"}}
+                style={{fontSize: "14px"}}>
+            <IconCartridge lifecycle={lifecycle} symbol={editorIcon}/>
         </Button>
     )
     let lastErrorMessage = ""
@@ -192,7 +194,6 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     }
     const errorIcon: HTMLElement = (
         <div className="error hidden"
-             style={{cursor: "pointer"}}
              onclick={() => Dialogs.info({
                  headline: "Script Error",
                  message: lastErrorMessage,
@@ -369,14 +370,6 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             controlsContainer.appendChild(<div className="controls"/>)
         }
         for (const section of sections) {populateSection(terminator, section, controlsContainer)}
-        const codeEditorColumn: HTMLElement = (
-            <Column ems={LKR} color={Colors.cream} style={{height: "3.5em", minWidth: "max-content"}}>
-                <h5>Code Editor</h5>
-                {toggleEditorButton}
-                {errorIcon}
-            </Column>
-        )
-        controlsContainer.appendChild(codeEditorColumn)
         controlsTerminator.own(terminator)
     }
     const indexParamBoxes = () => {
@@ -430,7 +423,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         }),
         service.activeCodeEditor.catchupAndSubscribe(option => {
             const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
-            toggleEditorButton.classList.toggle("active", isActive)
+            editorIcon.setValue(isActive ? IconSymbol.CodeClose : IconSymbol.Code)
         }),
         box.parameters.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
         box.samples.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
@@ -462,6 +455,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                               : ScriptWindows.open(service, adapter, () => compiler.stripHeader(box.code.getValue()), className))))
                       }}
                       populateControls={() => controlsContainer}
+                      populateHeader={() => [errorIcon, toggleEditorButton]}
                       populateMeter={() => config.populateMeter({lifecycle, service, adapter})}
                       icon={config.icon}/>
     )

@@ -2,6 +2,7 @@ import css from "./DeviceEditor.sass?inline"
 import {
     Editing,
     Errors,
+    isDefined,
     isNotNull,
     Lifecycle,
     ObservableValue,
@@ -47,6 +48,7 @@ type Construct = {
     populateControls: Provider<JsxValue>
     populateMeter: Provider<JsxValue>
     createLabel?: Provider<HTMLElement>
+    populateHeader?: Provider<JsxValue>
     icon: IconSymbol
     className?: string
 }
@@ -73,7 +75,7 @@ const defaultLabelFactory = (lifecycle: Lifecycle, editing: Editing, labelField:
 export const DeviceEditor =
     ({
          lifecycle, service, adapter, populateMenu, populateControls, populateMeter,
-         createLabel, icon, className: customClassName
+         createLabel, populateHeader, icon, className: customClassName
      }: Construct) => {
         const {project} = service
         const {editing} = project
@@ -145,7 +147,7 @@ export const DeviceEditor =
                     )
                     lifecycle.own(DeviceDragging.install(project, element, adapter, color,
                         () => {dragStartedOnHeader = true}))
-                }} style={{color: color.toString()}}>
+                }} className={isDefined(populateHeader) ? "with-tools" : ""} style={{color: color.toString()}}>
                     <Icon symbol={icon} onInit={element =>
                         lifecycle.ownAll(
                             Events.subscribe(element, "pointerdown", event => event.stopPropagation()),
@@ -206,6 +208,12 @@ export const DeviceEditor =
                         lifecycle.own(availability.subscribe(apply))
                         return button
                     })()}
+                    {isDefined(populateHeader) && (
+                        <div className="header-tools" onInit={element => lifecycle.own(
+                            Events.subscribe(element, "pointerdown", event => event.stopPropagation()))}>
+                            {populateHeader()}
+                        </div>
+                    )}
                 </header>
                 <MenuButton root={MenuItem.root()
                     .setRuntimeChildrenProcedure(parent => {

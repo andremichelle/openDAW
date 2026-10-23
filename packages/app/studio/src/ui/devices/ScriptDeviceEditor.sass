@@ -7,7 +7,6 @@ component
   align-items: stretch
   align-content: start
   column-gap: 0.5em
-  margin-right: 1em
   @include mixins.Control
 
   > .controls, > .group > .controls
@@ -20,6 +19,7 @@ component
     border-radius: 0 2px 2px 0
 
     &:empty
+      grid-template-columns: repeat(3, 3.5em)
       border-radius: 3px
       outline: 1px solid rgba(white, 0.04)
       @include colors.panel-background-stripes-dark
@@ -62,11 +62,6 @@ component
     border-radius: 2px
     outline: 2px solid var(--color-red)
     background-color: color-mix(in srgb, var(--color-red) 20%, transparent)
-
-  .error
-    font-size: 16px
-    color: orange
-    cursor: default
 
   .sample-drop
     margin-top: 1px

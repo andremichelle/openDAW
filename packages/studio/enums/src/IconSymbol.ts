@@ -190,6 +190,7 @@ export enum IconSymbol {
     Algorithm,
     WebClap,
     ZoomFit,
+    CodeClose,
 }
 
 export namespace IconSymbol {
