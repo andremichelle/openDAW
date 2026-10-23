@@ -103,7 +103,9 @@ Browser checks used the maintainer's examples: create an FX send/bus, drag that 
 verify its output and the source send remain intact, fold/unfold nested mixer strips, and click long group
 rails to reveal their headers. Regression tests cover visible nested spans and FX creation/movement.
 
-Mixer group rails span a reserved row above the strips. Channel selection uses a left-edge bar, title fill/outline and subtle channel tint. The folder toggle sits to the right of its icon. Timeline header backgrounds fill
+Mixer group rails span a reserved row above the strips. Channel selection uses a top border, title
+fill/outline and subtle channel tint. Selected groups keep both their top selection border and group rail.
+The folder toggle sits to the right of its icon. Timeline header backgrounds fill
 the indentation area, with square edges and content padding. Boundary drop feedback validates the
 source, parent, sibling anchor and Output boundary before showing an insertion marker.
 

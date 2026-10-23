@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `f954e9ef-4593-4c71-973a-352823731e7b`.
+- Current refactored build: `6c053f8b-c1a3-43ab-ad5d-eaf3d9e1b9fe`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -71,3 +71,8 @@ historical evidence in `track-groups.md`.
 
 The original demo remains unchanged. Preview-only stock-asset proxy and WASM cache configuration remain
 outside the upstream PR source. The refactor updates the existing PR #496.
+
+Mixer selection follow-up: selected strips use their existing 2px top border instead of a left inset
+shadow. Name-label fill/outline and subtle tint are unchanged. Selected folders keep both their
+selection border and group rail. The production build and hosted single/multiple-selection checks pass;
+unselected borders remain transparent, and no selected strip has an inset left shadow.
