@@ -335,13 +335,11 @@ should only toggle.
 The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
 whether it is automated or modulated, `value` already includes both.
 
-Community scripts with views: Envelope Synth, Harmonic Synth (drawable partials, preview keys, live spectrum) and Wave Draw (a drawable wavetable).
-
 ---
 
 ## 9. Community Scripts
 
-Select **Community Scripts** in the code editor toolbar to browse instruments shared by the openDAW community, for example Simple Sine Synth and Grain Synthesizer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
+Select **Community Scripts** in the code editor toolbar to browse instruments shared by the openDAW community. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
 
 ---
 

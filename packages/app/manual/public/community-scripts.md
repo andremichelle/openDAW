@@ -10,7 +10,7 @@ shows up in every openDAW Studio, without a Studio update.
 ## Using community scripts
 
 1. In Werkstatt, Apparat or Spielwerk, open the code editor and click **Community Scripts** in its toolbar.
-2. In the code editor for project scripts, choose **File > Community Scripts...**.
+2. In the code editor for project scripts, click **Community Scripts** in its top bar.
 3. Search by name, author or tag, select a script to read its description and code, and click **Open**.
 
 Every script links to its folder on GitHub, where you can read its history or suggest an improvement.

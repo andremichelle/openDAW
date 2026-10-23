@@ -43,7 +43,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
 import {ScriptSession} from "./code-editor/ScriptSession"
-import {ScriptTemplates, StarterScript} from "./code-editor/StockScripts"
+import {ScriptTemplates} from "./code-editor/StockScripts"
 
 const isMimeType = (value: string): value is `${string}/${string}` => /^[^/]+\/[^/]+$/.test(value)
 const isExtension = (value: string): value is `.${string}` => value.length > 1 && value.startsWith(".")
@@ -137,14 +137,13 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             })
     }, scriptWorkerUrl)
     const storage = ScriptStorage.get()
-    const stockReady = storage.syncStock([StarterScript])
     return (
         <div className={className}>
             <Await
-                factory={() => Promise.all([loadMonacoSetup().then(({monaco}) => monaco), stockReady])}
+                factory={() => loadMonacoSetup().then(({monaco}) => monaco)}
                 failure={(props) => EditorLoadFailure(props)}
                 loading={() => ThreeDots()}
-                success={([monaco]) => {
+                success={monaco => {
                     const {editor, model, container} = MonacoFactory.create({
                         monaco, lifecycle, language: "typescript",
                         uri: "file:///main.ts", initialCode: ScriptSession.savedSource.getValue(), keepExisting: true
@@ -321,8 +320,6 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                             .setTriggerProcedure(() => newScript(ScriptTemplates.Edit, "Edit Script")),
                         MenuItem.default({label: "Open...", shortcut: Shortcuts.open.format(), separatorBefore: true})
                             .setTriggerProcedure(open),
-                        MenuItem.default({label: "Community Scripts..."})
-                            .setTriggerProcedure(openCommunity),
                         MenuItem.default({label: "Save", shortcut: Shortcuts.save.format()})
                             .setTriggerProcedure(save),
                         MenuItem.default({label: "Save As...", shortcut: Shortcuts.saveAs.format()})
@@ -362,8 +359,13 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                                 </Button>
                                 <Button lifecycle={lifecycle}
                                         onClick={() => open().finally()}
-                                        appearance={{tooltip: "Browse scripts"}}>
-                                    <span>Scripts</span> <Icon symbol={IconSymbol.Code}/>
+                                        appearance={{tooltip: "Browse your scripts"}}>
+                                    <span>My Scripts</span> <Icon symbol={IconSymbol.Code}/>
+                                </Button>
+                                <Button lifecycle={lifecycle}
+                                        onClick={() => openCommunity().finally()}
+                                        appearance={{color: Colors.dark, cursor: "pointer", tooltip: "Browse scripts shared by the community"}}>
+                                    <span>Community Scripts</span>
                                 </Button>
                                 {title}
                             </header>
