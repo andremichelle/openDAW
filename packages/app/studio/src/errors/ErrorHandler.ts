@@ -165,6 +165,11 @@ export class ErrorHandler {
             event.preventDefault()
             return true
         }
+        if (ErrorInfo.isSyntheticRejection(event)) {
+            event.preventDefault()
+            this.#notifyBrowserInternal("synthetic unhandledrejection event without a promise")
+            return true
+        }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
         if (ErrorInfo.isForeignRealmError(reason)) {
