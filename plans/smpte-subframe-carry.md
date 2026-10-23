@@ -10,4 +10,4 @@ AI-assisted: this change was written with Claude Code (an AI coding assistant).
 
 ## Not covered
 - The clock display in `AbsoluteUnitDisplay.tsx` was not checked in a browser.
-- 29.97 fps keeps the existing convention of 30 frame slots per second (`Math.ceil(fps)`).
+- Simplified on merge: one rounding on the subframe grid of the second, one carry into the next second. At 29.97 fps the carry happens at 2397.6 subframes.

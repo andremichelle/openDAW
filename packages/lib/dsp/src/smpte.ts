@@ -20,20 +20,15 @@ const toSeconds = (time: SMPTETime, fps: FrameRate): number =>
     time.subframes / (fps * SubframesPerFrame)
 
 const fromSeconds = (seconds: number, fps: FrameRate): SMPTETime => {
-    const framesPerSecond = Math.ceil(fps)
     const wholeSeconds = Math.floor(seconds)
-    const totalFrames = (seconds - wholeSeconds) * fps
-    const flooredFrames = Math.floor(totalFrames)
-    const roundedSubframes = Math.round((totalFrames - flooredFrames) * SubframesPerFrame)
-    const carryFrame = roundedSubframes === SubframesPerFrame
-    const subframes = carryFrame ? 0 : roundedSubframes
-    const frameIndex = flooredFrames + (carryFrame ? 1 : 0)
-    const carrySecond = frameIndex >= framesPerSecond
-    const frames = carrySecond ? 0 : frameIndex
-    const totalSeconds = wholeSeconds + (carrySecond ? 1 : 0)
-    const hours = Math.floor(totalSeconds / 3600.0)
-    const minutes = Math.floor((totalSeconds % 3600.0) / 60.0)
-    return {hours, minutes, seconds: totalSeconds % 60, frames, subframes}
+    const ticks = Math.round((seconds - wholeSeconds) * fps * SubframesPerFrame)
+    const carry = ticks >= fps * SubframesPerFrame
+    const totalSeconds = carry ? wholeSeconds + 1 : wholeSeconds
+    const subframesInSecond = carry ? 0 : ticks
+    return {
+        hours: Math.floor(totalSeconds / 3600), minutes: Math.floor(totalSeconds / 60) % 60, seconds: totalSeconds % 60,
+        frames: Math.floor(subframesInSecond / SubframesPerFrame), subframes: subframesInSecond % SubframesPerFrame
+    }
 }
 
 const toString = (time: SMPTETime): string => {
