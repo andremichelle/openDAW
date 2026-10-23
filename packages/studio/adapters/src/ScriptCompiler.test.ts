@@ -183,3 +183,51 @@ describe("ScriptCompiler.wrapView", () => {
         expect(() => new received[0].View().push()).toThrow(TypeError)
     })
 })
+
+describe("ScriptCompiler resets a @label name when the script drops @label", () => {
+    const NAMED: ScriptCompiler.Config = {...CONFIG, defaultName: "Werkstatt"}
+    const compileWith = async (config: ScriptCompiler.Config, label: string, ...sources: ReadonlyArray<string>) => {
+        const {context} = createContext()
+        const {editing, device} = createDevice()
+        editing.modify(() => device.label.setValue(label))
+        const compiler = ScriptCompiler.create(config)
+        for (const source of sources) {await compiler.compile(context, editing, device, source)}
+        return device.label.getValue()
+    }
+
+    it("goes back to the default name", async () => {
+        expect(await compileWith(NAMED, "Werkstatt", `// @label Dot\n${CODE_A}`, CODE_B)).toBe("Werkstatt")
+    })
+
+    it("keeps a name given by hand", async () => {
+        expect(await compileWith(NAMED, "Mine", CODE_A, CODE_B)).toBe("Mine")
+    })
+
+    it("keeps a name given by hand after a @label script", async () => {
+        const {context} = createContext()
+        const {editing, device} = createDevice()
+        const compiler = ScriptCompiler.create(NAMED)
+        await compiler.compile(context, editing, device, `// @label Dot\n${CODE_A}`)
+        editing.modify(() => device.label.setValue("Mine"))
+        await compiler.compile(context, editing, device, CODE_B)
+        expect(device.label.getValue()).toBe("Mine")
+    })
+
+    it("a new @label still replaces the name", async () => {
+        expect(await compileWith(NAMED, "Werkstatt", `// @label Dot\n${CODE_A}`, `// @label Dash\n${CODE_B}`)).toBe("Dash")
+    })
+
+    it("keeps the name without a default name in the config", async () => {
+        expect(await compileWith(CONFIG, "Werkstatt", `// @label Dot\n${CODE_A}`, CODE_B)).toBe("Dot")
+    })
+
+    it("undo brings the @label name back", async () => {
+        const {context} = createContext()
+        const {editing, device} = createDevice()
+        const compiler = ScriptCompiler.create(NAMED)
+        await compiler.compile(context, editing, device, `// @label Dot\n${CODE_A}`)
+        await compiler.compile(context, editing, device, CODE_B)
+        editing.undo()
+        expect(device.label.getValue()).toBe("Dot")
+    })
+})

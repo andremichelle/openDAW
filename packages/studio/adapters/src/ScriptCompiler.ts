@@ -1,4 +1,4 @@
-import {asInstanceOf, Editing, isDefined, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, Option, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
@@ -214,6 +214,11 @@ const reconcileRecords = (hub: Field<Pointers.ScriptRecord>, declared: ReadonlyA
     }
 }
 
+const previousLabel = (code: string, headerPattern: RegExp): Option<string> => {
+    const result = tryCatch(() => ScriptDeclaration.parseLabel(parseHeader(code, headerPattern).userCode))
+    return result.status === "success" ? result.value : Option.None
+}
+
 // code without a header was never compiled, so it declared nothing yet
 const previousCollections = (code: string, headerPattern: RegExp): ReadonlyArray<CollectionDeclaration> => {
     const {userCode, update} = parseHeader(code, headerPattern)
@@ -355,6 +360,7 @@ export namespace ScriptCompiler {
         readonly headerTag: string
         readonly registryName: string
         readonly functionName: string
+        readonly defaultName?: string
     }
 
     // The wrapped, registry-populating source for a script (`{update, create, params, samples}`), exposed so the
@@ -397,7 +403,12 @@ export namespace ScriptCompiler {
             claimRegistration(audioContext, deviceBox, newUpdate)
             const modifier = () => {
                 deviceBox.code.setValue(createHeader(newUpdate) + userCode)
-                label.ifSome(name => deviceBox.label.setValue(name))
+                if (label.nonEmpty()) {
+                    deviceBox.label.setValue(label.unwrap())
+                } else if (isDefined(config.defaultName)
+                    && previousLabel(previousCode, headerPattern).contains(deviceBox.label.getValue())) {
+                    deviceBox.label.setValue(config.defaultName)
+                }
                 reconcileParameters(deviceBox, params, order)
                 reconcileSamples(deviceBox, samples, order)
                 if (isDefined(deviceBox.sideChains)) {reconcileSidechains(deviceBox.sideChains, sidechains)}

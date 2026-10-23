@@ -50,7 +50,7 @@ Set the device name using a `// @label` comment:
 // @label My Synth
 ```
 
-When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name. An empty `@label` (without a name) causes a compile error.
+When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name, unless that name came from the previous `@label`: then the device goes back to its default name. An empty `@label` (without a name) causes a compile error.
 
 ---
 
