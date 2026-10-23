@@ -20,6 +20,7 @@ import {
     ArrayField,
     Box,
     BoxGraph,
+    ByteArrayField,
     Field,
     ObjectField,
     optimizeUpdates,
@@ -28,6 +29,7 @@ import {
     Update
 } from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
+import {YBytes} from "./YBytes"
 import {deterministicReconcile} from "./Reconcile"
 import * as Y from "yjs"
 
@@ -51,11 +53,12 @@ export class YSync<T> implements Terminable {
         console.debug("populate")
         assert(boxes.size === 0, "boxes must be empty")
         const sync = new YSync<T>({boxGraph, boxes})
+        const generation = sync.#generator.next()
         asDefined(boxes.doc, "Y.Map is not connect to Y.Doc")
             .transact(() => boxGraph.boxes()
                 .forEach(box => {
                     const key = UUID.toString(box.address.uuid)
-                    const map = YMapper.createBoxMap(box)
+                    const map = YMapper.createBoxMap(box, generation)
                     boxes.set(key, map)
                 }), "[openDAW] populate")
         return sync
@@ -102,6 +105,8 @@ export class YSync<T> implements Terminable {
     readonly #boxes: Y.Map<unknown>
     readonly #updates: Array<Update>
     readonly #pathPrefix: ReadonlyArray<string | number>
+    readonly #generator: YBytes.Generator
+    readonly #touchedBytes: Array<ByteArrayField> = []
 
     #ignoreUpdates: boolean = false
     #publishFrom: Option<int> = Option.None
@@ -112,6 +117,7 @@ export class YSync<T> implements Terminable {
         this.#boxes = boxes
         this.#updates = []
         this.#pathPrefix = YSync.#computePathPrefix(boxes)
+        this.#generator = new YBytes.Generator(asDefined(boxes.doc, "Y.Map is not connect to Y.Doc").clientID)
         this.#terminator.ownAll(this.#setupYjs(), this.#setupOpenDAW())
     }
 
@@ -168,11 +174,14 @@ export class YSync<T> implements Terminable {
                     return
                 }
                 console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
+                this.#repairTorn()
                 return
             }
             const highLevelConflict = this.#conflict.mapOr(check => check(), false)
             if (highLevelConflict) {
                 this.#rollbackTransaction(events)
+            } else {
+                this.#repairTorn()
             }
         }
         this.#boxes.observeDeep(eventHandler)
@@ -184,8 +193,17 @@ export class YSync<T> implements Terminable {
     // replays through here before repairing.
     #applyEvents(events: Array<Y.YEvent<any>>): ReadonlyArray<Box> {
         const touched: Array<Box> = []
+        this.#touchedBytes.length = 0
         for (const event of events) {
             const path = this.#normalizePath(event.path)
+            // an event inside a chunked bytes field: its keys are chunks, not fields, the field is read whole
+            const chunked = this.#bytesFieldAt(path)
+            if (chunked !== null) {
+                YMapper.fromY(chunked, this.#storedAt(path))
+                this.#touchedBytes.push(chunked)
+                touched.push(chunked.box)
+                continue
+            }
             const keys = event.changes.keys
             for (const [key, change] of keys.entries()) {
                 if (YSync.debugging) {
@@ -249,6 +267,42 @@ export class YSync<T> implements Terminable {
         return path.slice(prefix.length)
     }
 
+    // the bytes field a Y.Map at `path` stores, if it is one
+    #bytesFieldAt(path: ReadonlyArray<string | number>): ByteArrayField | null {
+        if (path.length < 3) {return null}
+        const vertex = this.#boxGraph.findVertex(YMapper.pathToAddress(path.slice(0, -1), String(path[path.length - 1]))).unwrapOrNull()
+        return vertex instanceof ByteArrayField ? vertex : null
+    }
+
+    #storedAt(path: ReadonlyArray<string | number>): unknown {
+        const [uuidAsString, fieldsKey, ...fieldKeys] = path
+        const parent = YMapper.findMap((this.#boxes.get(String(uuidAsString)) as Y.Map<unknown>)
+            .get(String(fieldsKey)) as Y.Map<unknown>, fieldKeys.slice(0, -1))
+        return parent.get(String(fieldKeys[fieldKeys.length - 1]))
+    }
+
+    // a remote batch that left a chunked field torn: the client that owns the winning write puts its value back
+    #repairTorn(): void {
+        const fields = this.#touchedBytes.splice(0)
+        if (fields.length === 0) {return}
+        const client = this.#getDoc().clientID
+        const repairs = fields.flatMap(field => {
+            const stored = this.#storedField(field)
+            if (!YBytes.isChunked(stored) || !YBytes.ownsRepair(YBytes.read(stored), client)) {return []}
+            return [{stored, value: field.getValue()}]
+        })
+        if (repairs.length === 0) {return}
+        this.#getDoc().transact(() => repairs.forEach(({stored, value}) => YBytes.repair(stored, value)), "[openDAW] repair")
+    }
+
+    #storedField(field: ByteArrayField): unknown {
+        const key = UUID.toString(field.address.uuid)
+        const boxObject = this.#boxes.get(key)
+        if (!isInstanceOf(boxObject, Y.Map)) {return undefined}
+        const parent = this.#resolveFieldMap(boxObject, key, field.address.fieldKeys)
+        return parent?.get(String(field.address.fieldKeys[field.address.fieldKeys.length - 1]))
+    }
+
     #updateValue(path: ReadonlyArray<string | number>, key: string): Box {
         const address = YMapper.pathToAddress(path, key)
         const vertex = this.#boxGraph.findVertex(address)
@@ -258,6 +312,8 @@ export class YSync<T> implements Terminable {
             .get(String(uuidAsString)) as Y.Map<unknown>)
             .get(String(fieldsKey)) as Y.Map<unknown>, fieldKeys)
         assert(vertex.isField(), "Vertex must be either Primitive or Pointer")
+        const bytes = this.#bytesFieldAt([...path, key])
+        if (bytes !== null) {this.#touchedBytes.push(bytes)}
         vertex.accept({
             visitField: (_: Field) => panic("Vertex must be either Primitive or Pointer"),
             visitArrayField: (_: ArrayField) => panic("Vertex must be either Primitive or Pointer"),
@@ -352,7 +408,7 @@ export class YSync<T> implements Terminable {
                 // optimizeUpdates should have filtered this, but guard in case.
                 return
             }
-            this.#boxes.set(key, YMapper.createBoxMap(optBox.unwrap()))
+            this.#boxes.set(key, YMapper.createBoxMap(optBox.unwrap(), this.#generator.next()))
         } else if (update.type === "primitive") {
             const key = UUID.toString(update.address.uuid)
             const boxObject = this.#boxes.get(key)
@@ -362,8 +418,12 @@ export class YSync<T> implements Terminable {
             }
             const field = this.#resolveFieldMap(boxObject, key, update.address.fieldKeys)
             if (field === undefined) {return}
-            field.set(String(update.address.fieldKeys[update.address.fieldKeys.length - 1]),
-                YMapper.toY(update.newValue))
+            const fieldKey = String(update.address.fieldKeys[update.address.fieldKeys.length - 1])
+            if (update.newValue instanceof Int8Array) {
+                YBytes.write(field, fieldKey, update.newValue, this.#generator.next())
+            } else {
+                field.set(fieldKey, YMapper.toY(update.newValue))
+            }
         } else if (update.type === "pointer") {
             const key = UUID.toString(update.address.uuid)
             const boxObject = this.#boxes.get(key)

@@ -175,12 +175,37 @@ impl BoxGraph {
     /// not O(all boxes) — the difference between a silent selection and an audible dropout.
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
         self.affected.clear();
-        for update in updates {
-            self.apply(update, registry)?;
-            self.update_edges(update);
+        if !updates.iter().any(|update| matches!(update, Update::BytesSplice {..})) {
+            for update in updates {
+                self.apply(update, registry)?;
+                self.update_edges(update);
+            }
+            self.dispatch(updates);
+            return Ok(());
         }
-        self.dispatch(updates);
+        // a splice reads the field as the updates before it left it, so each one is resolved right before it applies
+        let mut resolved = Vec::with_capacity(updates.len());
+        for update in updates {
+            let update = self.resolve(update)?;
+            self.apply(&update, registry)?;
+            self.update_edges(&update);
+            resolved.push(update);
+        }
+        self.dispatch(&resolved);
         Ok(())
+    }
+
+    /// A bytes splice as the `Primitive` it makes of the field's current value, any other update as it is.
+    fn resolve(&self, update: &Update) -> Result<Update, Error> {
+        let Update::BytesSplice {address, offset, delete, bytes} = update else {return Ok(update.clone())};
+        let Some(FieldValue::Bytes(current)) = self.field_value(address) else {return Err(Error::BadSplice)};
+        let end = offset.checked_add(*delete).ok_or(Error::BadSplice)?;
+        if end > current.len() {return Err(Error::BadSplice)}
+        let mut value = Vec::with_capacity(current.len() - delete + bytes.len());
+        value.extend_from_slice(&current[..*offset]);
+        value.extend_from_slice(bytes);
+        value.extend_from_slice(&current[end..]);
+        Ok(Update::Primitive {address: address.clone(), old: FieldValue::Bytes(current.clone()), new: FieldValue::Bytes(value)})
     }
 
     /// Notify subscribers after a transaction. The subscriptions are lifted out of `self` for the
@@ -315,7 +340,8 @@ impl BoxGraph {
             Update::New {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
             Update::Delete {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Primitive {address, new, ..} => self.set_field(address, new.clone()),
-            Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone()))
+            Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone())),
+            Update::BytesSplice {..} => Err(Error::BadSplice)
         }
     }
 
@@ -324,7 +350,8 @@ impl BoxGraph {
             Update::New {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Delete {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
             Update::Primitive {address, old, ..} => self.set_field(address, old.clone()),
-            Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone()))
+            Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone())),
+            Update::BytesSplice {..} => Err(Error::BadSplice)
         }
     }
 
@@ -398,7 +425,7 @@ impl BoxGraph {
                     self.edge_connect(address.clone(), target.clone());
                 }
             }
-            Update::Primitive {..} => {}
+            Update::Primitive {..} | Update::BytesSplice {..} => {}
         }
     }
 

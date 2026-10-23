@@ -1,10 +1,11 @@
-import {Arrays, ByteArrayInput, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {Arrays, ByteArrayInput, isDefined, Option, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {BoxGraph} from "./graph"
 import {Address} from "./address"
 import {Synchronization, UpdateTask} from "./sync"
 import {PointerField} from "./pointer"
-import {PrimitiveField, PrimitiveValues} from "./primitive"
+import {ByteArrayField, PrimitiveField, PrimitiveValues} from "./primitive"
+import {BytesSplice} from "./bytes-splice"
 
 // Applies forward-only tasks to a graph. The caller owns the transaction, so this works inside an
 // undoable modification as well as inside a plain sync transaction.
@@ -17,6 +18,12 @@ export const applyUpdateTasks = <M>(graph: BoxGraph<M>, updates: ReadonlyArray<U
             (graph.findVertex(Address.reconstruct(update.address))
                 .unwrap(() => `Could not find primitive field ${update.address}`) as PrimitiveField)
                 .setValue(update.value as PrimitiveValues)
+        } else if (type === "update-bytes") {
+            const field = graph.findVertex(Address.reconstruct(update.address))
+                .unwrap(() => `Could not find bytes field ${update.address}`)
+            if (!(field instanceof ByteArrayField)) {return panic(`${update.address} is no bytes field`)}
+            field.setValue(BytesSplice.apply(field.getValue(),
+                {offset: update.offset, deleteCount: update.deleteCount, insert: update.bytes}))
         } else if (type === "update-pointer") {
             (graph.findVertex(Address.reconstruct(update.address))
                 .unwrap(() => `Could not find pointer field ${update.address}`) as PointerField)

@@ -10,6 +10,7 @@ if ((globalThis as any)[key]) {
 export * from "./address"
 export * from "./array"
 export * from "./box"
+export * from "./bytes-splice"
 export * from "./constraints"
 export * from "./dispatchers"
 export * from "./editing"

@@ -22,6 +22,8 @@ pub enum Error {
     UnknownBox,
     UnknownUpdate,
     AddressNotFound,
+    /// A bytes splice that does not fit the field it lands on (no bytes field, or outside its value).
+    BadSplice,
 }
 
 impl From<bytes::ByteError> for Error {

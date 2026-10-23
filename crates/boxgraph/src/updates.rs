@@ -19,6 +19,10 @@ pub enum Update {
     Delete {uuid: Uuid, name: String, settings: Vec<u8>},
     Primitive {address: Address, old: FieldValue, new: FieldValue},
     Pointer {address: Address, old: Option<Address>, new: Option<Address>},
+    /// A bytes field changed in one range (`update-bytes` of the forward stream): `delete` bytes at `offset` give
+    /// way to `bytes`. The graph resolves it into a `Primitive` against the field's value when it applies it, so
+    /// nothing after `transaction` ever sees one.
+    BytesSplice {address: Address, offset: usize, delete: usize, bytes: Vec<u8>},
 }
 
 fn primitive_field_type(name: &str) -> Result<FieldType, Error> {
@@ -125,6 +129,14 @@ pub fn encode(writer: &mut ByteWriter, updates: &[Update]) {
                 write_value(writer, old);
                 write_value(writer, new)
             }
+            Update::BytesSplice {address, offset, delete, bytes} => {
+                writer.write_string("update-bytes");
+                address.write(writer);
+                writer.write_int(*offset as i32);
+                writer.write_int(*delete as i32);
+                writer.write_int(bytes.len() as i32);
+                writer.write_raw(bytes)
+            }
         }
     }
 }
@@ -155,6 +167,14 @@ pub fn decode_forward(reader: &mut ByteReader) -> Result<Vec<Update>, Error> {
                 let field_type = primitive_field_type(&reader.read_string()?)?;
                 let value = read_value(reader, &field_type)?;
                 Update::Primitive {address, old: value.clone(), new: value}
+            },
+            "update-bytes" => {
+                let address = Address::read(reader)?;
+                let offset = reader.read_int()?;
+                let delete = reader.read_int()?;
+                let length = reader.read_int()?;
+                if offset < 0 || delete < 0 || length < 0 {return Err(Error::BadSplice)}
+                Update::BytesSplice {address, offset: offset as usize, delete: delete as usize, bytes: reader.read_raw(length as usize)?}
             },
             "update-pointer" => Update::Pointer {
                 address: Address::read(reader)?,

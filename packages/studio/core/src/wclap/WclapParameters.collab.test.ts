@@ -228,3 +228,44 @@ describe("WclapStates in a live room", () => {
         expect(bytesOf(guest, deviceUuid)).toStrictEqual(bytesOf(owner, deviceUuid))
     })
 })
+
+describe("WclapStates range sync in a live room", () => {
+    const deviceOf = (peer: Peer, deviceUuid: string): WclapDeviceBox =>
+        peer.project.boxGraph.findBox<WclapDeviceBox>(UUID.parse(deviceUuid)).unwrap()
+
+    it("a state that differs from the last one in one byte sends about one chunk, not the whole state", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const guest = await join(owner)
+        const state = Uint8Array.from({length: 1 << 20}, (_, index) => (index * 31) & 0xff)
+        WclapStates.store(owner.project, deviceUuid, state.slice().buffer)
+        converge(owner, guest)
+        const next = state.slice()
+        next[400_000] ^= 0xff
+        const vector = Y.encodeStateVector(guest.doc)
+        WclapStates.store(owner.project, deviceUuid, next.buffer)
+        const update = Y.encodeStateAsUpdate(owner.doc, vector)
+        expect(update.length).toBeLessThan(16 * 1024 + 4096)
+        Y.applyUpdate(guest.doc, update, owner)
+        const received = new Uint8Array(deviceOf(guest, deviceUuid).pluginState.getValue().slice().buffer)
+        expect(received.length).toBe(next.length)
+        expect(received.every((byte, index) => byte === next[index])).toBe(true)
+    })
+
+    it("a state saved with a pattern inserted grows the state by its new bytes only", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const guest = await join(owner)
+        const state = Uint8Array.from({length: 200_000}, (_, index) => (index * 7) & 0xff)
+        WclapStates.store(owner.project, deviceUuid, state.slice().buffer)
+        converge(owner, guest)
+        const next = new Uint8Array(state.length + 1024)
+        next.set(state.subarray(0, 190_000))
+        next.set(state.subarray(190_000), 191_024)
+        const vector = Y.encodeStateVector(guest.doc)
+        WclapStates.store(owner.project, deviceUuid, next.buffer)
+        // an insert moves every chunk behind it, so this is honest about the cost: the tail travels
+        const update = Y.encodeStateAsUpdate(owner.doc, vector)
+        expect(update.length).toBeLessThan(next.length - 150_000)
+        Y.applyUpdate(guest.doc, update, owner)
+        expect(deviceOf(guest, deviceUuid).pluginState.getValue().length).toBe(next.length)
+    })
+})

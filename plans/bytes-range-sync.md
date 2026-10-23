@@ -113,3 +113,29 @@ Options:
 2. Chunk size: 16 KB keeps a one byte edit small and a 1 MB value at 64 map entries. Smaller chunks mean more entries,
    larger chunks more bytes per edit.
 3. Should `ScriptBufferChunkBox` move onto chunked byte fields later? It solved the same problem with child boxes.
+
+## Result (2026-10-23)
+
+1. **Ranges come from a diff, not a hint.** `BytesSplice.of(old, new)` finds the common prefix and suffix of every
+   bytes update, so `setValue`, `setBytes`, undo and redo all travel as ranges without carrying anything. A range is a
+   splice (offset, bytes removed, bytes inserted), which also covers inserts and removals in the middle. One linear scan
+   per bytes update. `ByteArrayField` gained `setBytes`, `setByte` and `setLength`.
+2. **Engine.** `UpdateTasks.of` (lib-box) sends `update-bytes` when the splice is smaller than the value. Rust decodes
+   it as `Update::BytesSplice` and resolves it inside `transaction` against the field as the updates before it left
+   it, into an ordinary `Primitive`, so observers, devices and the checksum never see a splice. `Error::BadSplice` for
+   a splice that does not fit.
+3. **Yjs.** Values up to one chunk (16 KB) stay a plain `Uint8Array`, as before, larger ones become a chunk map with a
+   meta entry. Writes only touch differing chunks. Atomicity is the generation tag (option 1): each chunk stores its
+   writer's generation, the meta entry the generation every chunk must have. A torn field is delivered to nobody, the
+   client owning the meta entry's write puts its chunks back. Old rooms with a large plain value are read and chunked
+   on the first write.
+4. **ProTracker** saves state version 2: the module with room for every pattern. A position or pattern edit changes
+   1 to 27 bytes of the state, a step 3, a sample header 30. Version 1 still loads.
+5. **Tests.** lib-box `bytes.test.ts` (26: splice cases, 5000 random edits, field methods, undo and redo, tasks, a
+   mirror through 300 random transactions), Rust `bytes_splice.rs` (11), core-wasm `bytes-range-mirror.test.ts` (6,
+   TS against the Rust engine), core `YBytes.test.ts` (21: stored form, one chunk per edit, late joiner, old rooms,
+   chunk keys never read as fields, concurrent edits of different and same chunks, growth against edits, three peers,
+   a torn field whose owner is away, 40 random rounds), `WclapParameters.collab.test.ts` (2 more), ProTracker native
+   state tests (17).
+6. **Open.** A diff costs a scan per bytes update on the main thread (about 1 ms per MB). An insert in the middle of a
+   chunked value moves every chunk behind it, so it sends the tail.

@@ -288,6 +288,27 @@ export class ByteArrayField<E extends PointerTypes = UnreferenceableType> extend
         return this.getValue() === value
     }
     clamp(value: Readonly<Int8Array>): Readonly<Int8Array> {return value}
+    /** Writes `bytes` at `offset` into a copy of the value, growing it (zero filled) if they reach past its end. */
+    setBytes(offset: int, bytes: Readonly<Int8Array>): void {
+        if (!Number.isInteger(offset) || offset < 0) {return panic(`setBytes: invalid offset ${offset}`)}
+        const current = this.getValue()
+        const end = offset + bytes.length
+        if (end <= current.length && bytes.every((byte, index) => current[offset + index] === byte)) {return}
+        const next = new Int8Array(Math.max(current.length, end))
+        next.set(current)
+        next.set(bytes, offset)
+        this.setValue(next)
+    }
+    setByte(index: int, value: int): void {this.setBytes(index, new Int8Array([value]))}
+    /** Cuts the value or zero extends it to `length` bytes. */
+    setLength(length: int): void {
+        if (!Number.isInteger(length) || length < 0) {return panic(`setLength: invalid length ${length}`)}
+        const current = this.getValue()
+        if (length === current.length) {return}
+        const next = new Int8Array(length)
+        next.set(current.subarray(0, length))
+        this.setValue(next)
+    }
     read(input: DataInput): void {
         const bytes: Int8Array = new Int8Array(input.readInt())
         input.readBytes(bytes)
