@@ -120,7 +120,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             editing.modify(() => adapter.box.groupCollapsed.toggle())
         }}/>
         lifecycle.own(adapter.box.groupCollapsed.catchupAndSubscribe(field => {
-            folderToggle.textContent = field.getValue() ? "▸" : "▾"
+            folderToggle.textContent = field.getValue() ? "▾" : "▸"
             folderToggle.setAttribute("aria-expanded", String(!field.getValue()))
             folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
             folderToggle.title = field.getValue() ? "Expand group" : "Collapse group"
