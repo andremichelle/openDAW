@@ -14,8 +14,8 @@ Groups may contain other groups.
 - Collapse hides descendants without changing playback. The folded arrangement row shows thin lines for
   descendant note/audio regions at their original times and colors. Group rows resize and retain their height.
 - Double-click a group title to rename it. Right-click and the three-dot button use the same track menu.
-- Duplicate keeps copies inside their original parent. Selected sibling copies form one block per channel category after the last
-  selected sibling in that category, in display order. Selections across folders create a block in each original folder.
+- Duplicate keeps copies inside their original parent. Selected sibling copies form one block after the last
+  selected sibling, in display order. Selections across folders create a block in each original folder.
   Selecting a folder and its descendant copies the subtree once. New copies become the track selection.
 - Delete removes the folder and its complete nested subtree in one undoable action.
 - Ungroup (Keep Tracks) promotes the children and removes only the group's processing.
@@ -27,7 +27,8 @@ Groups may contain other groups.
 existing pointer ordinals. Old projects default to ungrouped. Generated TypeScript boxes and the Rust/WASM
 registry must be rebuilt together after schema changes.
 
-`AudioUnitGroups` supplies hierarchy, depth-first order and visibility. `Project.grouping` owns undoable
+`AudioUnitGroups` supplies hierarchy and command queries; `Project.audioUnitLayout` shares channel order,
+visibility, indentation and boundaries between timeline and mixer. See `track-layout-refactor.md`. `Project.grouping` owns undoable
 membership, ordering, routing and duplication operations. `Project.trackSelection` is local UI state,
 independent of active device editing and clip/region selection. Hidden rows leave timeline hit testing.
 
@@ -71,16 +72,15 @@ Synthetic render checks do not establish a subjective listening assessment or fu
 
 Hierarchy ordering builds parent buckets once. Subtree queries visit child hubs instead of scanning unrelated
 channels. Timeline changes coalesce at the graph transaction boundary, before painting and hit testing.
-Timeline and mixer sorts use an index map. Folded overviews ignore effect and mixer parameter edits.
+Timeline and mixer consume a shared layout snapshot. Folded overviews ignore effect and mixer parameter edits.
 
 A synthetic browser project with 80 folders and 160 instrument children measured duplicate-to-second-frame
 latency of 27.15 seconds before these changes and 0.44 seconds after them. Single-track deletion measured
 0.69 seconds before and 0.31 seconds after. These single-run measurements include the browser display cycle
 and temporary timing instrumentation; they are not guarantees for other projects or hardware.
 
-Each sibling list follows group buses, instruments, FX buses, then Output. Positioned moves and duplication
-preserve relative order within each category. Category boundaries also apply inside folders. Output remains
-the final top-level channel. Mixer folders use
+Each sibling list follows saved indices, with Output kept last. New groups take the first selected
+sibling slot; positioned moves and duplicate blocks retain their requested order. Mixer folders use
 the same persistent collapse state as the arrangement and keep their volume, mute, solo and effects controls.
 
 General audio-unit transfers expand group roots to full subtrees, including cross-project and delete-source
@@ -93,12 +93,11 @@ explicitly preserves it.
 The layout stays flat. `GroupRails` uses grid spans over the visible, depth-first unit list, so each folder
 has a continuous boundary across the existing row/column gaps. Nested folders add inset rails. Selected
 group rails cover the complete visible subtree. Clicking a rail selects and reveals its group header.
-The mixer mirrors the boundary below its strips, with space reserved for each nesting level.
+The mixer displays the boundary above its strips, with space reserved for each nesting level.
 
 Single-lane devices no longer show an isolated tree stub. Captured-pointer mixer handles suppress the
-browser focus outline. New-channel insertion skips complete folder subtrees; new instruments follow
-folders, and new FX buses follow instruments before Output. Explicit moves retain their requested position
-within the destination category; folder subtrees remain contiguous.
+browser focus outline. New-channel insertion skips complete folder subtrees; browser instruments follow the selected track inside its parent group, and new FX buses use their default
+slot before Output. Explicit moves retain their requested position; folder subtrees remain contiguous.
 
 Browser checks used the maintainer's examples: create an FX send/bus, drag that bus to another root boundary,
 verify its output and the source send remain intact, fold/unfold nested mixer strips, and click long group
@@ -106,7 +105,7 @@ rails to reveal their headers. Regression tests cover visible nested spans and F
 
 Mixer group rails span a reserved row above the strips. Channel selection uses a left-edge bar, title fill/outline and subtle channel tint. The folder toggle sits to the right of its icon. Timeline header backgrounds fill
 the indentation area, with square edges and content padding. Boundary drop feedback validates the
-source, parent, sibling anchor and channel category before showing an insertion marker.
+source, parent, sibling anchor and Output boundary before showing an insertion marker.
 
 Track selection lines occupy their own depth position after the parent rails. Header backgrounds remain
 full-width, so the selection line is painted as a narrow background stripe rather than an outer border

@@ -1,5 +1,5 @@
 import css from "./GroupRails.sass?inline"
-import {AudioUnitBoxAdapter, AudioUnitGroups, ColorCodes} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitLayout, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {Project} from "@opendaw/studio-core"
 import {asDefined, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
@@ -19,8 +19,7 @@ export class GroupRails implements Terminable {
             project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelection())
         )
     }
-    update(units: ReadonlyArray<AudioUnitBox>): void {
-        const spans = AudioUnitGroups.spans(units)
+    update(spans: ReadonlyArray<AudioUnitLayout.Boundary>): void {
         const groups = new Set(spans.map(span => span.unit))
         this.#rails.forEach((entry, unit) => {
             if (groups.has(unit)) {return}
@@ -28,7 +27,7 @@ export class GroupRails implements Terminable {
             entry.button.remove()
             this.#rails.delete(unit)
         })
-        spans.forEach(({unit, start, end, depth}) => {
+        spans.forEach(({unit, start, end, indent}) => {
             if (!this.#rails.has(unit)) {
                 const lifecycle = this.#lifecycle.spawn()
                 const button = document.createElement("button")
@@ -50,14 +49,14 @@ export class GroupRails implements Terminable {
                 this.#rails.set(unit, {button, lifecycle})
             }
             const {button} = asDefined(this.#rails.get(unit))
-            button.style.setProperty("--rail-depth", String(depth))
+            button.style.setProperty("--rail-offset", `${indent}px`)
             button.style.gridRow = this.horizontal ? "1" : `${start + 1} / ${end + 1}`
             button.style.gridColumn = this.horizontal ? `${start + 2} / ${end + 2}` : "1"
             if (button.parentElement !== this.container) {this.container.appendChild(button)}
         })
         if (this.container instanceof HTMLElement && this.horizontal) {
             this.container.style.setProperty("--group-rail-height", `${spans.length === 0 ? 0 :
-                8 + Math.max(...spans.map(span => span.depth)) * 5}px`)
+                8 + Math.max(...spans.map(span => span.depth)) * AudioUnitLayout.Indent}px`)
         }
         this.#refreshSelection()
     }
