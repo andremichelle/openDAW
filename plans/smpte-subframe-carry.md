@@ -1,6 +1,6 @@
 # SMPTE.fromSeconds carry
 
-AI-assisted: this change was written with Claude Code (an AI coding assistant) and reviewed by the submitter.
+AI-assisted: this change was written with Claude Code (an AI coding assistant).
 
 ## Process
 - Read `packages/lib/dsp/src/smpte.ts` looking for off-by-one errors at unit boundaries.
