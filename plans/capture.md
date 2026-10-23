@@ -137,3 +137,49 @@ Each phase ships on its own, with tests first and bit-identical behaviour where 
    overlay and write boxes at wrap and stop (far fewer transactions).
 4. `InputLatency` preference: keep it as a browser-only override or drop it once ports report real latency.
 5. The 8 channel effects monitoring cap: lift it with the port rewrite or keep it.
+
+## 6. Vendor behaviour the browser IO must absorb
+
+Source: [opendaw-test known-vendor-issues.md](https://github.com/naomiaro/opendaw-test/blob/main/docs/known-vendor-issues.md)
+(measured on SDK 0.0.177, Chrome 155, macOS, 2026-10-22). Read it before attributing a timing symptom to the SDK.
+Every entry below belongs in `studio-io/browser`, never in the domain code.
+
+### Clock
+1. Chromium 442866743: `currentFrame` stands still for a quantum while the main thread changes the graph (connect,
+   disconnect, building a worklet or stream source). Both take start stamps are read exactly then. `QuantumClock`
+   (lattice anchored at the largest `currentFrame - calls * 128`) repairs it. Every frame stamp in the ports must go
+   through it.
+2. Chromium 571344687: a processor built right after `addModule()` reads a stale frame in its constructor and first
+   `process()` (up to 110 ms with a slow load). Never seed a clock from the constructor.
+3. Firefox 1629478 (spec): `inputs[0]` is empty until the stream source delivers. `RecordingProcessor` already waits
+   for the expected channel count before stamping. Keep that in the port.
+4. Chromium 575891839: after a back/forward-cache restore the worklet clock runs at half speed. Candidate: tear the
+   engine down on `pageshow` with `persisted`.
+5. Chromium 560233271: `suspend()` / `resume()` after a worklet-thread stall halves the render rate until reload.
+   Never suspend.
+6. Hidden or fully covered window stops rAF, so every main-thread timing read freezes. Principle 1 (no main-thread
+   timing) removes this class.
+
+### Latency
+7. Chromium 516995393 (spec gap, all vendors): no input latency figure. `getSettings().latency` is nominal (2.67 ms
+   reported, 35 to 63 ms measured). Loopback calibration (PR #380) or the `InputLatency` override stays the only
+   source in the browser (decision 4).
+8. Chromium 388871416: `outputLatency` is wrong on Bluetooth (161 ms reported, 200 to 280 ms real, varies per
+   stream), follows the system default device instead of the context sink, and reads 0 right after `resume()`.
+9. Each `MediaStreamAudioSourceNode` has its own start delay (0 to 4 quanta between two nodes on one stream, a
+   441 frame step at 44.1 kHz in the first second). Two inputs recorded together are skewed by the browser. A worklet
+   module still loading delays the first take frame (117 ms measured).
+
+### Input integrity
+10. Chromium 40103985: a render-thread stall (80 ms) leaves about 32 ms of zeros in `getUserMedia` input. More than
+    30 s of exact digital silence on the output also produces one hole. A dither of `(n & 1) / 10000` on the output
+    removed it. Keep the worklet thread free of long tasks during a take, consider the dither while recording.
+11. A `MediaStreamAudioDestinationNode` stream from another `AudioContext` captures silent, and `track.stop()` on a
+    shared stream kills it for every consumer. Hand each consumer a `stream.clone()`.
+12. WebKit 326286, 211959, 210231: on iOS echo cancellation crackles the output, capture turns all output mono, no
+    stereo `getUserMedia`. Not measured here.
+13. WebKit 328462: Safari "Enhanced Security" disables `SharedArrayBuffer`, which the recording ring needs.
+
+### Desktop port
+14. None of these apply to the `cpal` / `midir` implementation. It reports real input and output latency and stamps
+    in driver frames, which is the reason the domain must not know any of the above.
