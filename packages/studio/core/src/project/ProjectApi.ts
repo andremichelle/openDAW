@@ -47,9 +47,11 @@ import {
     AudioRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
+    AudioUnitGroups,
     CaptureBox,
     ColorCodes,
     DeviceAccepts,
+    Devices,
     DeviceBoxUtils,
     EffectPointerType,
     IndexedAdapterCollectionListener,
@@ -150,12 +152,12 @@ export class ProjectApi {
     createInstrument<A, INST extends InstrumentBox>(
         {create, defaultIcon, defaultName, trackType}: InstrumentFactory<A, INST>,
         options: InstrumentOptions<A> = {} as any): InstrumentProduct<INST> {
-        const {name, icon, index} = options
+        const {name, icon, index, destination} = options
         const {boxGraph, rootBox, userEditingManager} = this.#project
         assert(rootBox.isAttached(), "rootBox not attached")
         const existingNames = ProjectQueries.existingInstrumentNames(rootBox)
         const audioUnitBox = AudioUnitFactory.create(this.#project.skeleton,
-            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index)
+            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index, destination)
         const uniqueName = Strings.getUniqueName(existingNames, name ?? defaultName)
         const iconSymbol = icon ?? defaultIcon
         const instrumentBox = create(boxGraph, audioUnitBox.input, uniqueName, iconSymbol, options.attachment)
@@ -171,6 +173,24 @@ export class ProjectApi {
 
     createAnyInstrument(factory: InstrumentFactory<any, any>): InstrumentProduct<InstrumentBox> {
         return this.createInstrument(factory)
+    }
+
+    createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
+        const {trackSelection, audioUnitLayout, userEditingManager, rootBox, grouping} = this.#project
+        const selected = AudioUnitGroups.roots(trackSelection.selected)
+        const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
+            ?? (!trackSelection.hasExplicitSelection ? userEditingManager.audioUnit.get().map(vertex =>
+                this.#project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box).unwrapOrUndefined() : undefined)
+        const parent = isDefined(anchor) ? AudioUnitGroups.parent(anchor) : undefined
+        const siblings = AudioUnitGroups.children(rootBox, parent)
+        const before = isDefined(anchor) ? siblings[siblings.indexOf(anchor) + 1] : undefined
+        const destination = isDefined(parent) ? AudioUnitGroups.bus(parent) : undefined
+        const product = this.createInstrument(factory, {destination})
+        if (isDefined(anchor) && anchor.type.getValue() !== AudioUnitType.Output) {
+            grouping.move([product.audioUnitBox], parent, before)
+        }
+        trackSelection.set([product.audioUnitBox])
+        return product
     }
 
     // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).

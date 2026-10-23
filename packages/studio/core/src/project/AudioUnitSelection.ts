@@ -1,6 +1,6 @@
 import {DefaultObservableValue, isDefined, Optional, Terminator} from "@opendaw/lib-std"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
+import {Devices} from "@opendaw/studio-adapters"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import type {Project} from "./Project"
 
@@ -31,7 +31,7 @@ export class AudioUnitSelection {
         this.value.setValue(next)
     }
     click(unit: AudioUnitBox, {shiftKey, metaKey, ctrlKey}: {shiftKey: boolean, metaKey: boolean, ctrlKey: boolean}): void {
-        const order = AudioUnitGroups.ordered(this.project.rootBox).filter(item => !AudioUnitGroups.hidden(item))
+        const order = this.project.audioUnitLayout.snapshot.visibleRows.map(row => row.unit)
         const anchorIndex = isDefined(this.#anchor) ? order.indexOf(this.#anchor) : -1
         const end = order.indexOf(unit)
         if (shiftKey && anchorIndex >= 0 && end >= 0) {

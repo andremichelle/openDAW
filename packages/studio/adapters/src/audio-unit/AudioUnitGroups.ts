@@ -10,14 +10,8 @@ export namespace AudioUnitGroups {
         const box = unit.groupParent.targetVertex.unwrapOrNull()?.box
         return box instanceof AudioUnitBox && box.isGroup.getValue() ? box : undefined
     }
-    export const category = (unit: AudioUnitBox): number => {
-        switch (unit.type.getValue()) {
-            case AudioUnitType.Bus: return 0
-            case AudioUnitType.Instrument: return 1
-            case AudioUnitType.Aux: return 2
-            default: return 3
-        }
-    }
+    // Only Output has a fixed section; folders and other channels keep their saved positions.
+    export const category = (unit: AudioUnitBox): number => unit.type.getValue() === AudioUnitType.Output ? 1 : 0
     export const compareCategories = (left: AudioUnitBox, right: AudioUnitBox): number => category(left) - category(right)
     export const children = (root: RootBox, group?: AudioUnitBox): AudioUnitBox[] =>
         (isDefined(group)

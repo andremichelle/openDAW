@@ -17,9 +17,9 @@ component
     width: 4px
     justify-self: start
     align-self: stretch
-    margin-left: calc(var(--rail-depth) * 5px)
+    margin-left: var(--rail-offset, 0px)
 
   &.horizontal
     height: 4px
     align-self: start
-    margin-top: calc(var(--rail-depth) * 5px)
+    margin-top: var(--rail-offset, 0px)

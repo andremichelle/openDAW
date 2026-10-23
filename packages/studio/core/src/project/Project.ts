@@ -1,3 +1,4 @@
+import {AudioUnitLayoutState} from "./AudioUnitLayoutState"
 import {
     asInstanceOf,
     Editing,
@@ -149,6 +150,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly timelineBox: TimelineBox
 
     readonly grouping: AudioUnitGrouping
+    readonly audioUnitLayout: AudioUnitLayoutState
     readonly trackSelection: AudioUnitSelection
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
@@ -244,6 +246,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
+        this.audioUnitLayout = this.#terminator.own(new AudioUnitLayoutState(this))
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
