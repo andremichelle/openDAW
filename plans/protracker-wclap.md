@@ -111,10 +111,11 @@ one block, and the next block start corrects it.
 
 ## Licensing and distribution
 
-1. Musashi is MIT. The playroutine is Peter Hanning's, "distributed with ProTracker for use in other productions",
-   which is not an OSI license. opendaw-commons requires OSI licensed source, so it cannot go there as is.
-2. Distribution therefore goes through the openDAW cloud catalogue (admin upload, `assets.opendaw.studio/wclaps`),
-   like the other cloud plugins. Open question below.
+1. The project code is MIT, Musashi is MIT. The playroutine is public domain: the ProTracker 2.3A ReadMe (1993) releases
+   the distribution as Public Domain, the 2.3D help file repeats it. The README of the ProTracker repo lists every part.
+2. The five example modules in `wclap/mods/` are free to share. The 8bitboy collection carries no license and never
+   ships in the plugin.
+3. Distribution through opendaw-commons is open.
 
 ## Phases
 
@@ -233,5 +234,10 @@ Code in `../ProTracker/wclap/` (`protracker.c`, `build.sh`, output in `wclap/out
 ## Open questions
 
 1. Player only, or should the plan include pattern editing later?
-2. Distribution: openDAW cloud catalogue (my recommendation), or ask for a licence clarification and use
-   opendaw-commons?
+2. Distribution: settled, opendaw-commons (see Licensing and distribution).
+
+## May break
+
+1. **Snapshot pass on the audio thread.** Loading a module or a project runs the snapshot pass inside `process`,
+   ~90 ms for a 5 minute song, longer for longer songs up to the 2^17 tick cap. A realtime render may drop out once at
+   load. Observed, not fixed. The fix would build the snapshots on the main thread and swap them in when ready.
