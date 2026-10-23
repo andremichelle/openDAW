@@ -224,6 +224,7 @@
         })
     }
     const attachedParams = new WeakMap()
+    const enterValueElements = new WeakSet()
     const preview = Object.freeze({
         noteOn(pitch, velocity = 0.8) {post({type: "preview", on: true, pitch, velocity})},
         noteOff(pitch) {post({type: "preview", on: false, pitch})}
@@ -258,13 +259,17 @@
         send(message) {post({type: "send", message})},
         openWindow(name) {post({type: "window", action: "open", name: name ?? "View"})},
         closeWindow(name) {post({type: "window", action: "close", name: name ?? "View"})},
-        attachParameter(element, name) {
+        attachParameter(element, name, options = {}) {
             if (!(element instanceof Element)) {throw new TypeError("attachParameter expects an element")}
             if (!paramValues.has(name)) {throw new Error(`attachParameter: no @param '${name}'`)}
             attachedParams.set(element, name)
+            if (options?.enterValue === true) {enterValueElements.add(element)} else {enterValueElements.delete(element)}
             return Object.freeze({
                 terminate: () => {
-                    if (attachedParams.get(element) === name) {attachedParams.delete(element)}
+                    if (attachedParams.get(element) === name) {
+                        attachedParams.delete(element)
+                        enterValueElements.delete(element)
+                    }
                 }
             })
         },
@@ -286,6 +291,30 @@
             if (event.button === 2 || (isMacOS && event.button === 0 && event.ctrlKey)) {event.stopImmediatePropagation()}
         }, {capture: true})
     }
+    // a double press on an element attached with {enterValue: true} enters its value like on a knob, the script never sees the second press
+    const press = {element: null, time: 0, swallowClick: false}
+    globalThis.addEventListener("click", event => {
+        if (!press.swallowClick) {return}
+        press.swallowClick = false
+        event.stopImmediatePropagation()
+    }, {capture: true})
+    globalThis.addEventListener("pointerdown", event => {
+        if (event.button !== 0) {return}
+        const target = event.composedPath().find(node => enterValueElements.has(node)) ?? null
+        const now = performance.now()
+        press.swallowClick = false
+        if (target !== null && target === press.element && now - press.time < 200) {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            press.element = null
+            press.swallowClick = true
+            const rect = target.getBoundingClientRect()
+            post({type: "param-enter", name: attachedParams.get(target), x: rect.left, y: rect.top + rect.height / 2})
+            return
+        }
+        press.element = target
+        press.time = now
+    }, {capture: true})
     for (const kind of ["keydown", "keyup"]) {
         globalThis.addEventListener(kind, event => {
             const tag = typeof event.target?.tagName === "string" ? event.target.tagName : ""

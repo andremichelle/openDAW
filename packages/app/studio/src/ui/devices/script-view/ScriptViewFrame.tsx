@@ -2,6 +2,7 @@ import runtimeSource from "./view-runtime.js?raw"
 import {
     ControlSource,
     Editing,
+    EmptyExec,
     Func,
     isDefined,
     Lifecycle,
@@ -28,6 +29,8 @@ import {
 } from "@opendaw/studio-adapters"
 import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Fonts} from "@/ui/Fonts"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
+import {Layers} from "@/ui/surface/Layers.tsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export type ScriptViewMode = "inline" | "window"
@@ -147,6 +150,24 @@ export const ScriptViewFrame = ({
     iframe.srcdoc = srcdoc
     const connection = lifecycle.own(new Terminator())
     const menu: { parameter: Optional<AutomatableParameterFieldAdapter<number>> } = {parameter: undefined}
+    const enterValue = (parameter: AutomatableParameterFieldAdapter<number>, x: number, y: number): void => {
+        const flyout = Layers.get(iframe).flyout
+        const iframeRect = iframe.getBoundingClientRect()
+        const flyoutRect = flyout.getBoundingClientRect()
+        const printValue = parameter.getPrintValue()
+        const resolvers = Promise.withResolvers<string>()
+        resolvers.promise.then(text => {
+            editing.modify(() => parameter.setPrintValue(text))
+            editing.mark()
+        }, EmptyExec)
+        flyout.appendChild(
+            <FloatingTextInput position={{x: iframeRect.left - flyoutRect.left + x, y: iframeRect.top - flyoutRect.top + y}}
+                               value={printValue.value}
+                               unit={printValue.unit}
+                               numeric
+                               resolvers={resolvers}/>
+        )
+    }
     const streamSubscriptions = new Map<string, Terminable>()
     const heldPitches = new Set<number>()
     const releasePreview = (): void => {
@@ -247,6 +268,10 @@ export const ScriptViewFrame = ({
         } else if (message.type === "window" && (message.action === "open" || message.action === "close")
             && typeof message.name === "string") {
             onWindow(message.action, message.name)
+        } else if (message.type === "param-enter" && typeof message.name === "string"
+            && typeof message.x === "number" && typeof message.y === "number") {
+            const parameter = paramsByName.get(message.name)
+            if (isDefined(parameter)) {enterValue(parameter, message.x, message.y)}
         } else if (message.type === "param-menu" && typeof message.name === "string"
             && typeof message.x === "number" && typeof message.y === "number") {
             menu.parameter = paramsByName.get(message.name)

@@ -333,8 +333,12 @@ learn, reset):
 ```
 
 ```javascript
-host.attachParameter(cutoffHandle, "cutoff")
+host.attachParameter(cutoffHandle, "cutoff", {enterValue: true})
 ```
+
+`{enterValue: true}` adds a double click that opens the same text field as on a regular knob, to type a value
+with its unit. Use it for knobs and sliders. Leave it out for checkboxes and buttons, where a double click
+should only toggle.
 
 The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
 whether it is automated or modulated, `value` already includes both.

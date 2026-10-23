@@ -49,7 +49,8 @@ host.root, host.mode ("inline" | "window")
 host.params.<name>: label, value, set(value), subscribe(observer),
     sources, subscribeSources(observer)   (value includes automation and modulation, sources lists
     "automated", "modulated", "midi", "external")
-host.attachParameter(element, name) -> {terminate()}   (right click on element opens the parameter menu)
+host.attachParameter(element, name, options?) -> {terminate()}   (right click on element opens the parameter menu,
+    {enterValue: true} adds a double click to type a value, for knobs and sliders, not for checkboxes)
 host.data.<collection>: length, get(index), toArray(), set(index, {field: value}), insert(index, values?),
     remove(index), subscribe(observer)
 host.data.<buffer>: length, get(index), toArray(), set(values, offset?), subscribe(observer)

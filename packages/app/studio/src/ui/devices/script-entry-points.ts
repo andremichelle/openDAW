@@ -287,9 +287,10 @@ const HOST = parameter("host", "host: ViewHost", "The view's only connection to 
         "`value` includes automation and modulation. `sources` lists what controls it (`automated`, `modulated`,",
         "`midi`, `external`), `subscribeSources(observer)` is called with every change."
     ].join("\n")),
-    entry("attachParameter", "host.attachParameter(element, name): {terminate()}", [
+    entry("attachParameter", "host.attachParameter(element, name, options?): {terminate()}", [
         "A right click on `element` (or inside it) opens the parameter menu of `@param name`: automation,",
-        "modulation, MIDI learn, reset. Pair it with `[omit-default-ui]` when the view is the only control."
+        "modulation, MIDI learn, reset. `{enterValue: true}` adds a double click that enters a value like on a",
+        "knob, meant for knobs and sliders. Pair it with `[omit-default-ui]` when the view is the only control."
     ].join("\n")),
     entry("data", "host.data.<collection>", [
         "Every `@collection` by name: `length`, `get(index)`, `toArray()`, `set(index, {field: value})`,",
