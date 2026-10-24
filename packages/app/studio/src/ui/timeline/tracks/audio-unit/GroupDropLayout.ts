@@ -21,8 +21,12 @@ export namespace GroupDropLayout {
         if (!isDefined(hit)) {return Option.None}
         const model = layout.row(hit.unit).unwrap()
         const headerOffset = coordinate - start(hit.header)
-        const inside = model.isGroup && headerOffset > size(hit.header) * 0.25
-            && headerOffset < size(hit.header) * 0.75
+        // An expanded timeline group already has an after-subtree boundary below its children.
+        // Keep its header an inside target, avoiding a distant insertion-line flash on entry.
+        const expandedHeader = !horizontal && model.isGroup && !model.collapsed
+        const insideStart = expandedHeader ? Math.min(6, size(hit.header) * 0.25) : size(hit.header) * 0.25
+        const insideEnd = expandedHeader ? size(hit.header) : size(hit.header) * 0.75
+        const inside = model.isGroup && headerOffset > insideStart && headerOffset < insideEnd
             && (horizontal || pointer.clientX >= hit.header.x && pointer.clientX < hit.header.x + hit.header.width)
         if (inside) {
             return Option.wrap({parent: hit.unit, before: undefined, row: hit, inside: true, after: false,
