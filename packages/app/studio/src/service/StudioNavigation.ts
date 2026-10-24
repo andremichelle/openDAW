@@ -7,6 +7,8 @@ import {ProjectProfileService} from "@/service/ProjectProfileService"
 // Every other page (script editor, graph, ...) stays reachable with the back button.
 const ConsumedRoutes: ReadonlyArray<string> = ["/open-bundle", "/open-project", "/join"]
 
+export const DevicePreviewRoute = "/device-preview"
+
 // The project profile is the single source of truth: project open ⇔ "/create" + a studio screen,
 // no project ⇔ "/" + dashboard. Other routes are plain pages and leave everything untouched.
 // Routes never mutate state directly: "/" with an open project is a close request (confirmed when
@@ -59,6 +61,7 @@ export class StudioNavigation {
     onProjectOpened(): void {
         this.#screen.setValue("default")
         const route = RouteLocation.get()
+        if (route.path === DevicePreviewRoute) {return}
         if (ConsumedRoutes.some(prefix => route.path.startsWith(prefix))) {
             route.replaceWith("/create")
         } else {

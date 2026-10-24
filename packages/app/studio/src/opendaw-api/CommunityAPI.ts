@@ -1,4 +1,4 @@
-import {Lazy, Progress} from "@opendaw/lib-std"
+import {Lazy, Option, Progress} from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {ScriptPreamble} from "@opendaw/studio-scripting"
 import {HttpStatus, retryTransient} from "./HttpRetry"
@@ -42,6 +42,10 @@ export class CommunityAPI {
 
     async scriptsFor(target: CommunityScriptTarget): Promise<ReadonlyArray<CommunityScript>> {
         return (await this.scripts()).scripts.filter(entry => entry.target === target)
+    }
+
+    screenshotOf(entry: CommunityScript): Option<string> {
+        return Option.wrap(entry.screenshot).map(name => `${CommunityAPI.FileRoot}/scripts/${name}`)
     }
 
     loadSource(entry: CommunityScript): Promise<string> {

@@ -6,6 +6,7 @@ import {
     MutableObservableOption,
     MutableObservableValue,
     Observable,
+    Option,
     Procedure,
     RuntimeNotifier
 } from "@opendaw/lib-std"
@@ -75,6 +76,11 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
     const description: HTMLElement = <div className="description">Select a script on the left, or paste a GitHub link below.</div>
     const facts: HTMLElement = <div className="facts">Author, tags and a link to GitHub</div>
     const code: HTMLElement = <pre className="code"/>
+    const previewLabel: HTMLElement = <div className="label hidden">Preview:</div>
+    const preview: HTMLImageElement = (
+        <img className="preview hidden" alt=""
+             onload={() => preview.style.width = `${preview.naturalWidth / 2}px`}/>
+    )
     const detail: HTMLElement = (
         <div className="detail empty">
             <div className="label">Name:</div>
@@ -83,6 +89,8 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
             {description}
             <div className="label">Source:</div>
             {facts}
+            {previewLabel}
+            {preview}
             <div className="label">Code:</div>
             {code}
         </div>
@@ -93,6 +101,16 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
     const showDetail = (entry: Entry): void => {
         detail.classList.remove("empty")
         name.textContent = entry.name
+        const screenshot = entry.kind === "community" ? CommunityAPI.get().screenshotOf(entry.script) : Option.None
+        previewLabel.classList.toggle("hidden", screenshot.isEmpty())
+        preview.classList.toggle("hidden", screenshot.isEmpty())
+        screenshot.match({
+            none: () => preview.removeAttribute("src"),
+            some: url => {
+                preview.style.removeProperty("width")
+                preview.src = url
+            }
+        })
         if (entry.kind === "community") {
             const {script} = entry
             description.textContent = script.description

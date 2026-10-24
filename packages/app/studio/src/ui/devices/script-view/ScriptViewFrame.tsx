@@ -261,6 +261,8 @@ export const ScriptViewFrame = ({
                 streamSubscriptions.get(name)?.terminate()
                 streamSubscriptions.delete(name)
             }
+        } else if (message.type === "ready") {
+            iframe.dataset.ready = "true"
         } else if (message.type === "send") {
             onSend(message.message)
         } else if (message.type === "preview" && typeof message.pitch === "number" && Number.isInteger(message.pitch)
@@ -296,6 +298,7 @@ export const ScriptViewFrame = ({
         endGesture()
         const target = iframe.contentWindow
         if (!isDefined(target)) {return}
+        delete iframe.dataset.ready
         const channel = new MessageChannel()
         state.port = channel.port1
         channel.port1.onmessage = event => receive(event.data)
