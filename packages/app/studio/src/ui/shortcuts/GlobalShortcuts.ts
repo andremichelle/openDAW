@@ -90,6 +90,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyL, {shift}),
         description: "Toggle loop mode"
     },
+    "toggle-mute": {
+        shortcut: Shortcut.of(Key.KeyM),
+        description: "Toggle mute of the edited audio unit"
+    },
+    "toggle-solo": {
+        shortcut: Shortcut.of(Key.KeyS),
+        description: "Toggle solo of the edited audio unit"
+    },
     "copy-device": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
         description: "Duplicate selected device"
