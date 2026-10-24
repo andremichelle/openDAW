@@ -1,26 +1,27 @@
 import css from "./PresetItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
-import {isDefined, Lifecycle, Nullable, StringComparator} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {MenuItem, PresetEntry} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {DragPreset} from "@/ui/AnyDragData"
 import {PresetService} from "@/ui/browse/PresetService"
+import {DeviceIcon, StockDeviceMeta} from "@/ui/browse/DeviceItem"
 import {AccessKey} from "@/opendaw-api/AccessKey"
 import {Icon} from "../components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {TextTooltip} from "@/ui/surface/TextTooltip"
 
 const className = Html.adoptStyleSheet(css, "PresetItem")
 
 type Construct = {
     entry: PresetEntry
+    device: StockDeviceMeta
     presetService: PresetService
     lifecycle: Lifecycle
 }
 
-export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLElement => {
+export const PresetItem = ({entry, device, presetService, lifecycle}: Construct): HTMLElement => {
     const userMenuRoot: Nullable<MenuItem> = entry.source === "user"
         ? MenuItem.root().setRuntimeChildrenProcedure(parent => {
             const canUpload = AccessKey.get().nonEmpty()
@@ -40,13 +41,10 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
         : null
     const item: HTMLElement = (
         <div className={className}>
-            <div className="marker">
-                <Icon className="source"
-                      symbol={entry.source === "stock" ? IconSymbol.CloudFolder : IconSymbol.UserFolder}/>
-                <Icon className="swap" symbol={IconSymbol.Swap}/>
-            </div>
-            <div className="title">
-                <span className="name">{entry.name}</span>
+            <DeviceIcon device={device}/>
+            <span className="name">{entry.name}</span>
+            <span className="brief">{entry.description}</span>
+            <div className="extras">
                 {entry.hasTimeline === true && (
                     <span className="timeline-badge" title="Including timeline data">
                         <Icon symbol={IconSymbol.Timeline}/>
@@ -62,10 +60,7 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
             </div>
         </div>
     )
-    if (entry.description.length > 0) {
-        lifecycle.own(TextTooltip.default(item, () => entry.description))
-    }
-    lifecycle.own(Events.subscribeSingleClick(item, () => presetService.activatePreset(entry)))
+    lifecycle.own(Events.subscribe(item, "dblclick", () => presetService.activatePreset(entry)))
     DragAndDrop.installSource(item, () => ({
         type: "preset",
         category: entry.category,
@@ -87,14 +82,4 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
         })
     }
     return item
-}
-
-export const PresetItems = (presets: ReadonlyArray<PresetEntry>,
-                            presetService: PresetService,
-                            lifecycle: Lifecycle): ReadonlyArray<HTMLElement> => {
-    const byName = (left: PresetEntry, right: PresetEntry) =>
-        StringComparator(left.name.toLowerCase(), right.name.toLowerCase())
-    const user = presets.filter(entry => entry.source === "user").toSorted(byName)
-    const stock = presets.filter(entry => entry.source === "stock").toSorted(byName)
-    return [...user, ...stock].map(entry => PresetItem({entry, presetService, lifecycle}))
 }

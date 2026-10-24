@@ -1,67 +1,19 @@
 @use "@/mixins"
 
 component
-  grid-column: 1 / -1
-  display: grid
-  grid-template-columns: subgrid
-  align-items: center
-  padding: 0 0.25em
-  border-radius: 0.2em
-  color: var(--color-dark)
+  @include mixins.library-device-row
 
-  &.accept-drop
-    background-color: rgba(white, 0.04)
-    outline: 0.5px dashed var(--color)
-    outline-offset: -0.5px
-
-  > div.marker
-    grid-column: 2
-    width: 18px
-    height: 18px
-    display: flex
-    align-items: center
-    justify-content: center
-    color: var(--color)
-    scale: 95%
-
-    > svg
-      width: 16px !important
-      height: 16px !important
-      min-width: 16px !important
-      min-height: 16px !important
-
-    > svg.swap
-      display: none
-
-  &.accept-drop > div.marker
-    opacity: 1
-
-    > svg.source
-      display: none
-
-    > svg.swap
-      display: block
-
-  > div.title
-    grid-column: 3 / -1
+  > div.extras
     display: flex
     align-items: center
     column-gap: 0.5em
-    overflow: hidden
-
-    > span.name
-      flex: 1
-      min-width: 0
-      white-space: nowrap
-      overflow: hidden
-      text-overflow: ellipsis
 
     > span.timeline-badge
       flex-shrink: 0
       display: flex
       align-items: center
       justify-content: center
-      color: var(--color-dark)
+      color: inherit
       opacity: mixins.$library-marker-opacity
 
       > svg
@@ -75,7 +27,7 @@ component
       display: flex
       align-items: center
       justify-content: center
-      color: var(--color-dark)
+      color: inherit
       opacity: mixins.$library-marker-opacity
       margin-left: auto
 

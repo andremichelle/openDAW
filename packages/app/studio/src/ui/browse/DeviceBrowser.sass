@@ -31,27 +31,45 @@ component
     justify-content: center
     padding: 2em 0
 
-  div.tree
-    display: flex
-    flex-direction: column
+  div.list
     font-size: 0.6875rem
-    row-gap: 1.25em
     overflow: hidden auto
     padding: 0 12px 1em 0.25em
 
-    > section.category
+    > div.rows
       display: grid
-      grid-template-columns: #{mixins.$library-triangle-hit} 18px 1fr 1fr
-      row-gap: 0.375em
+      grid-template-columns: 22px auto 1fr auto
       column-gap: 7px
       color: var(--color)
 
-      > h1
+      > div.details
         grid-column: 1 / -1
-        justify-self: start
-        white-space: nowrap
-        font-size: 1em
-        padding: 0.25em 0.75em
-        margin: 0 0 0.25em 0.75em
-        border-radius: 0.25em
-        background-color: rgba(black, 0.3)
+        margin-top: -3px
+        overflow: hidden
+
+        > div.card
+          display: flex
+          flex-direction: column
+          row-gap: 0.375em
+          padding: 0.25em 0.75em 0.625em 30px
+          border-radius: 0 0 3px 3px
+          background-color: color-mix(in srgb, var(--color-panel-background-bright), var(--color-panel-background) 50%)
+          color: var(--color-gray)
+
+          > span.caption
+            color: var(--color-shadow)
+            white-space: nowrap
+            overflow: hidden
+            text-overflow: ellipsis
+
+          > p
+            margin: 0
+            line-height: 1.4
+            overflow-wrap: break-word
+
+          > span.hint
+            font-size: 0.875em
+            color: var(--color-shadow)
+
+        > div.spacer
+          height: 0.75em

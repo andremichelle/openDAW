@@ -4,12 +4,11 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IndexedBox} from "@opendaw/lib-box"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
-import {EffectFactories, PresetEntry} from "@opendaw/studio-core"
+import {EffectFactories} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData, DragDevice} from "@/ui/AnyDragData"
 import {PresetService} from "@/ui/browse/PresetService"
-import {PresetItems} from "@/ui/browse/PresetItem"
 import {Icon} from "../components/Icon"
 
 const className = Html.adoptStyleSheet(css, "DeviceItem")
@@ -19,75 +18,51 @@ export type StockDeviceMeta = {
     name: string
     icon: IconSymbol
     brief: string
+    description: string
     externalIconUrl?: string
     presetless?: boolean
 }
 export type DeviceDropKind = "audio-effect" | "midi-effect"
 
+export const DeviceIcon = ({device}: { device: StockDeviceMeta }): HTMLElement => isDefined(device.externalIconUrl)
+    ? <div className="icon external"><img src={device.externalIconUrl} alt=""/></div>
+    : <div className="icon"><Icon symbol={device.icon}/></div>
+
 type Construct = {
     presetService: PresetService
-    expandedKeys: Set<string>
     device: StockDeviceMeta
-    presets: ReadonlyArray<PresetEntry>
-    expandOnRender: boolean
     onCreate: () => void
     dropKind: Nullable<DeviceDropKind>
     onDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>>
     instrumentKey: Nullable<InstrumentFactories.Keys>
-    expandKey: string
     lifecycle: Lifecycle
 }
 
 export const DeviceItem = ({
-                               presetService, expandedKeys, device, presets, expandOnRender,
-                               onCreate, dropKind, onDrop, instrumentKey, expandKey, lifecycle
+                               presetService, device, onCreate, dropKind, onDrop, instrumentKey, lifecycle
                            }: Construct): HTMLElement => {
-    const empty = presets.length === 0
-    const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
-    const triangle: HTMLElement = <span className="triangle"/>
-    const header: HTMLElement = (
-        <div className="device-header">
-            {triangle}
-            {isDefined(device.externalIconUrl)
-                ? <div className="icon external">
-                    <img src={device.externalIconUrl} alt=""/>
-                </div>
-                : <div className="icon">
-                    <Icon symbol={device.icon}/>
-                </div>}
+    const item: HTMLElement = (
+        <div className={className}>
+            <DeviceIcon device={device}/>
             <span className="name">{device.name}</span>
             <span className="brief">{device.brief}</span>
         </div>
     )
-    const presetList: HTMLElement = <div className="preset-list hidden"/>
-    presetList.append(...PresetItems(presets, presetService, lifecycle))
-    const shouldExpand = !empty && (expandedKeys.has(expandKey) || expandOnRender)
-    if (shouldExpand) {
-        presetList.classList.remove("hidden")
-        item.classList.add("expanded")
-    }
-    triangle.onclick = (event: MouseEvent) => {
-        event.stopPropagation()
-        if (empty) {return}
-        const open = !presetList.classList.toggle("hidden")
-        item.classList.toggle("expanded", open)
-        if (open) {expandedKeys.add(expandKey)} else {expandedKeys.delete(expandKey)}
-    }
-    lifecycle.own(Events.subscribeSingleClick(header, onCreate))
+    lifecycle.own(Events.subscribe(item, "dblclick", onCreate))
     if (dropKind === "audio-effect") {
-        DragAndDrop.installSource(header, () => ({
+        DragAndDrop.installSource(item, () => ({
             type: "audio-effect",
             uuids: null,
             device: device.key as EffectFactories.AudioEffectKeys
         } satisfies DragDevice))
     } else if (dropKind === "midi-effect") {
-        DragAndDrop.installSource(header, () => ({
+        DragAndDrop.installSource(item, () => ({
             type: "midi-effect",
             uuids: null,
             device: device.key as EffectFactories.MidiEffectKeys
         } satisfies DragDevice))
     } else {
-        DragAndDrop.installSource(header, () => ({
+        DragAndDrop.installSource(item, () => ({
             type: "instrument",
             device: device.key as InstrumentFactories.Keys
         } satisfies DragDevice))
@@ -101,7 +76,7 @@ export const DeviceItem = ({
     const isBareInstrument = (dragData: AnyDragData): boolean =>
         dragData.type === "instrument" && dragData.device === null && dragData.effects.length === 0
     if (acceptsEffect || acceptsInstrument) {
-        DragAndDrop.installTarget(header, {
+        DragAndDrop.installTarget(item, {
             drag: (_event, dragData) => {
                 if (acceptsEffect && !isRackIntentEffect(dragData)) {
                     const effects = presetService.resolveEffectBoxesFromDrag(dropKind, dragData)
@@ -119,7 +94,7 @@ export const DeviceItem = ({
                     const effects = presetService.resolveEffectBoxesFromDrag(dropKind, dragData)
                     if (effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === device.key) {
                         onDrop(effects).catch(console.warn)
-                        header.classList.remove("accept-drop")
+                        item.classList.remove("accept-drop")
                         return
                     }
                 }
@@ -128,13 +103,11 @@ export const DeviceItem = ({
                     && dragData.type === "instrument" && dragData.device === null) {
                     presetService.saveAsInstrumentPreset(instrumentKey, dragData.uuid).catch(console.warn)
                 }
-                header.classList.remove("accept-drop")
+                item.classList.remove("accept-drop")
             },
-            enter: allowDrop => header.classList.toggle("accept-drop", allowDrop),
-            leave: () => header.classList.remove("accept-drop")
+            enter: allowDrop => item.classList.toggle("accept-drop", allowDrop),
+            leave: () => item.classList.remove("accept-drop")
         })
     }
-    item.appendChild(header)
-    item.appendChild(presetList)
     return item
 }

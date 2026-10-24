@@ -1,13 +1,13 @@
 import {asInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {IndexedBox} from "@opendaw/lib-box"
+import {Box, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler} from "@opendaw/studio-adapters"
 import {EffectFactories, EffectFactory, PresetEntry, Project} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
-import {CommunityScript} from "@/opendaw-api/CommunityIndex"
+import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 
@@ -66,7 +66,19 @@ export namespace SpotlightCreate {
             }
         })
 
-    export const script = (service: StudioService, script: CommunityScript): void =>
+    export type ScriptTarget = Exclude<CommunityScriptTarget, "project">
+
+    export const ScriptHosts = {
+        apparat: InstrumentFactories.Apparat,
+        werkstatt: EffectFactories.AudioNamed.Werkstatt,
+        spielwerk: EffectFactories.MidiNamed.Spielwerk
+    } as const
+
+    // creates the host device of a dropped script, None when it cannot go there
+    export type ScriptPlacement = (project: Project) => Option<Box>
+
+    export const script = (service: StudioService, script: CommunityScript,
+                           place: Option<ScriptPlacement> = Option.None): void =>
         withProject(service, async project => {
             const source = await Promises.tryCatch(CommunityAPI.get().loadSource(script))
             if (source.status === "rejected") {
@@ -80,20 +92,29 @@ export namespace SpotlightCreate {
             const compiler = ScriptCompiler.create(config)
             const userCode = compiler.stripHeader(source.value)
             const created: Option<ScriptCompiler.ScriptDeviceBox> = project.editing.modify(() => {
-                const box = createScriptDevice(project, target)
+                const box = place.match({
+                    none: () => createScriptDevice(project, target),
+                    some: placement => placement(project)
+                        .flatMap(box => isScriptDevice(box) ? Option.wrap(box) : Option.None)
+                })
                 // no header yet: an editor mounting before the compile below loads nothing
                 box.ifSome(box => box.code.setValue(userCode))
                 return box
             }).flatMap(box => box)
             await created.match({
-                none: () => Promise.resolve(),
+                none: async () => {
+                    if (place.isEmpty()) {RuntimeNotifier.notify({message: "Select a track that takes this effect first.", icon: "Info"})}
+                },
                 some: box => compiler.compile(service.audioContext, project.editing, box, userCode, true)
             })
         })
 
     const scriptConfigs = {apparat: "Apparat", werkstatt: "Werkstatt", spielwerk: "Spielwerk"} as const
 
-    const createScriptDevice = (project: Project, target: "apparat" | "werkstatt" | "spielwerk")
+    const isScriptDevice = (box: Box): box is ScriptCompiler.ScriptDeviceBox =>
+        box instanceof ApparatDeviceBox || box instanceof WerkstattDeviceBox || box instanceof SpielwerkDeviceBox
+
+    const createScriptDevice = (project: Project, target: ScriptTarget)
         : Option<ScriptCompiler.ScriptDeviceBox> => {
         switch (target) {
             case "apparat":

@@ -102,7 +102,7 @@ const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wa
 export class StudioService implements ProjectEnv {
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
-        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Presets)
+        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Instruments)
     } as const
     readonly timeline = {
         range,

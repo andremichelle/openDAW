@@ -1,1 +1,1 @@
-export enum BrowseScope {Presets, Samples, Soundfonts}
+export enum BrowseScope {Instruments, AudioEffects, MidiEffects, Samples, Soundfonts}

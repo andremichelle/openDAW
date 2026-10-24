@@ -45,7 +45,7 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
     presets: {
         screen: "default", placement: "right", frame: 4, headline: "Presets",
         text: "Instruments and effects ready to drop onto the timeline or into a device chain.",
-        prepare: browse(BrowseScope.Presets)
+        prepare: browse(BrowseScope.Instruments)
     },
     samples: {
         screen: "default", placement: "right", frame: 4, headline: "Samples",
@@ -61,7 +61,7 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
         screen: "default", placement: "right", headline: "Clips",
         text: "Launch loops per track without arranging them. Great for sketching ideas live.",
         prepare: service => {
-            service.layout.browseScope.setValue(BrowseScope.Presets)
+            service.layout.browseScope.setValue(BrowseScope.Instruments)
             service.timeline.clips.visible.setValue(true)
         }
     },

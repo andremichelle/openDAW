@@ -31,6 +31,7 @@ import {installAutoScroll} from "@/ui/AutoScroll"
 import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
+import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -125,6 +126,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const isNewUnit = (dragData: AnyDragData): boolean =>
         (dragData.type === "instrument" && dragData.device !== null)
         || (dragData.type === "preset" && (dragData.category === "instrument" || dragData.category === "audio-unit"))
+        || (dragData.type === "script" && dragData.script.target === "apparat")
     lifecycle.ownAll(
         // The root sees drags over headers, lanes, gaps and the empty band alike, so a new unit can land
         // between any two units. The inner targets (effects onto a header, samples onto a lane) keep theirs.
@@ -149,6 +151,12 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                         PresetApplication.createNewAudioUnitFromInstrument(
                             service.project, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
                     }
+                } else if (dragData.type === "script") {
+                    SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
+                        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(SpotlightCreate.ScriptHosts.apparat)
+                        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        return Option.wrap(instrumentBox)
+                    }))
                 }
             },
             enter: () => {},

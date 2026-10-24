@@ -12,6 +12,7 @@ export type HoverEditSwitch = { hover(): void, cancel(): void }
 // Anything that lands in the device panel: a device from the browser, one dragged out of a chain, a preset.
 export const isDeviceDrag = (data: AnyDragData): boolean =>
     data.type === "midi-effect" || data.type === "audio-effect" || data.type === "instrument" || data.type === "preset"
+    || data.type === "script"
 
 // Holding a device over a unit's track header for a second opens that unit's chain, so the device can be
 // dropped where it belongs in the device panel. `hover` is fed by dragover, which keeps firing while the

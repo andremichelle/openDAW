@@ -363,7 +363,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         }, {passive: false}),
         installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX,
             {padding: [0, 32, 0, 0], dragPadding: [0, 32, 0, 32]}),
-        DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
+        DevicePanelDragAndDrop.install(service, service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target
             if (target instanceof Element && isAbsent(target.closest("[data-drag]"))) {

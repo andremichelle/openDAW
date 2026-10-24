@@ -1,21 +1,4 @@
 @use "@/mixins"
 
 component
-  @include mixins.library-item-outer
-  @include mixins.library-item-states("div.device-header")
-
-  > div.device-header
-    @include mixins.library-item-header
-
-    > div.icon.external
-      background-color: transparent
-      padding: 0
-      color: inherit
-
-      > img
-        width: 100%
-        height: 100%
-        object-fit: contain
-
-  > div.preset-list
-    @include mixins.library-preset-list
+  @include mixins.library-device-row
