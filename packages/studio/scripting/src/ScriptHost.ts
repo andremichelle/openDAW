@@ -1,20 +1,14 @@
 import {Errors, RuntimeNotifier} from "@opendaw/lib-std"
-import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
+import {Messenger, Promises} from "@opendaw/lib-runtime"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
+import {ScriptConnection} from "./ScriptConnection"
 
 export class ScriptHost implements ScriptExecutionProtocol {
     readonly #executor: ScriptExecutionProtocol
 
     constructor(host: ScriptHostProtocol, scriptURL: string) {
-        const messenger = Messenger.for(new Worker(scriptURL, {type: "module"}))
-        Communicator.executor<ScriptHostProtocol>(messenger.channel("scripting-host"), host)
-        this.#executor = Communicator.sender<ScriptExecutionProtocol>(messenger.channel("scripting-execution"),
-            dispatcher => new class implements ScriptExecutionProtocol {
-                executeScript(script: string, context: ScriptExecutionContext): Promise<void> {
-                    return dispatcher.dispatchAndReturn(this.executeScript, script, context)
-                }
-            })
+        this.#executor = ScriptConnection.host(Messenger.for(new Worker(scriptURL, {type: "module"})), host)
     }
 
     async executeScript(script: string, context: ScriptExecutionContext): Promise<void> {

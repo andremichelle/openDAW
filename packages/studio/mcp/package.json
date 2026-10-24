@@ -1,0 +1,27 @@
+{
+  "name": "@opendaw/studio-mcp",
+  "version": "0.0.1",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && esbuild src/cli.ts src/ScriptWorker.ts --bundle --platform=node --format=esm --external:typescript --banner:js=\"console.debug = () => {}\" --outdir=dist --log-level=warning",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "npm run build && vitest run"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.96",
+    "@opendaw/lib-runtime": "^0.0.87",
+    "@opendaw/lib-std": "^0.0.86",
+    "@opendaw/studio-adapters": "^0.3.6",
+    "@opendaw/studio-boxes": "^0.0.112",
+    "@opendaw/studio-scripting": "^0.0.88",
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.28",
+    "@opendaw/typescript-config": "^0.0.32",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2"
+  }
+}
