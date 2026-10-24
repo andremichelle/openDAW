@@ -37,7 +37,7 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
+import {DeviceEditor, getColorFor} from "@/ui/devices/DeviceEditor.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Clipboard, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
@@ -367,7 +367,11 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         const sections = ScriptDeclaration.parseGroups(box.code.getValue())
         const terminator = new Terminator()
         if (sections.length === 0) {
-            controlsContainer.appendChild(<div className="controls"/>)
+            controlsContainer.appendChild(
+                <div className="controls empty">
+                    <div className="hint">Click <Icon symbol={IconSymbol.Code} style={{color: getColorFor(adapter.type).toString()}}/> to edit the script</div>
+                </div>
+            )
         }
         for (const section of sections) {populateSection(terminator, section, controlsContainer)}
         controlsTerminator.own(terminator)

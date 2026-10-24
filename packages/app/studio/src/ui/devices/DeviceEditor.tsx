@@ -28,7 +28,7 @@ import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "DeviceEditor")
 
-const getColorFor = (type: DeviceType) => {
+export const getColorFor = (type: DeviceType) => {
     switch (type) {
         case "midi-effect":
             return Colors.orange
