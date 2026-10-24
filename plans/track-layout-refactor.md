@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `98743b95-6c5d-4975-bcf9-e4b9c9a68f93`.
+- Current refactored build: `3c164a54-3edc-44bb-aee6-7dc10360bb58`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -98,3 +98,8 @@ Hosted drag checks move a track onto the group header, between two children, and
 108px resized group also accepts a center-header drop. The temporary CSS fixture checks feedback geometry
 separately from those completed native gestures; live pointer-hold screenshots are not available through
 the current browser automation. Saved the hosted example as `Track drop feedback verification`.
+
+Group-hover appearance follow-up: inside-group feedback uses four 8px corner brackets instead of a
+continuous border. Header bounds, indentation and insertion-line geometry are unchanged. The compiled
+stylesheet browser fixture verifies the corners stay outside launcher/automation cells and the
+insertion preview remains one line. The production preview build passes.
