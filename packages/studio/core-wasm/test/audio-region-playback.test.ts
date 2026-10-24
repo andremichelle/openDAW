@@ -57,7 +57,7 @@ describe("audio-region playback", () => {
         engine.set_metronome_enabled(0)
         expect(drainSamples()).toBeGreaterThan(0) // the region's file loads (a synthetic tone)
 
-        const capture = (quanta: number): {peak: number, buffer: Float32Array} => {
+        const capture = (quanta: number, skipQuanta = 0): {peak: number, buffer: Float32Array} => {
             engine.stop(); engine.play()
             const len = engine.output_len() >>> 0
             const buffer = new Float32Array(quanta * len)
@@ -68,7 +68,7 @@ describe("audio-region playback", () => {
                 const out = new Float32Array(memory.buffer, enginePtr, len)
                 for (let i = 0; i < len; i++) {
                     expect(Number.isFinite(out[i])).toBe(true)
-                    if (Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}
+                    if (q >= skipQuanta && Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}
                 }
                 buffer.set(out, q * len)
             }
@@ -98,7 +98,7 @@ describe("audio-region playback", () => {
         regionBox.mute.setValue(true)
         source.endTransaction()
         await sync.settle()
-        const muted = capture(64)
+        const muted = capture(64, 8) // skip the first 20 ms: stop + play without a render is a jump, the old read fades out
         console.log(`muted peak: ${muted.peak.toFixed(6)}`)
         expect(muted.peak).toBeLessThan(playing.peak / 100) // muting silences it
         expect(maxDiff(playing.buffer, muted.buffer)).toBeGreaterThan(0.01) // and it really changed the output
