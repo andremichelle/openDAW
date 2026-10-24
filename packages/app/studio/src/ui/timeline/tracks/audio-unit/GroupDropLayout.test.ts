@@ -165,6 +165,33 @@ describe("track drop layout", () => {
         expect(above.row).toBe(below.row)
         expect(above.after).toBe(false)
     })
+    it("keeps expanded mixer group targets stable when entering from the right", () => {
+        const {group, inner, build} = fixture({horizontal: true})
+        const {row, resolve} = build()
+        for (const unit of [group, inner]) {
+            const header = row(unit).header
+            for (let offset = header.width - 1; offset > 6; offset--) {
+                const target = resolve(header.x + offset, 150)
+                expect(target.inside).toBe(true)
+                expect(target.parent).toBe(unit)
+                expect(target.row).toBe(row(unit))
+            }
+            expect(resolve(header.x + 1, 150).before).toBe(unit)
+        }
+    })
+    it("retains both mixer insertion edges for collapsed groups", () => {
+        const {group, after, graph, build} = fixture({horizontal: true})
+        graph.beginTransaction()
+        group.groupCollapsed.setValue(true)
+        graph.endTransaction()
+        const {row, resolve} = build()
+        const header = row(group).header
+        expect(resolve(header.x + 1, 150).before).toBe(group)
+        expect(resolve(header.x + header.width / 2, 150).inside).toBe(true)
+        const right = resolve(header.x + header.width - 1, 150)
+        expect(right.inside).toBe(false)
+        expect(right.before).toBe(after)
+    })
     it("returns no target for an empty visible list", () => {
         const {build} = fixture()
         expect(GroupDropLayout.resolve(build().layout, [], {clientX: 0, clientY: 0}, false).isEmpty()).toBe(true)

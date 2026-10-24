@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `f9ebbd79-1949-4d1b-8a5c-b5af178a51ad`.
+- Current refactored build: `d78b9f4f-ee05-472f-9ecd-27410037e56c`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -116,3 +116,12 @@ available below its last visible child. Collapsed groups and mixer hit zones ret
 Two new regressions walk upward through resized/nested expanded headers and check collapsed edge
 behavior. All 11 geometry tests pass.
 The full Studio suite passes 104 tests in 26 files; the production build/type check passes.
+
+Mixer hover follow-up: mixer inside-drop feedback uses the same `drop-corners` Sass mixin as the
+timeline, replacing the full strip outline with four 8px brackets. The overlay does not intercept
+controls. Expanded mixer groups also keep the inside target through the right edge; their left 6px
+remain an insertion-before target, with after-subtree insertion available beyond their children.
+Collapsed groups retain both insertion edges. Two new mixer geometry regressions cover nested
+expanded entry from the right and collapsed edge targets. All 106 Studio tests (26 files), production
+build and type checks pass. A browser fixture using actual mixer/strip/rail styles verifies corners
+and separate insertion feedback; this is a style check, not a live held-drag screenshot.
