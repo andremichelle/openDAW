@@ -1,10 +1,11 @@
+import {GroupDropLayout} from "./GroupDropLayout"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {AudioUnitGroups, AudioUnitLayout, Devices} from "@opendaw/studio-adapters"
+import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
 import {Browser, Dragging, Events} from "@opendaw/lib-dom"
-import {isDefined, Lifecycle, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
+import {asDefined, isDefined, Lifecycle, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
 
 export const groupSelectedTracks = (project: Project): void => {
     const selected = project.trackSelection.selected
@@ -76,48 +77,26 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
     )
 }
 
-export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number}
+export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number, headerHeight: number}
 
 /** Header centre means add to folder; row edges mean insert. Pointer indentation chooses the parent at edges. */
 export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Optional<GroupDrop> => {
     const elements = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
         .map(row => [row.dataset.unit, row]))
+    const headers = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-group-header]"))
+        .map(header => [header.dataset.groupHeader, header]))
     const layout = project.audioUnitLayout.snapshot
     const rows = layout.visibleRows.flatMap(row => {
-        const element = elements.get(UUID.toString(row.unit.address.uuid))
-        return isDefined(element) && element.getClientRects().length > 0 ? [element] : []
+        const uuid = UUID.toString(row.unit.address.uuid), element = elements.get(uuid)
+        if (!isDefined(element) || element.getClientRects().length === 0) {return []}
+        return [{unit: row.unit, bounds: element.getBoundingClientRect(),
+            header: (headers.get(uuid) ?? element).getBoundingClientRect()}]
     })
-    if (rows.length === 0) {return undefined}
-    const coord = horizontal ? event.clientX : event.clientY
-    const row = rows.find(row => {
-        const rect = row.getBoundingClientRect()
-        return coord < (horizontal ? rect.right : rect.bottom)
-    }) ?? rows[rows.length - 1]
-    const uuid = row.dataset.unit
-    if (!isDefined(uuid)) {return undefined}
-    const unit = project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrUndefined()
-    if (!(unit instanceof AudioUnitBox)) {return undefined}
-    const rect = row.getBoundingClientRect(), start = horizontal ? rect.left : rect.top
-    const size = horizontal ? rect.width : Math.min(rect.height, 40)
-    const offset = coord - start
-    const inside = unit.isGroup.getValue() && offset > size * 0.25 && offset < size * 0.75
-    if (inside) {return {parent: unit, row, inside: true, after: false, indent: layout.row(unit).mapOr(item => item.indent + AudioUnitLayout.Indent, 0)}}
-    const after = offset >= size / 2
-    let parent = layout.row(unit).mapOr(item => item.parent, undefined)
-    // Moving left across a tree guide lifts the insertion out of that folder.
-    if (!horizontal) {
-        const indent = Math.max(0, Math.floor((event.clientX - rect.left - 12) / AudioUnitLayout.Indent))
-        while (isDefined(parent) && layout.row(parent).mapOr(item => item.depth, 0) >= indent) {parent = layout.row(parent).mapOr(item => item.parent, undefined)}
-    }
-    let sibling = unit
-    while (layout.row(sibling).mapOr(item => item.parent, undefined) !== parent) {
-        const next = layout.row(sibling).mapOr(item => item.parent, undefined)
-        if (!isDefined(next)) {break}
-        sibling = next
-    }
-    const siblings = layout.rows.filter(item => item.parent === parent).map(item => item.unit)
-    const before = after ? siblings[siblings.indexOf(sibling) + 1] : sibling
-    return {parent, before, row, inside: false, after, indent: isDefined(parent) ? layout.row(parent).mapOr(item => item.indent + AudioUnitLayout.Indent, 0) : 0}
+    return GroupDropLayout.resolve(layout, rows, event, horizontal).map(target => ({
+        parent: target.parent, before: target.before,
+        row: asDefined(elements.get(UUID.toString(target.row.unit.address.uuid))),
+        inside: target.inside, after: target.after, indent: target.indent, headerHeight: target.row.header.height
+    })).unwrapOrUndefined()
 }
 
 export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void => {
@@ -125,14 +104,16 @@ export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void 
         row.classList.remove("group-drop-inside", "group-drop-before", "group-drop-after"))
     if (!isDefined(target)) {return}
     target.row.style.setProperty("--drop-indent", `${target.indent}px`)
+    target.row.style.setProperty("--drop-header-height", `${target.headerHeight}px`)
     target.row.classList.add(target.inside ? "group-drop-inside" : target.after ? "group-drop-after" : "group-drop-before")
 }
 
 /** Pointer capture gives track moves the same Escape/cancel behavior as other timeline gestures. */
 export const installGroupTrackDrag = (handle: HTMLElement, project: Project, unit: AudioUnitBox): Terminable => {
+    handle.dataset.groupHeader = UUID.toString(unit.address.uuid)
     handle.draggable = false
     handle.title = "Drag to move track; drop on a group or between tracks. Drag left to move out."
-    return Dragging.attach(handle, start => {
+    const dragging = Dragging.attach(handle, start => {
         if (start.target instanceof Element && start.target.closest("button,input,select,textarea,a,[contenteditable],.track-resizer,[data-track-controls],svg.collapse-automation")) {return Option.None}
         if (!unit.isAttached() || unit.type.getValue() === AudioUnitType.Output) {return Option.None}
         const units = project.trackSelection.has(unit) ? [...project.trackSelection.selected] : [unit]
@@ -164,4 +145,5 @@ export const installGroupTrackDrag = (handle: HTMLElement, project: Project, uni
             finally: clear
         } satisfies Dragging.Process)
     })
+    return Terminable.many(dragging, {terminate: () => handle.removeAttribute("data-group-header")})
 }
