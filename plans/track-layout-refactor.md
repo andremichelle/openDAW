@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `c8e3ff88-21f9-481d-9c65-5c00f00fd4d9`.
+- Current refactored build: `f9ebbd79-1949-4d1b-8a5c-b5af178a51ad`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -108,3 +108,11 @@ Drop-feedback stacking follow-up: group rails paint at layer 6; timeline drop co
 lines must paint above them at layer 7. A browser fixture with both actual compiled styles verifies
 the rail no longer covers the left corners or the insertion line. Earlier corner checks without a
 rail did not exercise this overlap.
+
+Expanded-group hover follow-up: the timeline header's lower quarter no longer resolves to the distant
+after-subtree insertion boundary. Expanded headers accept inside drops from 6px below their top through
+their bottom edge. The top edge still inserts before the group; insertion after the subtree remains
+available below its last visible child. Collapsed groups and mixer hit zones retain both edge targets.
+Two new regressions walk upward through resized/nested expanded headers and check collapsed edge
+behavior. All 11 geometry tests pass.
+The full Studio suite passes 104 tests in 26 files; the production build/type check passes.

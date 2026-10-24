@@ -71,13 +71,43 @@ describe("track drop layout", () => {
     it("draws after an expanded group below its whole subtree rather than below its header", () => {
         const {group, lastChild, after, build} = fixture()
         const {row, resolve} = build()
-        const headerBottom = resolve(row(group).header.y + row(group).header.height - 1)
+        const headerBottom = resolve(row(group).header.y + row(group).header.height - 1,
+            row(group).header.x + row(group).header.width + 10)
         const childBottom = resolve(row(lastChild).bounds.y + row(lastChild).bounds.height - 1, 304)
         const nextTop = resolve(row(after).bounds.y + 1)
         expect([headerBottom.before, childBottom.before, nextTop.before]).toEqual([after, after, after])
         expect(headerBottom.row).toBe(row(after))
         expect(line(headerBottom)).toBe(line(childBottom))
         expect(line(childBottom)).toBe(line(nextTop))
+    })
+    it("keeps expanded group headers inside targets when entering from below", () => {
+        const {group, inner, build} = fixture({groupHeight: 132})
+        const {row, resolve} = build()
+        for (const unit of [group, inner]) {
+            const header = row(unit).header
+            // Walk up from the bottom edge, including the former after-subtree quarter.
+            for (let offset = header.height - 1; offset > 6; offset--) {
+                const target = resolve(header.y + offset)
+                expect(target.inside).toBe(true)
+                expect(target.parent).toBe(unit)
+                expect(target.row).toBe(row(unit))
+            }
+            expect(resolve(header.y + 1).inside).toBe(false)
+            expect(resolve(header.y + 1).before).toBe(unit)
+        }
+    })
+    it("retains both insertion edges around a collapsed group header", () => {
+        const {group, after, graph, build} = fixture()
+        graph.beginTransaction()
+        group.groupCollapsed.setValue(true)
+        graph.endTransaction()
+        const {row, resolve} = build()
+        const header = row(group).header
+        expect(resolve(header.y + 1).before).toBe(group)
+        expect(resolve(header.y + header.height / 2).inside).toBe(true)
+        const bottom = resolve(header.y + header.height - 1)
+        expect(bottom.inside).toBe(false)
+        expect(bottom.before).toBe(after)
     })
     it("uses one physical boundary for end-of-folder and following root positions", () => {
         const {group, lastChild, after, build} = fixture()
