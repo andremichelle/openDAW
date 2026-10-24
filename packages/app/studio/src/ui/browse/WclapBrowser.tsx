@@ -1,7 +1,8 @@
 import css from "./WclapBrowser.sass?inline"
 import {
-    Bytes, DefaultObservableValue, EmptyProcedure, Lifecycle, RuntimeNotifier, StringComparator, Terminator
+    Bytes, DefaultObservableValue, EmptyProcedure, Lifecycle, Option, RuntimeNotifier, StringComparator, Terminator, UUID
 } from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -10,6 +11,9 @@ import {WclapPluginInfo} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
+import {StorageInspector} from "@/storage/StorageInspector"
+import {StorageReport} from "@/storage/StorageReport"
+import {StorageScan} from "@/storage/StorageScan"
 import {WclapCatalog, WclapIndexEntry, WclapIndexFolder} from "@/opendaw-api"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
@@ -78,7 +82,7 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
     return {name: "", folders: (await WclapCatalog.get().tree()).folders.map(toFolder), items: []}
 }
 
-export const WclapBrowser = ({lifecycle}: Construct) => {
+export const WclapBrowser = ({lifecycle, service}: Construct) => {
     const entries: HTMLElement = (
         <div className="scrollable" onConnect={scrollable => lifecycle.own(installScrollbars(scrollable))}/>
     )
@@ -86,6 +90,34 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
     const filter = new DefaultObservableValue("")
     const loaded: { root: ResourceFolder<Entry> } = {root: {name: "", folders: [], items: []}}
     const remove = async ({id, bundle}: Entry): Promise<void> => {
+        const dialog = RuntimeNotifier.progress({headline: "Checking WebCLAP Usages"})
+        const scanned = await Promises.tryCatch(StorageInspector.scan(EmptyProcedure, EmptyProcedure))
+        dialog.terminate()
+        if (scanned.status === "rejected") {
+            return RuntimeNotifier.info({headline: "Could not check the usages", message: String(scanned.error)})
+        }
+        const openProjectId: Option<string> = service.projectProfileService.getValue().map(profile => UUID.toString(profile.uuid))
+        const report = service.projectProfileService.getValue().match({
+            none: () => scanned.value,
+            some: profile => StorageReport.withOpenProject(scanned.value, UUID.toString(profile.uuid),
+                StorageScan.referencesOf(profile.project.boxGraph).refs)
+        })
+        const usedBy = report.assets.find(asset => StorageReport.isSame(asset, {kind: "wclap", id}))?.usedBy ?? []
+        if (usedBy.some(ref => ref.kind === "project" && openProjectId.contains(ref.id))) {
+            return RuntimeNotifier.info({
+                headline: "In Use", message: `'${bundle}' is used by the open project. Remove it there first.`
+            })
+        }
+        if (usedBy.length > 0) {
+            const users = usedBy.map(ref => report.items.find(item => StorageReport.isSame(item, ref))?.name ?? ref.id)
+            const proceed = await RuntimeNotifier.approve({
+                headline: "Still In Use",
+                message: `'${bundle}' is used by ${users.join(", ")}. They will miss it after the deletion.`,
+                approveText: "Continue",
+                cancelText: "Cancel"
+            })
+            if (!proceed) {return}
+        }
         const approved = await RuntimeNotifier.approve({
             headline: "Delete WebCLAP Bundle",
             message: `Delete "${bundle}" from this device and from your cloud backup? Projects using it will pass audio through.`,

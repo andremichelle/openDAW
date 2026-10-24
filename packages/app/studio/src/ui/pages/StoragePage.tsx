@@ -7,6 +7,7 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {StorageScan} from "@/storage/StorageScan"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {WclapStorage} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
 import {BackButton} from "@/ui/pages/BackButton"
 import {Button} from "@/ui/components/Button"
@@ -16,8 +17,17 @@ import {StorageInspector} from "@/storage/StorageInspector"
 import {StorageReport} from "@/storage/StorageReport"
 import {StorageDeletion} from "@/storage/StorageDeletion"
 import {DeleteUnusedDialog} from "@/ui/pages/DeleteUnusedDialog"
+import {WclapDescriber} from "@/service/WclapDescriber"
 
 const className = Html.adoptStyleSheet(css, "StoragePage")
+
+const nameWclaps = async (report: StorageScan.Report): Promise<StorageScan.Report> => ({
+    ...report, assets: await Promise.all(report.assets.map(async asset => {
+        if (asset.kind !== "wclap") {return asset}
+        const plugins = await WclapDescriber.describe(WclapStorage.urlOf(asset.id)).catch(() => [])
+        return plugins.length === 0 ? asset : {...asset, name: plugins.map(({name}) => name).join(", ")}
+    }))
+})
 
 const Consequence = "This cannot be undone. With the cloud backup on, it is removed there on the next sync too."
 
@@ -226,7 +236,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             some: profile => StorageReport.withOpenProject(result.value, UUID.toString(profile.uuid),
                 StorageScan.referencesOf(profile.project.boxGraph).refs)
         })
-        update(report)
+        update(await nameWclaps(report))
     }
     scan().then(EmptyExec)
     return (
