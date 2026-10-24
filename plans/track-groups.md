@@ -113,3 +113,7 @@ Track selection lines occupy their own depth position after the parent rails. He
 full-width, so the selection line is painted as a narrow background stripe rather than an outer border
 that overlaps the parent rail. Rails are 4px wide with a 5px depth step: one pixel between levels.
 Header padding, automation guides and drag-out hit testing use the same depth step.
+
+Drag feedback uses `GroupDropLayout` to assign one marker to each physical insertion boundary. An
+expanded group's following slot is drawn after its full subtree. Group-center feedback is bounded to
+the primary header's measured height and first grid column, excluding clip launcher and automation.

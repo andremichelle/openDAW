@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `6c053f8b-c1a3-43ab-ad5d-eaf3d9e1b9fe`.
+- Current refactored build: `98743b95-6c5d-4975-bcf9-e4b9c9a68f93`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -76,3 +76,25 @@ Mixer selection follow-up: selected strips use their existing 2px top border ins
 shadow. Name-label fill/outline and subtle tint are unchanged. Selected folders keep both their
 selection border and group rail. The production build and hosted single/multiple-selection checks pass;
 unselected borders remain transparent, and no selected strip has an inset left shadow.
+
+## Drag feedback follow-up
+
+`GroupDropLayout` resolves pointer geometry against the shared layout and actual channel/header bounds.
+Both sides of a gap use the same canonical marker row. An after-group target is drawn below the complete
+visible subtree. End-of-folder and following-root targets share a physical boundary with different
+indentation. A hidden Output still permits the final insertion slot.
+
+Group-center feedback uses the primary header height and first grid column. Automation, clip launcher
+and arrangement cells are excluded from that frame. Header drag handles own their `data-group-header`
+registration; mixer column gaps use the same canonical boundary rule.
+
+This UI-only follow-up passes 102 Studio tests, 36 focused core grouping tests, Studio types and the
+production build. Nine new pure geometry tests cover nested/resized/folded groups, automation, launcher
+exclusion, hidden Output and mixer gaps. A browser fixture using the actual stylesheet confirms the
+inside frame fits the 288px header column (including indentation) and stops before launcher/automation;
+the insertion line uses one full-width grid span.
+
+Hosted drag checks move a track onto the group header, between two children, and back to the root. A
+108px resized group also accepts a center-header drop. The temporary CSS fixture checks feedback geometry
+separately from those completed native gestures; live pointer-hold screenshots are not available through
+the current browser automation. Saved the hosted example as `Track drop feedback verification`.
