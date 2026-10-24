@@ -55,7 +55,8 @@ Without a project, creating a device starts a new project first.
 ## Samples
 
 The `sample` verb searches the openDAW library and your own samples. **Enter** creates a new Tape track with the sample.
-Samples only appear with the verb, a search without a verb leaves them out.
+Samples only appear with the verb, a search without a verb leaves them out. The openDAW samples are royalty-free for
+your music made in openDAW, but they are not licensed for redistribution.
 
 The word `loop` keeps only loops (samples with a tempo), `noloop` or `oneshot` keeps only one-shots: `~kick loop`.
 
