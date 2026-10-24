@@ -22,7 +22,7 @@ import {connectSyncToEngine, EngineSync} from "./helpers/connect-sync"
 
 const WERKSTATT = {headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}
 const APPARAT = {headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}
-const MIXER = readFileSync(new URL("../../../app/studio/src/ui/devices/audio-effects/examples/sidechain-mixer.js", import.meta.url), "utf8")
+const MIXER = readFileSync(new URL("./assets/werkstatt/sidechain-mixer.js", import.meta.url), "utf8")
 
 // Deterministic sources: A is a ramp on the left (checks per-sample alignment), B a constant pair.
 const SOURCE_A = (index: number): [number, number] => [index / 1000, 0.2]
