@@ -47,7 +47,8 @@ component
     background-size: 100% 2px, 100% 2px, 2px 100%, 2px 100%
     background-repeat: no-repeat
     pointer-events: none
-    z-index: 5
+    // Drop feedback must paint above GroupRails (z-index: 6).
+    z-index: 7
 
   &.group-drop-before:after, &.group-drop-after:after
     content: ""
@@ -58,7 +59,8 @@ component
     height: 2px
     background: var(--color-blue)
     pointer-events: none
-    z-index: 5
+    // Drop feedback must paint above GroupRails (z-index: 6).
+    z-index: 7
 
   &.group-drop-before:after
     top: -1px

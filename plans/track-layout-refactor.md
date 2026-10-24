@@ -62,7 +62,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `3c164a54-3edc-44bb-aee6-7dc10360bb58`.
+- Current refactored build: `c8e3ff88-21f9-481d-9c65-5c00f00fd4d9`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -103,3 +103,8 @@ Group-hover appearance follow-up: inside-group feedback uses four 8px corner bra
 continuous border. Header bounds, indentation and insertion-line geometry are unchanged. The compiled
 stylesheet browser fixture verifies the corners stay outside launcher/automation cells and the
 insertion preview remains one line. The production preview build passes.
+
+Drop-feedback stacking follow-up: group rails paint at layer 6; timeline drop corners and insertion
+lines must paint above them at layer 7. A browser fixture with both actual compiled styles verifies
+the rail no longer covers the left corners or the insertion line. Earlier corner checks without a
+rail did not exercise this overlap.
