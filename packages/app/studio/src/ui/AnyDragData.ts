@@ -37,7 +37,6 @@ export type DragDevice = (
         index: byte
         uuid: string
     }) & DragCopyHint
-export type DragChannelStrip = { type: "channelstrip", uuid: string, start_index: int } & DragCopyHint
 // One timeline track lane dragged to reorder it among the lanes sharing its device group (same unit, same
 // track type, same device).
 export type DragTrack = { type: "track", uuid: UUID.String } & DragCopyHint
@@ -67,5 +66,5 @@ export type DragModulator = {
 } & DragCopyHint
 
 export type AnyDragData =
-    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
+    DragSample | DragFile | DragDevice | DragTrack | DragSoundfont | DragPreset
     | DragCompositeEntry | DragModulator

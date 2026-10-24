@@ -89,7 +89,8 @@ export namespace MenuItems {
     }
 
     export const copyAudioUnit = (audioUnit: AudioUnitBoxAdapter, options?: { separatorBefore?: boolean }): MenuItem =>
-        MenuItem.default({label: "Copy AudioUnit", hidden: audioUnit.isOutput, separatorBefore: options?.separatorBefore})
+        MenuItem.default({label: "Copy AudioUnit",
+            selectable: !audioUnit.box.isGroup.getValue(), hidden: audioUnit.isOutput, separatorBefore: options?.separatorBefore})
             .setTriggerProcedure(() => AudioUnitsClipboard.copyEntry(audioUnit).ifSome(ClipboardManager.write))
 
     // the system clipboard is async, so the item is enabled by this session's last copy and reads the system

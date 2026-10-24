@@ -19,16 +19,20 @@ component
       width: max-content
       padding: 0.5em
       display: grid
-      grid-template-rows: auto auto auto auto 40px 1fr auto
+      grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto 40px 1fr auto
       grid-auto-flow: column dense
       justify-content: start
       row-gap: 4px
       column-gap: 8px
 
+      > [data-unit]
+        grid-row: 2 / 9
+
       > div.headers
         display: grid
         grid-template-rows: subgrid
-        grid-row: span 7
+        grid-row: 2 / 9
+        grid-column: 1
         padding: 0 0.5em 0.5em 1em
         border-radius: 0.125em
         background-color: rgba(white, 0.01)
@@ -40,3 +44,12 @@ component
           justify-content: right
           color: rgba(white, 0.4)
           pointer-events: none
+  [data-unit].group-drop-inside
+    outline: 2px solid var(--color-blue)
+    outline-offset: -2px
+
+  [data-unit].group-drop-before
+    box-shadow: inset 2px 0 var(--color-blue)
+
+  [data-unit].group-drop-after
+    box-shadow: inset -2px 0 var(--color-blue)
