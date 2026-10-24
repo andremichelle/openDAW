@@ -28,6 +28,8 @@ A query can start with a verb. The verb limits the search to what it can do. Wit
 The symbol needs no space, `+vapo` is enough. A word needs a space after it, and its first letters are enough:
 `cr vapo` means `create vapo`. **Tab** completes a verb you started typing.
 
+A symbol or a complete word turns into a label in front of the input. **Backspace** on an empty input removes it.
+
 A verb on its own, like `+` or `/`, lists all its entries with the ones you use most at the top.
 
 The legend under an empty Spotlight shows which verbs are available right now.

@@ -63,6 +63,27 @@ describe("SpotlightVerbs.parse", () => {
     })
 })
 
+describe("SpotlightVerbs.lead", () => {
+    const leadOf = (text: string) => SpotlightVerbs.lead(text).map(({verb: {verb}, rest}) => ({verb, rest})).unwrapOrNull()
+    it("takes a leading symbol", () => {
+        expect(leadOf("+")).toStrictEqual({verb: "create", rest: ""})
+        expect(leadOf("+vapo")).toStrictEqual({verb: "create", rest: "vapo"})
+        expect(leadOf("  @ vapo")).toStrictEqual({verb: "goto", rest: "vapo"})
+        expect(leadOf("+/vapo")).toStrictEqual({verb: "create", rest: "/vapo"})
+    })
+    it("takes a complete word followed by whitespace", () => {
+        expect(leadOf("create ")).toStrictEqual({verb: "create", rest: ""})
+        expect(leadOf("Create  vapo")).toStrictEqual({verb: "create", rest: "vapo"})
+    })
+    it("leaves partial or unfinished words and plain text", () => {
+        expect(leadOf("create")).toBeNull()
+        expect(leadOf("cr vapo")).toBeNull()
+        expect(leadOf("creates")).toBeNull()
+        expect(leadOf("vapo")).toBeNull()
+        expect(leadOf("")).toBeNull()
+    })
+})
+
 describe("SpotlightEntry.rank", () => {
     const brightPad = entry("Create Vaporisateur · Bright Pad", {names: ["Bright Pad"], qualifiers: ["Vaporisateur"], group: 1})
     const darkPad = entry("Create Vaporisateur · Dark Pad", {names: ["Dark Pad"], qualifiers: ["Vaporisateur"], group: 2})

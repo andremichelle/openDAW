@@ -32,6 +32,16 @@ export namespace SpotlightVerbs {
         return candidates.length === 1 ? Option.wrap(candidates[0]) : Option.None
     }
 
+    export const lead = (text: string): Option<{ verb: SpotlightVerbDefinition, rest: string }> => {
+        const query = text.trimStart()
+        const lower = query.toLowerCase()
+        return Option.wrap(List.find(({symbol, word}) =>
+            query.startsWith(symbol) || (lower.startsWith(word) && /\s/.test(query.charAt(word.length)))))
+            .map(verb => ({
+                verb, rest: query.slice(query.startsWith(verb.symbol) ? verb.symbol.length : verb.word.length).trimStart()
+            }))
+    }
+
     export const parse = (text: string): SpotlightQuery => {
         const query = text.trimStart()
         const implicit: SpotlightQuery = {verb: Option.None, subject: query.trim(), completion: Option.None}

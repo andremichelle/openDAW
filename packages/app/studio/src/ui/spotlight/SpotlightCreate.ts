@@ -1,17 +1,26 @@
-import {asInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType} from "@opendaw/studio-enums"
-import {ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
-import {DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project} from "@opendaw/studio-core"
+import {
+    ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WerkstattDeviceBox
+} from "@opendaw/studio-boxes"
+import {
+    DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler, WclapPluginInfo
+} from "@opendaw/studio-adapters"
+import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStorage} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
+import {WclapCatalog} from "@/opendaw-api/WclapCatalog"
+import {WclapDescriber} from "@/service/WclapDescriber"
+import {WclapNames} from "@/service/WclapNames"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 
 export namespace SpotlightCreate {
+    export type Wclap = { readonly id: string, readonly name: string, readonly info: WclapPluginInfo }
+
     // without a project a new one is started first
     const withProject = (service: StudioService, action: (project: Project) => Promise<void>): void => {
         const run = () => service.hasProfile ? action(service.project) : Promise.resolve()
@@ -106,4 +115,57 @@ export namespace SpotlightCreate {
                     EffectFactories.MidiNamed.Spielwerk.create(project, field, field.pointerHub.incoming().length), SpielwerkDeviceBox))
         }
     }
+
+    export const wclaps = async (): Promise<ReadonlyArray<Wclap>> => {
+        const [published, stored] = await Promise.all([
+            WclapCatalog.get().all().catch(() => []),
+            WclapDescriber.stored().catch(() => [])
+        ])
+        const cloud = published.flatMap(({uuid, name, plugins}) => {
+            const shortNames = WclapNames.distinct(plugins.map(info => info.name))
+            return plugins.map((info, index) => ({id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info}))
+        })
+        const cloudIds = new Set(published.map(({uuid}) => uuid))
+        const local = Array.from(new Set(stored.map(({url}) => url)))
+            .filter(url => !cloudIds.has(WclapStorage.idOf(url)))
+            .flatMap(url => {
+                const bundle = stored.filter(plugin => plugin.url === url)
+                const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
+                return bundle.map(({info}, index) => ({id: WclapStorage.idOf(url), name: shortNames[index], info}))
+            })
+        return [...cloud, ...local]
+    }
+
+    const storeWclap = async ({id, name}: Wclap): Promise<string> => {
+        if (await WclapStorage.exists(id)) {return WclapStorage.urlOf(id)}
+        const progress = new DefaultObservableValue(0.0)
+        const dialog = RuntimeNotifier.progress({headline: `Downloading ${name}`, progress})
+        const result = await Promises.tryCatch(WclapCatalog.get().load(id, value => progress.setValue(value))
+            .then(archive => WclapStorage.store(archive)))
+        dialog.terminate()
+        if (result.status === "rejected") {throw result.error}
+        if (result.value !== WclapStorage.urlOf(id)) {throw new Error("the download does not match its id")}
+        return result.value
+    }
+
+    export const wclap = (service: StudioService, wclap: Wclap): void =>
+        withProject(service, async project => {
+            const url = await Promises.tryCatch(storeWclap(wclap))
+            if (url.status === "rejected") {
+                console.warn(url.error)
+                RuntimeNotifier.notify({message: `Could not download ${wclap.name}.`, icon: "Warning"})
+                return
+            }
+            const {clapId} = wclap.info
+            project.editing.modify(() => {
+                const box: Option<WclapDeviceBox | WclapInstrumentBox> = WclapDescriber.kindOf(wclap.info) === "instrument"
+                    ? Option.wrap(asInstanceOf(createInstrument(project, InstrumentFactories.Wclap), WclapInstrumentBox))
+                    : effectField(project, "audio").map(field => asInstanceOf(
+                        EffectFactories.AudioNamed.Wclap.create(project, field, field.pointerHub.incoming().length), WclapDeviceBox))
+                box.ifSome(box => {
+                    box.url.setValue(url.value)
+                    box.clapId.setValue(clapId)
+                })
+            })
+        })
 }
