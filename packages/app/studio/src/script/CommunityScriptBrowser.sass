@@ -97,7 +97,7 @@ component
     flex-direction: column
     row-gap: 0.25em
     min-height: 0
-    overflow: hidden
+    overflow: hidden scroll
 
     &.empty
       > div.name, > div.description, > div.facts, > pre.code
@@ -127,18 +127,18 @@ component
         color: var(--color-blue)
 
     > img.preview
-      flex: 0 1 auto
-      min-height: 0
+      flex: 0 0 auto
       max-width: 100%
+      margin-bottom: 1em
       align-self: flex-start
       object-fit: contain
       object-position: left top
 
     > pre.code
-      flex: 1 1 0
+      flex: 0 0 auto
       margin: 0
       padding: 0.5em
-      overflow: auto
+      overflow: auto hidden
       font-family: monospace
       font-size: 10px
       white-space: pre

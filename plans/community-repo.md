@@ -140,6 +140,29 @@ Checkpoints, each one looked at in the browser before the next:
 What it does: every community script shows a picture of its device in the browser, rendered by the Studio itself, so
 it always looks like what the user gets. Contributors add nothing.
 
+Status (2026-10-24): DONE and live. Studio c9dab554a (deployed PROD), commons 0790ab7 (deploy run 40106977901 rendered
+25 device scripts on opendaw.studio and uploaded them, project scripts have none).
+
+As built:
+
+1. Studio `/device-preview` (`DevicePreviewPage.tsx`): `window.openDAWDevicePreview(target, source)` is its only
+   input, never a URL. It opens a fresh project without leaving the route and without the welcome tour, creates the
+   device (Spielwerk on a hidden Vaporisateur, Werkstatt on a Tape), compiles the script, mounts the real
+   `DevicePanel` and resolves with the CSS selector of the device element once every script view reports `ready`
+   (view runtime posts it two frames after the view class is built, the frame sets `data-ready`).
+2. Commons `tools/src/Screenshots.ts`, `deploy.ts --screenshots <studio>`: Playwright 1.64.1 with headless Chromium in
+   the build job (no secrets), a fresh context per item at device pixel ratio 2, the PNG shot is re-encoded to WebP 0.9
+   by the same browser (no image dependency), `<uuid>-<hash>.webp` next to the script plus `screenshot` in the index
+   entry. A script that fails keeps no picture and logs a warning, the deploy goes on.
+3. About 1 s per device, 25 devices in 25 s. The pictures are byte-identical between runs, so a deploy only uploads
+   pictures of changed scripts or after a Studio restyle.
+4. Studio browser: `CommunityIndex` takes the optional `screenshot` (a plain file name, else the entry is skipped),
+   the detail pane shows the picture at 1x above the code.
+5. Order matters: the commons job renders on the PROD Studio, so a Studio change to the preview page or the device
+   look has to be deployed before commons renders it.
+
+Planning notes from before the build:
+
 When: after the merge, in the deploy build job (the one without secrets). Pull requests stay as they are, a reviewer
 previews the real script with the Load button.
 
