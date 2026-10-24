@@ -3,6 +3,7 @@ import {EmptyExec, Nullable, Option} from "@opendaw/lib-std"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {SpotlightVerb, SpotlightVerbs} from "./SpotlightVerbs"
 import {SpotlightEntry} from "./SpotlightEntry"
+import {SpotlightSampleFilter} from "./SpotlightSampleFilter"
 
 type Construct = {
     names: ReadonlyArray<string>
@@ -36,6 +37,8 @@ describe("SpotlightVerbs.parse", () => {
         expect(verbOf("=bpm")).toBe("edit")
         expect(verbOf("/bundle")).toBe("open")
         expect(verbOf("op stems")).toBe("open")
+        expect(verbOf("~kick")).toBe("sample")
+        expect(verbOf("sa kick")).toBe("sample")
         expect(SpotlightVerbs.parse("+vapo").subject).toBe("vapo")
         expect(SpotlightVerbs.parse("@ vapo").subject).toBe("vapo")
     })
@@ -156,6 +159,42 @@ describe("SpotlightEntry.rank", () => {
     })
     it("is case insensitive", () => {
         expect(labels(all, "VAPO")).toEqual(["Create Vaporisateur"])
+    })
+})
+
+describe("SpotlightEntry.rank with explicit verbs", () => {
+    const kick = entry("Sample · Kick", {names: ["Kick"], verb: "sample"})
+    const kicker = entry("Create Kicker", {names: ["Kicker"]})
+    it("leaves samples out of a search without a verb", () => {
+        expect(labels([kick, kicker], "kick")).toStrictEqual(["Create Kicker"])
+    })
+    it("lists samples with the sample verb", () => {
+        expect(labels([kick, kicker], "kick", Option.wrap("sample"))).toStrictEqual(["Sample · Kick"])
+    })
+})
+
+describe("SpotlightSampleFilter.narrow", () => {
+    const loop = entry("Sample · Kick Loop", {names: ["Kick Loop"], qualifiers: ["loop"], verb: "sample"})
+    const shot = entry("Sample · Kick", {names: ["Kick"], qualifiers: ["oneshot"], verb: "sample"})
+    const device = entry("Create Kicker", {names: ["Kicker"]})
+    const narrowed = (subject: string) => {
+        const result = SpotlightSampleFilter.narrow([loop, shot, device], subject)
+        return {labels: result.entries.map(({label}) => label), subject: result.subject}
+    }
+    it("keeps everything without a keyword", () => {
+        expect(narrowed("kick")).toStrictEqual({labels: ["Sample · Kick Loop", "Sample · Kick", "Create Kicker"], subject: "kick"})
+    })
+    it("keeps only loops for loop and drops the keyword", () => {
+        expect(narrowed("kick loop")).toStrictEqual({labels: ["Sample · Kick Loop", "Create Kicker"], subject: "kick"})
+        expect(narrowed("LOOP")).toStrictEqual({labels: ["Sample · Kick Loop", "Create Kicker"], subject: ""})
+    })
+    it("keeps only one-shots for noloop or oneshot", () => {
+        expect(narrowed("noloop kick")).toStrictEqual({labels: ["Sample · Kick", "Create Kicker"], subject: "kick"})
+        expect(narrowed("kick oneshot")).toStrictEqual({labels: ["Sample · Kick", "Create Kicker"], subject: "kick"})
+        expect(narrowed("loop oneshot")).toStrictEqual({labels: ["Sample · Kick", "Create Kicker"], subject: ""})
+    })
+    it("takes whole words only", () => {
+        expect(narrowed("loops").labels).toHaveLength(3)
     })
 })
 

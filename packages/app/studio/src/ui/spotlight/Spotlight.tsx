@@ -15,6 +15,8 @@ import {SpotlightCreateEntries} from "@/ui/spotlight/SpotlightCreateEntries"
 import {SpotlightStudioEntries} from "@/ui/spotlight/SpotlightStudioEntries"
 import {SpotlightUsage} from "@/ui/spotlight/SpotlightUsage"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {SpotlightSample, SpotlightSampleEntries} from "@/ui/spotlight/SpotlightSampleEntries"
+import {SpotlightSampleFilter} from "@/ui/spotlight/SpotlightSampleFilter"
 
 const className = Html.adoptStyleSheet(css, "Spotlight")
 
@@ -45,6 +47,7 @@ export class Spotlight {
         this.#session = Option.wrap(lifecycle)
         const scripts = lifecycle.own(new DefaultObservableValue<ReadonlyArray<CommunityScript>>([]))
         const wclaps = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightCreate.Wclap>>([]))
+        const samples = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightSample>>([]))
         const entries = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightEntry>>([]))
         const selected = lifecycle.own(new DefaultObservableValue<int>(0))
         const results = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightEntry>>([]))
@@ -104,7 +107,7 @@ export class Spotlight {
                 none: () => {
                     verbIcon.classList.toggle("hidden", verb.isEmpty())
                     scopeChip.classList.add("hidden")
-                    input.placeholder = "Type a device, preset, script or place..."
+                    input.placeholder = "Type a device, preset, script, sample or place..."
                 },
                 some: parent => {
                     verbIcon.classList.add("hidden")
@@ -116,10 +119,13 @@ export class Spotlight {
         }
         const renderList = () => {
             const {verb, subject} = SpotlightVerbs.parse(queryText())
+            const narrowed = verb.mapOr(({verb}) => verb === "sample", false)
+                ? SpotlightSampleFilter.narrow(entries.getValue(), subject)
+                : {entries: entries.getValue(), subject}
             const ranked = scopeEntry().match({
-                none: () => subject.length === 0
-                    ? verb.mapOr(({verb}) => SpotlightEntry.frequent(entries.getValue(), verb, SpotlightUsage.count()), [])
-                    : SpotlightEntry.rank(entries.getValue(), verb.map(({verb}) => verb), subject),
+                none: () => narrowed.subject.length === 0
+                    ? verb.mapOr(({verb}) => SpotlightEntry.frequent(narrowed.entries, verb, SpotlightUsage.count()), [])
+                    : SpotlightEntry.rank(narrowed.entries, verb.map(({verb}) => verb), narrowed.subject),
                 some: parent => SpotlightEntry.browse(parent.children, input.value)
             }).slice(0, MAX_RESULTS)
             const listing = scope.nonEmpty() || subject.length > 0 || verb.nonEmpty()
@@ -131,7 +137,7 @@ export class Spotlight {
                 ? <div className="empty">{scope.nonEmpty() ? `No match for '${input.value.trim()}'`
                     : verb.match({
                         none: () => `Nothing found for '${subject}'`,
-                        some: ({verb, word}) => verb === "create" || verb === "open" || verb === "goto"
+                        some: ({verb, word}) => verb === "create" || verb === "open" || verb === "goto" || verb === "sample"
                             ? `Nothing to ${word} for '${subject}'` : `'${word}' is not available yet`
                     })}</div>
                 : ranked.map((entry, index) => (
@@ -183,7 +189,8 @@ export class Spotlight {
         const refresh = () => {
             entries.setValue([...SpotlightStudioEntries.places(service), ...SpotlightStudioEntries.actions(service),
                 ...SpotlightStudioEntries.opens(service),
-                ...SpotlightCreateEntries.collect(service, scripts.getValue(), wclaps.getValue())])
+                ...SpotlightCreateEntries.collect(service, scripts.getValue(), wclaps.getValue()),
+                ...SpotlightSampleEntries.collect(service, samples.getValue())])
             renderHelp()
             render()
         }
@@ -198,6 +205,7 @@ export class Spotlight {
             selected.subscribe(renderSelection),
             scripts.subscribe(refresh),
             wclaps.subscribe(refresh),
+            samples.subscribe(refresh),
             presets.userIndex.subscribe(refresh),
             presets.cloudIndex.subscribe(refresh),
             hasProfile ? service.project.userEditingManager.audioUnit.catchupAndSubscribe(refresh) : Terminable.Empty,
@@ -288,6 +296,9 @@ export class Spotlight {
         })
         SpotlightCreate.wclaps().then(list => {
             if (this.#session.contains(lifecycle)) {wclaps.setValue(list)}
+        })
+        SpotlightSampleEntries.load().then(list => {
+            if (this.#session.contains(lifecycle)) {samples.setValue(list)}
         })
         refresh()
         surface.flyout.appendChild(element)

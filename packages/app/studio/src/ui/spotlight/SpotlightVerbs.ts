@@ -1,7 +1,7 @@
 import {Option} from "@opendaw/lib-std"
 import {IconSymbol} from "@opendaw/studio-enums"
 
-export type SpotlightVerb = "create" | "open" | "goto" | "remove" | "move" | "edit"
+export type SpotlightVerb = "create" | "open" | "goto" | "sample" | "remove" | "move" | "edit"
 
 export type SpotlightVerbDefinition = {
     readonly verb: SpotlightVerb
@@ -21,10 +21,13 @@ export namespace SpotlightVerbs {
         {verb: "create", word: "create", symbol: "+", icon: IconSymbol.Add},
         {verb: "open", word: "open", symbol: "/", icon: IconSymbol.FolderOpen},
         {verb: "goto", word: "goto", symbol: "@", icon: IconSymbol.Search},
+        {verb: "sample", word: "sample", symbol: "~", icon: IconSymbol.AudioFile},
         {verb: "remove", word: "remove", symbol: "-", icon: IconSymbol.Delete},
         {verb: "move", word: "move", symbol: ">", icon: IconSymbol.ArrowRight},
         {verb: "edit", word: "edit", symbol: "=", icon: IconSymbol.Pencil}
     ]
+
+    export const Explicit: ReadonlyArray<SpotlightVerb> = ["sample"]
 
     const byWordPrefix = (prefix: string): Option<SpotlightVerbDefinition> => {
         if (prefix.length === 0) {return Option.None}
