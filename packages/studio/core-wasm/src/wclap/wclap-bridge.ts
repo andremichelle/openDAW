@@ -13,7 +13,7 @@ export type WclapBundleLoader = (url: string) => Promise<WclapBundle>
 export type WclapHostCallbacks = {
     loadBundle: WclapBundleLoader
     sendGui: (uuid: string, bytes: ArrayBuffer) => void
-    sendState: (uuid: string, bytes: ArrayBuffer) => void
+    sendState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string) => void
     sendParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>) => void
     sendParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture) => void
     sendHovered: (uuid: string, paramId: number) => void
@@ -384,7 +384,7 @@ export class WclapBridges {
         loaded.writeChunks = []
         if (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes)) {return}
         plugin.knownState = bytes
-        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer)}
+        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer, plugin.url, plugin.clapId)}
     }
 
     #module(url: string): Promise<{ module: WebAssembly.Module, bundle: WclapBundle }> {

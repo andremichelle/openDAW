@@ -33,7 +33,9 @@ case found, and the rules that make versioning conclusive. Trigger: the WebCLAP 
    after the Update, redo of both steps.
    **Gap, by code reading:** the bridge sends a save as `(uuid, bytes)` without the build. A save the new build posted
    before the worklet sees the undone `url` lands on the main thread after it and is stored onto the old build.
-   Narrow (a save due within one message round trip of the undo, or the window closing), closed by implementation 3.
+   Narrow (a save due within one message round trip of the undo, or the window closing). Fixed: the bridge sends the
+   saving instance's url and clapId, `WclapStates.storeFrom` drops a save the device no longer names (also covers a
+   switch to another plugin of the same bundle). Tests "WebCLAP late saves".
 3. **Old build gone locally, file still on the server.** BROKEN. `restoreFromCloud` and the remote both go through
    `WclapCatalog.find(id)`, which only knows current index entries. `f7cd1180.wclap` answers 200 but a v1 ProTracker
    project on a new machine, after "Delete unused", after OPFS eviction or after a tombstone purge gets "Missing
@@ -83,8 +85,8 @@ case found, and the rules that make versioning conclusive. Trigger: the WebCLAP 
    published only removes the row and keeps the file, or refuses while the entry is in some `supersedes` list.
    Commons deploy already uploads only, add a test that it never removes `wclaps/*.wclap`.
 3. **State origin (rule 4, fixes edge 6).** New field 15 `state-url` (string) on both boxes, additive: the url of the
-   build that wrote `plugin-state`. The bridge sends the saving instance's url with every save, `WclapStates.store`
-   drops a save whose url is not the box's `url` (edge 2 gap) and writes `state-url` with the blob. The bridge loads the blob only when
+   build that wrote `plugin-state`. The save already carries the instance's url (edge 2 fix), `storeFrom` writes
+   it as `state-url` with the blob. The bridge loads the blob only when
    `state-url` is empty (legacy), equals `url`, or is superseded by `url` (known from the catalogue). Otherwise the
    device reports "state was saved by a newer build" with an "Update" action, and stores nothing. Undo and redo
    carry both fields in the same steps, so edge 2 stays correct without relying on order.

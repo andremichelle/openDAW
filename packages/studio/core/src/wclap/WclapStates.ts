@@ -16,6 +16,15 @@ export namespace WclapStates {
         })
     }
 
-    const equals = (a: Readonly<Int8Array>, b: Readonly<Int8Array>): boolean =>
+    // a save the engine posted before it saw a new url or clapId belongs to the plugin the device no longer names
+    export const storeFrom = (project: Project, uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void => {
+        project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
+            if (!(box instanceof WclapDeviceBox) && !(box instanceof WclapInstrumentBox)) {return}
+            if (box.url.getValue() !== url || box.clapId.getValue() !== clapId) {return}
+            store(project, uuid, bytes)
+        })
+    }
+
+    const equals =(a: Readonly<Int8Array>, b: Readonly<Int8Array>): boolean =>
         a.length === b.length && a.every((value, index) => value === b[index])
 }

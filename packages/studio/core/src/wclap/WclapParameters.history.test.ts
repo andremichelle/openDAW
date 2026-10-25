@@ -154,3 +154,41 @@ describe("WebCLAP Update and the undo history", () => {
         expect(blob()).toStrictEqual(NewBlob)
     })
 })
+
+// a save posted by the engine before it saw the device's new url or clapId arrives after the change
+describe("WebCLAP late saves", () => {
+    const setup = async () => {
+        const {Project} = await import("../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const device = project.editing.modify(() => EffectFactories.AudioNamed.Wclap
+            .create(project, skeleton.mandatoryBoxes.primaryAudioUnitBox.audioEffects, 0) as WclapDeviceBox).unwrap()
+        project.editing.modify(() => {
+            device.url.setValue("opfs:new-build")
+            device.clapId.setValue("com.example.plugin")
+        })
+        WclapStates.storeFrom(project, UUID.toString(device.address.uuid), new Int8Array([1, 1]).buffer,
+            "opfs:new-build", "com.example.plugin")
+        return {project, device, uuid: UUID.toString(device.address.uuid)}
+    }
+
+    it("a save from the new build after the undo of the Update is dropped", async () => {
+        const {project, device, uuid} = await setup()
+        project.editing.modify(() => device.url.setValue("opfs:old-build"))
+        WclapStates.storeFrom(project, uuid, new Int8Array([2, 2, 2]).buffer, "opfs:new-build", "com.example.plugin")
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([1, 1])
+    })
+
+    it("a save from another plugin of the same bundle is dropped", async () => {
+        const {project, device, uuid} = await setup()
+        project.editing.modify(() => device.clapId.setValue("com.example.other"))
+        WclapStates.storeFrom(project, uuid, new Int8Array([3]).buffer, "opfs:new-build", "com.example.plugin")
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([1, 1])
+    })
+
+    it("a save from the plugin the device names is stored", async () => {
+        const {device, project, uuid} = await setup()
+        WclapStates.storeFrom(project, uuid, new Int8Array([4]).buffer, "opfs:new-build", "com.example.plugin")
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([4])
+    })
+})

@@ -117,7 +117,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                 wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
-                wclapState(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapState, uuid, bytes)}
+                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void {
+                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId)
+                }
                 wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
                     dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
                 }
