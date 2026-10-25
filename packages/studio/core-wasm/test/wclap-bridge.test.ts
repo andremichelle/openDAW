@@ -52,13 +52,14 @@ type Host = {
     states: Array<Uint8Array>
     reported: Array<[number, number, number]>
     loads: Array<Promise<unknown>>
+    saveRequests: number
 }
 
 const createHost = (bundle: WclapBundle | (() => Promise<WclapBundle>) = basics): Host => {
     const memory = new WebAssembly.Memory({initial: 16})
     const host: Host = {
         bridges: undefined as unknown as WclapBridges, imports: {}, memory,
-        statuses: [], params: [], states: [], reported: [], loads: []
+        statuses: [], params: [], states: [], reported: [], loads: [], saveRequests: 0
     }
     const callbacks: WclapHostCallbacks = {
         loadBundle: () => typeof bundle === "function" ? bundle() : Promise.resolve(bundle),
@@ -69,7 +70,7 @@ const createHost = (bundle: WclapBundle | (() => Promise<WclapBundle>) = basics)
         sendHovered: () => {},
         requestGuiResize: () => {},
         sendStatus: (_uuid, status) => host.statuses.push(status),
-        requestSave: () => {},
+        requestSave: () => {host.saveRequests++},
         track: promise => host.loads.push(promise)
     }
     host.bridges = new WclapBridges(memory, 48000, callbacks)
@@ -454,5 +455,17 @@ describe("wclap bridge", () => {
         host.imports.host_wclap_input(handle, 1, IN0, IN1, 128)
         expect(process(host, handle)).toBe(1)
         expect(played(host)).toEqual([new Array(128).fill(0.25), new Array(128).fill(1.75)])
+    })
+
+    // a page that polls (SC Dark every 100 ms, ProTracker at 60 Hz) sends faster than the save delay of 40 chunks
+    it("a page that polls faster than the save delay still gets the state saved while it is open", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        Array.from({length: 400}).forEach((_, chunk) => {
+            if (chunk % 30 === 0) {host.bridges.receive("01020304-0506-0708-090a-0b0c0d0e0f10", new TextEncoder().encode("{}").buffer)}
+            process(host, handle)
+        })
+        expect(host.saveRequests).toBeGreaterThan(0)
     })
 })

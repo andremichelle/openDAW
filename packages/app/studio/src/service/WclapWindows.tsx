@@ -89,8 +89,11 @@ export namespace WclapWindows {
         const session = new Terminator()
         const saveTimer: { id: Optional<ReturnType<typeof setTimeout>> } = {id: undefined}
         const scheduleSave = () => {
-            if (isDefined(saveTimer.id)) {clearTimeout(saveTimer.id)}
-            saveTimer.id = setTimeout(() => engine.wclapSaveState(uuid), SAVE_DELAY_MS)
+            if (isDefined(saveTimer.id)) {return}
+            saveTimer.id = setTimeout(() => {
+                saveTimer.id = undefined
+                engine.wclapSaveState(uuid)
+            }, SAVE_DELAY_MS)
         }
         const vitals = session.own(new VitalSigns())
         const connection = session.own(new Terminator())

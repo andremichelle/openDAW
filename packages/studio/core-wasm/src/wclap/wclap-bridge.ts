@@ -170,7 +170,8 @@ export class WclapBridges {
             }
             new Uint8Array(loaded.memory.buffer).set(source, loaded.scratchPtr)
             this.#call(loaded, loaded.webview + ClapAbi.Webview.RECEIVE, loaded.plugin, loaded.scratchPtr, source.length)
-            plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
+            // a page that polls must not postpone a pending save forever, so a running countdown is kept
+            if (plugin.dirtyCountdown < 0) {plugin.dirtyCountdown = SAVE_DELAY_CHUNKS}
             plugin.receivedSinceProcess = true
             if (!loaded.emitsParams) {loaded.pollRemaining = loaded.paramIds.length}
             this.#runCallback(plugin, loaded)
