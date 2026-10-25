@@ -47,10 +47,11 @@ typedef struct opendaw_plugin_device_panel {
 ```
 
 - `clap.webview get_uri` stays the big window, the page every host shows.
-- The panel page may be the same page as the window, it learns where it lives from `wclap-open`
-  (`placement: "panel" | "window"`). The panel height passed to `get_width` is the 176px surface, in logical pixels. Other hosts never send the field, the page falls back to its window layout.
-- Feature present but extension missing: the panel shows the window page with `placement: "panel"`, width from
-  `clap.gui get_size` scaled to the panel height.
+- The panel page may be the same page as the window, the plugin tells them apart in its own URIs: the demo answers
+  `/index.html?panel` for the panel and `/index.html` for the window. `pagePath` (`WclapWindows.tsx`) already keeps
+  the query, so the frame protocol stays unchanged, and any host passes the window URI as it is.
+- The panel height passed to `get_width` is the 176px surface, in logical pixels.
+- Feature present but extension missing: the host strategy, with a log line naming the plugin.
 
 ### 3. Opening the big window
 
@@ -84,7 +85,7 @@ Two strategies, today everything sits in one block in `populateControls` (`Wclap
    text. Used with no plugin loaded, a failed load, and every plugin without `opendaw:device-panel`. Existing
    devices stay bit-identical.
 2. **Panel strategy.** The 176px surface holds only the panel iframe (`wclap-frame.html`, same origin isolation,
-   same frame protocol, `placement: "panel"`) at the width from `get_width`. Load Plugin, Update, Parameters and
+   same frame protocol, the page from the extension's `get_uri`) at the width from `get_width`. Load Plugin, Update, Parameters and
    Audio In move into the `populateMenu` menu, Open UI and Update become header tools (`populateHeader`,
    `with-tools`). Used when the described plugin lists `opendaw:device-panel`.
 
@@ -112,10 +113,13 @@ Panel strategy details:
    close destroys.
 3. Bridge: read the `opendaw:device-panel` feature, query `opendaw.device-panel/1`, `request_show` / `request_hide`
    posted to the main thread. Node test with a stub plugin.
-4. `WclapDeviceEditor` panel frame + `placement` in `wclap-open`.
-5. Reference plugin in open-webclap: a panel view with a "big view" button calling `request_show`, verified in
-   openDAW and in one other CLAP host (window only, no errors).
-6. Docs for plugin authors: the feature, the extension header, the `placement` field.
+4. `WclapDeviceEditor` panel frame, loaded with the extension's `get_uri`.
+5. Reference plugin, written (uncommitted): `opendaw-commons/wclaps/device-panel-demo`, Simple Sine plus the
+   webview and gui of ProTracker, the feature, the extension (`/index.html?panel`, 176px wide) and a "Big View"
+   button calling `request_show`. One plain page, two layouts by the query. Built with emcc, node check of
+   features, extension and both URIs, commons validator green. Open: verify in openDAW once steps 1 to 4 are in,
+   and in one other CLAP host (window only, no errors).
+6. Docs for plugin authors: the feature, the extension header, the panel URI convention.
 
 ## Open
 
