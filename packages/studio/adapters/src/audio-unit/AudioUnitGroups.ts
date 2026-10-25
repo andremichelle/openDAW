@@ -3,19 +3,25 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 
-/** Folder membership is independent of audio routing. Indices are a depth-first display order. */
+/** Folder membership follows the primary output into a group bus. Indices are a depth-first display order. */
 export namespace AudioUnitGroups {
     export const all = (root: RootBox): ReadonlyArray<AudioUnitBox> => IndexedBox.collectIndexedBoxes(root.audioUnits, AudioUnitBox)
     export const parent = (unit: AudioUnitBox): Optional<AudioUnitBox> => {
-        const box = unit.groupParent.targetVertex.unwrapOrNull()?.box
-        return box instanceof AudioUnitBox && box.isGroup.getValue() ? box : undefined
+        const output = unit.output.targetVertex.unwrapOrNull()?.box
+        if (!(output instanceof AudioBusBox)) {return undefined}
+        const box = output.output.targetVertex.unwrapOrNull()?.box
+        return box instanceof AudioUnitBox && box !== unit && box.isGroup.getValue() ? box : undefined
     }
     // Only Output has a fixed section; folders and other channels keep their saved positions.
     export const category = (unit: AudioUnitBox): number => unit.type.getValue() === AudioUnitType.Output ? 1 : 0
     export const compareCategories = (left: AudioUnitBox, right: AudioUnitBox): number => category(left) - category(right)
     export const children = (root: RootBox, group?: AudioUnitBox): AudioUnitBox[] =>
         (isDefined(group)
-            ? IndexedBox.collectIndexedBoxes(group.groupChildren, AudioUnitBox).filter(unit => parent(unit) === group)
+            ? (bus(group)?.input.pointerHub.incoming() ?? [])
+                .filter(pointer => pointer.box instanceof AudioUnitBox && pointer === pointer.box.output)
+                .map(pointer => pointer.box as AudioUnitBox)
+                .filter(unit => parent(unit) === group)
+                .sort((a, b) => a.index.getValue() - b.index.getValue())
             : all(root).filter(unit => !isDefined(parent(unit)))).sort(compareCategories)
     export const ancestors = (unit: AudioUnitBox): AudioUnitBox[] => {
         const result: AudioUnitBox[] = []

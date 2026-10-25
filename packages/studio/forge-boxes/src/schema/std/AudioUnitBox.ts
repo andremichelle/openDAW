@@ -60,8 +60,7 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 name: "capture",
                 pointerType: Pointers.Capture, mandatory: false
             },
-            31: {type: "pointer", name: "group-parent", pointerType: Pointers.GroupMember, mandatory: false},
-            32: {type: "field", name: "group-children", pointerRules: {accepts: [Pointers.GroupMember], mandatory: false}},
+            // 31/32 were experimental folder pointers; keep their keys reserved for old project files.
             33: {type: "boolean", name: "is-group"},
             34: {type: "boolean", name: "group-collapsed"},
             30: {

@@ -9,7 +9,7 @@ import {TransferUtils} from "./TransferUtils"
 export namespace TransferAudioUnits {
     export type TransferOptions = {
         insertIndex?: int,
-        /** Same-project duplication only: initialize external folder/output references to the originals. */
+        /** Same-project duplication only: initialize external output references to the originals. */
         preserveExternalConnections?: boolean,
         deleteSource?: boolean,
         includeAux?: boolean,
@@ -39,10 +39,6 @@ export namespace TransferAudioUnits {
         if (options.preserveExternalConnections) {
             assert(sources[0].graph === targetBoxGraph, "External connections require the same project")
             sources.forEach(source => {
-                const parent = AudioUnitGroups.parent(source)
-                if (isDefined(parent) && !sources.includes(parent)) {
-                    uuidMap.add({source: parent.address.uuid, target: parent.address.uuid})
-                }
                 source.output.targetAddress.ifSome(address => {
                     if (dependencies.some(box => UUID.equals(box.address.uuid, address.uuid))) {return}
                     const mapping = uuidMap.opt(address.uuid).unwrapOrUndefined()

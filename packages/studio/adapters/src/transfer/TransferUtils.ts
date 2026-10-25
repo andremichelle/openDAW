@@ -132,9 +132,8 @@ export namespace TransferUtils {
             return false
         }
         PointerField.decodeWith({
-            map: (pointer: PointerField, address: Option<Address>): Option<Address> =>
-                address.flatMap(addr => pointer.pointerType === Pointers.GroupMember && !uuidMap.hasKey(addr.uuid)
-                    ? Option.None : uuidMap.opt(addr.uuid).match({
+            map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
+                address.flatMap(addr => uuidMap.opt(addr.uuid).match({
                     some: ({target}) => Option.wrap(addr.moveTo(target)),
                     none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
                 }))

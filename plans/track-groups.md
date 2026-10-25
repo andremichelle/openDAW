@@ -4,7 +4,8 @@
 
 A group is an audio bus displayed as a folder in the arrangement and mixer. Its children keep their
 instruments, clips, automation and effects. The group accepts audio effects only and starts at unity gain.
-Groups may contain other groups.
+Groups may contain other groups. Membership follows the primary audio output: a track belongs to the
+folder whose bus receives its output. Changing that route changes its folder in both views.
 
 - Shift-click selects a visible range. Cmd-click on macOS or Ctrl-click elsewhere toggles individual channels.
 - Cmd/Ctrl+G or Group Tracks creates a folder from the selection, including a single channel.
@@ -22,23 +23,28 @@ Groups may contain other groups.
 
 ## Model and routing
 
-`AudioUnitBox` fields 31–34 store optional parent membership, children, group identity and collapse state.
-`userInterface` field 2 stores synthetic-lane height (0 = default). `Pointers.GroupMember` is appended, keeping
-existing pointer ordinals. Old projects default to ungrouped. Generated TypeScript boxes and the Rust/WASM
-registry must be rebuilt together after schema changes.
+`AudioUnitBox` fields 33–34 store group identity and collapse state. Membership is derived from
+`AudioUnitBox.output → AudioBusBox.output → AudioUnitBox`; only destinations marked `isGroup` form folders.
+Children are the audio units whose primary outputs point to that group's bus input. Aux sends do not
+create membership. No separate parent/children pointers or `GroupMember` pointer type remain.
+`userInterface` field 2 stores synthetic-lane height (0 = default). Fields 31/32 from the earlier preview
+remain reserved and are skipped by the length-delimited reader. Existing audio routes, group identity,
+collapse and height survive loading; a formerly independent folder member now appears under its actual
+routed destination. Generated TypeScript boxes and the Rust/WASM registry must be rebuilt together.
 
 `AudioUnitGroups` supplies hierarchy and command queries; `Project.audioUnitLayout` shares channel order,
 visibility, indentation and boundaries between timeline and mixer. See `track-layout-refactor.md`. `Project.grouping` owns undoable
 membership, ordering, routing and duplication operations. `Project.trackSelection` is local UI state,
 independent of active device editing and clip/region selection. Hidden rows leave timeline hit testing.
 
-Moving between folders updates the output only when it follows the previous folder or primary bus.
-Custom output routes remain intact; a moved subtree keeps its internal routes. Containment and primary-route/aux-send feedback checks reject invalid destinations. Cross-folder
-grouping uses the closest common ancestor.
+Moving into a folder routes the moved roots to its bus; moving to the top level routes them to Output.
+A moved subtree keeps its internal routes. Direct output-menu changes also update membership, visibility
+and boundaries. Containment and primary-route/aux-send feedback checks reject invalid destinations; output
+menus share the same feedback validation. Cross-folder grouping uses the closest common ancestor.
 
 New buses initialize at their final output destination. Retargeting a new box in its construction transaction
 can leave resolved adapters stale because initial pointer notifications are deferred. Same-project duplication
-therefore maps external parent/output references before constructing copies. General transfers retain their
+therefore maps external output references before constructing copies. General transfers retain their
 independent-copy semantics. Ordering uses a pre-transfer tree snapshot before deferred pointers settle.
 
 Timeline and mixer use captured-pointer channel dragging with cancellation. Native device/internal-lane
@@ -70,7 +76,7 @@ Synthetic render checks do not establish a subjective listening assessment or fu
 
 ## Performance and ordering
 
-Hierarchy ordering builds parent buckets once. Subtree queries visit child hubs instead of scanning unrelated
+Hierarchy ordering builds parent buckets once. Subtree queries visit bus input hubs instead of scanning unrelated
 channels. Timeline changes coalesce at the graph transaction boundary, before painting and hit testing.
 Timeline and mixer consume a shared layout snapshot. Folded overviews ignore effect and mixer parameter edits.
 
@@ -84,8 +90,8 @@ sibling slot; positioned moves and duplicate blocks retain their requested order
 the same persistent collapse state as the arrangement and keep their volume, mute, solo and effects controls.
 
 General audio-unit transfers expand group roots to full subtrees, including cross-project and delete-source
-transfers. Internal membership is mapped; external membership is omitted unless same-project duplication
-explicitly preserves it.
+transfers. Internal audio routes are mapped to copied buses. External output routes map to the destination
+Output unless same-project duplication explicitly preserves them; membership follows those routes.
 
 
 ## Maintainer UI review
@@ -117,3 +123,19 @@ Header padding, automation guides and drag-out hit testing use the same depth st
 Drag feedback uses `GroupDropLayout` to assign one marker to each physical insertion boundary. An
 expanded group's following slot is drawn after its full subtree. Group-center feedback is bounded to
 the primary header's measured height and first grid column, excluding clip launcher and automation.
+
+## Routing-derived membership verification
+
+The routing-only follow-up passes 790 core tests (79 files), 364 adapter tests (31 files), 106 Studio tests
+(26 files), and 2 real-WASM grouping/audio tests. Direct output edits move the track between folders and
+change effect processing in the real engine; undo/redo and multiple route edits publish one layout per
+transaction. A synthetic project captured from commit `74ae96a1f` verifies old pointer fields are ignored
+without changing routes and that resaving/reloading retains the resulting hierarchy and collapse state.
+The pre-change source is `74ae96a1f7e54d9186fd797c93046f1c56672d58` (preview build
+`d78b9f4f-ee05-472f-9ecd-27410037e56c`) for rollback. No DSP algorithm changes are needed.
+
+Hosted verification opened the old `Track drop feedback verification` project without editing it, then
+saved a separate `Routing membership verification` copy. In the mixer, routing Neon to Output removed
+it from the folder; it remained visible when the folder collapsed. Routing it back hid it immediately;
+Undo restored the outside route. Save/reload/reopen retained that output and collapse state in both
+mixer and timeline. No user-created project was modified for this check.
