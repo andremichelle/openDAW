@@ -1,7 +1,8 @@
 // The JS host of a WCLAP plugin: a wasm32 CLAP module with its own memory, run next to the engine per device
 import {isDefined, isNotNull, isNull, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
 import {
-    WclapAudioPort, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus
+    WclapAudioPort, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapParamGesture, WclapParamInfo, WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
 import {ClapAbi} from "./clap-abi"
@@ -19,6 +20,9 @@ export type WclapHostCallbacks = {
     sendHovered: (uuid: string, paramId: number) => void
     // clap.gui request_resize: the plugin's page wants another window size (logical pixels)
     requestGuiResize: (uuid: string, width: number, height: number) => void
+    // clap.gui request_show / request_hide: the plugin's page asks for its window
+    requestGuiShow: (uuid: string) => void
+    requestGuiHide: (uuid: string) => void
     sendStatus: (uuid: string, status: WclapStatus) => void
     requestSave: (uuid: string) => void
     track: Procedure<Promise<unknown>>
@@ -54,6 +58,7 @@ type Loaded = {
     plugin: number
     webview: number
     gui: number
+    panel: number
     guiCreated: boolean
     processPtr: number
     transportPtr: number
@@ -106,7 +111,7 @@ class Plugin {
     clapId: string = ""
     loaded: Nullable<Loaded> = null
     loading: boolean = false
-    guiOpen: boolean = false
+    guiSessions: number = 0
     generation: number = 0
     pendingState: Nullable<Uint8Array> = null
     knownState: Nullable<Uint8Array> = null
@@ -178,7 +183,7 @@ export class WclapBridges {
         })
     }
 
-    // The webview's start page and the size the plugin asks for (clap.gui: create, get_size, set_parent, show)
+    // The webview's start page and the size the plugin asks for, one session per open, the gui lives until the last close
     openGui(uuid: string): WclapGuiInfo {
         const none: WclapGuiInfo = {uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}
         const plugin = this.#pluginByUuid(uuid)
@@ -188,27 +193,58 @@ export class WclapBridges {
             const length = this.#call(loaded, loaded.webview + ClapAbi.Webview.GET_URI, loaded.plugin, loaded.uriPtr, URI_CAPACITY)
             if (length <= 0) {return none}
             const uri = this.#cstr(loaded.memory, loaded.uriPtr)
-            const size = {width: 0, height: 0, resizable: false, aspectRatio: 0}
-            if (loaded.gui !== 0 && !loaded.guiCreated) {
-                const api = this.#alloc(loaded, ClapAbi.Gui.WINDOW_API_WEBVIEW)
-                if (this.#call(loaded, loaded.gui + ClapAbi.Gui.CREATE, loaded.plugin, api, 0) !== 0) {
-                    loaded.guiCreated = true
-                    if (this.#call(loaded, loaded.gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, loaded.sizePtr, loaded.sizePtr + 4) !== 0) {
-                        size.width = this.#u32(loaded.memory, loaded.sizePtr)
-                        size.height = this.#u32(loaded.memory, loaded.sizePtr + 4)
-                    }
-                    size.resizable = this.#hasFunction(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE)
-                        && this.#call(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE, loaded.plugin) !== 0
-                    size.aspectRatio = size.resizable ? this.#aspectRatio(loaded) : 0
-                    this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.API, api, true)
-                    this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.PTR, 0, true)
-                    this.#call(loaded, loaded.gui + ClapAbi.Gui.SET_PARENT, loaded.plugin, loaded.windowPtr)
-                    this.#call(loaded, loaded.gui + ClapAbi.Gui.SHOW, loaded.plugin)
-                }
-            }
-            plugin.guiOpen = true
+            const size = this.#showGui(loaded)
+            plugin.guiSessions++
             return {uri, ...size}
         })
+    }
+
+    // The device panel page (opendaw.device-panel/1) and its width for the panel height, a gui session like openGui
+    openPanel(uuid: string, height: number): WclapPanelInfo {
+        const none: WclapPanelInfo = {uri: "", width: 0}
+        const plugin = this.#pluginByUuid(uuid)
+        if (!isDefined(plugin) || isNull(plugin.loaded) || !this.#hasPanel(plugin.loaded)) {return none}
+        const loaded = plugin.loaded
+        return this.#contain(plugin, none, () => {
+            const length = this.#call(loaded, loaded.panel + ClapAbi.DevicePanel.GET_URI, loaded.plugin, loaded.uriPtr, URI_CAPACITY)
+            if (length <= 0) {return none}
+            const uri = this.#cstr(loaded.memory, loaded.uriPtr)
+            const width = this.#call(loaded, loaded.panel + ClapAbi.DevicePanel.GET_WIDTH, loaded.plugin, height, loaded.sizePtr) !== 0
+                ? this.#u32(loaded.memory, loaded.sizePtr) : 0
+            this.#showGui(loaded)
+            plugin.guiSessions++
+            return {uri, width}
+        })
+    }
+
+    #hasPanel(loaded: Loaded): boolean {return loaded.panel !== 0 && loaded.webview !== 0}
+
+    // clap.gui create, get_size, set_parent, show on the first session, the size of the created gui after
+    #showGui(loaded: Loaded): Omit<WclapGuiInfo, "uri"> {
+        const none = {width: 0, height: 0, resizable: false, aspectRatio: 0}
+        if (loaded.gui === 0) {return none}
+        if (loaded.guiCreated) {return this.#guiSize(loaded)}
+        const api = this.#alloc(loaded, ClapAbi.Gui.WINDOW_API_WEBVIEW)
+        if (this.#call(loaded, loaded.gui + ClapAbi.Gui.CREATE, loaded.plugin, api, 0) === 0) {return none}
+        loaded.guiCreated = true
+        const size = this.#guiSize(loaded)
+        this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.API, api, true)
+        this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.PTR, 0, true)
+        this.#call(loaded, loaded.gui + ClapAbi.Gui.SET_PARENT, loaded.plugin, loaded.windowPtr)
+        this.#call(loaded, loaded.gui + ClapAbi.Gui.SHOW, loaded.plugin)
+        return size
+    }
+
+    #guiSize(loaded: Loaded): Omit<WclapGuiInfo, "uri"> {
+        const size = {width: 0, height: 0, resizable: false, aspectRatio: 0}
+        if (this.#call(loaded, loaded.gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, loaded.sizePtr, loaded.sizePtr + 4) !== 0) {
+            size.width = this.#u32(loaded.memory, loaded.sizePtr)
+            size.height = this.#u32(loaded.memory, loaded.sizePtr + 4)
+        }
+        size.resizable = this.#hasFunction(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE)
+            && this.#call(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE, loaded.plugin) !== 0
+        size.aspectRatio = size.resizable ? this.#aspectRatio(loaded) : 0
+        return size
     }
 
     // clap.gui adjust_size then set_size, answers the size the plugin accepted
@@ -266,8 +302,8 @@ export class WclapBridges {
 
     closeGui(uuid: string): void {
         const plugin = this.#pluginByUuid(uuid)
-        if (!isDefined(plugin)) {return}
-        plugin.guiOpen = false
+        if (!isDefined(plugin) || plugin.guiSessions === 0) {return}
+        if (--plugin.guiSessions > 0) {return}
         const loaded = plugin.loaded
         if (isNull(loaded)) {return}
         this.#contain(plugin, undefined, () => this.#destroyGui(loaded))
@@ -327,7 +363,7 @@ export class WclapBridges {
                 plugin.loading = false
                 this.#publishParams(plugin, loaded)
                 this.#host.sendStatus(plugin.uuid,
-                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0})
+                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0, panel: this.#hasPanel(loaded)})
             }, error => {
                 if (plugin.generation !== generation) {return}
                 plugin.loading = false
@@ -491,7 +527,7 @@ export class WclapBridges {
         return {
             memory, table, malloc, buffer: memory.buffer, view: new DataView(memory.buffer),
             audio: [new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
-            plugin: 0, webview: 0, gui: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
+            plugin: 0, webview: 0, gui: 0, panel: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
             inputs: [0, 0], outputs: [0, 0], inputPorts: 0, inputPortInfos: [], auxInputs: [], auxFed: [], auxSilent: [], scratchPtr: 0, scratchSize: 0, steadyTime: 0,
             eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
             latencyExt: 0, latency: 0,
@@ -515,11 +551,12 @@ export class WclapBridges {
         if (factory === 0) {throw new Error("no clap.plugin-factory")}
         const count = this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_COUNT, factory)
         const idPtr = this.#alloc(loaded, plugin.clapId)
-        const found = Array.from({length: count}, (_, index) => index).some(index => {
-            const descriptor = this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_DESCRIPTOR, factory, index)
-            return this.#cstr(memory, this.#u32(memory, descriptor + ClapAbi.PluginDescriptor.ID)) === plugin.clapId
-        })
-        if (!found) {throw new Error(`plugin id ${plugin.clapId} not in bundle`)}
+        const descriptorOf = (index: number): number =>
+            this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_DESCRIPTOR, factory, index)
+        const found = Array.from({length: count}, (_, index) => index).find(index =>
+            this.#cstr(memory, this.#u32(memory, descriptorOf(index) + ClapAbi.PluginDescriptor.ID)) === plugin.clapId)
+        if (!isDefined(found)) {throw new Error(`plugin id ${plugin.clapId} not in bundle`)}
+        const features = this.#cstrList(memory, this.#u32(memory, descriptorOf(found) + ClapAbi.PluginDescriptor.FEATURES))
         loaded.plugin = this.#call(loaded, factory + ClapAbi.PluginFactory.CREATE_PLUGIN, factory, host, idPtr)
         if (loaded.plugin === 0) {throw new Error("create_plugin returned null")}
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.INIT, loaded.plugin) === 0) {
@@ -530,6 +567,12 @@ export class WclapBridges {
         loaded.state = this.#extension(loaded, ClapAbi.Ext.STATE)
         loaded.params = this.#extension(loaded, ClapAbi.Ext.PARAMS)
         loaded.latencyExt = this.#extension(loaded, ClapAbi.Ext.LATENCY)
+        if (features.includes(ClapAbi.Feature.DEVICE_PANEL)) {
+            loaded.panel = this.#extension(loaded, ClapAbi.Ext.DEVICE_PANEL)
+            if (loaded.panel === 0) {
+                this.#log(plugin, loaded, `lists ${ClapAbi.Feature.DEVICE_PANEL} without ${ClapAbi.Ext.DEVICE_PANEL}, shown without its panel`)
+            }
+        }
         loaded.uriPtr = malloc(URI_CAPACITY)
         loaded.sizePtr = malloc(ClapAbi.ResizeHints.SIZE)
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
@@ -589,12 +632,20 @@ export class WclapBridges {
         this.#setFn(loaded, guiExt + ClapAbi.HostGui.RESIZE_HINTS_CHANGED, trampoline(["i32"], [], () => {}))
         this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_RESIZE, trampoline(["i32", "i32", "i32"], ["i32"],
             (_host: number, width: number, height: number) => {
-                if (!plugin.guiOpen || width <= 0 || height <= 0) {return 0}
+                if (plugin.guiSessions === 0 || width <= 0 || height <= 0) {return 0}
                 this.#host.requestGuiResize(plugin.uuid, width, height)
                 return 1
             }))
-        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_SHOW, trampoline(["i32"], ["i32"], () => 0))
-        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_HIDE, trampoline(["i32"], ["i32"], () => 0))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_SHOW, trampoline(["i32"], ["i32"], () => {
+            if (plugin.guiSessions === 0) {return 0}
+            this.#host.requestGuiShow(plugin.uuid)
+            return 1
+        }))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_HIDE, trampoline(["i32"], ["i32"], () => {
+            if (plugin.guiSessions === 0) {return 0}
+            this.#host.requestGuiHide(plugin.uuid)
+            return 1
+        }))
         this.#setFn(loaded, guiExt + ClapAbi.HostGui.CLOSED, trampoline(["i32", "i32"], [], () => {}))
         this.#setFn(loaded, stateExt + ClapAbi.HostState.MARK_DIRTY, trampoline(["i32"], [],
             () => {plugin.dirtyCountdown = SAVE_DELAY_CHUNKS}))
@@ -641,7 +692,7 @@ export class WclapBridges {
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {plugin.callbackRequested = true}))
         this.#setFn(loaded, webviewExt + ClapAbi.HostWebview.SEND, trampoline(["i32", "i32", "i32"], ["i32"],
             (_host: number, bufferPtr: number, size: number) => {
-                if (!plugin.guiOpen) {return 0}
+                if (plugin.guiSessions === 0) {return 0}
                 const count = Math.min(size, Math.max(0, memory.buffer.byteLength - bufferPtr))
                 this.#host.sendGui(plugin.uuid, new Uint8Array(memory.buffer, bufferPtr, count).slice().buffer)
                 return 1

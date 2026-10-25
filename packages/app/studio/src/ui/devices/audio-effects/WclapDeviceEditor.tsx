@@ -16,6 +16,7 @@ import {
     Optional,
     RuntimeNotifier,
     StringComparator,
+    Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -24,7 +25,9 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapStates, WclapStorage} from "@opendaw/studio-core"
+import {
+    EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapGuis, WclapStates, WclapStorage
+} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
@@ -36,6 +39,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
+import {WclapFrame} from "@/service/WclapFrame"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {WclapCatalog, WclapIndexFolder} from "@/opendaw-api"
@@ -59,6 +63,9 @@ type CloudPlugin = { uuid: string, label: string, info: WclapPluginInfo }
 type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins: ReadonlyArray<CloudPlugin> }
 
 const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
+const DEVICE_PANEL_FEATURE = "opendaw:device-panel"
+// the device body's content height (mixins.Control: 192px minus its 0.5em padding)
+const PANEL_HEIGHT = 176
 
 export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project, engine} = service
@@ -69,8 +76,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
     const state: {
-        info: Optional<WclapPluginInfo>, ready: boolean, editor: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
-    } = {info: undefined, ready: false, editor: false, inputs: [], credits: ""}
+        info: Optional<WclapPluginInfo>, ready: boolean, failed: boolean, editor: boolean, panel: boolean,
+        inputs: ReadonlyArray<WclapAudioPort>, credits: string
+    } = {info: undefined, ready: false, failed: false, editor: false, panel: false, inputs: [], credits: ""}
     const pluginBox: HTMLElement = (
         <div className="plugin" onclick={() => {
             if (state.credits.length > 0) {window.open(state.credits, "_blank", "noopener")}
@@ -133,12 +141,14 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         showName()
         showCredits(url)
         showUpdate(url, clapId)
+        showStrategy()
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
             if (adapter.clapIdField.getValue() !== clapId) {return}
             state.info = plugins.find(plugin => plugin.clapId === clapId)
             showName()
             if (isDefined(state.info) && state.ready) {vendorLabel.textContent = state.info.vendor}
+            showStrategy()
         }, () => {})
     }
     // the latest pick wins, a download that finishes after another choice is dropped
@@ -251,7 +261,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         MenuItem.default({label: "Enter Percentage..."}).setTriggerProcedure(() => enterPercentage(parameter)),
         ...parameterContextItems(editing, midiLearning, adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter)
     ]
-    const parametersMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populateParameters = (parent: MenuItem): void => {
         const entries = parametersField.pointerHub.incoming().flatMap(({box}) => {
             const paramBox = asInstanceOf(box, WclapParameterBox)
             const parameter = parameterOf(paramBox)
@@ -265,7 +275,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 .setRuntimeChildrenProcedure(leaf => leaf.addMenuItem(...parameterItems(value)))))
         }
         populate(parent, WclapParameterTree.build(entries))
-    })
+    }
+    const parametersMenu = MenuItem.root().setRuntimeChildrenProcedure(populateParameters)
     const byLabel = (a: { label: string }, b: { label: string }): number =>
         StringComparator(a.label.toLowerCase(), b.label.toLowerCase())
     const isCurrent = (url: string, {clapId}: WclapPluginInfo): boolean =>
@@ -324,7 +335,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             MenuItem.default({label, checked: isCurrent(WclapStorage.urlOf(uuid), info)})
                 .setTriggerProcedure(() => useCloud(uuid, info))))
     }
-    const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populatePlugins = (parent: MenuItem): void => {
         if (cloud.plugins.length === 0) {refreshCloud()}
         // a cloud plugin picked once is stored too, it stays listed under Cloud only
         const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
@@ -354,7 +365,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 })
         )
         refreshStored()
-    })
+    }
+    const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(populatePlugins)
     const openLabel: HTMLElement = <span>Open UI</span>
     const openButton: HTMLElement = (
         <Button lifecycle={lifecycle}
@@ -380,7 +392,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         </MenuButton>
     )
     const pluginButtons: HTMLElement = <div className="group plugin">{openButton}{parametersButton}</div>
-    const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populateAudioIn = (parent: MenuItem): void => {
         if (adapter.type !== "instrument") {return}
         const fields = adapter.audioInputs
         const count = Math.min(state.inputs.length, fields.length)
@@ -397,7 +409,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 checked: fields[index].targetAddress.nonEmpty()
             }).setRuntimeChildrenProcedure(sub => populateSidechainMenu(sub, menuOf(fields[index]))))
         }
-    })
+    }
+    const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(populateAudioIn)
     const audioInLabel: HTMLElement = <span className="button-label">Audio In</span>
     const audioInGroup: HTMLElement = (
         <div className="group hidden">
@@ -427,6 +440,114 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         openButton.classList.toggle("disabled", !state.ready || !state.editor)
         parametersButton.classList.toggle("disabled", !state.ready)
     }
+    const title = (): string => state.info?.name ?? adapter.labelField.getValue()
+    const minimized = adapter.minimizedField.getValue()
+    const buttonsRow: HTMLElement = (
+        <div className="buttons">
+            <div className="group">
+                <MenuButton root={pluginMenu}
+                            appearance={{
+                                framed: true, color: Colors.shadow, activeColor: Colors.white,
+                                tooltip: "Pick a plugin from the openDAW cloud or this device, or import one"
+                            }}>
+                    <span className="button-label">Load Plugin</span>
+                </MenuButton>
+            </div>
+            {updateGroup}
+            {pluginButtons}
+            {audioInGroup}
+        </div>
+    )
+    const aboutText: HTMLElement = (
+        <p className="about">
+            Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
+                       rel="noopener">WebCLAP</a> bundle,
+            a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
+            .wclap.tar.gz or a bare .wasm from disk.
+        </p>
+    )
+    const panelArea: HTMLElement = <div className="panel hidden" style={{width: `${PANEL_HEIGHT}px`}}/>
+    const controls: HTMLElement = <div className={className}>{pluginBox}{buttonsRow}{aboutText}{panelArea}</div>
+    // panel strategy: the plugin's own page fills the device body, the device controls move into the menu
+    const panel = {active: false, framed: false, generation: 0}
+    const panelSession = lifecycle.own(new Terminator())
+    const wantsPanel = (): boolean => isDefined(state.info) && state.info.features.includes(DEVICE_PANEL_FEATURE)
+    const dropPanel = (): void => {
+        state.panel = false
+        showStrategy()
+    }
+    const openPanelFrame = async (generation: number): Promise<void> => {
+        const current = (): boolean => generation === panel.generation
+        const opened = await engine.wclapOpenPanel(uuid, PANEL_HEIGHT)
+        if (opened.uri.length === 0) {
+            if (current()) {dropPanel()}
+            return
+        }
+        const guiSession = {held: true}
+        const release = (): void => {
+            if (!guiSession.held) {return}
+            guiSession.held = false
+            engine.wclapCloseGui(uuid)
+        }
+        if (!current()) {return release()}
+        const bundle = await WclapBundles.fetch(adapter.urlField.getValue()).catch(error => {
+            release()
+            throw error
+        })
+        if (!current()) {return release()}
+        const frame = panelSession.own(WclapFrame({
+            service, adapter, bundle, uri: opened.uri,
+            reload: async () => {
+                release()
+                const {uri} = await engine.wclapOpenPanel(uuid, PANEL_HEIGHT)
+                guiSession.held = uri.length > 0
+                return uri
+            },
+            reloaded: () => Promise.resolve(),
+            release,
+            lost: dropPanel,
+            scroll: EmptyExec
+        }))
+        panelArea.style.width = `${opened.width > 0 ? opened.width : PANEL_HEIGHT}px`
+        panelArea.appendChild(frame.iframe)
+        panelSession.own(frame.listen(window))
+    }
+    const showStrategy = (): void => {
+        const active = wantsPanel() && !state.failed && (!state.ready || state.panel)
+        if (active !== panel.active) {
+            panel.active = active
+            controls.classList.toggle("panel-view", active)
+            for (const element of [pluginBox, buttonsRow, aboutText]) {element.classList.toggle("hidden", active)}
+            panelArea.classList.toggle("hidden", !active)
+        }
+        const framed = active && state.ready && !minimized
+        if (framed === panel.framed) {return}
+        panel.framed = framed
+        panel.generation++
+        panelSession.terminate()
+        panelArea.replaceChildren()
+        panelArea.style.width = `${PANEL_HEIGHT}px`
+        if (framed) {
+            openPanelFrame(panel.generation)
+                .catch(error => RuntimeNotifier.notify({message: `Could not open the plugin panel: ${error}`, icon: "Warning"}))
+        }
+    }
+    const populatePanelMenu = (parent: MenuItem): void => {
+        if (!panel.active) {return}
+        parent.addMenuItem(
+            MenuItem.default({
+                label: WclapWindows.isOpen(uuidString) ? "Close Window" : "Open Window",
+                selectable: state.ready && state.editor, separatorBefore: true
+            }).setTriggerProcedure(() => WclapWindows.toggle(service, adapter, title())),
+            MenuItem.default({label: "Load Plugin"}).setRuntimeChildrenProcedure(populatePlugins),
+            MenuItem.default({label: "Update", selectable: successor.plugin.nonEmpty()})
+                .setTriggerProcedure(() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))),
+            MenuItem.default({label: "Parameters", selectable: state.ready}).setRuntimeChildrenProcedure(populateParameters)
+        )
+        if (adapter.type === "instrument" && state.ready && state.inputs.length > 0) {
+            parent.addMenuItem(MenuItem.default({label: "Audio In"}).setRuntimeChildrenProcedure(populateAudioIn))
+        }
+    }
     lifecycle.ownAll(
         Events.subscribe(globalThis, "pointermove", (event: PointerEvent) => {
             pointer.x = event.clientX
@@ -443,7 +564,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         adapter.urlField.subscribe(showPlugin),
         engine.subscribeWclapStatus(uuidString, status => {
             state.ready = status.state === "ready"
+            state.failed = status.state === "failed"
             state.editor = status.editor === true
+            state.panel = status.panel === true
             vendorLabel.classList.toggle("failed", status.state === "failed")
             vendorLabel.textContent = status.state === "ready"
                 ? state.info?.vendor ?? ""
@@ -452,8 +575,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             state.inputs = status.inputs
             showAudioIn()
             showStatus()
+            showStrategy()
         }),
-        WclapWindows.subscribe(uuidString, showStatus)
+        WclapWindows.subscribe(uuidString, showStatus),
+        WclapGuis.subscribeShow(uuidString, visible => {if (visible) {WclapWindows.show(service, adapter, title())}})
     )
     showStatus()
     refreshStored()
@@ -467,31 +592,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           } else {
                               MenuItems.forEffectDevice(parent, service, deviceHost, adapter)
                           }
+                          populatePanelMenu(parent)
                       }}
-                      populateControls={() => (
-                          <div className={className}>
-                              {pluginBox}
-                              <div className="buttons">
-                                  <div className="group">
-                                      <MenuButton root={pluginMenu}
-                                                  appearance={{
-                                                      framed: true, color: Colors.shadow, activeColor: Colors.white,
-                                                      tooltip: "Pick a plugin from the openDAW cloud or this device, or import one"
-                                                  }}>
-                                          <span className="button-label">Load Plugin</span>
-                                      </MenuButton>
-                                  </div>
-                                  {updateGroup}
-                                  {pluginButtons}
-                                  {audioInGroup}
-                              </div>
-                              <p className="about">
-                                  Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
-                                             rel="noopener">WebCLAP</a> bundle,
-                                  a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
-                                  .wclap.tar.gz or a bare .wasm from disk.
-                              </p>
-                          </div>)}
+                      populateControls={() => controls}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}

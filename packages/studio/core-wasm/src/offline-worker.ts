@@ -39,6 +39,7 @@ import {
     SignalGraph,
     WclapBundle,
     WclapGuiInfo,
+    WclapPanelInfo,
     WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
@@ -166,6 +167,8 @@ Communicator.executor<OfflineEngineProtocol>(
                     wclapResizeGui(uuid: string, width: number, height: number): void {
                         dispatcher.dispatchAndForget(this.wclapResizeGui, uuid, width, height)
                     }
+                    wclapShowGui(uuid: string): void {dispatcher.dispatchAndForget(this.wclapShowGui, uuid)}
+                    wclapHideGui(uuid: string): void {dispatcher.dispatchAndForget(this.wclapHideGui, uuid)}
                     wclapStatus(uuid: string, status: WclapStatus): void {dispatcher.dispatchAndForget(this.wclapStatus, uuid, status)}
                     wclapRequestSave(uuid: string): void {dispatcher.dispatchAndForget(this.wclapRequestSave, uuid)}
                     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
@@ -325,6 +328,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => midi.connect(port, buffer),
                 wclapOpenGui: (_uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve({uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}),
                 wclapCloseGui: (_uuid: UUID.Bytes): void => {},
+                wclapOpenPanel: (_uuid: UUID.Bytes, _height: number): Promise<WclapPanelInfo> => Promise.resolve({uri: "", width: 0}),
                 wclapResizeGui: (_uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> =>
                     Promise.resolve({width, height}),
                 wclapReceive: (_uuid: UUID.Bytes, _bytes: ArrayBuffer): void => {},

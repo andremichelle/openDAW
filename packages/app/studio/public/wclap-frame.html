@@ -98,6 +98,8 @@
                 })
             }, {capture: true})
         }
+        // never the browser's own menu, the page's handlers still see the event
+        target.addEventListener("contextmenu", event => event.preventDefault(), {capture: true})
     }
 
     // Chrome may lose the release outside the frame, the next buttonless move delivers it to the page
@@ -168,6 +170,7 @@
             forwardPointer()
         }
     })
+    window.addEventListener("contextmenu", event => event.preventDefault())
     channel.port1.start()
     window.parent.postMessage({type: "wclap-frame-ready"}, "*", [channel.port2])
 </script>

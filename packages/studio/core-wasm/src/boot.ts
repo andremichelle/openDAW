@@ -42,6 +42,8 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
         sendParam: (uuid, paramId, value, gesture) => engineToClient.wclapParam(uuid, paramId, value, gesture),
         sendHovered: (uuid, paramId) => engineToClient.wclapHovered(uuid, paramId),
         requestGuiResize: (uuid, width, height) => engineToClient.wclapResizeGui(uuid, width, height),
+        requestGuiShow: uuid => engineToClient.wclapShowGui(uuid),
+        requestGuiHide: uuid => engineToClient.wclapHideGui(uuid),
         sendStatus: (uuid, status) => engineToClient.wclapStatus(uuid, status),
         requestSave: uuid => engineToClient.wclapRequestSave(uuid),
         track

@@ -2,6 +2,7 @@
 // describe, load, audio, parameter mapping (ids above 2^31, unit/real kinds, folded modulation and its
 // clearing), values queued before the plugin is up, state round trip, fault containment, load tracking.
 // Audio port layouts against a minimal test plugin (test/assets/audio-ports.c).
+// Device panel sessions, request_show and request_hide against the device-panel-demo (test/assets/device-panel.c).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
@@ -42,6 +43,12 @@ const untar = (bytes: Uint8Array): Array<WclapBundleFile> => {
 
 const basics: WclapBundle = {files: untar(gunzipSync(readFileSync(BASICS)))}
 const audioPortsBundle: WclapBundle = {files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(AUDIO_PORTS))}]}
+// device-panel.c, the opendaw-commons device-panel-demo, once with and once without its opendaw.device-panel/1 extension
+const wasmBundle = (name: string): WclapBundle =>
+    ({files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(path.resolve(__dirname, "assets", name)))}]})
+const devicePanelBundle = wasmBundle("device-panel.wasm")
+const devicePanelNoExtensionBundle = wasmBundle("device-panel-no-extension.wasm")
+const DEVICE_PANEL = "studio.opendaw.commons.device-panel-demo"
 
 type Host = {
     bridges: WclapBridges
@@ -53,22 +60,28 @@ type Host = {
     reported: Array<[number, number, number]>
     loads: Array<Promise<unknown>>
     saveRequests: number
+    guiSends: number
+    shows: Array<string>
+    hovered: Array<number>
+    hides: Array<string>
 }
 
 const createHost = (bundle: WclapBundle | (() => Promise<WclapBundle>) = basics): Host => {
     const memory = new WebAssembly.Memory({initial: 16})
     const host: Host = {
         bridges: undefined as unknown as WclapBridges, imports: {}, memory,
-        statuses: [], params: [], states: [], reported: [], loads: [], saveRequests: 0
+        statuses: [], params: [], states: [], reported: [], loads: [], saveRequests: 0, guiSends: 0, shows: [], hides: [], hovered: []
     }
     const callbacks: WclapHostCallbacks = {
         loadBundle: () => typeof bundle === "function" ? bundle() : Promise.resolve(bundle),
-        sendGui: () => {},
+        sendGui: () => {host.guiSends++},
         sendState: (_uuid, bytes) => host.states.push(new Uint8Array(bytes)),
         sendParams: (_uuid, list) => {host.params = [...list]},
         sendParam: (_uuid, id, value, gesture) => host.reported.push([id, value, gesture]),
-        sendHovered: () => {},
+        sendHovered: (_uuid, paramId) => host.hovered.push(paramId),
         requestGuiResize: () => {},
+        requestGuiShow: uuid => host.shows.push(uuid),
+        requestGuiHide: uuid => host.hides.push(uuid),
         sendStatus: (_uuid, status) => host.statuses.push(status),
         requestSave: () => {host.saveRequests++},
         track: promise => host.loads.push(promise)
@@ -395,6 +408,37 @@ describe("wclap bridge", () => {
         expect(process(host, handle)).toBe(1)
     })
 
+    // the plugin's page sends reach the host only while a gui session is open
+    it("keeps the gui while any session is open and closes it with the last close", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        const talks = (): boolean => {
+            const before = host.guiSends
+            // CBOR "ready", the first message of the Basics page, answered with the plugin state
+            host.bridges.receive(uuid, new Uint8Array([0x65, ...new TextEncoder().encode("ready")]).buffer)
+            rms(host, handle, 4)
+            return host.guiSends > before
+        }
+        expect(talks()).toBe(false)
+        const first = host.bridges.openGui(uuid)
+        expect(talks()).toBe(true)
+        const second = host.bridges.openGui(uuid)
+        expect(second).toEqual(first)
+        host.bridges.closeGui(uuid)
+        expect(talks()).toBe(true)
+        host.bridges.closeGui(uuid)
+        expect(talks()).toBe(false)
+        // a close without an open session is ignored, the next open counts as the first
+        host.bridges.closeGui(uuid)
+        host.bridges.openGui(uuid)
+        expect(talks()).toBe(true)
+        host.bridges.closeGui(uuid)
+        expect(talks()).toBe(false)
+        expect(host.statuses.at(-1)?.state).toBe("ready")
+    })
+
     const loadAudioPorts = (shape: string): [Host, number] => {
         const host = createHost(audioPortsBundle)
         new Float32Array(host.memory.buffer, IN0, 128).fill(0.25)
@@ -467,5 +511,99 @@ describe("wclap bridge", () => {
             process(host, handle)
         })
         expect(host.saveRequests).toBeGreaterThan(0)
+    })
+
+    describe("device panel", () => {
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        // page messages of device-panel.c: 1 poll, 5 request_show, 6 request_hide, 7 param-hovered (id at byte 4)
+        const page = (host: Host, type: number): void => host.bridges.receive(uuid, new Uint8Array([type]).buffer)
+        const talks = (host: Host): boolean => {
+            const before = host.guiSends
+            page(host, 1)
+            return host.guiSends > before
+        }
+        const loadPanel = async (bundle: WclapBundle = devicePanelBundle): Promise<[Host, number]> => {
+            const host = createHost(bundle)
+            const handle = load(host, DEVICE_PANEL, "device-panel")
+            await ready(host, handle)
+            return [host, handle]
+        }
+
+        it("reports a plugin with the feature and the extension as one with a panel, others without", async () => {
+            const [host] = await loadPanel()
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: true})
+            const plain = createHost()
+            await ready(plain, load(plain))
+            expect(plain.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: false})
+        })
+
+        it("opens the panel page with its width as a gui session, the window page stays the webview's", async () => {
+            const [host] = await loadPanel()
+            expect(talks(host)).toBe(false)
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html?panel", width: 176})
+            expect(talks(host)).toBe(true)
+            const window = host.bridges.openGui(uuid)
+            expect(window.uri).toBe("/index.html")
+            expect(window.width).toBe(480)
+            expect(window.height).toBe(320)
+            host.bridges.closeGui(uuid)
+            expect(talks(host)).toBe(true)
+            host.bridges.closeGui(uuid)
+            expect(talks(host)).toBe(false)
+        })
+
+        it("opens no panel for a plugin without the feature and counts no session", async () => {
+            const host = createHost()
+            await ready(host, load(host))
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "", width: 0})
+            host.bridges.openGui(uuid)
+            host.bridges.closeGui(uuid)
+            host.bridges.closeGui(uuid)
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "", width: 0})
+        })
+
+        it("logs a plugin that lists the feature without the extension and shows it without a panel", async () => {
+            const lines: Array<string> = []
+            const log = console.log
+            console.log = (...args: Array<unknown>) => {lines.push(args.join(" "))}
+            const loaded = await loadPanel(devicePanelNoExtensionBundle).finally(() => {console.log = log})
+            const [host] = loaded
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: false})
+            expect(lines.some(line => line.includes(DEVICE_PANEL) && line.includes("opendaw.device-panel/1"))).toBe(true)
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "", width: 0})
+            expect(host.bridges.openGui(uuid).uri).toBe("/index.html")
+        })
+
+        it("passes request_show and request_hide on while a page is open and refuses them otherwise", async () => {
+            const [host] = await loadPanel()
+            page(host, 5)
+            page(host, 6)
+            expect(host.shows).toEqual([])
+            expect(host.hides).toEqual([])
+            host.bridges.openPanel(uuid, 176)
+            page(host, 5)
+            expect(host.shows).toEqual([uuid])
+            page(host, 6)
+            expect(host.hides).toEqual([uuid])
+            host.bridges.closeGui(uuid)
+            page(host, 5)
+            expect(host.shows).toEqual([uuid])
+        })
+
+        it("reports the hovered fader to the host, so right-click and double-click reach the gain parameter", async () => {
+            const [host] = await loadPanel()
+            host.bridges.openPanel(uuid, 176)
+            const hover = (id: number): void => {
+                const message = new DataView(new ArrayBuffer(8))
+                message.setUint8(0, 7)
+                message.setUint32(4, id, true)
+                host.bridges.receive(uuid, message.buffer)
+            }
+            hover(0)
+            hover(0xffffffff)
+            hover(3)
+            expect(host.hovered).toEqual([0, -1, -1])
+            expect(param(host, "Gain").id).toBe(0)
+        })
     })
 })

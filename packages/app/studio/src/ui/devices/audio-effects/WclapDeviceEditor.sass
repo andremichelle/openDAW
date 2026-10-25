@@ -8,6 +8,21 @@ component
   min-width: 16em
   @include mixins.Control
 
+  &.panel-view
+    min-width: 0
+
+  > div.panel
+    flex: 0 0 auto
+    height: 100%
+    overflow: hidden
+    border-radius: 3px
+    background-color: rgba(black, 0.25)
+
+    > iframe
+      display: block
+      width: 100%
+      height: 100%
+
   > div.plugin
     display: flex
     flex-direction: column

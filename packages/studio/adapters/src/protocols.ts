@@ -13,6 +13,8 @@ export type WclapBundle = { files: ReadonlyArray<WclapBundleFile> }
 export type WclapGuiInfo = { uri: string, width: number, height: number, resizable: boolean, aspectRatio: number }
 // the size the plugin's clap.gui adjust_size accepted
 export type WclapGuiSize = { width: number, height: number }
+// the device panel page (opendaw.device-panel/1), uri "" = none, width 0 = the plugin names no width
+export type WclapPanelInfo = { uri: string, width: number }
 // one plugin of a bundle's factory, `features` as CLAP lists them ("instrument", "audio-effect", ...)
 export type WclapPluginInfo = { clapId: string, name: string, vendor: string, features: ReadonlyArray<string> }
 // the engine's live processor graph, latencies and compensation delays in frames
@@ -30,8 +32,10 @@ export type WclapParamInfo = {
 export type WclapAudioPort = { name: string, channels: number }
 // inputs: the loaded plugin's audio input ports, empty until ready
 // editor: once ready, whether the plugin offers a window of its own (clap.webview)
+// panel: once ready, whether the plugin offers a device panel page (opendaw:device-panel + opendaw.device-panel/1)
 export type WclapStatus = {
-    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>, editor?: boolean
+    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>, editor?: boolean,
+    panel?: boolean
 }
 // a parameter change the plugin reports (its GUI, a preset): 0 = value, 1 = gesture begin, 2 = gesture end
 export type WclapParamGesture = 0 | 1 | 2
@@ -63,6 +67,8 @@ export interface EngineCommands extends Terminable {
     // WCLAP webview relay
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo>
     wclapCloseGui(uuid: UUID.Bytes): void
+    // a gui session like wclapOpenGui, closed with wclapCloseGui
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo>
     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize>
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
     // save the plugin's state now (answered through EngineToClient.wclapState when it changed)
@@ -94,6 +100,9 @@ export interface EngineToClient {
     wclapHovered(uuid: string, paramId: number): void
     // clap.gui request_resize: the plugin asks for another window size (logical pixels)
     wclapResizeGui(uuid: string, width: number, height: number): void
+    // clap.gui request_show / request_hide: the plugin's page asks for its window
+    wclapShowGui(uuid: string): void
+    wclapHideGui(uuid: string): void
     wclapStatus(uuid: string, status: WclapStatus): void
     // the plugin's state changed, the host answers with `wclapSaveState` between render quanta
     wclapRequestSave(uuid: string): void
