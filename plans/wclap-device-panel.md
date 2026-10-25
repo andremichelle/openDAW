@@ -78,8 +78,27 @@ host keeps one session and multiplexes:
 
 ### 5. Device editor
 
-- `WclapDeviceEditor` with the feature: the panel area hosts a `wclap-frame.html` iframe (same origin isolation,
-  same frame protocol, `placement: "panel"`), the parameter tree moves behind the header menu.
+Two strategies, today everything sits in one block in `populateControls` (`WclapDeviceEditor.tsx:455`):
+
+1. **Host strategy (today, unchanged).** Plugin box, Load Plugin, Update, Open UI, Parameters, Audio In, about
+   text. Used with no plugin loaded, a failed load, and every plugin without `opendaw:device-panel`. Existing
+   devices stay bit-identical.
+2. **Panel strategy.** The 176px surface holds only the panel iframe (`wclap-frame.html`, same origin isolation,
+   same frame protocol, `placement: "panel"`) at the width from `get_width`. Load Plugin, Update, Parameters and
+   Audio In move into the `populateMenu` menu, Open UI and Update become header tools (`populateHeader`,
+   `with-tools`). Used when the described plugin lists `opendaw:device-panel`.
+
+Switching:
+
+- The choice comes from `state.info.features`, known at describe time, not from the load status. While the plugin
+  loads the panel strategy shows a placeholder at the panel width, no jump from the host layout to the panel.
+- A failed load falls back to the host strategy, so the error and Load Plugin are visible.
+- A `clapId` or `url` change (pick, Update, undo, Live Room peer) chooses again, the old strategy terminates
+  completely, iframe included.
+- One container in `populateControls` swaps its content, each strategy owns a `Terminator` under the editor
+  lifecycle. `pluginMenu`, `parametersMenu` and `audioInMenu` are built once and shared, never duplicated.
+
+Panel strategy details:
 - The panel frame lives with the editor lifecycle, the window with the device, as `ScriptWindows`.
 - Context menu, double-click, wheel, keys and `clap.param-hovered` work in the panel frame as in the window
   (`onFrameMessage` shared, not copied).
