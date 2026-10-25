@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
-import {AudioUnitLayout, ProjectSkeleton} from "@opendaw/studio-adapters"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitGroups, AudioUnitLayout, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {AudioBusBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {asDefined, isDefined, UUID} from "@opendaw/lib-std"
 import {GroupDropLayout} from "./GroupDropLayout"
@@ -11,14 +11,22 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
     const graph = skeleton.boxGraph
     graph.beginTransaction()
     let index = 0
-    const create = (group: boolean, parent?: AudioUnitBox): AudioUnitBox => AudioUnitBox.create(graph, UUID.generate(), box => {
-        box.collection.refer(rootBox.audioUnits)
-        box.output.refer(primaryAudioBusBox.input)
-        box.index.setValue(index++)
-        box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
-        box.isGroup.setValue(group)
-        if (isDefined(parent)) {box.groupParent.refer(parent.groupChildren)}
-    })
+    const create = (group: boolean, parent?: AudioUnitBox): AudioUnitBox => {
+        const unit = AudioUnitBox.create(graph, UUID.generate(), box => {
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent)) : primaryAudioBusBox).input)
+            box.index.setValue(index++)
+            box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
+            box.isGroup.setValue(group)
+        })
+        if (group) {
+            AudioBusBox.create(graph, UUID.generate(), box => {
+                box.collection.refer(rootBox.audioBusses)
+                box.output.refer(unit.input)
+            })
+        }
+        return unit
+    }
     const first = create(false), group = create(true), child = create(false, group)
     const inner = create(true, group), leaf = create(false, inner), lastChild = create(false, group)
     const after = create(false), last = create(false)

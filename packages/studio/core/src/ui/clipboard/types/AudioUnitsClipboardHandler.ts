@@ -185,7 +185,7 @@ export namespace AudioUnitsClipboard {
         const outputAdapter = rootBoxAdapter.audioUnits.adapters().find(adapter => adapter.isOutput)
         if (!outputAdapter) {return}
         const outputBox = outputAdapter.box
-        const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
+        const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().find(bus => bus.audioUnitBoxAdapter().isOutput)?.address
         if (!primaryBusAddress) {return}
         const boxes = ClipboardUtils.deserializeBoxes(
             data,
@@ -228,7 +228,7 @@ export namespace AudioUnitsClipboard {
                                rootBoxAdapter: RootBoxAdapter,
                                currentAudioUnit: Option<AudioUnitBoxAdapter>): Optional<AudioUnitBox> => {
         const rootBox = rootBoxAdapter.box
-        const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
+        const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().find(bus => bus.audioUnitBoxAdapter().isOutput)?.address
         if (!primaryBusAddress) {return undefined}
         const boxes = ClipboardUtils.deserializeBoxes(
             data, boxGraph, newAudioUnitPasteOptions(rootBox, primaryBusAddress.uuid))

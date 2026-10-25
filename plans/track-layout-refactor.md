@@ -32,13 +32,14 @@ drag targets and timeline hit testing follow the same shared order.
 ## Audio and persistence scope
 
 The layout refactor changes no box schema or DSP/WASM processing implementation. Group membership, collapse,
-routing and effects continue to use the existing grouping model. The original grouping feature separately
-extends the saved box schema and matching Rust registry; this refactor adds no further schema fields.
+routing and effects originally continued to use the existing grouping model. The subsequent routing-derived
+membership update removes the experimental parent/children fields and updates the matching Rust registry;
+it adds no DSP algorithms. See `track-groups.md` for the current model and compatibility check.
 
 A newly inserted grouped instrument receives its destination during construction through
 `InstrumentOptions.destination`. Repointing a newly constructed channel later in the same transaction can
 leave its resolved route inconsistent with its saved pointer. The regression checks both membership and
-the resolved group bus, plus serialization and undo/redo. Existing channels preserve custom-output behavior.
+the resolved group bus, plus serialization and undo/redo. Grouping/moving existing channels now sets their destination, and membership follows the output route.
 
 ## Verification
 
@@ -62,7 +63,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `d78b9f4f-ee05-472f-9ecd-27410037e56c`.
+- Current refactored build: `afc1b8b7-8efd-47f0-8e89-fc11518f3266`.
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -125,3 +126,13 @@ Collapsed groups retain both insertion edges. Two new mixer geometry regressions
 expanded entry from the right and collapsed edge targets. All 106 Studio tests (26 files), production
 build and type checks pass. A browser fixture using actual mixer/strip/rail styles verifies corners
 and separate insertion feedback; this is a style check, not a live held-drag screenshot.
+
+## Routing-derived membership follow-up
+
+Membership now follows the primary output into a group bus. The separate parent/children schema fields
+and pointer enum value are removed; identity/collapse remain. Output-menu edits rebuild the shared
+layout once per transaction, and group overview redraws follow the route changes. Nested routing, aux
+send exclusion, feedback rejection, transfers and old-preview-file decoding are covered in the tests.
+This supersedes the earlier independent custom-output/folder behavior. See `track-groups.md`.
+Hosted output-menu checks and a saved/reopened copy confirm that both views follow the same routing
+hierarchy. The old preview project opened correctly; its original library entry was left unchanged.

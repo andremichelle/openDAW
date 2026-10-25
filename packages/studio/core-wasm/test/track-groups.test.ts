@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton, InstrumentFactories, ScriptCompiler} from "@opendaw/studio-adapters"
+import {AudioUnitGroups, ProjectSkeleton, InstrumentFactories, ScriptCompiler} from "@opendaw/studio-adapters"
 import {ApparatDeviceBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv, Project} from "@opendaw/studio-core"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -140,8 +140,13 @@ describe("track groups on the real WASM engine", () => {
         project.editing.modify(() => effect.volume.setValue(-6))
         const processed = await render(project)
         expect(peak(processed) / peak(baseline)).toBeCloseTo(Math.pow(10, -6 / 20), 4)
-        project.editing.modify(() => project.grouping.move([unit], undefined))
+        // Use the same pointer edit as the output menu: hierarchy and processing must agree.
+        project.editing.modify(() => unit.output.refer(project.primaryAudioBusBox.input))
+        expect(AudioUnitGroups.parent(unit)).toBeUndefined()
         expect(maxDiff(baseline, await render(project))).toBeLessThan(1e-6)
+        project.editing.modify(() => unit.output.refer(AudioUnitGroups.bus(inner)!.input))
+        expect(AudioUnitGroups.parent(unit)).toBe(inner)
+        expect(maxDiff(processed, await render(project))).toBeLessThan(1e-6)
         project.terminate()
     }, 30_000)
 })

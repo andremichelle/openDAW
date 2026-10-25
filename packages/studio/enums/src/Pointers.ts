@@ -67,5 +67,4 @@ export enum Pointers {
     ScriptValue,
     ScriptBuffer,
     ScriptBufferChunk,
-    GroupMember,
 }

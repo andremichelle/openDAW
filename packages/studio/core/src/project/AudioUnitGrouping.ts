@@ -14,6 +14,13 @@ export class AudioUnitGrouping {
         const roots = AudioUnitGroups.roots(units)
         if (isDefined(before) && (!before.isAttached() || AudioUnitGroups.parent(before) !== parent || roots.includes(before))) {return false}
         if (isDefined(parent) && roots.some(unit => unit === parent || AudioUnitGroups.ancestors(parent).includes(unit))) {return false}
+        return !isDefined(parent) || this.canRoute(roots, parent)
+    }
+
+    /** Output menus and folder moves share primary-route/send feedback validation. */
+    canRoute(units: ReadonlyArray<AudioUnitBox>, destination: AudioUnitBox): boolean {
+        const roots = AudioUnitGroups.roots(units)
+        if (roots.length === 0 || !destination.isAttached()) {return false}
         // Follow primary routes and sends from the destination: adding a route must never feed itself.
         const visited = new Set<AudioUnitBox>()
         const reachesSource = (unit: AudioUnitBox): boolean => {
@@ -29,7 +36,7 @@ export class AudioUnitGrouping {
                 return target instanceof AudioUnitBox && reachesSource(target)
             })
         }
-        return !isDefined(parent) || !reachesSource(parent)
+        return !reachesSource(destination)
     }
 
     /** Boundary drops must retain their exact sibling slot. */
@@ -79,12 +86,7 @@ export class AudioUnitGrouping {
         siblings.splice(outputIndex < 0 ? position : Math.min(position, outputIndex), 0, ...moving)
         siblings.sort(AudioUnitGroups.compareCategories)
         moving.forEach(unit => {
-            const previous = AudioUnitGroups.parent(unit)
-            const previousBus = isDefined(previous) ? AudioUnitGroups.bus(previous) : primaryAudioBusBox
-            const followsParent = unit.output.targetVertex.unwrapOrUndefined()?.box === previousBus
-            const changedParent = previous !== parent
-            isDefined(parent) ? unit.groupParent.refer(parent.groupChildren) : unit.groupParent.defer()
-            if (changedParent && followsParent) {unit.output.refer(destination.input)}
+            unit.output.refer(destination.input)
         })
         const ordered: AudioUnitBox[] = []
         const append = (unit: AudioUnitBox): void => {

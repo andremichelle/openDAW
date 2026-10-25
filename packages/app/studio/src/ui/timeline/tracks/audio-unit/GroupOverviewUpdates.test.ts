@@ -1,12 +1,12 @@
 import {describe, expect, it} from "vitest"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
-import {TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
 import {UUID} from "@opendaw/lib-std"
 import {affectsGroupOverview} from "./GroupOverviewUpdates"
 
 describe("folded group redraws", () => {
     it("ignores mixer parameter edits but follows folder membership and order", () => {
-        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = ProjectSkeleton.empty({
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioUnitBox, primaryAudioBusBox}} = ProjectSkeleton.empty({
             createDefaultUser: false, createOutputMaximizer: false
         })
         boxGraph.beginTransaction()
@@ -15,6 +15,8 @@ describe("folded group redraws", () => {
             box.target.refer(primaryAudioUnitBox.volume)
             box.type.setValue(TrackType.Value)
         })
+        const source = AudioUnitBox.create(boxGraph, UUID.generate(), box => box.collection.refer(rootBox.audioUnits))
+        const target = AudioUnitBox.create(boxGraph, UUID.generate(), box => box.collection.refer(rootBox.audioUnits))
         boxGraph.endTransaction()
         const relevant: boolean[] = []
         const subscription = boxGraph.subscribeToAllUpdates({onUpdate: update => {
@@ -33,6 +35,12 @@ describe("folded group redraws", () => {
         track.index.setValue(1)
         boxGraph.endTransaction()
         expect(relevant).toEqual([true, true, true])
+        relevant.length = 0
+        boxGraph.beginTransaction()
+        source.output.refer(primaryAudioBusBox.input)
+        primaryAudioBusBox.output.refer(target.input)
+        boxGraph.endTransaction()
+        expect(relevant).toEqual([true, true])
         subscription.terminate()
     })
 })
