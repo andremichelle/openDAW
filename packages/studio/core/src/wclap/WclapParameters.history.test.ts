@@ -192,3 +192,50 @@ describe("WebCLAP late saves", () => {
         expect(Array.from(device.pluginState.getValue())).toStrictEqual([4])
     })
 })
+
+// every pick in the device editor (cloud, community, local, import, Update) goes through WclapStates.select
+describe("WebCLAP plugin switch", () => {
+    const setup = async () => {
+        const {Project} = await import("../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const device = project.editing.modify(() => EffectFactories.AudioNamed.Wclap
+            .create(project, skeleton.mandatoryBoxes.primaryAudioUnitBox.audioEffects, 0) as WclapDeviceBox).unwrap()
+        project.editing.modify(() => {
+            device.url.setValue("opfs:surge")
+            device.clapId.setValue("org.surge-synth-team.surge-xt")
+        })
+        WclapStates.store(project, UUID.toString(device.address.uuid), new Int8Array([7, 7]).buffer)
+        project.editing.modify(() => device.label.setValue("Surge XT"))
+        return {project, device}
+    }
+
+    it("another plugin starts without the previous plugin's state, an undo brings it back", async () => {
+        const {project, device} = await setup()
+        project.editing.modify(() => WclapStates.select(device, "opfs:obxf", "org.surge-synth-team.ob-xf"))
+        expect(device.pluginState.getValue().length).toBe(0)
+        project.editing.undo()
+        expect(device.clapId.getValue()).toBe("org.surge-synth-team.surge-xt")
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([7, 7])
+    })
+
+    it("another plugin of the same bundle starts without the state", async () => {
+        const {project, device} = await setup()
+        project.editing.modify(() => WclapStates.select(device, "opfs:surge", "org.surge-synth-team.surge-xt-fx"))
+        expect(device.pluginState.getValue().length).toBe(0)
+    })
+
+    it("another build of the same plugin keeps the state", async () => {
+        const {project, device} = await setup()
+        project.editing.modify(() => WclapStates.select(device, "opfs:surge-newer", "org.surge-synth-team.surge-xt"))
+        expect(device.url.getValue()).toBe("opfs:surge-newer")
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([7, 7])
+    })
+
+    it("another plugin also drops a legacy base64 state", async () => {
+        const {project, device} = await setup()
+        project.editing.modify(() => device.state.setValue(btoa(String.fromCharCode(9, 9))))
+        project.editing.modify(() => WclapStates.select(device, "opfs:obxf", "org.surge-synth-team.ob-xf"))
+        expect(device.state.getValue()).toBe("")
+    })
+})

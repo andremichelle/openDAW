@@ -24,7 +24,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
+import {EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapStates, WclapStorage} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
@@ -91,10 +91,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
     const select = (url: string, clapId: string): void => {
-        editing.modify(() => {
-            adapter.urlField.setValue(url)
-            adapter.clapIdField.setValue(clapId)
-        })
+        editing.modify(() => WclapStates.select(adapter.box, url, clapId))
     }
     const showName = (): void => {
         const clapId = adapter.clapIdField.getValue()

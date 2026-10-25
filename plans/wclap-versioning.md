@@ -62,6 +62,11 @@ case found, and the rules that make versioning conclusive. Trigger: the WebCLAP 
 12. **Reproducible commons builds.** The commons uuid is the archive hash. A deploy that rebuilds an unchanged
     plugin with different bytes publishes a "new build" that supersedes an identical one (already watched).
 
+13. **Plugin switch carried the state.** Every pick in the device editor (cloud, community, local, import, Update)
+    changed only `url` + `clapId`, so another plugin got the previous plugin's blob. Fixed: `WclapStates.select`
+    keeps the blob only for the same `clapId` (another build), else clears field 14 and 12 in the same undoable step.
+    Tests "WebCLAP plugin switch". What remains for `state-url` is a downgrade to an older build of the same plugin.
+
 ## Rules
 
 1. **A project pins its build.** Nothing switches a device's build except an explicit user action (Update, picking

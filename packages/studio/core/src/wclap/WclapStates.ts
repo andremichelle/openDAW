@@ -25,6 +25,16 @@ export namespace WclapStates {
         })
     }
 
+    // inside a modify: another build of the same plugin reads the state, another plugin starts without it
+    export const select = (box: WclapDeviceBox | WclapInstrumentBox, url: string, clapId: string): void => {
+        if (box.clapId.getValue() !== clapId) {
+            box.pluginState.setValue(new Int8Array(0))
+            box.state.setValue("")
+        }
+        box.url.setValue(url)
+        box.clapId.setValue(clapId)
+    }
+
     const equals =(a: Readonly<Int8Array>, b: Readonly<Int8Array>): boolean =>
         a.length === b.length && a.every((value, index) => value === b[index])
 }
