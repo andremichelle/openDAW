@@ -33,8 +33,12 @@ export class WclapCatalog {
         return Option.wrap((await this.all()).find(entry => entry.supersedes.includes(uuid)))
     }
 
+    // a superseded build left the index but its file stays, so an unlisted id is asked from both servers
     async load(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
-        const community = WclapIndex.flatten(await CommunityAPI.get().wclaps()).some(entry => entry.uuid === uuid)
-        return community ? CommunityAPI.get().loadWclap(uuid, progress) : OpenWclapAPI.get().load(uuid, progress)
+        const [cloud, community] = await Promise.all([OpenWclapAPI.get().all(),
+            CommunityAPI.get().wclaps().then(WclapIndex.flatten)])
+        if (community.some(entry => entry.uuid === uuid)) {return CommunityAPI.get().loadWclap(uuid, progress)}
+        if (cloud.some(entry => entry.uuid === uuid)) {return OpenWclapAPI.get().load(uuid, progress)}
+        return OpenWclapAPI.get().load(uuid, progress).catch(() => CommunityAPI.get().loadWclap(uuid, progress))
     }
 }
