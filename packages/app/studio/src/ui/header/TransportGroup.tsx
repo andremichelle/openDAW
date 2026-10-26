@@ -74,7 +74,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
         ContextMenu.subscribe(playButton, collector => collector
             .addItems(
                 MenuItem.default({
-                    label: "Resume from last playback starting position",
+                    label: "Start playback from last start position",
                     checked: playback.timestampEnabled
                 }).setTriggerProcedure(() => playback.timestampEnabled = !playback.timestampEnabled),
                 MenuItem.default({
