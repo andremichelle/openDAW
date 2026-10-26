@@ -164,7 +164,18 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
     }
     // a sample from the browser reaches the page as a dropped wav file: while it is dragged, the frame lets the
     // drag through to its parent, which relays the position and the file to the frame
-    const sampleDrag = terminator.own(new Terminator())
+    const dragging = terminator.own(new Terminator())
+    // every other drag (preset, device) goes to the studio, the device panel replaces or inserts as usual
+    const letThrough = (): void => {
+        dragging.terminate()
+        iframe.style.pointerEvents = "none"
+        dragging.ownAll(
+            {terminate: () => {iframe.style.pointerEvents = ""}},
+            // no pointer event reaches the page while a drag runs, the first one after means it ended
+            Events.subscribe(iframe.ownerDocument, "dragend", () => dragging.terminate(), {capture: true}),
+            Events.subscribe(iframe.ownerDocument, "pointermove", () => dragging.terminate(), {capture: true})
+        )
+    }
     const framePoint = (event: DragEvent): Option<{ x: number, y: number }> => {
         const rect = iframe.getBoundingClientRect()
         const x = event.clientX - rect.left, y = event.clientY - rect.top
@@ -182,19 +193,15 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
     const dragSample = (sample: Sample): void => {
         const parent = iframe.parentElement
         if (!isDefined(parent) || link.port.isEmpty()) {return}
-        sampleDrag.terminate()
+        letThrough()
         const over = {inside: false}
         const leave = (): void => {
             if (!over.inside) {return}
             over.inside = false
             post({type: "wclap-drag-leave"})
         }
-        iframe.style.pointerEvents = "none"
-        sampleDrag.ownAll(
-            {terminate: () => {
-                iframe.style.pointerEvents = ""
-                leave()
-            }},
+        dragging.ownAll(
+            {terminate: leave},
             Events.subscribe(parent, "dragover", (event: DragEvent) => framePoint(event).match({
                 none: leave,
                 some: ({x, y}) => {
@@ -211,16 +218,13 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
                     over.inside = false
                     dropSample(sample, x, y)
                 })
-                sampleDrag.terminate()
-            }),
-            // no pointer event reaches the page while a drag runs, the first one after means it ended
-            Events.subscribe(iframe.ownerDocument, "dragend", () => sampleDrag.terminate(), {capture: true}),
-            Events.subscribe(iframe.ownerDocument, "pointermove", () => sampleDrag.terminate(), {capture: true})
+                dragging.terminate()
+            })
         )
     }
     terminator.ownAll(
         Events.subscribe(iframe.ownerDocument, "dragstart", () => DragAndDrop.current().ifSome(data => {
-            if (data.type === "sample") {dragSample(data.sample)}
+            if (data.type === "sample") {dragSample(data.sample)} else {letThrough()}
         })),
         WclapGuis.register(uuidString, bytes => post({type: "wclap-message", bytes})),
         WclapGuis.subscribeHovered(uuidString, paramId => {
