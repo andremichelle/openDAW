@@ -98,8 +98,12 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
-    const select = (url: string, clapId: string): void => {
-        editing.modify(() => WclapStates.select(adapter.box, url, clapId))
+    const select = (url: string, {clapId, name}: WclapPluginInfo): void => {
+        const previous = state.info?.name
+        editing.modify(() => {
+            WclapStates.select(adapter.box, url, clapId)
+            WclapStates.name(project, adapter.box, previous, name)
+        })
     }
     const showName = (): void => {
         const clapId = adapter.clapIdField.getValue()
@@ -176,7 +180,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                     showPlugin()
                     return
                 }
-                select(local, info.clapId)
+                select(local, info)
                 refreshStored()
             })
             .catch(error => {
@@ -224,7 +228,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         await WclapStorage.store(archive)
         refreshStored()
         engine.wclapRetry(url)
-        select(url, chosen.unwrap().clapId)
+        select(url, chosen.unwrap())
     }
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
     const parameterOf = (paramBox: WclapParameterBox): Optional<AutomatableParameterFieldAdapter> =>
@@ -356,7 +360,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                         .setTriggerProcedure(() => {
                             pick.generation++
                             engine.wclapRetry(url)
-                            select(url, info.clapId)
+                            select(url, info)
                         })))),
             MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})
                 .setTriggerProcedure(() => {

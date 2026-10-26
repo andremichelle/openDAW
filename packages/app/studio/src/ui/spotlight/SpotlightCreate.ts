@@ -8,7 +8,7 @@ import {
 import {
     DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler, WclapPluginInfo
 } from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStorage} from "@opendaw/studio-core"
+import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStates, WclapStorage} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
@@ -156,7 +156,7 @@ export namespace SpotlightCreate {
                 RuntimeNotifier.notify({message: `Could not download ${wclap.name}.`, icon: "Warning"})
                 return
             }
-            const {clapId} = wclap.info
+            const {clapId, name} = wclap.info
             project.editing.modify(() => {
                 const box: Option<WclapDeviceBox | WclapInstrumentBox> = WclapDescriber.kindOf(wclap.info) === "instrument"
                     ? Option.wrap(asInstanceOf(createInstrument(project, InstrumentFactories.Wclap), WclapInstrumentBox))
@@ -165,6 +165,7 @@ export namespace SpotlightCreate {
                 box.ifSome(box => {
                     box.url.setValue(url.value)
                     box.clapId.setValue(clapId)
+                    WclapStates.name(project, box, undefined, name)
                 })
             })
         })
