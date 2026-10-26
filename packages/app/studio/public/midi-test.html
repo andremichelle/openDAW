@@ -87,9 +87,10 @@
                     <div class="bar"><div id="pedal-bar"></div></div>
                     <span class="meta">Value</span><span id="pedal-value">no message yet</span>
                     <span class="meta">Presses</span><span id="pedal-count">0</span>
-                    <span class="meta">Polarity</span><label><input type="checkbox" id="invert-sustain"> Invert</label>
+                    <span class="meta">Polarity</span><select id="sustain-polarity"><option value="auto">Auto</option><option value="as-is">As is</option><option value="inverted">Inverted</option></select>
+                    <span class="meta">Detected</span><span id="pedal-detected">waiting for the first press</span>
                 </div>
-                <p class="hint">A pedal reads "Down" while you press it. If it reads "Down" with your foot off, the pedal polarity is inverted. Many keyboards detect the polarity at power up: keep the pedal released while plugging in the keyboard, or use the polarity switch on the pedal. "Invert" flips the reading here, like a studio setting would.</p>
+                <p class="hint">A pedal reads "Down" while you press it. If it reads "Down" with your foot off, the pedal polarity is inverted. Many keyboards detect the polarity at power up: keep the pedal released while plugging in the keyboard, or use the polarity switch on the pedal. Polarity "Auto" takes the first pedal message of a device as a press, if it says up the device is inverted. "As is" and "Inverted" override it.</p>
             </section>
             <section>
                 <h2>Pitch Bend · Aftertouch · Program</h2>
@@ -135,7 +136,15 @@
     const active = new Map()
     const sustainDown = new Map()
     const sustainRaw = new Map()
-    const invertSustain = document.getElementById("invert-sustain")
+    const detectedInverted = new Map()
+    const sustainPolarity = document.getElementById("sustain-polarity")
+    const isInverted = input => sustainPolarity.value === "inverted"
+        || (sustainPolarity.value === "auto" && detectedInverted.get(input.id) === true)
+    const showDetected = () => {
+        const entries = Array.from(detectedInverted.entries())
+        document.getElementById("pedal-detected").textContent = entries.length === 0 ? "waiting for the first press"
+            : entries.map(([id, inverted]) => `${access?.inputs.get(id)?.name ?? id}: ${inverted ? "inverted" : "as is"}`).join(", ")
+    }
     const lanes = {sustain: [], bend: [], mod: [], pressure: []}
     const ccState = new Map()
     const extras = new Map()
@@ -174,15 +183,20 @@
         note.release = time
         if (sustainDown.get(channelKey(input, channel)) !== true) endNote(note, time)
     }
-    const setSustain = (input, channel, raw, time) => {
+    const setSustain = (input, channel, raw, time, replay = false) => {
         const key = channelKey(input, channel)
         sustainRaw.set(key, {input, channel, raw})
-        const value = invertSustain.checked ? 127 - raw : raw
+        if (!replay && !detectedInverted.has(input.id)) {
+            detectedInverted.set(input.id, raw < 64)
+            showDetected()
+        }
+        const inverted = isInverted(input)
+        const value = inverted ? 127 - raw : raw
         const down = value >= 64
         const wasDown = sustainDown.get(key) === true
         sustainDown.set(key, down)
         pushLane(lanes.sustain, time, value / 127)
-        if (down && !wasDown) counts.pedalPresses++
+        if (down && !wasDown && !replay) counts.pedalPresses++
         if (!down && wasDown) {
             for (const note of Array.from(active.values())) {
                 if (note.input === input && note.channel === channel && note.release !== null) endNote(note, time)
@@ -192,7 +206,7 @@
         state.textContent = down ? "Down" : "Up"
         state.classList.toggle("down", down)
         document.getElementById("pedal-bar").style.width = `${value / 127 * 100}%`
-        document.getElementById("pedal-value").textContent = invertSustain.checked
+        document.getElementById("pedal-value").textContent = inverted
             ? `${value} (sent ${raw}, ch ${channel + 1}, ${input.name})`
             : `${value} (ch ${channel + 1}, ${input.name})`
         document.getElementById("pedal-count").textContent = String(counts.pedalPresses)
@@ -470,14 +484,15 @@
             `Inputs: ${inputs.length === 0 ? "none" : ""}`,
             ...inputs.map(input => `  ${input.name} · ${input.manufacturer ?? ""} · ${input.state} · ${input.connection}`),
             `Messages: ${counts.messages} (clock and active sensing: ${counts.realtime})`,
-            `Sustain presses: ${counts.pedalPresses}${invertSustain.checked ? " (inverted)" : ""}`,
+            `Sustain presses: ${counts.pedalPresses}}`,
+            `Sustain polarity: ${sustainPolarity.value}, detected ${document.getElementById("pedal-detected").textContent}`,
             "",
             ...logLines.slice(-200)
         ].join("\n")
     }
-    invertSustain.onchange = () => {
+    sustainPolarity.onchange = () => {
         const now = performance.now()
-        for (const {input, channel, raw} of Array.from(sustainRaw.values())) setSustain(input, channel, raw, now)
+        for (const {input, channel, raw} of Array.from(sustainRaw.values())) setSustain(input, channel, raw, now, true)
     }
     document.getElementById("pause").onclick = event => {
         paused = !paused

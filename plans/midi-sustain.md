@@ -98,17 +98,27 @@ that lets a script detach an output from its source.
    pressed (AKAI MPK mini with a switchable pedal: inverted in both switch positions and after a power cycle, the same
    in Logic). Many keyboards detect polarity at power up, some not or wrongly, see the links below.
 
-## Invert sustain per input device
+## Sustain polarity per input device
 
-A per-device setting "Invert sustain" next to the MIDI input device preferences. When on, the capture reads CC64 as
-`127 - value` before any solution sees it, so live hold, recording and the automation lane all get the corrected
-pedal. Off by default, existing setups unchanged.
+A per-device setting "Sustain polarity" next to the MIDI input device preferences, with three modes:
+
+1. **Auto (default).** MIDI cannot ask a keyboard for a controller's current value, CC64 only arrives on change. The
+   first CC64 of a device is taken as a press: if it says up (< 64), the device is inverted. Decided once per device
+   and remembered, a later message never flips it.
+2. **As is.** CC64 as sent.
+3. **Inverted.** CC64 read as `127 - value`.
+
+The capture applies it before any solution sees CC64, so live hold, recording and the automation lane all get the
+corrected pedal.
 
 1. Applies to A, B (MIDI learn sees the corrected value) and C alike, and to D (the forwarded CC64 is inverted too).
 2. Stored per device id in the preferences, not in the project, a project opened on another setup must not inherit it.
-3. The test page `opendaw.studio/midi-test.html` has the same toggle, users can confirm it fixes their pedal before
-   reporting.
-4. Few hosts have it: Logic needs a Transformer in the Environment, Pianoteq reverses the CC64 range, Native
+3. Auto guesses wrong when the pedal is held while the device connects (the first message is the release) or when a
+   keyboard sends all its controller values on power up (the first message is the resting state). As is and Inverted
+   override it. The detected polarity is shown next to the setting.
+4. The test page `opendaw.studio/midi-test.html` has the same three modes and shows what Auto detected, users can
+   confirm it fixes their pedal before reporting.
+5. Few hosts have it: Logic needs a Transformer in the Environment, Pianoteq reverses the CC64 range, Native
    Instruments Kontrol Mk3 users report re-setting normal/invert each session.
 
 References:
@@ -124,14 +134,14 @@ References:
 
 `packages/app/studio/public/midi-test.html`, deployed with the studio as `/midi-test.html`. Web MIDI only, no studio
 code: piano roll with notes held by the pedal, lanes for sustain, pitch bend, mod wheel and aftertouch, all CCs, a raw
-message log and "Copy report" for bug reports. Separates "the studio does it wrong" from "the device sends it so".
+message log, the sustain polarity modes and "Copy report" for bug reports. Separates "the studio does it wrong" from "the device sends it so".
 
 ## Recommendation for the discussion
 
 C gives the result users expect from a DAW with no setup, and its first step (live sustain in the sequencer plus
 baked recording) already solves the issue as reported. A is the smallest change, but its
 recordings cannot be edited later and C would replace it. B is worth it only if holding after other MIDI effects
-matters. D can follow for WebCLAP instruments. Invert sustain ships with whichever solution comes first.
+matters. D can follow for WebCLAP instruments. Sustain polarity ships with whichever solution comes first.
 
 Open questions:
 
