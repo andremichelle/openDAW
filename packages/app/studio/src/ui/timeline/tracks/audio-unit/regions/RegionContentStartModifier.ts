@@ -23,8 +23,8 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
             .lowerEqual(region.position, prev => prev !== region && prev.isSelected))
             .match({
                 none: () => position,
-                some: prev => position < prev.complete && prev.complete <= region.complete - PPQN.SemiQuaver
-                    ? prev.complete
+                some: prev => position < prev.complete && Math.ceil(prev.complete) <= region.complete - PPQN.SemiQuaver
+                    ? Math.ceil(prev.complete)
                     : position
             })
     }
@@ -109,7 +109,7 @@ export class RegionContentStartModifier implements RegionModifier {
         return this.#adapters.reduce((maxDelta, adapter) => {
             const maxByDuration = adapter.duration - PPQN.SemiQuaver
             const maxByLoopDuration = adapter.loopDuration - PPQN.SemiQuaver
-            return Math.min(maxDelta, maxByDuration, maxByLoopDuration)
+            return Math.min(maxDelta, Math.floor(maxByDuration), Math.floor(maxByLoopDuration))
         }, Infinity)
     }
 

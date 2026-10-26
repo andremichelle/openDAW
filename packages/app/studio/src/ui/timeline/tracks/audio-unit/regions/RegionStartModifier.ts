@@ -37,11 +37,12 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
             .lowerEqual(region.position - 1, region => region.isSelected))
             .ifSome(region => {
                 if (position < region.complete) {
-                    position = region.complete
+                    position = Math.ceil(region.complete)
                 }
             })
         const min = Math.min(region.duration, this.#tool.snapping.value(region.position))
-        return Math.max(region.duration - Math.max(min, region.complete - position), -region.position)
+        const latest = Math.max(Math.floor(region.complete - min), region.position)
+        return Math.max(Math.min(position, latest), 0) - region.position
     }
 }
 
