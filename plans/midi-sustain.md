@@ -85,6 +85,39 @@ Not possible today. When a source note ends, the Spielwerk bridge ends every not
 (`sourceToOutput` in `script-spielwerk.ts`), so a script cannot hold a note past its key. It would need an API change
 that lets a script detach an output from its source.
 
+### F. A sustain lane per instrument track with assignable targets
+
+A pedal lane without regions, like the tempo track (`TempoTrack.events` points to a `ValueEventCollectionBox`), one
+per instrument audio unit, plus a target that decides what the pedal does.
+
+How other DAWs do it: Logic, Ableton, Cubase, Bitwig and Reaper store CC64 as controller data inside the MIDI region
+or clip, and the instrument sustains, not the host. A synth that ignores CC64 does not sustain. Region data moves,
+copies and loops with the phrase, that is the reason for the convention.
+
+1. Lane: a new field on the audio unit pointing to a `ValueEventCollectionBox`, values 0 to 1, stepped. Continuous so
+   half pedal survives for targets that use it. Absent by default, old projects unchanged.
+2. Recording: the capture writes the (polarity corrected) pedal into the lane of the recorded track, notes keep the
+   lengths the hands played. Editable like tempo automation.
+3. Region edits: moving, copying and deleting note regions moves, copies and deletes the pedal events in their range
+   ("automation follows regions" in Logic, "automation follows events" in Cubase). Closes the main gap against region
+   data. Looped regions still need the pedal drawn across every repeat.
+4. Target "Hold" (default): the note sequencer holds note-offs while the pedal is down, live and on playback, for every
+   instrument. Same path as C, live pedal travels with the note signals so the order stays intact.
+5. Target "Parameter": any automatable parameter of the track. Released is the parameter's base value (its own
+   automation keeps working), pressed is a custom value, for example a long ADSR release.
+6. Target "Forward": CC64 goes to the WebCLAP plugin or soundfont as is (D).
+7. Pro: plug in and it works (Hold), one lane to edit, no setup, free assignment for sound design.
+8. Con: engine (sequencer hold, a sustain signal, a parameter switch), schema (lane field, target), editor lane,
+   capture and recording, region edits that carry the lane.
+9. Con: sustain acts before the MIDI effects, like C.
+
+Open for F:
+
+1. Does a parameter change reach voices already in release? Check every stock instrument's envelope. It decides
+   whether "Parameter" on the release time is a real alternative to "Hold".
+2. One target per track or several (Hold plus a parameter)?
+3. Where does the lane show: under the track like tempo, or as a lane of the track's automation list?
+
 ## Edge cases for any solution
 
 1. Restrike of a held pitch, see above.
@@ -138,13 +171,12 @@ message log, the sustain polarity modes and "Copy report" for bug reports. Separ
 
 ## Recommendation for the discussion
 
-C gives the result users expect from a DAW with no setup, and its first step (live sustain in the sequencer plus
-baked recording) already solves the issue as reported. A is the smallest change, but its
-recordings cannot be edited later and C would replace it. B is worth it only if holding after other MIDI effects
-matters. D can follow for WebCLAP instruments. Sustain polarity ships with whichever solution comes first.
+F (proposed 2026-10-26). It takes C's ordered live path and Hold, stores the pedal as an editable lane like tempo,
+carries it with region edits, and adds Parameter and Forward targets (D included). A, B and C are superseded.
 
-Open questions:
+Order:
 
-1. Should recorded sustain be editable (an automation lane, C step two) or are baked note lengths enough?
-2. Where does the pedal belong in the chain, before the MIDI effects (C) or as a device (B)?
-3. Do we expect sustain on notes drawn in the piano roll?
+1. Polarity setting and capture of CC64 (live Hold only, no lane).
+2. The lane, recording into it and playback Hold.
+3. Region edits carry the lane.
+4. Parameter and Forward targets.
