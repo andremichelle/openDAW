@@ -97,11 +97,6 @@ export const StudioSettingsSchema = z.object({
         "show-cpu-stats": false,
         "enable-beta-features": false,
         "enable-debug-menu": false
-    }),
-    "storage": z.object({
-        "auto-delete-orphaned-samples": z.boolean()
-    }).default({
-        "auto-delete-orphaned-samples": false
     })
 })
 

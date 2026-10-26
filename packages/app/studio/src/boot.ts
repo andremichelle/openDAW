@@ -40,7 +40,7 @@ import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {StudioPreferences, WclapStorage} from "@opendaw/studio-core"
+import {SampleGarbage, StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
@@ -180,6 +180,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         }).finally()
         return
     }
+    SampleGarbage.purge().catch(console.warn)
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")

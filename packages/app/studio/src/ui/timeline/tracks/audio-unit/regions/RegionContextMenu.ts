@@ -4,6 +4,7 @@ import {
     AudioBounce,
     AudioConsolidation,
     AudioContentModifier,
+    AudioMonoConversion,
     ContextMenu,
     ElementCapturing,
     MenuItem,
@@ -25,6 +26,7 @@ import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
+import {MonoConversions} from "@/service/MonoConversions"
 
 type Construct = {
     element: Element
@@ -126,6 +128,15 @@ export const installRegionContextMenu =
                 MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounce(selection.selected())})
                     .setTriggerProcedure(() => Bounces.bounceRegions(service, selection.selected().slice())
                         .then(EmptyExec, console.warn)),
+                MenuItem.default({
+                    label: "Convert to Mono...",
+                    hidden: region.type !== "audio-region",
+                    selectable: isInstanceOf(region, AudioRegionBoxAdapter) && AudioMonoConversion.canConvert(region.file)
+                }).setTriggerProcedure(() => {
+                    if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                        MonoConversions.convertRegion(service, region).then(EmptyExec, console.warn)
+                    }
+                }),
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)
