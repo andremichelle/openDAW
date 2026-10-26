@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI Test - openDAW</title>
+    <style>
+        :root {
+            --bg: #1b1d21;
+            --panel: #24272c;
+            --line: #33373e;
+            --text: #c9ced6;
+            --dim: #7d8590;
+            --accent: #4fb3ff;
+            --note: #4fb3ff;
+            --held: #f2a33a;
+            --sustain: #6fd36f;
+            --warn: #ff6b6b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+        h1 { font-size: 18px; margin: 0; font-weight: 600; }
+        h2 { font-size: 11px; margin: 0 0 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+        section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+        header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+        #status { color: var(--dim); }
+        #status.error { color: var(--warn); }
+        .row { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; }
+        @media (max-width: 860px) { .row { grid-template-columns: minmax(0, 1fr); } }
+        canvas { display: block; width: 100%; background: var(--bg); border-radius: 4px; }
+        #roll { height: 360px; }
+        #lanes { height: 200px; margin-top: 8px; }
+        .devices { display: grid; gap: 4px; }
+        .device { display: flex; gap: 8px; align-items: center; }
+        .device .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+        .device.active .dot { background: var(--sustain); }
+        .device .meta { color: var(--dim); }
+        .pedal { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center; }
+        .pedal .state { font-size: 20px; font-weight: 600; }
+        .pedal .state.down { color: var(--sustain); }
+        .bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+        .bar > div { height: 100%; width: 0; background: var(--sustain); }
+        #ccs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+        .cc { background: var(--bg); border-radius: 4px; padding: 6px 8px; }
+        .cc .name { color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cc .value { font: 600 15px ui-monospace, Menlo, monospace; }
+        .cc .bar > div { background: var(--accent); }
+        .empty { color: var(--dim); }
+        .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .tools h2 { margin: 0 auto 0 0; }
+        button, select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; font: inherit; }
+        button:hover { border-color: var(--accent); }
+        label { color: var(--dim); display: flex; gap: 4px; align-items: center; }
+        #log { height: 260px; overflow: auto; margin: 0; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre; background: var(--bg); border-radius: 4px; padding: 8px; }
+        .hint { color: var(--dim); margin: 8px 0 0; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>openDAW MIDI Test</h1>
+        <span id="status">Requesting MIDI access…</span>
+    </header>
+    <div class="row">
+        <section>
+            <h2>Notes</h2>
+            <canvas id="roll"></canvas>
+            <canvas id="lanes"></canvas>
+            <p class="hint">Blue: key down. Orange: key released, held by the sustain pedal. Lanes: sustain (CC 64), pitch bend, mod wheel (CC 1), aftertouch.</p>
+        </section>
+        <div style="display: grid; gap: 12px; align-content: start;">
+            <section>
+                <h2>Inputs</h2>
+                <div id="devices" class="devices"><span class="empty">No MIDI inputs</span></div>
+            </section>
+            <section>
+                <h2>Sustain Pedal (CC 64)</h2>
+                <div class="pedal">
+                    <span id="pedal-state" class="state">–</span>
+                    <div class="bar"><div id="pedal-bar"></div></div>
+                    <span class="meta">Value</span><span id="pedal-value">no message yet</span>
+                    <span class="meta">Presses</span><span id="pedal-count">0</span>
+                    <span class="meta">Polarity</span><label><input type="checkbox" id="invert-sustain"> Invert</label>
+                </div>
+                <p class="hint">A pedal reads "Down" while you press it. If it reads "Down" with your foot off, the pedal polarity is inverted. Many keyboards detect the polarity at power up: keep the pedal released while plugging in the keyboard, or use the polarity switch on the pedal. "Invert" flips the reading here, like a studio setting would.</p>
+            </section>
+            <section>
+                <h2>Pitch Bend · Aftertouch · Program</h2>
+                <div id="extras" class="pedal"></div>
+            </section>
+        </div>
+    </div>
+    <section>
+        <h2>Controllers</h2>
+        <div id="ccs"><span class="empty">Move a knob, fader or wheel</span></div>
+    </section>
+    <section>
+        <div class="tools">
+            <h2>Messages</h2>
+            <label><input type="checkbox" id="show-realtime"> Clock and active sensing</label>
+            <button id="pause">Pause</button>
+            <button id="clear">Clear</button>
+            <button id="copy">Copy report</button>
+        </div>
+        <pre id="log"></pre>
+        <p class="hint">"Copy report" copies the browser, the devices and the last messages. Paste it into a bug report.</p>
+    </section>
+</main>
+<script>
+    const CC_NAMES = {
+        0: "Bank Select", 1: "Mod Wheel", 2: "Breath", 4: "Foot", 5: "Portamento Time", 6: "Data Entry", 7: "Volume",
+        8: "Balance", 10: "Pan", 11: "Expression", 32: "Bank Select LSB", 64: "Sustain", 65: "Portamento",
+        66: "Sostenuto", 67: "Soft Pedal", 68: "Legato", 69: "Hold 2", 71: "Resonance", 72: "Release", 73: "Attack",
+        74: "Cutoff", 91: "Reverb", 93: "Chorus", 98: "NRPN LSB", 99: "NRPN MSB", 100: "RPN LSB", 101: "RPN MSB",
+        120: "All Sound Off", 121: "Reset Controllers", 123: "All Notes Off"
+    }
+    const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    const noteName = pitch => `${NOTE_NAMES[pitch % 12]}${Math.floor(pitch / 12) - 1}`
+    const isBlack = pitch => [1, 3, 6, 8, 10].includes(pitch % 12)
+    const hex = bytes => Array.from(bytes, byte => byte.toString(16).padStart(2, "0").toUpperCase()).join(" ")
+    const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    const WINDOW_MS = 8000
+    const LOG_LIMIT = 1000
+    const statusElement = document.getElementById("status")
+    const logElement = document.getElementById("log")
+    const showRealtime = document.getElementById("show-realtime")
+    const notes = []
+    const active = new Map()
+    const sustainDown = new Map()
+    const sustainRaw = new Map()
+    const invertSustain = document.getElementById("invert-sustain")
+    const lanes = {sustain: [], bend: [], mod: [], pressure: []}
+    const ccState = new Map()
+    const extras = new Map()
+    const logLines = []
+    const counts = {messages: 0, realtime: 0, pedalPresses: 0}
+    const deviceElements = new Map()
+    let paused = false
+    let range = {low: 48, high: 72}
+    let access = null
+    const setStatus = (text, error = false) => {
+        statusElement.textContent = text
+        statusElement.classList.toggle("error", error)
+    }
+    const channelKey = (input, channel) => `${input.id}:${channel}`
+    const noteKey = (input, channel, pitch) => `${input.id}:${channel}:${pitch}`
+    const pushLane = (lane, time, value) => {
+        lane.push({time, value})
+        while (lane.length > 2 && lane[1].time < performance.now() - WINDOW_MS * 2) lane.shift()
+    }
+    const endNote = (note, time) => {
+        note.end = time
+        active.delete(note.key)
+    }
+    const noteOn = (input, channel, pitch, velocity, time) => {
+        const key = noteKey(input, channel, pitch)
+        const playing = active.get(key)
+        if (playing !== undefined) endNote(playing, time)
+        const note = {key, input, channel, pitch, velocity, start: time, release: null, end: null}
+        notes.push(note)
+        active.set(key, note)
+        range = {low: Math.min(range.low, pitch - 2), high: Math.max(range.high, pitch + 2)}
+    }
+    const noteOff = (input, channel, pitch, time) => {
+        const note = active.get(noteKey(input, channel, pitch))
+        if (note === undefined || note.release !== null) return
+        note.release = time
+        if (sustainDown.get(channelKey(input, channel)) !== true) endNote(note, time)
+    }
+    const setSustain = (input, channel, raw, time) => {
+        const key = channelKey(input, channel)
+        sustainRaw.set(key, {input, channel, raw})
+        const value = invertSustain.checked ? 127 - raw : raw
+        const down = value >= 64
+        const wasDown = sustainDown.get(key) === true
+        sustainDown.set(key, down)
+        pushLane(lanes.sustain, time, value / 127)
+        if (down && !wasDown) counts.pedalPresses++
+        if (!down && wasDown) {
+            for (const note of Array.from(active.values())) {
+                if (note.input === input && note.channel === channel && note.release !== null) endNote(note, time)
+            }
+        }
+        const state = document.getElementById("pedal-state")
+        state.textContent = down ? "Down" : "Up"
+        state.classList.toggle("down", down)
+        document.getElementById("pedal-bar").style.width = `${value / 127 * 100}%`
+        document.getElementById("pedal-value").textContent = invertSustain.checked
+            ? `${value} (sent ${raw}, ch ${channel + 1}, ${input.name})`
+            : `${value} (ch ${channel + 1}, ${input.name})`
+        document.getElementById("pedal-count").textContent = String(counts.pedalPresses)
+    }
+    const releaseAll = (input, channel, time) => {
+        for (const note of Array.from(active.values())) {
+            if (note.input === input && note.channel === channel) endNote(note, time)
+        }
+    }
+    const setCC = (input, channel, controller, value) => {
+        const key = `${channel}:${controller}`
+        let entry = ccState.get(key)
+        if (entry === undefined) {
+            const element = document.createElement("div")
+            element.className = "cc"
+            element.innerHTML = `<div class="name"></div><div class="value"></div><div class="bar"><div></div></div>`
+            element.querySelector(".name").textContent = `CC ${controller} ${CC_NAMES[controller] ?? ""} · ch ${channel + 1}`
+            entry = {element, controller, channel}
+            ccState.set(key, entry)
+            const container = document.getElementById("ccs")
+            container.querySelector(".empty")?.remove()
+            const sorted = Array.from(ccState.values()).sort((a, b) => a.controller - b.controller || a.channel - b.channel)
+            container.replaceChildren(...sorted.map(item => item.element))
+        }
+        entry.element.querySelector(".value").textContent = String(value)
+        entry.element.querySelector(".bar > div").style.width = `${value / 127 * 100}%`
+    }
+    const setExtra = (label, text) => {
+        let entry = extras.get(label)
+        if (entry === undefined) {
+            const name = document.createElement("span")
+            name.className = "meta"
+            name.textContent = label
+            const value = document.createElement("span")
+            document.getElementById("extras").append(name, value)
+            entry = value
+            extras.set(label, entry)
+        }
+        entry.textContent = text
+    }
+    const describe = (data) => {
+        const [status, data1, data2] = data
+        const type = status & 0xF0
+        const channel = (status & 0x0F) + 1
+        switch (type) {
+            case 0x80: return `ch ${channel} Note Off       ${noteName(data1).padEnd(4)} (${data1}) velocity ${data2}`
+            case 0x90: return data2 === 0
+                ? `ch ${channel} Note Off (on 0) ${noteName(data1).padEnd(4)} (${data1})`
+                : `ch ${channel} Note On        ${noteName(data1).padEnd(4)} (${data1}) velocity ${data2}`
+            case 0xA0: return `ch ${channel} Poly Pressure  ${noteName(data1).padEnd(4)} (${data1}) ${data2}`
+            case 0xB0: return `ch ${channel} Control Change ${String(data1).padEnd(3)} ${(CC_NAMES[data1] ?? "").padEnd(15)} ${data2}`
+            case 0xC0: return `ch ${channel} Program Change ${data1 + 1}`
+            case 0xD0: return `ch ${channel} Channel Pressure ${data1}`
+            case 0xE0: return `ch ${channel} Pitch Bend     ${((data2 << 7) | data1) - 8192}`
+        }
+        switch (status) {
+            case 0xF0: return `SysEx (${data.length} bytes)`
+            case 0xF8: return "Clock"
+            case 0xFA: return "Start"
+            case 0xFB: return "Continue"
+            case 0xFC: return "Stop"
+            case 0xFE: return "Active Sensing"
+            case 0xFF: return "Reset"
+        }
+        return "Unknown"
+    }
+    const log = (input, data, time) => {
+        const line = `${(time / 1000).toFixed(3).padStart(10)}  ${hex(data).padEnd(9)}  ${input.name.slice(0, 20).padEnd(20)}  ${describe(data)}`
+        logLines.push(line)
+        if (logLines.length > LOG_LIMIT) logLines.shift()
+        if (paused) return
+        logElement.textContent = logLines.slice(-300).join("\n")
+        logElement.scrollTop = logElement.scrollHeight
+    }
+    const onMessage = (input, event) => {
+        const data = event.data
+        const time = event.timeStamp
+        if (data.length === 0) return
+        const status = data[0]
+        counts.messages++
+        if (status === 0xF8 || status === 0xFE) {
+            counts.realtime++
+            if (showRealtime.checked) log(input, data, time)
+            return
+        }
+        log(input, data, time)
+        deviceElements.get(input.id)?.classList.add("active")
+        const type = status & 0xF0
+        const channel = status & 0x0F
+        const [, data1, data2] = data
+        switch (type) {
+            case 0x80:
+                noteOff(input, channel, data1, time)
+                break
+            case 0x90:
+                if (data2 === 0) noteOff(input, channel, data1, time)
+                else noteOn(input, channel, data1, data2, time)
+                break
+            case 0xA0: {
+                const note = active.get(noteKey(input, channel, data1))
+                if (note !== undefined) note.pressure = data2
+                pushLane(lanes.pressure, time, data2 / 127)
+                setExtra("Poly AT", `${data2} on ${noteName(data1)} (ch ${channel + 1})`)
+                break
+            }
+            case 0xB0:
+                setCC(input, channel, data1, data2)
+                if (data1 === 64) setSustain(input, channel, data2, time)
+                if (data1 === 1) pushLane(lanes.mod, time, data2 / 127)
+                if (data1 === 120 || data1 === 123) releaseAll(input, channel, time)
+                break
+            case 0xC0:
+                setExtra("Program", `${data1 + 1} (ch ${channel + 1})`)
+                break
+            case 0xD0:
+                pushLane(lanes.pressure, time, data1 / 127)
+                setExtra("Channel AT", `${data1} (ch ${channel + 1})`)
+                break
+            case 0xE0: {
+                const bend = ((data2 << 7) | data1) - 8192
+                pushLane(lanes.bend, time, bend / 16384 + 0.5)
+                setExtra("Pitch Bend", `${bend} (ch ${channel + 1})`)
+                break
+            }
+        }
+    }
+    const refreshDevices = () => {
+        const container = document.getElementById("devices")
+        const inputs = Array.from(access.inputs.values())
+        deviceElements.clear()
+        if (inputs.length === 0) {
+            container.innerHTML = `<span class="empty">No MIDI inputs. Connect a device, it appears here.</span>`
+            return
+        }
+        container.replaceChildren(...inputs.map(input => {
+            const element = document.createElement("div")
+            element.className = "device"
+            element.innerHTML = `<span class="dot"></span><span class="name"></span><span class="meta"></span>`
+            element.querySelector(".name").textContent = input.name ?? "Unnamed"
+            element.querySelector(".meta").textContent = [input.manufacturer, input.state].filter(text => text).join(" · ")
+            deviceElements.set(input.id, element)
+            input.onmidimessage = event => onMessage(input, event)
+            return element
+        }))
+        setStatus(`${inputs.length} input${inputs.length === 1 ? "" : "s"} connected. Play a note.`)
+    }
+    const fitCanvas = canvas => {
+        const ratio = devicePixelRatio
+        const width = Math.round(canvas.clientWidth * ratio)
+        const height = Math.round(canvas.clientHeight * ratio)
+        if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width
+            canvas.height = height
+        }
+        const context = canvas.getContext("2d")
+        context.setTransform(ratio, 0, 0, ratio, 0, 0)
+        return {context, width: canvas.clientWidth, height: canvas.clientHeight}
+    }
+    const KEYS_WIDTH = 44
+    const drawRoll = now => {
+        const {context, width, height} = fitCanvas(document.getElementById("roll"))
+        const low = Math.max(0, range.low)
+        const high = Math.min(127, range.high)
+        const rows = high - low + 1
+        const rowHeight = height / rows
+        const plotWidth = width - KEYS_WIDTH
+        const toX = time => KEYS_WIDTH + plotWidth - (now - time) / WINDOW_MS * plotWidth
+        const toY = pitch => (high - pitch) * rowHeight
+        context.clearRect(0, 0, width, height)
+        for (let pitch = low; pitch <= high; pitch++) {
+            const y = toY(pitch)
+            context.fillStyle = isBlack(pitch) ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.025)"
+            context.fillRect(KEYS_WIDTH, y, plotWidth, rowHeight)
+            const sounding = Array.from(active.values()).find(note => note.pitch === pitch)
+            context.fillStyle = sounding !== undefined
+                ? (sounding.release === null ? css("--note") : css("--held"))
+                : (isBlack(pitch) ? "#111" : "#d8dce2")
+            context.fillRect(0, y + 0.5, KEYS_WIDTH - 2, Math.max(1, rowHeight - 1))
+            if (pitch % 12 === 0 && rowHeight >= 7) {
+                context.fillStyle = sounding !== undefined ? "#000" : "#555"
+                context.font = `${Math.min(11, rowHeight)}px sans-serif`
+                context.textBaseline = "middle"
+                context.fillText(noteName(pitch), 3, y + rowHeight / 2)
+            }
+        }
+        for (let seconds = Math.ceil((now - WINDOW_MS) / 1000); seconds * 1000 <= now; seconds++) {
+            const x = toX(seconds * 1000)
+            context.fillStyle = css("--line")
+            context.fillRect(x, 0, 1, height)
+        }
+        while (notes.length > 0 && notes[0].end !== null && notes[0].end < now - WINDOW_MS) notes.shift()
+        for (const note of notes) {
+            const y = toY(note.pitch) + 1
+            const h = Math.max(1, rowHeight - 2)
+            const x0 = Math.max(KEYS_WIDTH, toX(note.start))
+            const keyEnd = note.release ?? note.end ?? now
+            const x1 = toX(keyEnd)
+            context.globalAlpha = 0.35 + 0.65 * note.velocity / 127
+            context.fillStyle = css("--note")
+            if (x1 > KEYS_WIDTH) context.fillRect(x0, y, Math.max(1, x1 - x0), h)
+            if (note.release !== null) {
+                const heldEnd = toX(note.end ?? now)
+                const heldStart = Math.max(KEYS_WIDTH, x1)
+                if (heldEnd > heldStart) {
+                    context.fillStyle = css("--held")
+                    context.fillRect(heldStart, y + h * 0.2, heldEnd - heldStart, h * 0.6)
+                }
+            }
+            context.globalAlpha = 1
+        }
+    }
+    const drawLanes = now => {
+        const {context, width, height} = fitCanvas(document.getElementById("lanes"))
+        const plotWidth = width - KEYS_WIDTH
+        const toX = time => KEYS_WIDTH + plotWidth - (now - time) / WINDOW_MS * plotWidth
+        const entries = [["Sustain", lanes.sustain, css("--sustain")], ["Bend", lanes.bend, css("--accent")],
+            ["Mod", lanes.mod, css("--accent")], ["AT", lanes.pressure, css("--held")]]
+        const laneHeight = height / entries.length
+        context.clearRect(0, 0, width, height)
+        entries.forEach(([label, points, color], index) => {
+            const top = index * laneHeight
+            const bottom = top + laneHeight - 4
+            const toY = value => bottom - value * (laneHeight - 8)
+            context.fillStyle = "rgba(255,255,255,0.03)"
+            context.fillRect(KEYS_WIDTH, top, plotWidth, laneHeight - 4)
+            context.fillStyle = css("--dim")
+            context.font = "11px sans-serif"
+            context.textBaseline = "middle"
+            context.fillText(label, 2, top + laneHeight / 2)
+            if (label === "Sustain") {
+                context.fillStyle = "rgba(255,255,255,0.08)"
+                context.fillRect(KEYS_WIDTH, toY(64 / 127), plotWidth, 1)
+            }
+            if (points.length === 0) return
+            context.strokeStyle = color
+            context.lineWidth = 1.5
+            context.beginPath()
+            const visible = points.filter((point, i) => i === points.length - 1 || points[i + 1].time >= now - WINDOW_MS)
+            visible.forEach((point, i) => {
+                const x = Math.max(KEYS_WIDTH, toX(point.time))
+                if (i === 0) {
+                    context.moveTo(x, toY(point.value))
+                } else {
+                    context.lineTo(x, toY(visible[i - 1].value))
+                    context.lineTo(x, toY(point.value))
+                }
+            })
+            context.lineTo(width, toY(visible[visible.length - 1].value))
+            context.stroke()
+            if (label === "Sustain") {
+                context.globalAlpha = 0.15
+                context.fillStyle = color
+                visible.forEach((point, i) => {
+                    if (point.value < 64 / 127) return
+                    const x0 = Math.max(KEYS_WIDTH, toX(point.time))
+                    const x1 = i + 1 < visible.length ? toX(visible[i + 1].time) : width
+                    context.fillRect(x0, top, x1 - x0, laneHeight - 4)
+                })
+                context.globalAlpha = 1
+            }
+        })
+    }
+    const frame = () => {
+        const now = performance.now()
+        drawRoll(now)
+        drawLanes(now)
+        requestAnimationFrame(frame)
+    }
+    const report = () => {
+        const inputs = access === null ? [] : Array.from(access.inputs.values())
+        return [
+            "openDAW MIDI Test report",
+            `Date: ${new Date().toISOString()}`,
+            `Browser: ${navigator.userAgent}`,
+            `Inputs: ${inputs.length === 0 ? "none" : ""}`,
+            ...inputs.map(input => `  ${input.name} · ${input.manufacturer ?? ""} · ${input.state} · ${input.connection}`),
+            `Messages: ${counts.messages} (clock and active sensing: ${counts.realtime})`,
+            `Sustain presses: ${counts.pedalPresses}${invertSustain.checked ? " (inverted)" : ""}`,
+            "",
+            ...logLines.slice(-200)
+        ].join("\n")
+    }
+    invertSustain.onchange = () => {
+        const now = performance.now()
+        for (const {input, channel, raw} of Array.from(sustainRaw.values())) setSustain(input, channel, raw, now)
+    }
+    document.getElementById("pause").onclick = event => {
+        paused = !paused
+        event.target.textContent = paused ? "Resume" : "Pause"
+        if (!paused) logElement.textContent = logLines.slice(-300).join("\n")
+    }
+    document.getElementById("clear").onclick = () => {
+        logLines.length = 0
+        logElement.textContent = ""
+    }
+    document.getElementById("copy").onclick = async event => {
+        const button = event.target
+        const done = text => {
+            button.textContent = text
+            setTimeout(() => button.textContent = "Copy report", 1500)
+        }
+        await navigator.clipboard.writeText(report()).then(() => done("Copied"), () => done("Copy failed"))
+    }
+    requestAnimationFrame(frame)
+    if (typeof navigator.requestMIDIAccess !== "function") {
+        setStatus("This browser has no Web MIDI. Use Chrome, Edge, Opera or Firefox. Safari does not support MIDI.", true)
+    } else {
+        navigator.requestMIDIAccess({sysex: false}).then(midiAccess => {
+            access = midiAccess
+            access.onstatechange = () => refreshDevices()
+            refreshDevices()
+        }, error => setStatus(`MIDI access was denied (${error.name}). Allow MIDI for this site in the browser settings and reload.`, true))
+    }
+</script>
+</body>
+</html>

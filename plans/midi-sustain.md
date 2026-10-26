@@ -94,13 +94,44 @@ that lets a script detach an output from its source.
 5. Live rooms: the sustain signal has to travel like the note signals.
 6. Offline render and freeze must match live playback (only for B and C, A bakes it).
 7. Half pedal: CC64 is continuous, all host-side solutions treat >= 64 as down.
+8. Inverted pedal: a normally closed pedal on a keyboard that expects normally open sends 127 at rest and 0 when
+   pressed (AKAI MPK mini with a switchable pedal: inverted in both switch positions and after a power cycle, the same
+   in Logic). Many keyboards detect polarity at power up, some not or wrongly, see the links below.
+
+## Invert sustain per input device
+
+A per-device setting "Invert sustain" next to the MIDI input device preferences. When on, the capture reads CC64 as
+`127 - value` before any solution sees it, so live hold, recording and the automation lane all get the corrected
+pedal. Off by default, existing setups unchanged.
+
+1. Applies to A, B (MIDI learn sees the corrected value) and C alike, and to D (the forwarded CC64 is inverted too).
+2. Stored per device id in the preferences, not in the project, a project opened on another setup must not inherit it.
+3. The test page `opendaw.studio/midi-test.html` has the same toggle, users can confirm it fixes their pedal before
+   reporting.
+4. Few hosts have it: Logic needs a Transformer in the Environment, Pianoteq reverses the CC64 range, Native
+   Instruments Kontrol Mk3 users report re-setting normal/invert each session.
+
+References:
+
+1. [Arturia: sustain pedal acts reversely](https://support.arturia.com/hc/en-us/articles/4405741267602-My-sustain-pedal-acts-reversely-How-to-invert-it)
+2. [Akai MPC Key 61: pedal working in reverse](https://support.akaipro.com/en/support/solutions/articles/69000859246-akai-pro-mpc-key-61-my-pedal-is-working-in-reverse)
+3. [NI k61 mk3: always reverse polarity with 3 pedals](https://community.native-instruments.com/discussion/40104/k61-mk3-sustain-pedal-always-reverse-polarity-3-different-pedals)
+4. [Yamaha checks pedal polarity at boot (PSR Tutorial forum)](https://www.psrtutorial.com/forum/index.php/topic,66436.msg502841.html)
+5. [Cantabile: polarity flips from a half seated plug](https://community.cantabilesoftware.com/t/sustain-pedal-changing-polarity-and-back-mystery/8773)
+6. [Pianoteq: reverse the CC64 range](https://forum.modartt.com/viewtopic.php?id=5065)
+
+## Test page
+
+`packages/app/studio/public/midi-test.html`, deployed with the studio as `/midi-test.html`. Web MIDI only, no studio
+code: piano roll with notes held by the pedal, lanes for sustain, pitch bend, mod wheel and aftertouch, all CCs, a raw
+message log and "Copy report" for bug reports. Separates "the studio does it wrong" from "the device sends it so".
 
 ## Recommendation for the discussion
 
 C gives the result users expect from a DAW with no setup, and its first step (live sustain in the sequencer plus
 baked recording) already solves the issue as reported. A is the smallest change, but its
 recordings cannot be edited later and C would replace it. B is worth it only if holding after other MIDI effects
-matters. D can follow for WebCLAP instruments.
+matters. D can follow for WebCLAP instruments. Invert sustain ships with whichever solution comes first.
 
 Open questions:
 
