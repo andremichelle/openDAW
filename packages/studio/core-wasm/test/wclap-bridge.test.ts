@@ -5,6 +5,8 @@
 // Device panel sessions, request_show and request_hide against the device-panel-demo (test/assets/device-panel.c).
 // An audio effect with a device panel against WetChorus (test/assets/wet-chorus.wasm, open-webclap ports/wet-chorus,
 // WetChorus by Ronald Klarenbeek, MIT).
+// A granular instrument with a device panel, its sample sent from the page, against Xenon (test/assets/xenon.wasm,
+// opendaw-commons wclaps/xenon).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
@@ -53,6 +55,8 @@ const devicePanelNoExtensionBundle = wasmBundle("device-panel-no-extension.wasm"
 const DEVICE_PANEL = "studio.opendaw.commons.device-panel-demo"
 const wetChorusBundle = wasmBundle("wet-chorus.wasm")
 const WET_CHORUS = "studio.opendaw.commons.wet-chorus"
+const xenonBundle = wasmBundle("xenon.wasm")
+const XENON = "studio.opendaw.commons.xenon"
 
 type Host = {
     bridges: WclapBridges
@@ -707,6 +711,337 @@ describe("wclap bridge", () => {
             edit(4)
             rms(host, handle, 2)
             expect(host.reported).toEqual([[2, 0, 1], [2, 45, 0], [2, 0, 2]])
+        })
+    })
+    describe("Xenon, a granular instrument with a device panel", () => {
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        const RATE = 48000
+        const loadXenon = async (bundle: WclapBundle = xenonBundle): Promise<[Host, number]> => {
+            const host = createHost(bundle)
+            const handle = load(host, XENON, "xenon")
+            await ready(host, handle)
+            return [host, handle]
+        }
+        // the page's upload: begin (frames, rate, name), chunks of 16-bit mono, commit
+        const upload = (host: Host, samples: Float32Array, name: string = "tone.wav", chunk: number = 10000): void => {
+            const nameBytes = new TextEncoder().encode(name)
+            const begin = new DataView(new ArrayBuffer(20 + nameBytes.length))
+            begin.setUint8(0, 6)
+            begin.setUint32(4, samples.length, true)
+            begin.setFloat64(8, RATE, true)
+            begin.setUint32(16, nameBytes.length, true)
+            new Uint8Array(begin.buffer).set(nameBytes, 20)
+            host.bridges.receive(uuid, begin.buffer)
+            for (let offset = 0; offset < samples.length; offset += chunk) {
+                const count = Math.min(chunk, samples.length - offset)
+                const message = new DataView(new ArrayBuffer(12 + count * 2))
+                message.setUint8(0, 8)
+                message.setUint32(4, offset, true)
+                message.setUint32(8, count, true)
+                for (let index = 0; index < count; index++) {
+                    message.setInt16(12 + index * 2, Math.round(Math.max(-1, Math.min(32767 / 32768, samples[offset + index])) * 32768), true)
+                }
+                host.bridges.receive(uuid, message.buffer)
+            }
+            host.bridges.receive(uuid, new Uint8Array([9]).buffer)
+        }
+        const tone = (seconds: number = 1): Float32Array =>
+            new Float32Array(RATE * seconds).map((_, index) => 0.8 * Math.sin(2 * Math.PI * 440 * index / RATE))
+        const noise = (seconds: number = 1): Float32Array => {
+            const state = {seed: 12345}
+            return new Float32Array(RATE * seconds).map(() => {
+                state.seed = (state.seed * 1103515245 + 12345) >>> 0
+                return (state.seed / 4294967296) * 1.6 - 0.8
+            })
+        }
+        const channels = (host: Host, handle: number, chunks: number): [number, number] => {
+            const sums = [0, 0]
+            for (let chunk = 0; chunk < chunks; chunk++) {
+                process(host, handle)
+                new Float32Array(host.memory.buffer, OUT0, 128).forEach(value => sums[0] += value * value)
+                new Float32Array(host.memory.buffer, OUT1, 128).forEach(value => sums[1] += value * value)
+            }
+            return [Math.sqrt(sums[0] / (chunks * 128)), Math.sqrt(sums[1] / (chunks * 128))]
+        }
+        // first differences, a high-pass view of the left output
+        const roughness = (host: Host, handle: number, chunks: number): number => {
+            const state = {sum: 0, last: 0}
+            for (let chunk = 0; chunk < chunks; chunk++) {
+                process(host, handle)
+                new Float32Array(host.memory.buffer, OUT0, 128).forEach(value => {
+                    state.sum += (value - state.last) ** 2
+                    state.last = value
+                })
+            }
+            return Math.sqrt(state.sum / (chunks * 128))
+        }
+        const set = (host: Host, handle: number, name: string, value: number): void => {
+            host.imports.host_wclap_param(handle, param(host, name).id | 0, FLOAT, value, NaN)
+        }
+        // status: type, grains, sample generation, mod generation, voices, then 42 values (float64),
+        // 42 live normalized values (float32) and five floats per grain
+        const status = (host: Host): { grains: number, sampleGeneration: number, voices: number, values: Array<number> } => {
+            host.bridges.receive(uuid, new Uint8Array([1]).buffer)
+            const view = new DataView(host.lastGui)
+            expect(view.getUint8(0)).toBe(1)
+            return {
+                grains: view.getUint32(4, true), sampleGeneration: view.getUint32(8, true), voices: view.getUint32(16, true),
+                values: Array.from({length: 42}, (_, index) => view.getFloat64(24 + index * 8, true))
+            }
+        }
+        const peaks = (host: Host): { frames: number, rate: number, columns: number, name: string, bytes: Int8Array } => {
+            const view = new DataView(host.lastGui)
+            expect(view.getUint8(0)).toBe(2)
+            const columns = view.getUint32(16, true)
+            return {
+                frames: view.getUint32(4, true), rate: view.getFloat64(8, true), columns,
+                name: new TextDecoder().decode(new Uint8Array(host.lastGui, 28, view.getUint32(20, true))),
+                bytes: new Int8Array(host.lastGui, 152, columns * 2)
+            }
+        }
+
+        it("describes itself as an instrument that offers a device panel", async () => {
+            const plugins = await createHost(xenonBundle).bridges.describe("xenon")
+            expect(plugins.map(({clapId, name}) => [clapId, name])).toEqual([[XENON, "Xenon"]])
+            expect(plugins[0].features).toEqual(expect.arrayContaining(["instrument", "synthesizer", "opendaw:device-panel"]))
+        })
+
+        it("is 512 wide in the device panel and opens a 1024 x 352 window, 1 to 3 times the panel", async () => {
+            const [host] = await loadXenon()
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: true})
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html", width: 512})
+            expect(host.bridges.openGui(uuid)).toMatchObject({uri: "/index.html", width: 1024, height: 352, resizable: true})
+            expect(host.bridges.resizeGui(uuid, 100, 100)).toEqual({width: 512, height: 176})
+            expect(host.bridges.resizeGui(uuid, 4000, 4000)).toEqual({width: 1536, height: 528})
+        })
+
+        it("lists 42 parameters in the page's order with their defaults", async () => {
+            const [host] = await loadXenon()
+            expect(host.params.length).toBe(42)
+            expect(host.params.slice(0, 5).map(({name, min, max, defaultValue}) => [name, min, max, defaultValue]))
+                .toEqual([["Position", 0, 1, 0], ["Spray", 0, 1, 0.05], ["Scan", -2, 2, 0], ["Size", 1, 2000, 80], ["Density", 0.5, 200, 20]])
+            expect(param(host, "Cutoff")).toMatchObject({min: 20, max: 20000, defaultValue: 20000})
+            expect(param(host, "Env 2 Release")).toMatchObject({min: 1, max: 8000, defaultValue: 600})
+        })
+
+        it("stays silent without a sample, even with a note held", async () => {
+            const [host, handle] = await loadXenon()
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            expect(rms(host, handle, 50)).toBe(0)
+        })
+
+        it("takes a sample from the page, answers with its peaks, plays grains while a note is held and stops after the release", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone(), "tone.wav")
+            const answer = peaks(host)
+            expect(answer).toMatchObject({frames: RATE, rate: RATE, columns: 2048, name: "tone.wav"})
+            expect(Math.max(...answer.bytes)).toBeGreaterThan(95)
+            expect(Math.min(...answer.bytes)).toBeLessThan(-95)
+            expect(rms(host, handle, 10)).toBe(0)
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            expect(rms(host, handle, 100)).toBeGreaterThan(0.05)
+            const playing = status(host)
+            expect(playing.grains).toBeGreaterThan(0)
+            expect(playing.voices).toBe(1)
+            host.imports.host_wclap_note(handle, 0, 60, 0)
+            rms(host, handle, 1500)
+            expect(rms(host, handle, 10)).toBeLessThan(1e-4)
+            expect(status(host)).toMatchObject({grains: 0, voices: 0})
+        })
+
+        it("plays a held note on and on, the countdown carries grains across blocks", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone())
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            const levels = Array.from({length: 10}, () => rms(host, handle, 100))
+            levels.forEach(level => expect(level).toBeGreaterThan(0.05))
+        })
+
+        it("keeps at most 128 grains at once", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone())
+            set(host, handle, "Density", 200)
+            set(host, handle, "Size", 2000)
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            host.imports.host_wclap_note(handle, 1, 64, 1)
+            host.imports.host_wclap_note(handle, 1, 67, 1)
+            rms(host, handle, 800)
+            // the status leaves out grains that start later in the block
+            const {grains} = status(host)
+            expect(grains).toBeGreaterThan(120)
+            expect(grains).toBeLessThanOrEqual(128)
+        })
+
+        it("places grains at azimuth 90 to the right: the right ear louder and earlier than the left", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone())
+            set(host, handle, "Azimuth", 90)
+            set(host, handle, "Spread", 0)
+            set(host, handle, "Room", 0)
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            const [left, right] = channels(host, handle, 200)
+            expect(right).toBeGreaterThan(left * 1.5)
+            set(host, handle, "Azimuth", -90)
+            rms(host, handle, 100)
+            const [leftAfter, rightAfter] = channels(host, handle, 200)
+            expect(leftAfter).toBeGreaterThan(rightAfter * 1.5)
+        })
+
+        it("keeps grains in the centre equal on both ears (the room is not, it spreads)", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone())
+            set(host, handle, "Spread", 0)
+            set(host, handle, "Room", 0)
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            const [left, right] = channels(host, handle, 200)
+            expect(left).toBeGreaterThan(0.05)
+            expect(right).toBeCloseTo(left, 6)
+        })
+
+        it("filters every grain, a low cutoff takes the high content off noise", async () => {
+            const measure = async (cutoff: number): Promise<number> => {
+                const [host, handle] = await loadXenon()
+                host.bridges.openPanel(uuid, 176)
+                upload(host, noise())
+                set(host, handle, "Cutoff", cutoff)
+                set(host, handle, "Room", 0)
+                host.imports.host_wclap_note(handle, 1, 60, 1)
+                rms(host, handle, 20)
+                return roughness(host, handle, 200)
+            }
+            const open = await measure(20000)
+            const closed = await measure(200)
+            expect(open).toBeGreaterThan(0.05)
+            expect(closed).toBeLessThan(open * 0.1)
+        })
+
+        it("transposes grains by the note when key tracking is on, the peaks of a pitched tone stay where they are", async () => {
+            const zeroCrossings = async (key: number, track: number): Promise<number> => {
+                const [host, handle] = await loadXenon()
+                host.bridges.openPanel(uuid, 176)
+                upload(host, tone())
+                set(host, handle, "Spread", 0)
+                set(host, handle, "Room", 0)
+                set(host, handle, "Size", 2000)
+                set(host, handle, "Density", 1)
+                set(host, handle, "Shape", 0.25)
+                set(host, handle, "Key Track", track)
+                host.imports.host_wclap_note(handle, 1, key, 1)
+                rms(host, handle, 150)
+                const state = {count: 0, last: 0}
+                for (let chunk = 0; chunk < 100; chunk++) {
+                    process(host, handle)
+                    new Float32Array(host.memory.buffer, OUT0, 128).forEach(value => {
+                        if ((value >= 0) !== (state.last >= 0)) {state.count++}
+                        state.last = value
+                    })
+                }
+                return state.count
+            }
+            const base = await zeroCrossings(60, 1)
+            expect(base).toBeGreaterThan(200)
+            expect(await zeroCrossings(72, 1) / base).toBeCloseTo(2, 1)
+            expect(await zeroCrossings(72, 0) / base).toBeCloseTo(1, 1)
+        })
+
+        it("saves the parameters, the modulation and the sample, and a new instance plays the same", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone(0.5), "half.wav")
+            const uploaded = Array.from(peaks(host).bytes)
+            set(host, handle, "Size", 120)
+            const mod = new DataView(new ArrayBuffer(16))
+            mod.setUint8(0, 5)
+            mod.setUint32(4, 0, true)
+            mod.setUint32(8, 0, true)
+            mod.setFloat32(12, 0.25, true)
+            host.bridges.receive(uuid, mod.buffer)
+            rms(host, handle, 2)
+            host.bridges.saveState(uuid)
+            const saved = host.states.at(-1)!
+            // 16 header + 42 values + 42 x 10 depths + name + rate + frames + 16-bit frames
+            expect(saved.length).toBe(16 + 42 * 8 + 42 * 10 * 4 + 4 + 8 + 8 + 4 + RATE)
+            const other = createHost(xenonBundle)
+            const otherHandle = load(other, XENON, "xenon")
+            const base64 = Buffer.from(saved).toString("base64")
+            new Uint8Array(other.memory.buffer).set(new TextEncoder().encode(base64), 2048)
+            other.imports.host_wclap_state(otherHandle, 2048, base64.length)
+            await ready(other, otherHandle)
+            expect(param(other, "Size").value).toBeCloseTo(120, 9)
+            other.bridges.openPanel(uuid, 176)
+            other.bridges.receive(uuid, new Uint8Array([11]).buffer)
+            expect(peaks(other)).toMatchObject({frames: RATE / 2, name: "half.wav"})
+            expect(Array.from(peaks(other).bytes)).toEqual(uploaded)
+            other.bridges.receive(uuid, new Uint8Array([12]).buffer)
+            const mods = new DataView(other.lastGui)
+            expect([mods.getUint8(0), mods.getUint32(4, true), mods.getUint32(8, true)]).toEqual([3, 10, 42])
+            expect(mods.getFloat32(16, true)).toBeCloseTo(0.25, 6)
+            other.imports.host_wclap_note(otherHandle, 1, 60, 1)
+            expect(rms(other, otherHandle, 100)).toBeGreaterThan(0.05)
+            // the bridge sends nothing for a state equal to the loaded one, so one value changes
+            set(other, otherHandle, "Size", 121)
+            rms(other, otherHandle, 1)
+            other.bridges.saveState(uuid)
+            const expected = saved.slice()
+            new DataView(expected.buffer).setFloat64(16 + 3 * 8, 121, true)
+            expect(Array.from(other.states.at(-1)!)).toEqual(Array.from(expected))
+        })
+
+        it("clears its sample from the page and from a state without one", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone())
+            host.bridges.receive(uuid, new Uint8Array([10]).buffer)
+            expect(peaks(host)).toMatchObject({frames: 0, columns: 0})
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            expect(rms(host, handle, 50)).toBe(0)
+            host.bridges.saveState(uuid)
+            expect(host.states.at(-1)!.length).toBe(16 + 42 * 8 + 42 * 10 * 4 + 4 + 8 + 4)
+        })
+
+        it("ignores a sample longer than 60 s and a chunk outside the announced frames", async () => {
+            const [host] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            const begin = new DataView(new ArrayBuffer(20))
+            begin.setUint8(0, 6)
+            begin.setUint32(4, RATE * 61, true)
+            begin.setFloat64(8, RATE, true)
+            host.bridges.receive(uuid, begin.buffer)
+            host.bridges.receive(uuid, new Uint8Array([9]).buffer)
+            expect(status(host).sampleGeneration).toBe(0)
+            begin.setUint32(4, 100, true)
+            host.bridges.receive(uuid, begin.buffer)
+            const chunk = new DataView(new ArrayBuffer(12 + 20))
+            chunk.setUint8(0, 8)
+            chunk.setUint32(4, 95, true)
+            chunk.setUint32(8, 10, true)
+            host.bridges.receive(uuid, chunk.buffer)
+            host.bridges.receive(uuid, new Uint8Array([9]).buffer)
+            expect(peaks(host)).toMatchObject({frames: 100})
+        })
+
+        it("takes a page edit as a host gesture and reports the value back in its status", async () => {
+            const [host, handle] = await loadXenon()
+            host.bridges.openPanel(uuid, 176)
+            const edit = (type: number, value: number = 0): void => {
+                const message = new DataView(new ArrayBuffer(type === 3 ? 16 : 8))
+                message.setUint8(0, type)
+                message.setUint32(4, 15, true)
+                if (type === 3) {message.setFloat64(8, value, true)}
+                host.bridges.receive(uuid, message.buffer)
+            }
+            host.reported.length = 0
+            edit(2)
+            edit(3, 1000)
+            edit(4)
+            rms(host, handle, 2)
+            expect(host.reported).toEqual([[15, 0, 1], [15, 1000, 0], [15, 0, 2]])
+            expect(status(host).values[15]).toBe(1000)
         })
     })
 })

@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grain Synth Previews</title>
+    <style>
+        :root {--page: #1b1c1e; --text: #e8e8e8; --dim: #6c6f75; --faint: #3a3c40}
+        * {box-sizing: border-box}
+        html, body {margin: 0; background: var(--page); color: var(--text); font: 300 13px/1.5 system-ui, sans-serif}
+        body {padding: 32px 16px 64px; display: flex; flex-direction: column; align-items: center; row-gap: 40px}
+        header {max-width: 1060px; width: 100%}
+        header h1 {font-weight: 400; font-size: 18px; margin: 0 0 4px}
+        header p {margin: 0; color: var(--dim); max-width: 760px}
+        .grid {display: grid; grid-template-columns: repeat(auto-fill, minmax(512px, 1fr)); gap: 40px 32px; max-width: 1060px; width: 100%}
+        .card {display: flex; flex-direction: column; row-gap: 10px}
+        .card h2 {margin: 0; font-weight: 400; font-size: 13px}
+        .card h2 span {color: var(--dim)}
+        .device {position: relative; width: 512px; height: 176px; user-select: none; -webkit-user-select: none}
+        .device canvas {position: absolute; left: 0; display: block}
+        .device .wave {top: 0; width: 512px; height: 104px; cursor: crosshair}
+        .device .controls {top: 104px; width: 512px; height: 72px; cursor: ns-resize; touch-action: none}
+        .device .tag {position: absolute; top: 4px; font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); pointer-events: none}
+        .device .name {left: 6px}
+        .device .load {left: auto; right: 6px; pointer-events: auto; cursor: pointer}
+        .device .load:hover {color: var(--text)}
+        .device .drop {position: absolute; inset: 0 0 72px; display: flex; align-items: center; justify-content: center;
+            font-size: 10px; letter-spacing: .3em; color: var(--text); opacity: 0; transition: opacity .15s; pointer-events: none}
+        .device.dropping .drop {opacity: 1}
+        .options {display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--dim); font-size: 11px}
+        .options button {appearance: none; background: none; border: none; padding: 0; color: var(--dim); font: inherit; cursor: pointer}
+        .options button.active {color: var(--text)}
+        .options .swatch {width: 10px; height: 10px; border-radius: 50%; display: inline-block; vertical-align: -1px}
+        .options .group {display: flex; column-gap: 8px; align-items: center}
+        input[type=file] {display: none}
+        @media (max-width: 560px) {.grid {grid-template-columns: 1fr}}
+    </style>
+</head>
+<body>
+<header>
+    <h1>Grain synth, phase 0 previews</h1>
+    <p>Each frame is the device panel surface, 512 × 176. Drop an audio file on any waveform (or LOAD) to see it in all
+        four. Click on the waveform to move the grain position, drag the parameters vertically (Shift for fine), switch the
+        sections. The grains are simulated, an LFO sweeps POS and CUT so the modulation display moves. Mix the waveform
+        style, the control style and the colour below each frame.</p>
+</header>
+<div class="grid"></div>
+<input type="file" accept="audio/*">
+<script>
+    const HUES = {cyan: [0.18, 0.9, 1.0], orange: [1.0, 0.45, 0.1], green: [0.55, 1.0, 0.15], magenta: [1.0, 0.18, 0.58],
+        violet: [0.62, 0.3, 1.0], blue: [0.2, 0.45, 1.0], white: [0.85, 0.92, 1.0]}
+    const STYLES = ["Band", "Energy", "Neon", "Particles"]
+    const CONTROLS = ["Arc", "Numeral", "Ring", "Bar"]
+    const MOD = {lfo1: "#ff8a3d", lfo2: "#3dd6ff", env1: "#c45cff", rand: "#8aff5c"}
+    const PRESETS = [
+        {title: "A", style: 0, controls: 0, hue: "cyan"},
+        {title: "B", style: 1, controls: 1, hue: "orange"},
+        {title: "C", style: 2, controls: 2, hue: "magenta"},
+        {title: "D", style: 3, controls: 3, hue: "blue"}
+    ]
+    const MAX_GRAINS = 64
+    const percent = value => `${Math.round(value * 100)}`
+    const exp = (min, max) => value => min * Math.pow(max / min, value)
+    const fixed = (digits, unit = "") => value => `${value.toFixed(digits)}${unit}`
+    const SECTIONS = {
+        GRAIN: [
+            {key: "pos", label: "POS", value: 0.3, text: percent, mod: ["lfo1", 0.18]},
+            {key: "spray", label: "SPRAY", value: 0.12, text: percent, mod: ["rand", 0.1]},
+            {key: "scan", label: "SCAN", value: 0.5, text: value => fixed(2)((value - 0.5) * 4)},
+            {key: "size", label: "SIZE", value: 0.45, text: value => `${Math.round(exp(1, 2000)(value))}`},
+            {key: "density", label: "DENS", value: 0.55, text: value => `${Math.round(exp(0.5, 200)(value))}`},
+            {key: "reverse", label: "REV", value: 0.2, text: percent},
+            {key: "shape", label: "SHAPE", value: 0.5, text: value => ["GAUSS", "HANN", "TRI", "ATK", "DEC"][Math.min(4, Math.floor(value * 5))]},
+            {key: "sync", label: "SYNC", value: 0, text: value => value < 0.5 ? "OFF" : "1/16"}
+        ],
+        PITCH: [
+            {key: "pitch", label: "PITCH", value: 0.5, text: value => `${Math.round((value - 0.5) * 96)}`},
+            {key: "fine", label: "FINE", value: 0.5, text: value => `${Math.round((value - 0.5) * 200)}`},
+            {key: "prand", label: "RAND", value: 0.15, text: value => fixed(1)(value * 24), mod: ["env1", 0.12]},
+            {key: "scale", label: "SCALE", value: 0.3, text: value => ["OFF", "OCT", "5TH", "MAJ", "MIN"][Math.min(4, Math.floor(value * 5))]},
+            {key: "track", label: "KEY", value: 1, text: value => value < 0.5 ? "OFF" : "ON"},
+            {key: "glide", label: "GLIDE", value: 0.1, text: value => `${Math.round(value * 1000)}`}
+        ],
+        FILTER: [
+            {key: "type", label: "TYPE", value: 0.1, text: value => ["LP", "BP", "HP"][Math.min(2, Math.floor(value * 3))]},
+            {key: "cutoff", label: "CUT", value: 0.6, text: value => { const hz = exp(20, 20000)(value); return hz >= 1000 ? `${(hz / 1000).toFixed(1)}K` : `${Math.round(hz)}` }, mod: ["lfo2", 0.2]},
+            {key: "res", label: "RES", value: 0.3, text: percent},
+            {key: "crand", label: "RAND", value: 0.25, text: percent},
+            {key: "drive", label: "DRIVE", value: 0.1, text: percent},
+            {key: "ktrack", label: "KEY", value: 0.5, text: percent},
+            {key: "fenv", label: "ENV", value: 0.65, text: value => `${Math.round((value - 0.5) * 200)}`}
+        ],
+        SPACE: [
+            {key: "azimuth", label: "AZIM", value: 0.7, text: value => `${Math.round(value * 180)}°`, mod: ["rand", 0.15]},
+            {key: "elevation", label: "ELEV", value: 0.5, text: value => `${Math.round((value - 0.5) * 180)}°`},
+            {key: "distance", label: "DIST", value: 0.35, text: value => fixed(1, "M")(exp(0.5, 30)(value))},
+            {key: "drand", label: "RAND", value: 0.4, text: percent},
+            {key: "motion", label: "MOTION", value: 0.3, text: percent, mod: ["lfo1", 0.1]},
+            {key: "room", label: "ROOM", value: 0.25, text: percent},
+            {key: "width", label: "WIDTH", value: 0.8, text: percent}
+        ],
+        AMP: [
+            {key: "attack", label: "ATK", value: 0.1, text: value => `${Math.round(exp(1, 5000)(value))}`},
+            {key: "decay", label: "DEC", value: 0.4, text: value => `${Math.round(exp(1, 5000)(value))}`},
+            {key: "sustain", label: "SUS", value: 0.8, text: percent},
+            {key: "release", label: "REL", value: 0.5, text: value => `${Math.round(exp(1, 8000)(value))}`},
+            {key: "velocity", label: "VEL", value: 0.6, text: percent},
+            {key: "gain", label: "GAIN", value: 0.75, text: value => fixed(1)((value - 0.75) * 48)},
+            {key: "voices", label: "VOICES", value: 0.5, text: value => `${1 + Math.round(value * 15)}`},
+            {key: "mode", label: "MODE", value: 1, text: value => value < 0.5 ? "MONO" : "POLY"}
+        ],
+        MOD: [
+            {key: "lfo1rate", label: "LFO 1", value: 0.35, text: value => fixed(2, "")(exp(0.02, 20)(value)), source: "lfo1"},
+            {key: "lfo1shape", label: "SHAPE", value: 0.0, text: value => ["SIN", "TRI", "SAW", "SQR", "S&H"][Math.min(4, Math.floor(value * 5))], source: "lfo1"},
+            {key: "lfo2rate", label: "LFO 2", value: 0.5, text: value => fixed(2, "")(exp(0.02, 20)(value)), source: "lfo2"},
+            {key: "lfo2shape", label: "SHAPE", value: 0.25, text: value => ["SIN", "TRI", "SAW", "SQR", "S&H"][Math.min(4, Math.floor(value * 5))], source: "lfo2"},
+            {key: "env1atk", label: "ENV 1", value: 0.2, text: value => `${Math.round(exp(1, 5000)(value))}`, source: "env1"},
+            {key: "env1dec", label: "DEC", value: 0.5, text: value => `${Math.round(exp(1, 5000)(value))}`, source: "env1"},
+            {key: "rand", label: "RAND", value: 0.6, text: percent, source: "rand"}
+        ]
+    }
+
+    // a stand-in sample: plucks and a pad, 4 s
+    const synthesize = () => {
+        const rate = 22050, length = rate * 4, data = new Float32Array(length)
+        const notes = [[0, 220, 0.9], [0.55, 330, 0.7], [1.1, 277, 0.8], [1.7, 440, 0.5], [2.2, 165, 1.0], [3.1, 523, 0.6]]
+        for (const [start, frequency, gain] of notes) {
+            const offset = Math.floor(start * rate)
+            for (let index = 0; index < rate * 1.6 && offset + index < length; index++) {
+                const time = index / rate
+                data[offset + index] += gain * Math.exp(-time * 3.2) * (Math.sin(2 * Math.PI * frequency * time) + 0.4 * Math.sin(4 * Math.PI * frequency * time + 0.3))
+            }
+        }
+        for (let index = 0; index < length; index++) {
+            const time = index / rate
+            data[index] += 0.18 * Math.sin(2 * Math.PI * 110 * time) * (0.5 + 0.5 * Math.sin(time * 1.7)) + (Math.random() - 0.5) * 0.04
+        }
+        return {name: "STAND-IN.WAV", channels: [data]}
+    }
+    const COLUMNS = 1024
+    const computePeaks = channels => {
+        const length = channels[0].length, peaks = new Uint8Array(COLUMNS * 4)
+        let maximum = 1e-6
+        for (const channel of channels) {for (let index = 0; index < length; index++) {maximum = Math.max(maximum, Math.abs(channel[index]))}}
+        for (let column = 0; column < COLUMNS; column++) {
+            const from = Math.floor(column * length / COLUMNS), to = Math.max(from + 1, Math.floor((column + 1) * length / COLUMNS))
+            let min = 1, max = -1
+            for (const channel of channels) {
+                for (let index = from; index < to; index++) {
+                    const value = channel[index] / maximum
+                    if (value < min) {min = value}
+                    if (value > max) {max = value}
+                }
+            }
+            peaks[column * 4] = Math.round((min + 1) * 127.5)
+            peaks[column * 4 + 1] = Math.round((max + 1) * 127.5)
+        }
+        return peaks
+    }
+    const sample = {name: "", peaks: null, listeners: new Set()}
+    const setSample = ({name, channels}) => {
+        sample.name = name.toUpperCase()
+        sample.peaks = computePeaks(channels)
+        sample.listeners.forEach(listener => listener())
+    }
+    const decode = async file => {
+        const context = new OfflineAudioContext(1, 1, 44100)
+        const buffer = await context.decodeAudioData(await file.arrayBuffer())
+        const channels = []
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {channels.push(buffer.getChannelData(channel))}
+        setSample({name: file.name, channels})
+    }
+
+    const VERTEX = `#version 300 es
+in vec2 position;
+void main() {gl_Position = vec4(position, 0.0, 1.0);}`
+    const FRAGMENT = `#version 300 es
+precision highp float;
+uniform sampler2D peaks;
+uniform sampler2D grains;
+uniform int grainCount;
+uniform vec2 size;
+uniform float scale;
+uniform float time;
+uniform int style;
+uniform vec3 hue;
+uniform vec2 range;
+uniform float dropping;
+out vec4 fragment;
+float hash(vec2 p) {p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y);}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+float fbm(vec2 p) {float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) {v += a * noise(p); p = p * 2.03 + 17.0; a *= 0.5;} return v;}
+vec2 peak(float x) {return texture(peaks, vec2(clamp(x, 0.0, 1.0), 0.5)).rg * 2.0 - 1.0;}
+float amplitude(float x) {vec2 p = peak(x); return max(abs(p.x), abs(p.y));}
+float activity(float x) {
+    float sum = 0.0;
+    for (int i = 0; i < ${MAX_GRAINS}; i++) {
+        if (i >= grainCount) {break;}
+        vec4 grain = texelFetch(grains, ivec2(i, 0), 0);
+        float d = (x - grain.x) / max(grain.y, 0.004);
+        sum += grain.z * exp(-d * d);
+    }
+    return sum;
+}
+float energyLine(float x, float span, float act) {
+    return (fbm(vec2(x * 48.0 + time * 0.6, time * 1.4)) - 0.5) * 2.4 * amplitude(x) * span * (0.35 + act);
+}
+void main() {
+    vec2 pixel = gl_FragCoord.xy;
+    float x = pixel.x / size.x;
+    float span = size.y * 0.42;
+    float y = pixel.y - size.y * 0.5;
+    float act = min(activity(x), 2.5);
+    vec3 color = vec3(0.0);
+    float radius = 14.0 * scale;
+    if (style == 0) {
+        y += (fbm(vec2(x * 30.0, time * 2.0)) - 0.5) * act * 14.0 * scale;
+        float d = 1e9;
+        for (int j = -6; j <= 6; j++) {
+            float dx = float(j) * radius / 6.0;
+            vec2 p = peak(x + dx / size.x) * span;
+            float dy = y < p.x ? p.x - y : (y > p.y ? y - p.y : 0.0);
+            d = min(d, length(vec2(dx, dy)));
+        }
+        vec2 p = peak(x) * span;
+        bool inside = y >= p.x && y <= p.y;
+        float edge = inside ? min(y - p.x, p.y - y) : d;
+        float wisp = 0.6 + 0.8 * fbm(vec2(x * 40.0, y / scale * 0.08 - time * 1.5));
+        float fill = inside ? 0.10 + 0.45 * act * wisp : 0.0;
+        float core = exp(-edge / (0.9 * scale));
+        float glow = (inside ? 0.0 : exp(-d / (5.0 * scale * (1.0 + act)))) * 0.55 * wisp;
+        color = hue * (fill + glow + core * 0.7) + vec3(core * (0.25 + 0.5 * act));
+    } else if (style == 1) {
+        float d = 1e9;
+        for (int j = -6; j <= 6; j++) {
+            float dx = float(j) * radius / 6.0;
+            float xx = x + dx / size.x;
+            d = min(d, length(vec2(dx, y - energyLine(xx, span, min(activity(xx), 2.5)))));
+        }
+        float line = energyLine(x, span, act);
+        float haze = fbm(vec2(x * 22.0, y / span * 2.0 - time * 1.2)) * exp(-abs(y - line) / (16.0 * scale)) * (0.15 + 0.6 * act) * amplitude(x);
+        float core = exp(-d / (1.0 * scale));
+        float glow = exp(-d / (7.0 * scale * (1.0 + act))) * 0.6;
+        color = hue * (glow + haze + core * 0.6) + vec3(core * (0.3 + 0.4 * act));
+    } else if (style == 2) {
+        float d = 1e9, center = 1e9;
+        for (int j = -6; j <= 6; j++) {
+            float dx = float(j) * radius / 6.0;
+            float a = amplitude(x + dx / size.x) * span;
+            d = min(d, length(vec2(dx, abs(y) - a)));
+        }
+        center = abs(y);
+        float thickness = 0.8 + act * 1.2;
+        float core = exp(-d / (thickness * scale));
+        float glow = exp(-d / (9.0 * scale)) * (0.35 + 0.5 * act);
+        float axis = exp(-center / (0.6 * scale)) * 0.18;
+        float inner = abs(y) < amplitude(x) * span ? 0.035 + 0.12 * act : 0.0;
+        color = hue * (glow + core * 0.8 + axis + inner) + vec3(core * (0.2 + 0.3 * act));
+    } else {
+        vec2 p = peak(x) * span;
+        bool inside = y >= p.x && y <= p.y;
+        float edge = inside ? min(y - p.x, p.y - y) : min(abs(y - p.x), abs(y - p.y));
+        color = hue * ((inside ? 0.07 : 0.0) + exp(-edge / (0.8 * scale)) * 0.25);
+        for (int i = 0; i < ${MAX_GRAINS}; i++) {
+            if (i >= grainCount) {break;}
+            vec4 grain = texelFetch(grains, ivec2(i, 0), 0);
+            vec4 place = texelFetch(grains, ivec2(i, 1), 0);
+            float near = 1.0 - grain.w;
+            float spread = (1.5 + near * 5.0 + grain.w * 4.0) * scale;
+            vec2 center = vec2(grain.x * size.x, place.x * span * 0.85);
+            vec2 delta = (pixel - vec2(0.0, size.y * 0.5)) - center;
+            delta.x /= 1.0 + grain.y * size.x / (spread * 2.0);
+            float blob = exp(-dot(delta, delta) / (spread * spread));
+            vec3 tint = mix(hue, vec3(1.0), 0.35 + 0.4 * near);
+            color += tint * blob * grain.z * (0.5 + near);
+        }
+    }
+    float position = abs(pixel.x - range.x * size.x);
+    color += hue * exp(-position / (0.6 * scale)) * 0.35;
+    float sprayEdge = abs(x - range.x) < range.y ? 0.025 : 0.0;
+    color += hue * sprayEdge;
+    color *= mix(1.0, 0.22, dropping);
+    color = 1.0 - exp(-color * 1.35);
+    fragment = vec4(color, clamp(max(color.r, max(color.g, color.b)) * 1.2, 0.0, 1.0));
+}`
+
+    const createWave = canvas => {
+        const gl = canvas.getContext("webgl2", {premultipliedAlpha: true, antialias: false})
+        const compile = (type, source) => {
+            const shader = gl.createShader(type)
+            gl.shaderSource(shader, source)
+            gl.compileShader(shader)
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {throw new Error(gl.getShaderInfoLog(shader))}
+            return shader
+        }
+        const program = gl.createProgram()
+        gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX))
+        gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT))
+        gl.linkProgram(program)
+        gl.useProgram(program)
+        const buffer = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW)
+        const location = gl.getAttribLocation(program, "position")
+        gl.enableVertexAttribArray(location)
+        gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0)
+        const peaks = gl.createTexture()
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, peaks)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        const grains = gl.createTexture()
+        gl.activeTexture(gl.TEXTURE1)
+        gl.bindTexture(gl.TEXTURE_2D, grains)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_GRAINS, 2, 0, gl.RGBA, gl.FLOAT, null)
+        const uniform = name => gl.getUniformLocation(program, name)
+        gl.uniform1i(uniform("peaks"), 0)
+        gl.uniform1i(uniform("grains"), 1)
+        const grainData = new Float32Array(MAX_GRAINS * 2 * 4)
+        return {
+            setPeaks: data => {
+                gl.activeTexture(gl.TEXTURE0)
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, COLUMNS, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+            },
+            render: ({time, style, hue, range, dropping, grainList}) => {
+                const ratio = window.devicePixelRatio || 1
+                const width = Math.round(canvas.clientWidth * ratio), height = Math.round(canvas.clientHeight * ratio)
+                if (canvas.width !== width || canvas.height !== height) {canvas.width = width; canvas.height = height}
+                gl.viewport(0, 0, width, height)
+                grainData.fill(0)
+                grainList.forEach((grain, index) => {
+                    grainData.set([grain.x, grain.width, grain.amp, grain.depth], index * 4)
+                    grainData.set([grain.pan, 0, 0, 0], (MAX_GRAINS + index) * 4)
+                })
+                gl.activeTexture(gl.TEXTURE1)
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_GRAINS, 2, gl.RGBA, gl.FLOAT, grainData)
+                gl.uniform1i(uniform("grainCount"), grainList.length)
+                gl.uniform2f(uniform("size"), width, height)
+                gl.uniform1f(uniform("scale"), ratio)
+                gl.uniform1f(uniform("time"), time)
+                gl.uniform1i(uniform("style"), style)
+                gl.uniform3fv(uniform("hue"), hue)
+                gl.uniform2f(uniform("range"), range[0], range[1])
+                gl.uniform1f(uniform("dropping"), dropping)
+                gl.clearColor(0, 0, 0, 0)
+                gl.clear(gl.COLOR_BUFFER_BIT)
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+            }
+        }
+    }
+
+    const ARC_START = Math.PI * 0.75, ARC_SWEEP = Math.PI * 1.5
+    const drawControl = (context, kind, {x, label, text, value, modulated, modColor, highlighted, source}) => {
+        const center = x + 32
+        const bright = highlighted ? "#ffffff" : "#e8e8e8", dim = "#6c6f75"
+        context.textAlign = "center"
+        if (kind === 0) {
+            const cy = 30, radius = 11
+            context.lineCap = "round"
+            context.fillStyle = "#3a3c40"
+            context.beginPath(); context.arc(center + Math.cos(ARC_START) * radius, cy + Math.sin(ARC_START) * radius, 1.2, 0, Math.PI * 2); context.fill()
+            if (value > 0.001) {
+                context.strokeStyle = bright; context.lineWidth = 2
+                context.beginPath(); context.arc(center, cy, radius, ARC_START, ARC_START + value * ARC_SWEEP); context.stroke()
+            }
+            if (modulated !== null) {
+                context.strokeStyle = modColor; context.globalAlpha = 0.45; context.lineWidth = 1.5
+                context.beginPath(); context.arc(center, cy, radius + 4, ARC_START + modulated[0] * ARC_SWEEP, ARC_START + modulated[1] * ARC_SWEEP); context.stroke()
+                context.globalAlpha = 1; context.fillStyle = modColor
+                const angle = ARC_START + modulated[2] * ARC_SWEEP
+                context.beginPath(); context.arc(center + Math.cos(angle) * (radius + 4), cy + Math.sin(angle) * (radius + 4), 2, 0, Math.PI * 2); context.fill()
+            }
+            context.fillStyle = bright; context.font = "400 8px system-ui"; context.fillText(text, center, cy + 3)
+            context.fillStyle = source ? MOD[source] : dim; context.font = "500 7px system-ui"; context.fillText(label, center, 62)
+        } else if (kind === 1) {
+            context.fillStyle = source ? MOD[source] : dim; context.font = "500 7px system-ui"; context.fillText(label, center, 22)
+            context.fillStyle = bright; context.font = "300 16px system-ui"; context.fillText(text, center, 42)
+            const lit = Math.round(value * 8)
+            for (let index = 0; index <= 8; index++) {
+                context.fillStyle = index <= lit ? bright : "#3a3c40"
+                context.beginPath(); context.arc(center - 16 + index * 4, 54, index === lit ? 1.4 : 1, 0, Math.PI * 2); context.fill()
+            }
+            if (modulated !== null) {
+                context.fillStyle = modColor
+                context.beginPath(); context.arc(center - 16 + Math.round(modulated[2] * 8) * 4, 59, 1.3, 0, Math.PI * 2); context.fill()
+            }
+        } else if (kind === 2) {
+            const cy = 30, radius = 12, count = 13
+            const lit = Math.round(value * (count - 1))
+            for (let index = 0; index < count; index++) {
+                const angle = ARC_START + index / (count - 1) * ARC_SWEEP
+                context.fillStyle = index <= lit ? bright : "#3a3c40"
+                context.beginPath(); context.arc(center + Math.cos(angle) * radius, cy + Math.sin(angle) * radius, index === lit ? 1.8 : 1.1, 0, Math.PI * 2); context.fill()
+            }
+            if (modulated !== null) {
+                const angle = ARC_START + modulated[2] * ARC_SWEEP
+                context.fillStyle = modColor
+                context.beginPath(); context.arc(center + Math.cos(angle) * (radius - 5), cy + Math.sin(angle) * (radius - 5), 1.6, 0, Math.PI * 2); context.fill()
+            }
+            context.fillStyle = highlighted ? bright : (source ? MOD[source] : dim)
+            context.font = highlighted ? "400 8px system-ui" : "500 7px system-ui"
+            context.fillText(highlighted ? text : label, center, 62)
+        } else {
+            context.fillStyle = source ? MOD[source] : dim; context.font = "500 7px system-ui"; context.fillText(label, center, 22)
+            context.fillStyle = bright; context.font = "300 13px system-ui"; context.fillText(text, center, 40)
+            const left = center - 22, width = 44
+            context.fillStyle = "#3a3c40"; context.fillRect(left, 49.5, 1, 1)
+            context.fillStyle = bright; context.fillRect(left, 49, Math.max(1, value * width), 2)
+            if (modulated !== null) {
+                context.fillStyle = modColor; context.globalAlpha = 0.45
+                context.fillRect(left + modulated[0] * width, 54, (modulated[1] - modulated[0]) * width, 1)
+                context.globalAlpha = 1
+                context.beginPath(); context.arc(left + modulated[2] * width, 54.5, 1.6, 0, Math.PI * 2); context.fill()
+            }
+        }
+    }
+
+    const createPreview = preset => {
+        const state = {...preset, section: "GRAIN", values: {}, hovered: -1, drag: null, dropping: 0, grains: [], spawn: 0, lfo: {lfo1: 0, lfo2: 0, env1: 0, rand: 0}}
+        Object.values(SECTIONS).flat().forEach(param => state.values[param.key] = param.value)
+        const card = document.createElement("div")
+        card.className = "card"
+        card.innerHTML = `<h2>${preset.title} <span></span></h2>
+            <div class="device"><canvas class="wave"></canvas><canvas class="controls"></canvas>
+            <div class="tag name"></div><div class="tag load">LOAD</div><div class="drop">DROP SAMPLE</div></div>
+            <div class="options"><div class="group option-style"></div><div class="group option-controls"></div><div class="group option-hues"></div></div>`
+        const device = card.querySelector(".device")
+        const waveCanvas = card.querySelector("canvas.wave"), controlCanvas = card.querySelector("canvas.controls")
+        const subtitle = card.querySelector("h2 span"), nameTag = card.querySelector(".name")
+        const wave = createWave(waveCanvas)
+        const updateSample = () => {wave.setPeaks(sample.peaks); nameTag.textContent = sample.name}
+        sample.listeners.add(updateSample)
+        const buildOptions = (selector, items, current, apply) => {
+            const group = card.querySelector(selector)
+            group.innerHTML = ""
+            items.forEach((item, index) => {
+                const button = document.createElement("button")
+                if (selector === ".option-hues") {
+                    const [r, g, b] = HUES[item]
+                    button.innerHTML = `<span class="swatch" style="background: rgb(${r * 255}, ${g * 255}, ${b * 255})"></span>`
+                    button.title = item
+                } else {button.textContent = item}
+                button.classList.toggle("active", current() === (selector === ".option-hues" ? item : index))
+                button.onclick = () => {apply(selector === ".option-hues" ? item : index); refreshOptions()}
+                group.appendChild(button)
+            })
+        }
+        const refreshOptions = () => {
+            buildOptions(".option-style", STYLES, () => state.style, value => state.style = value)
+            buildOptions(".option-controls", CONTROLS, () => state.controls, value => state.controls = value)
+            buildOptions(".option-hues", Object.keys(HUES), () => state.hue, value => state.hue = value)
+            subtitle.textContent = `${STYLES[state.style]} waveform · ${CONTROLS[state.controls]} controls`
+        }
+        refreshOptions()
+        const params = () => SECTIONS[state.section]
+        const modulation = param => {
+            if (!param.mod) {return null}
+            const [source, depth] = param.mod
+            const base = state.values[param.key]
+            return [Math.max(0, base - depth), Math.min(1, base + depth), Math.min(1, Math.max(0, base + depth * state.lfo[source]))]
+        }
+        const modulatedValue = key => {
+            const param = Object.values(SECTIONS).flat().find(param => param.key === key)
+            const range = modulation(param)
+            return range === null ? state.values[key] : range[2]
+        }
+        const drawControls = () => {
+            const ratio = window.devicePixelRatio || 1
+            const width = Math.round(512 * ratio), height = Math.round(72 * ratio)
+            if (controlCanvas.width !== width || controlCanvas.height !== height) {controlCanvas.width = width; controlCanvas.height = height}
+            const context = controlCanvas.getContext("2d")
+            context.setTransform(ratio, 0, 0, ratio, 0, 0)
+            context.clearRect(0, 0, 512, 72)
+            context.textAlign = "left"
+            context.font = "500 7px system-ui"
+            let x = 8
+            for (const name of Object.keys(SECTIONS)) {
+                const active = name === state.section
+                context.fillStyle = active ? "#e8e8e8" : "#55585e"
+                context.letterSpacing = "1.5px"
+                context.fillText(name, x, 9)
+                if (active) {
+                    context.fillStyle = `rgb(${HUES[state.hue].map(value => value * 255).join(",")})`
+                    context.beginPath(); context.arc(x - 4, 6.5, 1.3, 0, Math.PI * 2); context.fill()
+                }
+                x += context.measureText(name).width + 14
+            }
+            context.letterSpacing = "1px"
+            params().forEach((param, index) => {
+                const value = state.values[param.key]
+                const modulated = modulation(param)
+                drawControl(context, state.controls, {
+                    x: index * 64, label: param.label, text: param.text(value), value, modulated,
+                    modColor: param.mod ? MOD[param.mod[0]] : null, highlighted: index === state.hovered || state.drag?.index === index, source: param.source
+                })
+            })
+            context.letterSpacing = "0px"
+        }
+        const sectionAt = (x, y) => {
+            if (y > 14) {return null}
+            const context = controlCanvas.getContext("2d")
+            context.font = "500 7px system-ui"
+            context.letterSpacing = "1.5px"
+            let left = 4
+            for (const name of Object.keys(SECTIONS)) {
+                const width = context.measureText(name).width + 14
+                if (x >= left && x < left + width) {return name}
+                left += width
+            }
+            return null
+        }
+        controlCanvas.addEventListener("pointerdown", event => {
+            if (event.button !== 0 || event.ctrlKey) {return}
+            const section = sectionAt(event.offsetX, event.offsetY)
+            if (section !== null) {state.section = section; return}
+            const index = Math.floor(event.offsetX / 64)
+            if (index >= params().length) {return}
+            controlCanvas.setPointerCapture(event.pointerId)
+            state.drag = {index, y: event.clientY, value: state.values[params()[index].key]}
+        })
+        controlCanvas.addEventListener("pointermove", event => {
+            state.hovered = event.offsetY > 14 ? Math.floor(event.offsetX / 64) : -1
+            controlCanvas.style.cursor = event.offsetY <= 14 ? "pointer" : "ns-resize"
+            if (state.drag === null) {return}
+            const param = params()[state.drag.index]
+            const delta = (state.drag.y - event.clientY) / (event.shiftKey ? 600 : 150)
+            state.values[param.key] = Math.min(1, Math.max(0, state.drag.value + delta))
+        })
+        controlCanvas.addEventListener("pointerleave", () => state.hovered = -1)
+        const release = () => state.drag = null
+        controlCanvas.addEventListener("pointerup", release)
+        controlCanvas.addEventListener("lostpointercapture", release)
+        controlCanvas.addEventListener("dblclick", event => {
+            const param = params()[Math.floor(event.offsetX / 64)]
+            if (param) {state.values[param.key] = param.value}
+        })
+        controlCanvas.addEventListener("wheel", event => {
+            const param = params()[Math.floor(event.offsetX / 64)]
+            if (!param) {return}
+            event.preventDefault()
+            state.values[param.key] = Math.min(1, Math.max(0, state.values[param.key] - Math.sign(event.deltaY) * 0.02))
+        }, {passive: false})
+        waveCanvas.addEventListener("pointerdown", event => {
+            if (event.button !== 0 || event.ctrlKey) {return}
+            waveCanvas.setPointerCapture(event.pointerId)
+            state.values.pos = event.offsetX / 512
+            state.drag = {wave: true}
+        })
+        waveCanvas.addEventListener("pointermove", event => {if (state.drag?.wave) {state.values.pos = Math.min(1, Math.max(0, event.offsetX / 512))}})
+        waveCanvas.addEventListener("pointerup", release)
+        card.querySelector(".load").addEventListener("click", () => document.querySelector("input[type=file]").click())
+        device.addEventListener("dragover", event => {event.preventDefault(); device.classList.add("dropping"); state.dropping = 1})
+        device.addEventListener("dragleave", () => {device.classList.remove("dropping"); state.dropping = 0})
+        device.addEventListener("drop", event => {
+            event.preventDefault()
+            device.classList.remove("dropping")
+            state.dropping = 0
+            const file = event.dataTransfer.files[0]
+            if (file) {decode(file).catch(reason => alert(`Could not decode ${file.name}: ${reason}`))}
+        })
+        let dropLevel = 0
+        const step = (time, delta) => {
+            const rate = value => 0.02 * Math.pow(1000, value)
+            state.lfo.lfo1 = Math.sin(time * Math.PI * 2 * rate(state.values.lfo1rate))
+            state.lfo.lfo2 = Math.sin(time * Math.PI * 2 * rate(state.values.lfo2rate) + 1.3)
+            state.lfo.env1 = Math.max(-1, 1 - 2 * ((time * 0.7) % 1))
+            if (Math.random() < delta * 8) {state.lfo.rand = Math.random() * 2 - 1}
+            const position = modulatedValue("pos"), spray = state.values.spray * 0.5
+            const sizeSeconds = 0.001 * Math.pow(2000, state.values.size)
+            const density = 0.5 * Math.pow(400, state.values.density)
+            state.spawn += density * delta
+            while (state.spawn >= 1 && state.grains.length < MAX_GRAINS) {
+                state.spawn -= 1
+                const width = Math.min(0.4, sizeSeconds / 4)
+                state.grains.push({
+                    x: Math.min(1, Math.max(0, position + (Math.random() * 2 - 1) * spray)),
+                    width: width * 0.5, amp: 0, depth: Math.random() * state.values.drand + (1 - state.values.drand) * state.values.distance,
+                    pan: (Math.random() * 2 - 1) * state.values.azimuth, age: 0, life: Math.max(0.03, sizeSeconds)
+                })
+            }
+            state.spawn = Math.min(state.spawn, 1)
+            state.grains = state.grains.filter(grain => {
+                grain.age += delta
+                const phase = grain.age / grain.life
+                grain.amp = Math.sin(Math.PI * Math.min(1, phase)) * (0.45 + 0.55 * (1 - grain.depth))
+                grain.x += (state.values.scan - 0.5) * 0.02 * delta
+                grain.pan = Math.min(1, Math.max(-1, grain.pan + state.values.motion * 0.6 * delta * Math.sign(grain.pan || 1)))
+                return phase < 1
+            })
+            dropLevel += (state.dropping - dropLevel) * Math.min(1, delta * 12)
+            wave.render({time, style: state.style, hue: HUES[state.hue], range: [position, spray], dropping: dropLevel, grainList: state.grains})
+            drawControls()
+        }
+        if (sample.peaks !== null) {updateSample()}
+        return {card, step}
+    }
+
+    const grid = document.querySelector(".grid")
+    const previews = PRESETS.map(createPreview)
+    previews.forEach(preview => grid.appendChild(preview.card))
+    setSample(synthesize())
+    document.querySelector("input[type=file]").addEventListener("change", event => {
+        const file = event.target.files[0]
+        if (file) {decode(file).catch(reason => alert(`Could not decode ${file.name}: ${reason}`))}
+        event.target.value = ""
+    })
+    window.addEventListener("dragover", event => event.preventDefault())
+    window.addEventListener("drop", event => event.preventDefault())
+    let last = performance.now()
+    const frame = now => {
+        const delta = Math.min(0.05, (now - last) / 1000)
+        last = now
+        previews.forEach(preview => preview.step(now / 1000, delta))
+        requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+</script>
+</body>
+</html>
