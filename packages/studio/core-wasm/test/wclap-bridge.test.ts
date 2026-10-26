@@ -3,7 +3,7 @@
 // clearing), values queued before the plugin is up, state round trip, fault containment, load tracking.
 // Audio port layouts against a minimal test plugin (test/assets/audio-ports.c).
 // Device panel sessions, request_show and request_hide against the device-panel-demo (test/assets/device-panel.c).
-// An audio effect with a device panel against WetChorus (test/assets/wet-chorus.wasm, opendaw-commons wclaps/wet-chorus,
+// An audio effect with a device panel against WetChorus (test/assets/wet-chorus.wasm, open-webclap ports/wet-chorus,
 // WetChorus by Ronald Klarenbeek, MIT).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
