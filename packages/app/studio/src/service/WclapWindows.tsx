@@ -24,25 +24,26 @@ export namespace WclapWindows {
 
     export const close = (uuid: string): void => windows.get(uuid)?.handle.close()
 
-    export const toggle = (service: StudioService, adapter: WclapAdapter, title: string): void => {
+    // transparent: the window shows through where the page draws nothing (plugins with a device panel)
+    export const toggle = (service: StudioService, adapter: WclapAdapter, title: string, transparent: boolean = false): void => {
         const uuid = UUID.toString(adapter.uuid)
         if (windows.has(uuid)) {
             close(uuid)
             return
         }
-        show(service, adapter, title)
+        show(service, adapter, title, transparent)
     }
 
-    export const show = (service: StudioService, adapter: WclapAdapter, title: string): void => {
+    export const show = (service: StudioService, adapter: WclapAdapter, title: string, transparent: boolean = false): void => {
         const uuid = UUID.toString(adapter.uuid)
         if (windows.has(uuid) || opening.has(uuid)) {return}
         opening.add(uuid)
-        open(service, adapter, title)
+        open(service, adapter, title, transparent)
             .catch(error => RuntimeNotifier.notify({message: `Could not open the plugin window: ${error}`, icon: "Warning"}))
             .finally(() => opening.delete(uuid))
     }
 
-    const open = async (service: StudioService, adapter: WclapAdapter, title: string): Promise<void> => {
+    const open = async (service: StudioService, adapter: WclapAdapter, title: string, transparent: boolean): Promise<void> => {
         const {engine} = service
         const uuid = adapter.uuid
         const uuidString = UUID.toString(uuid)
@@ -98,7 +99,8 @@ export namespace WclapWindows {
                 // WheelEvent.deltaMode: 0 pixels, 1 lines, 2 pages
                 const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? handle.size.getValue().height : 1
                 handle.scrollBy(deltaX * unit, deltaY * unit)
-            }
+            },
+            transparent
         }))
         const handle = FloatingWindow({
             title, icon: IconSymbol.WebClap, width, height,

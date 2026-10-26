@@ -506,7 +506,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             reloaded: () => Promise.resolve(),
             release,
             lost: dropPanel,
-            scroll: EmptyExec
+            scroll: EmptyExec,
+            transparent: true
         }))
         panelArea.style.width = `${opened.width > 0 ? opened.width : PANEL_HEIGHT}px`
         panelArea.appendChild(frame.iframe)
@@ -538,7 +539,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             MenuItem.default({
                 label: WclapWindows.isOpen(uuidString) ? "Close Window" : "Open Window",
                 selectable: state.ready && state.editor, separatorBefore: true
-            }).setTriggerProcedure(() => WclapWindows.toggle(service, adapter, title())),
+            }).setTriggerProcedure(() => WclapWindows.toggle(service, adapter, title(), state.panel)),
             MenuItem.default({label: "Load Plugin"}).setRuntimeChildrenProcedure(populatePlugins),
             MenuItem.default({label: "Update", selectable: successor.plugin.nonEmpty()})
                 .setTriggerProcedure(() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))),
@@ -578,7 +579,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             showStrategy()
         }),
         WclapWindows.subscribe(uuidString, showStatus),
-        WclapGuis.subscribeShow(uuidString, visible => {if (visible) {WclapWindows.show(service, adapter, title())}})
+        WclapGuis.subscribeShow(uuidString, visible => {if (visible) {WclapWindows.show(service, adapter, title(), state.panel)}})
     )
     showStatus()
     refreshStored()

@@ -20,7 +20,7 @@
     const files = new Map()
     // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
     const channel = new MessageChannel()
-    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false}
+    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, transparent: false, dragging: false}
 
     const post = message => channel.port1.postMessage(message)
     const fail = message => {
@@ -126,8 +126,40 @@
         }
     }
 
-    const open = async ({uuid, page, files: list}) => {
+    // a transparent frame (the device panel) shows the studio where the page draws nothing, the page's colour scheme
+    // must match the frame's or the browser paints an opaque backdrop
+    const matchColorScheme = inner => {
+        const document = inner.contentDocument
+        if (!state.transparent || document === null) {return}
+        inner.style.colorScheme = getComputedStyle(document.documentElement).colorScheme
+    }
+
+    // a sample dragged from the studio arrives as positions and finally a file, replayed as a native file drag
+    const dragEvent = (type, x, y, file) => {
+        const inner = state.inner
+        const target = inner?.contentWindow
+        const document = inner?.contentDocument
+        if (!target || !document) {return}
+        const dataTransfer = new target.DataTransfer()
+        dataTransfer.items.add(file)
+        const element = document.elementFromPoint(x, y) ?? document.documentElement
+        element.dispatchEvent(new target.DragEvent(type, {
+            bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer, relatedTarget: null
+        }))
+    }
+    const dragOver = ({x, y}, file) => {
+        if (!state.dragging) {dragEvent("dragenter", x, y, file)}
+        state.dragging = true
+        dragEvent("dragover", x, y, file)
+    }
+
+    const open = async ({uuid, page, files: list, transparent}) => {
         state.uuid = uuid
+        state.transparent = transparent === true
+        if (state.transparent) {
+            document.documentElement.style.colorScheme = "dark"
+            document.documentElement.style.background = document.body.style.background = "transparent"
+        }
         const path = page.split("?")[0]
         state.pageDirectory = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : ""
         files.clear()
@@ -135,6 +167,7 @@
         await registerWorker()
         const inner = document.createElement("iframe")
         inner.addEventListener("load", () => {
+            matchColorScheme(inner)
             forwardInput(inner)
             releaseLostButtons(inner)
             forwardPointer()
@@ -168,6 +201,15 @@
         } else if (data?.type === "wclap-pointer-enable") {
             state.pointer = true
             forwardPointer()
+        } else if (data?.type === "wclap-drag" && inner !== null) {
+            dragOver(data, new File([], `${data.name}.wav`, {type: "audio/wav"}))
+        } else if (data?.type === "wclap-drag-leave" && inner !== null && state.dragging) {
+            state.dragging = false
+            dragEvent("dragleave", -1, -1, new File([], "", {type: "audio/wav"}))
+        } else if (data?.type === "wclap-drop" && inner !== null && data.file instanceof File) {
+            dragOver(data, data.file)
+            state.dragging = false
+            dragEvent("drop", data.x, data.y, data.file)
         }
     })
     window.addEventListener("contextmenu", event => event.preventDefault())

@@ -1,16 +1,18 @@
-import {AutomatableParameterFieldAdapter, WclapBundle} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter, Sample, WclapBundle} from "@opendaw/studio-adapters"
 import {
     asInstanceOf, EmptyExec, Exec, isDefined, Option, Optional, RuntimeNotifier, Subscription, Terminable, Terminator, UUID,
     VitalSigns
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
+import {WavFile} from "@opendaw/lib-dsp"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, MenuItem, WclapGuis} from "@opendaw/studio-core"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
+import {DragAndDrop} from "@/ui/DragAndDrop"
 import {StudioService} from "@/service/StudioService"
 import type {WclapAdapter} from "@/service/WclapWindows"
 
@@ -49,6 +51,8 @@ export type WclapFrameConfig = {
     release: Exec
     lost: Exec
     scroll: (deltaX: number, deltaY: number, deltaMode: number) => void
+    // the device panel shows through where the page draws nothing
+    transparent?: boolean
 }
 
 export interface WclapFrame extends Terminable {
@@ -58,7 +62,7 @@ export interface WclapFrame extends Terminable {
 }
 
 // One plugin page in the wclap-frame.html shim: the message port, page traffic, saves and the parameter menu
-export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, release, lost, scroll}: WclapFrameConfig): WclapFrame => {
+export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, release, lost, scroll, transparent}: WclapFrameConfig): WclapFrame => {
     const {project, engine} = service
     const {editing, midiLearning} = project
     const uuid = adapter.uuid
@@ -137,7 +141,7 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
         if (vitals.isTerminated) {return release()}
         if (!link.port.contains(port)) {return}
         if (reopened.length === 0) {return lost()}
-        post({type: "wclap-open", uuid: uuidString, page: pagePath(reopened), files: bundle.files})
+        post({type: "wclap-open", uuid: uuidString, page: pagePath(reopened), files: bundle.files, transparent: transparent === true})
         if (link.pointer) {post({type: "wclap-pointer-enable"})}
         return reloaded()
     }
@@ -153,12 +157,71 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
         )
         port.start()
         if (link.loads++ === 0) {
-            post({type: "wclap-open", uuid: uuidString, page, files: bundle.files})
+            post({type: "wclap-open", uuid: uuidString, page, files: bundle.files, transparent: transparent === true})
         } else {
             reopen(port).catch(error => RuntimeNotifier.notify({message: `Could not reconnect the plugin window: ${error}`, icon: "Warning"}))
         }
     }
+    // a sample from the browser reaches the page as a dropped wav file: while it is dragged, the frame lets the
+    // drag through to its parent, which relays the position and the file to the frame
+    const sampleDrag = terminator.own(new Terminator())
+    const framePoint = (event: DragEvent): Option<{ x: number, y: number }> => {
+        const rect = iframe.getBoundingClientRect()
+        const x = event.clientX - rect.left, y = event.clientY - rect.top
+        return x >= 0 && y >= 0 && x < rect.width && y < rect.height ? Option.wrap({x, y}) : Option.None
+    }
+    const dropSample = (sample: Sample, x: number, y: number): void => {
+        service.sampleManager.getAudioData(UUID.parse(sample.uuid)).then(audio => {
+            const bytes = WavFile.encodeFloats({
+                frames: audio.frames.slice(), sampleRate: audio.sampleRate,
+                numberOfFrames: audio.numberOfFrames, numberOfChannels: audio.numberOfChannels
+            })
+            post({type: "wclap-drop", x, y, file: new File([bytes], `${sample.name}.wav`, {type: "audio/wav"})})
+        }, reason => RuntimeNotifier.notify({message: `Could not load ${sample.name}: ${reason}`, icon: "Warning"}))
+    }
+    const dragSample = (sample: Sample): void => {
+        const parent = iframe.parentElement
+        if (!isDefined(parent) || link.port.isEmpty()) {return}
+        sampleDrag.terminate()
+        const over = {inside: false}
+        const leave = (): void => {
+            if (!over.inside) {return}
+            over.inside = false
+            post({type: "wclap-drag-leave"})
+        }
+        iframe.style.pointerEvents = "none"
+        sampleDrag.ownAll(
+            {terminate: () => {
+                iframe.style.pointerEvents = ""
+                leave()
+            }},
+            Events.subscribe(parent, "dragover", (event: DragEvent) => framePoint(event).match({
+                none: leave,
+                some: ({x, y}) => {
+                    event.preventDefault()
+                    if (isDefined(event.dataTransfer)) {event.dataTransfer.dropEffect = "copy"}
+                    over.inside = true
+                    post({type: "wclap-drag", x, y, name: sample.name})
+                }
+            })),
+            Events.subscribe(parent, "dragleave", (event: DragEvent) => {if (framePoint(event).isEmpty()) {leave()}}),
+            Events.subscribe(parent, "drop", (event: DragEvent) => {
+                framePoint(event).ifSome(({x, y}) => {
+                    event.preventDefault()
+                    over.inside = false
+                    dropSample(sample, x, y)
+                })
+                sampleDrag.terminate()
+            }),
+            // no pointer event reaches the page while a drag runs, the first one after means it ended
+            Events.subscribe(iframe.ownerDocument, "dragend", () => sampleDrag.terminate(), {capture: true}),
+            Events.subscribe(iframe.ownerDocument, "pointermove", () => sampleDrag.terminate(), {capture: true})
+        )
+    }
     terminator.ownAll(
+        Events.subscribe(iframe.ownerDocument, "dragstart", () => DragAndDrop.current().ifSome(data => {
+            if (data.type === "sample") {dragSample(data.sample)}
+        })),
         WclapGuis.register(uuidString, bytes => post({type: "wclap-message", bytes})),
         WclapGuis.subscribeHovered(uuidString, paramId => {
             if (paramId < 0) {return}
