@@ -3,6 +3,8 @@
 // clearing), values queued before the plugin is up, state round trip, fault containment, load tracking.
 // Audio port layouts against a minimal test plugin (test/assets/audio-ports.c).
 // Device panel sessions, request_show and request_hide against the device-panel-demo (test/assets/device-panel.c).
+// An audio effect with a device panel against WetChorus (test/assets/wet-chorus.wasm, opendaw-commons wclaps/wet-chorus,
+// WetChorus by Ronald Klarenbeek, MIT).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
@@ -49,6 +51,8 @@ const wasmBundle = (name: string): WclapBundle =>
 const devicePanelBundle = wasmBundle("device-panel.wasm")
 const devicePanelNoExtensionBundle = wasmBundle("device-panel-no-extension.wasm")
 const DEVICE_PANEL = "studio.opendaw.commons.device-panel-demo"
+const wetChorusBundle = wasmBundle("wet-chorus.wasm")
+const WET_CHORUS = "studio.opendaw.commons.wet-chorus"
 
 type Host = {
     bridges: WclapBridges
@@ -61,6 +65,7 @@ type Host = {
     loads: Array<Promise<unknown>>
     saveRequests: number
     guiSends: number
+    lastGui: ArrayBuffer
     shows: Array<string>
     hovered: Array<number>
     hides: Array<string>
@@ -70,11 +75,14 @@ const createHost = (bundle: WclapBundle | (() => Promise<WclapBundle>) = basics)
     const memory = new WebAssembly.Memory({initial: 16})
     const host: Host = {
         bridges: undefined as unknown as WclapBridges, imports: {}, memory,
-        statuses: [], params: [], states: [], reported: [], loads: [], saveRequests: 0, guiSends: 0, shows: [], hides: [], hovered: []
+        statuses: [], params: [], states: [], reported: [], loads: [], saveRequests: 0, guiSends: 0, lastGui: new ArrayBuffer(0), shows: [], hides: [], hovered: []
     }
     const callbacks: WclapHostCallbacks = {
         loadBundle: () => typeof bundle === "function" ? bundle() : Promise.resolve(bundle),
-        sendGui: () => {host.guiSends++},
+        sendGui: (_uuid, bytes) => {
+            host.guiSends++
+            host.lastGui = bytes
+        },
         sendState: (_uuid, bytes) => host.states.push(new Uint8Array(bytes)),
         sendParams: (_uuid, list) => {host.params = [...list]},
         sendParam: (_uuid, id, value, gesture) => host.reported.push([id, value, gesture]),
@@ -604,6 +612,101 @@ describe("wclap bridge", () => {
             hover(3)
             expect(host.hovered).toEqual([0, -1, -1])
             expect(param(host, "Gain").id).toBe(0)
+        })
+    })
+
+    describe("WetChorus, an audio effect with a device panel", () => {
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        const loadChorus = async (): Promise<[Host, number]> => {
+            const host = createHost(wetChorusBundle)
+            const handle = load(host, WET_CHORUS, "wet-chorus")
+            await ready(host, handle)
+            return [host, handle]
+        }
+        it("describes itself as an audio effect that offers a device panel", async () => {
+            const plugins = await createHost(wetChorusBundle).bridges.describe("wet-chorus")
+            expect(plugins.map(({clapId}) => clapId)).toEqual([WET_CHORUS])
+            expect(plugins[0].features).toEqual(expect.arrayContaining(["audio-effect", "chorus", "opendaw:device-panel"]))
+        })
+
+        it("shows its whole panel scaled into the device panel and in a 768 x 512 window from 50 to 125 %", async () => {
+            const [host] = await loadChorus()
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: true})
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html", width: 264})
+            expect(host.bridges.openGui(uuid)).toMatchObject({uri: "/index.html", width: 768, height: 512, resizable: true})
+            expect(host.bridges.resizeGui(uuid, 100, 100)).toEqual({width: 384, height: 256})
+            expect(host.bridges.resizeGui(uuid, 2000, 2000)).toEqual({width: 960, height: 640})
+            expect(host.bridges.resizeGui(uuid, 1152, 900)).toEqual({width: 960, height: 640})
+        })
+
+        it("lists Speed, Depth and Mode at their upstream defaults", async () => {
+            const [host] = await loadChorus()
+            expect(host.params.map(({name, min, max, defaultValue}) => [name, min, max, defaultValue]))
+                .toEqual([["Speed", 0, 10, 5], ["Depth", 0, 1, 0], ["Mode", 0, 180, 180]])
+        })
+
+        it("plays a fully wet chorus, both outputs differ from the input and from each other", async () => {
+            const [host, handle] = await loadChorus()
+            const level = rms(host, handle, 200)
+            expect(level).toBeGreaterThan(0.01)
+            const [left, right] = [new Float32Array(host.memory.buffer, OUT0, 128), new Float32Array(host.memory.buffer, OUT1, 128)]
+            const input = new Float32Array(host.memory.buffer, IN0, 128)
+            expect(Array.from(left)).not.toEqual(Array.from(input))
+            expect(Array.from(left)).not.toEqual(Array.from(right))
+        })
+
+        it("saves upstream's state format and reads it back into the same values", async () => {
+            const [host, handle] = await loadChorus()
+            host.imports.host_wclap_param(handle, param(host, "Speed").id | 0, FLOAT, 2.5, NaN)
+            host.imports.host_wclap_param(handle, param(host, "Depth").id | 0, FLOAT, 1, NaN)
+            host.imports.host_wclap_param(handle, param(host, "Mode").id | 0, FLOAT, 90, NaN)
+            rms(host, handle, 2)
+            host.bridges.saveState(uuid)
+            const words = new Int32Array(host.states[0].slice().buffer)
+            expect(Array.from(words)).toEqual([1, 65, 16, 1, 32])
+            const other = createHost(wetChorusBundle)
+            const otherHandle = load(other, WET_CHORUS, "wet-chorus")
+            const bytes = host.states[0]
+            new Uint8Array(other.memory.buffer).set(new TextEncoder().encode(Buffer.from(bytes).toString("base64")), 2048)
+            other.imports.host_wclap_state(otherHandle, 2048, Buffer.from(bytes).toString("base64").length)
+            await ready(other, otherHandle)
+            expect(param(other, "Speed").value).toBeCloseTo(2.5, 9)
+            expect(param(other, "Depth").value).toBe(1)
+            expect(param(other, "Mode").value).toBeCloseTo(90, 9)
+        })
+
+        it("snaps a host value between detents onto the nearest of the 65 knob positions in its saved state", async () => {
+            const [host, handle] = await loadChorus()
+            host.imports.host_wclap_param(handle, param(host, "Speed").id | 0, FLOAT, 5.07, NaN)
+            rms(host, handle, 1)
+            host.bridges.saveState(uuid)
+            expect(new Int32Array(host.states[0].slice().buffer)[2]).toBe(32)
+        })
+
+        it("answers a page poll with its meters and values, and takes a page edit as a host gesture", async () => {
+            const [host, handle] = await loadChorus()
+            host.bridges.openPanel(uuid, 176)
+            rms(host, handle, 50)
+            host.bridges.receive(uuid, new Uint8Array([1]).buffer)
+            // status: type, then the IN, OUT L, OUT R meters (float32, 0..1 over -72..+12 dB) and the three values (float64)
+            const status = new DataView(host.lastGui)
+            expect(status.byteLength).toBe(40)
+            expect(status.getUint8(0)).toBe(1)
+            for (const offset of [4, 8, 12]) {expect(status.getFloat32(offset, true)).toBeGreaterThan(0.5)}
+            expect([16, 24, 32].map(offset => status.getFloat64(offset, true))).toEqual([5, 0, 180])
+            const edit = (type: number, value: number = 0): void => {
+                const message = new DataView(new ArrayBuffer(type === 3 ? 16 : 8))
+                message.setUint8(0, type)
+                message.setUint32(4, 2, true)
+                if (type === 3) {message.setFloat64(8, value, true)}
+                host.bridges.receive(uuid, message.buffer)
+            }
+            host.reported.length = 0
+            edit(2)
+            edit(3, 45)
+            edit(4)
+            rms(host, handle, 2)
+            expect(host.reported).toEqual([[2, 0, 1], [2, 45, 0], [2, 0, 2]])
         })
     })
 })
