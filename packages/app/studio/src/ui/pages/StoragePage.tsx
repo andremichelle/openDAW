@@ -241,7 +241,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
     scan().then(EmptyExec)
     return (
         <div className={className}>
-            <BackButton service={service}/>
+            <BackButton lifecycle={lifecycle} service={service}/>
             <h1>Storage</h1>
             <p className="disclaimer">
                 This page only covers the storage of this browser (OPFS). It knows nothing about your work anywhere
