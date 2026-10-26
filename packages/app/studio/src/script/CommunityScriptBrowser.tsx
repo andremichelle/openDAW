@@ -72,25 +72,23 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
         open({name: entry.name, source: value})
     }
     const list: HTMLElement = <div className="list" onConnect={element => lifecycle.own(installScrollbars(element))}/>
-    const name: HTMLElement = <div className="name">No script selected</div>
     const description: HTMLElement = <div className="description">Select a script on the left, or paste a GitHub link below.</div>
-    const facts: HTMLElement = <div className="facts">Author, tags and a link to GitHub</div>
-    const code: HTMLElement = <pre className="code"/>
+    const tags: HTMLElement = <div className="tags hidden"/>
+    const code: HTMLElement = <pre className="code hidden"/>
+    const github: HTMLAnchorElement = (
+        <a className="github hidden" target="_blank" rel="noopener">View on GitHub</a>
+    )
     const preview: HTMLImageElement = (
         <img className="preview hidden" alt=""
              onload={() => preview.style.width = `${preview.naturalWidth / 2}px`}/>
     )
     const detail: HTMLElement = (
         <div className="detail empty" onConnect={element => lifecycle.own(installScrollbars(element))}>
-            <div className="label">Name:</div>
-            {name}
-            <div className="label">Description:</div>
-            {description}
-            <div className="label">Source:</div>
-            {facts}
             {preview}
-            <div className="label">Code:</div>
+            {tags}
+            {description}
             {code}
+            {github}
         </div>
     )
     const linkField: HTMLInputElement = (
@@ -98,7 +96,7 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
     )
     const showDetail = (entry: Entry): void => {
         detail.classList.remove("empty")
-        name.textContent = entry.name
+        github.classList.remove("hidden")
         const screenshot = entry.kind === "community" ? CommunityAPI.get().screenshotOf(entry.script) : Option.None
         preview.classList.toggle("hidden", screenshot.isEmpty())
         screenshot.match({
@@ -111,21 +109,22 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
         if (entry.kind === "community") {
             const {script} = entry
             description.textContent = script.description
-            const author: HTMLElement = isDefined(script.author.github)
-                ? <a href={`https://github.com/${script.author.github}`} target="_blank" rel="noopener">{script.author.name}</a>
-                : <span>{script.author.name}</span>
-            facts.replaceChildren(
-                <span>by {author}</span>,
-                ...script.tags.map(tag => <span className="tag">{tag}</span>),
-                <a href={script.source} target="_blank" rel="noopener">GitHub</a>)
+            tags.replaceChildren(...script.tags.map(tag => <button className="tag" onclick={() => filter.setValue(tag)}>{tag}</button>))
+            tags.classList.toggle("hidden", script.tags.length === 0)
+            code.classList.add("hidden")
+            github.href = script.source
         } else {
+            const {owner, repo, ref, path} = entry.file
             description.textContent = "Loaded from a link, nothing is saved until you save it in the editor."
-            facts.replaceChildren(<span>{`${entry.file.owner}/${entry.file.repo} at ${entry.file.ref}, ${entry.file.path}`}</span>)
+            tags.replaceChildren()
+            tags.classList.add("hidden")
+            code.classList.remove("hidden")
+            code.textContent = "Loading..."
+            github.href = `https://github.com/${owner}/${repo}/blob/${ref}/${path}`
+            sourceOf(entry).then(
+                source => {if (selection.contains(entry)) {code.textContent = source}},
+                error => {if (selection.contains(entry)) {code.textContent = String(error)}})
         }
-        code.textContent = "Loading..."
-        sourceOf(entry).then(
-            source => {if (selection.contains(entry)) {code.textContent = source}},
-            error => {if (selection.contains(entry)) {code.textContent = String(error)}})
     }
     const renderList = (scripts: ReadonlyArray<CommunityScript>): void => {
         const community: ReadonlyArray<Entry> = scripts
@@ -137,7 +136,10 @@ export const CommunityScriptBrowser = ({lifecycle, target, open, nothingSelected
                      onclick={() => selection.wrap(entry)}
                      ondblclick={() => openEntry(entry)}>
                     <span className="name">{entry.name}</span>
-                    <span className="author">{entry.kind === "community" ? entry.script.author.name : "link"}</span>
+                    {entry.kind === "community" && isDefined(entry.script.author.github)
+                        ? <a className="author" href={`https://github.com/${entry.script.author.github}`}
+                             target="_blank" rel="noopener">{entry.script.author.name}</a>
+                        : <span className="author">{entry.kind === "community" ? entry.script.author.name : "link"}</span>}
                 </div>
             )
             row.classList.toggle("selected", selection.mapOr(selected => selected.key === entry.key, false))
