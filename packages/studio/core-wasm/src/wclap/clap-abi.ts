@@ -63,6 +63,10 @@ export namespace ClapAbi {
         export const OUT_EVENTS = 36
     }
 
+    export namespace ProcessStatus {
+        export const ERROR = 0
+    }
+
     export namespace AudioBuffer {
         export const SIZE = 24
         export const DATA32 = 0
@@ -134,11 +138,38 @@ export namespace ClapAbi {
         export const THREAD_CHECK = "clap.thread-check"
         export const PARAM_HOVERED = "clap.param-hovered/1"
         export const HOST_PARAMS = "clap.params"
+        export const LATENCY = "clap.latency"
+        export const DEVICE_PANEL = "opendaw.device-panel/1"
+    }
+
+    export namespace Feature {
+        export const DEVICE_PANEL = "opendaw:device-panel"
+    }
+
+    // opendaw_plugin_device_panel_t: get_uri(plugin, uri, capacity), get_width(plugin, height, *width)
+    export namespace DevicePanel {
+        export const GET_URI = 0
+        export const GET_WIDTH = 4
+    }
+
+    export namespace PluginLatency {
+        export const GET = 0
+    }
+
+    export namespace HostLatency {
+        export const SIZE = 4
+        export const CHANGED = 0
     }
 
     export namespace AudioPorts {
         export const COUNT = 0
         export const GET = 4
+    }
+
+    export namespace AudioPortInfo {
+        export const SIZE = 276
+        export const NAME = 4
+        export const CHANNEL_COUNT = 264
     }
 
     export namespace Params {
@@ -176,9 +207,21 @@ export namespace ClapAbi {
         export const CREATE = 8
         export const DESTROY = 12
         export const GET_SIZE = 20
+        export const CAN_RESIZE = 24
+        export const GET_RESIZE_HINTS = 28
+        export const ADJUST_SIZE = 32
+        export const SET_SIZE = 36
         export const SET_PARENT = 40
         export const SHOW = 52
         export const HIDE = 56
+    }
+
+    // clap_gui_resize_hints: three bools, then the aspect ratio as two u32
+    export namespace ResizeHints {
+        export const SIZE = 12
+        export const PRESERVE_ASPECT_RATIO = 2
+        export const ASPECT_RATIO_WIDTH = 4
+        export const ASPECT_RATIO_HEIGHT = 8
     }
 
     // clap_window: api string pointer, then the native handle (NULL for a webview)
@@ -248,6 +291,15 @@ export namespace ClapAbi {
         export const HAS_BEATS_TIMELINE = 1 << 1
         export const IS_PLAYING = 1 << 4
         export const BEATTIME_FACTOR = 2 ** 31
+    }
+
+    export namespace HostGui {
+        export const SIZE = 20
+        export const RESIZE_HINTS_CHANGED = 0
+        export const REQUEST_RESIZE = 4
+        export const REQUEST_SHOW = 8
+        export const REQUEST_HIDE = 12
+        export const CLOSED = 16
     }
 
     export namespace HostParamHovered {

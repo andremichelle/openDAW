@@ -1,0 +1,100 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 2em
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  @include colors.panel-background
+
+  p.summary, p.legend
+    color: var(--color-dark)
+    font-size: 0.75em
+
+  div.canvas
+    flex: 1
+    overflow: auto
+
+  svg
+    display: block
+
+  g.lane
+    rect
+      fill: transparent
+
+    &.odd rect
+      fill: rgba(white, 0.02)
+
+    text
+      fill: var(--color-gray)
+      font-size: 11px
+
+  g.node
+    cursor: default
+
+    rect
+      fill: var(--color-panel-background-bright)
+      stroke: var(--color-dark)
+
+    text
+      fill: var(--color-dark)
+      font-size: 9px
+      pointer-events: none
+
+    text.name
+      fill: var(--color-bright)
+      font-size: 11px
+
+    &.latent
+      rect
+        stroke: var(--color-orange)
+
+      text.timing
+        fill: var(--color-orange)
+
+  g.edge
+    color: var(--color-dark)
+
+    path
+      fill: none
+      stroke: currentColor
+      stroke-width: 1.25
+
+    &.order
+      color: var(--color-purple)
+
+      path
+        stroke-dasharray: 4 3
+
+    &.delayed
+      color: var(--color-blue)
+
+      path
+        stroke-width: 2
+
+    &.exceeded
+      color: var(--color-red)
+
+  g.delay-label
+    pointer-events: none
+
+    rect
+      fill: var(--color-blue)
+
+    text
+      fill: var(--color-black)
+      font-size: 10px
+
+    &.exceeded rect
+      fill: var(--color-red)
+
+  svg.focus
+    g.node:not(.active), g.edge:not(.active)
+      opacity: 0.15
+
+    g.edge.active
+      color: var(--color-bright)
+
+      &.delayed
+        color: var(--color-blue)

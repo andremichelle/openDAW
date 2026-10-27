@@ -12,6 +12,11 @@ export namespace ErrorInfo {
     export const isForeignRealmError = (value: unknown): boolean =>
         !(value instanceof Error) && Object.prototype.toString.call(value) === "[object Error]"
 
+    // A script dispatched a plain Event named "unhandledrejection", no promise of ours rejected (#1189).
+    export const isSyntheticRejection = (event: Event): boolean =>
+        event.type === "unhandledrejection" && !event.isTrusted
+        && Object.prototype.toString.call(event) !== "[object PromiseRejectionEvent]"
+
     const fromError = (error: Error, fallbackName: string = "Error"): ErrorInfo => ({
         name: error.name || fallbackName,
         message: error.message,

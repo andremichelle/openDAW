@@ -4,10 +4,13 @@
 //! over the shared linear memory. All real state (the user processor instance, the hot-swap, validation) lives
 //! JS-side; this crate only marshals offsets and forwards parameter changes. The script's parameters live on
 //! dynamic `WerkstattParameterBox` children under the `parameters` hub (field 11); the engine observes that
-//! collection and drives `parameter_changed` with each child's declaration index as the id.
+//! collection and drives `parameter_changed` with each child's declaration index as the id. Samples declared with
+//! `@sample` live on dynamic `WerkstattSampleBox` children under the `samples` hub (field 12); the engine resolves
+//! each child's `file` and drives `sample_changed`, which the bridge turns into `proc.samples[label]`.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`.
+//! `parameter_changed(...)`, `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`,
+//! `observe_sample_collection_field() -> 12`, `observe_sidechain_collection_field() -> 13`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -26,7 +29,8 @@ fn panic(info: &PanicInfo) -> ! {
 pub struct WerkstattState {
     uuid: [u8; 16],
     handle: u32,
-    sample_rate: f32
+    sample_rate: f32,
+    latency: u32
 }
 
 #[no_mangle]
@@ -44,6 +48,39 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn observe_param_collection_field() -> u32 {
     11
+}
+
+/// The `samples` hub field key — the engine observes its `WerkstattSampleBox` children and drives
+/// `sample_changed` per child (declaration index as id).
+#[no_mangle]
+pub extern "C" fn observe_sample_collection_field() -> u32 {
+    12
+}
+
+/// The `records` hub field key: the engine observes its `ScriptRecordBox` children and hands each `@collection`
+/// snapshot to `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_record_collection_field() -> u32 {
+    14
+}
+
+/// The `buffers` hub field key: `ScriptBufferBox` children (`@buffer` data), delivered through `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_buffer_collection_field() -> u32 {
+    15
+}
+
+/// One `@collection` snapshot for the user `Processor` (`this.data`), forwarded to the JS bridge.
+#[no_mangle]
+pub extern "C" fn data_changed(state_ptr: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    unsafe { abi::with_state::<WerkstattState>(state_ptr, |state| abi::script_data(state.handle, collection, ptr, records, fields)) }
+}
+
+/// The `side-chains` hub field key — the engine turns each `WerkstattSidechainBox` child into a sidechain port,
+/// which the JS script bridge resolves itself during `host_script_audio`.
+#[no_mangle]
+pub extern "C" fn observe_sidechain_collection_field() -> u32 {
+    13
 }
 
 /// Boot: stash the sample rate, learn this device's box uuid, and create the JS-side script bridge keyed to it.
@@ -68,6 +105,16 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe {
         abi::with_state::<WerkstattState>(state_ptr, |state| {
             forward_param(state, id, ParamValue::from_wire(kind, value, modulation));
+        })
+    }
+}
+
+/// A `@sample` slot's resolved handle (or `present == 0` to clear), keyed by the child's declaration `id`.
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    unsafe {
+        abi::with_state::<WerkstattState>(state_ptr, |state| {
+            abi::script_sample(state.handle, id, handle, present != 0);
         })
     }
 }
@@ -124,5 +171,10 @@ pub extern "C" fn process(desc_ptr: u32) {
         }
         abi::script_audio(handle, src_l, src_r, out_l, out_r,
             &Block {index: block.index, flags, p0: sub_p0, p1: block.p1, s0: sub_s0, s1: block.s1, bpm: block.bpm});
+    }
+    let latency = abi::script_latency(handle);
+    if latency != state.latency {
+        state.latency = latency;
+        abi::set_latency(latency);
     }
 }

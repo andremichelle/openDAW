@@ -24,7 +24,7 @@ export namespace ClipCapturing {
                 // A y outside the resolved lane's own bounds sits in a band no TrackContext covers (the
                 // synthetic unit lane): capture nothing there.
                 if (y >= track.position + track.size) {return null}
-                const clipIndex = Math.floor(x / ClipWidth)
+                const clipIndex = Math.floor((x + manager.service.timeline.clips.scroll.getValue()) / ClipWidth)
                 return track.trackBoxAdapter.clips.collection.getAdapterByIndex(clipIndex)
                     .match<ClipCaptureTarget>({
                         none: () => ({type: "track", track, clipIndex}),

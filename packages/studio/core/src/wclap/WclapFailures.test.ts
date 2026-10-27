@@ -36,9 +36,9 @@ const createProject = async (): Promise<{ project: Project, uuid: string }> => {
     return {project, uuid: UUID.toString(device.address.uuid)}
 }
 
-const failed: WclapStatus = {state: "failed", message: "WebCLAP bundle abc is not stored"}
-const loading: WclapStatus = {state: "loading", message: ""}
-const ready: WclapStatus = {state: "ready", message: ""}
+const failed: WclapStatus = {state: "failed", message: "WebCLAP bundle abc is not stored", inputs: []}
+const loading: WclapStatus = {state: "loading", message: "", inputs: []}
+const ready: WclapStatus = {state: "ready", message: "", inputs: []}
 
 describe("WclapFailures", () => {
     afterEach(() => vi.restoreAllMocks())

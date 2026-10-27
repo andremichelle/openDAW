@@ -87,10 +87,10 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
                 categoryKey: "instrument",
                 compoundLabel: "Racks",
                 compoundCategory: "audio-unit",
-                stockDevices: Object.entries(InstrumentFactories.Named).map(([key, factory]) => ({
+                stockDevices: InstrumentFactories.Sorted.map(([key, factory]) => ({
                     key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription,
                     presetless: key === "Tape"
-                })).toSorted((a, b) => a.name.localeCompare(b.name)),
+                })),
                 lifecycle: itemLifecycle
             }),
             renderCategory({

@@ -14,6 +14,48 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
 import {ResourceSelection, truncateList} from "@/ui/browse/ResourceSelection"
 
+export const createTapeTracks = async (service: StudioService, samples: ReadonlyArray<Sample>): Promise<void> => {
+    const hasNoProfile = !service.hasProfile
+    if (hasNoProfile) {
+        await service.newProject()
+        if (!service.hasProfile) {return}
+    }
+    const project = service.project
+    const {editing, boxGraph} = project
+    editing.modify(() => {
+        if (hasNoProfile && samples.length === 1 && samples[0].bpm > 0) {project.api.setBpm(samples[0].bpm)}
+        samples.forEach(sample => {
+            const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
+            const uuid = UUID.parse(uuidAsString)
+            const {trackBox, instrumentBox} = project.api.createInstrument(InstrumentFactories.Tape)
+            instrumentBox.label.setValue(name)
+            const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
+                .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
+                    box.fileName.setValue(name)
+                    box.startInSeconds.setValue(0)
+                    box.endInSeconds.setValue(durationInSeconds)
+                }))
+            if (bpm === 0) {
+                AudioContentFactory.createNotStretchedRegion({
+                    boxGraph,
+                    sample,
+                    audioFileBox,
+                    position: 0,
+                    targetTrack: trackBox
+                })
+            } else {
+                AudioContentFactory.createPitchStretchedRegion({
+                    boxGraph,
+                    sample,
+                    audioFileBox,
+                    position: 0,
+                    targetTrack: trackBox
+                })
+            }
+        })
+    })
+}
+
 export class SampleSelection implements ResourceSelection<Sample> {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
@@ -23,47 +65,7 @@ export class SampleSelection implements ResourceSelection<Sample> {
         this.#selection = selection
     }
 
-    async requestDevice(samples: ReadonlyArray<Sample>): Promise<void> {
-        const hasNoProfile = !this.#service.hasProfile
-        if (hasNoProfile) {
-            await this.#service.newProject()
-            if (!this.#service.hasProfile) {return}
-        }
-        const project = this.#service.project
-        const {editing, boxGraph} = project
-        editing.modify(() => {
-            if (hasNoProfile && samples.length === 1 && samples[0].bpm > 0) {project.api.setBpm(samples[0].bpm)}
-            samples.forEach(sample => {
-                const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
-                const uuid = UUID.parse(uuidAsString)
-                const {trackBox, instrumentBox} = project.api.createInstrument(InstrumentFactories.Tape)
-                instrumentBox.label.setValue(name)
-                const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
-                    .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
-                        box.fileName.setValue(name)
-                        box.startInSeconds.setValue(0)
-                        box.endInSeconds.setValue(durationInSeconds)
-                    }))
-                if (bpm === 0) {
-                    AudioContentFactory.createNotStretchedRegion({
-                        boxGraph,
-                        sample,
-                        audioFileBox,
-                        position: 0,
-                        targetTrack: trackBox
-                    })
-                } else {
-                    AudioContentFactory.createPitchStretchedRegion({
-                        boxGraph,
-                        sample,
-                        audioFileBox,
-                        position: 0,
-                        targetTrack: trackBox
-                    })
-                }
-            })
-        })
-    }
+    requestDevice(samples: ReadonlyArray<Sample>): Promise<void> {return createTapeTracks(this.#service, samples)}
 
     async deleteItems(samples: ReadonlyArray<Sample>): Promise<ReadonlyArray<Sample>> {
         const dialog = RuntimeNotifier.progress({headline: "Checking Sample Usages"})

@@ -8,7 +8,8 @@
 //! lives in the user `Processor` JS-side; this crate keeps only the bridge handle.
 //!
 //! Exports: `kind()` (instrument), `state_size()`, `process(desc_ptr)`, `init(...)`, `parameter_changed(...)`,
-//! `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`, `observe_sample_collection_field() -> 12`.
+//! `sample_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`, `observe_sample_collection_field() -> 12`,
+//! `observe_sidechain_collection_field() -> 13`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -48,6 +49,31 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
 #[no_mangle]
 pub extern "C" fn observe_sample_collection_field() -> u32 {
     12
+}
+
+/// The `records` hub field key: the engine observes its `ScriptRecordBox` children and hands each `@collection`
+/// snapshot to `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_record_collection_field() -> u32 {
+    14
+}
+
+/// The `buffers` hub field key: `ScriptBufferBox` children (`@buffer` data), delivered through `data_changed`.
+#[no_mangle]
+pub extern "C" fn observe_buffer_collection_field() -> u32 {
+    15
+}
+
+/// One `@collection` snapshot for the user `Processor` (`this.data`), forwarded to the JS bridge.
+#[no_mangle]
+pub extern "C" fn data_changed(state_ptr: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    unsafe { abi::with_state::<ApparatState>(state_ptr, |state| abi::script_data(state.handle, collection, ptr, records, fields)) }
+}
+
+/// The `side-chains` hub field key — see Werkstatt.
+#[no_mangle]
+pub extern "C" fn observe_sidechain_collection_field() -> u32 {
+    13
 }
 
 #[no_mangle]

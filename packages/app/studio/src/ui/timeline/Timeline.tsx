@@ -73,7 +73,10 @@ export const Timeline = ({lifecycle, service}: Construct) => {
             }
         })()),
         clips.visible.catchupAndSubscribe(owner => { return element.classList.toggle("clips-visible", owner.getValue()) }),
-        clips.count.catchupAndSubscribe(owner => element.style.setProperty("--clips-count", String(owner.getValue()))),
+        clips.count.catchupAndSubscribe(owner => {
+            element.style.setProperty("--clips-count", String(owner.getValue()))
+            clips.columns.setValue(Math.max(clips.columns.getValue(), owner.getValue()))
+        }),
         markers.catchupAndSubscribe(request),
         tempo.catchupAndSubscribe(request),
         signature.catchupAndSubscribe(request)

@@ -1,7 +1,8 @@
 // Shared WASM-engine boot + resource plumbing for BOTH studio hosts: the realtime worklet processor and
 // the offline render worker. Links the engine + device side-modules (with the script/NAM bridges) and
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
-import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {EngineToClient} from "@opendaw/studio-adapters"
 import {EngineExports, readPanicMessage} from "./engine-exports"
 import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
@@ -36,10 +37,13 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
     new WclapBridges(memory, sampleRate, {
         loadBundle: url => engineToClient.fetchWclapBundle(url),
         sendGui: (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
-        sendState: (uuid, bytes) => engineToClient.wclapState(uuid, bytes),
+        sendState: (uuid, bytes, url, clapId) => engineToClient.wclapState(uuid, bytes, url, clapId),
         sendParams: (uuid, params) => engineToClient.wclapParams(uuid, params),
         sendParam: (uuid, paramId, value, gesture) => engineToClient.wclapParam(uuid, paramId, value, gesture),
         sendHovered: (uuid, paramId) => engineToClient.wclapHovered(uuid, paramId),
+        requestGuiResize: (uuid, width, height) => engineToClient.wclapResizeGui(uuid, width, height),
+        requestGuiShow: uuid => engineToClient.wclapShowGui(uuid),
+        requestGuiHide: uuid => engineToClient.wclapHideGui(uuid),
         sendStatus: (uuid, status) => engineToClient.wclapStatus(uuid, status),
         requestSave: uuid => engineToClient.wclapRequestSave(uuid),
         track
@@ -47,7 +51,9 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
 
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
                                       sampleRate: number, engineToClient: EngineToClient,
-                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient)): EngineExports => {
+                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient),
+                                      broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null)
+    : { engine: EngineExports, scriptBridges: ScriptBridges } => {
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
@@ -55,14 +61,14 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
         {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
     engine.init(sampleRate)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
-        (uuid, message) => engineToClient.deviceMessage(uuid, message))
+        (uuid, message) => engineToClient.deviceMessage(uuid, message), broadcaster)
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
     modules.deviceModules.forEach((deviceModule, index) =>
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))
     modules.effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
-    return engine
+    return {engine, scriptBridges}
 }
 
 // Pop every sample/soundfont the engine queued and run the load handshake for each: fetch + decode over

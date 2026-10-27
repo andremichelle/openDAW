@@ -21,7 +21,11 @@ export const ParameterLabel = (
                    const printValue = adapter.stringMapping.x(
                        adapter.valueMapping.y(adapter.getControlledUnitValue()))
                    element.textContent = printValue.value
-                   element.setAttribute("unit", printValue.unit)
+                   if (printValue.unit.length > 0) {
+                       element.setAttribute("unit", printValue.unit)
+                   } else {
+                       element.removeAttribute("unit")
+                   }
                }
                lifecycle.own(parameter.subscribe(onValueChange))
                onValueChange(parameter)

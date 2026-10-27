@@ -34,6 +34,33 @@ fn primitives_round_trip() {
 }
 
 #[test]
+fn ill_formed_utf16_string_round_trips_byte_exact() {
+    // A JS string may hold lone surrogates; decoding them lossily (U+FFFD) diverged the mirror's checksum.
+    let schema: Schema = BTreeMap::from([(0, FieldType::String)]);
+    for units in [vec![0xD800u16], vec![0x61, 0xDC00, 0x62], vec![0xDBFF, 0x61], vec![0x61, 0xD83D]] {
+        let mut writer = ByteWriter::new();
+        writer.write_int(FLDS_MAGIC);
+        writer.write_short(1);
+        writer.write_short(0);
+        writer.write_int(4 + 2 * units.len() as i32);
+        writer.write_utf16(&units);
+        let bytes = writer.into_bytes();
+        let decoded = read_fields(&mut ByteReader::new(&bytes), &schema).unwrap();
+        assert_eq!(decoded[&0], FieldValue::Utf16(units.clone()));
+        let mut rewritten = ByteWriter::new();
+        write_fields(&mut rewritten, &decoded);
+        assert_eq!(rewritten.into_bytes(), bytes);
+    }
+}
+
+#[test]
+fn well_formed_utf16_string_stays_a_string() {
+    let schema: Schema = BTreeMap::from([(0, FieldType::String)]);
+    let fields: Fields = BTreeMap::from([(0, FieldValue::String("pair 👻 ok".to_string()))]);
+    assert_eq!(round_trip(&schema, &fields), fields);
+}
+
+#[test]
 fn hook_is_zero_width() {
     // A `Field.hook` serializes nothing: in the FLDS container it is key + len(0) + empty payload.
     let schema: Schema = BTreeMap::from([(0, FieldType::Int32), (5, FieldType::Hook)]);

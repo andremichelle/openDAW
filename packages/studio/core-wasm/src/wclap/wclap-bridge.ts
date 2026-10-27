@@ -1,6 +1,9 @@
 // The JS host of a WCLAP plugin: a wasm32 CLAP module with its own memory, run next to the engine per device
 import {isDefined, isNotNull, isNull, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
-import {WclapBundle, WclapGuiInfo, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {
+    WclapAudioPort, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapParamGesture, WclapParamInfo, WclapPluginInfo,
+    WclapStatus
+} from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
@@ -11,10 +14,15 @@ export type WclapBundleLoader = (url: string) => Promise<WclapBundle>
 export type WclapHostCallbacks = {
     loadBundle: WclapBundleLoader
     sendGui: (uuid: string, bytes: ArrayBuffer) => void
-    sendState: (uuid: string, bytes: ArrayBuffer) => void
+    sendState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string) => void
     sendParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>) => void
     sendParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture) => void
     sendHovered: (uuid: string, paramId: number) => void
+    // clap.gui request_resize: the plugin's page wants another window size (logical pixels)
+    requestGuiResize: (uuid: string, width: number, height: number) => void
+    // clap.gui request_show / request_hide: the plugin's page asks for its window
+    requestGuiShow: (uuid: string) => void
+    requestGuiHide: (uuid: string) => void
     sendStatus: (uuid: string, status: WclapStatus) => void
     requestSave: (uuid: string) => void
     track: Procedure<Promise<unknown>>
@@ -28,6 +36,7 @@ const MAX_PAGES = 16384 // 1 GB, the most an untrusted module may grow to
 const SAVE_DELAY_CHUNKS = 40 // ~100 ms of quiet after the last change before the state is saved
 const MAX_PARAM_EVENTS = 128
 const MAX_NOTE_EVENTS = 128
+const POLL_PER_CHUNK = 16 // get_value calls per quantum, a plugin's get_value may cost tens of µs
 const EVENT_SLOT_SIZE = 48 // the largest record written (clap_event_param_value / param_mod)
 const EVENT_SLOTS = MAX_PARAM_EVENTS * 2 + MAX_NOTE_EVENTS
 const NOTE_EVENT_SIZE = 40
@@ -36,6 +45,8 @@ const LOG_LIMIT = 200 // console lines per plugin instance before its output is 
 const PARAM_KIND_UNIT = 0 // abi::PARAM_KIND_UNIT: a 0..1 automation value to map into the parameter's range
 const PPQN_QUARTER = 960 // WASM CONTRACT: lib-dsp PPQN.Quarter
 const BLOCK_FLAG_PLAYING = 1 << 2 // abi::BlockFlags::PLAYING
+const MAX_AUDIO_PORTS = 32 // per direction: the declared layout sizes allocations in the plugin's memory
+const MAX_PORT_CHANNELS = 1024
 
 type Loaded = {
     memory: WebAssembly.Memory
@@ -47,6 +58,7 @@ type Loaded = {
     plugin: number
     webview: number
     gui: number
+    panel: number
     guiCreated: boolean
     processPtr: number
     transportPtr: number
@@ -56,6 +68,10 @@ type Loaded = {
     inputs: [number, number]
     outputs: [number, number]
     inputPorts: number
+    inputPortInfos: Array<WclapAudioPort>
+    auxInputs: Array<[number, number]> // the first two channel buffers per input port, port 0's are `inputs`
+    auxFed: Array<boolean> // the device fed this port for the coming process call
+    auxSilent: Array<boolean>
     scratchPtr: number
     scratchSize: number
     steadyTime: number
@@ -63,8 +79,14 @@ type Loaded = {
     eventCount: number
     pendingNotes: Array<PendingNote>
     paramInfos: Map<number, WclapParamInfo>
+    paramIds: Array<number>
+    pollCursor: number
+    pollRemaining: number
+    emitsParams: boolean // the plugin reported a PARAM_VALUE itself, polling is never needed
     reported: Map<number, number> // last value per id the plugin reported (its GUI, a preset), f32
     lastModulation: Map<number, number> // last PARAM_MOD amount per id, to clear it once the sum returns to 0
+    latencyExt: number
+    latency: number // frames the plugin reports through clap.latency, read after activate
     gestures: Set<number> // ids the plugin's GUI is dragging
     state: number
     params: number
@@ -89,14 +111,15 @@ class Plugin {
     clapId: string = ""
     loaded: Nullable<Loaded> = null
     loading: boolean = false
-    guiOpen: boolean = false
+    guiSessions: number = 0
     generation: number = 0
     pendingState: Nullable<Uint8Array> = null
     knownState: Nullable<Uint8Array> = null
     dirtyCountdown: number = -1
     receivedSinceProcess: boolean = false
     flushRequested: boolean = false
-    pollPending: boolean = false
+    callbackRequested: boolean = false
+    restartRequested: boolean = false
     // host-side values per clap id, kept before the plugin is up and pushed with its first process call
     readonly pendingParams = new Map<number, PendingParam>()
 
@@ -126,10 +149,14 @@ export class WclapBridges {
             host_wclap_load: (handle, urlPtr, urlLen, idPtr, idLen) => this.#load(handle, urlPtr, urlLen, idPtr, idLen),
             host_wclap_process: (handle, in0, in1, out0, out1, frames, bpm, position, flags) =>
                 this.#process(handle, in0, in1, out0, out1, frames, bpm, position, flags),
+            host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left, right, frames),
             host_wclap_note: (handle, on, key, velocity) => this.#note(handle, on !== 0, key, velocity),
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
-            host_wclap_state: (handle, ptr, len) => this.#state(handle, ptr, len),
+            host_wclap_state: (handle, ptr, len) =>
+                this.#state(handle, decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))),
+            host_wclap_state_bytes: (handle, ptr, len) => this.#state(handle, new Uint8Array(this.#memory.buffer, ptr, len).slice()),
             host_wclap_reset: (handle) => this.#reset(handle),
+            host_wclap_latency: (handle) => this.#latency(handle),
             host_wclap_release: (handle) => this.#release(handle)
         }
     }
@@ -148,15 +175,17 @@ export class WclapBridges {
             }
             new Uint8Array(loaded.memory.buffer).set(source, loaded.scratchPtr)
             this.#call(loaded, loaded.webview + ClapAbi.Webview.RECEIVE, loaded.plugin, loaded.scratchPtr, source.length)
-            plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
+            // a page that polls must not postpone a pending save forever, so a running countdown is kept
+            if (plugin.dirtyCountdown < 0) {plugin.dirtyCountdown = SAVE_DELAY_CHUNKS}
             plugin.receivedSinceProcess = true
-            plugin.pollPending = true
+            if (!loaded.emitsParams) {loaded.pollRemaining = loaded.paramIds.length}
+            this.#runCallback(plugin, loaded)
         })
     }
 
-    // The webview's start page and the size the plugin asks for (clap.gui: create, get_size, set_parent, show)
+    // The webview's start page and the size the plugin asks for, one session per open, the gui lives until the last close
     openGui(uuid: string): WclapGuiInfo {
-        const none: WclapGuiInfo = {uri: "", width: 0, height: 0}
+        const none: WclapGuiInfo = {uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}
         const plugin = this.#pluginByUuid(uuid)
         if (!isDefined(plugin) || isNull(plugin.loaded) || plugin.loaded.webview === 0) {return none}
         const loaded = plugin.loaded
@@ -164,24 +193,91 @@ export class WclapBridges {
             const length = this.#call(loaded, loaded.webview + ClapAbi.Webview.GET_URI, loaded.plugin, loaded.uriPtr, URI_CAPACITY)
             if (length <= 0) {return none}
             const uri = this.#cstr(loaded.memory, loaded.uriPtr)
-            const size = {width: 0, height: 0}
-            if (loaded.gui !== 0 && !loaded.guiCreated) {
-                const api = this.#alloc(loaded, ClapAbi.Gui.WINDOW_API_WEBVIEW)
-                if (this.#call(loaded, loaded.gui + ClapAbi.Gui.CREATE, loaded.plugin, api, 0) !== 0) {
-                    loaded.guiCreated = true
-                    if (this.#call(loaded, loaded.gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, loaded.sizePtr, loaded.sizePtr + 4) !== 0) {
-                        size.width = this.#u32(loaded.memory, loaded.sizePtr)
-                        size.height = this.#u32(loaded.memory, loaded.sizePtr + 4)
-                    }
-                    this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.API, api, true)
-                    this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.PTR, 0, true)
-                    this.#call(loaded, loaded.gui + ClapAbi.Gui.SET_PARENT, loaded.plugin, loaded.windowPtr)
-                    this.#call(loaded, loaded.gui + ClapAbi.Gui.SHOW, loaded.plugin)
-                }
-            }
-            plugin.guiOpen = true
+            const size = this.#showGui(loaded)
+            plugin.guiSessions++
             return {uri, ...size}
         })
+    }
+
+    // The device panel page (opendaw.device-panel/1) and its width for the panel height, a gui session like openGui
+    openPanel(uuid: string, height: number): WclapPanelInfo {
+        const none: WclapPanelInfo = {uri: "", width: 0}
+        const plugin = this.#pluginByUuid(uuid)
+        if (!isDefined(plugin) || isNull(plugin.loaded) || !this.#hasPanel(plugin.loaded)) {return none}
+        const loaded = plugin.loaded
+        return this.#contain(plugin, none, () => {
+            const length = this.#call(loaded, loaded.panel + ClapAbi.DevicePanel.GET_URI, loaded.plugin, loaded.uriPtr, URI_CAPACITY)
+            if (length <= 0) {return none}
+            const uri = this.#cstr(loaded.memory, loaded.uriPtr)
+            const width = this.#call(loaded, loaded.panel + ClapAbi.DevicePanel.GET_WIDTH, loaded.plugin, height, loaded.sizePtr) !== 0
+                ? this.#u32(loaded.memory, loaded.sizePtr) : 0
+            this.#showGui(loaded)
+            plugin.guiSessions++
+            return {uri, width}
+        })
+    }
+
+    #hasPanel(loaded: Loaded): boolean {return loaded.panel !== 0 && loaded.webview !== 0}
+
+    // clap.gui create, get_size, set_parent, show on the first session, the size of the created gui after
+    #showGui(loaded: Loaded): Omit<WclapGuiInfo, "uri"> {
+        const none = {width: 0, height: 0, resizable: false, aspectRatio: 0}
+        if (loaded.gui === 0) {return none}
+        if (loaded.guiCreated) {return this.#guiSize(loaded)}
+        const api = this.#alloc(loaded, ClapAbi.Gui.WINDOW_API_WEBVIEW)
+        if (this.#call(loaded, loaded.gui + ClapAbi.Gui.CREATE, loaded.plugin, api, 0) === 0) {return none}
+        loaded.guiCreated = true
+        const size = this.#guiSize(loaded)
+        this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.API, api, true)
+        this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.PTR, 0, true)
+        this.#call(loaded, loaded.gui + ClapAbi.Gui.SET_PARENT, loaded.plugin, loaded.windowPtr)
+        this.#call(loaded, loaded.gui + ClapAbi.Gui.SHOW, loaded.plugin)
+        return size
+    }
+
+    #guiSize(loaded: Loaded): Omit<WclapGuiInfo, "uri"> {
+        const size = {width: 0, height: 0, resizable: false, aspectRatio: 0}
+        if (this.#call(loaded, loaded.gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, loaded.sizePtr, loaded.sizePtr + 4) !== 0) {
+            size.width = this.#u32(loaded.memory, loaded.sizePtr)
+            size.height = this.#u32(loaded.memory, loaded.sizePtr + 4)
+        }
+        size.resizable = this.#hasFunction(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE)
+            && this.#call(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE, loaded.plugin) !== 0
+        size.aspectRatio = size.resizable ? this.#aspectRatio(loaded) : 0
+        return size
+    }
+
+    // clap.gui adjust_size then set_size, answers the size the plugin accepted
+    resizeGui(uuid: string, width: number, height: number): WclapGuiSize {
+        const requested: WclapGuiSize = {width, height}
+        const plugin = this.#pluginByUuid(uuid)
+        if (!isDefined(plugin) || isNull(plugin.loaded) || !plugin.loaded.guiCreated) {return requested}
+        const loaded = plugin.loaded
+        return this.#contain(plugin, requested, () => {
+            const {gui, sizePtr} = loaded
+            if (!this.#hasFunction(loaded, gui + ClapAbi.Gui.SET_SIZE)) {return requested}
+            const view = this.#view(loaded)
+            view.setUint32(sizePtr, Math.max(1, Math.round(width)), true)
+            view.setUint32(sizePtr + 4, Math.max(1, Math.round(height)), true)
+            if (this.#hasFunction(loaded, gui + ClapAbi.Gui.ADJUST_SIZE)) {
+                this.#call(loaded, gui + ClapAbi.Gui.ADJUST_SIZE, loaded.plugin, sizePtr, sizePtr + 4)
+            }
+            const adjusted: WclapGuiSize = {width: this.#u32(loaded.memory, sizePtr), height: this.#u32(loaded.memory, sizePtr + 4)}
+            if (this.#call(loaded, gui + ClapAbi.Gui.SET_SIZE, loaded.plugin, adjusted.width, adjusted.height) !== 0) {return adjusted}
+            if (this.#call(loaded, gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, sizePtr, sizePtr + 4) === 0) {return adjusted}
+            return {width: this.#u32(loaded.memory, sizePtr), height: this.#u32(loaded.memory, sizePtr + 4)}
+        })
+    }
+
+    #aspectRatio(loaded: Loaded): number {
+        const {gui, sizePtr} = loaded
+        if (!this.#hasFunction(loaded, gui + ClapAbi.Gui.GET_RESIZE_HINTS)) {return 0}
+        if (this.#call(loaded, gui + ClapAbi.Gui.GET_RESIZE_HINTS, loaded.plugin, sizePtr) === 0) {return 0}
+        const view = this.#view(loaded)
+        if (view.getUint8(sizePtr + ClapAbi.ResizeHints.PRESERVE_ASPECT_RATIO) === 0) {return 0}
+        const width = view.getUint32(sizePtr + ClapAbi.ResizeHints.ASPECT_RATIO_WIDTH, true)
+        const height = view.getUint32(sizePtr + ClapAbi.ResizeHints.ASPECT_RATIO_HEIGHT, true)
+        return width > 0 && height > 0 ? width / height : 0
     }
 
     // A plugin applies page messages only in process or flush, so flush first when nothing rendered since
@@ -206,8 +302,8 @@ export class WclapBridges {
 
     closeGui(uuid: string): void {
         const plugin = this.#pluginByUuid(uuid)
-        if (!isDefined(plugin)) {return}
-        plugin.guiOpen = false
+        if (!isDefined(plugin) || plugin.guiSessions === 0) {return}
+        if (--plugin.guiSessions > 0) {return}
         const loaded = plugin.loaded
         if (isNull(loaded)) {return}
         this.#contain(plugin, undefined, () => this.#destroyGui(loaded))
@@ -245,9 +341,20 @@ export class WclapBridges {
         plugin.clapId = clapId
         this.#destroy(plugin)
         if (url.length === 0 || clapId.length === 0) {return}
+        this.#start(plugin)
+    }
+
+    retry(url: string): void {
+        for (const plugin of this.#plugins.values()) {
+            if (plugin.url === url && plugin.clapId.length > 0 && isNull(plugin.loaded) && !plugin.loading) {this.#start(plugin)}
+        }
+    }
+
+    #start(plugin: Plugin): void {
+        const {url} = plugin
         const generation = ++plugin.generation
         plugin.loading = true
-        this.#host.sendStatus(plugin.uuid, {state: "loading", message: ""})
+        this.#host.sendStatus(plugin.uuid, {state: "loading", message: "", inputs: []})
         const load = this.#module(url)
             .then(({module}) => this.#instantiate(plugin, module))
             .then(loaded => {
@@ -255,11 +362,12 @@ export class WclapBridges {
                 plugin.loaded = loaded
                 plugin.loading = false
                 this.#publishParams(plugin, loaded)
-                this.#host.sendStatus(plugin.uuid, {state: "ready", message: ""})
+                this.#host.sendStatus(plugin.uuid,
+                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0, panel: this.#hasPanel(loaded)})
             }, error => {
                 if (plugin.generation !== generation) {return}
                 plugin.loading = false
-                this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(error)})
+                this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(error), inputs: []})
             })
         this.#host.track(load)
     }
@@ -267,14 +375,16 @@ export class WclapBridges {
     #publishParams(plugin: Plugin, loaded: Loaded): void {
         const params = this.#readParams(loaded)
         loaded.paramInfos = new Map(params.map(param => [param.id, param]))
+        loaded.paramIds = params.map(({id}) => id)
+        loaded.pollCursor = 0
+        loaded.pollRemaining = 0
         this.#host.sendParams(plugin.uuid, params)
     }
 
     // The box's state blob, applied now or once the plugin is up, skipped when this bridge saved it itself
-    #state(handle: number, ptr: number, len: number): void {
+    #state(handle: number, bytes: Uint8Array): void {
         const plugin = this.#plugins.get(handle)
         if (!isDefined(plugin)) {return}
-        const bytes = decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))
         if (bytes.length === 0 || (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes))) {return}
         plugin.pendingState = bytes
         const loaded = plugin.loaded
@@ -291,7 +401,7 @@ export class WclapBridges {
         loaded.readSource = null
         plugin.knownState = bytes
         if (ok === 0) {
-            this.#host.sendStatus(plugin.uuid, {state: "loading", message: `${plugin.clapId} rejected its saved state`})
+            this.#host.sendStatus(plugin.uuid, {state: "loading", message: `${plugin.clapId} rejected its saved state`, inputs: []})
             return
         }
         this.#saveState(plugin, loaded, true)
@@ -311,7 +421,7 @@ export class WclapBridges {
         loaded.writeChunks = []
         if (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes)) {return}
         plugin.knownState = bytes
-        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer)}
+        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer, plugin.url, plugin.clapId)}
     }
 
     #module(url: string): Promise<{ module: WebAssembly.Module, bundle: WclapBundle }> {
@@ -367,20 +477,19 @@ export class WclapBridges {
         const params: Array<WclapParamInfo> = []
         for (let index = 0; index < count; index++) {
             if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_INFO, loaded.plugin, index, info) === 0) {continue}
+            // the info is read before get_value: a call may grow the memory, which detaches the view
             const view = new DataView(loaded.memory.buffer)
             const id = view.getUint32(info + ClapAbi.ParamInfo.ID, true)
             const defaultValue = view.getFloat64(info + ClapAbi.ParamInfo.DEFAULT_VALUE, true)
+            const flags = view.getUint32(info + ClapAbi.ParamInfo.FLAGS, true)
+            const min = view.getFloat64(info + ClapAbi.ParamInfo.MIN_VALUE, true)
+            const max = view.getFloat64(info + ClapAbi.ParamInfo.MAX_VALUE, true)
+            const name = this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.NAME)
+            const module = this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.MODULE)
             const value = this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, id, valueOut) === 0
-                ? defaultValue : view.getFloat64(valueOut, true)
+                ? defaultValue : this.#view(loaded).getFloat64(valueOut, true)
             loaded.reported.set(id, Math.fround(value))
-            params.push({
-                id, defaultValue, value,
-                flags: view.getUint32(info + ClapAbi.ParamInfo.FLAGS, true),
-                name: this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.NAME),
-                module: this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.MODULE),
-                min: view.getFloat64(info + ClapAbi.ParamInfo.MIN_VALUE, true),
-                max: view.getFloat64(info + ClapAbi.ParamInfo.MAX_VALUE, true)
-            })
+            params.push({id, defaultValue, value, flags, name, module, min, max})
         }
         return params
     }
@@ -404,20 +513,24 @@ export class WclapBridges {
         const memory = exports.memory ?? imported
         if (!isDefined(memory)) {throw new Error("module neither imports nor exports a memory")}
         memoryRef.memory = memory
-        if (!isDefined(exports.__indirect_function_table) || !isDefined(exports.malloc) || !isDefined(exports.clap_entry)) {
-            throw new Error("module lacks __indirect_function_table, malloc or clap_entry")
+        // wasm-ld names the table `__indirect_function_table`, other toolchains export it under their own name
+        const table = exports.__indirect_function_table
+            ?? Object.values(instance.exports).find((value): value is WebAssembly.Table => value instanceof WebAssembly.Table)
+        if (!isDefined(table) || !isDefined(exports.malloc) || !isDefined(exports.clap_entry)) {
+            throw new Error("module lacks a function table, malloc or clap_entry")
         }
         exports._initialize?.()
-        return {memory, table: exports.__indirect_function_table, malloc: exports.malloc, entry: exports.clap_entry.value}
+        return {memory, table, malloc: exports.malloc, entry: exports.clap_entry.value}
     }
 
     #emptyLoaded(memory: WebAssembly.Memory, table: WebAssembly.Table, malloc: (size: number) => number): Loaded {
         return {
             memory, table, malloc, buffer: memory.buffer, view: new DataView(memory.buffer),
             audio: [new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
-            plugin: 0, webview: 0, gui: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
-            inputs: [0, 0], outputs: [0, 0], inputPorts: 0, scratchPtr: 0, scratchSize: 0, steadyTime: 0,
-            eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), reported: new Map(), lastModulation: new Map(),
+            plugin: 0, webview: 0, gui: 0, panel: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
+            inputs: [0, 0], outputs: [0, 0], inputPorts: 0, inputPortInfos: [], auxInputs: [], auxFed: [], auxSilent: [], scratchPtr: 0, scratchSize: 0, steadyTime: 0,
+            eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
+            latencyExt: 0, latency: 0,
             gestures: new Set(), state: 0, params: 0, inEvents: 0, outEvents: 0, istream: 0, ostream: 0,
             readSource: null, writeChunks: [], logCount: 0
         }
@@ -438,11 +551,12 @@ export class WclapBridges {
         if (factory === 0) {throw new Error("no clap.plugin-factory")}
         const count = this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_COUNT, factory)
         const idPtr = this.#alloc(loaded, plugin.clapId)
-        const found = Array.from({length: count}, (_, index) => index).some(index => {
-            const descriptor = this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_DESCRIPTOR, factory, index)
-            return this.#cstr(memory, this.#u32(memory, descriptor + ClapAbi.PluginDescriptor.ID)) === plugin.clapId
-        })
-        if (!found) {throw new Error(`plugin id ${plugin.clapId} not in bundle`)}
+        const descriptorOf = (index: number): number =>
+            this.#call(loaded, factory + ClapAbi.PluginFactory.GET_PLUGIN_DESCRIPTOR, factory, index)
+        const found = Array.from({length: count}, (_, index) => index).find(index =>
+            this.#cstr(memory, this.#u32(memory, descriptorOf(index) + ClapAbi.PluginDescriptor.ID)) === plugin.clapId)
+        if (!isDefined(found)) {throw new Error(`plugin id ${plugin.clapId} not in bundle`)}
+        const features = this.#cstrList(memory, this.#u32(memory, descriptorOf(found) + ClapAbi.PluginDescriptor.FEATURES))
         loaded.plugin = this.#call(loaded, factory + ClapAbi.PluginFactory.CREATE_PLUGIN, factory, host, idPtr)
         if (loaded.plugin === 0) {throw new Error("create_plugin returned null")}
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.INIT, loaded.plugin) === 0) {
@@ -452,17 +566,27 @@ export class WclapBridges {
         loaded.gui = this.#extension(loaded, ClapAbi.Ext.GUI)
         loaded.state = this.#extension(loaded, ClapAbi.Ext.STATE)
         loaded.params = this.#extension(loaded, ClapAbi.Ext.PARAMS)
+        loaded.latencyExt = this.#extension(loaded, ClapAbi.Ext.LATENCY)
+        if (features.includes(ClapAbi.Feature.DEVICE_PANEL)) {
+            loaded.panel = this.#extension(loaded, ClapAbi.Ext.DEVICE_PANEL)
+            if (loaded.panel === 0) {
+                this.#log(plugin, loaded, `lists ${ClapAbi.Feature.DEVICE_PANEL} without ${ClapAbi.Ext.DEVICE_PANEL}, shown without its panel`)
+            }
+        }
         loaded.uriPtr = malloc(URI_CAPACITY)
-        loaded.sizePtr = malloc(8)
+        loaded.sizePtr = malloc(ClapAbi.ResizeHints.SIZE)
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
         this.#loadState(plugin, loaded)
         const audioPorts = this.#extension(loaded, ClapAbi.Ext.AUDIO_PORTS)
-        loaded.inputPorts = audioPorts === 0 ? 1 : this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, 1)
-        this.#createProcess(plugin, loaded)
+        loaded.inputPortInfos = audioPorts === 0 ? [] : this.#readPorts(loaded, audioPorts, true)
+        loaded.inputPorts = audioPorts === 0 ? 1 : loaded.inputPortInfos.length
+        const outputPorts = audioPorts === 0 ? [{name: "", channels: 2}] : this.#readPorts(loaded, audioPorts, false)
+        this.#createProcess(plugin, loaded, outputPorts)
         // the engine splits blocks at events, so a chunk may hold any 1..128 frames
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
             throw new Error("plugin.activate failed")
         }
+        this.#readLatency(loaded)
         this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.START_PROCESSING, loaded.plugin))
         return loaded
     }
@@ -494,14 +618,35 @@ export class WclapBridges {
         const threadCheckExt = malloc(ClapAbi.HostThreadCheck.SIZE)
         const stateExt = malloc(ClapAbi.HostState.SIZE)
         const hoveredExt = malloc(ClapAbi.HostParamHovered.SIZE)
+        const guiExt = malloc(ClapAbi.HostGui.SIZE)
         const paramsExt = malloc(ClapAbi.HostParams.SIZE)
+        const latencyExt = malloc(ClapAbi.HostLatency.SIZE)
         const extensions = new Map<string, number>([
+            [ClapAbi.Ext.LATENCY, latencyExt],
             [ClapAbi.Ext.WEBVIEW, webviewExt], [ClapAbi.Ext.LOG, logExt],
             [ClapAbi.Ext.THREAD_CHECK, threadCheckExt], [ClapAbi.Ext.STATE, stateExt],
-            [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt]
+            [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt], [ClapAbi.Ext.GUI, guiExt]
         ])
         this.#setFn(loaded, hoveredExt + ClapAbi.HostParamHovered.UPDATE, trampoline(["i32", "i32"], [],
             (_host: number, paramId: number) => this.#host.sendHovered(plugin.uuid, paramId === ClapAbi.INVALID_ID ? -1 : paramId)))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.RESIZE_HINTS_CHANGED, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_RESIZE, trampoline(["i32", "i32", "i32"], ["i32"],
+            (_host: number, width: number, height: number) => {
+                if (plugin.guiSessions === 0 || width <= 0 || height <= 0) {return 0}
+                this.#host.requestGuiResize(plugin.uuid, width, height)
+                return 1
+            }))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_SHOW, trampoline(["i32"], ["i32"], () => {
+            if (plugin.guiSessions === 0) {return 0}
+            this.#host.requestGuiShow(plugin.uuid)
+            return 1
+        }))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_HIDE, trampoline(["i32"], ["i32"], () => {
+            if (plugin.guiSessions === 0) {return 0}
+            this.#host.requestGuiHide(plugin.uuid)
+            return 1
+        }))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.CLOSED, trampoline(["i32", "i32"], [], () => {}))
         this.#setFn(loaded, stateExt + ClapAbi.HostState.MARK_DIRTY, trampoline(["i32"], [],
             () => {plugin.dirtyCountdown = SAVE_DELAY_CHUNKS}))
         this.#setFn(loaded, paramsExt + ClapAbi.HostParams.RESCAN, trampoline(["i32", "i32"], [],
@@ -527,23 +672,27 @@ export class WclapBridges {
                 loaded.writeChunks.push(new Uint8Array(memory.buffer, bufferPtr, count).slice())
                 return BigInt(count)
             }))
+        // allocated before the view is taken: malloc may grow the memory, which detaches every earlier view
+        const [name, vendor, url, version] =
+            ["openDAW", "openDAW", "https://opendaw.studio", "0.1"].map(text => this.#alloc(loaded, text))
         const view = this.#view(loaded)
         view.setUint32(host, ClapAbi.VERSION.major, true)
         view.setUint32(host + 4, ClapAbi.VERSION.minor, true)
         view.setUint32(host + 8, ClapAbi.VERSION.revision, true)
         view.setUint32(host + ClapAbi.Host.HOST_DATA, 0, true)
-        view.setUint32(host + ClapAbi.Host.NAME, this.#alloc(loaded, "openDAW"), true)
-        view.setUint32(host + ClapAbi.Host.VENDOR, this.#alloc(loaded, "openDAW"), true)
-        view.setUint32(host + ClapAbi.Host.URL, this.#alloc(loaded, "https://opendaw.studio"), true)
-        view.setUint32(host + ClapAbi.Host.VERSION, this.#alloc(loaded, "0.1"), true)
+        view.setUint32(host + ClapAbi.Host.NAME, name, true)
+        view.setUint32(host + ClapAbi.Host.VENDOR, vendor, true)
+        view.setUint32(host + ClapAbi.Host.URL, url, true)
+        view.setUint32(host + ClapAbi.Host.VERSION, version, true)
         this.#setFn(loaded, host + ClapAbi.Host.GET_EXTENSION, trampoline(["i32", "i32"], ["i32"],
             (_host: number, idPtr: number) => extensions.get(this.#cstr(memory, idPtr)) ?? 0))
-        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {plugin.restartRequested = true}))
+        this.#setFn(loaded, latencyExt + ClapAbi.HostLatency.CHANGED, trampoline(["i32"], [], () => this.#readLatency(loaded)))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_PROCESS, trampoline(["i32"], [], () => {}))
-        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {plugin.callbackRequested = true}))
         this.#setFn(loaded, webviewExt + ClapAbi.HostWebview.SEND, trampoline(["i32", "i32", "i32"], ["i32"],
             (_host: number, bufferPtr: number, size: number) => {
-                if (!plugin.guiOpen) {return 0}
+                if (plugin.guiSessions === 0) {return 0}
                 const count = Math.min(size, Math.max(0, memory.buffer.byteLength - bufferPtr))
                 this.#host.sendGui(plugin.uuid, new Uint8Array(memory.buffer, bufferPtr, count).slice().buffer)
                 return 1
@@ -556,37 +705,82 @@ export class WclapBridges {
         return host
     }
 
-    // Allocate the clap_process block once: two stereo audio buffers, the event lists and a transport event
-    #createProcess(plugin: Plugin, loaded: Loaded): void {
+    #readPorts(loaded: Loaded, audioPorts: number, isInput: boolean): Array<WclapAudioPort> {
+        const direction = isInput ? 1 : 0
+        const side = isInput ? "input" : "output"
+        const count = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, direction) >>> 0
+        if (count > MAX_AUDIO_PORTS) {throw new Error(`${count} ${side} ports, at most ${MAX_AUDIO_PORTS} are supported`)}
+        const info = loaded.malloc(ClapAbi.AudioPortInfo.SIZE)
+        const ports: Array<WclapAudioPort> = []
+        for (let index = 0; index < count; index++) {
+            if (this.#call(loaded, audioPorts + ClapAbi.AudioPorts.GET, loaded.plugin, index, direction, info) === 0) {
+                throw new Error(`${side} port ${index} has no info`)
+            }
+            const channels = this.#u32(loaded.memory, info + ClapAbi.AudioPortInfo.CHANNEL_COUNT)
+            if (channels > MAX_PORT_CHANNELS) {
+                throw new Error(`${side} port ${index} has ${channels} channels, at most ${MAX_PORT_CHANNELS} are supported`)
+            }
+            ports.push({name: this.#cstr(loaded.memory, info + ClapAbi.AudioPortInfo.NAME), channels})
+        }
+        return ports
+    }
+
+    // Allocate the clap_process block once: an audio buffer per input port, one per output port, the event lists
+    // and a transport event
+    #createProcess(plugin: Plugin, loaded: Loaded, outputPorts: ReadonlyArray<WclapAudioPort>): void {
         const {malloc} = loaded
         const processPtr = malloc(ClapAbi.Process.SIZE)
-        const audioIn = malloc(ClapAbi.AudioBuffer.SIZE)
-        const audioOut = malloc(ClapAbi.AudioBuffer.SIZE)
-        const inData = malloc(8)
-        const outData = malloc(8)
+        const inputCount = Math.max(1, loaded.inputPorts)
+        const inputChannels = Array.from({length: inputCount}, (_port, index) => loaded.inputPortInfos[index]?.channels ?? 2)
+        const audioIn = malloc(ClapAbi.AudioBuffer.SIZE * inputCount)
+        const audioOut = malloc(ClapAbi.AudioBuffer.SIZE * Math.max(1, outputPorts.length))
+        const inData = inputChannels.map(channels => malloc(Math.max(1, channels) * 4))
+        const outData = outputPorts.map(({channels}) => malloc(Math.max(1, channels) * 4))
+        const scratch = malloc(RENDER_QUANTUM * 4)
+        const silence = malloc(RENDER_QUANTUM * 4)
         loaded.inputs = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
-        loaded.outputs = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
+        const outLeft = malloc(RENDER_QUANTUM * 4)
+        loaded.outputs = [outLeft, outputPorts[0]?.channels === 1 ? outLeft : malloc(RENDER_QUANTUM * 4)]
+        loaded.auxInputs = [loaded.inputs]
+        for (let index = 1; index < inputCount; index++) {loaded.auxInputs.push([malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)])}
         const inEvents = malloc(ClapAbi.InputEvents.SIZE)
         const outEvents = malloc(ClapAbi.OutputEvents.SIZE)
         loaded.transportPtr = malloc(ClapAbi.TransportEvent.SIZE)
+        loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
+        // taken after the allocations: malloc may grow the memory, which detaches every earlier view
         const view = this.#view(loaded)
-        view.setUint32(inData, loaded.inputs[0], true)
-        view.setUint32(inData + 4, loaded.inputs[1], true)
-        view.setUint32(outData, loaded.outputs[0], true)
-        view.setUint32(outData + 4, loaded.outputs[1], true)
-        for (const [buffer, data] of [[audioIn, inData], [audioOut, outData]]) {
-            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, data, true)
+        for (const buffer of [...loaded.auxInputs.flat(), ...loaded.outputs, scratch, silence]) {
+            new Float32Array(loaded.memory.buffer, buffer, RENDER_QUANTUM).fill(0.0)
+        }
+        inputChannels.forEach((channels, port) => {
+            const buffer = audioIn + port * ClapAbi.AudioBuffer.SIZE
+            for (let channel = 0; channel < channels; channel++) {
+                view.setUint32(inData[port] + channel * 4, channel < 2 ? loaded.auxInputs[port][channel] : silence, true)
+            }
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, inData[port], true)
             view.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
-            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, 2, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channels, true)
             view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
             view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
-        }
+        })
+        outputPorts.forEach(({channels}, port) => {
+            const buffer = audioOut + port * ClapAbi.AudioBuffer.SIZE
+            for (let channel = 0; channel < channels; channel++) {
+                view.setUint32(outData[port] + channel * 4, port === 0 && channel < 2 ? loaded.outputs[channel] : scratch, true)
+            }
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, outData[port], true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channels, true)
+            view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
+            view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
+        })
+        loaded.auxFed = loaded.auxInputs.map(() => false)
+        loaded.auxSilent = loaded.auxInputs.map(() => true)
         new Uint8Array(loaded.memory.buffer, loaded.transportPtr, ClapAbi.TransportEvent.SIZE).fill(0)
         view.setUint32(loaded.transportPtr, ClapAbi.TransportEvent.SIZE, true)
         view.setUint16(loaded.transportPtr + ClapAbi.EventHeader.TYPE, ClapAbi.EventType.TRANSPORT, true)
         view.setUint16(loaded.transportPtr + ClapAbi.TransportEvent.TSIG_NUM, 4, true)
         view.setUint16(loaded.transportPtr + ClapAbi.TransportEvent.TSIG_DENOM, 4, true)
-        loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
         view.setUint32(inEvents + ClapAbi.InputEvents.CTX, 0, true)
         this.#setFn(loaded, inEvents + ClapAbi.InputEvents.SIZE_FN, trampoline(["i32"], ["i32"], () => loaded.eventCount))
         this.#setFn(loaded, inEvents + ClapAbi.InputEvents.GET_FN, trampoline(["i32", "i32"], ["i32"],
@@ -599,6 +793,8 @@ export class WclapBridges {
                 const paramId = eventView.getUint32(eventPtr + ClapAbi.ParamValueEvent.PARAM_ID, true)
                 if (type === ClapAbi.EventType.PARAM_VALUE) {
                     plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
+                    loaded.emitsParams = true
+                    loaded.pollRemaining = 0
                     const value = eventView.getFloat64(eventPtr + ClapAbi.ParamValueEvent.VALUE, true)
                     loaded.reported.set(paramId, Math.fround(value))
                     this.#host.sendParam(plugin.uuid, paramId, value, 0)
@@ -616,8 +812,8 @@ export class WclapBridges {
         view.setUint32(processPtr + ClapAbi.Process.TRANSPORT, loaded.transportPtr, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS, audioIn, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS, audioOut, true)
-        view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS_COUNT, loaded.inputPorts > 0 ? 1 : 0, true)
-        view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS_COUNT, 1, true)
+        view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS_COUNT, loaded.inputPorts, true)
+        view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS_COUNT, outputPorts.length, true)
         view.setUint32(processPtr + ClapAbi.Process.IN_EVENTS, inEvents, true)
         view.setUint32(processPtr + ClapAbi.Process.OUT_EVENTS, outEvents, true)
         loaded.processPtr = processPtr
@@ -625,35 +821,77 @@ export class WclapBridges {
         loaded.outEvents = outEvents
     }
 
-    // One chunk through the plugin, 0 = not ready (the device passes through)
+    // Input port `index` (1+) for the coming process call; port 0 arrives with the call itself
+    #input(handle: number, index: number, left: number, right: number, frames: number): void {
+        const plugin = this.#plugins.get(handle)
+        if (!isDefined(plugin) || isNull(plugin.loaded)) {return}
+        const loaded = plugin.loaded
+        if (index < 1 || index >= loaded.auxInputs.length) {return}
+        const engine = this.#memory.buffer
+        const [targetLeft, targetRight] = loaded.auxInputs[index]
+        const sourceLeft = new Float32Array(engine, left, frames)
+        const sourceRight = new Float32Array(engine, right, frames)
+        const outLeft = new Float32Array(loaded.memory.buffer, targetLeft, frames)
+        if (loaded.inputPortInfos[index]?.channels === 1) {
+            for (let frame = 0; frame < frames; frame++) {outLeft[frame] = (sourceLeft[frame] + sourceRight[frame]) * 0.5}
+        } else {
+            outLeft.set(sourceLeft)
+            new Float32Array(loaded.memory.buffer, targetRight, frames).set(sourceRight)
+        }
+        loaded.auxFed[index] = true
+        loaded.auxSilent[index] = false
+    }
+
+    // Ports the device did not feed this call play silence (cleared once, until fed again)
+    #silenceUnfedInputs(loaded: Loaded): void {
+        for (let index = 1; index < loaded.auxInputs.length; index++) {
+            if (!loaded.auxFed[index] && !loaded.auxSilent[index]) {
+                const [left, right] = loaded.auxInputs[index]
+                new Float32Array(loaded.memory.buffer, left, RENDER_QUANTUM).fill(0.0)
+                new Float32Array(loaded.memory.buffer, right, RENDER_QUANTUM).fill(0.0)
+                loaded.auxSilent[index] = true
+            }
+            loaded.auxFed[index] = false
+        }
+    }
+
+    // One chunk through the plugin, 0 = no plugin output (the device passes through)
     #process(handle: number, in0: number, in1: number, out0: number, out1: number, frames: number,
              bpm: number, position: number, flags: number): number {
         const plugin = this.#plugins.get(handle)
         if (!isDefined(plugin) || isNull(plugin.loaded)) {return 0}
         const loaded = plugin.loaded
         return this.#contain(plugin, 0, () => {
+            if (plugin.restartRequested) {this.#restart(plugin, loaded)}
             const engine = this.#memory.buffer
             const [inLeft, inRight, outLeft, outRight] = this.#audio(loaded)
-            inLeft.set(new Float32Array(engine, in0, frames))
-            inRight.set(new Float32Array(engine, in1, frames))
+            const sourceLeft = new Float32Array(engine, in0, frames)
+            const sourceRight = new Float32Array(engine, in1, frames)
+            if (loaded.inputPortInfos[0]?.channels === 1) {
+                for (let frame = 0; frame < frames; frame++) {inLeft[frame] = (sourceLeft[frame] + sourceRight[frame]) * 0.5}
+            } else {
+                inLeft.set(sourceLeft)
+                inRight.set(sourceRight)
+            }
             const view = this.#view(loaded)
             this.#writeU64(view, loaded.processPtr + ClapAbi.Process.STEADY_TIME, loaded.steadyTime)
             view.setUint32(loaded.processPtr + ClapAbi.Process.FRAMES_COUNT, frames, true)
             loaded.steadyTime += frames
             this.#writeTransport(loaded, view, bpm, position, flags)
             this.#writeEvents(plugin, loaded, view)
-            this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
+            this.#silenceUnfedInputs(loaded)
+            const status = this.#onAudioThread(() =>
+                this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
             loaded.eventCount = 0
             plugin.receivedSinceProcess = false
             plugin.flushRequested = false
-            if (plugin.pollPending) {
-                plugin.pollPending = false
-                this.#pollParams(plugin, loaded)
-            }
+            this.#runCallback(plugin, loaded)
+            if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
             if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
                 plugin.dirtyCountdown = -1
                 this.#host.requestSave(plugin.uuid)
             }
+            if (status === ClapAbi.ProcessStatus.ERROR) {return 0}
             const [, , afterLeft, afterRight] = this.#audio(loaded)
             new Float32Array(engine, out0, frames).set(afterLeft.subarray(0, frames))
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
@@ -661,16 +899,52 @@ export class WclapBridges {
         })
     }
 
-    // Cmajor emits no parameter events for page edits
+    #readLatency(loaded: Loaded): void {
+        loaded.latency = loaded.latencyExt === 0
+            ? 0 : this.#call(loaded, loaded.latencyExt + ClapAbi.PluginLatency.GET, loaded.plugin) >>> 0
+    }
+
+    // clap request_restart: deactivate and activate again, where a plugin may change its latency
+    #restart(plugin: Plugin, loaded: Loaded): void {
+        plugin.restartRequested = false
+        this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.STOP_PROCESSING, loaded.plugin))
+        this.#call(loaded, loaded.plugin + ClapAbi.Plugin.DEACTIVATE, loaded.plugin)
+        if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
+            throw new Error("plugin.activate failed on restart")
+        }
+        this.#readLatency(loaded)
+        this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.START_PROCESSING, loaded.plugin))
+    }
+
+    #latency(handle: number): number {
+        const plugin = this.#plugins.get(handle)
+        return !isDefined(plugin) || isNull(plugin.loaded) ? 0 : plugin.loaded.latency
+    }
+
+    // clap request_callback: on_main_thread between render quanta, at most once per quantum
+    #runCallback(plugin: Plugin, loaded: Loaded): void {
+        if (!plugin.callbackRequested) {return}
+        plugin.callbackRequested = false
+        this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ON_MAIN_THREAD, loaded.plugin)
+    }
+
+    // Cmajor emits no parameter events for page edits, so its values are swept a slice per quantum
     #pollParams(plugin: Plugin, loaded: Loaded): void {
-        if (loaded.params === 0) {return}
-        const view = this.#view(loaded)
-        for (const info of loaded.paramInfos.values()) {
-            if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, info.id, loaded.sizePtr) === 0) {continue}
-            const value = view.getFloat64(loaded.sizePtr, true)
-            if (loaded.reported.get(info.id) === Math.fround(value)) {continue}
-            loaded.reported.set(info.id, Math.fround(value))
-            this.#host.sendParam(plugin.uuid, info.id, value, 0)
+        const {paramIds} = loaded
+        if (loaded.params === 0 || paramIds.length === 0) {
+            loaded.pollRemaining = 0
+            return
+        }
+        const count = Math.min(POLL_PER_CHUNK, loaded.pollRemaining)
+        loaded.pollRemaining -= count
+        for (let index = 0; index < count; index++) {
+            const id = paramIds[loaded.pollCursor]
+            loaded.pollCursor = (loaded.pollCursor + 1) % paramIds.length
+            if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, id, loaded.sizePtr) === 0) {continue}
+            const value = this.#view(loaded).getFloat64(loaded.sizePtr, true) // after the call, which may grow the memory
+            if (loaded.reported.get(id) === Math.fround(value)) {continue}
+            loaded.reported.set(id, Math.fround(value))
+            this.#host.sendParam(plugin.uuid, id, value, 0)
         }
     }
 
@@ -825,7 +1099,7 @@ export class WclapBridges {
         plugin.pendingState = plugin.knownState ?? plugin.pendingState
         plugin.knownState = null
         console.error(`[wclap ${plugin.clapId}]`, result.error)
-        this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(result.error)})
+        this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(result.error), inputs: []})
         return fallback
     }
 
@@ -834,11 +1108,12 @@ export class WclapBridges {
     }
 
     // CLAP's [audio-thread] calls, answered as such by the thread-check extension (clap-helpers asserts on it)
-    #onAudioThread(procedure: () => void): void {
+    #onAudioThread<T>(procedure: () => T): T {
         this.#inProcess = true
         const result = tryCatch(procedure)
         this.#inProcess = false
         if (result.status === "failure") {throw result.error}
+        return result.value
     }
 
     // The plugin memory's DataView and audio views, renewed after the memory grew (a grow detaches them)
@@ -863,6 +1138,11 @@ export class WclapBridges {
     }
 
     // `slotPtr` addresses a function-pointer field in plugin memory, its value is an index into the plugin's table
+    #hasFunction(loaded: Loaded, slotPtr: number): boolean {
+        const index = this.#u32(loaded.memory, slotPtr)
+        return index !== 0 && index < loaded.table.length && typeof loaded.table.get(index) === "function"
+    }
+
     #call(loaded: Loaded, slotPtr: number, ...args: Array<number | bigint>): number {
         const index = this.#u32(loaded.memory, slotPtr)
         const fn: unknown = index < loaded.table.length ? loaded.table.get(index) : null

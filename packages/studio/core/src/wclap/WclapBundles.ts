@@ -5,6 +5,7 @@ import {WclapStorage} from "./WclapStorage"
 const BLOCK = 512
 
 // A WCLAP bundle is a `.tar.gz` holding `module.wasm` plus GUI files, fetched once per url and kept in memory.
+// A bare `.wasm` (no GUI) counts as a bundle holding only `module.wasm`.
 export namespace WclapBundles {
     const cache = new Map<string, Promise<WclapBundle>>()
 
@@ -25,12 +26,20 @@ export namespace WclapBundles {
         unpack(url, Promise.resolve(archive))
 
     const unpack = (url: string, archive: Promise<ArrayBuffer>): Promise<WclapBundle> => {
-        const promise = archive
-            .then(bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer())
-            .then(buffer => ({files: stripRoot(untar(new Uint8Array(buffer)))}))
+        const promise = archive.then(async (bytes): Promise<WclapBundle> => {
+            if (isWasm(bytes)) {return {files: [{path: "module.wasm", bytes: new Uint8Array(bytes)}]}}
+            const buffer = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer()
+            return {files: stripRoot(untar(new Uint8Array(buffer)))}
+        })
         promise.catch(() => cache.delete(url))
         cache.set(url, promise)
         return promise
+    }
+
+    // the wasm magic `\0asm`
+    export const isWasm = (bytes: ArrayBuffer): boolean => {
+        const head = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength))
+        return head.length === 4 && head[0] === 0x00 && head[1] === 0x61 && head[2] === 0x73 && head[3] === 0x6D
     }
 
     export const file = (bundle: WclapBundle, path: string): Optional<WclapBundleFile> =>

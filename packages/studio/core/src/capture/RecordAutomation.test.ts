@@ -1,4 +1,4 @@
-import {describe, expect, it, vi} from "vitest"
+import {afterEach, describe, expect, it, vi} from "vitest"
 import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, unitValue, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {
@@ -43,6 +43,7 @@ const createFakeWorklet = () => ({
     suspendAutomation(uuid: UUID.Bytes): void {this.suspended.push(uuid)},
     playbackTimestamp: new DefaultObservableValue(0),
     countInBeatsRemaining: new DefaultObservableValue(0),
+    compensationLatency: new DefaultObservableValue(0),
     position: new DefaultObservableValue<ppqn>(0),
     bpm: new DefaultObservableValue(120),
     isPlaying: new DefaultObservableValue(false),
@@ -245,6 +246,65 @@ describe("RecordAutomation", () => {
             record(true)
             write(0.25)
             expect(events()[1].interpolation.type).toBe("linear")
+        })
+
+        // Issue #443: a preset change after a pause jumped every value, the recorded take ramped into the jump
+        describe("held pauses", () => {
+            afterEach(() => vi.restoreAllMocks())
+            const withClock = async (test: (advance: (millis: number) => void) => Promise<void>) => {
+                const clock = {now: 0}
+                vi.spyOn(performance, "now").mockImplementation(() => clock.now)
+                await test(millis => clock.now += millis)
+            }
+
+            it("records a jump after a held pause as a step, not a ramp", () => withClock(async advance => {
+                const {record, seek, write, stop, events} = await setup()
+                record(true)
+                write(0.25)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.75)
+                expect(events().map(({position, value}) => [position, value]))
+                    .toEqual([[0, expect.any(Number)], [0, 0.25], [PPQN.Bar, 0.25], [PPQN.Bar, 0.75]])
+                seek(PPQN.Bar * 2)
+                stop()
+                expect(events().map(({position, value}) => [position, value]))
+                    .toEqual([[0, expect.any(Number)], [0, 0.25], [PPQN.Bar, 0.25], [PPQN.Bar, 0.75], [PPQN.Bar * 2, 0.75]])
+            }))
+
+            it("keeps ramping between writes that follow each other closely", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup()
+                record(true)
+                write(0.25)
+                advance(16)
+                seek(PPQN.SemiQuaver)
+                write(0.5)
+                advance(16)
+                seek(PPQN.SemiQuaver * 2)
+                write(0.75)
+                expect(positions()).toEqual([0, 0, PPQN.SemiQuaver, PPQN.SemiQuaver * 2])
+            }))
+
+            it("adds no hold point when the value did not change", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup()
+                record(true)
+                write(0.25)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.5)
+                write(0.25)
+                expect(positions()).toEqual([0, 0, PPQN.Bar, PPQN.Bar])
+            }))
+
+            it("keeps a stepped parameter's single event per write", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup({target: "mute"})
+                record(true)
+                write(1.0)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.0)
+                expect(positions()).toEqual([0, 0, PPQN.Bar])
+            }))
         })
 
         it("records no interpolation for a stepped parameter", async () => {
@@ -582,6 +642,37 @@ describe("RecordAutomation", () => {
             record(true)
             project.editing.modify(() => modulator.amount.setUnitValue(0.75), false)
             expect(audioUnit.tracks.values().length).toBe(0)
+        })
+    })
+
+    // Live error 1174: the user deleted the take while recording, then undid. Undo restores the region as a NEW
+    // instance under the same uuid, while the recorder still holds the old one. `isAttached` only asks for the
+    // uuid, so closing the take acted on the stale instance: "Could not remove <uuid>" on delete.
+    describe("a take deleted and restored by undo while recording (1174)", () => {
+        it("closes without throwing when the take ended where it started", async () => {
+            const {project, record, write, stop, regions} = await setup()
+            record(true)
+            write(0.25)
+            const box = regions()[0].box
+            project.editing.mark()
+            project.editing.modify(() => box.delete())
+            project.editing.undo()
+            expect(regions()[0].box).not.toBe(box)
+            expect(() => stop()).not.toThrow()
+        })
+
+        it("keeps the restored take in sync with the graph", async () => {
+            const {project, record, seek, write, stop, regions} = await setup()
+            record(true)
+            write(0.25)
+            const box = regions()[0].box
+            project.editing.mark()
+            project.editing.modify(() => box.delete())
+            project.editing.undo()
+            seek(PPQN.Quarter + 1)
+            expect(() => stop()).not.toThrow()
+            expect(regions().length).toBe(1)
+            expect(regions()[0].box.isAttached()).toBe(true)
         })
     })
 })

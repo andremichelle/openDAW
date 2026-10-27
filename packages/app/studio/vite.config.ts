@@ -13,6 +13,7 @@ export default defineConfig(({command}) => {
     const env = process.env.NODE_ENV as BuildInfo["env"]
     const date = Date.now()
     const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
+        && existsSync(resolve(__dirname, "../../../certs/localhost.pem"))
 
     // Determine base path for production CI builds
     const isCI = process.env.CI === "true"
@@ -58,8 +59,8 @@ export default defineConfig(({command}) => {
         clearScreen: false,
         server: {
             port: 8080,
-            host: "localhost",
-            https: command === "serve" ? {
+            host: certsExist ? true : "localhost", // network-reachable only over HTTPS
+            https: command === "serve" && certsExist ? {
                 key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
                 cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
             } : undefined,
@@ -73,7 +74,7 @@ export default defineConfig(({command}) => {
                 allow: [resolve(__dirname, "../../../")]
             },
             proxy: {
-                "/manuals": {target: "https://localhost:8081", secure: false}
+                "/manuals": {target: `${certsExist ? "https" : "http"}://localhost:8081`, secure: false}
             },
             hmr: {
                 overlay: false
@@ -95,7 +96,9 @@ export default defineConfig(({command}) => {
         plugins: [
             crossOriginIsolation(),
             viteCompression({
-                algorithm: "brotliCompress"
+                algorithm: "brotliCompress",
+                // the onnx runtime (Neural Demux) is left out, too large to brotli at every build
+                filter: (file: string) => /\.(js|mjs|json|css|html|wasm)$/i.test(file) && !/ort-wasm.*\.wasm$/i.test(file)
             }),
             {
                 name: "generate-date-json",

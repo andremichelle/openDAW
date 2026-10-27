@@ -18,16 +18,22 @@
         svg: "image/svg+xml", webp: "image/webp", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", txt: "text/plain"
     }
     const files = new Map()
-    const state = {studio: null, origin: "*", uuid: "", pageDirectory: "", inner: null, pointer: false}
+    // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
+    const channel = new MessageChannel()
+    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, transparent: false, dragging: false}
 
-    const post = message => {if (state.studio !== null) {state.studio.postMessage(message, state.origin)}}
+    const post = message => channel.port1.postMessage(message)
     const fail = message => {
         document.body.replaceChildren(Object.assign(document.createElement("p"), {textContent: message}))
         post({type: "wclap-error", message})
     }
 
+    // the service worker passes the URL's path, percent-encoded ("Bright%20Ambience.srgfx"), the bundle has file names
+    const decoded = path => {
+        try {return decodeURIComponent(path)} catch {return path}
+    }
     const resolve = path => {
-        const clean = path.split("?")[0].replace(/^\/+/, "")
+        const clean = decoded(path.split("?")[0]).replace(/^\/+/, "")
         const file = files.get(clean) ?? files.get(`${state.pageDirectory}${clean}`)
         if (file === undefined) {return null}
         const extension = clean.split(".").pop()?.toLowerCase() ?? ""
@@ -92,10 +98,68 @@
                 })
             }, {capture: true})
         }
+        // never the browser's own menu, the page's handlers still see the event
+        target.addEventListener("contextmenu", event => event.preventDefault(), {capture: true})
     }
 
-    const open = async ({uuid, page, files: list}) => {
+    // Chrome may lose the release outside the frame, the next buttonless move delivers it to the page
+    const releaseLostButtons = inner => {
+        const target = inner.contentWindow
+        if (target === null) {return}
+        for (const [down, up, move, Event] of [
+            ["mousedown", "mouseup", "mousemove", target.MouseEvent],
+            ["pointerdown", "pointerup", "pointermove", target.PointerEvent]]) {
+            const pressed = {active: false}
+            target.addEventListener(down, event => {
+                if (event.pointerType === undefined || event.pointerType === "mouse") {pressed.active = true}
+            }, {capture: true})
+            target.addEventListener(up, () => {pressed.active = false}, {capture: true})
+            target.addEventListener(move, event => {
+                if (!pressed.active || event.buttons !== 0) {return}
+                pressed.active = false
+                event.stopImmediatePropagation()
+                const {clientX, clientY, screenX, screenY} = event
+                const pointer = up === "pointerup" ? {pointerId: event.pointerId, pointerType: "mouse", isPrimary: true} : {}
+                const init = {bubbles: true, cancelable: true, composed: true, clientX, clientY, screenX, screenY, button: 0, buttons: 0}
+                ;(event.target ?? target.document).dispatchEvent(new Event(up, {...init, ...pointer}))
+            }, {capture: true})
+        }
+    }
+
+    // a transparent frame (the device panel) shows the studio where the page draws nothing, the page's colour scheme
+    // must match the frame's or the browser paints an opaque backdrop
+    const matchColorScheme = inner => {
+        const document = inner.contentDocument
+        if (!state.transparent || document === null) {return}
+        inner.style.colorScheme = getComputedStyle(document.documentElement).colorScheme
+    }
+
+    // a sample dragged from the studio arrives as positions and finally a file, replayed as a native file drag
+    const dragEvent = (type, x, y, file) => {
+        const inner = state.inner
+        const target = inner?.contentWindow
+        const document = inner?.contentDocument
+        if (!target || !document) {return}
+        const dataTransfer = new target.DataTransfer()
+        dataTransfer.items.add(file)
+        const element = document.elementFromPoint(x, y) ?? document.documentElement
+        element.dispatchEvent(new target.DragEvent(type, {
+            bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer, relatedTarget: null
+        }))
+    }
+    const dragOver = ({x, y}, file) => {
+        if (!state.dragging) {dragEvent("dragenter", x, y, file)}
+        state.dragging = true
+        dragEvent("dragover", x, y, file)
+    }
+
+    const open = async ({uuid, page, files: list, transparent}) => {
         state.uuid = uuid
+        state.transparent = transparent === true
+        if (state.transparent) {
+            document.documentElement.style.colorScheme = "dark"
+            document.documentElement.style.background = document.body.style.background = "transparent"
+        }
         const path = page.split("?")[0]
         state.pageDirectory = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : ""
         files.clear()
@@ -103,7 +167,9 @@
         await registerWorker()
         const inner = document.createElement("iframe")
         inner.addEventListener("load", () => {
+            matchColorScheme(inner)
             forwardInput(inner)
+            releaseLostButtons(inner)
             forwardPointer()
         })
         inner.src = `./wclap/${uuid}/${page}`
@@ -113,27 +179,42 @@
 
     window.addEventListener("message", event => {
         const inner = state.inner
-        if (inner !== null && event.source === inner.contentWindow) {
-            const data = event.data
-            const bytes = data instanceof ArrayBuffer ? data
-                : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
-            if (bytes !== null) {post({type: "wclap-message", bytes})}
-            return
+        if (inner === null || event.source !== inner.contentWindow) {return}
+        const data = event.data
+        const bytes = data instanceof ArrayBuffer ? data
+            : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
+        if (bytes !== null) {post({type: "wclap-message", bytes})}
+        // a wheel event the page did not use (juce-webclap-plugins pages send them): the window may scroll
+        const wheel = data?.webclapWheel
+        if (bytes === null && typeof wheel === "object" && wheel !== null
+            && Number.isFinite(wheel.deltaX) && Number.isFinite(wheel.deltaY) && Number.isFinite(wheel.deltaMode)) {
+            post({type: "wclap-wheel", deltaX: wheel.deltaX, deltaY: wheel.deltaY, deltaMode: wheel.deltaMode})
         }
-        if (event.source !== window.parent) {return}
+    })
+    channel.port1.addEventListener("message", event => {
+        const inner = state.inner
         const data = event.data
         if (data?.type === "wclap-open") {
-            state.studio = event.source
-            state.origin = event.origin
             open(data).catch(error => fail(`The plugin page could not start: ${error.message ?? error}`))
         } else if (data?.type === "wclap-message" && inner !== null && inner.contentWindow !== null) {
             inner.contentWindow.postMessage(data.bytes, "*")
         } else if (data?.type === "wclap-pointer-enable") {
             state.pointer = true
             forwardPointer()
+        } else if (data?.type === "wclap-drag" && inner !== null) {
+            dragOver(data, new File([], `${data.name}.wav`, {type: "audio/wav"}))
+        } else if (data?.type === "wclap-drag-leave" && inner !== null && state.dragging) {
+            state.dragging = false
+            dragEvent("dragleave", -1, -1, new File([], "", {type: "audio/wav"}))
+        } else if (data?.type === "wclap-drop" && inner !== null && data.file instanceof File) {
+            dragOver(data, data.file)
+            state.dragging = false
+            dragEvent("drop", data.x, data.y, data.file)
         }
     })
-    window.parent.postMessage({type: "wclap-frame-ready"}, "*")
+    window.addEventListener("contextmenu", event => event.preventDefault())
+    channel.port1.start()
+    window.parent.postMessage({type: "wclap-frame-ready"}, "*", [channel.port2])
 </script>
 </body>
 </html>

@@ -13,6 +13,7 @@ const MIN_PERIOD: f64 = 40.0; // shortest (~1200 Hz)
 const RING_SIZE: usize = 4096;
 const RING_MASK: i64 = (RING_SIZE - 1) as i64;
 const LATENCY: i64 = 2 * MAX_PERIOD; // output lags input so a grain's full ±P extent is buffered
+pub const LATENCY_FRAMES: u32 = LATENCY as u32;
 const MARKS: usize = 64; // recent analysis marks kept for nearest-mark lookup
 const MIN_RATIO: f64 = 0.5; // clamp: below this, 2P grains leave gaps in the overlap-add
 const MAX_RATIO: f64 = 2.0;

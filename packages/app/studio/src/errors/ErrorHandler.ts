@@ -7,7 +7,8 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
-const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint"]
+const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint",
+    "user-script:"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
     "Request timeout",
@@ -162,6 +163,11 @@ export class ErrorHandler {
             const detail = event.target instanceof HTMLMediaElement ? event.target.error?.message : undefined
             console.warn("Resource load error ignored:", detail ?? event.target.nodeName)
             event.preventDefault()
+            return true
+        }
+        if (ErrorInfo.isSyntheticRejection(event)) {
+            event.preventDefault()
+            this.#notifyBrowserInternal("synthetic unhandledrejection event without a promise")
             return true
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}

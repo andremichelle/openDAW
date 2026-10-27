@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.91](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.90...@opendaw/studio-scripting@0.0.91) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-scripting
+
+## [0.0.90](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.89...@opendaw/studio-scripting@0.0.90) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-scripting
+
+## [0.0.89](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.88...@opendaw/studio-scripting@0.0.89) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-scripting
+
+## [0.0.88](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.87...@opendaw/studio-scripting@0.0.88) (2026-10-09)
+
+**Note:** Version bump only for package @opendaw/studio-scripting
+
 ## [0.0.87](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.86...@opendaw/studio-scripting@0.0.87) (2026-09-30)
 
 **Note:** Version bump only for package @opendaw/studio-scripting

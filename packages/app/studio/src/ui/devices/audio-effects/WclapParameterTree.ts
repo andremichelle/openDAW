@@ -24,7 +24,8 @@ export namespace WclapParameterTree {
         return {
             groups: [
                 ...Array.from(modules, ([label, members]) => ({
-                    label, tree: build(members.map(({module, name, value}) => ({module: module.join("/"), name, value})))
+                    label, tree: build(members.map(({module, name, value}) =>
+                        ({module: module.join("/"), name: withoutLabel(name, label), value})))
                 })),
                 ...byWords.groups
             ],
@@ -33,6 +34,15 @@ export namespace WclapParameterTree {
     }
 
     const words = (name: string): ReadonlyArray<string> => name.split(/\s+/).filter(word => word.length > 0)
+
+    // plugins often repeat the module in every name ("Op 1 to Op 2" > "Op 1 to Op 2 Depth")
+    const withoutLabel = (name: string, label: string): string => {
+        const prefix = words(label)
+        const nameWords = words(name)
+        if (nameWords.length <= prefix.length) {return name}
+        return prefix.every((word, index) => word.toLowerCase() === nameWords[index].toLowerCase())
+            ? nameWords.slice(prefix.length).join(" ") : name
+    }
 
     // a first word shared by two or more names, at least one of them longer, becomes a group of the remainders
     const byBeginning = <T>(entries: ReadonlyArray<Entry<T>>): ParameterTree<T> => {

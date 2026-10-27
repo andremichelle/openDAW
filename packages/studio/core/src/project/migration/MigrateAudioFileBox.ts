@@ -13,6 +13,7 @@ export const migrateAudioFileBox = async (
 ): Promise<void> => {
     const {startInSeconds, endInSeconds, fileName} = box
     if (isIntEncodedAsFloat(startInSeconds.getValue()) || isIntEncodedAsFloat(endInSeconds.getValue()) || endInSeconds.getValue() === 0) {
+        console.debug(`[ProjectLoad] migration waits for sample '${fileName.getValue()}'`)
         const audioData = await loadAudioData(box.address.uuid)
         const seconds = audioData.numberOfFrames / audioData.sampleRate
         console.debug(`Migrate 'AudioFileBox' to float sec (${fileName.getValue()})`, seconds.toFixed(3))

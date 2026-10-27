@@ -30,6 +30,23 @@ component
     color: var(--color-blue)
     outline: none
 
+    &.with-tools
+      grid-template-columns: auto auto 1fr auto auto
+
+    > .header-tools
+      display: flex
+      align-items: center
+      column-gap: 3px
+
+      > *
+        --color: currentColor
+
+      > .error
+        display: flex
+        font-size: 14px
+        color: orange
+        cursor: pointer
+
     &::after
       content: ""
       display: block
@@ -59,6 +76,9 @@ component
     padding: 0 0.25rem
 
     &::after
+      display: none
+
+    > .header-tools
       display: none
 
     > svg:nth-of-type(2)

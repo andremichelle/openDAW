@@ -17,7 +17,6 @@ export namespace Tubular {
     export const Detunes = Array.from({length: 15}, (_, index) => index === 7 ? "0" : index > 7 ? `+${index - 7}` : String(index - 7))
     export const LfoWaves = ["Triangle", "Saw Down", "Saw Up", "Square", "Sine", "S&H"]
     export const Switch = ["Off", "On"]
-    export const Engines = ["Mark I", "Modern"]
     // The 32 algorithms as msfa bus flags per operator in SYSEX order (OP6 first): bits 0-1 out bus (0 =
     // output), bit 2 add to bus, bits 4-5 in bus, bits 6-7 feedback. Mirrors `ALGORITHMS` in fm.rs.
     const ALGORITHMS: ReadonlyArray<ReadonlyArray<number>> = [

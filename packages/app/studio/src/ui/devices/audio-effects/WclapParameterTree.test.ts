@@ -50,6 +50,29 @@ describe("WclapParameterTree", () => {
         expect(shape(tree)).toStrictEqual([["osc", [["a", [["Wave", ["Shape", "Mix"]]]], ["b", ["Level"]]]], "Volume"])
     })
 
+    it("drops a module's own label from the start of its parameter names", () => {
+        const tree = WclapParameterTree.build([
+            {module: "Op 1 to Op 2", name: "Op 1 to Op 2 Active", value: "active"},
+            {module: "Op 1 to Op 2", name: "Op 1 to Op 2 Depth", value: "depth"},
+            {module: "Op 1 to Op 2", name: "Op 1 to Op 2 Is Enveloped", value: "enveloped"},
+            {module: "Op 1 to Op 2", name: "Op 1 to Op 2 Is OneShot", value: "oneshot"},
+            {module: "Op 1 to Op 2", name: "Op 1 to Op 2", value: "self"},
+            {module: "Op 1 to Op 3", name: "Op 1 to Op 30 Level", value: "partial"}
+        ])
+        expect(shape(tree)).toStrictEqual([
+            ["Op 1 to Op 2", [["Is", ["Enveloped", "OneShot"]], "Active", "Depth", "Op 1 to Op 2"]],
+            ["Op 1 to Op 3", ["Op 1 to Op 30 Level"]]
+        ])
+    })
+
+    it("strips the label per path level", () => {
+        const tree = WclapParameterTree.build([
+            {module: "Osc/A", name: "A Wave", value: "wave"},
+            {module: "Osc/A", name: "A Level", value: "level"}
+        ])
+        expect(shape(tree)).toStrictEqual([["Osc", [["A", ["Wave", "Level"]]]]])
+    })
+
     it("keeps every value reachable exactly once", () => {
         const names = ["Osc A", "Osc A Wave", "Osc B Wave", "low cut", "dry", "Filter Cutoff", "Filter Env Amount"]
         const collect = (tree: ParameterTree<string>): Array<string> =>

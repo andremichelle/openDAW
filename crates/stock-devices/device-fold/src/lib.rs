@@ -67,6 +67,7 @@ impl Fold {
     fn set_factor(state: &mut FoldState, factor: usize) {
         state.factor = factor;
         state.resampler = ResamplerStereo::new(factor);
+        abi::set_latency(ResamplerStereo::latency(factor));
         let oversampled_rate = state.sample_rate * factor as f32;
         state.smooth_input_gain = LinearRamp::linear(oversampled_rate, SMOOTH_SECONDS);
         state.smooth_output_gain = LinearRamp::linear(oversampled_rate, SMOOTH_SECONDS);

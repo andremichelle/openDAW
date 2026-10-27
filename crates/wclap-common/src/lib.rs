@@ -8,6 +8,7 @@ pub const RENDER_QUANTUM: usize = 128;
 const URL_FIELD: [u16; 1] = [10];
 const CLAP_ID_FIELD: [u16; 1] = [11];
 const STATE_FIELD: [u16; 1] = [12];
+const PLUGIN_STATE_FIELD: [u16; 1] = [14];
 const URL_CAPACITY: usize = 1024;
 const CLAP_ID_CAPACITY: usize = 256;
 
@@ -16,12 +17,15 @@ pub struct WclapLink {
     url_field_id: u32,
     clap_id_field_id: u32,
     state_field_id: u32,
+    plugin_state_field_id: u32,
+    has_plugin_state: bool,
     url: [u8; URL_CAPACITY],
     url_len: usize,
     clap_id: [u8; CLAP_ID_CAPACITY],
     clap_id_len: usize,
     scratch_in: [[f32; RENDER_QUANTUM]; 2],
-    scratch_out: [[f32; RENDER_QUANTUM]; 2]
+    scratch_out: [[f32; RENDER_QUANTUM]; 2],
+    latency: u32
 }
 
 impl WclapLink {
@@ -29,17 +33,24 @@ impl WclapLink {
         self.bridge = abi::wclap_create(&abi::self_uuid());
         self.url_field_id = abi::observe_field(&URL_FIELD);
         self.clap_id_field_id = abi::observe_field(&CLAP_ID_FIELD);
+        self.plugin_state_field_id = abi::observe_field(&PLUGIN_STATE_FIELD);
         self.state_field_id = abi::observe_field(&STATE_FIELD);
     }
 
     pub fn url(&self) -> &[u8] {&self.url[..self.url_len]}
     pub fn clap_id(&self) -> &[u8] {&self.clap_id[..self.clap_id_len]}
 
-    /// The bridge reloads only when url or clap id changed.
+    /// The bridge reloads only when url or clap id changed. The base64 state counts only while the bytes are empty.
     pub fn apply_field(&mut self, id: u32, value: FieldValue) {
+        if id == self.plugin_state_field_id {
+            let FieldValue::Bytes(bytes) = value else {return};
+            self.has_plugin_state = !bytes.is_empty();
+            abi::wclap_state_bytes(self.bridge, bytes);
+            return;
+        }
         let FieldValue::String(text) = value else {return};
         if id == self.state_field_id {
-            abi::wclap_state(self.bridge, text);
+            if !self.has_plugin_state {abi::wclap_state(self.bridge, text)}
             return;
         }
         if id == self.url_field_id {
@@ -57,7 +68,7 @@ impl WclapLink {
     pub fn reset(&self) {abi::wclap_reset(self.bridge)}
     pub fn release(&self) {abi::wclap_release(self.bridge)}
 
-    /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough while it is not ready.
+    /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough when it has no output.
     pub fn process_effect(&mut self, in_left: &[f32], in_right: &[f32],
                           out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize, block: &Block) {
         let frames = s1 - s0;
@@ -72,11 +83,19 @@ impl WclapLink {
         }
     }
 
-    /// One sub-chunk of the instrument: silence in, the plugin's output ADDED to `out` (the instrument contract).
-    pub fn process_instrument(&mut self, out_left: &mut [f32], out_right: &mut [f32], block: &Block) {
+    /// One sub-chunk of the instrument: the side-chain (or silence) in, the plugin's output ADDED to `out`.
+    pub fn process_instrument(&mut self, input: Option<[&[f32]; 2]>, out_left: &mut [f32], out_right: &mut [f32], block: &Block) {
         let frames = out_left.len().min(RENDER_QUANTUM);
-        self.scratch_in[0][..frames].fill(0.0);
-        self.scratch_in[1][..frames].fill(0.0);
+        match input {
+            Some([in_left, in_right]) if in_left.len() >= frames && in_right.len() >= frames => {
+                self.scratch_in[0][..frames].copy_from_slice(&in_left[..frames]);
+                self.scratch_in[1][..frames].copy_from_slice(&in_right[..frames]);
+            }
+            _ => {
+                self.scratch_in[0][..frames].fill(0.0);
+                self.scratch_in[1][..frames].fill(0.0);
+            }
+        }
         if !self.run(frames, block) {return}
         for index in 0..frames {
             out_left[index] += self.scratch_out[0][index];
@@ -86,8 +105,14 @@ impl WclapLink {
 
     fn run(&mut self, frames: usize, block: &Block) -> bool {
         let [scratch_out_left, scratch_out_right] = &mut self.scratch_out;
-        abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
-                           [scratch_out_left, scratch_out_right], frames, block)
+        let processed = abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
+                           [scratch_out_left, scratch_out_right], frames, block);
+        let latency = abi::wclap_latency(self.bridge);
+        if latency != self.latency {
+            self.latency = latency;
+            abi::set_latency(latency);
+        }
+        processed
     }
 }
 

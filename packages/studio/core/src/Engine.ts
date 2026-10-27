@@ -4,16 +4,18 @@ import {
     ObservableOption,
     ObservableValue,
     Observer,
+    Option,
     Procedure,
     Subscription,
     Terminable,
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal, WclapGuiInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal, SignalGraph, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
+export type RecordingStop = {readonly contextTime: number}
 
 export interface Engine extends Terminable {
     play(): void
@@ -33,9 +35,14 @@ export interface Engine extends Terminable {
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo>
     wclapCloseGui(uuid: UUID.Bytes): void
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo>
+    wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize>
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
     wclapSaveState(uuid: UUID.Bytes): void
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
+    wclapRetry(url: string): void
+    querySignalGraph(): Promise<SignalGraph>
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void
@@ -50,12 +57,15 @@ export interface Engine extends Terminable {
 
     get position(): ObservableValue<ppqn>
     get recordingStart(): ObservableOption<RecordingStart>
+    get recordingStop(): Option<RecordingStop>
     get bpm(): ObservableValue<bpm>
     get isPlaying(): ObservableValue<boolean>
     get isRecording(): ObservableValue<boolean>
     get isCountingIn(): ObservableValue<boolean>
     get playbackTimestamp(): ObservableValue<ppqn>
     get countInBeatsRemaining(): ObservableValue<number>
+    /** seconds the heard output lags the timeline through plugin delay compensation */
+    get compensationLatency(): ObservableValue<number>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
     get cpuLoad(): ObservableValue<number>
     get project(): Project

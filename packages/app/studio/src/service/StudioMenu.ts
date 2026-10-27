@@ -45,6 +45,12 @@ export const populateStudioMenu = (service: StudioService) => {
                         label: "Save as Template...",
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.saveAsTemplate()),
+                    MenuItem.default({
+                        label: "Save Bundle File to Disk...",
+                        selectable: service.hasProfile
+                    }).setTriggerProcedure(() => service.exportBundle()),
+                    MenuItem.default({label: "Open Bundle File from Disk..."})
+                        .setTriggerProcedure(() => service.importBundle()),
                     MenuItem.default({label: "Import", separatorBefore: true})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.default({label: "Audio Files..."})
@@ -55,8 +61,6 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => NeuralDemux.run(service).catch(EmptyExec)),
                             MenuItem.default({label: "Soundfont Files..."})
                                 .setTriggerProcedure(() => service.soundfontService.browse(true)),
-                            MenuItem.default({label: "Project Bundle..."})
-                                .setTriggerProcedure(() => service.importBundle()),
                             MenuItem.default({label: "Preset Bundle..."})
                                 .setTriggerProcedure(() => service.importPreset().then(EmptyExec)),
                             MenuItem.default({label: "DAWproject..."})
@@ -68,8 +72,6 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => service.exportMixdown()),
                             MenuItem.default({label: "Stems...", selectable: service.hasProfile})
                                 .setTriggerProcedure(() => service.exportStems()),
-                            MenuItem.default({label: "Project Bundle...", selectable: service.hasProfile})
-                                .setTriggerProcedure(() => service.exportBundle()),
                             MenuItem.default({label: "DAWproject...", selectable: service.hasProfile})
                                 .setTriggerProcedure(async () => service.exportDawproject()),
                             MenuItem.default({
@@ -146,6 +148,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         separatorBefore: true,
                         icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
+                    MenuItem.default({
+                        label: "Storage",
+                        icon: IconSymbol.Folder
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/storage")),
                     MenuItem.default({
                         label: "Statistics",
                         icon: IconSymbol.Charts

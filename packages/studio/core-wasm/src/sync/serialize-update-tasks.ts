@@ -23,6 +23,12 @@ export const serializeUpdateTasks = (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeM
             const serialization: ValueSerialization = ValueSerialization[task.primitiveType]
             output.writeString(serialization.type)
             serialization.encode(output, task.value as PrimitiveValues)
+        } else if (task.type === "update-bytes") {
+            Address.reconstruct(task.address).write(output)
+            output.writeInt(task.offset)
+            output.writeInt(task.deleteCount)
+            output.writeInt(task.bytes.length)
+            output.writeBytes(task.bytes)
         } else if (task.type === "update-pointer") {
             Address.reconstruct(task.address).write(output)
             if (isDefined(task.target)) {

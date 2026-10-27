@@ -1,8 +1,8 @@
 import css from "./SelectionRectangle.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {EmptyExec, Lifecycle, Option, Selection, SortedSet, UUID, ValueAxis} from "@opendaw/lib-std"
+import {EmptyExec, Lifecycle, Option, Selection, SortedSet, Terminator, UUID, ValueAxis} from "@opendaw/lib-std"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {Dragging, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
 import {BoxAdapter} from "@opendaw/studio-adapters"
 import {Colors} from "@opendaw/studio-enums"
 
@@ -34,6 +34,19 @@ export const SelectionRectangle =
             svgRect.height.baseVal.value = empty ? 0 : Math.max(Math.abs(y1 - y0), 1)
         }
         const svg: SVGSVGElement = <svg classList={className}>{svgRect}</svg>
+        const deselectOnClick = ({clientX, clientY}: PointerEvent, items: ReadonlyArray<T>): void => {
+            const gesture = new Terminator()
+            gesture.ownAll(
+                Events.subscribe(window, "pointermove", event => {
+                    if (Math.hypot(event.clientX - clientX, event.clientY - clientY) > 5) {gesture.terminate()}
+                }),
+                Events.subscribe(window, "pointerup", () => {
+                    selection.deselect(...items)
+                    gesture.terminate()
+                }),
+                Events.subscribe(window, "pointercancel", () => gesture.terminate())
+            )
+        }
         lifecycle.ownAll(
             Dragging.attach(target, (event: PointerEvent) => {
                 if (event.defaultPrevented) {return Option.None}
@@ -52,15 +65,15 @@ export const SelectionRectangle =
                         selection.deselectAll()
                     }
                 }
+                const deselectables: Array<T> = []
                 for (const selectable of captured) {
                     if (selection.isSelected(selectable)) {
-                        if (event.shiftKey) {
-                            selection.deselect(selectable)
-                        }
+                        if (event.shiftKey) {deselectables.push(selectable)}
                     } else {
                         selection.select(selectable)
                     }
                 }
+                if (deselectables.length > 0) {deselectOnClick(event, deselectables)}
                 if (captured.length > 0) {
                     return Option.None
                 }

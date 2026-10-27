@@ -1,8 +1,8 @@
-import {Maybe, UUID} from "@opendaw/lib-std"
+import {int, Maybe, UUID} from "@opendaw/lib-std"
 import {AddressLayout} from "./address"
 import {PrimitiveType} from "./primitive"
 
-// WASM CONTRACT: these forward-only task tags ("new"/"update-primitive"/"update-pointer"/"delete")
+// WASM CONTRACT: these forward-only task tags ("new"/"update-primitive"/"update-bytes"/"update-pointer"/"delete")
 // are serialized to the WASM engine and decoded by Rust (crates/boxgraph decode_forward). Do not rename.
 // `primitiveType` carries the field's codec captured at emission time: a task stream is forward-only and
 // self-contained, so serialization must never re-resolve the field against a live graph that a later task
@@ -10,6 +10,8 @@ import {PrimitiveType} from "./primitive"
 export type UpdateTask<M> =
     | { type: "new", name: keyof M, uuid: UUID.Bytes, buffer: ArrayBufferLike }
     | { type: "update-primitive", address: AddressLayout, primitiveType: PrimitiveType, value: unknown }
+    // a bytes field changed in one range: `deleteCount` bytes at `offset` give way to `bytes`
+    | { type: "update-bytes", address: AddressLayout, offset: int, deleteCount: int, bytes: Int8Array }
     | { type: "update-pointer", address: AddressLayout, target: Maybe<AddressLayout> }
     | { type: "delete", uuid: UUID.Bytes }
 

@@ -76,7 +76,7 @@ export class Field<P extends PointerTypes = PointerTypes, F extends Fields = Fie
 
     isBox(): this is Box {return false}
     isField(): this is Field {return true}
-    isAttached(): boolean {return this.graph.findBox(this.address.uuid).nonEmpty()}
+    isAttached(): boolean {return this.box.isAttached()}
     fields(): ReadonlyArray<Field> {return Arrays.empty()}
     record(): Record<string, Field> {return Objects.empty()}
     getField(_key: keyof F): F[keyof F] {return panic()}

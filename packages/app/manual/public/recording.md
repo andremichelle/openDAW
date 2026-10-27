@@ -12,7 +12,7 @@ current delay in milliseconds. Lower values mean tighter response.
 
 To record audio or MIDI, you must first arm the target instrument. Each audio-unit shows a tiny {icon:Record} button in
 the track header controls. Click it to arm the track for recording. To arm multiple tracks simultaneously, hold
-{key:Shift} while clicking additional arm buttons.
+**Shift** while clicking additional arm buttons.
 
 The arm button displays a horizontal peak meter showing input levels when an audio source is connected.
 
@@ -47,7 +47,7 @@ MIDI capture offers several options:
 ## Recording
 
 After arming your tracks, press the {icon:Record} button in the transport controls or use the keyboard shortcut.
-Recording begins after a count-in (configurable in preferences). To skip the count-in, hold {key:Shift} while clicking
+Recording begins after a count-in (configurable in preferences). To skip the count-in, hold **Shift** while clicking
 the record button.
 
 To restart recording (delete current recordings and start over), use the restart recording shortcut.

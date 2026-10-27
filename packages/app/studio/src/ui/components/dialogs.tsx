@@ -2,6 +2,7 @@ import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Button, Dialog, DialogHandler} from "@/ui/components/Dialog.tsx"
 import {
     Arrays,
+    DefaultObservableValue,
     EmptyExec,
     Errors,
     Exec,
@@ -21,6 +22,7 @@ import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
 import {Browser, Clipboard} from "@opendaw/lib-dom"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {DropDown} from "@/ui/composite/DropDown"
 
 export namespace Dialogs {
     type Default = {
@@ -179,6 +181,42 @@ export namespace Dialogs {
             </Dialog>
         )
         dialog.addEventListener("close", () => resolve(Option.None), {once: true})
+        Surface.get(origin).body.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
+
+    // Never rejects, the first choice is preselected
+    export const select = <T,>({headline, message, choices, okText, origin}: {
+        headline: string, message: string, choices: ReadonlyArray<Choice<T>>, okText?: string, origin?: Element
+    }): Promise<Option<T>> => {
+        if (choices.length === 0) {return Promise.resolve(Option.None)}
+        const lifecycle = new Terminator()
+        const {resolve, promise} = Promise.withResolvers<Option<T>>()
+        const selected = lifecycle.own(new DefaultObservableValue<Choice<T>>(choices[0]))
+        const buttons: ReadonlyArray<Button> = [{
+            text: okText ?? "Ok",
+            primary: true,
+            onClick: handler => {
+                handler.close()
+                resolve(Option.wrap(selected.getValue().value))
+            }
+        }]
+        const dialog: HTMLDialogElement = (
+            <Dialog headline={headline} icon={IconSymbol.System} cancelable={true} buttons={buttons}>
+                <div style={{padding: "1em 0", display: "flex", flexDirection: "column", rowGap: "0.75em"}}>
+                    <p style={{whiteSpace: "pre-line"}}>{message}</p>
+                    <div style={{display: "flex"}}>
+                        <DropDown lifecycle={lifecycle} owner={selected} provider={() => choices}
+                                  mapping={choice => choice.text} width="16em"/>
+                    </div>
+                </div>
+            </Dialog>
+        )
+        dialog.addEventListener("close", () => {
+            lifecycle.terminate()
+            resolve(Option.None)
+        }, {once: true})
         Surface.get(origin).body.appendChild(dialog)
         dialog.showModal()
         return promise

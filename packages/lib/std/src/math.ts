@@ -20,7 +20,7 @@ export const cosine = (y1: number, y2: number, mu: number): number => {
     const mu2 = (1.0 - Math.cos(mu * Math.PI)) * 0.5
     return y1 * (1.0 - mu2) + y2 * mu2
 }
-export const mod = (value: number, range: number): number => fract(value / range) * range
+export const mod = (value: number, range: number): number => ((value % range) + range) % range
 export const fract = (value: number): number => value - Math.floor(value)
 export const nextPowOf2 = (n: int): int => Math.pow(2, Math.ceil(Math.log(n) / Math.log(2)))
 export const radToDeg = (rad: number): number => rad * 180.0 / Math.PI

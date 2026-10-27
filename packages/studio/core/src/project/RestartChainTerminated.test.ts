@@ -32,6 +32,7 @@ const createFakeWorklet = () => {
     return {
         playbackTimestamp: new DefaultObservableValue(0),
         countInBeatsRemaining: new DefaultObservableValue(0),
+        compensationLatency: new DefaultObservableValue(0),
         position: new DefaultObservableValue(0),
         bpm: new DefaultObservableValue(120),
         isPlaying: new DefaultObservableValue(false),

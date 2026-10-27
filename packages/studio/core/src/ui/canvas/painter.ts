@@ -54,9 +54,12 @@ export class CanvasUnitPainter implements Terminable {
 class CanvasRenderer implements Terminable {
     readonly #lifecycle = new Terminator()
 
+    readonly #canvas: HTMLCanvasElement
     readonly #context: CanvasRenderingContext2D
     readonly #update: Exec
 
+    #observedWidth: number = 0
+    #observedHeight: number = 0
     #width: number = 0
     #height: number = 0
     #devicePixelRatio: number = 1
@@ -64,28 +67,16 @@ class CanvasRenderer implements Terminable {
     #needsUpdate: boolean = true
 
     constructor(canvas: HTMLCanvasElement, update: Exec) {
+        this.#canvas = canvas
         this.#context = asDefined(canvas.getContext("2d"))
         this.#update = update
-
         this.#lifecycle.ownAll(
-            Html.watchResize(canvas, () => {
-                this.#isResized = true
-                this.#needsUpdate = true
+            Html.watchResize(canvas, ({contentRect: {width, height}}) => {
+                this.#observedWidth = Math.round(width)
+                this.#observedHeight = Math.round(height)
+                if (this.#observedWidth !== this.#width || this.#observedHeight !== this.#height) {this.#needsUpdate = true}
             }),
-            this.#lifecycle.own(AnimationFrame.add(() => {
-                const width = canvas.clientWidth
-                const height = canvas.clientHeight
-                if (!this.#needsUpdate || width === 0 || height === 0) {return}
-                this.#isResized = width !== this.#width || height !== this.#height || devicePixelRatio !== this.#devicePixelRatio
-                this.#width = width
-                this.#height = height
-                this.#devicePixelRatio = devicePixelRatio
-                canvas.width = width * devicePixelRatio
-                canvas.height = height * devicePixelRatio
-                this.#update()
-                this.#isResized = false
-                this.#needsUpdate = false
-            }))
+            AnimationFrame.add(() => this.#paint())
         )
     }
 
@@ -98,4 +89,22 @@ class CanvasRenderer implements Terminable {
     get context(): CanvasRenderingContext2D {return this.#context}
     requestUpdate(): void {this.#needsUpdate = true}
     terminate(): void {this.#lifecycle.terminate()}
+
+    #paint(): void {
+        if (!this.#needsUpdate) {return}
+        // not observed yet (mounted this frame, or out of the observer's reach): read the layout
+        const observed = this.#observedWidth > 0 && this.#observedHeight > 0
+        const width = observed ? this.#observedWidth : this.#canvas.clientWidth
+        const height = observed ? this.#observedHeight : this.#canvas.clientHeight
+        if (width === 0 || height === 0) {return}
+        this.#isResized = width !== this.#width || height !== this.#height || devicePixelRatio !== this.#devicePixelRatio
+        this.#width = width
+        this.#height = height
+        this.#devicePixelRatio = devicePixelRatio
+        this.#canvas.width = width * devicePixelRatio
+        this.#canvas.height = height * devicePixelRatio
+        this.#update()
+        this.#isResized = false
+        this.#needsUpdate = false
+    }
 }

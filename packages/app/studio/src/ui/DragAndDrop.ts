@@ -89,6 +89,8 @@ export namespace DragAndDrop {
         )
     }
 
+    export const current = (): Option<AnyDragData> => dragging
+
     export const isCopy = (event: DragEvent, data: AnyDragData): boolean => event.altKey || data.copy === true
 
     export interface Process {

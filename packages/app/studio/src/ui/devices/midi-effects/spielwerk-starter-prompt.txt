@@ -13,7 +13,7 @@ class Processor {
 A generator function called on every audio block. Receives a unified event stream and yields output notes.
 
 block (timing and transport):
-- block.from  — start position in ppqn, inclusive (480 ppqn = 1 quarter note)
+- block.from  — start position in ppqn, inclusive (960 ppqn = 1 quarter note)
 - block.to    — end position in ppqn, exclusive
 - block.bpm   — current project tempo in beats per minute
 - block.flags — bitmask of transport state:

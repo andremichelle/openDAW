@@ -462,18 +462,21 @@ export class ProjectApi {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
         const explicitPosition = options?.position
+        // `position` is Int32, but `complete` is fractional for regions with a float32 duration (musical audio
+        // converted from seconds). Round UP, so the stored position is the one masked, never truncated into the
+        // region before it (#1164).
         if (!isDefined(explicitPosition) && options?.findFreeSpace === true) {
-            let insert = region.complete
+            let insert = Math.ceil(region.complete)
             for (const {position, complete} of track.regions.collection.iterateFrom(region.complete)) {
                 if (insert + region.duration <= position) {break}
-                insert = complete
+                insert = Math.ceil(complete)
             }
             return Option.wrap(region.copyTo({
                 position: insert,
                 consolidate: true
             }) as R)
         }
-        const position = explicitPosition ?? region.complete
+        const position = Math.ceil(explicitPosition ?? region.complete)
         const complete = position + region.duration
         const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, position, complete)
         const solver = this.#project.overlapResolver.fromRange(targetTrack, position, complete)
@@ -676,18 +679,7 @@ export class ProjectApi {
         const blockEnd = notes.reduce((max, {position, duration}) => Math.max(max, position + duration), -Infinity)
         const shift = blockEnd - blockStart
         if (shift <= 0) {return []}
-        const {boxGraph, boxAdapters} = this.#project
-        return notes.map(adapter => {
-            const copy = NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                const events = adapter.box.events.targetVertex.unwrap("events.target")
-                box.events.refer(events)
-                box.position.setValue(adapter.position + shift)
-                box.duration.setValue(adapter.duration)
-                box.pitch.setValue(adapter.pitch)
-                box.velocity.setValue(adapter.velocity)
-            })
-            return boxAdapters.adapterFor(copy, NoteEventBoxAdapter)
-        })
+        return notes.map(adapter => adapter.copyTo({position: adapter.position + shift}))
     }
 
     #createTrack({field, target, trackType, insertIndex}: {

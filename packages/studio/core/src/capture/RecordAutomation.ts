@@ -26,9 +26,11 @@ export namespace RecordAutomation {
         lastValue: unitValue
         lastRelativePosition: ppqn
         lastEventBox: ValueEventBox
+        lastWriteTime: number
     }
 
     const Epsilon = 0.01
+    const HoldMillis = 100 // a longer pause held the value, the next write is a step
 
     type RecorderContext = {
         project: Project
@@ -103,7 +105,7 @@ export namespace RecordAutomation {
         return {
             adapter, trackBoxAdapter, regionBox, collectionBox,
             startPosition: startPos, floating, lastValue: value,
-            lastRelativePosition: 0, lastEventBox
+            lastRelativePosition: 0, lastEventBox, lastWriteTime: performance.now()
         }
     }
 
@@ -150,13 +152,25 @@ export namespace RecordAutomation {
         if (position < state.startPosition) {return}
         const relativePosition = Math.trunc(position - state.startPosition)
         if (relativePosition < state.lastRelativePosition) {return}
+        const now = performance.now()
+        const held = now - state.lastWriteTime > HoldMillis
+        state.lastWriteTime = now
         if (relativePosition === state.lastRelativePosition) {
             state.lastEventBox.value.setValue(value)
             state.lastValue = value
         } else {
             const interpolation = state.floating ? Interpolation.Linear : Interpolation.None
+            const step = state.floating && held && state.lastValue !== value
+            if (step) {
+                ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(relativePosition)
+                    box.value.setValue(state.lastValue)
+                    box.events.refer(state.collectionBox.events)
+                })
+            }
             state.lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(relativePosition)
+                box.index.setValue(step ? 1 : 0)
                 box.value.setValue(value)
                 box.events.refer(state.collectionBox.events)
             })

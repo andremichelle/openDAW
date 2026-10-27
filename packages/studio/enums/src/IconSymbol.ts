@@ -189,6 +189,8 @@ export enum IconSymbol {
     Tubular,
     Algorithm,
     WebClap,
+    ZoomFit,
+    CodeClose,
 }
 
 export namespace IconSymbol {

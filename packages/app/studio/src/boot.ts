@@ -26,7 +26,7 @@ import {
     GlobalSoundfontLoaderManager,
     Workers
 } from "@opendaw/studio-core"
-import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, OpenWclapAPI} from "@/opendaw-api"
+import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, WclapCatalog} from "@/opendaw-api"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -40,7 +40,7 @@ import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {StudioPreferences, WclapStorage} from "@opendaw/studio-core"
+import {SampleGarbage, StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
@@ -116,6 +116,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         soundfonts: () => OpenSoundfontAPI.get().all(),
         presets: () => OpenPresetAPI.get().list()
     })
+    WclapCatalog.get().tree().finally()
     const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
@@ -125,9 +126,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             OpenSoundfontAPI.get().load(uuid, progress)
     })
     const chainedWclapProvider = new ChainedWclapProvider()
-    WclapStorage.installRemote(async id => (await OpenWclapAPI.get().find(id)).nonEmpty()
-        ? OpenWclapAPI.get().load(id)
-        : chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty))
+    WclapStorage.installRemote(id => WclapCatalog.get().load(id)
+        .catch(() => chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty)))
     const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
@@ -161,10 +161,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
     }, "appearance")
     document.querySelector("#preloader")?.remove()
-    replaceChildren(surface.ground, App(service))
-    Tour.install(service)
-    AnimationFrame.start(window)
-    installCursors()
     RuntimeNotifier.install({
         info: (request) => Dialogs.info(request),
         approve: (request) => Dialogs.approve({...request, reverse: true}),
@@ -172,6 +168,10 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
+    replaceChildren(surface.ground, App(service))
+    Tour.install(service)
+    AnimationFrame.start(window)
+    installCursors()
     const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
     if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({
@@ -180,6 +180,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         }).finally()
         return
     }
+    SampleGarbage.purge().catch(console.warn)
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")

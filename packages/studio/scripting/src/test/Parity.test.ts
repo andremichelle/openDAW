@@ -52,7 +52,7 @@ describe("Schema parity", () => {
             MIDIOutput: [],
             Tape: [],
             Neon: [],
-            Tubular: ["voiceLoad", "engine"],
+            Tubular: ["voiceLoad"],
             // patterns are exposed as CubedPattern objects (length + unpacked steps), not through the field binder
             Cubed: Array.from({length: 16}, (_, pattern) => [
                 `patterns.${pattern}.length`,
@@ -112,7 +112,7 @@ describe("Schema parity", () => {
         expect(assertMirrored(project.addMarker())).toEqual([])
         expect(assertMirrored(project.groove)).toEqual([])
         const value = unit.addValueTrack(unit, "volume")
-        expect(assertMirrored(value)).toEqual(["type"])
+        expect(assertMirrored(value)).toEqual(["type", "height"])
         const valueRegion = value.addRegion()
         expect(assertMirrored(valueRegion)).toEqual([])
         expect(assertMirrored(valueRegion.addEvent())).toEqual(["interpolation"])

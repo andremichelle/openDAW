@@ -23,7 +23,7 @@ const HOST_IMPORTS: ReadonlyArray<string> = [
     "host_resolve_soundfont", "host_observe_soundfont",
     "host_observe_field", "host_observe_target_string",
     "host_bind_sidechain", "host_resolve_input", "host_self_uuid", "host_panic",
-    "host_base_frequency"
+    "host_base_frequency", "host_set_latency"
 ]
 
 // The device exports the linker touches. `state_size` takes the sample rate (devices size their state from
@@ -46,6 +46,10 @@ export type DeviceExports = {
     audio_effects_field?: () => number
     observe_param_collection_field?: () => number
     observe_sample_collection_field?: () => number
+    observe_sidechain_collection_field?: () => number
+    observe_record_collection_field?: () => number
+    observe_buffer_collection_field?: () => number
+    data_changed?: (statePtr: number, collection: number, ptr: number, records: number, fields: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -58,6 +62,8 @@ export type LinkerEngine = {
                       soundfontChangedIndex: number, resetIndex: number, terminateIndex: number, midiEffectsField: number,
                       audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    device_set_sidechain_collection_field: (deviceId: number, field: number) => void
+    device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
                          childEnabledKey: number, childMuteKey: number, childSoloKey: number,
@@ -162,6 +168,13 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
         device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
         device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
     engine.device_set_box_type(deviceId, writeName(engine, memory, boxType))
+    const sidechainField = device.observe_sidechain_collection_field?.() ?? 0
+    if (sidechainField !== 0) {engine.device_set_sidechain_collection_field(deviceId, sidechainField)}
+    const recordField = device.observe_record_collection_field?.() ?? 0
+    const bufferField = device.observe_buffer_collection_field?.() ?? 0
+    if (recordField !== 0 || bufferField !== 0) {
+        engine.device_set_record_collection(deviceId, recordField, bufferField, installOptional(device.data_changed))
+    }
 }
 
 // Register one COMPOSITE box type (a box hosting a child collection of its own instruments): write its

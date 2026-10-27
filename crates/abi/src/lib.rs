@@ -168,6 +168,7 @@ extern "C" {
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
+    fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
     // worklet; the bridge copies each chunk between the two memories. See the `nam_*` wrappers below.
@@ -185,10 +186,13 @@ extern "C" {
     fn host_wclap_load(handle: u32, url_ptr: u32, url_len: u32, id_ptr: u32, id_len: u32);
     fn host_wclap_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32,
                           bpm: f32, position: f64, flags: u32) -> u32;
+    fn host_wclap_input(handle: u32, index: u32, left_ptr: u32, right_ptr: u32, frames: u32);
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
+    fn host_wclap_state_bytes(handle: u32, ptr: u32, len: u32);
     fn host_wclap_reset(handle: u32);
+    fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
@@ -207,6 +211,9 @@ extern "C" {
     // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
     // dedup on create either — see the JS side).
     fn host_script_release(handle: u32);
+    fn host_script_latency(handle: u32) -> u32;
+    // WASM CONTRACT: one `@collection` snapshot (f32 record-major, NaN = no value box); collection u32::MAX resets all
+    fn host_script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32);
     // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
     // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
     fn host_panic(msg_ptr: u32, msg_len: u32);
@@ -275,6 +282,24 @@ pub fn base_frequency() -> f32 {
     { unsafe { host_base_frequency() } }
     #[cfg(not(target_family = "wasm"))]
     { f32::from_bits(NATIVE_BASE_FREQUENCY.load(core::sync::atomic::Ordering::Relaxed)) }
+}
+
+/// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
+#[inline]
+pub fn set_latency(frames: u32) {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_set_latency(frames) }
+    #[cfg(not(target_family = "wasm"))]
+    NATIVE_LATENCY.store(frames, core::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_LATENCY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Native TEST SEAM: the latency the last [`set_latency`] call reported.
+#[cfg(not(target_family = "wasm"))]
+pub fn native_latency() -> u32 {
+    NATIVE_LATENCY.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// Native TEST SEAM: set what [`base_frequency`] returns (a device test detunes, then restores 440).
@@ -408,6 +433,7 @@ pub const FIELD_KIND_FLOAT: u32 = 1;
 pub const FIELD_KIND_BOOL: u32 = 2;
 pub const FIELD_KIND_STRING: u32 = 3;
 pub const FIELD_KIND_INT_ARRAY: u32 = 4;
+pub const FIELD_KIND_BYTES: u32 = 5;
 
 /// A PLAIN box-field value handed to a device's [`Instrument::field_changed`], ALREADY TYPED (the analog of
 /// [`ParamValue`] for observed fields, not parameters). Mirrors the box graph's field primitives one-to-one:
@@ -421,7 +447,8 @@ pub enum FieldValue<'a> {
     Float(f32),
     Bool(bool),
     String(&'a str),
-    Ints(&'a [i32])
+    Ints(&'a [i32]),
+    Bytes(&'a [u8])
 }
 
 impl<'a> FieldValue<'a> {
@@ -443,6 +470,7 @@ impl<'a> FieldValue<'a> {
                 FieldValue::String(core::str::from_utf8(bytes).expect("field string is not valid UTF-8"))
             }
             FIELD_KIND_INT_ARRAY => FieldValue::Ints(slice::from_raw_parts(bits as *const i32, len as usize)),
+            FIELD_KIND_BYTES => FieldValue::Bytes(slice::from_raw_parts(bits as *const u8, len as usize)),
             _ => panic!("unknown field kind")
         }
     }
@@ -860,6 +888,15 @@ pub fn script_note_off(handle: u32, id: u32) {
     { let _ = (handle, id); }
 }
 
+/// The frames the user `Processor` declares through `this.latency` (0 when unset). Native stub 0.
+#[inline]
+pub fn script_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_script_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
+}
+
 /// Tell the user `Processor` to reset (transport stop). Native stub no-op.
 #[inline]
 pub fn script_reset(handle: u32) {
@@ -905,6 +942,15 @@ pub fn script_sample(handle: u32, index: u32, sample_handle: u32, present: bool)
     { unsafe { host_script_sample(handle, index, sample_handle, present as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, index, sample_handle, present); }
+}
+
+/// Hand one `@collection` snapshot to the JS bridge (`data_changed` forwards it), see `host_script_data`.
+#[inline]
+pub fn script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_data(handle, collection, ptr, records, fields) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, collection, ptr, records, fields); }
 }
 
 /// Run the user note-transform generator + all stateful tracking (Spielwerk) over the pulled input events,
@@ -1020,8 +1066,21 @@ pub fn wclap_load(handle: u32, url: &str, clap_id: &str) {
     { let _ = (handle, url, clap_id); }
 }
 
+/// Feed the plugin's audio input port `index` (1+) for the next [`wclap_process`]; port 0 is its `inputs`.
+/// An unfed port plays silence. Native stub no-op.
+#[inline]
+pub fn wclap_input(handle: u32, index: u32, input: [&[f32]; 2]) {
+    #[cfg(target_family = "wasm")]
+    {
+        let [left, right] = input;
+        unsafe { host_wclap_input(handle, index, left.as_ptr() as u32, right.as_ptr() as u32, left.len().min(right.len()) as u32) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, index, input); }
+}
+
 /// Run `frames` stereo samples through the plugin with the block's transport (tempo, pulse position, playing).
-/// `false` = not ready, the device must pass its input through.
+/// `false` = no plugin output, the device must pass its input through.
 #[inline]
 pub fn wclap_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize, block: &Block) -> bool {
     #[cfg(target_family = "wasm")]
@@ -1074,6 +1133,25 @@ pub fn wclap_state(handle: u32, base64: &str) {
     { unsafe { host_wclap_state(handle, base64.as_ptr() as u32, base64.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, base64); }
+}
+
+/// Hand the saved `clap_plugin_state` blob as raw bytes (empty = none) to the bridge, same contract as
+/// [`wclap_state`] without the base64. Native stub no-op.
+#[inline]
+pub fn wclap_state_bytes(handle: u32, bytes: &[u8]) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_state_bytes(handle, bytes.as_ptr() as u32, bytes.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, bytes); }
+}
+
+/// The frames the loaded plugin reports through `clap.latency` (0 until it is ready). Native stub 0.
+#[inline]
+pub fn wclap_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_wclap_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
 }
 
 /// Transport stop: `clap_plugin.reset`. Native stub no-op.
@@ -1386,6 +1464,15 @@ pub trait Instrument {
     }
 }
 
+static CHUNK_START: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// The quantum frame where the current instrument `process_audio` chunk starts (its slices are rebased to 0),
+/// for reading a [`resolve_input`] buffer, which is in absolute quantum coordinates.
+#[inline]
+pub fn chunk_start() -> usize {
+    CHUNK_START.load(core::sync::atomic::Ordering::Relaxed) as usize
+}
+
 /// Dispatch ONE block's `events` (offset-sorted, within `[block.s0, block.s1)`) over the stereo `output`:
 /// `process_audio` for each chunk between events, `handle_event` (or a Route-D param pull) at each offset.
 /// Each chunk gets a cloned `block` with `s0`/`s1` rebased to `0`/`len`, `p0`/`p1` the chunk's pulse range,
@@ -1404,6 +1491,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
             let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
             chunk_p0 = event.position;
@@ -1418,6 +1506,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     }
     if cursor < s1 {
         let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
 }

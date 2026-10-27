@@ -384,6 +384,11 @@ Missing:
 - bundle presets (`clap.preset-load`)
 - `EVENT_CHOKE` and `cent` tuning note expressions
 - a missing-plugin placeholder (today the device passes through and the editor shows "Failed")
+- offline render waits for every WebCLAP plugin to finish initializing, if it needs to: today
+  `offline-worker.ts` only awaits the bridge's tracked load promises (`pending`, `queryLoadingComplete`),
+  a plugin that is instantiated but still starting up (e.g. a Cmajor patch building its engine) may render
+  silence or passthrough into the first blocks of the export (not yet verified). Needs a per-plugin "ready" signal from the
+  bridge that the render loop awaits before the first block, with a timeout that fails the export loudly
 
 ### Plugin origin (blocker 1)
 

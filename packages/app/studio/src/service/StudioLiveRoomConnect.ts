@@ -1,4 +1,4 @@
-import {Errors, Option, Optional, panic, Progress, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Errors, isDefined, Option, Optional, panic, Progress, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {Promises, Wait} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, WclapStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
@@ -17,6 +17,12 @@ const classifyConnectError = (error: unknown): RoomResultStatus => {
 }
 
 export const connectRoom = async (service: StudioService, prefillRoomName?: Optional<string>): Promise<void> => {
+    if (!isDefined(window.RTCPeerConnection)) {
+        return RuntimeNotifier.info({
+            headline: "Live Rooms Unavailable",
+            message: "Live rooms require WebRTC, which is disabled or not supported in this browser."
+        })
+    }
     const result = await showConnectRoomDialog(prefillRoomName).catch(() => null)
     if (result === null) {return}
     const {roomName, userName, userColor} = result

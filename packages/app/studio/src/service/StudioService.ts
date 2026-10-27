@@ -26,7 +26,7 @@ import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
-import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
+import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
@@ -109,6 +109,8 @@ export class StudioService implements ProjectEnv {
         snapping,
         clips: {
             count: new DefaultObservableValue(3),
+            columns: new DefaultObservableValue(8),
+            scroll: new DefaultObservableValue(0),
             visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
@@ -120,7 +122,7 @@ export class StudioService implements ProjectEnv {
     } as const
     readonly menu = populateStudioMenu(this)
     readonly panelLayout = new PanelContents(createPanelFactory(this))
-    readonly spotlightDataSupplier = new SpotlightDataSupplier()
+    readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
@@ -175,7 +177,6 @@ export class StudioService implements ProjectEnv {
         this.#navigation = new StudioNavigation(this.layout.screen, this.#projectProfileService)
         this.#listenProject()
         this.#installConsoleCommands()
-        this.#populateSpotlightData()
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
@@ -245,7 +246,7 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "No stems to export.", icon: "Info"})
                     return
                 }
-                const {status: dialogStatus, error: dialogError, value: config} =
+                const {status: dialogStatus, error: dialogError, value: result} =
                     await Promises.tryCatch(ProjectDialogs.showExportStemsDialog(project))
                 if (dialogStatus === "rejected") {
                     if (Errors.isAbort(dialogError)) {return}
@@ -253,9 +254,10 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                     return
                 }
-                ExportConfiguration.sanitizeExportNamesInPlace(config)
+                const {configuration, section} = result
+                ExportConfiguration.sanitizeExportNamesInPlace(configuration)
                 await this.audioContext.suspend()
-                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
+                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, configuration, section))
                 if (status === "rejected" && !Errors.isAbort(error)) {
                     console.warn(error)
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
@@ -271,6 +273,12 @@ export class StudioService implements ProjectEnv {
     }
 
     async exportDawproject() {
+        const approved = await Dialogs.approve({
+            headline: "Export DAWproject",
+            message: "DAWproject is an experimental exchange format by Bitwig.\nDevices and their settings may not survive the conversion, so the exported file is not a reliable copy of your project. Do not use it as a backup. To back up your work or send it to another user, use 'Save Bundle File to Disk...' instead.",
+            approveText: "Export"
+        })
+        if (!approved) {return}
         return this.#projectProfileService.getValue().ifSome(profile => DawProjectService.exportDawproject(profile))
     }
 
@@ -463,6 +471,8 @@ export class StudioService implements ProjectEnv {
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
+                this.timeline.clips.scroll.setValue(0)
+                this.timeline.clips.columns.setValue(Math.max(8, maxClipIndex + 1))
                 if (maxClipIndex > 0) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
@@ -546,12 +556,6 @@ export class StudioService implements ProjectEnv {
             })
         ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
-    }
-
-    #populateSpotlightData(): void {
-        this.spotlightDataSupplier.registerAction("Create Synth", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create Drumcomputer", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create ModularSystem", EmptyExec)
     }
 
     #configBeforeUnload(): void {

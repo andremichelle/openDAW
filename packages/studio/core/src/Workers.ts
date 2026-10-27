@@ -9,6 +9,23 @@ import type {
     TransientProtocol
 } from "@opendaw/lib-dsp"
 
+const OpfsAnswerWarnMillis = 10_000
+
+const watchOpfs = <T>(operation: string, path: string, promise: Promise<T>): Promise<T> => {
+    const start = performance.now()
+    const seconds = () => ((performance.now() - start) / 1000).toFixed(1)
+    const warning = setTimeout(() =>
+        console.warn(`[OPFS] ${operation} '${path}' has no answer from the worker after ${seconds()}s`), OpfsAnswerWarnMillis)
+    const settle = () => {
+        clearTimeout(warning)
+        if (performance.now() - start >= OpfsAnswerWarnMillis) {
+            console.warn(`[OPFS] ${operation} '${path}' answered after ${seconds()}s`)
+        }
+    }
+    promise.then(settle, settle)
+    return promise
+}
+
 export class Workers {
     static async install(url: string): Promise<void> {
         console.debug("install Workers")
@@ -49,12 +66,12 @@ export class Workers {
         return Communicator
             .sender<OpfsProtocol>(this.messenger.unwrap("Workers are not installed").channel("opfs"),
                 router => new class implements OpfsProtocol {
-                    write(path: string, data: Uint8Array): Promise<void> {return router.dispatchAndReturn(this.write, path, data)}
-                    read(path: string): Promise<Uint8Array> {return router.dispatchAndReturn(this.read, path)}
-                    exists(path: string): Promise<boolean> {return router.dispatchAndReturn(this.exists, path)}
-                    delete(path: string): Promise<void> {return router.dispatchAndReturn(this.delete, path)}
-                    list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return router.dispatchAndReturn(this.list, path)}
-                    isAvailable(): Promise<boolean> {return router.dispatchAndReturn(this.isAvailable)}
+                    write(path: string, data: Uint8Array): Promise<void> {return watchOpfs("write", path, router.dispatchAndReturn(this.write, path, data))}
+                    read(path: string): Promise<Uint8Array> {return watchOpfs("read", path, router.dispatchAndReturn(this.read, path))}
+                    exists(path: string): Promise<boolean> {return watchOpfs("exists", path, router.dispatchAndReturn(this.exists, path))}
+                    delete(path: string): Promise<void> {return watchOpfs("delete", path, router.dispatchAndReturn(this.delete, path))}
+                    list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return watchOpfs("list", path, router.dispatchAndReturn(this.list, path))}
+                    isAvailable(): Promise<boolean> {return watchOpfs("isAvailable", "", router.dispatchAndReturn(this.isAvailable))}
                 })
     }
 

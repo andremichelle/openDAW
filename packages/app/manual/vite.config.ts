@@ -29,6 +29,9 @@ const prerenderPages = (): Plugin => ({
     }
 })
 
+const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
+    && existsSync(resolve(__dirname, "../../../certs/localhost.pem"))
+
 export default defineConfig(({command}) => ({
     base: "/manuals/",
     build: {
@@ -46,8 +49,8 @@ export default defineConfig(({command}) => ({
     clearScreen: false,
     server: {
         port: 8081,
-        host: "localhost",
-        https: command === "serve" && existsSync(resolve(__dirname, "../../../certs/localhost-key.pem")) ? {
+        host: certsExist ? true : "localhost", // network-reachable only over HTTPS
+        https: command === "serve" && certsExist ? {
             key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
             cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
         } : undefined,

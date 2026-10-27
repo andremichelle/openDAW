@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/studio-scrollbars",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.5",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "exports": {
@@ -13,13 +13,13 @@
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\"",
-    "test": "echo \"No tests to run\""
+    "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-dom": "^0.0.91",
-    "@opendaw/lib-jsx": "^0.0.93",
-    "@opendaw/lib-runtime": "^0.0.87",
-    "@opendaw/lib-std": "^0.0.86"
+    "@opendaw/lib-dom": "^0.0.93",
+    "@opendaw/lib-jsx": "^0.0.95",
+    "@opendaw/lib-runtime": "^0.0.89",
+    "@opendaw/lib-std": "^0.0.88"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

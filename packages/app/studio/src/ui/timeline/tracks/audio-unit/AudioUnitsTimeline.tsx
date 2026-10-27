@@ -28,6 +28,7 @@ import {IndexedBox} from "@opendaw/lib-box"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
+import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 
@@ -49,7 +50,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 <div className="create-instrument">
                     <MenuButton root={MenuItem.root()
                         .setRuntimeChildrenProcedure(parent => parent
-                            .addMenuItem(...Object.entries(InstrumentFactories.Named).map(([_key, factory]) =>
+                            .addMenuItem(...InstrumentFactories.Sorted.map(([_key, factory]) =>
                                 MenuItem.default({
                                     label: factory.defaultName,
                                     icon: factory.defaultIcon
@@ -88,7 +89,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                             trackBoxAdapter={trackBoxAdapter}/>
         )
     }
-    const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, factory))
+    const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, scrollModel, factory))
     const insertLine: HTMLElement = <div className="unit-insert-line"/>
     // The insert slot among a device group's lanes for a pointer y: before the first lane whose vertical
     // center lies below it, else after the last.
@@ -256,7 +257,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
         scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
         Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop),
-        installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY, {padding: [24, 0, 24, 0]})
+        installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY,
+            {padding: [24, 0, 24, 0], ignorePointerSelector: Config.AutoScrollIgnore})
     )
     element.style.setProperty("--extra-space", `${ExtraSpace}px`)
     return element

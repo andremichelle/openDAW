@@ -84,8 +84,13 @@ export namespace WavFile {
      * ArrayBuffer ready to drop into a Blob or pass to importers expecting
      * standard 16-bit WAV.
      */
-    export const encodeInts16 = (audio: AudioData | AudioBufferLike, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer => {
-        const bytesPerSample = 2
+    export const encodeInts16 = (audio: AudioData | AudioBufferLike, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer =>
+        encodeInts(audio, 2, maxLength)
+
+    export const encodeInts24 = (audio: AudioData | AudioBufferLike, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer =>
+        encodeInts(audio, 3, maxLength)
+
+    const encodeInts = (audio: AudioData | AudioBufferLike, bytesPerSample: 2 | 3, maxLength: int): ArrayBuffer => {
         const sampleRate = audio.sampleRate
         let numberOfFrames: number
         let numberOfChannels: number
@@ -101,7 +106,7 @@ export namespace WavFile {
         }
         numberOfFrames = Math.min(maxLength, numberOfFrames)
         const dataSize = numberOfFrames * numberOfChannels * bytesPerSample
-        const size = 44 + dataSize
+        const size = 44 + dataSize + (dataSize & 1)
         const buf = new ArrayBuffer(size)
         const view = new DataView(buf)
         view.setUint32(0, MAGIC_RIFF, true)
@@ -122,7 +127,13 @@ export namespace WavFile {
             for (let j = 0; j < numberOfChannels; ++j) {
                 const sample = frames[j][i]
                 const clamped = sample < -1 ? -1 : sample > 1 ? 1 : sample
-                view.setInt16(w, Math.round(clamped * 0x7fff), true)
+                if (bytesPerSample === 2) {
+                    view.setInt16(w, Math.round(clamped * 0x7fff), true)
+                } else {
+                    const value = Math.round(clamped * 0x7fffff)
+                    view.setUint16(w, value & 0xffff, true)
+                    view.setInt8(w + 2, value >> 16)
+                }
                 w += bytesPerSample
             }
         }

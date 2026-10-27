@@ -1,5 +1,5 @@
 import {NestedLabels} from "@/ui/PreferencePanel"
-import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
+import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings, WclapZoomOptions} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
 
 export namespace PreferencesPageLabels {
@@ -66,6 +66,12 @@ export namespace PreferencesPageLabels {
                 "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)"
             }
         },
+        "webclap": {
+            label: "WebCLAP",
+            fields: {
+                "default-zoom": "Default plugin window zoom"
+            }
+        },
         "debug": {
             label: "Debug",
             fields: {
@@ -75,12 +81,6 @@ export namespace PreferencesPageLabels {
                 "footer-show-build-infos": "Show Build Information",
                 "enable-beta-features": "Enable Experimental Features",
                 "enable-debug-menu": "Enable Debug Menu"
-            }
-        },
-        "storage": {
-            label: "Storage",
-            fields: {
-                "auto-delete-orphaned-samples": "Auto-delete orphaned samples"
             }
         }
     }
@@ -98,6 +98,9 @@ export namespace PreferencesPageLabels {
                         ? "Push existing"
                         : "Keep existing"
             }))
+        },
+        "webclap": {
+            "default-zoom": WclapZoomOptions.map(value => ({value, label: `${value}%`}))
         }
     }
 

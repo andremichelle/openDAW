@@ -1,25 +1,25 @@
 {
   "name": "@opendaw/manual",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.7",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
-    "dev": "CI=true vite --clearScreen false --host",
+    "dev": "vite --clearScreen false",
     "build": "tsc && vite build",
     "preview": "vite preview --host",
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\"",
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-dom": "^0.0.91",
-    "@opendaw/lib-jsx": "^0.0.93",
-    "@opendaw/lib-runtime": "^0.0.87",
-    "@opendaw/lib-std": "^0.0.86",
-    "@opendaw/studio-enums": "^0.1.4",
-    "@opendaw/studio-icons": "^0.0.3",
-    "@opendaw/studio-markdown": "^0.0.3",
-    "@opendaw/studio-scrollbars": "^0.0.3"
+    "@opendaw/lib-dom": "^0.0.93",
+    "@opendaw/lib-jsx": "^0.0.95",
+    "@opendaw/lib-runtime": "^0.0.89",
+    "@opendaw/lib-std": "^0.0.88",
+    "@opendaw/studio-enums": "^0.1.8",
+    "@opendaw/studio-icons": "^0.0.7",
+    "@opendaw/studio-markdown": "^0.0.7",
+    "@opendaw/studio-scrollbars": "^0.0.5"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

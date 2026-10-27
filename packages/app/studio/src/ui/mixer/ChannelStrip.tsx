@@ -17,6 +17,7 @@ import {AuxSendGroup} from "@/ui/mixer/AuxSendGroup.tsx"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput.tsx"
 import {ChannelOutputSelector} from "@/ui/mixer/ChannelOutputSelector.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
+import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {AutomationControl} from "../components/AutomationControl"
@@ -76,7 +77,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
         </AutomationControl>
     )
     const muteModel = EditWrapper.forAutomatableParameter(editing, mute)
-    const soloModel = EditWrapper.forAutomatableParameter(editing, solo)
+    const exclusiveSolo = ExclusiveSolo.create(editing, adapter, () => rootBoxAdapter.audioUnits.adapters())
     const muteControl = (
         <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                            tracks={tracks} parameter={mute}>
@@ -92,7 +93,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
         <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                            tracks={tracks} parameter={solo}>
             <Checkbox lifecycle={lifecycle}
-                      model={soloModel}
+                      model={exclusiveSolo.model}
+                      onInit={exclusiveSolo.onInit}
                       className="solo"
                       appearance={{color: Colors.shadow, activeColor: Colors.yellow, framed: true}}>
                 <Icon symbol={IconSymbol.Solo}/>

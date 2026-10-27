@@ -13,7 +13,7 @@ use bindings::value_collection::ValueCurve;
 use boxgraph::address::Uuid;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use value::region::{global_to_local, RegionCollection, Span};
-use crate::modulation::{modulation_sum_split, ModulationChain};
+use crate::modulation::ModulationChain;
 
 /// A parameter's stable identifier: the field-key path to its box field (e.g. `[16, 10]` for
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
@@ -54,11 +54,28 @@ impl ParamHandle {
     /// While PAUSED the automation reads the FROZEN song position (a static curve there is the hold TS gets
     /// from its silent update clock) while the modulation follows the free-running position.
     pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
-        let (value, kind) = self.resolve_base(automation_position);
-        let modulation = modulation_sum_split(self.modulation.as_ref(),
-            automation_position, modulation_position);
+        self.resolve_lagged(&crate::playhead_history::Lagged {
+            automation: automation_position, modulation: modulation_position, quanta_back: 0})
+    }
+
+    pub(crate) fn resolve_lagged(&self, lagged: &crate::playhead_history::Lagged) -> (f32, u32, f32) {
+        let (value, kind) = self.resolve_base(lagged.automation);
+        let modulation = crate::modulation::modulation_sum_lagged(self.modulation.as_ref(),
+            lagged.automation, lagged.modulation, lagged.quanta_back);
         self.publish(modulation);
         (value, kind, modulation)
+    }
+
+    /// Like `resolve_held` for a reader whose audio is `lag` frames late: the curves and modulators as they
+    /// were when that audio was rendered (#482).
+    pub(crate) fn resolve_held_lagged(&self, position: f64, transporting: bool, lag: u32) -> (f32, u32, f32) {
+        if lag == 0 {
+            return self.resolve_held(position, transporting);
+        }
+        match crate::playhead_lagged(position, lag) {
+            Some(lagged) => self.resolve_lagged(&lagged),
+            None => self.resolve_held(position, transporting)
+        }
     }
 
     /// `[0]` the automated unit value (NaN when no curve applies, so the knob keeps showing its storage

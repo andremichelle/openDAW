@@ -5,7 +5,9 @@
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use crate::audio_buffer::SharedAudioBuffer;
+use crate::audio_buffer::{AudioBuffer, SharedAudioBuffer};
+use crate::compensation::{CompensationDelay, CompensationLimits};
+use crate::engine_context::NodeId;
 use crate::audio_generator::AudioGenerator;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
@@ -15,9 +17,16 @@ use crate::meter::Meter;
 use crate::telemetry::BroadcastSlot;
 use crate::RENDER_QUANTUM;
 
+struct BusSource {
+    buffer: SharedAudioBuffer,
+    node: NodeId,
+    delay: Option<CompensationDelay>
+}
+
 pub struct AudioBusProcessor {
     output: SharedAudioBuffer,
-    sources: Vec<SharedAudioBuffer>,
+    sources: Vec<BusSource>,
+    delayed: AudioBuffer,
     enabled: bool,
     events: EventBuffer,
     meter: Option<Meter>
@@ -25,7 +34,7 @@ pub struct AudioBusProcessor {
 
 impl AudioBusProcessor {
     pub fn new(output: SharedAudioBuffer) -> Self {
-        Self {output, sources: Vec::new(), enabled: true, events: EventBuffer::new(), meter: None}
+        Self {output, sources: Vec::new(), delayed: AudioBuffer::new(), enabled: true, events: EventBuffer::new(), meter: None}
     }
 
     /// Enable metering of this bus's RAW SUM (pre-fx, pre-strip) and return its broadcast slot. Lazy: the meter
@@ -42,13 +51,13 @@ impl AudioBusProcessor {
     }
 
     /// Add a source whose output is summed into this bus (TS `addAudioSource`).
-    pub fn add_audio_source(&mut self, source: SharedAudioBuffer) {
-        self.sources.push(source);
+    pub fn add_audio_source(&mut self, source: SharedAudioBuffer, node: NodeId) {
+        self.sources.push(BusSource {buffer: source, node, delay: None});
     }
 
     /// Remove a previously added source (by buffer identity), e.g. when its audio unit is removed.
     pub fn remove_audio_source(&mut self, source: &SharedAudioBuffer) {
-        self.sources.retain(|existing| !Rc::ptr_eq(existing, source));
+        self.sources.retain(|existing| !Rc::ptr_eq(&existing.buffer, source));
     }
 
     /// How many sources this bus currently sums (for tests / introspection).
@@ -70,7 +79,22 @@ impl AudioGenerator for AudioBusProcessor {
 }
 
 impl Processor for AudioBusProcessor {
+    fn junction_sources(&self) -> Option<Vec<NodeId>> {
+        Some(self.sources.iter().map(|source| source.node).collect())
+    }
+
+    fn set_junction_delays(&mut self, delays: &[u32], limits: CompensationLimits) {
+        for (source, &frames) in self.sources.iter_mut().zip(delays) {
+            if frames > 0 || source.delay.is_some() {
+                source.delay.get_or_insert_with(CompensationDelay::new).set_delay(frames, limits);
+            }
+        }
+    }
+
     fn reset(&mut self) {
+        for delay in self.sources.iter_mut().filter_map(|source| source.delay.as_mut()) {
+            delay.clear();
+        }
         self.output.borrow_mut().clear();
         if let Some(meter) = self.meter.as_mut() {
             meter.clear();
@@ -81,9 +105,15 @@ impl Processor for AudioBusProcessor {
         let mut output = self.output.borrow_mut();
         output.clear_range(0, RENDER_QUANTUM);
         if self.enabled {
-            for source in &self.sources {
-                let source = source.borrow();
-                output.add_range(&source, 0, RENDER_QUANTUM);
+            for source in &mut self.sources {
+                let buffer = source.buffer.borrow();
+                match source.delay.as_mut() {
+                    Some(delay) => {
+                        delay.process(&buffer, &mut self.delayed, 0, RENDER_QUANTUM);
+                        output.add_range(&self.delayed, 0, RENDER_QUANTUM);
+                    }
+                    None => output.add_range(&buffer, 0, RENDER_QUANTUM)
+                }
             }
         }
         // A disabled (bypassed) bus meters its silence; the peak decays to zero.

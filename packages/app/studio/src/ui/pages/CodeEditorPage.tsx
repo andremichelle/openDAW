@@ -23,7 +23,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {MixdownOptions, ScriptHost} from "@opendaw/studio-scripting"
+import {MixdownOptions, ScriptHost, ScriptPreamble} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {
     AudioContexts,
@@ -43,7 +43,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
 import {ScriptSession} from "./code-editor/ScriptSession"
-import {ScriptTemplates, StockScripts} from "./code-editor/StockScripts"
+import {ScriptTemplates} from "./code-editor/StockScripts"
 
 const isMimeType = (value: string): value is `${string}/${string}` => /^[^/]+\/[^/]+$/.test(value)
 const isExtension = (value: string): value is `.${string}` => value.length > 1 && value.startsWith(".")
@@ -137,15 +137,14 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             })
     }, scriptWorkerUrl)
     const storage = ScriptStorage.get()
-    const stockReady = storage.syncStock(StockScripts)
     return (
         <div className={className}>
             <Await
-                factory={() => Promise.all([loadMonacoSetup().then(({monaco}) => monaco), stockReady])}
+                factory={() => loadMonacoSetup().then(({monaco}) => monaco)}
                 failure={(props) => EditorLoadFailure(props)}
                 loading={() => ThreeDots()}
-                success={([monaco]) => {
-                    const {model, container} = MonacoFactory.create({
+                success={monaco => {
+                    const {editor, model, container} = MonacoFactory.create({
                         monaco, lifecycle, language: "typescript",
                         uri: "file:///main.ts", initialCode: ScriptSession.savedSource.getValue(), keepExisting: true
                     })
@@ -203,8 +202,15 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                     const isDirty = () => model.getValue() !== ScriptSession.savedSource.getValue()
                     const updateTitle = () => title.textContent = `${scriptName()}${isDirty() ? " *" : ""}`
                     const contentListener = model.onDidChangeContent(updateTitle)
+                    const pasteListener = editor.onDidPaste(() => {
+                        const source = model.getValue()
+                        const stripped = ScriptPreamble.strip(source)
+                        if (stripped === source || stripped.length === 0) {return}
+                        editor.executeEdits("strip-preamble", [{range: model.getFullModelRange(), text: stripped}])
+                    })
                     lifecycle.ownAll(
                         Terminable.create(() => contentListener.dispose()),
+                        Terminable.create(() => pasteListener.dispose()),
                         ScriptSession.current.subscribe(updateTitle),
                         ScriptSession.savedSource.subscribe(updateTitle),
                         ScriptSession.suggestedName.subscribe(updateTitle)
@@ -225,6 +231,11 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                     const newScript = async (source: string, suggestedName: string) => {
                         if (!await approveLosingChanges()) {return}
                         replaceContent(source, suggestedName)
+                    }
+                    const openCommunity = async (): Promise<void> => {
+                        const {status, value} = await Promises.tryCatch(ScriptDialogs.showCommunityDialog({target: "project"}))
+                        if (status === "rejected") {return}
+                        await newScript(value.source, value.name)
                     }
                     const store = async (uuid: UUID.Bytes, meta: ScriptMeta): Promise<boolean> => {
                         const source = model.getValue()
@@ -348,8 +359,13 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                                 </Button>
                                 <Button lifecycle={lifecycle}
                                         onClick={() => open().finally()}
-                                        appearance={{tooltip: "Browse scripts"}}>
-                                    <span>Scripts</span> <Icon symbol={IconSymbol.Code}/>
+                                        appearance={{tooltip: "Browse your scripts"}}>
+                                    <span>My Scripts</span> <Icon symbol={IconSymbol.Code}/>
+                                </Button>
+                                <Button lifecycle={lifecycle}
+                                        onClick={() => openCommunity().finally()}
+                                        appearance={{color: Colors.dark, cursor: "pointer", tooltip: "Browse scripts shared by the community"}}>
+                                    <span>Community Scripts</span>
                                 </Button>
                                 {title}
                             </header>

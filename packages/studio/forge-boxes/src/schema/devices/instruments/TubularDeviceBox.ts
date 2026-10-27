@@ -1,4 +1,4 @@
-import {BoxSchema, FieldRecord} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated, FieldRecord} from "@opendaw/lib-box-forge"
 import {Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
@@ -62,8 +62,7 @@ export const TubularDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrum
     // Bumped by every voice load: the device cuts all notes and restarts the LFO, as Dexed does on a
     // program change (plain field, not automatable).
     50: {type: "int32", name: "voice-load", value: 0, constraints: "index", unit: ""},
-    // Operator kernel: 0 = Mark I (hardware-like tables), 1 = Modern (msfa, default). Plain field.
-    51: {type: "int32", name: "engine", value: 1, constraints: {min: 0, max: 1}, unit: ""},
+    51: {type: "int32", name: "engine", value: 1, constraints: {min: 0, max: 1}, unit: "", deprecated},
     // Panel order OP1..OP6 (the sysex stores OP6 first; the adapter and the DSP map the index).
     40: {
         type: "array", name: "operators", length: 6, element: {

@@ -102,7 +102,7 @@ fn an_automated_pass_level_retargets_at_the_update_clock_inside_the_quantum() {
     // unity before it, ramping toward -inf after it.
     let params = Rc::new(SendParams::new());
     let automation = Rc::new(StripAutomation::new());
-    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| if position < 10.0 {0.0} else {f32::NEG_INFINITY}));
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool, _lag: u32| if position < 10.0 {0.0} else {f32::NEG_INFINITY}));
     let mut sink = sink(&params, automation);
     let input = shared_audio_buffer();
     {

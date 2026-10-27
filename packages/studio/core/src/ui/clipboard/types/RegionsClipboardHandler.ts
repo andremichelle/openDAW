@@ -130,9 +130,9 @@ export namespace RegionsClipboard {
             },
             paste: (entry: ClipboardEntry): void => {
                 if (entry.type !== "regions" || !getEnabled()) {return}
-                const position = getPosition()
+                const pastePosition = Math.max(0, Math.floor(getPosition()))
                 const metadata = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
-                const positionOffset = Math.max(0, position) - metadata.minPosition
+                const positionOffset = pastePosition - metadata.minPosition
                 const allTracks = getTracks()
                 const focusedTrack = getFocusedTrack()
                 if (focusedTrack.isEmpty() || allTracks.length === 0) {return}
@@ -147,7 +147,6 @@ export namespace RegionsClipboard {
                 }
                 editing.modify(() => {
                     selection.deselectAll()
-                    const pastePosition = Math.max(0, position)
                     const pasteComplete = pastePosition + (metadata.maxPosition - metadata.minPosition)
                     const overlapSolvers = sourceTrackToTarget.values()
                         .map(({target}) => overlapResolver.fromRange(target, pastePosition, pasteComplete))

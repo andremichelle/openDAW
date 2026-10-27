@@ -1,7 +1,8 @@
 import {isDefined, Optional, tryCatch, UUID} from "@opendaw/lib-std"
 import {Workers} from "../Workers"
 
-// Locally imported bundles live in OPFS `wclap/<sha256>/bundle.tar.gz`, addressed by an `opfs:<sha256>` url
+// Locally imported bundles live in OPFS `wclap/<sha256>/bundle.tar.gz`, addressed by an `opfs:<sha256>` url.
+// An imported bare `.wasm` is stored as is under the same name, see WclapBundles.
 export namespace WclapStorage {
     export const Folder = "wclap"
     export const Scheme = "opfs:"

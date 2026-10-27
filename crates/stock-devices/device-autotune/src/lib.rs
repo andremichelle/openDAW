@@ -63,6 +63,7 @@ impl AudioEffect for AutotuneDevice {
     fn init(state: &mut AutotuneState, sample_rate: f32) {
         state.dsp.prepare(sample_rate);
         state.core.prepare(sample_rate);
+        abi::set_latency(dsp::psola::LATENCY_FRAMES);
         state.key_id = abi::bind_parameter(&KEY_FIELD);
         state.scale_id = abi::bind_parameter(&SCALE_FIELD);
         state.amount_id = abi::bind_parameter(&AMOUNT_FIELD);

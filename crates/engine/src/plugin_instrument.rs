@@ -7,6 +7,8 @@
 //! device PULLS its own events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
+use core::cell::Cell;
 use alloc::string::String;
 use boxgraph::address::Uuid;
 use alloc::vec;
@@ -14,13 +16,15 @@ use alloc::vec::Vec;
 use abi::EventRecord;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
+use engine_env::engine_context::NodeId;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
-use crate::{call_device_process, call_device_reset, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
+use crate::audio_unit::SidechainSink;
+use crate::{call_device_process, call_device_reset, DeviceReg, PullLink, DEVICE_MAX_EVENTS, INPUTS, PULL};
 
 /// A graph node that voices its notes through a loaded instrument device (e.g. `device_sine.wasm`). It
 /// pulls notes from its `PullLink` chain (resolved by the device via `host_pull_events`), fills the
@@ -48,6 +52,9 @@ pub(crate) struct PluginInstrument {
     // pulled note starts SET, completes CLEAR the pitch bit. Captured from the engine's wiring context at
     // construction; composite slots share their unit's slot (idempotent bit writes).
     note_bits: Option<engine_env::telemetry::BroadcastSlot>,
+    // Resolved sidechain ports (id 2+, left, right), swapped into `INPUTS` for the device call; no MAIN input.
+    input_ports: Vec<(u32, u32, u32)>,
+    sidechain_buffers: Vec<SharedAudioBuffer>,
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     uuid: Uuid,
     type_name: String,
@@ -63,7 +70,8 @@ pub(crate) struct PluginInstrument {
     device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
-    descriptor: Box<[u32]>
+    descriptor: Box<[u32]>,
+    latency: Rc<Cell<u32>>
 }
 
 impl PluginInstrument {
@@ -93,6 +101,8 @@ impl PluginInstrument {
             0, 0,
             sample_rate.to_bits()
         ].into_boxed_slice();
+        let latency = Rc::new(Cell::new(0));
+        unsafe { crate::LATENCIES.get() }.insert(device_state.as_ptr() as u32, latency.clone());
         Self {
             process_index: device.process_index,
             reset_index: device.reset_index,
@@ -108,11 +118,14 @@ impl PluginInstrument {
             type_name,
             reported_non_finite: false,
             note_bits: crate::current_unit_note_bits(),
+            input_ports: Vec::new(),
+            sidechain_buffers: Vec::new(),
             device_output,
             device_events,
             device_state,
             out_offsets,
-            descriptor
+            descriptor,
+            latency
         }
     }
 
@@ -148,6 +161,20 @@ impl ParamSink for PluginInstrument {
     }
 }
 
+impl SidechainSink for PluginInstrument {
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]) {
+        self.input_ports.clear();
+        self.sidechain_buffers.clear();
+        for (port_id, _, source) in sources {
+            let buffer = source.borrow();
+            let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
+            drop(buffer);
+            self.input_ports.push((*port_id, left, right));
+            self.sidechain_buffers.push(source.clone());
+        }
+    }
+}
+
 impl EventReceiver for PluginInstrument {
     fn event_input(&mut self) -> &mut EventBuffer {
         &mut self.events
@@ -160,7 +187,17 @@ impl AudioGenerator for PluginInstrument {
     }
 }
 
+impl Drop for PluginInstrument {
+    fn drop(&mut self) {
+        unsafe { crate::LATENCIES.get() }.remove(&(self.device_state.as_ptr() as u32));
+    }
+}
+
 impl Processor for PluginInstrument {
+    fn latency(&self) -> u32 {
+        self.latency.get()
+    }
+
     fn reset(&mut self) {
         // Transport STOP: drop every active voice (the device clears its voice pool / envelopes), and clear the
         // buffered events.
@@ -195,7 +232,9 @@ impl Processor for PluginInstrument {
             pull.clock_armed = self.clock_armed;
             pull.note_bits = self.note_bits.clone(); // pulled notes mark THIS unit's note indicator
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
+            core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
+        crate::calling_device(self.device_state.as_ptr() as u32);
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
             let pull = unsafe { PULL.get() };
@@ -205,6 +244,7 @@ impl Processor for PluginInstrument {
             pull.clock_armed = false;
             pull.note_bits = None;
             core::mem::swap(&mut self.params, &mut pull.params); // and take them back
+            core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
         {
             let mut output = self.output.borrow_mut();

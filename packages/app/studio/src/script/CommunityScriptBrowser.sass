@@ -1,0 +1,167 @@
+component
+  flex: 1 1 0
+  display: flex
+  min-height: 0
+
+  div.content
+    flex: 1 1 0
+    display: grid
+    grid-template-columns: minmax(12em, 1fr) 2fr
+    grid-template-rows: auto 1fr auto
+    column-gap: 3em
+    row-gap: 0.5em
+    min-height: 0
+
+  div.link
+    grid-row: 3
+    grid-column: 1 / -1
+    padding-top: 0.5em
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > input
+      flex: 1 1 auto
+      top: 0
+
+    > a
+      margin-left: 1em
+      white-space: nowrap
+
+  a
+    color: inherit
+    text-decoration: none
+
+    &:hover
+      color: var(--color-blue)
+      text-decoration: underline
+
+  div.list-frame
+    grid-row: 2
+    grid-column: 1
+    display: flex
+    flex-direction: column
+    row-gap: 4px
+    position: relative
+    min-height: 0
+    overflow: hidden
+
+    > header
+      display: grid
+      grid-template-columns: 1fr auto
+      column-gap: 0.5em
+      padding: 0 6px
+      color: var(--color-blue)
+
+  div.list
+    flex: 1 1 0
+    min-height: 0
+    display: flex
+    flex-direction: column
+    row-gap: 3px
+    overflow: hidden scroll
+    color: var(--color-dark)
+
+    &:empty:after
+      content: "No community scripts yet."
+      margin-left: 6px
+
+    div.entry
+      display: grid
+      grid-template-columns: 1fr auto
+      column-gap: 0.5em
+      padding: 1px 6px 1px 4px
+      border-left: 2px solid transparent
+      border-radius: 2px
+      cursor: pointer
+
+      &:hover
+        color: var(--color-gray)
+
+      &.selected
+        color: var(--color-bright)
+        background-color: rgba(white, 0.08)
+        border-left-color: var(--color-blue)
+
+      &.link > span.author
+        color: var(--color-blue)
+
+      > span, > a
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+      > .author
+        opacity: 0.6
+
+  div.detail
+    grid-row: 1 / 3
+    grid-column: 2
+    display: flex
+    flex-direction: column
+    row-gap: 1em
+    min-height: 0
+    overflow: hidden scroll
+
+    > *
+      flex: 0 0 auto
+
+    &.empty > div.description
+      color: var(--color-dark)
+
+    > div.description, > pre.code
+      color: var(--color-gray)
+
+    > div.tags
+      display: flex
+      flex-wrap: wrap
+      gap: 0.5em
+
+      > button.tag
+        padding: 0.25em 0.75em
+        border: none
+        border-radius: 3px
+        font: inherit
+        color: var(--color-blue)
+        background-color: rgba(white, 0.08)
+        cursor: pointer
+
+        &:hover
+          background-color: rgba(white, 0.16)
+
+    > a.github
+      margin-top: auto
+      align-self: start
+      padding: 0.25em 0.5em
+      border: 1px solid var(--color-blue)
+      border-radius: 3px
+      color: var(--color-blue)
+      background-color: rgba(white, 0.05)
+
+      &:hover
+        text-decoration: none
+        background-color: rgba(white, 0.1)
+
+    > img.preview
+      flex: 0 0 auto
+      max-width: 100%
+      align-self: flex-start
+      object-fit: contain
+      object-position: left top
+
+    > pre.code
+      flex: 0 0 auto
+      margin: 0
+      padding: 0.5em
+      overflow: auto hidden
+      font-family: monospace
+      font-size: 10px
+      white-space: pre
+      user-select: text
+      background-color: rgba(black, 0.2)
+      border-radius: 3px
+
+  div.error
+    padding-left: 6px
+    cursor: pointer
+    color: var(--color-orange)

@@ -10,7 +10,9 @@ Writing style (all channels)
 • Opening paragraph states what the thing is and what it does, in plain words. No hype openers
   like "a proper convolution reverb" or "your track sits right in it", also not on Discord.
 • No long text. Handle every subject brief and to the point.
-• No technical details unless the prompt asks for them.
+• No technical details unless the prompt asks for them. No numbers like "5 ms" in an example.
+• No stiff inserted clauses like "A limiter, for example, does X". Short sentences in the order
+  things happen, concrete first, no abstract openers.
 • Always include the education angle, unless the prompt says otherwise. Exception: Discord never
   gets the education angle unless the prompt asks for it.
 
@@ -22,6 +24,8 @@ Per channel
   Structure, taken from the Project Templates post: headline, then ONE line that says what the
   thing is, then "### " sublines in Title Case, each followed by one or two plain sentences, then a
   blank line and "Enjoy :heart:". No other emoji. Lines are not wrapped.
+  No blank lines anywhere inside the post, not even before "Enjoy :heart:". Several items (plugins,
+  collections) go into a "- " list.
 • Never say a feature or collection is "free" or "shipped". openDAW is free, that is understood.
 • Do not repeat a fact in two paragraphs.
 • Complete sentences only, everywhere. No fragments like "A convolution reverb." or a bare link
@@ -165,3 +169,34 @@ Feature framing (Tubular)
 • Manual: https://opendaw.studio/manuals/devices/instruments/tubular
 • Never say a device "runs in the browser like every other device". openDAW runs in the browser,
   that is understood.
+
+Feature framing (WebCLAP)
+• openDAW hosts WebCLAP plugins (CLAP compiled to WebAssembly) as instruments and audio effects, each
+  with its own interface in a floating window. A huge step: devices are no longer only the ones we build.
+• No education angle, in no channel (including the newsletter).
+• Cloud plugins 2026-10-08: OB-Xf (Surge Synth Team), Pro54 (Cmajor), Basics (Signalsmith Audio),
+  Tapa, MNO, Slide (Charlie Culbert). Own .wclap.tar.gz files import from disk.
+• JUCE porting kit: https://github.com/andremichelle/juce-webclap-plugins (OB-Xf was the first port).
+• Format: https://github.com/free-audio/web-clap
+• Manual: https://opendaw.studio/manuals/devices/audio/wclap
+• Never use sublines like "Why This Matters". Sublines name the subject literally.
+• LinkedIn and newsletter carry the main argument: online DAWs that claim VST support always need a
+  native helper app downloaded and installed first, the plugins run outside the browser. WebCLAP runs in
+  the browser itself, no helper app, nothing to install. Do not name the other DAWs.
+• Never suggest that every desktop plugin runs in openDAW. Only plugins built as WebCLAP do, many can
+  be rebuilt that way (JUCE kit).
+• Lead with what WebCLAP gives, then contrast with VST. Never open a paragraph with what VST cannot do,
+  nobody asked that question.
+
+Feature framing (Community Scripts)
+• A public GitHub repository, opendaw-commons, holds scripts for Werkstatt, Apparat, Spielwerk and the
+  code editor. Anyone adds one with a pull request, after the merge it is in every Studio within minutes,
+  without a Studio update.
+• Anyone can try a pull request in the Studio before the merge by pasting its link (Load button).
+• LinkedIn: no school or education angle. Engaging call for contributions ("Call for scripts"), the story
+  is that community made devices reach the studio in no time.
+• Credit Chaosmeister for Deminix 3 when it is mentioned.
+• Never say "a few lines of JavaScript" or anything about how little code a device needs. Real scripts
+  run to hundreds of lines (Deminix 3 is over a thousand). Say the devices run your own JavaScript.
+• Manual: https://opendaw.studio/manuals/community-scripts
+• Repository: https://github.com/andremichelle/opendaw-commons

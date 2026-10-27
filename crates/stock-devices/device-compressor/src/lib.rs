@@ -146,6 +146,7 @@ impl AudioEffect for Compressor {
         if id == state.lookahead_id {
             state.lookahead = bool_value(value);
             state.lookahead_mix.set(if state.lookahead {1.0} else {0.0}, state.processing);
+            abi::set_latency(if state.lookahead {state.delay.latency() as u32} else {0});
         } else if id == state.automakeup_id {
             state.automakeup = bool_value(value);
         } else if id == state.autoattack_id {

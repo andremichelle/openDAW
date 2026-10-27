@@ -90,6 +90,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyL, {shift}),
         description: "Toggle loop mode"
     },
+    "toggle-mute": {
+        shortcut: Shortcut.of(Key.KeyM),
+        description: "Toggle mute of the edited audio unit"
+    },
+    "toggle-solo": {
+        shortcut: Shortcut.of(Key.KeyS),
+        description: "Toggle solo of the edited audio unit"
+    },
     "copy-device": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
         description: "Duplicate selected device"
@@ -141,6 +149,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "show-preferences": {
         shortcut: Shortcut.of(Key.Comma, {ctrl}),
         description: "Open preferences"
+    },
+    "open-spotlight": {
+        shortcut: Shortcut.of(Key.Enter, {shift}),
+        description: "Open or close the spotlight"
+    },
+    "open-spotlight-alt": {
+        shortcut: Shortcut.of(Key.KeyF, {ctrl}),
+        description: "Open or close the spotlight"
     }
 })
 

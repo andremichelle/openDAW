@@ -23,7 +23,7 @@ block (timing and transport):
 - block.s1    — last sample index to process (exclusive)
 - block.index — block counter (increments each audio callback)
 - block.bpm   — current project tempo in beats per minute
-- block.p0    — start position in ppqn (pulses per quarter note, 480 ppqn)
+- block.p0    — start position in ppqn (pulses per quarter note, 960 ppqn)
 - block.p1    — end position in ppqn
 - block.flags — bitmask of transport state:
     1 = transporting (transport is active)
@@ -81,6 +81,50 @@ Examples:
 // @param cutoff  1000  20  20000  exp  Hz
 // @param mode    0     0   3      int
 // @param bypass  false
+
+## Declaring samples
+Samples are declared as comments:
+
+// @sample <name>
+
+Each @sample creates a file picker on the device panel. Access the loaded audio via
+this.samples.<name>. Returns null before loaded.
+
+When loaded, this.samples.<name> is an AudioData object:
+- sampleRate: number — the sample's own sample rate
+- numberOfFrames: number — total frames
+- numberOfChannels: number — 1 (mono) or 2 (stereo)
+- frames: [Float32Array, ...] — per-channel audio data
+
+IMPORTANT: The sample's sampleRate may differ from the project sampleRate.
+Account for this, e.g. resample an impulse response before convolving.
+
+## Declaring sidechains
+Sidechain inputs are declared as comments, any number, each with a unique name:
+
+// @sidechain <name>
+
+Each @sidechain creates a source selector on the device panel (any track, device or
+enclosing composite input). Inside process() read it via this.sidechains.<name>, a pair
+[left, right] of Float32Array indexed like src and out (s0..s1). An unconnected
+sidechain reads silence. this.sidechains is set before every process() call, it is not
+available in the constructor.
+Reading a name that no @sidechain line declares stops the device with an error naming it.
+
+Example:
+// @sidechain Key
+    process({src, out}, {s0, s1}) {
+        const [keyL, keyR] = this.sidechains.Key
+        ...
+    }
+
+## Declaring latency
+A processor that delays its output (an FFT window, a look-ahead) declares the delay in milliseconds:
+
+// @latency <milliseconds>
+
+The engine delays every parallel path to match. A delay that changes at runtime can be set in frames
+with this.latency = frames, which overrides the declaration.
 
 ## Globals
 - sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).

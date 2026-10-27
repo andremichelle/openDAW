@@ -1,5 +1,5 @@
 import css from "./ShadertoyPreview.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Fullscreen, Html} from "@opendaw/lib-dom"
 import {
     asInstanceOf,
     DefaultObservableValue,
@@ -61,15 +61,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                                     if (canvas.clientHeight === 0) {return}
                                     canvas.style.width = `${canvas.clientHeight * 1280 / 720}px`
                                 }),
-                                Events.subscribe(canvas, "click", async () => {
-                                    try {
-                                        if (document.fullscreenElement) {
-                                            await document.exitFullscreen()
-                                        } else {
-                                            await canvas.requestFullscreen()
-                                        }
-                                    } catch { /* ignore fullscreen errors (often caused by extensions) */ }
-                                })
+                                Events.subscribe(canvas, "click", () => Fullscreen.toggle(canvas))
                             )
                             const {shaderCode, highres} = asInstanceOf(box, ShadertoyBox)
                             return shaderCode.catchupAndSubscribe(code => {

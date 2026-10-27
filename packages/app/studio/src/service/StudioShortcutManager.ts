@@ -146,6 +146,27 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-loop"].shortcut, () =>
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
                     editing.modify(() => enabled.setValue(!enabled.getValue())))),
+            gc.register(gs["toggle-mute"].shortcut, () => service.runIfProject(
+                ({editing, boxAdapters, userEditingManager}) => userEditingManager.audioUnit.get()
+                    .ifSome(({box}) => {
+                        const {mute} = boxAdapters.adapterFor(box, Devices.isHost).audioUnitBoxAdapter().box
+                        editing.modify(() => mute.setValue(!mute.getValue()))
+                    }))),
+            gc.register(gs["toggle-solo"].shortcut, () => service.runIfProject(
+                ({editing, boxAdapters, userEditingManager, rootBoxAdapter}) => userEditingManager.audioUnit.get()
+                    .ifSome(({box}) => {
+                        const unit = boxAdapters.adapterFor(box, Devices.isHost).audioUnitBoxAdapter()
+                        if (unit.isOutput) {return}
+                        const solo = !unit.box.solo.getValue()
+                        editing.modify(() => {
+                            unit.box.solo.setValue(solo)
+                            if (solo) {
+                                rootBoxAdapter.audioUnits.adapters()
+                                    .filter(other => other !== unit)
+                                    .forEach(other => other.box.solo.setValue(false))
+                            }
+                        })
+                    }))),
             gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
                 ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
@@ -186,7 +207,9 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
             gc.register(gs["workspace-screen-tap"].shortcut, () => service.runIfProject(() => service.switchScreen("tap"))),
-            gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences"))
+            gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences")),
+            gc.register(gs["open-spotlight"].shortcut, () => service.spotlight.toggle()),
+            gc.register(gs["open-spotlight-alt"].shortcut, () => service.spotlight.toggle())
         )
     }
 }

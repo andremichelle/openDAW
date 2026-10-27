@@ -8,6 +8,20 @@ component
   min-width: 16em
   @include mixins.Control
 
+  &.panel-view
+    min-width: 0
+
+  > div.panel
+    flex: 0 0 auto
+    height: 100%
+    overflow: hidden
+    border-radius: 3px
+
+    > iframe
+      display: block
+      width: 100%
+      height: 100%
+
   > div.plugin
     display: flex
     flex-direction: column
@@ -19,6 +33,12 @@ component
     border-radius: 3px
     outline: 0.5px solid rgba(white, 0.2)
     box-shadow: 0 0 3px -1px rgba(white, 0.2)
+
+    &.linked
+      cursor: pointer
+
+      &:hover
+        outline-color: var(--color-blue)
 
     > span.name, > span.vendor
       display: block
@@ -61,6 +81,9 @@ component
       font-size: 10px
       padding: 0 0.5em
       white-space: nowrap
+
+      &.has-source
+        color: var(--color-orange)
 
   > p.about
     margin: 0

@@ -7,6 +7,7 @@ import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipLane} from "@/ui/timeline/tracks/audio-unit/clips/ClipLane.tsx"
 import {RegionLane} from "@/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {installTrackResize} from "./TrackResize"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -38,5 +39,6 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
     )
     const {box: {enabled}} = trackBoxAdapter
     lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
+    installTrackResize(lifecycle, service, trackManager, trackBoxAdapter, element)
     return element
 }

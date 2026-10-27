@@ -29,6 +29,9 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME}.html -f
 RewriteRule ^(.+)$ $1.html [L]
 
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule \.md$ - [R=404,L]
+
 # SPA fallback: the root .htaccess rewrites /manuals/* into this folder, every non-file path loads the app
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [L]

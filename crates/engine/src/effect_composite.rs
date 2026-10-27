@@ -195,7 +195,7 @@ impl EffectCompositeBinding {
     pub(crate) fn entry_gain_at(&self, uuid: Uuid, position: f64, transporting: bool) -> Option<f32> {
         self.members.iter().find(|entry| entry.uuid == uuid)
             .map(|entry| match entry.strip_automation.volume.borrow().as_ref() {
-                Some(source) => source(position, transporting),
+                Some(source) => source(position, transporting, 0),
                 None => entry.strip_params.volume_db.get()
             })
     }
@@ -284,10 +284,12 @@ impl Engine {
         let tap = distributor.borrow().tap();
         let distributor_id = self.context.register_processor(distributor.clone());
         self.context.set_label(distributor_id, alloc::string::String::from("composite-distributor"));
+        self.context.set_owner(distributor_id, composite_uuid);
         let wet_sum = Rc::new(RefCell::new(AudioBusProcessor::new(engine_env::audio_buffer::shared_audio_buffer())));
         let wet_buffer = wet_sum.borrow().audio_output();
         let wet_sum_id = self.context.register_processor(wet_sum.clone());
         self.context.set_label(wet_sum_id, alloc::string::String::from("composite-wet-sum"));
+        self.context.set_owner(wet_sum_id, composite_uuid);
         let dry_wet = Rc::new(DryWetParams::new());
         let dry_wet_automation = Rc::new(StripAutomation::new());
         let mix = Rc::new(RefCell::new(DryWetMixProcessor::new(dry_wet.clone(), dry_wet_automation.clone(),
@@ -295,6 +297,8 @@ impl Engine {
         let mix_output = mix.borrow().audio_output();
         let mix_id = self.context.register_processor(mix.clone());
         self.context.set_label(mix_id, alloc::string::String::from("composite-mix"));
+        mix.borrow_mut().set_junction_nodes(distributor_id, wet_sum_id);
+        self.context.set_owner(mix_id, composite_uuid);
         // Live telemetry: the composite's OUTPUT peaks, under its own box uuid — the same registration every
         // plugin effect makes (`take_or_build_audio`), which is what its device peak meter reads. Without it
         // the composite's meter has no package to subscribe to and simply never moves.
@@ -562,6 +566,7 @@ impl Engine {
             Some(label) if !label.is_empty() => alloc::format!("composite-entry:{label}"),
             _ => alloc::string::String::from("composite-entry")
         });
+        self.context.set_owner(strip_id, uuid);
         // The entry's post-gain output under its own box uuid, so a sidechain can target the ENTRY.
         self.output_registry.register(Address::of(uuid, vec![]), strip_output.clone(), strip_id);
         let entry_meter = strip.borrow().meter_slot();
@@ -630,7 +635,7 @@ impl Engine {
         self.context.register_edge(entry.strip_id, binding.wet_sum_id);
         entry.edges.push((entry.strip_id, binding.wet_sum_id));
         if !entry.summed {
-            binding.wet_sum.borrow_mut().add_audio_source(entry.strip_output.clone());
+            binding.wet_sum.borrow_mut().add_audio_source(entry.strip_output.clone(), entry.strip_id);
             entry.summed = true;
         }
         entry.wired_index = index;

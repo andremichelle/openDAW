@@ -32,11 +32,14 @@ export const Manuals: ReadonlyArray<Manual> = [
         label: "General",
         files: [
             {type: "page", label: "Introduction", path: "/manuals/"},
+            {type: "page", label: "AI", path: "/manuals/ai"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
             {type: "page", label: "Automation", path: "/manuals/automation"},
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
             {type: "page", label: "Capture MIDI", path: "/manuals/capture-midi"},
             {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
+            {type: "page", label: "Community Scripts", path: "/manuals/community-scripts"},
+            {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
             {type: "page", label: "Connect MIDI Device", path: "/manuals/connect-midi-device"},
             {type: "page", label: "Education", path: "/manuals/education"},
             {type: "page", label: "Firefox MIDI", path: "/manuals/firefox-midi"},
@@ -54,7 +57,8 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Project Management", path: "/manuals/project-management"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
             {type: "page", label: "Script Editor", path: "/manuals/script-editor"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            {type: "page", label: "Spotlight", path: "/manuals/spotlight"}
         ]
     },
     {
@@ -85,6 +89,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Vocoder", path: "/manuals/devices/audio/vocoder", icon: IconSymbol.Vocoder},
                     {type: "page", label: "Waveshaper", path: "/manuals/devices/audio/waveshaper", icon: IconSymbol.Curve},
                     {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code},
+                    {type: "page", label: "WebCLAP", path: "/manuals/devices/audio/wclap", icon: IconSymbol.WebClap},
                     {type: "page", label: "Sink", path: "/manuals/devices/audio/sink", icon: IconSymbol.AudioBus}
                 ]
             },
@@ -92,6 +97,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 type: "folder",
                 label: "Instruments",
                 files: [
+                    {type: "page", label: "Audio Track", path: "/manuals/devices/instruments/tape", icon: IconSymbol.Tape},
                     {type: "page", label: "Apparat", path: "/manuals/devices/instruments/apparat", icon: IconSymbol.Code},
                     {type: "page", label: "Cubed", path: "/manuals/devices/instruments/cubed", icon: IconSymbol.Cube},
                     {type: "page", label: "Composite", path: "/manuals/devices/instruments/composite", icon: IconSymbol.Stack},
@@ -102,8 +108,8 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Tubular", path: "/manuals/devices/instruments/tubular", icon: IconSymbol.Tubular},
                     {type: "page", label: "Playfield", path: "/manuals/devices/instruments/playfield", icon: IconSymbol.Playfield},
                     {type: "page", label: "Soundfont", path: "/manuals/devices/instruments/soundfont", icon: IconSymbol.SoundFont},
-                    {type: "page", label: "Tape", path: "/manuals/devices/instruments/tape", icon: IconSymbol.Tape},
-                    {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur", icon: IconSymbol.Vaporisateur}
+                    {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur", icon: IconSymbol.Vaporisateur},
+                    {type: "page", label: "WebCLAP", path: "/manuals/devices/audio/wclap", icon: IconSymbol.WebClap}
                 ]
             },
             {

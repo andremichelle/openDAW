@@ -77,7 +77,7 @@ Gain, pan, mute and solo can be automated. Their lanes appear with the track's o
 
 The **Add Layer** button below the list opens a menu of instruments. Picking one creates a new layer that plays it.
 
-Every instrument that plays notes can be a layer, including Playfield and another Composite. Tape and MIDI Output cannot, because they are wired to the track itself.
+Every instrument that plays notes can be a layer, including Playfield and another Composite. Audio Track and MIDI Output cannot, because they are wired to the track itself.
 
 ---
 
