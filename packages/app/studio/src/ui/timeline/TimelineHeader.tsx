@@ -30,10 +30,14 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                 style={{marginLeft: "8px"}}
                 appearance={{color: Colors.shadow, tinyTriangle: true, tooltip: "Add track"}}
                 root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                    MenuItem.default({label: "Add Instrument…", icon: IconSymbol.Piano, selectable: service.hasProfile})
-                        .setTriggerProcedure(() => CreateTrack.instrument(service)),
-                    MenuItem.default({label: "Add Audio Track", icon: IconSymbol.Tape, selectable: service.hasProfile})
-                        .setTriggerProcedure(() => CreateTrack.audioTrack(service))
+                    MenuItem.default({
+                        label: "Add Instrument…", icon: IconSymbol.Piano, selectable: service.hasProfile,
+                        shortcut: GlobalShortcuts["add-instrument"].shortcut.format()
+                    }).setTriggerProcedure(() => CreateTrack.instrument(service)),
+                    MenuItem.default({
+                        label: "Add Audio Track", icon: IconSymbol.Tape, selectable: service.hasProfile,
+                        shortcut: GlobalShortcuts["add-audio-track"].shortcut.format()
+                    }).setTriggerProcedure(() => CreateTrack.audioTrack(service))
                 ))}>
                 <Icon symbol={IconSymbol.Add}/>
             </MenuButton>

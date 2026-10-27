@@ -23,6 +23,7 @@ import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsS
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
+import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
@@ -167,7 +168,9 @@ export namespace StudioShortcutManager {
                             }
                         })
                     }))),
-            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
+            gc.register(gs["add-instrument"].shortcut, () => {if (service.hasProfile) {CreateTrack.instrument(service)}}),
+            gc.register(gs["add-audio-track"].shortcut, () => {if (service.hasProfile) {CreateTrack.audioTrack(service)}}),
+            gc.register(gs["copy-device"].shortcut,() => service.runIfProject(
                 ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
                         const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)

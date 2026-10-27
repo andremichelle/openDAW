@@ -98,6 +98,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyS),
         description: "Toggle solo of the edited audio unit"
     },
+    "add-instrument": {
+        shortcut: Shortcut.of(Key.KeyI, {shift}),
+        description: "Add an instrument track"
+    },
+    "add-audio-track": {
+        shortcut: Shortcut.of(Key.KeyA, {shift}),
+        description: "Add an audio track"
+    },
     "copy-device": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
         description: "Duplicate selected device"
