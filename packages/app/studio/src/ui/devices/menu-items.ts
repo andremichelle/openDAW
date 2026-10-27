@@ -32,40 +32,14 @@ export namespace MenuItems {
         const {project} = service
         const {editing, api} = project
         const audioUnit = deviceHost.audioUnitBoxAdapter()
-        const {canProcessMidi, manualUrl, name} = deviceHost.inputAdapter.mapOr(input => ({
-            canProcessMidi: input.accepts === "midi",
+        const {manualUrl, name} = deviceHost.inputAdapter.mapOr(input => ({
             manualUrl: input.manualUrl,
             name: input.labelField.getValue()
-        }), {canProcessMidi: false, manualUrl: "manuals", name: "Unknown"})
-        // A one-sided host takes only one chain kind, so each "Add ..." is hidden unless the host has that chain.
-        const optMidiField = deviceHost.midiEffectsField
-        const optAudioField = deviceHost.audioEffectsField
+        }), {manualUrl: "manuals", name: "Unknown"})
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(manualUrl, name),
             MenuItem.default({label: "Replace…", hidden: !DeviceSlot.canReplaceInstrument(deviceHost)})
-                .setTriggerProcedure(() => DeviceDialog.open(service, {type: "replace-instrument", host: deviceHost})),
-            MenuItem.default({
-                label: "Add Midi-Effect",
-                separatorBefore: true,
-                hidden: !canProcessMidi || optMidiField.isEmpty()
-            })
-                .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
-                    .map(entry => MenuItem.default({
-                        label: entry.defaultName,
-                        icon: entry.defaultIcon,
-                        separatorBefore: entry.separatorBefore
-                    }).setTriggerProcedure(() => editing.modify(() =>
-                        api.insertEffect(optMidiField.unwrap("midiEffectsField"), entry, 0))))
-                )),
-            MenuItem.default({label: "Add Audio Effect", hidden: optAudioField.isEmpty()})
-                .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.AudioList
-                    .map(entry => MenuItem.default({
-                        label: entry.defaultName,
-                        icon: entry.defaultIcon,
-                        separatorBefore: entry.separatorBefore
-                    }).setTriggerProcedure(() => editing.modify(() =>
-                        api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
-                ))
+                .setTriggerProcedure(() => DeviceDialog.open(service, {type: "replace-instrument", host: deviceHost}))
         )
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
             populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
@@ -139,39 +113,9 @@ export namespace MenuItems {
         MenuItem.default({label, checked: primitive.getValue() === value})
             .setTriggerProcedure(() => editing.modify(() => primitive.setValue(value)))
 
-    export const forCompositeCell = (parent: MenuItem,
-                                     service: StudioService,
-                                     host: DeviceHost,
-                                     composite: DeviceBoxAdapter): void => {
-        const {editing, api} = service.project
-        const optMidiField = host.midiEffectsField
-        const optAudioField = host.audioEffectsField
+    export const forCompositeCell = (parent: MenuItem, host: DeviceHost, composite: DeviceBoxAdapter): void => {
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(composite.manualUrl, composite.labelField.getValue()),
-            MenuItem.default({
-                label: "Add Midi-Effect",
-                separatorBefore: true,
-                hidden: !DeviceHost.takesEffect(host, "midi")
-            }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
-                .map(entry => MenuItem.default({
-                    label: entry.defaultName,
-                    icon: entry.defaultIcon,
-                    separatorBefore: entry.separatorBefore
-                }).setTriggerProcedure(() => editing.modify(() =>
-                    api.insertEffect(optMidiField.unwrap("midiEffectsField"), entry, 0))))
-            )),
-            MenuItem.default({
-                label: "Add Audio Effect",
-                separatorBefore: optMidiField.isEmpty(),
-                hidden: optAudioField.isEmpty()
-            }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.AudioList
-                .map(entry => MenuItem.default({
-                    label: entry.defaultName,
-                    icon: entry.defaultIcon,
-                    separatorBefore: entry.separatorBefore
-                }).setTriggerProcedure(() => editing.modify(() =>
-                    api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
-            )),
             copyAudioUnit(host.audioUnitBoxAdapter(), {separatorBefore: true})
         )
     }
@@ -185,8 +129,7 @@ export namespace MenuItems {
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
             MenuItem.default({label: "Replace…"})
-                .setTriggerProcedure(() => DeviceDialog.open(service, DeviceSlot.forEffect(device))),
-            populateMenuItemToCreateEffect(service, host, device)
+                .setTriggerProcedure(() => DeviceDialog.open(service, DeviceSlot.forEffect(device)))
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})
         parent.addMenuItem(
@@ -407,23 +350,5 @@ export namespace MenuItems {
                 entry => presets.overwriteEffectPreset(entry, chainEffects.map(adapter => adapter.box as IndexedBox)))
         }
         return items
-    }
-
-    const populateMenuItemToCreateEffect = (service: StudioService, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {
-        const {project} = service
-        const {editing, api} = project
-        // `adapter` already sits in this host's chain of its own kind, so that chain field is present.
-        const field = DeviceHost.chainFieldOf(host, adapter.accepts).unwrap(`host takes no ${adapter.accepts} effects`)
-        const isAudio = adapter.accepts === "audio"
-        return MenuItem.default({label: isAudio ? "Add Audio Effect" : "Add Midi Effect", separatorBefore: true})
-            .setRuntimeChildrenProcedure(parent => parent
-                .addMenuItem(...(isAudio ? EffectFactories.AudioList : EffectFactories.MidiList)
-                    .map(factory => MenuItem.default({
-                        label: factory.defaultName,
-                        icon: factory.defaultIcon,
-                        separatorBefore: factory.separatorBefore
-                    }).setTriggerProcedure(() => editing.modify(() =>
-                        api.insertEffect(field, factory, adapter.indexField.getValue() + 1))))
-                ))
     }
 }
