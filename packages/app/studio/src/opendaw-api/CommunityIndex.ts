@@ -27,6 +27,7 @@ export type CommunityScript = {
     readonly minApi: number
     readonly target: CommunityScriptTarget
     readonly language: "ts" | "js"
+    readonly screenshot?: string
 }
 
 export type CommunityScriptIndex = {
@@ -58,7 +59,8 @@ export namespace CommunityIndex {
         source: z.string(),
         minApi: z.number(),
         target: z.enum(CommunityScriptTargets),
-        language: z.enum(["ts", "js"])
+        language: z.enum(["ts", "js"]),
+        screenshot: z.string().regex(/^[A-Za-z0-9.-]+$/).optional()
     })
 
     const Envelope = z.object({version: z.literal(1), updatedAt: z.string().optional(), scripts: z.array(z.unknown())})

@@ -25,12 +25,11 @@ import {connectSyncToEngine} from "./helpers/connect-sync"
 const WERKSTATT = {headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}
 const APPARAT = {headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}
 const SPIELWERK = {headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"}
-const example = (path: string): string =>
-    readFileSync(new URL(`../../../app/studio/src/ui/devices/${path}`, import.meta.url), "utf8")
+const example = (path: string): string => readFileSync(new URL(`./assets/${path}`, import.meta.url), "utf8")
 const fixture = (name: string): string => readFileSync(new URL(`./assets/apparat/${name}`, import.meta.url), "utf8")
-const XY_FILTER = example("audio-effects/examples/xy-filter.js")
-const CHAOS_PAD = example("audio-effects/examples/chaos-pad.js")
-const PARAMETRIC_EQ = example("audio-effects/examples/parametric-eq.js")
+const XY_FILTER = example("werkstatt/xy-filter.js")
+const CHAOS_PAD = example("werkstatt/chaos-pad.js")
+const PARAMETRIC_EQ = example("werkstatt/parametric-eq.js")
 const SINE = `class Processor {
     phase = 0
     process({out}, {s0, s1}) {
@@ -367,7 +366,7 @@ describe("loading an example replaces the scriptable device", () => {
             return {apparatUnit, apparat, spielwerk}
         }).unwrap()
         const instrumentCode = fixture("simple-sine.js")
-        const midiCode = example("midi-effects/examples/velocity.js")
+        const midiCode = example("spielwerk/velocity.js")
         await compilers.apparat.compile(worklet.context, editing, apparat, instrumentCode, true)
         await compilers.spielwerk.compile(worklet.context, editing, spielwerk, midiCode, true)
         await rig.sync.settle()
@@ -381,7 +380,7 @@ describe("loading an example replaces the scriptable device", () => {
                 })
             })
         const freshSpielwerk = await compilers.spielwerk.replace(worklet.context, editing, spielwerk,
-            example("midi-effects/examples/step-arp.js"), () => SpielwerkDeviceBox.create(boxGraph, UUID.generate(), fresh => {
+            example("spielwerk/step-arp.js"), () => SpielwerkDeviceBox.create(boxGraph, UUID.generate(), fresh => {
                 fresh.host.refer(spielwerk.host.targetVertex.unwrap("spielwerk host"))
                 fresh.index.setValue(spielwerk.index.getValue())
                 fresh.label.setValue("Spielwerk")
@@ -428,7 +427,7 @@ describe("loading an example replaces the scriptable device", () => {
     it("every shipped example replaces every other one without an error, through a held registration", async () => {
         const rig = await createRig()
         const {boxGraph, editing, compilers, worklet} = rig
-        const folder = (path: string): ReadonlyArray<string> => readdirSync(new URL(`../../../app/studio/src/ui/devices/${path}`, import.meta.url))
+        const folder = (path: string): ReadonlyArray<string> => readdirSync(new URL(`./assets/${path}`, import.meta.url))
             .filter(name => name.endsWith(".js")).sort().map(name => `${path}/${name}`)
         await rig.addWerkstatt(0, SINE)
         const sweep = async (first: ScriptCompiler.ScriptDeviceBox, compiler: ReturnType<typeof ScriptCompiler.create>,
@@ -451,7 +450,7 @@ describe("loading an example replaces the scriptable device", () => {
             }
         }
         const werkstatt = await rig.addWerkstatt(1, SINE)
-        await sweep(werkstatt, compilers.werkstatt, folder("audio-effects/examples"), box => renewWerkstatt(box, UUID.generate()))
+        await sweep(werkstatt, compilers.werkstatt, folder("werkstatt"), box => renewWerkstatt(box, UUID.generate()))
         const {apparat, spielwerk} = editing.modify(() => {
             const apparatUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
                 box.collection.refer(rig.rootBox.audioUnits)
@@ -470,7 +469,7 @@ describe("loading an example replaces the scriptable device", () => {
             return {apparat, spielwerk}
         }).unwrap()
         await compilers.apparat.compile(worklet.context, editing, apparat, fixture("simple-sine.js"), true)
-        await compilers.spielwerk.compile(worklet.context, editing, spielwerk, example("midi-effects/examples/velocity.js"), true)
+        await compilers.spielwerk.compile(worklet.context, editing, spielwerk, example("spielwerk/velocity.js"), true)
         await rig.sync.settle()
         await sweep(apparat, compilers.apparat, ["harmonic-synth.js", "simple-sine.js"], box => {
             const device = asInstanceOf(box, ApparatDeviceBox)
@@ -479,7 +478,7 @@ describe("loading an example replaces the scriptable device", () => {
                 fresh.label.setValue("Apparat")
             })
         }, fixture)
-        await sweep(spielwerk, compilers.spielwerk, folder("midi-effects/examples"), box => {
+        await sweep(spielwerk, compilers.spielwerk, folder("spielwerk"), box => {
             const device = asInstanceOf(box, SpielwerkDeviceBox)
             return SpielwerkDeviceBox.create(boxGraph, UUID.generate(), fresh => {
                 fresh.host.refer(device.host.targetVertex.unwrap("spielwerk host"))

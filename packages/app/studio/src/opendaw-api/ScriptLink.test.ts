@@ -153,6 +153,15 @@ describe("CommunityIndex.parseScripts", () => {
         })
         expect(index.scripts.length).toBe(1)
     })
+    it("keeps an optional screenshot file name and skips an entry whose screenshot is a path", () => {
+        const screenshot = "2a1fb4f4-36dc-8287-8c45-ab5739790516-0123456789ab.webp"
+        const index = CommunityIndex.parseScripts({
+            version: 1, scripts: [entry({screenshot}), entry({screenshot: "../../etc/passwd"})]
+        })
+        expect(index.scripts.length).toBe(1)
+        expect(index.scripts[0].screenshot).toBe(screenshot)
+        expect(CommunityIndex.parseScripts({version: 1, scripts: [entry()]}).scripts[0].screenshot).toBeUndefined()
+    })
     it("rejects an unknown index version", () => {
         expect(() => CommunityIndex.parseScripts({version: 2, scripts: []})).toThrow()
     })

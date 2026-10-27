@@ -27,7 +27,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-, ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPluginInfo} from "@opendaw/studio-adapters"
+, ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
@@ -127,6 +127,8 @@ export class OfflineEngineRenderer {
             wclapParam: (): void => {},
             wclapHovered: (): void => {},
             wclapResizeGui: (): void => {},
+            wclapShowGui: (): void => {},
+            wclapHideGui: (): void => {},
             wclapStatus: (): void => {},
             wclapRequestSave: (): void => {},
             notifyClipSequenceChanges: (): void => {},
@@ -158,6 +160,9 @@ export class OfflineEngineRenderer {
                 setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
                 wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> { return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid) }
                 wclapCloseGui(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapCloseGui, uuid) }
+                wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {
+                    return dispatcher.dispatchAndReturn(this.wclapOpenPanel, uuid, height)
+                }
                 wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
                     return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
                 }

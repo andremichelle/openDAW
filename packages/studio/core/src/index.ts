@@ -15,6 +15,7 @@ export * from "./ysync"
 
 export * from "./AudioBounce"
 export * from "./AudioConsolidation"
+export * from "./AudioMonoConversion"
 export * from "./AutoEq"
 export * from "./AudioContexts"
 export * from "./AudioDevices"

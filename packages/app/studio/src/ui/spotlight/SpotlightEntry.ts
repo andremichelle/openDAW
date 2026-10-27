@@ -1,6 +1,6 @@
 import {int, Option} from "@opendaw/lib-std"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {SpotlightVerb} from "@/ui/spotlight/SpotlightVerbs"
+import {SpotlightVerb, SpotlightVerbs} from "@/ui/spotlight/SpotlightVerbs"
 
 export type SpotlightEntry = {
     readonly verb: SpotlightVerb
@@ -50,7 +50,7 @@ export namespace SpotlightEntry {
         .map(({entry}) => entry)
 
     export const rank = (entries: ReadonlyArray<SpotlightEntry>, verb: Option<SpotlightVerb>, subject: string): ReadonlyArray<SpotlightEntry> =>
-        ranked(verb.match({none: () => entries, some: only => entries.filter(entry => entry.verb === only)}), subject)
+        ranked(verb.match({none: () => entries.filter(entry => !SpotlightVerbs.Explicit.includes(entry.verb)), some: only => entries.filter(entry => entry.verb === only)}), subject)
 
     export const frequent = (entries: ReadonlyArray<SpotlightEntry>, verb: SpotlightVerb,
                              usage: (entry: SpotlightEntry) => int): ReadonlyArray<SpotlightEntry> => entries

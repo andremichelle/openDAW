@@ -34,6 +34,7 @@ type Construct = {
 }
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
+const LicenseNote = "Royalty-free, not licensed for redistribution"
 const expandedKeys = new Set<string>()
 
 export const SampleBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
@@ -86,11 +87,16 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         importFiles: files => service.sampleService.importFiles(files),
         footer: ({lifecycle: footerLifecycle}) => (
             <div className="footer">
+                <span className="license" title={LicenseNote}
+                      onInit={element => footerLifecycle.own(location.catchupAndSubscribe(owner =>
+                          element.classList.toggle("hidden", owner.getValue() !== AssetLocation.OpenDAW)))}>
+                    {LicenseNote}
+                </span>
                 <LocalLink href="/storage" className="stored">
                     <span onInit={element => footerLifecycle.own(storedSize.catchupAndSubscribe(option =>
                         element.textContent = option.match({
                             none: () => "Storage",
-                            some: size => `Stored samples: ${Bytes.toString(size)}`
+                            some: size => `Locally stored samples: ${Bytes.toString(size)}`
                         })))}/>
                 </LocalLink>
                 <label>Volume:</label>

@@ -28,6 +28,7 @@ import {
     SignalGraph,
     WclapBundle,
     WclapGuiInfo,
+    WclapPanelInfo,
     WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
@@ -117,7 +118,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                 wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
-                wclapState(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapState, uuid, bytes)}
+                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void {
+                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId)
+                }
                 wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
                     dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
                 }
@@ -128,6 +131,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapResizeGui(uuid: string, width: number, height: number): void {
                     dispatcher.dispatchAndForget(this.wclapResizeGui, uuid, width, height)
                 }
+                wclapShowGui(uuid: string): void {dispatcher.dispatchAndForget(this.wclapShowGui, uuid)}
+                wclapHideGui(uuid: string): void {dispatcher.dispatchAndForget(this.wclapHideGui, uuid)}
                 wclapStatus(uuid: string, status: WclapStatus): void {dispatcher.dispatchAndForget(this.wclapStatus, uuid, status)}
                 wclapRequestSave(uuid: string): void {dispatcher.dispatchAndForget(this.wclapRequestSave, uuid)}
                 notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
@@ -246,6 +251,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 panic: (): void => {this.#panic = true},
                 wclapOpenGui: (uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve(this.#wclap.openGui(UUID.toString(uuid))),
                 wclapCloseGui: (uuid: UUID.Bytes): void => this.#wclap.closeGui(UUID.toString(uuid)),
+                wclapOpenPanel: (uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> =>
+                    Promise.resolve(this.#wclap.openPanel(UUID.toString(uuid), height)),
                 wclapResizeGui: (uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> =>
                     Promise.resolve(this.#wclap.resizeGui(UUID.toString(uuid), width, height)),
                 wclapReceive: (uuid: UUID.Bytes, bytes: ArrayBuffer): void =>

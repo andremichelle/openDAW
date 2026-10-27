@@ -16,7 +16,7 @@ const loadManifesto = (): Promise<string> =>
 
 export const ManifestoPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => (
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
-        <BackButton service={service}/>
+        <BackButton lifecycle={lifecycle} service={service}/>
         <div className="content">
             <Await factory={loadManifesto}
                    failure={({reason}) => `Could not load the manifesto (${reason})`}

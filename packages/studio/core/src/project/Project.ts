@@ -88,7 +88,7 @@ import {ppqn, TempoMap} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
-import {SampleStorage} from "../samples"
+import {SampleGarbage} from "../samples"
 import {AudioUnitFreeze} from "../AudioUnitFreeze"
 import {AutomationSuspension} from "./AutomationSuspension"
 
@@ -257,9 +257,14 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             onUpdate: (update) => {
                 if (update instanceof NewUpdate && update.name === AudioFileBox.ClassName) {
                     this.#registerSample(update.uuid)
+                    if (this.#userCreatedSamples.hasKey(update.uuid)) {
+                        SampleGarbage.unmark(update.uuid).catch(console.warn)
+                    }
                 } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
                     this.#unregisterSample(update.uuid)
-                    this.#deleteUserCreatedSample(update.uuid).finally()
+                    if (this.#userCreatedSamples.hasKey(update.uuid)) {
+                        SampleGarbage.mark(update.uuid).catch(console.warn)
+                    }
                 }
             }
         }))
@@ -534,6 +539,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.#userCreatedSamples.add(uuid)
     }
 
+    untrackUserCreatedSample(uuid: UUID.Bytes): void {
+        if (this.#userCreatedSamples.hasKey(uuid)) {this.#userCreatedSamples.removeByKey(uuid)}
+    }
+
     terminate(): void {
         this.#terminated = true
         this.#sampleRegistrations.forEach(({terminable}) => terminable.terminate())
@@ -560,19 +569,5 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     #unregisterSample(uuid: UUID.Bytes): void {
         this.#sampleRegistrations.removeByKey(uuid).terminable.terminate()
-    }
-
-    async #deleteUserCreatedSample(uuid: UUID.Bytes): Promise<void> {
-        if (!this.#userCreatedSamples.hasKey(uuid)) {return}
-        this.#userCreatedSamples.removeByKey(uuid)
-        const autoDelete = StudioPreferences.settings.storage["auto-delete-orphaned-samples"]
-        if (!autoDelete && await RuntimeNotifier.approve({
-            headline: "Keep Sample?",
-            message: "The sample is no longer used. Do you want to keep it in storage? Deletion of samples cannot be undone!",
-            approveText: "Keep",
-            cancelText: "Delete"
-        })) {return}
-        SampleStorage.get().deleteItem(uuid).catch((reason: unknown) =>
-            console.warn("Failed to delete sample from storage", reason))
     }
 }

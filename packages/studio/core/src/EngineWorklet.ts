@@ -42,6 +42,7 @@ import {
     WclapParamGesture,
     WclapParamInfo,
     WclapGuiInfo,
+    WclapPanelInfo,
     WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
@@ -197,6 +198,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid)}
                     wclapCloseGui(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapCloseGui, uuid)}
+                    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {
+                        return dispatcher.dispatchAndReturn(this.wclapOpenPanel, uuid, height)
+                    }
                     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
                         return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
                     }
@@ -267,13 +271,16 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
                 wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
-                wclapState: (uuid: string, bytes: ArrayBuffer): void => WclapStates.store(project, uuid, bytes),
+                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void =>
+                    WclapStates.storeFrom(project, uuid, bytes, url, clapId),
                 wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
                     WclapParameters.reconcile(project, uuid, params),
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
                     WclapParameters.apply(project, uuid, paramId, value, gesture),
                 wclapHovered: (uuid: string, paramId: number): void => WclapGuis.hover(uuid, paramId),
                 wclapResizeGui: (uuid: string, width: number, height: number): void => WclapGuis.resize(uuid, width, height),
+                wclapShowGui: (uuid: string): void => WclapGuis.show(uuid, true),
+                wclapHideGui: (uuid: string): void => WclapGuis.show(uuid, false),
                 wclapStatus: (uuid: string, status: WclapStatus): void => {
                     WclapFailures.report(project, uuid, this.#wclapStatus.get(uuid), status)
                     this.#wclapStatus.set(uuid, status)
@@ -336,6 +343,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return this.#commands.wclapOpenGui(uuid)}
     wclapCloseGui(uuid: UUID.Bytes): void {this.#commands.wclapCloseGui(uuid)}
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {return this.#commands.wclapOpenPanel(uuid, height)}
     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
         return this.#commands.wclapResizeGui(uuid, width, height)
     }

@@ -9,11 +9,14 @@ import {Surface} from "@/ui/surface/Surface"
 import {openManual} from "@/ui/manuals"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
-import {SpotlightVerbs} from "@/ui/spotlight/SpotlightVerbs"
+import {SpotlightVerbDefinition, SpotlightVerbs} from "@/ui/spotlight/SpotlightVerbs"
 import {SpotlightEntry} from "@/ui/spotlight/SpotlightEntry"
 import {SpotlightCreateEntries} from "@/ui/spotlight/SpotlightCreateEntries"
 import {SpotlightStudioEntries} from "@/ui/spotlight/SpotlightStudioEntries"
 import {SpotlightUsage} from "@/ui/spotlight/SpotlightUsage"
+import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {SpotlightSample, SpotlightSampleEntries} from "@/ui/spotlight/SpotlightSampleEntries"
+import {SpotlightSampleFilter} from "@/ui/spotlight/SpotlightSampleFilter"
 
 const className = Html.adoptStyleSheet(css, "Spotlight")
 
@@ -43,10 +46,13 @@ export class Spotlight {
         const lifecycle = new Terminator()
         this.#session = Option.wrap(lifecycle)
         const scripts = lifecycle.own(new DefaultObservableValue<ReadonlyArray<CommunityScript>>([]))
+        const wclaps = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightCreate.Wclap>>([]))
+        const samples = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightSample>>([]))
         const entries = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightEntry>>([]))
         const selected = lifecycle.own(new DefaultObservableValue<int>(0))
         const results = lifecycle.own(new DefaultObservableValue<ReadonlyArray<SpotlightEntry>>([]))
         const scope = lifecycle.own(new MutableObservableOption<string>())
+        const pinned = lifecycle.own(new MutableObservableOption<SpotlightVerbDefinition>())
         const outerQuery = lifecycle.own(new DefaultObservableValue<string>(""))
         const input: HTMLInputElement = <input type="text"/>
         const verbIcon: HTMLElement = <div className="verb"/>
@@ -61,6 +67,14 @@ export class Spotlight {
             </div>
         )
         const close = () => lifecycle.terminate()
+        const queryText = (): string => pinned.match({none: () => input.value, some: ({symbol}) => symbol + input.value})
+        const pinVerb = () => {
+            if (scope.nonEmpty() || pinned.nonEmpty()) {return}
+            SpotlightVerbs.lead(input.value).ifSome(({verb, rest}) => {
+                pinned.wrap(verb)
+                input.value = rest
+            })
+        }
         const browsable = (entry: SpotlightEntry): boolean => entry.children.length > 0 && entry.disabled.isEmpty()
         const selectedEntry = (): Option<SpotlightEntry> => Option.wrap(results.getValue().at(selected.getValue()))
         const scopeEntry = (): Option<SpotlightEntry> =>
@@ -87,13 +101,13 @@ export class Spotlight {
             if (index >= 0) {selected.setValue(index)}
         })
         const renderHeader = () => {
-            const {verb} = SpotlightVerbs.parse(input.value)
+            const {verb} = SpotlightVerbs.parse(queryText())
             verb.ifSome(({icon, word}) => replaceChildren(verbIcon, <Icon symbol={icon}/>, <span>{word}</span>))
             scopeEntry().match({
                 none: () => {
                     verbIcon.classList.toggle("hidden", verb.isEmpty())
                     scopeChip.classList.add("hidden")
-                    input.placeholder = "Type a device, preset, script or place..."
+                    input.placeholder = "Type a device, preset, script, sample or place..."
                 },
                 some: parent => {
                     verbIcon.classList.add("hidden")
@@ -104,11 +118,14 @@ export class Spotlight {
             })
         }
         const renderList = () => {
-            const {verb, subject} = SpotlightVerbs.parse(input.value)
+            const {verb, subject} = SpotlightVerbs.parse(queryText())
+            const narrowed = verb.mapOr(({verb}) => verb === "sample", false)
+                ? SpotlightSampleFilter.narrow(entries.getValue(), subject)
+                : {entries: entries.getValue(), subject}
             const ranked = scopeEntry().match({
-                none: () => subject.length === 0
-                    ? verb.mapOr(({verb}) => SpotlightEntry.frequent(entries.getValue(), verb, SpotlightUsage.count()), [])
-                    : SpotlightEntry.rank(entries.getValue(), verb.map(({verb}) => verb), subject),
+                none: () => narrowed.subject.length === 0
+                    ? verb.mapOr(({verb}) => SpotlightEntry.frequent(narrowed.entries, verb, SpotlightUsage.count()), [])
+                    : SpotlightEntry.rank(narrowed.entries, verb.map(({verb}) => verb), narrowed.subject),
                 some: parent => SpotlightEntry.browse(parent.children, input.value)
             }).slice(0, MAX_RESULTS)
             const listing = scope.nonEmpty() || subject.length > 0 || verb.nonEmpty()
@@ -120,7 +137,7 @@ export class Spotlight {
                 ? <div className="empty">{scope.nonEmpty() ? `No match for '${input.value.trim()}'`
                     : verb.match({
                         none: () => `Nothing found for '${subject}'`,
-                        some: ({verb, word}) => verb === "create" || verb === "open" || verb === "goto"
+                        some: ({verb, word}) => verb === "create" || verb === "open" || verb === "goto" || verb === "sample"
                             ? `Nothing to ${word} for '${subject}'` : `'${word}' is not available yet`
                     })}</div>
                 : ranked.map((entry, index) => (
@@ -149,6 +166,7 @@ export class Spotlight {
         }
         const render = () => {
             if (scope.nonEmpty() && scopeEntry().isEmpty()) {scope.clear()}
+            pinVerb()
             renderHeader()
             renderList()
         }
@@ -163,7 +181,6 @@ export class Spotlight {
                 SpotlightVerbs.List
                     .filter(({verb}) => available.some(entry => entry.verb === verb))
                     .map(({symbol, word}) => <span><b>{symbol}</b> {word}</span>),
-                available.some(browsable) && <span><b>→</b> browse</span>,
                 <span className="manual" title="Open the Spotlight manual" onclick={() => {
                     close()
                     openManual("/manuals/spotlight")
@@ -172,7 +189,8 @@ export class Spotlight {
         const refresh = () => {
             entries.setValue([...SpotlightStudioEntries.places(service), ...SpotlightStudioEntries.actions(service),
                 ...SpotlightStudioEntries.opens(service),
-                ...SpotlightCreateEntries.collect(service, scripts.getValue())])
+                ...SpotlightCreateEntries.collect(service, scripts.getValue(), wclaps.getValue()),
+                ...SpotlightSampleEntries.collect(service, samples.getValue())])
             renderHelp()
             render()
         }
@@ -186,6 +204,8 @@ export class Spotlight {
         lifecycle.ownAll(
             selected.subscribe(renderSelection),
             scripts.subscribe(refresh),
+            wclaps.subscribe(refresh),
+            samples.subscribe(refresh),
             presets.userIndex.subscribe(refresh),
             presets.cloudIndex.subscribe(refresh),
             hasProfile ? service.project.userEditingManager.audioUnit.catchupAndSubscribe(refresh) : Terminable.Empty,
@@ -235,9 +255,14 @@ export class Spotlight {
                         }
                         break
                     case "Backspace":
-                        if (scope.nonEmpty() && input.value.length === 0) {
+                        if (input.value.length > 0) {break}
+                        if (scope.nonEmpty()) {
                             event.preventDefault()
                             leaveScope()
+                        } else if (pinned.nonEmpty()) {
+                            event.preventDefault()
+                            pinned.clear()
+                            render()
                         }
                         break
                     case "Escape":
@@ -247,7 +272,7 @@ export class Spotlight {
                     case "Tab":
                         event.preventDefault()
                         if (scope.isEmpty()) {
-                            SpotlightVerbs.parse(input.value).completion.ifSome(completion => {
+                            SpotlightVerbs.parse(queryText()).completion.ifSome(completion => {
                                 input.value = completion
                                 render()
                             })
@@ -268,6 +293,12 @@ export class Spotlight {
         )
         CommunityAPI.get().scripts().then(index => {
             if (this.#session.contains(lifecycle)) {scripts.setValue(index.scripts)}
+        })
+        SpotlightCreate.wclaps().then(list => {
+            if (this.#session.contains(lifecycle)) {wclaps.setValue(list)}
+        })
+        SpotlightSampleEntries.load().then(list => {
+            if (this.#session.contains(lifecycle)) {samples.setValue(list)}
         })
         refresh()
         surface.flyout.appendChild(element)

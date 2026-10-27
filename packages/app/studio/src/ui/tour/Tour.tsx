@@ -14,6 +14,7 @@ import {TourStep, TourSteps} from "./TourSteps"
 import {TourAnchor} from "./TourAnchor"
 import {TourCard} from "./TourCard"
 import {centerCard, frameRect, placeCard} from "./TourPlacement"
+import {DevicePreviewRoute} from "@/service/StudioNavigation"
 
 export namespace Tour {
     // Offered once per arrival from the dashboard or a shared bundle link, never when switching between projects.
@@ -24,7 +25,7 @@ export namespace Tour {
             idle.value = optProfile.isEmpty()
             if (optProfile.isEmpty() || !wasIdle) {return}
             if (!StudioPreferences.settings.visibility["offer-studio-tour"]) {return}
-            if (RouteLocation.get().path.startsWith("/join")) {return}
+            if (RouteLocation.get().path.startsWith("/join") || RouteLocation.get().path === DevicePreviewRoute) {return}
             AnimationFrame.once(() => {
                 if (service.layout.screen.getValue() !== "default") {return}
                 offer(service)

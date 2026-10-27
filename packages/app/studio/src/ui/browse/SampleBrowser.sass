@@ -4,8 +4,19 @@
 // collapsing a folder removes its rows and the columns would jump every time a folder is toggled.
 component
   @include resource-browser("1fr 3.5em 3em minmax(4px, auto)", true)
-  > div.footer > a.stored
-    margin-right: auto
-    color: inherit
-    text-decoration: none
-    cursor: pointer
+  > div.footer
+    flex-wrap: wrap
+    row-gap: 0.25em
+
+    &:has(> span.license:not(.hidden))
+      height: auto
+
+    > span.license
+      flex: 1 0 100%
+
+    > a.stored
+      margin-right: auto
+      white-space: nowrap
+      color: inherit
+      text-decoration: none
+      cursor: pointer

@@ -32,7 +32,15 @@ export const Checkbox = ({lifecycle, model, style, className, appearance, onInit
                              dataClass="checkbox"
                              onInit={onInit}>
             {input}
-            <label htmlFor={id} style={{cursor: appearance?.cursor ?? "auto"}}>{children}</label>
+            <label htmlFor={id}
+                   style={{cursor: appearance?.cursor ?? "auto"}}
+                   onclick={(event: MouseEvent) => {
+                       // Firefox does not forward a label click with a modifier key to its input
+                       if (!event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {return}
+                       event.preventDefault()
+                       model.setValue(!model.getValue())
+                       input.checked = model.getValue()
+                   }}>{children}</label>
         </ButtonCheckboxRadio>
     )
 }

@@ -139,6 +139,17 @@ export namespace ClapAbi {
         export const PARAM_HOVERED = "clap.param-hovered/1"
         export const HOST_PARAMS = "clap.params"
         export const LATENCY = "clap.latency"
+        export const DEVICE_PANEL = "opendaw.device-panel/1"
+    }
+
+    export namespace Feature {
+        export const DEVICE_PANEL = "opendaw:device-panel"
+    }
+
+    // opendaw_plugin_device_panel_t: get_uri(plugin, uri, capacity), get_width(plugin, height, *width)
+    export namespace DevicePanel {
+        export const GET_URI = 0
+        export const GET_WIDTH = 4
     }
 
     export namespace PluginLatency {

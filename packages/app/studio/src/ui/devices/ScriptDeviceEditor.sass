@@ -7,6 +7,7 @@ component
   align-items: stretch
   align-content: start
   column-gap: 0.5em
+  min-width: 10.5em
   @include mixins.Control
 
   > .controls, > .group > .controls
@@ -18,11 +19,28 @@ component
     row-gap: 0.25em
     border-radius: 0 2px 2px 0
 
-    &:empty
+    &:empty, &.empty
       grid-template-columns: repeat(3, 3.5em)
       border-radius: 3px
       outline: 1px solid rgba(white, 0.04)
       @include colors.panel-background-stripes-dark
+
+    > .hint
+      grid-column: 1 / -1
+      grid-row: 1 / -1
+      display: flex
+      align-items: center
+      justify-content: center
+      column-gap: 0.5em
+      font-size: 10px
+      color: rgba(white, 0.4)
+      pointer-events: none
+
+      > svg
+        --color: currentColor
+        width: 11px
+        height: 11px
+        opacity: 0.66
 
   > .group
     display: flex

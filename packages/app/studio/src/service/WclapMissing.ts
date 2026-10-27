@@ -57,11 +57,9 @@ export namespace WclapMissing {
         }
     }
 
-    // a cloud id is the archive's hash, so a catalogue entry is this very build
+    // a cloud id is the archive's hash, so the file under it is this very build, listed or superseded
     const restoreFromCloud = async (url: string): Promise<boolean> => {
         const id = WclapStorage.idOf(url)
-        const entry = await WclapCatalog.get().find(id)
-        if (entry.isEmpty()) {return false}
         const {status, value: archive, error} = await Promises.tryCatch(WclapCatalog.get().load(id))
         if (status === "rejected") {
             console.warn(`WebCLAP ${id} could not be downloaded:`, error)

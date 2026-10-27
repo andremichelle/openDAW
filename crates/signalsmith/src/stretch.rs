@@ -83,6 +83,9 @@ pub struct SignalsmithStretch {
     cache: PrimedCache,
     capture_pending: bool,
     cache_restores: usize, // diagnostics: how many loop wraps took the memcpy fast path (vs re-priming)
+    // Seek crossfade (see `begin_crossfade`): the old stream's next output, blended out over `fade_len` samples.
+    fade_l: Vec<f32>, fade_r: Vec<f32>,
+    fade_len: usize, fade_pos: usize, fade_in: bool, fade_armed: bool,
 }
 
 impl SignalsmithStretch {
@@ -127,6 +130,8 @@ impl SignalsmithStretch {
             capture_pending: false,
 
             cache_restores: 0,
+            fade_l: vec![0.0; block], fade_r: vec![0.0; block],
+            fade_len: 0, fade_pos: 0, fade_in: false, fade_armed: false,
         }
     }
 
@@ -238,9 +243,30 @@ impl SignalsmithStretch {
         }
     }
 
+    /// Crossfade across the NEXT `reset_stream` / successful `try_restore` (a transport seek), so it does not click:
+    /// with `keep_old` the next `samples` of the current stream's already synthesized output fade out, with
+    /// `fade_in` the restarted stream fades in. Limited to the output the ring already holds.
+    pub fn begin_crossfade(&mut self, samples: usize, keep_old: bool, fade_in: bool) {
+        let length = samples.min(self.block - self.interval);
+        let keep_old = keep_old && self.s2_started;
+        for index in 0..length {
+            let slot = (self.s2_emit + index) % self.block;
+            let norm = self.ring_n[slot];
+            let (left, right) = if keep_old && norm > 1e-6 { (self.ring_l[slot] / norm, self.ring_r[slot] / norm) } else { (0.0, 0.0) };
+            self.fade_l[index] = left;
+            self.fade_r[index] = right;
+        }
+        self.fade_len = length; self.fade_pos = 0; self.fade_in = fade_in; self.fade_armed = true;
+    }
+
+    fn consume_crossfade(&mut self) {
+        if self.fade_armed { self.fade_armed = false; } else { self.fade_len = 0; }
+    }
+
     /// Reset streaming state; call at a discontinuity (loop wrap, region start, transport jump).
     /// `source_pos` is where in the source the first output frame should read from.
     pub fn reset_stream(&mut self, source_pos: f64) {
+        self.consume_crossfade();
         for v in self.out_ring.iter_mut() { *v = 0.0; }
         for v in self.norm_ring.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
@@ -289,6 +315,7 @@ impl SignalsmithStretch {
         self.s2_emit = self.cache.s2_emit; self.s2_started = self.cache.s2_started;
         self.capture_pending = false;
         self.cache_restores += 1;
+        self.consume_crossfade();
         true
     }
 
@@ -474,6 +501,13 @@ impl SignalsmithStretch {
             let nrm = self.ring_n[idx];
             out_l[out_i] = if nrm > 1e-6 { self.ring_l[idx]/nrm } else { 0.0 };
             out_r[out_i] = if nrm > 1e-6 { self.ring_r[idx]/nrm } else { 0.0 };
+            if self.fade_pos < self.fade_len {
+                let ramp = self.fade_pos as f32 / self.fade_len as f32;
+                let incoming = if self.fade_in { ramp } else { 1.0 };
+                out_l[out_i] = out_l[out_i] * incoming + self.fade_l[self.fade_pos] * (1.0 - ramp);
+                out_r[out_i] = out_r[out_i] * incoming + self.fade_r[self.fade_pos] * (1.0 - ramp);
+                self.fade_pos += 1;
+            }
             self.ring_l[idx]=0.0; self.ring_r[idx]=0.0; self.ring_n[idx]=0.0;
             self.s2_emit += 1;
         }

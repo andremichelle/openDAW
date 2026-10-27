@@ -4,10 +4,11 @@ import {DeviceFactory, DeviceHost, Devices, InstrumentFactories, InstrumentFacto
 import {EffectFactories, EffectFactory, PresetEntry, Project} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
+import {WclapDescriber} from "@/service/WclapDescriber"
 import {SpotlightEntry} from "@/ui/spotlight/SpotlightEntry"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 
-const enum Group {Device, UserPreset, StockPreset, Script}
+const enum Group {Device, Plugin, UserPreset, StockPreset, Script}
 
 type Accepts = "audio" | "midi"
 
@@ -26,7 +27,8 @@ const scriptDevices: Record<Exclude<CommunityScriptTarget, "project">, [DeviceFa
 }
 
 export namespace SpotlightCreateEntries {
-    export const collect = (service: StudioService, scripts: ReadonlyArray<CommunityScript>): ReadonlyArray<SpotlightEntry> => {
+    export const collect = (service: StudioService, scripts: ReadonlyArray<CommunityScript>,
+                            wclaps: ReadonlyArray<SpotlightCreate.Wclap>): ReadonlyArray<SpotlightEntry> => {
         const blocked = effectBlocker(service.hasProfile ? Option.wrap(service.project) : Option.None)
         const create = (label: string, names: ReadonlyArray<string>, qualifiers: ReadonlyArray<string>, icon: IconSymbol,
                         detail: string, group: Group, disabled: Option<string>, run: () => void,
@@ -74,6 +76,20 @@ export namespace SpotlightCreateEntries {
                 `Script by ${script.author.name}`, Group.Script, accepts.flatMap(blocked),
                 () => SpotlightCreate.script(service, script))}]
         })
+        const wclapEntries = wclaps.flatMap((wclap): ReadonlyArray<SpotlightEntry> => {
+            const {name, info} = wclap
+            const vendor = info.vendor.length > 0 ? ` · ${info.vendor}` : ""
+            switch (WclapDescriber.kindOf(info)) {
+                case "instrument":
+                    return [create(`Create WebCLAP · ${name}`, [name, "WebCLAP"], [info.vendor], IconSymbol.WebClap,
+                        `WebCLAP Instrument${vendor}`, Group.Plugin, Option.None, () => SpotlightCreate.wclap(service, wclap))]
+                case "audio-effect":
+                    return [create(`Create WebCLAP · ${name}`, [name, "WebCLAP"], [info.vendor], IconSymbol.WebClap,
+                        `WebCLAP Effect${vendor}`, Group.Plugin, blocked("audio"), () => SpotlightCreate.wclap(service, wclap))]
+                case "note-effect":
+                    return []
+            }
+        })
         const owned = [...presets, ...scriptEntries]
         const childrenOf = (factory: DeviceFactory): ReadonlyArray<SpotlightEntry> =>
             owned.filter(({owner}) => owner.contains(factory)).map(({entry}) => entry)
@@ -84,7 +100,7 @@ export namespace SpotlightCreateEntries {
             `Create ${factory.defaultName}`, [factory.defaultName, factory.briefDescription], [], factory.defaultIcon,
             factory.type === "audio" ? "Audio Effect" : "MIDI Effect", Group.Device, blocked(factory.type),
             () => SpotlightCreate.effect(service, factory), childrenOf(factory)))
-        return [...instruments, ...effects, ...owned.map(({entry}) => entry)]
+        return [...instruments, ...effects, ...wclapEntries, ...owned.map(({entry}) => entry)]
     }
 
     const effectBlocker = (project: Option<Project>) => {

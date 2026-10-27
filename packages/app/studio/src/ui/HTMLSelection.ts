@@ -20,9 +20,9 @@ export class HTMLSelection implements Terminable {
                 } else if (event.shiftKey) {
                     const nodes = this.#entries()
                     if (nodes.length === 0) {return}
-                    let lastSelection = this.#lastSelection ?? nodes[0]
                     const i0 = nodes.indexOf(target)
-                    const i1 = nodes.indexOf(lastSelection)
+                    const anchor = nodes.indexOf(this.#lastSelection ?? nodes[0])
+                    const i1 = anchor === -1 ? i0 : anchor
                     const n = Math.max(i0, i1)
                     for (let i = Math.min(i0, i1); i <= n; i++) {
                         nodes[i].classList.add("selected")

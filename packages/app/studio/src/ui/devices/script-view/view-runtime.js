@@ -370,6 +370,7 @@
             return
         }
         try {instance = new ViewClass(host)} catch (error) {reportError(error)}
+        requestAnimationFrame(() => requestAnimationFrame(() => post({type: "ready"})))
     }
     globalThis.addEventListener("message", event => {
         if (port !== null || event.source !== parent || event.ports.length !== 1) {return}

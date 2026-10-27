@@ -85,6 +85,39 @@ Not possible today. When a source note ends, the Spielwerk bridge ends every not
 (`sourceToOutput` in `script-spielwerk.ts`), so a script cannot hold a note past its key. It would need an API change
 that lets a script detach an output from its source.
 
+### F. A sustain lane per instrument track with assignable targets
+
+A pedal lane without regions, like the tempo track (`TempoTrack.events` points to a `ValueEventCollectionBox`), one
+per instrument audio unit, plus a target that decides what the pedal does.
+
+How other DAWs do it: Logic, Ableton, Cubase, Bitwig and Reaper store CC64 as controller data inside the MIDI region
+or clip, and the instrument sustains, not the host. A synth that ignores CC64 does not sustain. Region data moves,
+copies and loops with the phrase, that is the reason for the convention.
+
+1. Lane: a new field on the audio unit pointing to a `ValueEventCollectionBox`, values 0 to 1, stepped. Continuous so
+   half pedal survives for targets that use it. Absent by default, old projects unchanged.
+2. Recording: the capture writes the (polarity corrected) pedal into the lane of the recorded track, notes keep the
+   lengths the hands played. Editable like tempo automation.
+3. Region edits: moving, copying and deleting note regions moves, copies and deletes the pedal events in their range
+   ("automation follows regions" in Logic, "automation follows events" in Cubase). Closes the main gap against region
+   data. Looped regions still need the pedal drawn across every repeat.
+4. Target "Hold" (default): the note sequencer holds note-offs while the pedal is down, live and on playback, for every
+   instrument. Same path as C, live pedal travels with the note signals so the order stays intact.
+5. Target "Parameter": any automatable parameter of the track. Released is the parameter's base value (its own
+   automation keeps working), pressed is a custom value, for example a long ADSR release.
+6. Target "Forward": CC64 goes to the WebCLAP plugin or soundfont as is (D).
+7. Pro: plug in and it works (Hold), one lane to edit, no setup, free assignment for sound design.
+8. Con: engine (sequencer hold, a sustain signal, a parameter switch), schema (lane field, target), editor lane,
+   capture and recording, region edits that carry the lane.
+9. Con: sustain acts before the MIDI effects, like C.
+
+Open for F:
+
+1. Does a parameter change reach voices already in release? Check every stock instrument's envelope. It decides
+   whether "Parameter" on the release time is a real alternative to "Hold".
+2. One target per track or several (Hold plus a parameter)?
+3. Where does the lane show: under the track like tempo, or as a lane of the track's automation list?
+
 ## Edge cases for any solution
 
 1. Restrike of a held pitch, see above.
@@ -94,16 +127,56 @@ that lets a script detach an output from its source.
 5. Live rooms: the sustain signal has to travel like the note signals.
 6. Offline render and freeze must match live playback (only for B and C, A bakes it).
 7. Half pedal: CC64 is continuous, all host-side solutions treat >= 64 as down.
+8. Inverted pedal: a normally closed pedal on a keyboard that expects normally open sends 127 at rest and 0 when
+   pressed (AKAI MPK mini with a switchable pedal: inverted in both switch positions and after a power cycle, the same
+   in Logic). Many keyboards detect polarity at power up, some not or wrongly, see the links below.
+
+## Sustain polarity per input device
+
+A per-device setting "Sustain polarity" next to the MIDI input device preferences, with three modes:
+
+1. **Auto (default).** MIDI cannot ask a keyboard for a controller's current value, CC64 only arrives on change. The
+   first CC64 of a device is taken as a press: if it says up (< 64), the device is inverted. Decided once per device
+   and remembered, a later message never flips it.
+2. **As is.** CC64 as sent.
+3. **Inverted.** CC64 read as `127 - value`.
+
+The capture applies it before any solution sees CC64, so live hold, recording and the automation lane all get the
+corrected pedal.
+
+1. Applies to A, B (MIDI learn sees the corrected value) and C alike, and to D (the forwarded CC64 is inverted too).
+2. Stored per device id in the preferences, not in the project, a project opened on another setup must not inherit it.
+3. Auto guesses wrong when the pedal is held while the device connects (the first message is the release) or when a
+   keyboard sends all its controller values on power up (the first message is the resting state). As is and Inverted
+   override it. The detected polarity is shown next to the setting.
+4. The test page `opendaw.studio/midi-test.html` has the same three modes and shows what Auto detected, users can
+   confirm it fixes their pedal before reporting.
+5. Few hosts have it: Logic needs a Transformer in the Environment, Pianoteq reverses the CC64 range, Native
+   Instruments Kontrol Mk3 users report re-setting normal/invert each session.
+
+References:
+
+1. [Arturia: sustain pedal acts reversely](https://support.arturia.com/hc/en-us/articles/4405741267602-My-sustain-pedal-acts-reversely-How-to-invert-it)
+2. [Akai MPC Key 61: pedal working in reverse](https://support.akaipro.com/en/support/solutions/articles/69000859246-akai-pro-mpc-key-61-my-pedal-is-working-in-reverse)
+3. [NI k61 mk3: always reverse polarity with 3 pedals](https://community.native-instruments.com/discussion/40104/k61-mk3-sustain-pedal-always-reverse-polarity-3-different-pedals)
+4. [Yamaha checks pedal polarity at boot (PSR Tutorial forum)](https://www.psrtutorial.com/forum/index.php/topic,66436.msg502841.html)
+5. [Cantabile: polarity flips from a half seated plug](https://community.cantabilesoftware.com/t/sustain-pedal-changing-polarity-and-back-mystery/8773)
+6. [Pianoteq: reverse the CC64 range](https://forum.modartt.com/viewtopic.php?id=5065)
+
+## Test page
+
+`packages/app/studio/public/midi-test.html`, deployed with the studio as `/midi-test.html`. Web MIDI only, no studio
+code: piano roll with notes held by the pedal, lanes for sustain, pitch bend, mod wheel and aftertouch, all CCs, a raw
+message log, the sustain polarity modes and "Copy report" for bug reports. Separates "the studio does it wrong" from "the device sends it so".
 
 ## Recommendation for the discussion
 
-C gives the result users expect from a DAW with no setup, and its first step (live sustain in the sequencer plus
-baked recording) already solves the issue as reported. A is the smallest change, but its
-recordings cannot be edited later and C would replace it. B is worth it only if holding after other MIDI effects
-matters. D can follow for WebCLAP instruments.
+F (proposed 2026-10-26). It takes C's ordered live path and Hold, stores the pedal as an editable lane like tempo,
+carries it with region edits, and adds Parameter and Forward targets (D included). A, B and C are superseded.
 
-Open questions:
+Order:
 
-1. Should recorded sustain be editable (an automation lane, C step two) or are baked note lengths enough?
-2. Where does the pedal belong in the chain, before the MIDI effects (C) or as a device (B)?
-3. Do we expect sustain on notes drawn in the piano roll?
+1. Polarity setting and capture of CC64 (live Hold only, no lane).
+2. The lane, recording into it and playback Hold.
+3. Region edits carry the lane.
+4. Parameter and Forward targets.

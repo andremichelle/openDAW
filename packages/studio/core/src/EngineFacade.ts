@@ -22,6 +22,7 @@ import {
     PreferencesFacade,
     SignalGraph,
     WclapGuiInfo,
+    WclapPanelInfo,
     WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
@@ -136,6 +137,9 @@ export class EngineFacade implements Engine {
         return this.#worklet.mapOr(worklet => worklet.wclapOpenGui(uuid), Promise.resolve({uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}))
     }
     wclapCloseGui(uuid: UUID.Bytes): void {this.#worklet.ifSome(worklet => worklet.wclapCloseGui(uuid))}
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {
+        return this.#worklet.mapOr(worklet => worklet.wclapOpenPanel(uuid, height), Promise.resolve({uri: "", width: 0}))
+    }
     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
         return this.#worklet.mapOr(worklet => worklet.wclapResizeGui(uuid, width, height), Promise.resolve({width, height}))
     }

@@ -1,5 +1,6 @@
-import {isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@opendaw/lib-std"
-import {MenuItem, ProjectSignals, StudioPreferences, Workers} from "@opendaw/studio-core"
+import {isDefined, panic, RuntimeNotifier, RuntimeSignal, UUID} from "@opendaw/lib-std"
+import {MenuItem, ProjectSignals, SampleGarbage, StudioPreferences, Workers} from "@opendaw/studio-core"
+import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Promises} from "@opendaw/lib-runtime"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Browser} from "@opendaw/lib-dom"
@@ -88,7 +89,19 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
         }),
     MenuItem.default({label: "Validate Nextcloud Access...", separatorBefore: true})
         .setTriggerProcedure(() => NextcloudDebug.validateAccess()),
-    MenuItem.default({label: "Clear Local Storage", separatorBefore: true})
+    MenuItem.default({label: "Delete Garbage Samples", separatorBefore: true})
+        .setTriggerProcedure(async () => {
+            const inUse = service.hasProfile
+                ? service.project.boxGraph.boxes()
+                    .filter(box => box instanceof AudioFileBox)
+                    .map(box => UUID.toString(box.address.uuid))
+                : []
+            console.debug(`Garbage samples: ${JSON.stringify(await SampleGarbage.list())}`)
+            const deleted = await SampleGarbage.purge(inUse)
+            console.debug(`Deleted ${deleted.length} garbage sample(s)`)
+            if (deleted.length > 0) {RuntimeSignal.dispatch(ProjectSignals.StorageUpdated)}
+        }),
+    MenuItem.default({label: "Clear Local Storage"})
         .setTriggerProcedure(async () => {
             const approved = await RuntimeNotifier.approve({
                 headline: "Clear Local Storage",
