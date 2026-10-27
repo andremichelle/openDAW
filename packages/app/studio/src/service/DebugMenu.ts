@@ -64,6 +64,8 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
         label: "Throw an error in audio-worklet 💣",
         hidden: !Browser.isLocalHost()
     }).setTriggerProcedure(() => service.panicEngine()),
+    MenuItem.default({label: "Restart Audio Engine", selectable: service.hasProfile})
+        .setTriggerProcedure(() => service.restartEngine()),
     MenuItem.default({label: "List Supported Codecs...", separatorBefore: true})
         .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),
     MenuItem.default({label: "Show Playbackstats..."})

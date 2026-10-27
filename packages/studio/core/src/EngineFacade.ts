@@ -125,6 +125,9 @@ export class EngineFacade implements Engine {
         return this.#worklet.mapOr(worklet => worklet.queryLoadingComplete(), Promise.resolve(false))
     }
     panic(): void {this.#worklet.ifSome(worklet => worklet.panic())}
+    restart(): void {
+        this.#worklet.ifSome(worklet => worklet.dispatchEvent(new ErrorEvent("error", {error: new Error("Restart requested")})))
+    }
     sleep(): void {this.#worklet.ifSome(worklet => worklet.sleep())}
     wake(): void {this.#worklet.ifSome(worklet => worklet.wake())}
     loadClickSound(index: 0 | 1, data: AudioData): void {

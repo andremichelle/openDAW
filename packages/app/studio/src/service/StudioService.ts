@@ -188,6 +188,7 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
+    restartEngine(): void {this.runIfProject(({engine}) => engine.restart())}
 
     async newProject() {
         if (!await this.#projectProfileService.approveLosingChanges()) {return}
