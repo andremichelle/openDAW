@@ -29,7 +29,8 @@ export namespace PreferencesPageLabels {
             label: "Appearance",
             fields: {
                 "neutral-hue": "Neutral hue (0-360)",
-                "neutral-saturation": "Neutral saturation (%)"
+                "neutral-saturation": "Neutral saturation (%)",
+                "clamp-to-60fps": "Limit animations to 60 fps (for slower computers)"
             }
         },
         "time-display": {

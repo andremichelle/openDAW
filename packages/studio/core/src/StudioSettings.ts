@@ -39,10 +39,12 @@ export const StudioSettingsSchema = z.object({
     }),
     "appearance": z.object({
         "neutral-hue": z.number().catch(197),
-        "neutral-saturation": z.number().catch(100)
+        "neutral-saturation": z.number().catch(100),
+        "clamp-to-60fps": z.boolean().catch(true)
     }).default({
         "neutral-hue": 197,
-        "neutral-saturation": 100
+        "neutral-saturation": 100,
+        "clamp-to-60fps": true
     }),
     "time-display": z.object({
         "musical": z.boolean(),

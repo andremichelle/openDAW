@@ -9,6 +9,8 @@ export namespace AnimationFrame {
     let driver: Nullable<WindowProxy> = null
     let lastTimestamp: number = 0.0
 
+    export let clampTo60fps = true
+
     export const add = (exec: Exec): Terminable => {
         recurring.add(exec)
         return {terminate: (): unknown => recurring.delete(exec)}
@@ -38,7 +40,7 @@ export namespace AnimationFrame {
 
     const exe = (timestamp: DOMHighResTimeStamp): void => {
         id = driver?.requestAnimationFrame(exe) ?? -1
-        if (timestamp - lastTimestamp < 16.0) {return}
+        if (clampTo60fps && timestamp - lastTimestamp < 16.0) {return}
         lastTimestamp = timestamp
         if (recurring.size > 0 || nonrecurring.size > 0) {
             recurring.forEach((exec: Exec) => queue.push(exec))
