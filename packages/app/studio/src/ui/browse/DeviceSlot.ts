@@ -90,6 +90,37 @@ export namespace DeviceSlot {
         }
     }
 
+    // a rack brings a whole audio unit, so it never goes into a layer
+    export const acceptsRack = (slot: DeviceSlot, factory: InstrumentFactory): boolean => {
+        switch (slot.type) {
+            case "new-instrument":
+                return true
+            case "replace-instrument":
+                return isInstanceOf(slot.host, AudioUnitBoxAdapter) && factory.trackType === TrackType.Notes
+                    && slot.host.inputAdapter.mapOr(input => input.accepts === "midi", false)
+            default:
+                return false
+        }
+    }
+
+    // a new audio unit from rack bytes, or the whole unit at the slot replaced by it, its tracks kept unless asked
+    export const placeRack = (project: Project, slot: DeviceSlot, bytes: ArrayBuffer, keepTimeline: boolean): boolean => {
+        switch (slot.type) {
+            case "new-instrument": {
+                const insertIndex = slot.anchor.flatMap(unit => project.api.audioUnitIndex(unit)).unwrapOrUndefined()
+                const first = PresetDecoder.decode(bytes, project.skeleton, insertIndex).at(0)
+                if (isAbsent(first)) {return false}
+                project.userEditingManager.audioUnit.edit(first.editing)
+                return true
+            }
+            case "replace-instrument":
+                return isInstanceOf(slot.host, AudioUnitBoxAdapter)
+                    && PresetDecoder.replaceAudioUnit(bytes, slot.host.box, {keepTimeline}).isSuccess()
+            default:
+                return false
+        }
+    }
+
     export const canReplaceInstrument = (host: DeviceHost): boolean =>
         isInstanceOf(host, InstrumentCompositeCellBoxAdapter)
         || (isInstanceOf(host, AudioUnitBoxAdapter) && host.inputAdapter.mapOr(input => input.accepts === "midi", false))

@@ -126,10 +126,12 @@ Each phase ends with a browser check by André.
    of WebCLAP plugins, tag search and clickable tags in the info card, tag editing in the preset edit dialog. Stock
    preset tags need the preset API (api.opendaw.studio) to deliver them.
 
-## Out of scope
+## Racks and chains
 
-- Racks and chains (audio unit, audio effect chain, MIDI effect chain presets) are not listed yet. Remind André
-  before deploying.
+- Racks are listed for new and replaced instruments, never inside a layer. A new track decodes the whole unit, a
+  replace swaps the instrument and both effect chains (`replaceAudioUnit`), the tracks stay unless the timeline
+  question on Enter says otherwise.
+- Chains are listed at the "+" of their kind and go in at the slot, a replace swaps one effect for the chain.
 
 ## Implementation (2026-10-27, all phases, browser-unverified)
 

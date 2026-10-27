@@ -8,13 +8,11 @@ This manual covers how presets are saved, recalled and managed.
 
 ## Where to find them
 
-Instrument and effect presets are listed in the [Device Browser](/manuals/device-browser), next to
-the devices, community scripts and WebCLAP plugins. A click tries the preset right away, **Enter**
-keeps it. The **Folder** toggle in its filter bar shows or hides presets, the **cloud folder** and
-**user folder** toggles choose between stock presets and your own.
-
-Racks and Chains are not listed in the Device Browser yet. Create them from the
-[Spotlight](/manuals/spotlight) by typing their name.
+All presets are listed in the [Device Browser](/manuals/device-browser), next to the devices,
+community scripts and WebCLAP plugins: instrument presets and Racks when you add or replace an
+instrument, effect presets and Chains at the **+** buttons of the effect chains. A click tries the
+preset right away, **Enter** keeps it. The **Folder** toggle in its filter bar shows or hides
+presets, the **cloud folder** and **user folder** toggles choose between stock presets and your own.
 
 ### Preset dropdown on the device header
 

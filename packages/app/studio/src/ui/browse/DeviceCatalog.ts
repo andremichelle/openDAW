@@ -1,8 +1,8 @@
-import {asInstanceOf, Bytes, int, isDefined, Option, StringComparator} from "@opendaw/lib-std"
+import {asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
-import {InstrumentFactories, PresetDecoder, ScriptCompiler} from "@opendaw/studio-adapters"
+import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler} from "@opendaw/studio-adapters"
 import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStates} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
@@ -26,6 +26,8 @@ export type DeviceEntryKind = "device" | "user-preset" | "stock-preset" | "scrip
 
 export type DeviceFact = { readonly label: string, readonly value: string }
 
+export type DeviceBundle = "rack" | "chain"
+
 export type DeviceEntry = {
     readonly key: string
     readonly kind: DeviceEntryKind
@@ -40,6 +42,7 @@ export type DeviceEntry = {
     readonly facts: ReadonlyArray<DeviceFact>
     readonly tags: ReadonlyArray<string>
     readonly preset: Option<PresetEntry>
+    readonly bundle: Option<DeviceBundle>
     readonly prepare: () => Promise<DeviceCandidate>
 }
 
@@ -101,36 +104,71 @@ export namespace DeviceCatalog {
     const deviceEntry = (stock: Stock): DeviceEntry => ({
         key: `device:${stock.key}`, kind: "device", local: false, name: stock.name, brief: stock.brief,
         caption: stock.kindLabel, description: stock.description, icon: stock.icon, iconUrl: stock.iconUrl,
-        deviceKey: stock.key, facts: [], tags: DeviceTags.of(stock.key), preset: Option.None,
+        deviceKey: stock.key, facts: [], tags: DeviceTags.of(stock.key), preset: Option.None, bundle: Option.None,
         prepare: () => Promise.resolve(plainCandidate((project, slot) => stock.apply(project, slot).nonEmpty()))
     })
 
-    const presetEntry = (slot: DeviceSlot, entry: PresetEntry, stock: Stock): DeviceEntry => {
+    type PresetLook = {
+        readonly caption: string
+        readonly icon: IconSymbol
+        readonly iconUrl: Option<string>
+        readonly deviceKey: string
+        readonly facts: ReadonlyArray<DeviceFact>
+        readonly tags: ReadonlyArray<string>
+        readonly bundle: Option<DeviceBundle>
+        readonly apply: (project: Project, slot: DeviceSlot, bytes: ArrayBuffer, keepTimeline: boolean) => boolean
+    }
+
+    const presetEntryWith = (slot: DeviceSlot, entry: PresetEntry, look: PresetLook): DeviceEntry => {
         const user = entry.source === "user"
         return {
             key: `preset:${entry.source}:${entry.uuid}`, kind: user ? "user-preset" : "stock-preset", local: user,
-            name: entry.name, brief: entry.description, caption: `${user ? "User" : "Stock"} preset for ${stock.name}`,
-            description: entry.description, icon: stock.icon, iconUrl: stock.iconUrl, deviceKey: stock.key,
-            facts: [{label: "Device", value: stock.name}], tags: [...(entry.tags ?? []), ...DeviceTags.of(stock.key)],
-            preset: Option.wrap(entry),
+            name: entry.name, brief: entry.description, caption: `${user ? "User" : "Stock"} ${look.caption}`,
+            description: entry.description, icon: look.icon, iconUrl: look.iconUrl, deviceKey: look.deviceKey,
+            facts: look.facts, tags: [...(entry.tags ?? []), ...look.tags], preset: Option.wrap(entry),
+            bundle: look.bundle,
             prepare: async () => {
                 const bytes = await PresetApplication.fetchBytes(entry.uuid, entry.source)
                 return {
                     offersTimeline: DeviceSlot.hasTimeline(slot) && PresetDecoder.peekHasTimeline(bytes),
-                    apply: (project, slot, keepTimeline) =>
-                        DeviceSlot.placePreset(project, slot, bytes, deviceKeyOf(entry), keepTimeline),
+                    apply: (project, slot, keepTimeline) => look.apply(project, slot, bytes, keepTimeline),
                     settle: async service => service.project.loadScriptDevices()
                 }
             }
         }
     }
 
+    const timelineFact = (entry: PresetEntry): DeviceFact =>
+        ({label: "Timeline", value: entry.hasTimeline === true ? "Included" : "None"})
+
+    const presetEntry = (slot: DeviceSlot, entry: PresetEntry, stock: Stock): DeviceEntry =>
+        presetEntryWith(slot, entry, {
+            caption: `preset for ${stock.name}`, icon: stock.icon, iconUrl: stock.iconUrl, deviceKey: stock.key,
+            facts: [{label: "Device", value: stock.name}], tags: DeviceTags.of(stock.key), bundle: Option.None,
+            apply: (project, slot, bytes, keepTimeline) =>
+                DeviceSlot.placePreset(project, slot, bytes, deviceKeyOf(entry), keepTimeline)
+        })
+
+    const rackEntry = (slot: DeviceSlot, entry: PresetEntry, instrument: InstrumentFactory): DeviceEntry =>
+        presetEntryWith(slot, entry, {
+            caption: `rack with ${instrument.defaultName}`, icon: instrument.defaultIcon, iconUrl: Option.None,
+            deviceKey: deviceKeyOf(entry), facts: [{label: "Instrument", value: instrument.defaultName}, timelineFact(entry)],
+            tags: ["rack"], bundle: Option.wrap("rack"), apply: DeviceSlot.placeRack
+        })
+
+    const chainEntry = (slot: DeviceSlot, entry: PresetEntry, label: string): DeviceEntry =>
+        presetEntryWith(slot, entry, {
+            caption: `${label} chain`, icon: IconSymbol.Chain, iconUrl: Option.None, deviceKey: "",
+            facts: [], tags: ["chain"], bundle: Option.wrap("chain"),
+            apply: (project, slot, bytes, keepTimeline) => DeviceSlot.placePreset(project, slot, bytes, "", keepTimeline)
+        })
+
     const scriptEntry = (script: CommunityScript, target: SpotlightCreate.ScriptTarget, host: Stock): DeviceEntry => ({
         key: `script:${script.uuid}`, kind: "script", local: false, name: script.name, brief: script.description,
         caption: `Community script for ${host.name}`, description: script.description, icon: host.icon,
         iconUrl: host.iconUrl, deviceKey: host.key,
         facts: [{label: "Author", value: script.author.name}, {label: "License", value: script.license}],
-        tags: script.tags, preset: Option.None,
+        tags: script.tags, preset: Option.None, bundle: Option.None,
         prepare: async () => {
             const source = await CommunityAPI.get().loadSource(script)
             const compiler = ScriptCompiler.create(ScriptCompilers[SpotlightCreate.scriptConfigs[target]])
@@ -161,7 +199,7 @@ export namespace DeviceCatalog {
             {label: "Size", value: wclap.size > 0 ? Bytes.toString(wclap.size) : "-"},
             {label: "Stored", value: wclap.local ? "On this device" : "openDAW cloud"}
         ],
-        tags: wclap.info.features, preset: Option.None,
+        tags: wclap.info.features, preset: Option.None, bundle: Option.None,
         prepare: async () => {
             const url = await SpotlightCreate.storeWclap(wclap)
             const {clapId, name} = wclap.info
@@ -197,6 +235,15 @@ export namespace DeviceCatalog {
                     const stock = stockByKey.get(deviceKeyOf(entry))
                     return isDefined(stock) ? [presetEntry(slot, entry, stock)] : []
                 }),
+            ...presets.flatMap(entry => {
+                if (category === "instrument" && entry.category === "audio-unit") {
+                    const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[entry.instrument]
+                    return isDefined(factory) && DeviceSlot.acceptsRack(slot, factory) ? [rackEntry(slot, entry, factory)] : []
+                }
+                if (category === "audio-effect" && entry.category === "audio-effect-chain") {return [chainEntry(slot, entry, "audio effect")]}
+                if (category === "midi-effect" && entry.category === "midi-effect-chain") {return [chainEntry(slot, entry, "MIDI effect")]}
+                return []
+            }),
             ...(isDefined(scriptHost)
                 ? scripts.filter(script => script.target === scriptTarget).map(script => scriptEntry(script, scriptTarget, scriptHost))
                 : []),

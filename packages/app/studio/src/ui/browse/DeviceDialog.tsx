@@ -24,7 +24,8 @@ import {installScrollbars} from "@/ui/components/Scrollbars"
 import {Surface} from "@/ui/surface/Surface"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
-import {DeviceCatalog, DeviceEntry, DeviceEntryKind} from "@/ui/browse/DeviceCatalog"
+import {DeviceBundle, DeviceCatalog, DeviceEntry, DeviceEntryKind} from "@/ui/browse/DeviceCatalog"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {DeviceAudition} from "@/ui/browse/DeviceAudition"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
@@ -68,6 +69,11 @@ const hintOf = (slot: DeviceSlot): string => {
     return DeviceSlot.isReplace(slot)
         ? `Select ${noun} to replace and preview it`
         : `Select ${noun} to create and preview it`
+}
+
+const bundleOf: Record<DeviceBundle, { icon: IconSymbol, text: string }> = {
+    rack: {icon: IconSymbol.Stack, text: "Rack: a complete track with instrument and effects"},
+    chain: {icon: IconSymbol.Chain, text: "Chain: several effects in a row"}
 }
 
 const badgeOf: Record<DeviceEntryKind, Nullable<IconSymbol>> = {
@@ -185,6 +191,10 @@ export namespace DeviceDialog {
             const existing = elements.get(entry.key)
             if (isDefined(existing)) {return existing}
             const badge = badgeOf[entry.kind]
+            const bundle: HTMLElement = (
+                <span className="bundle">{entry.bundle.mapOr(bundle => <Icon symbol={bundleOf[bundle].icon}/>, null)}</span>
+            )
+            entry.bundle.ifSome(kind => lifecycle.own(TextTooltip.default(bundle, () => bundleOf[kind].text)))
             const element: HTMLElement = (
                 <div className="entry" onclick={() => pick(entry)}>
                     {entry.iconUrl.match({
@@ -195,6 +205,7 @@ export namespace DeviceDialog {
                     {entry.brief.length > 0
                         ? <span className="brief">{entry.brief}</span>
                         : <span className="brief missing">No description</span>}
+                    {bundle}
                     <span className="badge">{isDefined(badge) ? <Icon symbol={badge}/> : null}</span>
                 </div>
             )

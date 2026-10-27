@@ -5,7 +5,7 @@ component
   display: grid
   grid-template-columns: minmax(22em, 4fr) minmax(22em, 2fr)
   grid-template-rows: auto 1fr auto
-  column-gap: 24px
+  column-gap: 8px
   row-gap: 12px
   min-height: 0
 
@@ -43,7 +43,7 @@ component
 
     > div.rows
       display: grid
-      grid-template-columns: 22px auto 1fr auto
+      grid-template-columns: 22px auto 1fr 14px auto
       column-gap: 7px
       color: var(--color)
 
@@ -69,6 +69,12 @@ component
 
         > span.brief.missing
           opacity: 0.3
+
+        > span.bundle
+          display: flex
+          justify-content: center
+          font-size: 12px
+          color: var(--color-shadow)
 
         > span.badge
           display: flex

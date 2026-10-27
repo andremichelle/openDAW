@@ -53,7 +53,12 @@ The card on the right describes the selected entry: what it is, the device it ru
 your own presets it also offers **Edit…** (name, description and tags), **Duplicate**, **Delete** and **Save to
 Disk…**.
 
-## Not listed yet
+## Racks and Chains
 
-Racks (complete audio unit presets) and effect chain presets do not show up in the browser yet. Use the
-[Spotlight](/manuals/spotlight) for them.
+* **Racks** are complete audio units. Picked for a new track, the rack creates it with its instrument, effects and
+  mixer settings. Picked through **Replace…** on an instrument, the rack takes over the instrument and all effects of
+  the track, the notes and regions stay. Racks are not offered inside a composite layer.
+* **Chains** are listed at the **+** buttons of their kind, audio or MIDI. All effects of the chain go in at that
+  place. Through **Replace…** on an effect, the chain takes the place of that one effect.
+
+Both are presets, so the **Folder** toggle shows or hides them and the search finds them by `rack` and `chain`.

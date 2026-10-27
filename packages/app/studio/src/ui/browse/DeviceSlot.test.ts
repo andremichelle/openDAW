@@ -1,7 +1,9 @@
 import {describe, expect, it, vi} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {BoxEditing, IndexedBox} from "@opendaw/lib-box"
-import {DeviceHost, Devices, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {
+    DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
+} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
@@ -95,6 +97,60 @@ describe("DeviceSlot", () => {
         expect(order.length).toBe(4)
     })
 
+    const rackSetup = async () => {
+        const context = await setup()
+        const {project, EffectFactories} = context
+        const source = project.editing.modify(() => {
+            const {audioUnitBox} = project.api.createInstrument(InstrumentFactories.Nano)
+            const host = project.boxAdapters.adapterFor(audioUnitBox, Devices.isHost)
+            const field = DeviceHost.chainFieldOf(host, "audio").unwrap()
+            const compressor = project.api.insertEffect(field, EffectFactories.AudioNamed.Compressor, 0)
+            const gate = project.api.insertEffect(field, EffectFactories.AudioNamed.Gate, 1)
+            return {audioUnitBox, effects: [compressor, gate]}
+        }).unwrap()
+        const rack = PresetEncoder.encode(source.audioUnitBox, {}) as ArrayBuffer
+        const chain = PresetEncoder.encodeEffects(source.effects, PresetHeader.ChainKind.Audio) as ArrayBuffer
+        return {...context, rack, chain}
+    }
+
+    it("replaces the whole unit with a rack, effects included", async () => {
+        const {project, host, rack, effectNames, instrumentName} = await rackSetup()
+        const slot: DeviceSlot = {type: "replace-instrument", host}
+        expect(project.editing.modify(() => DeviceSlot.placeRack(project, slot, rack, true)).unwrap()).true
+        expect(instrumentName()).toBe("NanoDeviceBox")
+        expect(effectNames()).toEqual(["CompressorDeviceBox", "GateDeviceBox"])
+    })
+
+    it("creates a new unit from a rack and edits it", async () => {
+        const {project, rack, unitCount} = await rackSetup()
+        const before = unitCount()
+        expect(project.editing.modify(() =>
+            DeviceSlot.placeRack(project, {type: "new-instrument", anchor: Option.None}, rack, true)).unwrap()).true
+        expect(unitCount()).toBe(before + 1)
+        const edited = project.userEditingManager.audioUnit.get().unwrap().box
+        const editedHost = project.boxAdapters.adapterFor(edited, Devices.isHost)
+        expect(editedHost.inputField.pointerHub.incoming().at(0)?.box.name).toBe("NanoDeviceBox")
+    })
+
+    it("inserts a chain at the slot and replaces one effect with a chain", async () => {
+        const {project, host, chain, effectNames} = await rackSetup()
+        project.editing.modify(() =>
+            DeviceSlot.placePreset(project, {type: "insert", host, accepts: "audio", index: 1}, chain, "", true))
+        expect(effectNames()).toEqual(["DelayDeviceBox", "CompressorDeviceBox", "GateDeviceBox", "ReverbDeviceBox"])
+        project.editing.modify(() =>
+            DeviceSlot.placePreset(project, {type: "replace-effect", host, accepts: "audio", index: 0}, chain, "", true))
+        expect(effectNames()).toEqual(["CompressorDeviceBox", "GateDeviceBox", "CompressorDeviceBox", "GateDeviceBox", "ReverbDeviceBox"])
+    })
+
+    it("lists racks only where a whole unit can go", async () => {
+        const {host} = await setup()
+        const replace: DeviceSlot = {type: "replace-instrument", host}
+        expect(DeviceSlot.acceptsRack(replace, InstrumentFactories.Nano)).true
+        expect(DeviceSlot.acceptsRack(replace, InstrumentFactories.Tape)).false
+        expect(DeviceSlot.acceptsRack({type: "new-instrument", anchor: Option.None}, InstrumentFactories.Tape)).true
+        expect(DeviceSlot.acceptsRack({type: "insert", host, accepts: "audio", index: 0}, InstrumentFactories.Nano)).false
+    })
+
     it("creates a new instrument unit", async () => {
         const {project, unitCount} = await setup()
         const before = unitCount()
@@ -111,7 +167,7 @@ describe("DeviceAudition", () => {
         }
         return {
             key, kind: "device", local: false, name: key, brief: "", caption: "", description: "", icon: 0,
-            iconUrl: Option.None, deviceKey: key, facts: [], tags: [], preset: Option.None,
+            iconUrl: Option.None, deviceKey: key, facts: [], tags: [], preset: Option.None, bundle: Option.None,
             prepare: () => Promise.resolve(candidate)
         } as DeviceEntry
     }
