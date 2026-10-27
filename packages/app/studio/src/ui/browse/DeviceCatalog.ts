@@ -1,9 +1,10 @@
-import {asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator} from "@opendaw/lib-std"
+import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
-import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStates} from "@opendaw/studio-core"
+import {SoundfontDeviceBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler, Soundfont} from "@opendaw/studio-adapters"
+import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapStates} from "@opendaw/studio-core"
+import {OpenSoundfontAPI} from "@/opendaw-api"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
@@ -22,7 +23,7 @@ export interface DeviceCandidate {
     settle(service: StudioService): Promise<void>
 }
 
-export type DeviceEntryKind = "device" | "user-preset" | "stock-preset" | "script" | "wclap"
+export type DeviceEntryKind = "device" | "user-preset" | "stock-preset" | "script" | "wclap" | "soundfont"
 
 export type DeviceFact = { readonly label: string, readonly value: string }
 
@@ -51,6 +52,24 @@ export namespace DeviceCatalog {
         readonly presets: ReadonlyArray<PresetEntry>
         readonly scripts: ReadonlyArray<CommunityScript>
         readonly wclaps: ReadonlyArray<SpotlightCreate.Wclap>
+        readonly soundfonts: ReadonlyArray<SoundfontSource>
+    }
+
+    export type SoundfontSource = { readonly soundfont: Soundfont, readonly local: boolean }
+
+    // the openDAW library plus what was imported on this device
+    export const loadSoundfonts = async (): Promise<ReadonlyArray<SoundfontSource>> => {
+        const [cloud, stored] = await Promise.all([
+            OpenSoundfontAPI.get().all().catch((reason: unknown) => {
+                console.warn(reason)
+                return []
+            }),
+            SoundfontStorage.get().list()
+        ])
+        return [
+            ...cloud.map(soundfont => ({soundfont, local: false})),
+            ...Arrays.subtract(stored, cloud, ({uuid: a}, {uuid: b}) => a === b).map(soundfont => ({soundfont, local: true}))
+        ]
     }
 
     type Stock = {
@@ -64,7 +83,9 @@ export namespace DeviceCatalog {
         readonly apply: (project: Project, slot: DeviceSlot) => Option<Box>
     }
 
-    const rankOf: Record<DeviceEntryKind, int> = {"device": 0, "user-preset": 1, "stock-preset": 2, "script": 3, "wclap": 4}
+    const rankOf: Record<DeviceEntryKind, int> = {
+        "device": 0, "user-preset": 1, "stock-preset": 2, "script": 3, "wclap": 4, "soundfont": 5
+    }
 
     export const compare = (left: DeviceEntry, right: DeviceEntry): int => {
         const order = StringComparator(left.name.toLowerCase(), right.name.toLowerCase())
@@ -220,7 +241,28 @@ export namespace DeviceCatalog {
         }
     })
 
-    export const entriesFor = (slot: DeviceSlot, {presets, scripts, wclaps}: Sources): ReadonlyArray<DeviceEntry> => {
+    const soundfontEntry = ({soundfont, local}: SoundfontSource, player: Stock): DeviceEntry => ({
+        key: `soundfont:${soundfont.uuid}`, kind: "soundfont", local, name: soundfont.name,
+        brief: local ? "Imported soundfont" : "Soundfont from openDAW", caption: `Soundfont for ${player.name}`,
+        description: "", icon: player.icon, iconUrl: Option.None, deviceKey: player.key,
+        facts: [
+            {label: "Size", value: Bytes.toString(soundfont.size)},
+            {label: "License", value: soundfont.license.length > 0 ? soundfont.license : "-"},
+            {label: "Stored", value: local ? "On this device" : "openDAW cloud"}
+        ],
+        tags: ["soundfont"], preset: Option.None, bundle: Option.None,
+        prepare: () => Promise.resolve(plainCandidate((project, slot) => {
+            const {boxGraph} = project
+            const uuid = UUID.parse(soundfont.uuid)
+            const device = DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Soundfont)
+                .map(box => asInstanceOf(box, SoundfontDeviceBox))
+            device.ifSome(box => box.file.refer(boxGraph.findBox<SoundfontFileBox>(uuid).unwrapOrElse(() =>
+                SoundfontFileBox.create(boxGraph, uuid, file => file.fileName.setValue(soundfont.name)))))
+            return device.nonEmpty()
+        }))
+    })
+
+    export const entriesFor = (slot: DeviceSlot, {presets, scripts, wclaps, soundfonts}: Sources): ReadonlyArray<DeviceEntry> => {
         const category = DeviceSlot.categoryOf(slot)
         const stocks = stocksFor(slot)
         const stockByKey = new Map(stocks.map(stock => [stock.key, stock]))
@@ -247,6 +289,10 @@ export namespace DeviceCatalog {
             ...(isDefined(scriptHost)
                 ? scripts.filter(script => script.target === scriptTarget).map(script => scriptEntry(script, scriptTarget, scriptHost))
                 : []),
+            ...soundfonts.flatMap(source => {
+                const player = stockByKey.get("Soundfont")
+                return isDefined(player) ? [soundfontEntry(source, player)] : []
+            }),
             ...(isDefined(wclapKind) && stockByKey.has("Wclap")
                 ? wclaps.filter(({info}) => WclapDescriber.kindOf(info) === wclapKind)
                     .map(wclap => wclapEntry(wclap, wclapKind === "instrument"))

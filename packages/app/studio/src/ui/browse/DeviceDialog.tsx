@@ -44,7 +44,8 @@ const filter = {
     showUser: new DefaultObservableValue(true),
     showPresets: new DefaultObservableValue(true),
     showScripts: new DefaultObservableValue(true),
-    showWclaps: new DefaultObservableValue(true)
+    showWclaps: new DefaultObservableValue(true),
+    showSoundfonts: new DefaultObservableValue(true)
 }
 
 const colorOf: Record<PresetCategoryKey, Color> = {
@@ -80,7 +81,7 @@ const bundleOf: Record<DeviceBundle, { icon: IconSymbol, text: string }> = {
 
 const badgeOf: Record<DeviceEntryKind, Nullable<IconSymbol>> = {
     "device": null, "user-preset": IconSymbol.UserFolder, "stock-preset": IconSymbol.CloudFolder,
-    "script": IconSymbol.Code, "wclap": IconSymbol.WebClap
+    "script": IconSymbol.Code, "wclap": IconSymbol.WebClap, "soundfont": IconSymbol.SoundFont
 }
 
 const isVisible = (entry: DeviceEntry): boolean => {
@@ -95,6 +96,8 @@ const isVisible = (entry: DeviceEntry): boolean => {
             return filter.showScripts.getValue() && filter.showStock.getValue()
         case "wclap":
             return filter.showWclaps.getValue() && (entry.local ? filter.showUser.getValue() : filter.showStock.getValue())
+        case "soundfont":
+            return filter.showSoundfonts.getValue() && (entry.local ? filter.showUser.getValue() : filter.showStock.getValue())
     }
 }
 
@@ -126,7 +129,7 @@ export namespace DeviceDialog {
         const audition = lifecycle.own(new DeviceAudition(service, slot))
         const category = DeviceSlot.categoryOf(slot)
         const color = colorOf[category]
-        const sources = new DefaultObservableValue<DeviceCatalog.Sources>({presets: [], scripts: [], wclaps: []})
+        const sources = new DefaultObservableValue<DeviceCatalog.Sources>({presets: [], scripts: [], wclaps: [], soundfonts: []})
         const selected = new MutableObservableOption<DeviceEntry>()
         const elements = new Map<string, HTMLElement>()
         const visible: Array<DeviceEntry> = []
@@ -302,6 +305,7 @@ export namespace DeviceDialog {
                     {toggle(filter.showPresets, "Show presets", IconSymbol.Folder)}
                     {toggle(filter.showScripts, "Show community scripts", IconSymbol.Code)}
                     {category !== "midi-effect" && toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
+                    {category === "instrument" && toggle(filter.showSoundfonts, "Show soundfonts", IconSymbol.SoundFont)}
                     {search}
                 </div>
                 {list}
@@ -332,6 +336,7 @@ export namespace DeviceDialog {
             filter.showPresets.subscribe(render),
             filter.showScripts.subscribe(render),
             filter.showWclaps.subscribe(render),
+            filter.showSoundfonts.subscribe(render),
             sources.subscribe(render),
             service.presets.userIndex.subscribe(() => sources.setValue({...sources.getValue(), presets: service.presets.presets()})),
             service.presets.cloudIndex.subscribe(() => sources.setValue({...sources.getValue(), presets: service.presets.presets()})),
@@ -351,11 +356,12 @@ export namespace DeviceDialog {
                 console.warn(reason)
                 return []
             }),
-            SpotlightCreate.wclaps()
-        ]).then(([_, scripts, wclaps]) => {
+            SpotlightCreate.wclaps(),
+            category === "instrument" ? DeviceCatalog.loadSoundfonts() : Promise.resolve([])
+        ]).then(([_, scripts, wclaps, soundfonts]) => {
             if (!dialog.open) {return}
             ready.value = true
-            sources.setValue({presets: service.presets.presets(), scripts, wclaps})
+            sources.setValue({presets: service.presets.presets(), scripts, wclaps, soundfonts})
             currentKey.ifSome(key => Option.wrap(visible.find(entry => entry.kind === "device" && entry.deviceKey === key))
                 .ifSome(select))
         })

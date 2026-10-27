@@ -1,7 +1,7 @@
 # Device Browser
 
-The Device Browser is one dialog for everything that goes into a track: stock devices, presets, community scripts and
-WebCLAP plugins. It lists only what fits the place you opened it for, and every pick is created right away, so you hear
+The Device Browser is one dialog for everything that goes into a track: stock devices, presets, community scripts,
+WebCLAP plugins and soundfonts. It lists only what fits the place you opened it for, and every pick is created right away, so you hear
 it before you decide.
 
 ## Opening it
@@ -40,10 +40,13 @@ hear what the effect does.
 
 The toggles above the list choose what is shown:
 
-* **Cloud folder** shows what comes from openDAW: stock presets, community scripts and cloud WebCLAP plugins
-* **User folder** shows what is stored on this device: your presets and imported WebCLAP plugins
-* **Folder**, **Code** and **WebCLAP** show or hide presets, community scripts and WebCLAP plugins. Stock devices are
-  always listed.
+* **Cloud folder** shows what comes from openDAW: stock presets, community scripts, cloud WebCLAP plugins and the
+  soundfont library
+* **User folder** shows what is stored on this device: your presets, imported WebCLAP plugins and imported soundfonts
+* **Folder**, **Code**, **WebCLAP** and **SF** show or hide presets, community scripts, WebCLAP plugins and
+  soundfonts. Stock devices are always listed.
+
+A soundfont is listed with the instruments and creates a Soundfont player with the soundfont loaded.
 
 The search matches names, descriptions and tags. A click on a tag in the info card puts it into the search.
 
