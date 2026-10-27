@@ -30,6 +30,7 @@ import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 import {DevicePiano} from "@/ui/browse/DevicePiano"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
+import {AccessKey} from "@/opendaw-api/AccessKey"
 
 const className = Html.adoptStyleSheet(css, "DeviceDialog")
 
@@ -174,7 +175,7 @@ export namespace DeviceDialog {
                 <div className="actions">
                     {action("Edit…", () => presets.editPreset(preset))}
                     {action("Duplicate", () => presets.duplicatePreset(preset))}
-                    {action("Upload", () => presets.uploadPreset(preset))}
+                    {AccessKey.get().nonEmpty() && action("Upload", () => presets.uploadPreset(preset))}
                     {action("Delete", () => presets.deletePreset(preset))}
                     {action("Save to Disk…", () => presets.savePresetToDisk(preset))}
                 </div>
@@ -240,10 +241,11 @@ export namespace DeviceDialog {
         }
         const {captureDevices, userEditingManager, boxAdapters} = service.project
         const armedBefore = new Set(captureDevices.allCaptures().filter(capture => capture.armed.getValue()))
-        const armEditing = (): void => userEditingManager.audioUnit.get().ifSome(vertex =>
-            captureDevices.get(boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().uuid)
-                .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target))))
-        const piano: Nullable<SVGElement> = category === "instrument" ? <DevicePiano lifecycle={lifecycle}/> : null
+        const armEditing = (): void => (slot.type === "new-instrument"
+            ? userEditingManager.audioUnit.get().map(vertex => boxAdapters.adapterFor(vertex.box, Devices.isHost))
+            : Option.wrap(slot.host)).ifSome(host => captureDevices.get(host.audioUnitBoxAdapter().uuid)
+            .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target))))
+        const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot) ? <DevicePiano lifecycle={lifecycle}/> : null
         const content: HTMLElement = (
             <div className={className} style={{"--color": color.toString()}}
                  onkeydown={(event: KeyboardEvent) => {

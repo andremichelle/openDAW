@@ -212,7 +212,9 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         reconcileChildren(instrumentContainer, instrument.match({
             // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
             none: () => deviceHost.hostsInstrument
-                ? <div/>
+                ? DeviceSlot.canReplaceInstrument(deviceHost)
+                    ? insertButton("instrument", () => ({type: "replace-instrument", host: deviceHost}))
+                    : <div/>
                 : <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>,
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))

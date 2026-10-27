@@ -148,6 +148,12 @@ Each phase ends with a browser check by André.
 - The dialog is bottom-aligned with the top of the device panel and keeps 16px to the app header.
 - The sidebar keeps Samples and Soundfonts, `DeviceBrowser`, `DeviceItem`, `PresetItem` and `ScriptItem` are deleted.
 - Undo steps carry no names, `BoxEditing` has no step labels.
+- The piano and MIDI input show whenever notes reach the slot (`DeviceSlot.takesNotes`), effects on instrument tracks
+  included. The slot's own audio unit is armed while the dialog is open.
+- An empty composite layer shows a "+" in its instrument slot (replace-instrument), the drag that filled it is gone.
+- The sidebar browser starts minimized, the tour opens it for the Samples and Soundfonts steps and restores it.
+- Manual: new page `device-browser.md`, presets, connect-midi-device, composite, effect-composite, stereo-composite,
+  frequency-split and creating-a-device updated.
 
 ## Open questions
 

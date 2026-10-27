@@ -57,13 +57,13 @@ Each branch has its own small channel strip, matching a track header:
 
 The **Add Effect** button below the list opens a menu of audio effects. Picking one creates a **new branch** holding just that effect.
 
-You can also build branches by drag and drop (see section 6).
+You can also move existing effects into branches by drag and drop (see section 7).
 
 ---
 
 ## 4. Editing a Branch
 
-Click a branch to enter it. The device panel then shows that branch's serial chain on its own, and the header shows the composite's name as a **back** button with an arrow. Add, remove, reorder and edit devices inside the branch just like any other effect chain, then click the back button to return to the composite.
+Click a branch to enter it. The device panel then shows that branch's serial chain on its own, and the header shows the composite's name as a **back** button with an arrow. Add devices with the **+** buttons, remove, reorder and edit them inside the branch just like in any other effect chain, then click the back button to return to the composite.
 
 ---
 
@@ -87,10 +87,8 @@ Set Dry and Wet to taste for parallel-processing blends (for example, a low Wet 
 
 ## 7. Drag & Drop
 
-The composite is built almost entirely by dragging:
+Existing effects can be dragged in and out of the composite:
 
-- **From the Device Browser onto a branch** — drop on the middle of a branch to add the effect to that branch's chain; drop on its top or bottom edge to create a new branch holding it.
-- **From the Device Browser onto an empty composite** — the whole body is a drop zone; the effect becomes the first branch.
 - **An existing effect onto a branch** — moves that effect out of wherever it was and into the branch.
 - **An effect onto the back button (inside a branch)** — moves the effect out of the branch and onto the parent chain, next to the composite.
 

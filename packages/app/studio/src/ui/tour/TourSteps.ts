@@ -4,6 +4,7 @@ import {StudioService} from "@/service/StudioService"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {TourAnchor} from "./TourAnchor"
 import {TourPlacement} from "./TourPlacement"
+import {PanelType} from "@/ui/workspace/PanelType"
 
 export type TourStep = {
     screen: Workspace.ScreenKeys
@@ -14,7 +15,10 @@ export type TourStep = {
     prepare?: Procedure<StudioService>
 }
 
-const browse = (scope: BrowseScope): Procedure<StudioService> => service => service.layout.browseScope.setValue(scope)
+const browse = (scope: BrowseScope): Procedure<StudioService> => service => {
+    service.layout.browseScope.setValue(scope)
+    service.panelLayout.showIfAvailable(PanelType.BrowserPanel)
+}
 
 // Keys are the anchors. A key without a registered element shows a centered card.
 export const TourSteps: Record<TourAnchor, TourStep> = {

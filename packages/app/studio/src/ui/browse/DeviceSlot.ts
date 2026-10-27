@@ -42,6 +42,10 @@ export namespace DeviceSlot {
         }
     }
 
+    // whether notes played into the slot's audio unit reach what is auditioned
+    export const takesNotes = (slot: DeviceSlot): boolean => slot.type === "new-instrument"
+        || slot.host.audioUnitBoxAdapter().inputAdapter.mapOr(input => input.accepts === "midi", false)
+
     export const isReplace = (slot: DeviceSlot): boolean =>
         slot.type === "replace-effect" || slot.type === "replace-instrument"
 
