@@ -375,5 +375,6 @@ export namespace DeviceDialog {
         placeAbovePanel(dialog)
         dialog.showModal()
         search.focus()
+        search.querySelector("input")?.select()
     }
 }
