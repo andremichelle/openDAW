@@ -11,7 +11,7 @@ import {
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {PresetEntry} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, PresetEntry} from "@opendaw/studio-core"
 import {Devices} from "@opendaw/studio-adapters"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
@@ -70,6 +70,8 @@ const hintOf = (slot: DeviceSlot): string => {
         ? `Select ${noun} to replace and preview it`
         : `Select ${noun} to create and preview it`
 }
+
+type PresetCommand = { readonly label: string, readonly run: () => Promise<void> }
 
 const bundleOf: Record<DeviceBundle, { icon: IconSymbol, text: string }> = {
     rack: {icon: IconSymbol.Stack, text: "Rack: a complete track with instrument and effects"},
@@ -170,20 +172,24 @@ export namespace DeviceDialog {
             card.replaceChildren(...parts.filter(isDefined))
         }
         const cardLifecycle = lifecycle.own(new Terminator())
+        const presetCommands = (preset: PresetEntry): ReadonlyArray<PresetCommand> => {
+            const presets = service.presets
+            return [
+                {label: "Edit…", run: () => presets.editPreset(preset)},
+                {label: "Duplicate", run: () => presets.duplicatePreset(preset)},
+                ...(AccessKey.get().nonEmpty() ? [{label: "Upload", run: () => presets.uploadPreset(preset)}] : []),
+                {label: "Delete", run: () => presets.deletePreset(preset)},
+                {label: "Save to Disk…", run: () => presets.savePresetToDisk(preset)}
+            ]
+        }
         const presetActions = (preset: PresetEntry): HTMLElement => {
             cardLifecycle.terminate()
-            const presets = service.presets
-            const action = (label: string, run: () => Promise<void>) => (
-                <Button lifecycle={cardLifecycle} onClick={() => run().catch(console.warn)}
-                        appearance={{color: Colors.shadow, framed: true}}>{label}</Button>
-            )
             return (
                 <div className="actions">
-                    {action("Edit…", () => presets.editPreset(preset))}
-                    {action("Duplicate", () => presets.duplicatePreset(preset))}
-                    {AccessKey.get().nonEmpty() && action("Upload", () => presets.uploadPreset(preset))}
-                    {action("Delete", () => presets.deletePreset(preset))}
-                    {action("Save to Disk…", () => presets.savePresetToDisk(preset))}
+                    {presetCommands(preset).map(({label, run}) => (
+                        <Button lifecycle={cardLifecycle} onClick={() => run().catch(console.warn)}
+                                appearance={{color: Colors.shadow, framed: true}}>{label}</Button>
+                    ))}
                 </div>
             )
         }
@@ -209,6 +215,11 @@ export namespace DeviceDialog {
                     <span className="badge">{isDefined(badge) ? <Icon symbol={badge}/> : null}</span>
                 </div>
             )
+            entry.preset.ifSome(preset => {
+                if (preset.source !== "user") {return}
+                lifecycle.own(ContextMenu.subscribe(element, collector => collector.addItems(...presetCommands(preset)
+                    .map(({label, run}) => MenuItem.default({label}).setTriggerProcedure(() => run().catch(console.warn))))))
+            })
             elements.set(entry.key, element)
             return element
         }
