@@ -17,6 +17,12 @@ export namespace PresetApplication {
             .finally(() => dialog.terminate())
     }
 
+    // without a progress dialog
+    export const fetchBytes = (uuid: UUID.String, source: PresetSource): Promise<ArrayBuffer> =>
+        source === "user"
+            ? PresetStorage.load(UUID.parse(uuid))
+            : OpenPresetAPI.get().load(UUID.parse(uuid))
+
     export const createNewAudioUnitFromRack = async (project: Project,
                                                      uuid: UUID.String,
                                                      source: PresetSource,

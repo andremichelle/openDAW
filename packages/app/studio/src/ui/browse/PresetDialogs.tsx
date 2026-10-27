@@ -11,12 +11,14 @@ export namespace PresetDialogs {
         headline: string
         suggestedName?: string
         suggestedDescription?: string
+        suggestedTags?: ReadonlyArray<string>
         showTimelineToggle?: boolean
     }
 
     export type SaveResult = {
         name: string
         description: string
+        tags: ReadonlyArray<string>
         includeTimeline: boolean
     }
 
@@ -24,6 +26,7 @@ export namespace PresetDialogs {
                                                    headline,
                                                    suggestedName = "",
                                                    suggestedDescription = "",
+                                                   suggestedTags = [],
                                                    showTimelineToggle = true
                                                }: SaveInput): Promise<SaveResult> => {
         const lifecycle = new Terminator()
@@ -37,6 +40,9 @@ export namespace PresetDialogs {
                       rows={3}
                       placeholder="Optional description">{suggestedDescription}</textarea>
         )
+        const tagsField: HTMLInputElement = (
+            <input className="default" type="text" placeholder="Optional, comma separated" value={suggestedTags.join(", ")}/>
+        )
         const includeTimelineModel = new DefaultObservableValue(false)
         const approve = () => {
             const name = nameField.value.trim()
@@ -47,6 +53,8 @@ export namespace PresetDialogs {
             resolve({
                 name,
                 description: descriptionField.value.trim(),
+                tags: Array.from(new Set(tagsField.value.split(",")
+                    .map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0))),
                 includeTimeline: includeTimelineModel.getValue()
             })
             return true
@@ -76,6 +84,8 @@ export namespace PresetDialogs {
                     {nameField}
                     <div style={{paddingTop: "0.35em"}}>Description:</div>
                     {descriptionField}
+                    <div style={{paddingTop: "0.35em"}}>Tags:</div>
+                    {tagsField}
                     {showTimelineToggle && (
                         <Frag>
                             <div style={{paddingTop: "0.15em"}}>Include timeline:</div>

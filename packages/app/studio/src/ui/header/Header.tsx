@@ -1,5 +1,4 @@
 import css from "./Header.sass?inline"
-import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Lifecycle, Nullable, ObservableValue, Observer, Subscription, Terminator} from "@opendaw/lib-std"
 import {TransportGroup} from "@/ui/header/TransportGroup.tsx"
@@ -11,7 +10,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
-import {MidiDevices, StudioPreferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@opendaw/studio-core"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {EngineAddresses} from "@opendaw/studio-adapters"
@@ -22,6 +21,7 @@ import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
+import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 
 const className = Html.adoptStyleSheet(css, "Header")
@@ -68,7 +68,7 @@ export const Header = ({lifecycle, service}: Construct) => {
     TourAnchors.register(lifecycle, transport, "transport")
     TourAnchors.register(lifecycle, timecodes, "timecodes")
     return (
-        <header className={className}>
+        <header className={className} data-app-header>
             <MenuButton root={service.menu}
                         onInit={element => TourAnchors.register(lifecycle, element, "menu")}
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
@@ -83,11 +83,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             </Group>
             <div style={{display: "flex", columnGap: "4px"}}
                  onInit={element => TourAnchors.register(lifecycle, element, "midi")}>
-                <Checkbox lifecycle={lifecycle}
-                          model={MidiDevices.available()}
-                          appearance={{activeColor: Colors.orange, tooltip: "Midi Access", cursor: "pointer"}}>
-                    <Icon symbol={IconSymbol.Midi}/>
-                </Checkbox>
+                <MidiAccessButton lifecycle={lifecycle}/>
                 <CaptureMidiButton lifecycle={lifecycle} service={service}/>
             </div>
             <hr/>

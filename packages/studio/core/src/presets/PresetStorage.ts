@@ -74,7 +74,7 @@ export namespace PresetStorage {
     }
 
     export const updateMeta = async (uuid: UUID.Bytes,
-                                     update: {name: string, description: string}): Promise<void> => {
+                                     update: {name: string, description: string, tags?: ReadonlyArray<string>}): Promise<void> => {
         const uuidStr = UUID.toString(uuid)
         const current = await readIndex()
         const next = current.map(entry =>

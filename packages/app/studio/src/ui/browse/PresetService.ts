@@ -362,6 +362,7 @@ export class PresetService {
                 name: dialog.value.name,
                 device: deviceKey as EffectFactories.AudioEffectKeys,
                 description: dialog.value.description,
+                tags: dialog.value.tags,
                 created: now,
                 modified: now
             } satisfies AudioEffectPresetMeta
@@ -371,6 +372,7 @@ export class PresetService {
                 name: dialog.value.name,
                 device: deviceKey as EffectFactories.MidiEffectKeys,
                 description: dialog.value.description,
+                tags: dialog.value.tags,
                 created: now,
                 modified: now
             } satisfies MidiEffectPresetMeta
@@ -400,6 +402,7 @@ export class PresetService {
                 uuid: UUID.toString(UUID.generate()),
                 name: dialog.value.name,
                 description: dialog.value.description,
+                tags: dialog.value.tags,
                 created: now,
                 modified: now
             } satisfies AudioEffectChainPresetMeta
@@ -408,6 +411,7 @@ export class PresetService {
                 uuid: UUID.toString(UUID.generate()),
                 name: dialog.value.name,
                 description: dialog.value.description,
+                tags: dialog.value.tags,
                 created: now,
                 modified: now
             } satisfies MidiEffectChainPresetMeta
@@ -442,6 +446,7 @@ export class PresetService {
             name: dialog.value.name,
             device: deviceKey,
             description: dialog.value.description,
+            tags: dialog.value.tags,
             created: now,
             modified: now,
             hasTimeline: dialog.value.includeTimeline
@@ -512,6 +517,7 @@ export class PresetService {
             name: dialog.value.name,
             instrument,
             description: dialog.value.description,
+            tags: dialog.value.tags,
             created: now,
             modified: now,
             hasTimeline: includeTimeline
@@ -671,6 +677,7 @@ export class PresetService {
             headline: "Edit Preset",
             suggestedName: entry.name,
             suggestedDescription: entry.description,
+            suggestedTags: entry.tags,
             showTimelineToggle: false
         }))
         if (dialog.status === "rejected") {
@@ -678,7 +685,7 @@ export class PresetService {
             throw dialog.error
         }
         await PresetStorage.updateMeta(UUID.parse(entry.uuid),
-            {name: dialog.value.name, description: dialog.value.description})
+            {name: dialog.value.name, description: dialog.value.description, tags: dialog.value.tags})
     }
 
     async uploadPreset(entry: PresetEntry): Promise<void> {
@@ -835,6 +842,7 @@ export class PresetService {
             name: dialog.value.name,
             device: deviceKey,
             description: dialog.value.description,
+            tags: dialog.value.tags,
             created: now,
             modified: now,
             hasTimeline: false

@@ -35,6 +35,7 @@ import {
     TimelineBox,
     TrackBox,
     UserInterfaceBox,
+    WclapParameterBox,
     WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {
@@ -190,7 +191,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
-        this.editing = env.createEditing?.(this.boxGraph) ?? new BoxEditing(this.boxGraph)
+        this.editing = env.createEditing?.(this.boxGraph)
+            ?? new BoxEditing(this.boxGraph, box => box instanceof WclapParameterBox)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))

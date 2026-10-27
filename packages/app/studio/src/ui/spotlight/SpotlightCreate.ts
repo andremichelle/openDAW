@@ -19,7 +19,10 @@ import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
 
 export namespace SpotlightCreate {
-    export type Wclap = { readonly id: string, readonly name: string, readonly info: WclapPluginInfo }
+    export type Wclap = {
+        readonly id: string, readonly name: string, readonly info: WclapPluginInfo
+        readonly local: boolean, readonly license: string, readonly size: number
+    }
 
     // without a project a new one is started first
     const withProject = (service: StudioService, action: (project: Project) => Promise<void>): void => {
@@ -35,7 +38,7 @@ export namespace SpotlightCreate {
         .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost))
 
     // the unit after the edit-mode instrument, a new unit is placed before it
-    const anchorAfterEditing = (project: Project): Option<UUID.Bytes> => editingHost(project)
+    export const anchorAfterEditing = (project: Project): Option<UUID.Bytes> => editingHost(project)
         .flatMap(host => {
             const unit = host.audioUnitBoxAdapter().box
             if (unit.type.getValue() !== AudioUnitType.Instrument) {return Option.None}
@@ -118,7 +121,7 @@ export namespace SpotlightCreate {
             })
         })
 
-    const scriptConfigs = {apparat: "Apparat", werkstatt: "Werkstatt", spielwerk: "Spielwerk"} as const
+    export const scriptConfigs = {apparat: "Apparat", werkstatt: "Werkstatt", spielwerk: "Spielwerk"} as const
 
     const isScriptDevice = (box: Box): box is ScriptCompiler.ScriptDeviceBox =>
         box instanceof ApparatDeviceBox || box instanceof WerkstattDeviceBox || box instanceof SpielwerkDeviceBox
@@ -142,9 +145,11 @@ export namespace SpotlightCreate {
             WclapCatalog.get().all().catch(() => []),
             WclapDescriber.stored().catch(() => [])
         ])
-        const cloud = published.flatMap(({uuid, name, plugins}) => {
+        const cloud = published.flatMap(({uuid, name, plugins, license, size}) => {
             const shortNames = WclapNames.distinct(plugins.map(info => info.name))
-            return plugins.map((info, index) => ({id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info}))
+            return plugins.map((info, index) => ({
+                id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info, local: false, license, size
+            }))
         })
         const cloudIds = new Set(published.map(({uuid}) => uuid))
         const local = Array.from(new Set(stored.map(({url}) => url)))
@@ -152,12 +157,14 @@ export namespace SpotlightCreate {
             .flatMap(url => {
                 const bundle = stored.filter(plugin => plugin.url === url)
                 const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
-                return bundle.map(({info}, index) => ({id: WclapStorage.idOf(url), name: shortNames[index], info}))
+                return bundle.map(({info}, index) => ({
+                    id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0
+                }))
             })
         return [...cloud, ...local]
     }
 
-    const storeWclap = async ({id, name}: Wclap): Promise<string> => {
+    export const storeWclap = async ({id, name}: Wclap): Promise<string> => {
         if (await WclapStorage.exists(id)) {return WclapStorage.urlOf(id)}
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({headline: `Downloading ${name}`, progress})

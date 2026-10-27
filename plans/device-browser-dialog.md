@@ -37,7 +37,14 @@ Layout:
   search field, focused on open.
 - Left: the flat list of every entry that fits the insert position, sorted by name.
 - Right: the info card of the selected entry: name, kind (stock device, user preset, stock preset, community script,
-  WebCLAP plugin), host device, author or vendor, license, size, description, preview picture when available.
+  WebCLAP plugin), host device, author or vendor, license, size, description, tags.
+
+## Tags
+
+Every entry carries tags: stock devices, user and stock presets, community scripts (already tagged) and WebCLAP plugins
+(their CLAP features). The search matches names and tags, and the info card lists the tags of the selected entry. A
+click on a tag puts it into the search. Presets get a tags field in their meta, user presets are tagged in the preset
+edit dialog, stock presets carry tags from opendaw-commons.
 
 ## Opening
 
@@ -52,7 +59,7 @@ Layout:
 2. Every further pick reverts the previous candidate first, then applies the new one. Arrow keys pick the same way.
 3. Enter approves: the result becomes ONE undo step ("Add Xenon", "Replace Delay with Xenon") and the dialog closes.
    Enter without a pick just closes.
-4. Escape or a click outside the dialog cancels: everything reverts to the state before opening and the dialog closes.
+4. Escape or Cancel cancels: everything reverts to the state before opening and the dialog closes.
 5. Candidates are applied with `modify(fn, false)` and reverted with `revertPending()`, approve calls `mark()`. Leftover
    pending UI state from before opening is sealed or kept apart so a revert never touches it.
 6. Undo and redo are blocked while the dialog is open, `undo()` would seal the half applied candidate.
@@ -105,14 +112,6 @@ Dropped. The "+" buttons cover every insert position, replace covers dropping on
 creating tracks. Dropping a device onto a browser row to save a preset is gone too, the device context menus remain the
 way to save. Moving devices inside the device panel stays as it is.
 
-## Previews
-
-- Community scripts: the existing WebP screenshots from the commons deploy (`screenshot` in `CommunityIndex`).
-- Stock devices: a preview picture for every stock device. `/device-preview` gets extended from script devices to
-  stock devices.
-- Presets: later, when presets come from opendaw-commons, each preset gets its own picture rendered the same way.
-- WebCLAP plugins: no picture, the card shows metadata only.
-
 ## Phases
 
 Each phase ends with a browser check by André.
@@ -123,15 +122,36 @@ Each phase ends with a browser check by André.
    button opening the dialog, and the "Add Audio Track" button.
 3. Remove the Instruments, AudioFx and MidiFx tabs from the sidebar browser, update the tour steps (`presets`,
    `clips`) and `BrowseScope`.
-4. Stock device previews.
+4. Tags: an optional `tags` field in the preset meta (additive, SDK safe), tags for every stock device, the CLAP features
+   of WebCLAP plugins, tag search and clickable tags in the info card, tag editing in the preset edit dialog. Stock
+   preset tags need the preset API (api.opendaw.studio) to deliver them.
 
 ## Out of scope
 
 - Racks and chains (audio unit, audio effect chain, MIDI effect chain presets) are not listed yet. Remind André
   before deploying.
 
+## Implementation (2026-10-27, all phases, browser-unverified)
+
+- `BoxEditing.checkpoint()` (lib-box, additive): everything edited after it, marked, appended to the previous step
+  or pending, rolls back or commits as ONE undo step. Needed because device editors write their own marked steps
+  while auditioning (WebCLAP parameter sync, script compile appends). Other `Editing` implementations fall back to
+  `revertPending` and `mark`.
+- `ui/browse/DeviceSlot.ts` (where), `DeviceCatalog.ts` (what), `DeviceAudition.ts` (pick, approve, cancel),
+  `DeviceDialog.tsx` (the dialog), `DeviceTags.ts` (stock tags).
+- "+" buttons: `ui/devices/panel/InsertButton.tsx`, wired in `DevicePanel.tsx`. They carry no `data-drag`, so drop
+  insert indices stay as they were.
+- Replace opens from "Replace…" in the device context menus. The device icon still minimizes, see open question 1.
+- Tape is not listed in the instrument dialog, "Add audio track" creates it.
+- No preview pictures in the info card: the picked device itself is the preview. The "Add Effect" placeholder in an
+  empty chain is gone, the "+" buttons cover it.
+- The dialog is bottom-aligned with the top of the device panel and keeps 16px to the app header.
+- The sidebar keeps Samples and Soundfonts, `DeviceBrowser`, `DeviceItem`, `PresetItem` and `ScriptItem` are deleted.
+- Undo steps carry no names, `BoxEditing` has no step labels.
+
 ## Open questions
 
-1. Tape in the instrument dialog: still listed, or only reachable through "Add Audio Track"?
-2. Stock previews: rendered by a Playwright script in this repo and committed to `public/images/devices/`, or rendered
-   in the commons deploy like the script screenshots?
+1. The device icon click minimizes the device today, it is the only way to minimize. Replace via icon click needs a
+   new home for minimize.
+2. The drop handlers for presets, scripts and instruments in `DevicePanelDragAndDrop` and the timeline have no drag
+   source left. Remove them, or keep them for drags from elsewhere?

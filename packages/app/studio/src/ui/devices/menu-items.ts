@@ -23,6 +23,8 @@ import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
 import {PresetEffectKind, PresetService} from "@/ui/browse/PresetService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
+import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 
 export namespace MenuItems {
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {
@@ -39,6 +41,8 @@ export namespace MenuItems {
         const optAudioField = deviceHost.audioEffectsField
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(manualUrl, name),
+            MenuItem.default({label: "Replace…", hidden: !DeviceSlot.canReplaceInstrument(deviceHost)})
+                .setTriggerProcedure(() => DeviceDialog.open(service, {type: "replace-instrument", host: deviceHost})),
             MenuItem.default({
                 label: "Add Midi-Effect",
                 separatorBefore: true,
@@ -179,6 +183,8 @@ export namespace MenuItems {
         const {editing} = project
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
+            MenuItem.default({label: "Replace…"})
+                .setTriggerProcedure(() => DeviceDialog.open(service, DeviceSlot.forEffect(device))),
             populateMenuItemToCreateEffect(service, host, device)
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})

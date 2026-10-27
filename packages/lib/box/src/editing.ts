@@ -8,12 +8,15 @@ import {
     Notifier,
     Observer,
     Option,
+    Predicate,
+    Predicates,
     RuntimeNotifier,
     Subscription,
     SyncProvider,
     tryCatch
 } from "@opendaw/lib-std"
 import {optimizeUpdates, Update} from "./updates"
+import {Box} from "./box"
 
 export {optimizeUpdates}
 
@@ -22,8 +25,16 @@ class Modification {
 
     constructor(updates: ReadonlyArray<Update>) {this.#updates = updates}
 
-    inverse(graph: BoxGraph): void {
+    // boxes outside the history that point at a box this step created go with it, else it cannot be unstaged
+    inverse(graph: BoxGraph, outsideHistory: Predicate<Box>): void {
         graph.beginTransaction()
+        this.#updates.forEach(update => {
+            if (update.type !== "new") {return}
+            graph.findBox(update.uuid).ifSome(box => box.incomingEdges()
+                .map(pointer => pointer.box)
+                .filter(source => source.isAttached() && outsideHistory(source))
+                .forEach(source => source.delete()))
+        })
         this.#updates.toReversed().forEach(update => update.inverse(graph))
         graph.endTransaction()
     }
@@ -40,20 +51,28 @@ export interface ModificationProcess {
     revert(): void
 }
 
+export interface EditingCheckpoint {
+    rollback(): void
+    commit(): void
+}
+
 export class BoxEditing implements Editing {
     readonly #graph: BoxGraph
     readonly #pending: Array<Modification> = []
     readonly #marked: Array<ReadonlyArray<Modification>> = []
     readonly #notifier: Notifier<void>
+    readonly #outsideHistory: Predicate<Box>
 
     #modifying: boolean = false
     #inProcess: boolean = false
     #disabled: boolean = false
     #historyIndex: int = 0
     #savedHistoryIndex: int = 0 // -1 = saved state was spliced away, >= 0 = valid saved position
+    #epoch: int = 0
 
-    constructor(graph: BoxGraph) {
+    constructor(graph: BoxGraph, outsideHistory: Predicate<Box> = Predicates.alwaysFalse) {
         this.#graph = graph
+        this.#outsideHistory = outsideHistory
 
         this.#notifier = new Notifier<void>()
     }
@@ -83,7 +102,67 @@ export class BoxEditing implements Editing {
         Arrays.clear(this.#marked)
         this.#historyIndex = 0
         this.#savedHistoryIndex = 0
+        this.#epoch++
         this.#notifier.notify()
+    }
+
+    // everything edited after this call, marked, appended or pending, rolls back or commits as ONE undo step
+    checkpoint(): EditingCheckpoint {
+        assert(!this.#modifying && !this.#inProcess, "Cannot checkpoint while modifying")
+        if (this.#pending.length > 0) {
+            if (this.#historyIndex > 0) {
+                this.#marked[this.#historyIndex - 1] = [...this.#marked[this.#historyIndex - 1], ...this.#pending.splice(0)]
+            } else {
+                this.mark()
+            }
+        }
+        const epoch = this.#epoch
+        const base = this.#historyIndex
+        const baseLength = base > 0 ? this.#marked[base - 1].length : 0
+        const settled = {value: false}
+        const extract = (): ReadonlyArray<Modification> => {
+            const since: Array<Modification> = []
+            if (base > 0) {
+                since.push(...this.#marked[base - 1].slice(baseLength))
+                this.#marked[base - 1] = this.#marked[base - 1].slice(0, baseLength)
+            }
+            if (this.#historyIndex > base) {
+                since.push(...this.#marked.slice(base, this.#historyIndex).flat())
+                this.#marked.length = base
+                if (this.#savedHistoryIndex > base) {this.#savedHistoryIndex = -1}
+            }
+            since.push(...this.#pending.splice(0))
+            this.#historyIndex = base
+            return since
+        }
+        const settle = (): boolean => {
+            if (settled.value || epoch !== this.#epoch) {return false}
+            assert(!this.#modifying && !this.#inProcess, "Cannot settle a checkpoint while modifying")
+            settled.value = true
+            return true
+        }
+        return {
+            rollback: () => {
+                if (!settle()) {return}
+                const result = tryCatch(() => extract().toReversed()
+                    .forEach(modification => modification.inverse(this.#graph, this.#outsideHistory)))
+                if (result.status === "failure") {
+                    if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
+                    this.#notifier.notify()
+                    throw result.error
+                }
+                this.#notifier.notify()
+            },
+            commit: () => {
+                if (!settle()) {return}
+                const since = extract()
+                if (since.length > 0) {
+                    this.#pending.push(...since)
+                    this.mark()
+                }
+                this.#notifier.notify()
+            }
+        }
     }
 
     undo(): boolean {
@@ -94,7 +173,7 @@ export class BoxEditing implements Editing {
         const reversed = modifications.toReversed()
         const applied: Array<Modification> = []
         for (const step of reversed) {
-            const result = tryCatch(() => step.inverse(this.#graph))
+            const result = tryCatch(() => step.inverse(this.#graph, this.#outsideHistory))
             if (result.status === "failure") {
                 console.warn(`[BoxEditing] undo step failed and was rolled back`,
                     result.error instanceof Error ? result.error.stack : result.error)
@@ -121,7 +200,7 @@ export class BoxEditing implements Editing {
                 console.warn(`[BoxEditing] redo step failed and was rolled back`,
                     result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
-                applied.toReversed().forEach(completed => completed.inverse(this.#graph))
+                applied.toReversed().forEach(completed => completed.inverse(this.#graph, this.#outsideHistory))
                 this.#historyIndex--
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
@@ -263,7 +342,7 @@ export class BoxEditing implements Editing {
                 const result = tryCatch(() => this.#graph.endTransaction())
                 cleanup()
                 if (result.status === "success" && updates.length > 0) {
-                    new Modification(updates).inverse(this.#graph)
+                    new Modification(updates).inverse(this.#graph, this.#outsideHistory)
                 }
             }
         }
@@ -283,7 +362,7 @@ export class BoxEditing implements Editing {
 
     revertPending(): void {
         if (this.#pending.length === 0) {return}
-        this.#pending.reverse().forEach(modification => modification.inverse(this.#graph))
+        this.#pending.reverse().forEach(modification => modification.inverse(this.#graph, this.#outsideHistory))
         this.#pending.length = 0
         this.#notifier.notify()
     }
