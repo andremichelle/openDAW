@@ -3,6 +3,7 @@ import {byte, int, isDefined, isInstanceOf, Lifecycle, Terminable} from "@openda
 import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {MidiData} from "@opendaw/lib-midi"
+import {NoteStreamReceiver} from "@opendaw/studio-adapters"
 import {MidiDevices} from "@opendaw/studio-core"
 import {PianoRollLayout} from "@/ui/PianoRollLayout"
 
@@ -12,7 +13,7 @@ const LowestPitch = 36
 const NumKeys = 61
 
 // plays the auditioned instrument through the software MIDI input, hardware keyboards reach it the same way
-export const DevicePiano = ({lifecycle}: { lifecycle: Lifecycle }): SVGElement => {
+export const DevicePiano = ({lifecycle, notes}: { lifecycle: Lifecycle, notes: NoteStreamReceiver }): SVGElement => {
     const layout = new PianoRollLayout(0, NumKeys - 1, {whiteKeys: {width: 14, height: 40}, blackKeys: {width: 10, height: 24}})
     const {softwareMIDIInput} = MidiDevices
     const {sizes: {whiteKeys, blackKeys}} = layout
@@ -47,7 +48,9 @@ export const DevicePiano = ({lifecycle}: { lifecycle: Lifecycle }): SVGElement =
     }
     const update = (): void => {
         for (let key: int = 0; key < NumKeys; key++) {
-            svg.querySelector(`[data-key="${key}"]`)?.classList.toggle("active", softwareMIDIInput.hasActiveNote(LowestPitch + key))
+            const pitch = LowestPitch + key
+            svg.querySelector(`[data-key="${key}"]`)?.classList
+                .toggle("active", softwareMIDIInput.hasActiveNote(pitch) || notes.isNoteOn(pitch))
         }
     }
     lifecycle.ownAll(
@@ -62,6 +65,7 @@ export const DevicePiano = ({lifecycle}: { lifecycle: Lifecycle }): SVGElement =
         }),
         Events.subscribe(softwareMIDIInput, "midimessage", event =>
             MidiData.accept(event.data, {noteOn: (_note: byte, _velocity: byte) => update(), noteOff: (_note: byte) => update()})),
+        notes.subscribe(update),
         Terminable.create(() => softwareMIDIInput.releaseAllNotes())
     )
     return svg

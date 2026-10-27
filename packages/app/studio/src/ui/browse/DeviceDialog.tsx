@@ -12,7 +12,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, MenuItem, PresetEntry} from "@opendaw/studio-core"
-import {Devices} from "@opendaw/studio-adapters"
+import {Devices, NoteStreamReceiver} from "@opendaw/studio-adapters"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {Dialog} from "@/ui/components/Dialog"
@@ -264,13 +264,21 @@ export namespace DeviceDialog {
             const {engine} = service
             if (engine.isPlaying.getValue()) {engine.stop()} else {engine.play()}
         }
-        const {captureDevices, userEditingManager, boxAdapters} = service.project
+        const {captureDevices, userEditingManager, boxAdapters, liveStreamReceiver} = service.project
         const armedBefore = new Set(captureDevices.allCaptures().filter(capture => capture.armed.getValue()))
+        const notes = lifecycle.own(new NoteStreamReceiver(liveStreamReceiver))
+        const noteBinding = lifecycle.own(new Terminator())
         const armEditing = (): void => (slot.type === "new-instrument"
             ? userEditingManager.audioUnit.get().map(vertex => boxAdapters.adapterFor(vertex.box, Devices.isHost))
-            : Option.wrap(slot.host)).ifSome(host => captureDevices.get(host.audioUnitBoxAdapter().uuid)
-            .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target))))
-        const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot) ? <DevicePiano lifecycle={lifecycle}/> : null
+            : Option.wrap(slot.host)).ifSome(host => {
+            const audioUnit = host.audioUnitBoxAdapter()
+            noteBinding.terminate()
+            noteBinding.own(notes.bind(liveStreamReceiver, audioUnit.address))
+            captureDevices.get(audioUnit.uuid)
+                .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target)))
+        })
+        const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot)
+            ? <DevicePiano lifecycle={lifecycle} notes={notes}/> : null
         const onKeyDown = (event: KeyboardEvent): void => {
             const typing = Events.isTextInput(event.target) && filter.search.getValue().length > 0
             if (event.code === "ArrowDown" || event.code === "ArrowUp") {
