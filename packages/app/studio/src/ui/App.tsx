@@ -29,6 +29,8 @@ import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
 import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
 import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
+import {SampleEditorRoute} from "@/service/SampleEditorService"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -60,6 +62,7 @@ export const App = (service: StudioService) => {
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
+                    {path: SampleEditorRoute, factory: SampleEditorPage},
                     {path: "/components", factory: ComponentsPage},
                     {path: "/automation", factory: AutomationPage},
                     {path: "/errors", factory: ErrorsPage},

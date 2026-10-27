@@ -1,4 +1,4 @@
-import {assert, FloatArray, int, Lazy, Option, Procedure} from "@opendaw/lib-std"
+import {assert, FloatArray, int, Lazy, Option, Procedure, unitValue} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import type {OpfsProtocol, SamplePeakProtocol} from "@opendaw/lib-fusion"
 import type {
@@ -6,6 +6,7 @@ import type {
     AudioMaterialFeatures,
     AudioMaterialProtocol,
     BpmProtocol,
+    SampleEffectProtocol,
     TransientProtocol
 } from "@opendaw/lib-dsp"
 
@@ -102,6 +103,18 @@ export class Workers {
                 router => new class implements BpmProtocol {
                     detect(audioData: AudioData, moduleUrl: string): Promise<number> {
                         return router.dispatchAndReturn(this.detect, audioData, moduleUrl)
+                    }
+                })
+    }
+
+    @Lazy
+    static get SampleEffect(): SampleEffectProtocol {
+        return Communicator
+            .sender<SampleEffectProtocol>(this.messenger.unwrap("Workers are not installed").channel("sample-effects"),
+                router => new class implements SampleEffectProtocol {
+                    process(progress: Procedure<unitValue>, id: string, source: AudioData,
+                            values: ReadonlyArray<number>): Promise<AudioData> {
+                        return router.dispatchAndReturn(this.process, progress, id, source, values)
                     }
                 })
     }
