@@ -1,9 +1,10 @@
 # Korpus presets — authoring reference
 
-Korpus currently ships **without built-in presets**. This file keeps the 18 presets it used to ship, with every
-value exactly as it was, plus what each knob does, so presets can be rebuilt or new ones made. Restored as they are,
-they sound exactly as before: none of them used a knob that has since gained a job (their bow, pick and wind
-entries keep Object B Off, and vibrato, air, couple and the pick strings sit at the values that keep the old sound).
+Korpus ships a six-preset factory bank (three guitars, three flutes) in `KorpusPresets.ts`. This file keeps the
+18 presets of the former bank, with every value exactly as it was, plus what each knob does, so presets can be
+rebuilt or new ones made. Restored as they are, they sound exactly as before: none of them used a knob that has
+since gained a job (their bow, pick and wind entries keep Object B Off, and vibrato, air, couple and the pick
+strings sit at the values that keep the old sound).
 
 ## Where presets live
 

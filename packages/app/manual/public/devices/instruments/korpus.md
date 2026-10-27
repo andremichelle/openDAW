@@ -203,9 +203,11 @@ Output level in dB.
 
 ## 4. Presets
 
-Korpus has no built-in presets at the moment. When presets are available, a preset selector
-appears beside object A and under **Presets** in the device menu (⋮ in the device header).
-Loading a preset is a single undoable edit that silences any sounding notes at once.
+Korpus ships with a small factory bank — guitars (**Nylon Concert**, **Flat-Top Steel**,
+**Electric Clean**) and flutes (**Pan Flute**, **Silver Flute**, **Shakuhachi**) — in the
+preset selector beside object A and under **Presets** in the device menu (⋮ in the device
+header). Loading a preset is a single undoable edit that silences any sounding notes at once.
+A further eighteen documented patches live in the repository's preset authoring reference.
 
 ---
 

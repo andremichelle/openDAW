@@ -25,7 +25,44 @@ export namespace KorpusPresets {
         couple: number
         volume: number
     }
-    export const Factory: ReadonlyArray<Preset> = []
+    export const Factory: ReadonlyArray<Preset> = [
+        {
+            name: "Nylon Concert", exciter: 3, intensity: 0.42, position: 0.32, vibrato: 0.08, air: 0.46,
+            stroke: 0.46, objectA: 0, dampingA: 0.82, tuneA: 0, widthA: 0.5, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -12.0
+        },
+        {
+            name: "Flat-Top Steel", exciter: 3, intensity: 0.65, position: 0.16, vibrato: 0.0, air: 0.55,
+            stroke: 0.66, objectA: 4, dampingA: 0.83, tuneA: 0, widthA: 0.6, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -11.0
+        },
+        {
+            name: "Electric Clean", exciter: 3, intensity: 0.42, position: 0.26, vibrato: 0.0, air: 0.45,
+            stroke: 0.58, objectA: 1, dampingA: 0.88, tuneA: 0, widthA: 0.3, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -12.5
+        },
+        {
+            name: "Pan Flute", exciter: 4, intensity: 0.55, position: 0.3, vibrato: 0.12, air: 0.5,
+            stroke: 0.5, objectA: 0, dampingA: 0.45, tuneA: 0, widthA: 0.25, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -8.5
+        },
+        {
+            name: "Silver Flute", exciter: 4, intensity: 0.6, position: 0.35, vibrato: 0.25, air: 0.5,
+            stroke: 0.5, objectA: 1, dampingA: 0.65, tuneA: 0, widthA: 0.35, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -9.0
+        },
+        {
+            name: "Shakuhachi", exciter: 4, intensity: 0.8, position: 0.6, vibrato: 0.35, air: 0.9,
+            stroke: 0.5, objectA: 3, dampingA: 0.6, tuneA: 0, widthA: 0.3, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -9.5
+        }
+    ]
     const near = (a: number, b: number): boolean => Math.abs(a - b) < 1.0e-3
     export const matches = (box: KorpusDeviceBox, preset: Preset): boolean =>
         box.exciter.getValue() === preset.exciter
