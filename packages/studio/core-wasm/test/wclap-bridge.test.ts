@@ -7,6 +7,8 @@
 // WetChorus by Ronald Klarenbeek, MIT).
 // A granular instrument with a device panel, its sample sent from the page, against Xenon (test/assets/xenon.wasm,
 // opendaw-commons wclaps/xenon).
+// A glitch effect whose patterns follow the transport, against Glitchfest (test/assets/glitchfest.wasm,
+// opendaw-commons wclaps/glitchfest).
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
@@ -57,6 +59,8 @@ const wetChorusBundle = wasmBundle("wet-chorus.wasm")
 const WET_CHORUS = "studio.opendaw.commons.wet-chorus"
 const xenonBundle = wasmBundle("xenon.wasm")
 const XENON = "studio.opendaw.commons.xenon"
+const glitchfestBundle = wasmBundle("glitchfest.wasm")
+const GLITCHFEST = "studio.opendaw.commons.glitchfest"
 
 type Host = {
     bridges: WclapBridges
@@ -1042,6 +1046,431 @@ describe("wclap bridge", () => {
             rms(host, handle, 2)
             expect(host.reported).toEqual([[15, 0, 1], [15, 1000, 0], [15, 0, 2]])
             expect(status(host).values[15]).toBe(1000)
+        })
+    })
+    describe("Glitchfest, a glitch effect with patterns on the transport", () => {
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        // at 120 bpm a beat is 24000 frames, a column of a one bar pattern 3000
+        const BEAT = 24000, COLUMN = 3000, BAR = 4 * BEAT
+        const STUTTER = 0, REVERSE = 2, TAPE = 5, PITCH = 6, CRUSH = 7, GATE = 9, THROW = 11
+        type Block = [start: number, length: number, chance?: number, ramp?: number]
+        const loadGlitchfest = async (): Promise<[Host, number]> => {
+            const host = createHost(glitchfestBundle)
+            const handle = load(host, GLITCHFEST, "glitchfest")
+            await ready(host, handle)
+            host.bridges.openPanel(uuid, 176)
+            return [host, handle]
+        }
+        const setRow = (host: Host, pattern: number, row: number, blocks: ReadonlyArray<Block>): void => {
+            const message = new Uint8Array(8 + blocks.length * 4)
+            message.set([6, 0, 0, 0, pattern, row, blocks.length, 0])
+            blocks.forEach(([start, length, chance = 100, ramp = 0], index) => message.set([start, length, chance, ramp], 8 + index * 4))
+            host.bridges.receive(uuid, message.buffer)
+        }
+        const setSequence = (host: Host, slots: ReadonlyArray<number>): void => {
+            const message = new Int8Array(12)
+            message[0] = 7
+            message.set(slots, 4)
+            host.bridges.receive(uuid, message.buffer)
+        }
+        const clear = (host: Host): void => {
+            for (let pattern = 0; pattern < 4; pattern++) {
+                for (let row = 0; row < 12; row++) {setRow(host, pattern, row, [])}
+            }
+        }
+        const set = (host: Host, handle: number, name: string, value: number): void => {
+            host.imports.host_wclap_param(handle, param(host, name).id | 0, FLOAT, value, NaN)
+        }
+        const saw = (frame: number): number => (frame % 997) / 997 - 0.5
+        // runs whole blocks of 128 from a transport position, the input from a function of the frame
+        const play = (host: Host, handle: number, frames: number, signal: (frame: number) => number,
+                      {playing = true, bpm = 120, from = 0}: { playing?: boolean, bpm?: number, from?: number } = {}): [Float32Array, Float32Array] => {
+            const left = new Float32Array(frames), right = new Float32Array(frames)
+            const framesPerBeat = 48000 * 60 / bpm
+            for (let offset = 0; offset < frames; offset += 128) {
+                const inLeft = new Float32Array(host.memory.buffer, IN0, 128), inRight = new Float32Array(host.memory.buffer, IN1, 128)
+                for (let index = 0; index < 128; index++) {
+                    inLeft[index] = signal(from + offset + index)
+                    inRight[index] = -signal(from + offset + index)
+                }
+                const position = (from + offset) / framesPerBeat * 960
+                host.imports.host_wclap_process(handle, IN0, IN1, OUT0, OUT1, 128, bpm, position, playing ? 4 : 0)
+                const count = Math.min(128, frames - offset)
+                left.set(new Float32Array(host.memory.buffer, OUT0, count), offset)
+                right.set(new Float32Array(host.memory.buffer, OUT1, count), offset)
+            }
+            return [left, right]
+        }
+        const patterns = (host: Host): Uint8Array => {
+            host.bridges.receive(uuid, new Uint8Array([8]).buffer)
+            expect(new Uint8Array(host.lastGui)[0]).toBe(2)
+            return new Uint8Array(host.lastGui.slice(0))
+        }
+        const maxError = (actual: Float32Array, expected: (frame: number) => number, from: number, to: number): number => {
+            let error = 0
+            for (let frame = from; frame < to; frame++) {error = Math.max(error, Math.abs(actual[frame] - Math.fround(expected(frame))))}
+            return error
+        }
+        const level = (samples: Float32Array, from: number, to: number): number => {
+            let sum = 0
+            for (let frame = from; frame < to; frame++) {sum += samples[frame] * samples[frame]}
+            return Math.sqrt(sum / (to - from))
+        }
+
+        it("describes itself as a glitch effect that offers a device panel", async () => {
+            const plugins = await createHost(glitchfestBundle).bridges.describe("glitchfest")
+            expect(plugins.map(({clapId, name}) => [clapId, name])).toEqual([[GLITCHFEST, "Glitchfest"]])
+            expect(plugins[0].features).toEqual(expect.arrayContaining(["audio-effect", "glitch", "opendaw:device-panel"]))
+        })
+
+        it("is 236 wide in the device panel and opens a 472 x 352 window, 1 to 3 times the panel", async () => {
+            const [host] = await loadGlitchfest()
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: true})
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html", width: 236})
+            expect(host.bridges.openGui(uuid)).toMatchObject({uri: "/index.html", width: 472, height: 352, resizable: true})
+            expect(host.bridges.resizeGui(uuid, 100, 100)).toEqual({width: 236, height: 176})
+            expect(host.bridges.resizeGui(uuid, 4000, 4000)).toEqual({width: 708, height: 528})
+        })
+
+        it("lists 27 parameters in the page's order with their defaults", async () => {
+            const [host] = await loadGlitchfest()
+            expect(host.params.map(({name, defaultValue}) => [name, defaultValue])).toEqual([
+                ["Mix", 1], ["Length", 0], ["Dice", 0.35], ["Stutter Division", 2], ["Stutter Decay", 0.4],
+                ["Shuffle Slice", 1], ["Shuffle Seed", 17], ["Reverse Size", 1], ["Reverse Fade", 8],
+                ["Scratch Rate", 1], ["Scratch Depth", 0.6], ["Freeze Size", 60], ["Freeze Jitter", 0.3],
+                ["Tape Mode", 0], ["Tape Curve", 0.5], ["Pitch Semitones", -12], ["Pitch Glide", 0],
+                ["Crush Bits", 6], ["Crush Rate", 8000], ["Filter Direction", 0], ["Filter Resonance", 0.7],
+                ["Gate Division", 2], ["Gate Duty", 0.5], ["Pan Rate", 2], ["Pan Width", 1],
+                ["Throw Time", 2], ["Throw Feedback", 0.55]
+            ])
+        })
+
+        it("passes the input through untouched while the transport stops and where no block is drawn", async () => {
+            const [host, handle] = await loadGlitchfest()
+            const [stoppedLeft, stoppedRight] = play(host, handle, BAR, saw, {playing: false})
+            expect(maxError(stoppedLeft, saw, 0, BAR)).toBe(0)
+            expect(maxError(stoppedRight, frame => -saw(frame), 0, BAR)).toBe(0)
+            clear(host)
+            const [left] = play(host, handle, 2 * BAR, saw)
+            expect(maxError(left, saw, 0, 2 * BAR)).toBe(0)
+        })
+
+        it("plays the default pattern, a stutter, reverse, tape stop and gate in one bar", async () => {
+            const [host, handle] = await loadGlitchfest()
+            const [left] = play(host, handle, BAR, saw)
+            expect(maxError(left, saw, 0, 4 * COLUMN)).toBe(0)
+            expect(maxError(left, () => 0, 4 * COLUMN + 2100, 5 * COLUMN - 100)).toBeLessThan(1e-3)
+            expect(maxError(left, saw, 12 * COLUMN + 6500, 12 * COLUMN + 7000)).toBeGreaterThan(0.1)
+        })
+
+        it("repeats the slice at the start of a stutter block, 1/64 at 120 bpm is 1500 frames", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Stutter Division", 4)
+            set(host, handle, "Stutter Decay", 0)
+            setRow(host, 0, STUTTER, [[0, 4]])
+            const [left, right] = play(host, handle, 6 * COLUMN, saw)
+            for (const repeat of [1, 2, 5, 7]) {
+                expect(maxError(left, frame => saw(frame % 1500), repeat * 1500 + 200, repeat * 1500 + 1300)).toBeLessThan(1e-3)
+                expect(maxError(right, frame => -saw(frame % 1500), repeat * 1500 + 200, repeat * 1500 + 1300)).toBeLessThan(1e-3)
+            }
+            expect(maxError(left, saw, 4 * COLUMN + 2000, 6 * COLUMN)).toBe(0)
+        })
+
+        it("lets each stutter repeat decay by the decay amount", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Stutter Division", 4)
+            set(host, handle, "Stutter Decay", 0.5)
+            setRow(host, 0, STUTTER, [[0, 4]])
+            const [left] = play(host, handle, 4 * COLUMN, saw)
+            for (const repeat of [1, 2, 3]) {
+                expect(maxError(left, frame => saw(frame % 1500) * 0.5 ** repeat, repeat * 1500 + 200, repeat * 1500 + 1300)).toBeLessThan(1e-3)
+            }
+        })
+
+        it("plays each reverse slice backwards from its start", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Reverse Size", 3)
+            set(host, handle, "Reverse Fade", 1)
+            setRow(host, 0, REVERSE, [[8, 4]])
+            const start = 8 * COLUMN
+            const [left] = play(host, handle, 12 * COLUMN, saw)
+            expect(maxError(left, frame => saw(2 * start - frame), start + 2000, start + 5800)).toBeLessThan(1e-3)
+            expect(maxError(left, frame => saw(2 * (start + 6000) - frame), start + 6200, start + 11800)).toBeLessThan(1e-3)
+        })
+
+        it("plays every shuffle slice from one of the slices of the bar before the block", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Shuffle Slice", 2)
+            setRow(host, 0, 1, [[0, 32]])
+            setSequence(host, [-1, 0, -1, -1, -1, -1, -1, -1])
+            const [left] = play(host, handle, 2 * BAR, saw)
+            const picks = new Set<number>()
+            for (let slice = 1; slice < 16; slice++) {
+                const begin = BAR + slice * 6000
+                const pick = Array.from({length: 16}, (_, index) => index).find(index =>
+                    maxError(left, frame => saw(index * 6000 + frame - begin), begin + 200, begin + 5800) < 1e-3)
+                expect(pick).toBeDefined()
+                picks.add(pick!)
+            }
+            expect(picks.size).toBeGreaterThan(3)
+        })
+
+        it("scratches back to half a beat before the block at full depth", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Scratch Rate", 1)
+            set(host, handle, "Scratch Depth", 1)
+            setRow(host, 0, 3, [[8, 16]])
+            const start = 8 * COLUMN
+            const [left] = play(host, handle, 24 * COLUMN, saw)
+            expect(Math.abs(left[start + BEAT / 2] - Math.fround(saw(start - BEAT / 2)))).toBeLessThan(1e-3)
+            expect(Math.abs(left[start + BEAT] - Math.fround(saw(start)))).toBeLessThan(1e-3)
+        })
+
+        it("loops a freeze every half grain once its jitter is zero", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Freeze Size", 60)
+            set(host, handle, "Freeze Jitter", 0)
+            setRow(host, 0, 4, [[8, 16]])
+            const [left] = play(host, handle, BAR, saw)
+            expect(maxError(left, frame => left[frame + 1440], 8 * COLUMN + 3000, 8 * COLUMN + 40000)).toBeLessThan(1e-4)
+            expect(level(left, 8 * COLUMN + 3000, 8 * COLUMN + 40000)).toBeGreaterThan(0.1)
+        })
+
+        it("shifts the pitch by octaves, twice and half the zero crossings", async () => {
+            const crossings = (samples: Float32Array, from: number, to: number): number => {
+                let count = 0
+                for (let frame = from + 1; frame < to; frame++) {if ((samples[frame - 1] < 0) !== (samples[frame] < 0)) {count++}}
+                return count
+            }
+            const tone = (frame: number): number => 0.5 * Math.sin(2 * Math.PI * 220 * frame / 48000)
+            for (const [semitones, ratio] of [[12, 2], [-12, 0.5]]) {
+                const [host, handle] = await loadGlitchfest()
+                clear(host)
+                set(host, handle, "Pitch Semitones", semitones)
+                setRow(host, 0, PITCH, [[0, 32]])
+                const [left] = play(host, handle, BAR, tone)
+                expect(crossings(left, 10000, 58000) / crossings(new Float32Array(48000).map((_, index) => tone(index)), 0, 48000))
+                    .toBeCloseTo(ratio, 1)
+            }
+        })
+
+        it("crushes to the bit depth and holds each sample at the crush rate", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Crush Bits", 2)
+            set(host, handle, "Crush Rate", 1000)
+            setRow(host, 0, CRUSH, [[0, 32]])
+            const [left] = play(host, handle, BAR, saw)
+            const values = new Set(Array.from(left.subarray(2000, 40000)).map(value => Math.round(value * 1000)))
+            expect([...values].sort((a, b) => a - b)).toEqual([-500, 0, 500])
+            let changes = 0
+            for (let frame = 2001; frame < 40000; frame++) {if (left[frame] !== left[frame - 1]) {changes++}}
+            expect(changes).toBeLessThanOrEqual(Math.ceil(38000 / 48))
+        })
+
+        it("sweeps the filter down, the noise loses its highs towards the end of the block", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Filter Resonance", 0)
+            setRow(host, 0, 8, [[0, 32]])
+            const noise = (frame: number): number => Math.sin(frame * 12.9898) * 0.5
+            const [left] = play(host, handle, BAR, noise)
+            const roughness = (from: number, to: number): number => {
+                let sum = 0
+                for (let frame = from + 1; frame < to; frame++) {sum += (left[frame] - left[frame - 1]) ** 2}
+                return Math.sqrt(sum / (to - from))
+            }
+            expect(roughness(BAR - 6000, BAR)).toBeLessThan(roughness(2000, 8000) * 0.1)
+        })
+
+        it("pans fully right a quarter into its period at full width", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Pan Rate", 0)
+            set(host, handle, "Pan Width", 1)
+            setRow(host, 0, 10, [[0, 32]])
+            const [left, right] = play(host, handle, BAR, saw)
+            expect(Math.abs(left[BEAT / 2])).toBeLessThan(1e-3)
+            expect(right[BEAT / 2]).toBeCloseTo(-Math.SQRT2 * saw(BEAT / 2), 3)
+            expect(Math.abs(right[BEAT + BEAT / 2])).toBeLessThan(1e-3)
+        })
+
+        it("gates on and off at the division and duty", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Gate Division", 1)
+            set(host, handle, "Gate Duty", 0.5)
+            setRow(host, 0, GATE, [[0, 32]])
+            const [left] = play(host, handle, BEAT, saw)
+            expect(maxError(left, saw, 6000 + 600, 9000 - 100)).toBeLessThan(1e-3)
+            expect(maxError(left, () => 0, 9000 + 600, 12000 - 100)).toBeLessThan(1e-3)
+        })
+
+        it("slows a tape stop down to silence at the end of its block", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            setRow(host, 0, TAPE, [[0, 8]])
+            const tone = (frame: number): number => 0.5 * Math.sin(2 * Math.PI * 440 * frame / 48000)
+            const [left] = play(host, handle, 9 * COLUMN, tone)
+            expect(level(left, 1000, 3000)).toBeGreaterThan(0.3)
+            expect(level(left, 8 * COLUMN - 300, 8 * COLUMN)).toBeLessThan(0.02)
+            expect(maxError(left, tone, 8 * COLUMN + 2000, 9 * COLUMN)).toBe(0)
+        })
+
+        it("never plays a block with no chance and plays a ramped one softer at its edges", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            setRow(host, 0, GATE, [[0, 32, 0]])
+            set(host, handle, "Gate Duty", 0)
+            const [left] = play(host, handle, 2 * BAR, saw)
+            expect(maxError(left, saw, 0, 2 * BAR)).toBe(0)
+            setRow(host, 0, GATE, [[0, 32, 100, 100]])
+            const [ramped] = play(host, handle, BAR, saw)
+            expect(level(ramped, 1000, 3000)).toBeGreaterThan(0.2)
+            expect(level(ramped, BAR / 2 - 1000, BAR / 2 + 1000)).toBeLessThan(0.01)
+        })
+
+        it("follows the sequence: a slot plays its pattern, an empty slot plays dry", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Gate Duty", 0)
+            setRow(host, 1, GATE, [[0, 32]])
+            setSequence(host, [0, 1, -1, 1, 0, 0, 0, 0])
+            const [left] = play(host, handle, 4 * BAR, saw)
+            expect(maxError(left, saw, 0, BAR)).toBe(0)
+            expect(level(left, BAR + 1000, 2 * BAR)).toBeLessThan(1e-3)
+            expect(maxError(left, saw, 2 * BAR + 2000, 3 * BAR)).toBe(0)
+            expect(level(left, 3 * BAR + 1000, 4 * BAR)).toBeLessThan(1e-3)
+        })
+
+        it("stretches the columns over two and four bars", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Gate Duty", 0)
+            set(host, handle, "Length", 2)
+            setRow(host, 0, GATE, [[16, 16]])
+            const [left] = play(host, handle, 4 * BAR, saw)
+            expect(maxError(left, saw, 0, 2 * BAR)).toBe(0)
+            expect(level(left, 2 * BAR + 1000, 4 * BAR)).toBeLessThan(1e-3)
+        })
+
+        it("lets the echo of a throw outlive its block", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Throw Time", 3)
+            setRow(host, 0, THROW, [[0, 1]])
+            const burst = (frame: number): number => frame < 2800 ? 0.5 * Math.sin(2 * Math.PI * 220 * frame / 48000) : 0
+            const [left] = play(host, handle, 3 * BEAT, burst)
+            expect(level(left, 4000, BEAT - 1000)).toBe(0)
+            expect(level(left, BEAT + 500, BEAT + 2500)).toBeGreaterThan(0.1)
+            expect(level(left, 2 * BEAT + 500, 2 * BEAT + 2500)).toBeGreaterThan(0.02)
+        })
+
+        it("restarts a block when the transport jumps back into it", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            set(host, handle, "Stutter Division", 4)
+            set(host, handle, "Stutter Decay", 0)
+            setRow(host, 0, STUTTER, [[0, 32]])
+            play(host, handle, BEAT, saw)
+            const shifted = (frame: number): number => saw(frame + 400)
+            const [left] = play(host, handle, 4000, shifted)
+            expect(maxError(left, frame => shifted(frame % 1500), 1700, 2800)).toBeLessThan(1e-3)
+        })
+
+        it("stays finite and bounded with every effect drawn and extreme settings", async () => {
+            const [host, handle] = await loadGlitchfest()
+            clear(host)
+            const random = {seed: 7}
+            const next = (): number => {
+                random.seed = (random.seed * 1103515245 + 12345) >>> 0
+                return random.seed / 4294967296
+            }
+            for (let pattern = 0; pattern < 4; pattern++) {
+                for (let row = 0; row < 12; row++) {
+                    const blocks: Array<Block> = []
+                    for (let column = 0; column < 32; column += 4) {
+                        if (next() < 0.5) {blocks.push([column, 1 + Math.floor(next() * 4), Math.floor(next() * 101), Math.floor(next() * 101)])}
+                    }
+                    setRow(host, pattern, row, blocks)
+                }
+            }
+            setSequence(host, [0, 1, 2, 3, 3, 2, 1, 0])
+            for (const info of host.params) {set(host, handle, info.name, info.id % 2 === 0 ? info.max : info.min)}
+            set(host, handle, "Length", 0)
+            const noise = (frame: number): number => Math.sin(frame * 12.9898) * 0.9
+            const [left, right] = play(host, handle, 8 * 2 * BAR / 3, noise, {bpm: 180})
+            const peak = [left, right].reduce((max, samples) => samples.reduce((inner, value) => Math.max(inner, Math.abs(value)), max), 0)
+            expect(Number.isFinite(peak)).toBe(true)
+            expect(peak).toBeLessThan(8)
+            expect(peak).toBeGreaterThan(0.01)
+        })
+
+        it("saves parameters, sequence and every pattern, and a new instance reports the same patterns", async () => {
+            const [host, handle] = await loadGlitchfest()
+            setRow(host, 1, PITCH, [[0, 2, 50, 20], [4, 8]])
+            setRow(host, 3, CRUSH, [[31, 1, 75, 100]])
+            setSequence(host, [0, 1, -1, 3, 3, -1, 0, 1])
+            set(host, handle, "Crush Bits", 3)
+            play(host, handle, 256, saw)
+            const expected = patterns(host)
+            host.bridges.saveState(uuid)
+            const saved = host.states.at(-1)!
+            // 28 header, 27 values, 8 slots, 48 row counts and 4 bytes per block (5 default blocks and the 3 above)
+            expect(saved.length).toBe(28 + 27 * 8 + 8 + 48 + 8 * 4)
+            const other = createHost(glitchfestBundle)
+            const otherHandle = load(other, GLITCHFEST, "glitchfest")
+            const base64 = Buffer.from(saved).toString("base64")
+            new Uint8Array(other.memory.buffer).set(new TextEncoder().encode(base64), 2048)
+            other.imports.host_wclap_state(otherHandle, 2048, base64.length)
+            await ready(other, otherHandle)
+            other.bridges.openPanel(uuid, 176)
+            expect(param(other, "Crush Bits").value).toBe(3)
+            const restored = patterns(other)
+            expect(Array.from(restored.subarray(8))).toEqual(Array.from(expected.subarray(8)))
+        })
+
+        it("refuses an overlapping row, a block past the last column and a slot without a pattern", async () => {
+            const [host] = await loadGlitchfest()
+            const before = patterns(host)
+            setRow(host, 0, STUTTER, [[0, 4], [3, 2]])
+            setRow(host, 0, STUTTER, [[30, 4]])
+            setRow(host, 0, STUTTER, [[0, 0]])
+            setRow(host, 4, STUTTER, [[0, 1]])
+            setRow(host, 0, 12, [[0, 1]])
+            setSequence(host, [0, 4, 0, 0, 0, 0, 0, 0])
+            expect(Array.from(patterns(host).subarray(8))).toEqual(Array.from(before.subarray(8)))
+        })
+
+        it("answers a poll with transport, slot, column and values, and takes a page edit as a host gesture", async () => {
+            const [host, handle] = await loadGlitchfest()
+            setSequence(host, [2, 1, 0, 0, 0, 0, 0, 0])
+            play(host, handle, BAR + 10 * COLUMN, saw)
+            host.bridges.receive(uuid, new Uint8Array([1]).buffer)
+            const status = new DataView(host.lastGui)
+            expect(status.byteLength).toBe(24 + 27 * 8)
+            expect([status.getUint8(0), status.getUint32(4, true), status.getInt32(8, true)]).toEqual([1, 1, 1])
+            expect(status.getFloat32(16, true)).toBeCloseTo(10, 1)
+            expect(status.getFloat64(24 + 3 * 8, true)).toBe(2)
+            const edit = (type: number, value: number = 0): void => {
+                const message = new DataView(new ArrayBuffer(type === 3 ? 16 : 8))
+                message.setUint8(0, type)
+                message.setUint32(4, 4, true)
+                if (type === 3) {message.setFloat64(8, value, true)}
+                host.bridges.receive(uuid, message.buffer)
+            }
+            host.reported.length = 0
+            edit(2)
+            edit(3, 0.75)
+            edit(4)
+            play(host, handle, 256, saw, {from: BAR + 10 * COLUMN})
+            expect(host.reported).toEqual([[4, 0, 1], [4, 0.75, 0], [4, 0, 2]])
         })
     })
 })
