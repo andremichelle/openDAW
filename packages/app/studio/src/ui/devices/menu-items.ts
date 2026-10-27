@@ -10,7 +10,8 @@ import {
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {
-    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectFactories, MenuItem, NestedHostExit
+    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectFactories, MenuItem, NestedHostExit,
+    PresetEntry
 } from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
 import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
@@ -359,8 +360,53 @@ export namespace MenuItems {
                                 }))
                         }
                     }
+                    const overwrites = overwriteItems(service, host, context, instrumentTarget)
+                    submenu.addMenuItem(MenuItem.default({
+                        label: "Overwrite Preset", selectable: overwrites.length > 0, separatorBefore: true
+                    }).setRuntimeChildrenProcedure(items => items.addMenuItem(...overwrites)))
                 })
         )
+    }
+
+    // the user presets the device, its chains or its audio unit can be written over
+    const overwriteItems = (service: StudioService, host: DeviceHost, context: PresetContext,
+                            instrumentTarget: ReturnType<typeof resolveInstrumentTarget>): ReadonlyArray<MenuItem> => {
+        const presets = service.presets
+        const userPresets = presets.presets().filter(entry => entry.source === "user")
+        const items: Array<MenuItem> = []
+        const addGroup = (entries: ReadonlyArray<PresetEntry>, suffix: string,
+                          overwrite: (entry: PresetEntry) => Promise<void>): void =>
+            entries.forEach((entry, index) => items.push(MenuItem.default({
+                label: `${entry.name}${suffix}`, separatorBefore: index === 0 && items.length > 0
+            }).setTriggerProcedure(() => overwrite(entry).catch(console.warn))))
+        if (context.kind === "instrument-context" && isDefined(instrumentTarget)) {
+            addGroup(userPresets.filter(entry => entry.category === "instrument" && entry.device === instrumentTarget.key), "",
+                entry => presets.overwriteInstrumentPreset(entry, instrumentTarget.uuid))
+        } else if (context.kind === "effect-context") {
+            const deviceKey = EffectFactories.keyOfBox(context.device.box)
+            if (isDefined(deviceKey)) {
+                addGroup(userPresets.filter(entry => entry.category === context.device.type && entry.device === deviceKey), "",
+                    entry => presets.overwriteEffectPreset(entry, [context.device.box as IndexedBox]))
+            }
+        }
+        if (isDefined(instrumentTarget) && !(host instanceof InstrumentCompositeCellBoxAdapter)) {
+            addGroup(userPresets.filter(entry => entry.category === "audio-unit"), " (Rack)",
+                entry => presets.overwriteRackPreset(entry, instrumentTarget.uuid))
+        }
+        const kinds: ReadonlyArray<PresetEffectKind> = context.kind === "effect-context"
+            ? [context.device.type === "audio-effect" ? "audio-effect" : "midi-effect"]
+            : ["audio-effect", "midi-effect"]
+        for (const kind of kinds) {
+            const effects = context.kind === "effect-context"
+                ? sameKindEffectsInHost(service, host, kind)
+                : allEffectsInHost(service, host, kind)
+            const chainEffects = context.kind === "effect-context" && effects.length === 0 ? [context.device] : effects
+            if (chainEffects.length === 0) {continue}
+            const category = kind === "audio-effect" ? "audio-effect-chain" : "midi-effect-chain"
+            addGroup(userPresets.filter(entry => entry.category === category), kind === "audio-effect" ? " (Audio Chain)" : " (MIDI Chain)",
+                entry => presets.overwriteEffectPreset(entry, chainEffects.map(adapter => adapter.box as IndexedBox)))
+        }
+        return items
     }
 
     const populateMenuItemToCreateEffect = (service: StudioService, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {

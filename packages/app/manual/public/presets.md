@@ -72,6 +72,14 @@ other projects.
 When you keep an instrument preset with a timeline on a track that already has one, openDAW asks
 whether the track's timeline should be replaced.
 
+## Overwriting a preset
+
+**Overwrite Preset** in the same **Preset** submenu lists your own presets that the device can replace:
+presets of the same device, your Racks when you are on an audio unit, and your Chains of the matching
+effect kind. Pick one to store the current state under it. Name, description and tags stay. A
+confirmation is shown first, for instruments and Racks with the **Include timeline** toggle. The entry
+is greyed out when nothing fits.
+
 ## Managing your presets
 
 Select one of your presets in the Device Browser. The info card on the right offers:

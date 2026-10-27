@@ -31,12 +31,12 @@ export const CreateTrackButtons = ({lifecycle, service}: { lifecycle: Lifecycle,
     <div className={className}>
         <Button lifecycle={lifecycle}
                 onClick={() => CreateTrack.instrument(service)}
-                appearance={{color: Colors.shadow, cursor: "pointer"}}>
+                appearance={{color: Colors.green, cursor: "pointer"}}>
             <span>Add instrument</span> <Icon symbol={IconSymbol.Add}/>
         </Button>
         <Button lifecycle={lifecycle}
                 onClick={() => CreateTrack.audioTrack(service)}
-                appearance={{color: Colors.shadow, cursor: "pointer"}}>
+                appearance={{color: Colors.blue, cursor: "pointer"}}>
             <span>Add audio track</span> <Icon symbol={IconSymbol.Add}/>
         </Button>
     </div>

@@ -3,7 +3,6 @@ import {
     Errors,
     isAbsent,
     isDefined,
-    isNull,
     Lifecycle,
     Nullable,
     ObservableValue,
@@ -37,7 +36,6 @@ import {
 import {OpenPresetAPI} from "@/opendaw-api"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
-import {AnyDragData} from "@/ui/AnyDragData"
 import {PresetDialogs} from "@/ui/browse/PresetDialogs"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import type {StudioService} from "@/service/StudioService"
@@ -316,23 +314,6 @@ export class PresetService {
         }
     }
 
-    resolveEffectBoxesFromDrag(kind: PresetEffectKind, dragData: AnyDragData): ReadonlyArray<IndexedBox> {
-        if (dragData.type !== kind) {return []}
-        if (isNull(dragData.uuids)) {return []}
-        return dragData.uuids
-            .map(uuidStr => this.project.boxGraph.findBox(UUID.parse(uuidStr)).unwrapOrNull())
-            .filter((box): box is Box => isDefined(box))
-            .filter(IndexedBox.isIndexedBox)
-            .toSorted((a, b) => a.index.getValue() - b.index.getValue())
-    }
-
-    resolveDraggedInstrumentKey(dragData: AnyDragData): Nullable<InstrumentFactories.Keys> {
-        if (dragData.type !== "instrument" || dragData.device !== null) {return null}
-        const boxOpt = this.project.boxGraph.findBox(UUID.parse(dragData.uuid))
-        if (boxOpt.isEmpty()) {return null}
-        return InstrumentFactories.keyOfBox(boxOpt.unwrap()) ?? null
-    }
-
     #effectLabelFromBox(box: IndexedBox): string {
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
         const value = adapter.labelField.getValue()
@@ -461,34 +442,6 @@ export class PresetService {
         await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox, encodeOptions))
     }
 
-    async handleRackDrop(instrumentUuid: UUID.String,
-                         effectUuids: ReadonlyArray<UUID.String>): Promise<void> {
-        if (effectUuids.length > 0) {
-            await this.saveAsRackPreset(instrumentUuid, effectUuids)
-            return
-        }
-        const choice = await Promises.tryCatch(PresetDialogs.showRackCompositionDialog(
-            "Save as Rack",
-            "Include the entire audio chain, or save just the instrument?"))
-        if (choice.status === "rejected") {
-            if (Errors.isAbort(choice.error)) {return}
-            throw choice.error
-        }
-        if (choice.value.choice === "entire-chain") {
-            await this.saveAsRackPreset(instrumentUuid, [])
-            return
-        }
-        const instrumentKey = this.#instrumentKeyForUuid(instrumentUuid)
-        if (isAbsent(instrumentKey)) {return}
-        await this.saveAsInstrumentPreset(instrumentKey, instrumentUuid)
-    }
-
-    #instrumentKeyForUuid(uuid: UUID.String): Nullable<InstrumentFactories.Keys> {
-        const boxOpt = this.project.boxGraph.findBox(UUID.parse(uuid))
-        if (boxOpt.isEmpty()) {return null}
-        return InstrumentFactories.keyOfBox(boxOpt.unwrap()) ?? null
-    }
-
     async saveAsRackPreset(instrumentUuid: UUID.String,
                            effectUuids: ReadonlyArray<UUID.String>): Promise<void> {
         const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(instrumentUuid)
@@ -533,142 +486,76 @@ export class PresetService {
         await PresetStorage.save(meta, bytes)
     }
 
-    resolveRackCandidate(dragData: AnyDragData): Nullable<{
-        instrumentKey: InstrumentFactories.Keys
-        instrumentUuid: UUID.String
-        effectUuids: ReadonlyArray<UUID.String>
-    }> {
-        if (dragData.type === "instrument" && dragData.device === null) {
-            const key = this.#instrumentKeyForUuid(dragData.uuid)
-            if (isAbsent(key)) {return null}
-            return {instrumentKey: key, instrumentUuid: dragData.uuid, effectUuids: dragData.effects}
-        }
-        if ((dragData.type === "audio-effect" || dragData.type === "midi-effect")
-            && dragData.uuids !== null
-            && isDefined(dragData.instrument)) {
-            const key = this.#instrumentKeyForUuid(dragData.instrument)
-            if (isAbsent(key)) {return null}
-            return {instrumentKey: key, instrumentUuid: dragData.instrument, effectUuids: dragData.uuids}
-        }
-        return null
-    }
-
-    canReplacePreset(entry: PresetEntry, dragData: AnyDragData): boolean {
-        if (entry.source !== "user") {return false}
-        const rackIntentEffect = (dragData.type === "audio-effect" || dragData.type === "midi-effect")
-            && dragData.uuids !== null && isDefined(dragData.instrument)
-        const rackIntentInstrument = dragData.type === "instrument" && dragData.device === null
-            && dragData.effects.length > 0
-        if (entry.category === "audio-effect" || entry.category === "midi-effect") {
-            if (rackIntentEffect) {return false}
-            const effects = this.resolveEffectBoxesFromDrag(entry.category, dragData)
-            return effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === entry.device
-        }
-        if (entry.category === "audio-effect-chain") {
-            if (rackIntentEffect) {return false}
-            return this.resolveEffectBoxesFromDrag("audio-effect", dragData).length > 0
-        }
-        if (entry.category === "midi-effect-chain") {
-            if (rackIntentEffect) {return false}
-            return this.resolveEffectBoxesFromDrag("midi-effect", dragData).length > 0
-        }
-        if (entry.category === "instrument") {
-            if (rackIntentInstrument) {return false}
-            return this.resolveDraggedInstrumentKey(dragData) === entry.device
-        }
-        if (entry.category === "audio-unit") {
-            return isDefined(this.resolveRackCandidate(dragData))
-        }
-        return false
-    }
-
-    async replacePreset(entry: PresetEntry, dragData: AnyDragData): Promise<void> {
-        if (!this.canReplacePreset(entry, dragData)) {return}
+    async overwriteEffectPreset(entry: PresetEntry, effects: ReadonlyArray<IndexedBox>): Promise<void> {
+        if (entry.source !== "user" || effects.length === 0) {return}
         const {source: _source, ...meta} = entry
-        if (entry.category === "audio-effect" || entry.category === "midi-effect"
-            || entry.category === "audio-effect-chain" || entry.category === "midi-effect-chain") {
-            const isAudio = entry.category === "audio-effect" || entry.category === "audio-effect-chain"
-            const effects = this.resolveEffectBoxesFromDrag(isAudio ? "audio-effect" : "midi-effect", dragData)
+        const isAudio = entry.category === "audio-effect" || entry.category === "audio-effect-chain"
+        if (!isAudio && entry.category !== "midi-effect" && entry.category !== "midi-effect-chain") {return}
+        const approved = await RuntimeNotifier.approve({
+            headline: "Overwrite Preset?",
+            message: `Overwrite '${entry.name}' with ${effects.length === 1 ? "this effect" : `${effects.length} effects`}?`,
+            approveText: "Overwrite",
+            cancelText: "Cancel"
+        })
+        if (!approved) {return}
+        const kind = isAudio ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
+        await PresetStorage.save({...meta, modified: Date.now()}, PresetEncoder.encodeEffects(effects, kind))
+    }
+
+    async overwriteInstrumentPreset(entry: PresetEntry, instrumentUuid: UUID.String): Promise<void> {
+        if (entry.source !== "user" || entry.category !== "instrument") {return}
+        const {source: _source, ...meta} = entry
+        const layerInstrument = this.#layerInstrumentForUuid(instrumentUuid)
+        if (layerInstrument.nonEmpty()) {
             const approved = await RuntimeNotifier.approve({
-                headline: "Replace Preset?",
-                message: `Replace '${entry.name}' with ${effects.length === 1 ? "the dragged effect" : `${effects.length} effects`}?`,
-                approveText: "Replace",
+                headline: "Overwrite Preset?",
+                message: `Overwrite '${entry.name}' with this instrument?`,
+                approveText: "Overwrite",
                 cancelText: "Cancel"
             })
             if (!approved) {return}
-            const kind = isAudio ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
-            const bytes = PresetEncoder.encodeEffects(effects, kind)
-            await PresetStorage.save(meta, bytes)
+            await PresetStorage.save({...meta, hasTimeline: false, modified: Date.now()},
+                PresetEncoder.encodeLayerInstrument(layerInstrument.unwrap().box))
             return
         }
-        if (entry.category === "instrument") {
-            if (dragData.type !== "instrument" || dragData.device !== null) {return}
-            const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(dragData.uuid)
-            if (isAbsent(audioUnitBox)) {return}
-            const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
-                headline: "Replace Preset?",
-                message: `Replace '${entry.name}' with the dragged instrument?`,
-                initialIncludeTimeline: entry.hasTimeline === true
+        const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(instrumentUuid)
+        if (isAbsent(audioUnitBox)) {return}
+        const includeTimeline = await this.#confirmOverwrite(entry, "this instrument")
+        if (includeTimeline.isEmpty()) {return}
+        const timeline = includeTimeline.unwrap()
+        await PresetStorage.save({...meta, hasTimeline: timeline, modified: Date.now()},
+            PresetEncoder.encode(audioUnitBox, {
+                includeTimeline: timeline,
+                excludeEffect: (box: Box) => DeviceBoxUtils.isChainEffectOf(box, audioUnitBox)
             }))
-            if (confirm.status === "rejected") {
-                if (Errors.isAbort(confirm.error)) {return}
-                throw confirm.error
-            }
-            await PresetStorage.save({...meta, hasTimeline: confirm.value.includeTimeline},
-                PresetEncoder.encode(audioUnitBox, {includeTimeline: confirm.value.includeTimeline}))
-            return
+    }
+
+    async overwriteRackPreset(entry: PresetEntry, instrumentUuid: UUID.String): Promise<void> {
+        if (entry.source !== "user" || entry.category !== "audio-unit") {return}
+        const {source: _source, ...meta} = entry
+        const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(instrumentUuid)
+        if (isAbsent(audioUnitBox)) {return}
+        const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box
+        const instrument = isDefined(inputBox) ? InstrumentFactories.keyOfBox(inputBox) : undefined
+        if (!isDefined(instrument)) {return}
+        const includeTimeline = await this.#confirmOverwrite(entry, "the entire audio unit")
+        if (includeTimeline.isEmpty()) {return}
+        const timeline = includeTimeline.unwrap()
+        await PresetStorage.save({...meta, instrument, hasTimeline: timeline, modified: Date.now()},
+            PresetEncoder.encode(audioUnitBox, {includeTimeline: timeline}))
+    }
+
+    async #confirmOverwrite(entry: PresetEntry, what: string): Promise<Option<boolean>> {
+        const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
+            headline: "Overwrite Preset?",
+            message: `Overwrite '${entry.name}' with ${what}?`,
+            initialIncludeTimeline: entry.hasTimeline === true
+        }))
+        if (confirm.status === "rejected") {
+            if (Errors.isAbort(confirm.error)) {return Option.None}
+            throw confirm.error
         }
-        if (entry.category === "audio-unit") {
-            const candidate = this.resolveRackCandidate(dragData)
-            if (isAbsent(candidate)) {return}
-            const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(candidate.instrumentUuid)
-            if (isAbsent(audioUnitBox)) {return}
-            let keepEntireChain = true
-            let includeTimeline = false
-            if (candidate.effectUuids.length === 0) {
-                const choice = await Promises.tryCatch(PresetDialogs.showRackCompositionDialog(
-                    `Replace '${entry.name}'?`,
-                    "Replace with the entire audio chain, or just the instrument?",
-                    true,
-                    entry.hasTimeline === true))
-                if (choice.status === "rejected") {
-                    if (Errors.isAbort(choice.error)) {return}
-                    throw choice.error
-                }
-                keepEntireChain = choice.value.choice === "entire-chain"
-                includeTimeline = choice.value.includeTimeline
-            } else {
-                const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
-                    headline: "Replace Preset?",
-                    message: `Replace '${entry.name}' with the dragged rack?`,
-                    initialIncludeTimeline: entry.hasTimeline === true
-                }))
-                if (confirm.status === "rejected") {
-                    if (Errors.isAbort(confirm.error)) {return}
-                    throw confirm.error
-                }
-                includeTimeline = confirm.value.includeTimeline
-            }
-            const keep = new Set(candidate.effectUuids)
-            const bytes = keepEntireChain && candidate.effectUuids.length === 0
-                ? PresetEncoder.encode(audioUnitBox, {includeTimeline})
-                : PresetEncoder.encode(audioUnitBox, {
-                    includeTimeline,
-                    excludeEffect: (box: Box) =>
-                        DeviceBoxUtils.isEffectDeviceBox(box) && !keep.has(UUID.toString(box.address.uuid))
-                })
-            const rackMeta: RackPresetMeta = {
-                category: "audio-unit",
-                uuid: entry.uuid,
-                name: entry.name,
-                description: entry.description,
-                created: entry.created,
-                modified: entry.modified,
-                instrument: candidate.instrumentKey,
-                hasTimeline: includeTimeline
-            }
-            await PresetStorage.save(rackMeta, bytes)
-        }
+        return Option.wrap(confirm.value.includeTimeline)
     }
 
     async editPreset(entry: PresetEntry): Promise<void> {

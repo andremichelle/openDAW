@@ -112,75 +112,6 @@ export namespace PresetDialogs {
         return promise
     }
 
-    export type RackCompositionChoice = "entire-chain" | "only-instrument"
-
-    export type RackCompositionResult = {
-        choice: RackCompositionChoice
-        includeTimeline: boolean
-    }
-
-    export const showRackCompositionDialog = async (headline: string,
-                                                    message: string,
-                                                    showTimelineToggle: boolean = false,
-                                                    initialIncludeTimeline: boolean = false): Promise<RackCompositionResult> => {
-        const lifecycle = new Terminator()
-        const {resolve, reject, promise} = Promise.withResolvers<RackCompositionResult>()
-        promise.finally(() => lifecycle.terminate())
-        const includeTimelineModel = new DefaultObservableValue(initialIncludeTimeline)
-        const dialog: HTMLDialogElement = (
-            <Dialog headline={headline}
-                    icon={IconSymbol.Box}
-                    cancelable={true}
-                    buttons={[
-                        {
-                            text: "Cancel",
-                            onClick: handler => {
-                                reject(Errors.AbortError)
-                                handler.close()
-                            }
-                        },
-                        {
-                            text: "Only Instrument",
-                            onClick: handler => {
-                                resolve({choice: "only-instrument", includeTimeline: includeTimelineModel.getValue()})
-                                handler.close()
-                            }
-                        },
-                        {
-                            text: "Entire Chain",
-                            primary: true,
-                            onClick: handler => {
-                                resolve({choice: "entire-chain", includeTimeline: includeTimelineModel.getValue()})
-                                handler.close()
-                            }
-                        }
-                    ]}>
-                <div style={{padding: "1em 0", minWidth: "20em", display: "flex", color: Colors.dark.toString(),
-                    flexDirection: "column", rowGap: "0.75em"}}>
-                    <div>{message}</div>
-                    {showTimelineToggle && (
-                        <div style={{
-                            display: "grid",
-                            gridTemplateColumns: "auto 1fr",
-                            columnGap: "1em",
-                            alignItems: "center"
-                        }}>
-                            <div>Include timeline:</div>
-                            <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
-                                      appearance={{framed: true, color: Colors.black}}>
-                                <Icon symbol={IconSymbol.Checkbox}/>
-                            </Checkbox>
-                        </div>
-                    )}
-                </div>
-            </Dialog>
-        )
-        dialog.oncancel = () => reject(Errors.AbortError)
-        Surface.get().flyout.appendChild(dialog)
-        dialog.showModal()
-        return promise
-    }
-
     export type ReplaceInput = {
         headline: string
         message: string
@@ -213,7 +144,7 @@ export namespace PresetDialogs {
                             }
                         },
                         {
-                            text: "Replace",
+                            text: "Overwrite",
                             primary: true,
                             onClick: handler => {
                                 resolve({includeTimeline: includeTimelineModel.getValue()})

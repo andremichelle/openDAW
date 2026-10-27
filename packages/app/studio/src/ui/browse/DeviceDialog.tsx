@@ -215,6 +215,9 @@ export namespace DeviceDialog {
             rows.replaceChildren(...visible.map(elementOf))
             if (visible.length === 0) {rows.appendChild(<span className="empty">Nothing matches.</span>)}
             markSelection()
+            if (query.length > 0 && visible.length === 1 && !selected.mapOr(entry => entry.key === visible[0].key, false)) {
+                pick(visible[0])
+            }
         }
         const select = (entry: DeviceEntry): void => {
             selected.wrap(entry)
@@ -246,22 +249,22 @@ export namespace DeviceDialog {
             : Option.wrap(slot.host)).ifSome(host => captureDevices.get(host.audioUnitBoxAdapter().uuid)
             .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target))))
         const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot) ? <DevicePiano lifecycle={lifecycle}/> : null
+        const onKeyDown = (event: KeyboardEvent): void => {
+            const typing = Events.isTextInput(event.target) && filter.search.getValue().length > 0
+            if (event.code === "ArrowDown" || event.code === "ArrowUp") {
+                step(event.code === "ArrowDown" ? 1 : -1)
+            } else if (event.code === "Enter" || event.code === "NumpadEnter") {
+                approve().catch(console.warn)
+            } else if (event.code === "Space" && !typing) {
+                togglePlayback()
+            } else {
+                return
+            }
+            event.preventDefault()
+            event.stopPropagation()
+        }
         const content: HTMLElement = (
-            <div className={className} style={{"--color": color.toString()}}
-                 onkeydown={(event: KeyboardEvent) => {
-                     const typing = Events.isTextInput(event.target) && filter.search.getValue().length > 0
-                     if (event.code === "ArrowDown" || event.code === "ArrowUp") {
-                         step(event.code === "ArrowDown" ? 1 : -1)
-                     } else if (event.code === "Enter" || event.code === "NumpadEnter") {
-                         approve().catch(console.warn)
-                     } else if (event.code === "Space" && !typing) {
-                         togglePlayback()
-                     } else {
-                         return
-                     }
-                     event.preventDefault()
-                     event.stopPropagation()
-                 }}>
+            <div className={className} style={{"--color": color.toString()}}>
                 <div className="filter-bar">
                     {toggle(filter.showStock, "Show what comes from the openDAW cloud", IconSymbol.CloudFolder)}
                     {toggle(filter.showUser, "Show what is stored on this device", IconSymbol.UserFolder)}
@@ -292,6 +295,7 @@ export namespace DeviceDialog {
             </Dialog>
         )
         lifecycle.ownAll(
+            Events.subscribe(dialog, "keydown", onKeyDown),
             filter.search.subscribe(render),
             filter.showStock.subscribe(render),
             filter.showUser.subscribe(render),
