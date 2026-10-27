@@ -83,7 +83,7 @@ export namespace DeviceCatalog {
         readonly apply: (project: Project, slot: DeviceSlot) => Option<Box>
     }
 
-    const rankOf: Record<DeviceEntryKind, int> = {
+    export const rankOf: Readonly<Record<DeviceEntryKind, int>> = {
         "device": 0, "user-preset": 1, "stock-preset": 2, "script": 3, "wclap": 4, "soundfont": 5
     }
 

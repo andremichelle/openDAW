@@ -2,6 +2,7 @@ import css from "./DeviceDialog.sass?inline"
 import {
     Color,
     DefaultObservableValue,
+    int,
     isDefined,
     MutableObservableOption,
     Nullable,
@@ -107,6 +108,18 @@ const matches = (entry: DeviceEntry, query: string): boolean => {
     const text = [entry.name, entry.brief, ...entry.tags, ...entry.facts.map(({value}) => value)].join(" ").toLowerCase()
     return words.every(word => text.includes(word))
 }
+
+const relevanceOf = (entry: DeviceEntry, query: string): int => {
+    const name = entry.name.toLowerCase()
+    const lowered = query.toLowerCase()
+    if (name.startsWith(lowered)) {return 0}
+    return lowered.split(/\s+/).every(word => name.includes(word)) ? 1 : 2
+}
+
+const byRelevance = (query: string) => (left: DeviceEntry, right: DeviceEntry): int =>
+    relevanceOf(left, query) - relevanceOf(right, query)
+    || DeviceCatalog.rankOf[left.kind] - DeviceCatalog.rankOf[right.kind]
+    || DeviceCatalog.compare(left, right)
 
 // between the app header and the device panel, so the auditioned device stays in sight
 const placeAbovePanel = (dialog: HTMLDialogElement): void => {
@@ -236,7 +249,8 @@ export namespace DeviceDialog {
             }
             const query = filter.search.getValue().trim()
             visible.splice(0, visible.length, ...DeviceCatalog.entriesFor(slot, sources.getValue())
-                .filter(entry => isVisible(entry) && matches(entry, query)))
+                .filter(entry => isVisible(entry) && matches(entry, query))
+                .toSorted(query.length > 0 ? byRelevance(query) : () => 0))
             rows.replaceChildren(...visible.map(elementOf))
             if (visible.length === 0) {rows.appendChild(<span className="empty">Nothing matches.</span>)}
             markSelection()
