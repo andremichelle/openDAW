@@ -39,8 +39,13 @@ const className = Html.adoptStyleSheet(css, "DeviceDialog")
 const Gap = 16
 const MinHeight = 240
 
+const searchOf: Record<PresetCategoryKey, DefaultObservableValue<string>> = {
+    "instrument": new DefaultObservableValue(""),
+    "audio-effect": new DefaultObservableValue(""),
+    "midi-effect": new DefaultObservableValue("")
+}
+
 const filter = {
-    search: new DefaultObservableValue(""),
     showStock: new DefaultObservableValue(true),
     showUser: new DefaultObservableValue(true),
     showPresets: new DefaultObservableValue(true),
@@ -142,6 +147,7 @@ export namespace DeviceDialog {
         const audition = lifecycle.own(new DeviceAudition(service, slot))
         const category = DeviceSlot.categoryOf(slot)
         const color = colorOf[category]
+        const searchText = searchOf[category]
         const sources = new DefaultObservableValue<DeviceCatalog.Sources>({presets: [], scripts: [], wclaps: [], soundfonts: []})
         const selected = new MutableObservableOption<DeviceEntry>()
         const elements = new Map<string, HTMLElement>()
@@ -155,7 +161,7 @@ export namespace DeviceDialog {
         const card: HTMLElement = (
             <div className="card" onConnect={element => lifecycle.own(installScrollbars(element))}/>
         )
-        const search: HTMLElement = <SearchInput lifecycle={lifecycle} model={filter.search} placeholder="Search names and tags"/>
+        const search: HTMLElement = <SearchInput lifecycle={lifecycle} model={searchText} placeholder="Search names and tags"/>
         const toggle = (model: DefaultObservableValue<boolean>, tooltip: string, symbol: IconSymbol) => (
             <Checkbox lifecycle={lifecycle} model={model}
                       appearance={{tooltip, activeColor: Colors.blue, framed: true, landscape: true}}>
@@ -180,7 +186,7 @@ export namespace DeviceDialog {
                 ) : null,
                 entry.tags.length > 0 ? (
                     <div className="tags">
-                        {entry.tags.map(tag => <button className="tag" onclick={() => filter.search.setValue(tag)}>{tag}</button>)}
+                        {entry.tags.map(tag => <button className="tag" onclick={() => searchText.setValue(tag)}>{tag}</button>)}
                     </div>
                 ) : null,
                 entry.preset.mapOr(preset => preset.source === "user" ? presetActions(preset) : null, null)
@@ -247,7 +253,7 @@ export namespace DeviceDialog {
                 rows.replaceChildren(<div className="loading"><ThreeDots/></div>)
                 return
             }
-            const query = filter.search.getValue().trim()
+            const query = searchText.getValue().trim()
             visible.splice(0, visible.length, ...DeviceCatalog.entriesFor(slot, sources.getValue())
                 .filter(entry => isVisible(entry) && matches(entry, query))
                 .toSorted(query.length > 0 ? byRelevance(query) : () => 0))
@@ -297,7 +303,7 @@ export namespace DeviceDialog {
         const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot)
             ? <DevicePiano lifecycle={lifecycle} notes={notes}/> : null
         const onKeyDown = (event: KeyboardEvent): void => {
-            const typing = Events.isTextInput(event.target) && filter.search.getValue().length > 0
+            const typing = Events.isTextInput(event.target) && searchText.getValue().length > 0
             if (event.code === "ArrowDown" || event.code === "ArrowUp") {
                 step(event.code === "ArrowDown" ? 1 : -1)
             } else if (event.code === "Enter" || event.code === "NumpadEnter") {
@@ -344,7 +350,7 @@ export namespace DeviceDialog {
         )
         lifecycle.ownAll(
             Events.subscribe(dialog, "keydown", onKeyDown),
-            filter.search.subscribe(render),
+            searchText.subscribe(render),
             filter.showStock.subscribe(render),
             filter.showUser.subscribe(render),
             filter.showPresets.subscribe(render),
