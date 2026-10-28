@@ -17,6 +17,7 @@ import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 export namespace SpotlightCreate {
     export type Wclap = {
@@ -46,10 +47,12 @@ export namespace SpotlightCreate {
             return Option.wrap(units.at(unit.index.getValue() + 1)).map(next => next.address.uuid)
         })
 
-    const createInstrument = (project: Project, factory: InstrumentFactory): InstrumentBox => {
+    const createInstrument = (service: StudioService, factory: InstrumentFactory): InstrumentBox => {
+        const {project} = service
         const anchor = anchorAfterEditing(project)
         const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(factory)
         project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
         return instrumentBox
     }
 
@@ -58,7 +61,7 @@ export namespace SpotlightCreate {
             ? DeviceHost.chainFieldOf(host, accepts) : Option.None)
 
     export const instrument = (service: StudioService, factory: InstrumentFactory): void =>
-        withProject(service, async project => {project.editing.modify(() => createInstrument(project, factory))})
+        withProject(service, async project => {project.editing.modify(() => createInstrument(service, factory))})
 
     export const effect = (service: StudioService, factory: EffectFactory): void =>
         withProject(service, async project => effectField(project, factory.type).ifSome(field =>
@@ -69,10 +72,10 @@ export namespace SpotlightCreate {
             switch (entry.category) {
                 case "instrument":
                     return PresetApplication.createNewAudioUnitFromInstrument(
-                        project, entry.uuid, entry.device, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.device, entry.source, anchorAfterEditing(project))
                 case "audio-unit":
                     return PresetApplication.createNewAudioUnitFromRack(
-                        project, entry.uuid, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.source, anchorAfterEditing(project))
                 default:
                     return service.presets.activatePreset(entry)
             }
@@ -105,7 +108,7 @@ export namespace SpotlightCreate {
             const userCode = compiler.stripHeader(source.value)
             const created: Option<ScriptCompiler.ScriptDeviceBox> = project.editing.modify(() => {
                 const box = place.match({
-                    none: () => createScriptDevice(project, target),
+                    none: () => createScriptDevice(service, target),
                     some: placement => placement(project)
                         .flatMap(box => isScriptDevice(box) ? Option.wrap(box) : Option.None)
                 })
@@ -126,11 +129,12 @@ export namespace SpotlightCreate {
     const isScriptDevice = (box: Box): box is ScriptCompiler.ScriptDeviceBox =>
         box instanceof ApparatDeviceBox || box instanceof WerkstattDeviceBox || box instanceof SpielwerkDeviceBox
 
-    const createScriptDevice = (project: Project, target: ScriptTarget)
+    const createScriptDevice = (service: StudioService, target: ScriptTarget)
         : Option<ScriptCompiler.ScriptDeviceBox> => {
+        const {project} = service
         switch (target) {
             case "apparat":
-                return Option.wrap(asInstanceOf(createInstrument(project, InstrumentFactories.Apparat), ApparatDeviceBox))
+                return Option.wrap(asInstanceOf(createInstrument(service, InstrumentFactories.Apparat), ApparatDeviceBox))
             case "werkstatt":
                 return effectField(project, "audio").map(field => asInstanceOf(
                     EffectFactories.AudioNamed.Werkstatt.create(project, field, field.pointerHub.incoming().length), WerkstattDeviceBox))
@@ -191,7 +195,7 @@ export namespace SpotlightCreate {
             const {clapId, name} = wclap.info
             project.editing.modify(() => {
                 const box: Option<WclapDeviceBox | WclapInstrumentBox> = WclapDescriber.kindOf(wclap.info) === "instrument"
-                    ? Option.wrap(asInstanceOf(createInstrument(project, InstrumentFactories.Wclap), WclapInstrumentBox))
+                    ? Option.wrap(asInstanceOf(createInstrument(service, InstrumentFactories.Wclap), WclapInstrumentBox))
                     : effectField(project, "audio").map(field => asInstanceOf(
                         EffectFactories.AudioNamed.Wclap.create(project, field, field.pointerHub.incoming().length), WclapDeviceBox))
                 box.ifSome(box => {

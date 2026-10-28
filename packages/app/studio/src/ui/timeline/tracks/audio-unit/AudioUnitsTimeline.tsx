@@ -28,6 +28,7 @@ import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 
@@ -128,19 +129,24 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 const anchor = unitInsertion.anchorAt(event.clientY)
                 if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
-                    editing.modify(() => api.placeAudioUnitBefore(api.createAnyInstrument(factory).audioUnitBox, anchor))
+                    editing.modify(() => {
+                        const {audioUnitBox} = api.createAnyInstrument(factory)
+                        api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        NewInstrumentRegion.create(service.project, service.timeline.snapping, audioUnitBox)
+                    })
                 } else if (dragData.type === "preset") {
                     if (dragData.category === "audio-unit") {
-                        PresetApplication.createNewAudioUnitFromRack(service.project, dragData.uuid, dragData.source, anchor)
+                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, anchor)
                             .catch(console.warn)
                     } else if (isNotNull(dragData.device)) {
                         PresetApplication.createNewAudioUnitFromInstrument(
-                            service.project, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
+                            service, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
                     }
                 } else if (dragData.type === "script") {
                     SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
                         const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(SpotlightCreate.ScriptHosts.apparat)
                         project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
                         return Option.wrap(instrumentBox)
                     }))
                 }

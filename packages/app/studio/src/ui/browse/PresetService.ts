@@ -276,7 +276,7 @@ export class PresetService {
 
     createInstrument(key: InstrumentFactories.Keys): void {
         const factory = InstrumentFactories.Named[key]
-        this.project.editing.modify(() => DefaultInstrumentFactory.create(this.project.api, factory))
+        this.project.editing.modify(() => DefaultInstrumentFactory.create(this.service, factory))
     }
 
     createEffect(kind: PresetEffectKind, key: string): void {
@@ -754,7 +754,7 @@ export class PresetService {
     async activatePreset(entry: PresetEntry): Promise<void> {
         if (entry.category === "audio-unit") {
             const result = await Promises.tryCatch(
-                PresetApplication.createNewAudioUnitFromRack(this.project, entry.uuid, entry.source))
+                PresetApplication.createNewAudioUnitFromRack(this.service, entry.uuid, entry.source))
             if (result.status === "rejected") {
                 console.warn(result.error)
                 RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
@@ -764,7 +764,7 @@ export class PresetService {
         if (entry.category === "instrument") {
             const result = await Promises.tryCatch(
                 PresetApplication.createNewAudioUnitFromInstrument(
-                    this.project, entry.uuid, entry.device, entry.source))
+                    this.service, entry.uuid, entry.device, entry.source))
             if (result.status === "rejected") {
                 console.warn(result.error)
                 RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})

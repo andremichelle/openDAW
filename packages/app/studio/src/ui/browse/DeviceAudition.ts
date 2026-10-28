@@ -6,6 +6,8 @@ import {BoxEditing, EditingCheckpoint} from "@opendaw/lib-box"
 import type {StudioService} from "@/service/StudioService"
 import {DeviceCandidate, DeviceEntry} from "@/ui/browse/DeviceCatalog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 // every pick is applied right away from the state before opening, approve keeps the last one as ONE undo step
 export class DeviceAudition implements Terminable {
@@ -100,7 +102,17 @@ export class DeviceAudition implements Terminable {
             commit: () => editing.mark()
         })
         this.#current = Option.wrap(candidate)
-        const result = tryCatch(() => editing.modify(() => candidate.apply(project, this.#slot, keepTimeline), false))
+        const result = tryCatch(() => editing.modify(() => {
+            const applied = candidate.apply(project, this.#slot, keepTimeline)
+            if (applied && this.#slot.type === "new-instrument") {
+                project.userEditingManager.audioUnit.get().ifSome(({box}) => {
+                    if (isInstanceOf(box, AudioUnitBox)) {
+                        NewInstrumentRegion.create(project, this.#service.timeline.snapping, box)
+                    }
+                })
+            }
+            return applied
+        }, false))
         if (result.status === "success" && result.value.unwrapOrElse(false)) {return true}
         if (result.status === "failure") {console.warn(result.error)}
         this.#rollback()
