@@ -203,7 +203,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     .forEach(clip => clip.box.delete()))
             }
         }),
-        installClipContextMenu({element, project, capturing, selection: clipSelection}),
+        installClipContextMenu({element, project, capturing, selection: clipSelection, sampleEditor: service.sampleEditor}),
         Dragging.attach(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return Option.None}

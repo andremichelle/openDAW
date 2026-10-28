@@ -34,6 +34,7 @@ import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
+import {SampleEditorService} from "@/service/SampleEditorService"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
@@ -124,6 +125,7 @@ export class StudioService implements ProjectEnv {
     readonly panelLayout = new PanelContents(createPanelFactory(this))
     readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
+    readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
     readonly presets = new PresetService(this)
@@ -166,6 +168,7 @@ export class StudioService implements ProjectEnv {
             soundfont
         }))
         this.samplePlayback = new SamplePlayback()
+        this.sampleEditor = new SampleEditorService(this)
         ModulatorReveal.requested.subscribe(option =>
             option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
         this.#projectProfileService = new ProjectProfileService({
@@ -563,7 +566,7 @@ export class StudioService implements ProjectEnv {
         if (Browser.isLocalHost()) {return}
         window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine) {event.preventDefault()}
-            if (this.hasProfile && this.profile.hasUnsavedChanges()) {
+            if ((this.hasProfile && this.profile.hasUnsavedChanges()) || this.sampleEditor.hasUnsavedChanges) {
                 event.preventDefault()
             }
         })

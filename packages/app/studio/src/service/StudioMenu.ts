@@ -143,6 +143,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         icon: IconSymbol.Code
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
+                        label: "Sample Editor",
+                        icon: IconSymbol.Waveform
+                    }).setTriggerProcedure(() => service.sampleEditor.navigate()),
+                    MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
                         separatorBefore: true,
