@@ -1147,6 +1147,8 @@ describe("wclap bridge", () => {
 
         it("passes the input through untouched while the transport stops and where no block is drawn", async () => {
             const [host, handle] = await loadGlitchfest()
+            set(host, handle, "Gate Duty", 0)
+            setRow(host, 0, GATE, [[0, 32]])
             const [stoppedLeft, stoppedRight] = play(host, handle, BAR, saw, {playing: false})
             expect(maxError(stoppedLeft, saw, 0, BAR)).toBe(0)
             expect(maxError(stoppedRight, frame => -saw(frame), 0, BAR)).toBe(0)
@@ -1155,12 +1157,16 @@ describe("wclap bridge", () => {
             expect(maxError(left, saw, 0, 2 * BAR)).toBe(0)
         })
 
-        it("plays the default pattern, a stutter, reverse, tape stop and gate in one bar", async () => {
+        it("starts with four empty patterns, every slot on A and the rows in their order", async () => {
             const [host, handle] = await loadGlitchfest()
+            const message = patterns(host)
+            expect(message.length).toBe(32 + 4 * 12 * (4 + 32 * 4))
+            expect(Array.from(message.subarray(8, 16))).toEqual([0, 0, 0, 0, 0, 0, 0, 0])
+            expect(Array.from(message.subarray(16, 28))).toEqual(Array.from({length: 12}, (_, index) => index))
+            const view = new DataView(message.buffer)
+            for (let row = 0; row < 48; row++) {expect(view.getUint32(32 + row * 132, true)).toBe(0)}
             const [left] = play(host, handle, BAR, saw)
-            expect(maxError(left, saw, 0, 4 * COLUMN)).toBe(0)
-            expect(maxError(left, () => 0, 4 * COLUMN + 2100, 5 * COLUMN - 100)).toBeLessThan(1e-3)
-            expect(maxError(left, saw, 12 * COLUMN + 6500, 12 * COLUMN + 7000)).toBeGreaterThan(0.1)
+            expect(maxError(left, saw, 0, BAR)).toBe(0)
         })
 
         it("repeats the slice at the start of a stutter block, 1/64 at 120 bpm is 1500 frames", async () => {
@@ -1372,6 +1378,23 @@ describe("wclap bridge", () => {
             expect(level(left, 2 * BEAT + 500, 2 * BEAT + 2500)).toBeGreaterThan(0.02)
         })
 
+        it("fades a time effect from the old block into the next one, no click where patterns meet", async () => {
+            const tone = (frame: number): number => 0.5 * Math.sin(2 * Math.PI * 220 * frame / 48000)
+            const jump = (samples: Float32Array, from: number, to: number): number => {
+                let max = 0
+                for (let frame = from + 1; frame < to; frame++) {max = Math.max(max, Math.abs(samples[frame] - samples[frame - 1]))}
+                return max
+            }
+            for (const row of [STUTTER, 1, REVERSE, 3, 4, TAPE, PITCH]) {
+                const [host, handle] = await loadGlitchfest()
+                clear(host)
+                set(host, handle, "Freeze Jitter", 0)
+                setRow(host, 0, row, [[0, 32]])
+                const [left] = play(host, handle, 2 * BAR + 4000, tone, {from: BAR})
+                expect(jump(left, BAR - 300, BAR + 300), `row ${row}`).toBeLessThan(0.08)
+            }
+        })
+
         it("restarts a block when the transport jumps back into it", async () => {
             const [host, handle] = await loadGlitchfest()
             clear(host)
@@ -1422,8 +1445,8 @@ describe("wclap bridge", () => {
             const expected = patterns(host)
             host.bridges.saveState(uuid)
             const saved = host.states.at(-1)!
-            // 28 header, 27 values, 8 slots, 48 row counts and 4 bytes per block (5 default blocks and the 3 above)
-            expect(saved.length).toBe(28 + 27 * 8 + 8 + 48 + 8 * 4)
+            // 28 header, 27 values, 8 slots, 48 row counts, 4 bytes per block, the order
+            expect(saved.length).toBe(28 + 27 * 8 + 8 + 48 + 3 * 4 + 12)
             const other = createHost(glitchfestBundle)
             const otherHandle = load(other, GLITCHFEST, "glitchfest")
             const base64 = Buffer.from(saved).toString("base64")
@@ -1434,6 +1457,60 @@ describe("wclap bridge", () => {
             expect(param(other, "Crush Bits").value).toBe(3)
             const restored = patterns(other)
             expect(Array.from(restored.subarray(8))).toEqual(Array.from(expected.subarray(8)))
+        })
+
+        it("runs the rows in their order: a throw above a closed gate still echoes", async () => {
+            const burst = (frame: number): number => frame < 2800 ? 0.5 * Math.sin(2 * Math.PI * 220 * frame / 48000) : 0
+            const echo = async (order: ReadonlyArray<number>): Promise<number> => {
+                const [host, handle] = await loadGlitchfest()
+                set(host, handle, "Throw Time", 3)
+                set(host, handle, "Gate Duty", 0)
+                setRow(host, 0, THROW, [[0, 1]])
+                setRow(host, 0, GATE, [[0, 1]])
+                const message = new Uint8Array(16)
+                message[0] = 9
+                message.set(order, 4)
+                host.bridges.receive(uuid, message.buffer)
+                expect(Array.from(patterns(host).subarray(16, 28))).toEqual(order)
+                const [left] = play(host, handle, 2 * BEAT, burst)
+                return level(left, BEAT + 500, BEAT + 2500)
+            }
+            const identity = Array.from({length: 12}, (_, index) => index)
+            expect(await echo(identity)).toBeLessThan(0.01)
+            expect(await echo([THROW, ...identity.filter(row => row !== THROW)])).toBeGreaterThan(0.1)
+        })
+
+        it("saves the order, refuses one that is not every row once, and reads a version 1 state in the default order", async () => {
+            const [host, handle] = await loadGlitchfest()
+            const order = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+            const message = new Uint8Array(16)
+            message[0] = 9
+            message.set(order, 4)
+            host.bridges.receive(uuid, message.buffer)
+            message.set([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 4)
+            host.bridges.receive(uuid, message.buffer)
+            expect(Array.from(patterns(host).subarray(16, 28))).toEqual(order)
+            setRow(host, 2, STUTTER, [[3, 5]])
+            play(host, handle, 256, saw)
+            host.bridges.saveState(uuid)
+            const saved = host.states.at(-1)!
+            expect(Array.from(saved.subarray(saved.length - 12))).toEqual(order)
+            const restore = async (bytes: Uint8Array): Promise<Host> => {
+                const other = createHost(glitchfestBundle)
+                const otherHandle = load(other, GLITCHFEST, "glitchfest")
+                const base64 = Buffer.from(bytes).toString("base64")
+                new Uint8Array(other.memory.buffer).set(new TextEncoder().encode(base64), 2048)
+                other.imports.host_wclap_state(otherHandle, 2048, base64.length)
+                await ready(other, otherHandle)
+                other.bridges.openPanel(uuid, 176)
+                return other
+            }
+            expect(Array.from(patterns(await restore(saved)).subarray(16, 28))).toEqual(order)
+            const version1 = saved.slice(0, saved.length - 12)
+            new DataView(version1.buffer).setUint32(4, 1, true)
+            const restored = patterns(await restore(version1))
+            expect(Array.from(restored.subarray(16, 28))).toEqual(Array.from({length: 12}, (_, index) => index))
+            expect(new DataView(restored.buffer).getUint32(32 + (2 * 12 + STUTTER) * 132, true)).toBe(1)
         })
 
         it("refuses an overlapping row, a block past the last column and a slot without a pattern", async () => {

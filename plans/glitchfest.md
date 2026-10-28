@@ -7,7 +7,8 @@ blocks switch an effect on for their span. Inspired by the row-and-block idea of
 
 1. **Sequence strip** 14px on top. Left: A to D picks the pattern to edit. Right: 8 slots, the pattern sequence, a click
    cycles A, B, C, D, off. The playing slot is marked.
-2. **Label column** 40px, effect name. Click selects the row. Nothing flashes while playing.
+2. **Label column** 40px, effect name. Click selects the row, drag moves it (the order is the signal order, saved
+   from state version 2 on). Nothing flashes while playing.
 3. **Grid** 32 columns x 6px = 192px. The 32 columns always span the whole pattern, the Length setting maps them to
    1, 2 or 4 bars (so a column is a 1/32, 1/16 or 1/8 note).
 4. **Rows** 12 x 12px = 144px, no scrolling.
@@ -16,7 +17,7 @@ blocks switch an effect on for their span. Inspired by the row-and-block idea of
    name left, value right, values without units (percent implied). Mix is a host parameter only.
 6. Playhead as a thin vertical line over the grid, dimmed while another pattern plays.
 
-## Effects (fixed order, top to bottom = signal order)
+## Effects (initial order, top to bottom = signal order)
 
 1. **Stutter** repeats the slice at block start. Params: division, decay (each repeat quieter or shorter).
 2. **Shuffle** plays a different slice of the last bar. Params: slice size, seed.
@@ -45,8 +46,9 @@ signal order (the lower row wins) and do not each keep a copy. No per-row on/off
 
 ## Patterns
 
-Four patterns A to D, played by a sequence of 8 slots that follows the host transport. Each slot holds a pattern or
-off (dry). No MIDI input yet.
+Four patterns A to D, empty on a new device, played by a sequence of 8 slots that follows the host transport. Each
+slot holds a pattern or off (dry). No MIDI input yet. A block that starts while the previous one of its row still
+sounds crossfades from it in 5 ms (no click where patterns meet).
 
 ## Limits needing approval
 
@@ -61,4 +63,4 @@ off (dry). No MIDI input yet.
 3. **Phase 2** all twelve effects, Prob, Ramp. Done.
 4. **Phase 3** page: grid drawing, block move, cells, Dice, playhead, open-webclap site entry and
    scripts/build-glitchfest.sh. Done, browser check open.
-5. **Phase 4** openDAW bridge tests against test/assets/glitchfest.wasm (26 cases). Done, studio check open.
+5. **Phase 4** openDAW bridge tests against test/assets/glitchfest.wasm (29 cases). Done, studio check open.
