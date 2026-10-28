@@ -18,7 +18,12 @@ export namespace WclapParameters {
                 const id = paramBox.clapId.getValue() >>> 0
                 const info = wanted.get(id)
                 if (!isDefined(info)) {
-                    paramBox.delete()
+                    // a box from the history (a preset) must stay, else undoing its creation fails
+                    if (UUID.equals(paramBox.address.uuid, parameterUuid(hub.box.address.uuid, id))) {
+                        paramBox.delete()
+                    } else {
+                        paramBox.flags.setValue(paramBox.flags.getValue() | IS_HIDDEN)
+                    }
                     continue
                 }
                 existing.set(id, paramBox)

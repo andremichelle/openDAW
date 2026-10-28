@@ -13,7 +13,8 @@ import {
     RuntimeNotifier,
     Subscription,
     SyncProvider,
-    tryCatch
+    tryCatch,
+    UUID
 } from "@opendaw/lib-std"
 import {optimizeUpdates, Update} from "./updates"
 import {Box} from "./box"
@@ -28,11 +29,13 @@ class Modification {
     // boxes outside the history that point at a box this step created go with it, else it cannot be unstaged
     inverse(graph: BoxGraph, outsideHistory: Predicate<Box>): void {
         graph.beginTransaction()
+        const created = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        this.#updates.forEach(update => {if (update.type === "new") {created.add(update.uuid)}})
         this.#updates.forEach(update => {
             if (update.type !== "new") {return}
             graph.findBox(update.uuid).ifSome(box => box.incomingEdges()
                 .map(pointer => pointer.box)
-                .filter(source => source.isAttached() && outsideHistory(source))
+                .filter(source => source.isAttached() && outsideHistory(source) && !created.hasKey(source.address.uuid))
                 .forEach(source => source.delete()))
         })
         this.#updates.toReversed().forEach(update => update.inverse(graph))

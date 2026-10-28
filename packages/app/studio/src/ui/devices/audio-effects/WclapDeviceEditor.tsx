@@ -269,7 +269,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const entries = parametersField.pointerHub.incoming().flatMap(({box}) => {
             const paramBox = asInstanceOf(box, WclapParameterBox)
             const parameter = parameterOf(paramBox)
-            return isDefined(parameter)
+            const hidden = (paramBox.flags.getValue() & 4) !== 0 // CLAP_PARAM_IS_HIDDEN
+            return isDefined(parameter) && !hidden
                 ? [{module: paramBox.module.getValue(), name: paramBox.label.getValue(), value: parameter}] : []
         })
         const populate = (parent: MenuItem, tree: ParameterTree<AutomatableParameterFieldAdapter>): void => {
