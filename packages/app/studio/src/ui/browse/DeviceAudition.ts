@@ -1,5 +1,5 @@
 import {
-    DefaultObservableValue, isDefined, isInstanceOf, MutableObservableOption, Option, RuntimeNotifier, Terminable, tryCatch
+    DefaultObservableValue, Errors, isDefined, isInstanceOf, MutableObservableOption, Option, RuntimeNotifier, Terminable, tryCatch
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {BoxEditing, EditingCheckpoint} from "@opendaw/lib-box"
@@ -28,8 +28,10 @@ export class DeviceAudition implements Terminable {
     get applied(): MutableObservableOption<DeviceEntry> {return this.#applied}
     get loading(): DefaultObservableValue<boolean> {return this.#loading}
 
-    pick(entry: DeviceEntry): void {
+    // resolves true when the download was cancelled, the previous pick then stays
+    pick(entry: DeviceEntry): Promise<boolean> {
         const generation = ++this.#generation
+        const cancelled = {value: false}
         this.#loading.setValue(true)
         this.#pending = this.#candidateOf(entry).then(async candidate => {
             if (generation !== this.#generation) {return}
@@ -42,9 +44,14 @@ export class DeviceAudition implements Terminable {
             await this.#settle(candidate, entry.name)
         }, reason => {
             if (generation !== this.#generation) {return}
+            if (Errors.isAbort(reason)) {
+                cancelled.value = true
+                return
+            }
             console.warn(reason)
             RuntimeNotifier.notify({message: `Could not load ${entry.name}.`, icon: "Warning"})
         }).finally(() => {if (generation === this.#generation) {this.#loading.setValue(false)}})
+        return this.#pending.then(() => cancelled.value && generation === this.#generation)
     }
 
     async approve(): Promise<void> {

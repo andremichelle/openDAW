@@ -1,4 +1,4 @@
-import {asInstanceOf, DefaultObservableValue, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Box, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType} from "@opendaw/studio-enums"
@@ -167,8 +167,11 @@ export namespace SpotlightCreate {
     export const storeWclap = async ({id, name}: Wclap): Promise<string> => {
         if (await WclapStorage.exists(id)) {return WclapStorage.urlOf(id)}
         const progress = new DefaultObservableValue(0.0)
-        const dialog = RuntimeNotifier.progress({headline: `Downloading ${name}`, progress})
-        const result = await Promises.tryCatch(WclapCatalog.get().load(id, value => progress.setValue(value))
+        const controller = new AbortController()
+        const dialog = RuntimeNotifier.progress({
+            headline: `Downloading ${name}`, progress, cancel: () => controller.abort(Errors.AbortError)
+        })
+        const result = await Promises.tryCatch(WclapCatalog.get().load(id, value => progress.setValue(value), controller.signal)
             .then(archive => WclapStorage.store(archive)))
         dialog.terminate()
         if (result.status === "rejected") {throw result.error}
@@ -179,6 +182,7 @@ export namespace SpotlightCreate {
     export const wclap = (service: StudioService, wclap: Wclap): void =>
         withProject(service, async project => {
             const url = await Promises.tryCatch(storeWclap(wclap))
+            if (url.status === "rejected" && Errors.isAbort(url.error)) {return}
             if (url.status === "rejected") {
                 console.warn(url.error)
                 RuntimeNotifier.notify({message: `Could not download ${wclap.name}.`, icon: "Warning"})

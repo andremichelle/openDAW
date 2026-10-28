@@ -153,6 +153,7 @@ export namespace DeviceDialog {
         const elements = new Map<string, HTMLElement>()
         const visible: Array<DeviceEntry> = []
         const approved = {value: false}
+        const cancelledKeys = new Set<string>()
         const currentKey = DeviceSlot.currentDeviceKey(slot)
         const rows: HTMLElement = <div className="rows"/>
         const list: HTMLElement = (
@@ -260,7 +261,8 @@ export namespace DeviceDialog {
             rows.replaceChildren(...visible.map(elementOf))
             if (visible.length === 0) {rows.appendChild(<span className="empty">Nothing matches.</span>)}
             markSelection()
-            if (query.length > 0 && visible.length === 1 && !selected.mapOr(entry => entry.key === visible[0].key, false)) {
+            if (query.length > 0 && visible.length === 1 && !cancelledKeys.has(visible[0].key)
+                && !selected.mapOr(entry => entry.key === visible[0].key, false)) {
                 pick(visible[0])
             }
         }
@@ -270,7 +272,11 @@ export namespace DeviceDialog {
         }
         const pick = (entry: DeviceEntry): void => {
             select(entry)
-            audition.pick(entry)
+            audition.pick(entry).then(cancelled => {
+                if (!cancelled) {return}
+                cancelledKeys.add(entry.key)
+                audition.applied.match({none: () => selected.clear(), some: select})
+            })
         }
         const step = (delta: number): void => {
             if (visible.length === 0) {return}
@@ -305,7 +311,8 @@ export namespace DeviceDialog {
         const onKeyDown = (event: KeyboardEvent): void => {
             const typing = Events.isTextInput(event.target) && searchText.getValue().length > 0
             if (event.code === "ArrowDown" || event.code === "ArrowUp") {
-                step(event.code === "ArrowDown" ? 1 : -1)
+                // every step applies its device, a held key would create them faster than they are freed
+                if (!event.repeat) {step(event.code === "ArrowDown" ? 1 : -1)}
             } else if (event.code === "Enter" || event.code === "NumpadEnter") {
                 approve().catch(console.warn)
             } else if (event.code === "Space" && !typing) {

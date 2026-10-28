@@ -30,8 +30,8 @@ export class CommunityAPI {
     // the community WebCLAPs, built from source by the opendaw-commons CI, same format and naming as the cloud ones
     wclaps(): Promise<WclapIndex> {return this.#wclaps().catch(() => WclapIndex.Empty)}
 
-    loadWclap(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
-        return retryTransient(() => fetch(`${CommunityAPI.FileRoot}/wclaps/${uuid}.wclap`, OpenDAWHeaders)
+    loadWclap(uuid: string, progress: Progress.Handler = Progress.Empty, signal?: AbortSignal): Promise<ArrayBuffer> {
+        return retryTransient(() => fetch(`${CommunityAPI.FileRoot}/wclaps/${uuid}.wclap`, {...OpenDAWHeaders, signal})
             .then(response => response.ok
                 ? network.progress(progress)(response).arrayBuffer()
                 : Promise.reject(new HttpStatus(response.status))), 4)

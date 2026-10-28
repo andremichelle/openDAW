@@ -1,4 +1,4 @@
-import {Lazy, Option, Progress} from "@opendaw/lib-std"
+import {Errors, Lazy, Option, Progress} from "@opendaw/lib-std"
 import {CommunityAPI} from "./CommunityAPI"
 import {OpenWclapAPI} from "./OpenWclapAPI"
 import {WclapIndex, WclapIndexEntry, WclapIndexFolder} from "./WclapIndex"
@@ -34,11 +34,13 @@ export class WclapCatalog {
     }
 
     // a superseded build left the index but its file stays, so an unlisted id is asked from both servers
-    async load(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
+    async load(uuid: string, progress: Progress.Handler = Progress.Empty, signal?: AbortSignal): Promise<ArrayBuffer> {
         const [cloud, community] = await Promise.all([OpenWclapAPI.get().all(),
             CommunityAPI.get().wclaps().then(WclapIndex.flatten)])
-        if (community.some(entry => entry.uuid === uuid)) {return CommunityAPI.get().loadWclap(uuid, progress)}
-        if (cloud.some(entry => entry.uuid === uuid)) {return OpenWclapAPI.get().load(uuid, progress)}
-        return OpenWclapAPI.get().load(uuid, progress).catch(() => CommunityAPI.get().loadWclap(uuid, progress))
+        signal?.throwIfAborted()
+        if (community.some(entry => entry.uuid === uuid)) {return CommunityAPI.get().loadWclap(uuid, progress, signal)}
+        if (cloud.some(entry => entry.uuid === uuid)) {return OpenWclapAPI.get().load(uuid, progress, signal)}
+        return OpenWclapAPI.get().load(uuid, progress, signal).catch(reason => Errors.isAbort(reason)
+            ? Promise.reject(reason) : CommunityAPI.get().loadWclap(uuid, progress, signal))
     }
 }
