@@ -3,11 +3,11 @@
 A glitch audio effect for the WebCLAP site and the openDAW device panel. Rows of effects, a pattern grid where drawn
 blocks switch an effect on for their span. Inspired by the row-and-block idea of audiotool's Rasselbock, not a clone.
 
-## Layout (176px high, 236px wide, all text 9px, studio capitalisation)
+## Layout (176px high, 244px wide, all text 9px, studio capitalisation)
 
 1. **Sequence strip** 14px on top. Left: A to D picks the pattern to edit. Right: 8 slots, the pattern sequence, a click
    cycles A, B, C, D, off. The playing slot is marked.
-2. **Label column** 40px, effect name. Click selects the row, drag moves it (the order is the signal order, saved
+2. **Label column** 48px, effect name. Click selects the row, drag moves it (the order is the signal order, saved
    from state version 2 on). Nothing flashes while playing.
 3. **Grid** 32 columns x 6px = 192px. The 32 columns always span the whole pattern, the Length setting maps them to
    1, 2 or 4 bars (so a column is a 1/32, 1/16 or 1/8 note).

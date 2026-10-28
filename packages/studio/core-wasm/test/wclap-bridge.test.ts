@@ -1123,13 +1123,13 @@ describe("wclap bridge", () => {
             expect(plugins[0].features).toEqual(expect.arrayContaining(["audio-effect", "glitch", "opendaw:device-panel"]))
         })
 
-        it("is 236 wide in the device panel and opens a 472 x 352 window, 1 to 3 times the panel", async () => {
+        it("is 244 wide in the device panel and opens a 488 x 352 window, 1 to 3 times the panel", async () => {
             const [host] = await loadGlitchfest()
             expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: true})
-            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html", width: 236})
-            expect(host.bridges.openGui(uuid)).toMatchObject({uri: "/index.html", width: 472, height: 352, resizable: true})
-            expect(host.bridges.resizeGui(uuid, 100, 100)).toEqual({width: 236, height: 176})
-            expect(host.bridges.resizeGui(uuid, 4000, 4000)).toEqual({width: 708, height: 528})
+            expect(host.bridges.openPanel(uuid, 176)).toEqual({uri: "/index.html", width: 244})
+            expect(host.bridges.openGui(uuid)).toMatchObject({uri: "/index.html", width: 488, height: 352, resizable: true})
+            expect(host.bridges.resizeGui(uuid, 100, 100)).toEqual({width: 244, height: 176})
+            expect(host.bridges.resizeGui(uuid, 4000, 4000)).toEqual({width: 732, height: 528})
         })
 
         it("lists 27 parameters in the page's order with their defaults", async () => {
