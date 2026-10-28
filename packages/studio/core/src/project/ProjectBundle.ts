@@ -6,12 +6,13 @@ import {Project} from "./Project"
 import {ProjectEnv} from "./ProjectEnv"
 import {ProjectPaths} from "./ProjectPaths"
 import {ProjectProfile} from "./ProjectProfile"
+import {ProjectMeta} from "./ProjectMeta"
 import {Workers} from "../Workers"
 import {SampleStorage} from "../samples"
 import type JSZip from "jszip"
 import {SoundfontStorage} from "../soundfont"
 import {ExternalLib} from "../ExternalLib"
-import {WclapStorage} from "../wclap/WclapStorage"
+import {WclapStorage} from "../wclap"
 
 export namespace ProjectBundle {
     export const encode = async ({uuid, project, meta, cover}: ProjectProfile,
@@ -132,7 +133,7 @@ export namespace ProjectBundle {
         await Promise.all(promises)
         const projectData = await asDefined(zip.file(ProjectPaths.ProjectFile)).async("arraybuffer")
         const project = await Project.loadAnyVersion(env, projectData)
-        const meta = JSON.parse(await asDefined(zip.file(ProjectPaths.ProjectMetaFile)).async("text"))
+        const meta = ProjectMeta.fromJSON(JSON.parse(await asDefined(zip.file(ProjectPaths.ProjectMetaFile)).async("text")))
         const coverFile = zip.file(ProjectPaths.ProjectCoverFile)
         const cover: Option<ArrayBuffer> = Option.wrap(await coverFile?.async("arraybuffer"))
         return new ProjectProfile(bundleUUID, project, meta, cover)

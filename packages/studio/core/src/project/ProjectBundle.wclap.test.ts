@@ -84,6 +84,23 @@ describe("ProjectBundle with WebCLAP bundles", () => {
         vi.useRealTimers()
     })
 
+    it("fills meta fields an imported bundle lacks (live error 1193)", async () => {
+        const {Project} = await import("./Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        expect(project.rootBox.projectMeta.targetVertex.isEmpty()).toBe(true)
+        const zip = new JSZip()
+        zip.file("version", "1")
+        zip.file("uuid", UUID.generate(), {binary: true})
+        zip.file("project.od", project.toArrayBuffer() as ArrayBuffer, {binary: true})
+        zip.file("meta.json", JSON.stringify({name: "VID03 poc", created: "2026-10-28T14:17:30.258Z"}))
+        const profile = await ProjectBundle.decode(createEnv(), await zip.generateAsync({type: "arraybuffer"}))
+        expect(profile.meta.name).toBe("VID03 poc")
+        expect(profile.meta.tags).toStrictEqual([])
+        expect(profile.meta.artist).toBe("")
+        expect(profile.meta.description).toBe("")
+    })
+
     it("exports the project without a bundle that is not stored", async () => {
         const stored = await WclapStorage.store(new Uint8Array(64).fill(7).buffer)
         const missing = await WclapStorage.urlFor(new Uint8Array(64).fill(9).buffer)
