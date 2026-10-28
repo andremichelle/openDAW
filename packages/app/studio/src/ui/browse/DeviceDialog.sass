@@ -14,7 +14,7 @@ component
     display: flex
     align-items: center
     column-gap: 4px
-    font-size: 16px
+    font-size: 13px
 
     > div.separator
       width: 12px
@@ -22,7 +22,7 @@ component
     > :last-child
       flex: 1 1 auto
       margin-left: 12px
-      min-height: 28px
+      min-height: 22px
 
       > svg
         font-size: 14px
@@ -43,7 +43,7 @@ component
 
     > div.rows
       display: grid
-      grid-template-columns: 22px auto 1fr 14px auto
+      grid-template-columns: 16px auto 1fr 16px auto
       column-gap: 7px
       color: var(--color)
 
@@ -59,6 +59,10 @@ component
 
       > div.entry
         @include mixins.library-device-row
+        margin-bottom: 1px
+
+        > div.icon
+          @include mixins.color-icon-tile(16px)
 
         &:hover
           color: var(--color-gray)
@@ -73,12 +77,13 @@ component
         > span.bundle
           display: flex
           justify-content: center
-          font-size: 12px
+          font-size: 14px
           color: var(--color-shadow)
 
         > span.badge
           display: flex
           padding-right: 4px
+          font-size: 14px
           color: var(--color-shadow)
 
   > div.card

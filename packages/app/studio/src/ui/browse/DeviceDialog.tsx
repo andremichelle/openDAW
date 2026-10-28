@@ -346,7 +346,7 @@ export namespace DeviceDialog {
                     cancelable={true}
                     growWidth={true}
                     leading={isDefined(piano) ? <MidiAccessButton lifecycle={lifecycle} style={{fontSize: "16px"}}/> : undefined}
-                    style={{width: "min(56em, 90vw)", height: "min(36em, 75vh)"}}
+                    style={{width: "min(56em, 90vw)", height: "min(30em, 70vh)"}}
                     buttons={[
                         {text: "Cancel", onClick: () => dialog.close()},
                         {text: "Ok", primary: true, onClick: () => {approve().catch(console.warn)}}
