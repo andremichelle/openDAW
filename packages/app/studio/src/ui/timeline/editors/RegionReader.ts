@@ -56,7 +56,10 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT> & Any
     get position(): number {return this.#strategy().readPosition(this.region)}
     get duration(): number {return this.complete - this.position}
     get complete(): number {return this.#strategy().readComplete(this.region)}
-    get loopOffset(): number {return this.#strategy().readLoopOffset(this.region)}
+    get loopOffset(): number {
+        const strategy = this.#strategy()
+        return strategy.readLoopOffset(this.region) - (strategy.readContentShift?.(this.region) ?? 0)
+    }
     get loopDuration(): number {return this.#strategy().readLoopDuration(this.region)}
     get contentDuration(): ppqn {return this.loopDuration}
     set contentDuration(value: ppqn) {this.region.loopDuration = Math.max(PPQN.SemiQuaver, value)}
