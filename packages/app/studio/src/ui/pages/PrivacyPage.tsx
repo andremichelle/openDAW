@@ -20,6 +20,10 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         <h3>Cloud connections</h3>
         <p>If you choose to connect a cloud service (e.g. Google Drive or Dropbox), openDAW uses the official OAuth
             process. The access tokens are stored only in your browser or desktop app and are never shared with us.</p>
+        <p>If you upload a mixdown to SoundCloud, you log in on SoundCloud's own page and openDAW never sees your
+            password. SoundCloud requires an app secret to issue the access token, so this one step runs through our
+            server, which passes the token on to your browser without storing it. The rendered audio, the project name,
+            tags, description and cover are sent directly from your browser to SoundCloud.</p>
         <h3>Data usage</h3>
         <p>openDAW does not process, analyze, or share any personal data. Files remain under your control in your chosen
             storage location.</p>
