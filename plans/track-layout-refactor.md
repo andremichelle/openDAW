@@ -63,7 +63,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `0f712c2e-a396-49db-bb38-c93e7993c209` (2026-10-28 ungroup shortcut).
+- Current refactored build: `29a428cd-eaff-4faf-82cf-69c7bd323d1e` (2026-10-28 latest-main refresh).
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -233,3 +233,31 @@ it; Preferences shows the default binding, and its edit dialog captures an alter
 The trial alternative was canceled, leaving the default unchanged. Saved the restored verification project.
 Comparison build: `0f712c2e-a396-49db-bb38-c93e7993c209`; CloudFront invalidation
 `I1IPWK7JEMGZHY0DNJWGCXUZ1M` completed. Original comparison demo remains unchanged.
+
+## Latest official-main refresh (2026-10-28)
+
+Rebased the 34 grouping commits onto official `main` at
+`ba563e7bf5ab5e8b3e53491677ca10c049bc125f`. Rollback source:
+`3f16a04dc2f8a07dd80d514fd302457f2a956e22`, retained locally as
+`codex/track-groups-before-main-refresh-2026-10-28`. The only conflict was ProjectApi imports;
+keep the upstream audio-composite boxes/EffectFactories alongside the grouping imports.
+Range-diff preserves all grouping commits, with import/context adaptations only.
+
+Upstream's custom-only ShortcutStorage and legacy-screen-key migration remain intact. A new integration
+regression migrates the older saved Group/Ungroup bindings, retains both custom bindings, applies the
+new screen defaults, writes only custom values, and reloads the migrated preferences.
+
+Refresh validation: production dependency/Studio build passes all 25 tasks. Core passes 887 tests / 86
+files; adapters 360 / 31; Studio 251 / 41; real-WASM grouping plus MIDI Output 13 / 2. The first core run
+hit the existing five-second large-state collaboration test timeout during parallel checks. The full
+core rerun passes with two workers and unchanged assertions/timeouts. Studio also uses two workers.
+
+Published rebased comparison build `29a428cd-eaff-4faf-82cf-69c7bd323d1e`; invalidation
+`IHV2XSRHCFMYXCGVDZDVWLYFN` completed. Public metadata/deep-link responses use no-cache; the versioned
+engine has correct WASM MIME/magic and immutable caching, with COOP/COEP retained. The original demo is
+still build `1efc199a-bc44-4479-bcb4-dfdfe771f00d`. Prior comparison entry files are retained locally at
+`/tmp/group-main-refresh-rollback`; old hashed assets remain available.
+
+Hosted checks open the existing saved nested-group project on the rebuilt engine, verify mixer routing,
+run Shift+Cmd+G and one Undo, then save/reopen with both groups restored. No browser console errors.
+Screenshot: `/tmp/group-main-refresh-demo.png` (verification artifact only).

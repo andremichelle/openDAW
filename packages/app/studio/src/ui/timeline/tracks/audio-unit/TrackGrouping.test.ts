@@ -3,6 +3,7 @@ import {asInstanceOf, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {Key, Shortcut, ShortcutDefinitions} from "@opendaw/lib-dom"
 import {AudioUnitGroups, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {ShortcutStorage, ShortcutStore} from "@/service/ShortcutStorage"
 import {GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {ungroupSelectedTracks} from "./TrackGrouping"
 
@@ -63,6 +64,31 @@ describe("ungroup command", () => {
         expect(group.isAttached()).toBe(false)
         expect(project.trackSelection.selected).toEqual([track])
         project.terminate()
+    })
+    it("migrates saved group shortcuts through upstream custom-only shortcut storage", () => {
+        const customGroup = Shortcut.of(Key.KeyG, {ctrl: true, alt: true})
+        const customUngroup = Shortcut.of(Key.KeyU, {ctrl: true, shift: true})
+        const values = new Map<string, string>([[ShortcutStorage.LegacyStorageKey, JSON.stringify({global: {
+            "group-tracks": customGroup.toJSON(), "ungroup-tracks": customUngroup.toJSON(),
+            "workspace-screen-piano": Shortcut.of(Key.Digit3, {shift: true}).toJSON()
+        }})]])
+        const storage: ShortcutStore = {
+            getItem: key => values.get(key) ?? null,
+            setItem: (key, value) => {values.set(key, value)},
+            removeItem: key => {values.delete(key)}
+        }
+        const contexts = {global: {factory: GlobalShortcutsFactory, workingDefinition: ShortcutDefinitions.copy(GlobalShortcutsFactory)}}
+        expect(ShortcutStorage.load(contexts, storage)).toBe(true)
+        expect(contexts.global.workingDefinition["group-tracks"].shortcut.equals(customGroup)).toBe(true)
+        expect(contexts.global.workingDefinition["ungroup-tracks"].shortcut.equals(customUngroup)).toBe(true)
+        expect(contexts.global.workingDefinition["workspace-screen-piano"].shortcut
+            .equals(GlobalShortcutsFactory["workspace-screen-piano"].shortcut)).toBe(true)
+        expect(values.has(ShortcutStorage.LegacyStorageKey)).toBe(false)
+        const stored = JSON.parse(values.get(ShortcutStorage.StorageKey) ?? "{}")
+        expect(Object.keys(stored.global).sort()).toEqual(["group-tracks", "ungroup-tracks"])
+        const restored = {global: {factory: GlobalShortcutsFactory, workingDefinition: ShortcutDefinitions.copy(GlobalShortcutsFactory)}}
+        expect(ShortcutStorage.load(restored, storage)).toBe(true)
+        expect(restored.global.workingDefinition["ungroup-tracks"].shortcut.equals(customUngroup)).toBe(true)
     })
     it("keeps old shortcut preferences and persists a remapped ungroup action independently", () => {
         const shortcuts = ShortcutDefinitions.copy(GlobalShortcutsFactory)
