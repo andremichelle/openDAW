@@ -318,7 +318,6 @@ describe("Devices", () => {
         expect(deep.composite).toBe(inner.instrument)
         expect(deep.instrument.audioUnit).toBe(unit)
         expect(() => composite.addLayer("Tape" as "Nano")).toThrow()
-        expect(() => composite.addLayer("MIDIOutput" as "Nano")).toThrow()
         expect(composite.layers.length).toBe(3)
         bass.remove()
         expect(composite.layers).toEqual([pad, inner])

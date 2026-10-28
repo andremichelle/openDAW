@@ -285,9 +285,8 @@ export namespace InstrumentFactories {
         }
     }
 
-    // MIDI Output is wired at unit level only
     export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
-        factory.trackType === TrackType.Notes && factory !== MIDIOutput
+        factory.trackType === TrackType.Notes
 
     export const Tubular: InstrumentFactory<void, TubularDeviceBox> = {
         defaultName: "Tubular",

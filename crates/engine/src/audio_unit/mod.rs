@@ -111,7 +111,7 @@ const BUS_ENABLED_KEY: u16 = 4; // AudioBusBox.enabled: a disabled bus sums noth
 // The MIDI-output instrument (engine-side like the tape: it emits MIDI messages, no audio).
 // WASM CONTRACT: MIDIOutputDeviceBox field keys — enabled 4, channel 11, parameters 13 (hub), device 14
 // (pointer -> MIDIOutputBox); MIDIOutputParameterBox — controller 3 (Int32), value 4 (unipolar Float32).
-const MIDI_OUT_BOX_TYPE: &str = "MIDIOutputDeviceBox";
+pub(crate) const MIDI_OUT_BOX_TYPE: &str = "MIDIOutputDeviceBox";
 const MIDI_OUT_CHANNEL_KEY: u16 = 11;
 const MIDI_OUT_PARAMETERS_KEY: u16 = 13;
 const MIDI_OUT_DEVICE_KEY: u16 = 14;
@@ -203,6 +203,24 @@ pub(crate) struct MidiOutWired {
     pub(crate) cc_subs: Vec<SubscriptionId>,        // the CC parameters' field / automation observations
     pub(crate) cc_collections: Vec<ValueCollection>,
     pub(crate) monitor_node: Option<NodeId>
+}
+
+/// A MIDI Output device's node and box observations, shared by a unit (`MidiOutWired`) and a composite layer.
+pub(crate) struct MidiOutDevice {
+    pub(crate) node: Rc<RefCell<MidiOutProcessor>>,
+    pub(crate) node_id: NodeId,
+    pub(crate) instrument_uuid: Uuid,
+    pub(crate) controls: Rc<MidiOutControls>,
+    pub(crate) subs: Vec<SubscriptionId>,
+    pub(crate) cc_subs: Vec<SubscriptionId>,
+    pub(crate) cc_collections: Vec<ValueCollection>
+}
+
+/// What a composite slot's instrument is: a plugin, or the engine-side MIDI Output.
+#[derive(Clone, Copy)]
+pub(crate) enum SlotInstrument {
+    Plugin(DeviceReg),
+    MidiOut
 }
 
 /// A FROZEN unit's wiring (TS `AudioDeviceChain.#wire`'s frozen branch): the pre-rendered PCM player
@@ -313,6 +331,8 @@ pub(crate) struct TapeWired {
 /// `set_pull_chain`) without recreating it.
 pub(crate) enum ProcHandle {
     Instrument(Rc<RefCell<PluginInstrument>>),
+    // A MIDI Output hosted by a composite layer (a unit-level one is `Wired::MidiOut`).
+    MidiOut(Box<MidiOutDevice>),
     Audio(Rc<RefCell<PluginAudioEffect>>),
     Midi(Rc<PluginMidiEffect>),
     // A parallel EFFECT COMPOSITE: not one plugin but a whole sub-graph (distributor -> entries -> wet sum ->
@@ -1197,6 +1217,11 @@ impl Engine {
             self.graph.unsubscribe(member.enabled_sub);
             self.output_registry.remove(&Address::of(member.uuid, vec![]));
             self.teardown_sink(*binding);
+            return;
+        }
+        if let ProcHandle::MidiOut(device) = member.proc {
+            self.graph.unsubscribe(member.enabled_sub);
+            self.teardown_midi_out_device(*device);
             return;
         }
         self.output_registry.remove(&Address::of(member.uuid, vec![]));

@@ -339,6 +339,8 @@ pub(crate) struct MidiOutProcessor {
     // starts / completes — the note indicators light up.
     note_bits: Option<engine_env::telemetry::BroadcastSlot>,
     cc: Vec<CcBinding>,
+    // A composite layer's gate drops starts but not completes: release only the notes this node started.
+    release_held_only: bool,
     scratch: Box<[EventRecord]>,
     events: EventBuffer // unused (the node PULLS its notes); required by the Processor trait
 }
@@ -355,6 +357,7 @@ impl MidiOutProcessor {
             output: shared_audio_buffer(),
             note_bits,
             cc: Vec::new(),
+            release_held_only: false,
             scratch: vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice(),
             events: EventBuffer::new()
         }
@@ -366,6 +369,10 @@ impl MidiOutProcessor {
 
     pub(crate) fn set_cc(&mut self, cc: Vec<CcBinding>) {
         self.cc = cc;
+    }
+
+    pub(crate) fn set_release_held_only(&mut self, value: bool) {
+        self.release_held_only = value;
     }
 
     /// The bound parameters' (box uuid, last emitted value) pairs, carried across a rebuild / re-bind so a
@@ -458,13 +465,15 @@ impl MidiOutProcessor {
                     });
                 }
             } else if record.kind == EVENT_NOTE_OFF {
-                {
+                let held = {
                     let mut active = self.controls.active_notes.borrow_mut();
-                    if let Some(found) = active.iter().position(|pitch| *pitch == record.pitch as u8) {
+                    let found = active.iter().position(|pitch| *pitch == record.pitch as u8);
+                    if let Some(found) = found {
                         active.remove(found);
                     }
-                }
-                if device_num >= 0 {
+                    found.is_some()
+                };
+                if device_num >= 0 && (held || !self.release_held_only) {
                     self.midi_out.borrow_mut().push(MidiMsg {
                         device: device_num as u32, status: NOTE_OFF | channel,
                         data1: record.pitch as u8, data2: 0, len: 3, time_ms

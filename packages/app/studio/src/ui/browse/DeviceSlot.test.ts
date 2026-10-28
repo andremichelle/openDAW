@@ -170,7 +170,7 @@ describe("DeviceSlot", () => {
         return {...context, slot, layerNames}
     }
 
-    it("lists only layer instruments for a new layer and no racks", async () => {
+    it("lists every note instrument for a new layer and no racks", async () => {
         const {slot} = await layerSetup()
         expect(DeviceSlot.categoryOf(slot)).toBe("instrument")
         expect(DeviceSlot.takesNotes(slot)).true
@@ -178,7 +178,7 @@ describe("DeviceSlot", () => {
         expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Nano)).true
         expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.InstrumentComposite)).true
         expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Tape)).false
-        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.MIDIOutput)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.MIDIOutput)).true
         expect(DeviceSlot.acceptsRack(slot, InstrumentFactories.Nano)).false
         expect(DeviceSlot.hasTimeline(slot)).false
     })

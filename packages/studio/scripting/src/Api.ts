@@ -1158,7 +1158,7 @@ export interface Playfield extends Instrument {
  * Instruments that can live in a layer of an {@link InstrumentComposite}: everything that plays notes inside the unit
  * @group Instruments
  */
-export type LayerInstruments = Omit<Instruments, "Tape" | "MIDIOutput">
+export type LayerInstruments = Omit<Instruments, "Tape">
 
 /**
  * One layer of an {@link InstrumentComposite}: an instrument with its own MIDI and audio effect chains and its own strip
@@ -1204,7 +1204,7 @@ export interface InstrumentComposite extends Instrument {
     readonly layers: ReadonlyArray<InstrumentCompositeLayer>
     /**
      * Add a layer playing the given instrument
-     * @param key - Instrument type (everything except Tape and MIDIOutput)
+     * @param key - Instrument type (everything except Tape)
      * @param props - Instrument settings
      * @param layer - Layer settings
      * @example

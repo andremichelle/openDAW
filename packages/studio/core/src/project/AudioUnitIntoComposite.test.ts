@@ -82,7 +82,7 @@ describe("wrap an instrument into a Composite", () => {
         project.terminate()
     })
 
-    it("wrapping a Composite nests it, Tape and MIDI Output are refused", async () => {
+    it("wrapping a Composite nests it, a MIDI Output becomes a layer, Tape is refused", async () => {
         const project = await createProject()
         const {api} = project
         const {outer, tape, midiOut} = project.editing.modify(() => ({
@@ -93,7 +93,7 @@ describe("wrap an instrument into a Composite", () => {
         const product = project.editing.modify(() => api.wrapInstrumentIntoComposite(outer).result()).unwrap()
         expect(outer.host.targetAddress.unwrap().toString()).toBe(product.cellBox.instrument.address.toString())
         expect(project.editing.modify(() => api.wrapInstrumentIntoComposite(tape).isFailure()).unwrap()).toBe(true)
-        expect(project.editing.modify(() => api.wrapInstrumentIntoComposite(midiOut).isFailure()).unwrap()).toBe(true)
+        expect(project.editing.modify(() => api.wrapInstrumentIntoComposite(midiOut).isSuccess()).unwrap()).toBe(true)
         expect(tape.host.targetVertex.unwrap().box.name, "untouched").toBe("AudioUnitBox")
         project.terminate()
     })

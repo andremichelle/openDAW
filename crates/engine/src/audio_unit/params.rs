@@ -829,6 +829,7 @@ impl Engine {
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
+                composite.binding.for_each_midi_out(&mut |device| self.rebind_midi_out_cc(device, &invalidate));
                 self.rebind_composite_strips(&mut composite.binding, &invalidate);
                 for member in &mut composite.audio {
                     self.rebind_member(member, &invalidate, position);
