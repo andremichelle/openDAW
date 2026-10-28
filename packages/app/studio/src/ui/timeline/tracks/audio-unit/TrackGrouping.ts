@@ -15,6 +15,20 @@ export const groupSelectedTracks = (project: Project): void => {
     project.userEditingManager.audioUnit.edit(unit.editing)
 }
 
+export const ungroupSelectedTracks = (project: Project): void => {
+    const groups = project.trackSelection.commandTargets.filter(unit => unit.isGroup.getValue())
+        .toSorted((left, right) => AudioUnitGroups.depth(right) - AudioUnitGroups.depth(left))
+    if (groups.length === 0) {return}
+    const members = new Set(groups.flatMap(group => AudioUnitGroups.children(project.rootBox, group)))
+    const promoted = project.audioUnitLayout.snapshot.rows
+        .filter(row => members.has(row.unit) && !groups.includes(row.unit)).map(row => row.unit)
+    project.editing.modify(() => {
+        groups.forEach(group => project.grouping.ungroup(group))
+        if (promoted.length > 0) {project.userEditingManager.audioUnit.edit(promoted[0].editing)}
+    })
+    project.trackSelection.set(promoted)
+}
+
 export const duplicateSelectedTracks = (project: Project): void => {
     const copies = project.editing.modify(() => project.grouping.duplicate(project.trackSelection.commandTargets)).unwrapOrElse([])
     if (copies.length === 0) {return}
@@ -29,8 +43,11 @@ export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuIte
                 if (!project.trackSelection.has(unit)) {project.trackSelection.set([unit])}
                 groupSelectedTracks(project)
             }),
-        MenuItem.default({label: "Ungroup (Keep Tracks)", hidden: !unit.isGroup.getValue()})
-            .setTriggerProcedure(() => project.editing.modify(() => project.grouping.ungroup(unit))),
+        MenuItem.default({label: "Ungroup (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(), hidden: !unit.isGroup.getValue()})
+            .setTriggerProcedure(() => {
+                if (!project.trackSelection.has(unit)) {project.trackSelection.set([unit])}
+                ungroupSelectedTracks(project)
+            }),
         MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
             .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,
                 project.trackSelection.has(unit) ? project.trackSelection.selected : [unit])))

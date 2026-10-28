@@ -63,7 +63,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `e774216a-88b8-4017-b789-53273ab957e1` (2026-10-28 review follow-up).
+- Current refactored build: `0f712c2e-a396-49db-bb38-c93e7993c209` (2026-10-28 ungroup shortcut).
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -213,3 +213,23 @@ preserved the subgroup and routes. Inactive rails compute grayscale(1) with a de
 strip still has its top/name indicator. No console errors. Completed native gestures and source geometry
 regressions are separate evidence; no live pointer-hold capture is claimed. Screenshot:
 `/tmp/pr-496-review-demo.png` (verification artifact, not shipped).
+
+## Configurable ungroup shortcut (2026-10-28)
+
+Shift+Cmd+G on macOS / Shift+Ctrl+G elsewhere invokes Ungroup (Keep Tracks). Its `ungroup-tracks`
+action is in the existing Global shortcut definitions, so Preferences > Shortcuts > Global provides
+editing, Apply, reset and JSON import/export alongside Group selected tracks. The track menu displays
+the configured binding and uses the same action. Existing saved shortcut maps retain their choices and
+receive the new default when the action is absent.
+
+The command ungroups selected groups (deepest first for selected nested groups), preserves their tracks,
+and selects the promoted children. With an empty explicit selection it uses the edited group. Ordinary
+tracks are ignored. Group changes and promoted-track editing focus share one undo transaction.
+
+Validation: Studio type check and production preview build pass. 25 focused Studio tests cover the new
+command, nested multi-group undo/redo, edited-group fallback, saved custom shortcut round trips, and
+neighboring instrument/drag behavior. Hosted Shift+Cmd+G removes a selected subgroup and one Undo restores
+it; Preferences shows the default binding, and its edit dialog captures an alternative without conflict.
+The trial alternative was canceled, leaving the default unchanged. Saved the restored verification project.
+Comparison build: `0f712c2e-a396-49db-bb38-c93e7993c209`; CloudFront invalidation
+`I1IPWK7JEMGZHY0DNJWGCXUZ1M` completed. Original comparison demo remains unchanged.
