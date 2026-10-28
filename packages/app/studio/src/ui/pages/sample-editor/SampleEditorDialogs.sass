@@ -13,7 +13,7 @@ component
 
       > div.sample
         display: grid
-        grid-template-columns: 1fr auto 4em
+        grid-template-columns: 1fr 4em
         column-gap: 1em
         padding: 0.125em 0.5em
         border-radius: 2px
@@ -24,9 +24,6 @@ component
           white-space: nowrap
           overflow: hidden
           text-overflow: ellipsis
-
-        > span.origin
-          opacity: 0.5
 
         > span.duration
           text-align: right
@@ -49,3 +46,11 @@ component
 
     > span.unit
       opacity: 0.6
+
+  &.name
+    padding: 1em 0
+    display: grid
+    grid-template-columns: auto 1fr
+    align-items: center
+    column-gap: 1em
+    min-width: 20em

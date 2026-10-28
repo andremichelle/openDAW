@@ -6,12 +6,18 @@ import {Promises} from "@opendaw/lib-runtime"
 import {SampleEffect} from "@opendaw/lib-dsp"
 import {Sample} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
+import {Dialog} from "@/ui/components/Dialog"
+import {Surface} from "@/ui/surface/Surface"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {SearchInput} from "@/ui/components/SearchInput"
+import {TextInput} from "@/ui/components/TextInput"
 import {AudioFormatSelector} from "@/ui/components/AudioFormatSelector"
 import {AudioFormats} from "@/audio/AudioFormats"
 
 const className = Html.adoptStyleSheet(css, "SampleEditorDialogs")
+
+const OpenRequest = Symbol("open")
 
 const ExportExtensions: ReadonlySet<string> = new Set(["wav", "flac"])
 
@@ -25,24 +31,30 @@ export namespace SampleEditorDialogs {
         const filter = new DefaultObservableValue("")
         const selected = new DefaultObservableValue<Option<Sample>>(Option.None)
         const list: HTMLElement = <div className="samples"/>
-        const sorted = samples.toSorted((a, b) => a.name.localeCompare(b.name))
+        const opening = new AbortController()
+        const rows = samples.toSorted((a, b) => a.name.localeCompare(b.name)).map(sample => {
+            const row: HTMLElement = (
+                <div className="sample"
+                     onclick={() => selected.setValue(Option.wrap(sample))}
+                     ondblclick={() => {
+                         selected.setValue(Option.wrap(sample))
+                         opening.abort(OpenRequest)
+                     }}>
+                    <span>{sample.name}</span>
+                    <span className="duration">{`${sample.duration.toFixed(1)}s`}</span>
+                </div>
+            )
+            return {sample, row}
+        })
         const render = () => {
             const query = filter.getValue().trim().toLowerCase()
             Html.empty(list)
-            sorted.filter(({name}) => name.toLowerCase().includes(query)).forEach(sample => {
-                const row: HTMLElement = (
-                    <div className={Html.buildClassList("sample", selected.getValue().contains(sample) && "selected")}
-                         onclick={() => selected.setValue(Option.wrap(sample))}>
-                        <span>{sample.name}</span>
-                        <span className="origin">{sample.origin === "openDAW" ? "openDAW" : ""}</span>
-                        <span className="duration">{`${sample.duration.toFixed(1)}s`}</span>
-                    </div>
-                )
-                list.append(row)
-            })
+            rows.filter(({sample: {name}}) => name.toLowerCase().includes(query)).forEach(({row}) => list.append(row))
         }
-        lifecycle.ownAll(filter.subscribe(render), selected.subscribe(render))
-        render()
+        lifecycle.ownAll(
+            filter.catchupAndSubscribe(render),
+            selected.subscribe(owner => rows.forEach(({sample, row}) =>
+                row.classList.toggle("selected", owner.getValue().contains(sample)))))
         const {status, error} = await Promises.tryCatch(Dialogs.show({
             headline: "Open Sample",
             content: (
@@ -52,10 +64,11 @@ export namespace SampleEditorDialogs {
                 </div>
             ),
             okText: "Open",
-            buttons: [{text: "Cancel", primary: false, onClick: handler => handler.close()}]
+            buttons: [{text: "Cancel", primary: false, onClick: handler => handler.close()}],
+            abortSignal: opening.signal
         }))
         lifecycle.terminate()
-        if (status === "rejected") {return rejectAborted(error)}
+        if (status === "rejected" && error !== OpenRequest) {return rejectAborted(error)}
         const sample = selected.getValue()
         return sample.isEmpty() ? Promise.reject(Errors.AbortError) : sample.unwrap()
     }
@@ -85,6 +98,50 @@ export namespace SampleEditorDialogs {
         lifecycle.terminate()
         if (status === "rejected") {return rejectAborted(error)}
         return models.map(model => model.getValue())
+    }
+
+    export const askName = async (initial: string): Promise<string> => {
+        const lifecycle = new Terminator()
+        const {resolve, reject, promise} = Promise.withResolvers<string>()
+        promise.finally(() => lifecycle.terminate())
+        const name = new DefaultObservableValue(initial)
+        const input = <TextInput lifecycle={lifecycle} model={name} maxChars={64}/>
+        const approve = (): void => {
+            const trimmed = name.getValue().trim()
+            resolve(trimmed.length === 0 ? initial : trimmed)
+        }
+        const dialog: HTMLDialogElement = (
+            <Dialog headline="Save As New Sample"
+                    icon={IconSymbol.Waveform}
+                    cancelable={true}
+                    onCancel={() => reject(Errors.AbortError)}
+                    buttons={[{
+                        text: "Cancel",
+                        onClick: handler => handler.close()
+                    }, {
+                        text: "Save",
+                        primary: true,
+                        onClick: handler => {
+                            approve()
+                            handler.close()
+                        }
+                    }]}>
+                <div className={Html.buildClassList(className, "name")}>
+                    <div>Name:</div>
+                    {input}
+                </div>
+            </Dialog>
+        )
+        dialog.onkeydown = event => {
+            if (event.code !== "Enter") {return}
+            event.preventDefault()
+            approve()
+            dialog.close()
+        }
+        Surface.get().flyout.appendChild(dialog)
+        dialog.showModal()
+        input.focus()
+        return promise
     }
 
     export const chooseFormat = async (): Promise<AudioFormats.Format> => {

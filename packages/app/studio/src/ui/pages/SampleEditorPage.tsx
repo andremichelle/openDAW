@@ -13,7 +13,7 @@ import {
     Terminator
 } from "@opendaw/lib-std"
 import {AnimationFrame, Events, Html, Key, Keyboard, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
-import {createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioSplice, SampleEffect, SampleEffects} from "@opendaw/lib-dsp"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
@@ -24,8 +24,8 @@ import {Surface} from "@/ui/surface/Surface"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
+import {BackButton} from "@/ui/pages/BackButton"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {RadioGroup} from "@/ui/components/RadioGroup"
 import {SampleDocument} from "@/ui/pages/sample-editor/SampleDocument"
 import {SampleEdits} from "@/ui/pages/sample-editor/SampleEdits"
 import {SamplePainter} from "@/ui/pages/sample-editor/SamplePainter"
@@ -35,11 +35,15 @@ import {SampleViewport} from "@/ui/pages/sample-editor/SampleViewport"
 
 const className = Html.adoptStyleSheet(css, "SampleEditorPage")
 
+const OverviewEdgeWidth = 4
+const SelectionEdgeWidth = 4
 const ctrl = true
 const shift = true
 
 export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
     const editor = service.sampleEditor
+    service.runIfProject(project => {if (project.isRecording()) {project.stopRecording()}})
+    service.engine.stop()
     const player = lifecycle.own(new SamplePlayer(service.audioContext))
     const viewport = new SampleViewport()
     const loop = new DefaultObservableValue(false)
@@ -58,7 +62,6 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
     const current = (): Option<SampleDocument> => editor.document
     const nameLabel: HTMLElement = <span className="name"/>
     const infoLabel: HTMLElement = <span className="info"/>
-    const inputLabel: HTMLElement = <span>Default Input</span>
     const meterBar: HTMLElement = <div className="bar"/>
     const recordTime: HTMLElement = <span className="record-time"/>
     const statusSelection: HTMLElement = <span/>
@@ -84,7 +87,7 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
         empty.classList.toggle("hidden", document.nonEmpty())
         document.match({
             none: () => {
-                nameLabel.textContent = "Sample Editor"
+                nameLabel.textContent = ""
                 infoLabel.textContent = ""
                 statusSelection.textContent = ""
                 statusLength.textContent = ""
@@ -224,9 +227,14 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
             ...SampleEffects.Basics.map(effect => item(effect, false)),
             ...SampleEffects.Processors.map((effect, index) => item(effect, index === 0)))
     })
-    const inputMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
-        parent.addMenuItem(MenuItem.default({label: "Default Input", checked: inputDevice.getValue().isEmpty()})
-            .setTriggerProcedure(() => inputDevice.setValue(Option.None)))
+    const recordingMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        parent.addMenuItem(
+            MenuItem.default({label: "Mono", checked: channelCount.getValue() === 1})
+                .setTriggerProcedure(() => channelCount.setValue(1)),
+            MenuItem.default({label: "Stereo", checked: channelCount.getValue() === 2})
+                .setTriggerProcedure(() => channelCount.setValue(2)),
+            MenuItem.default({label: "Default Input", checked: inputDevice.getValue().isEmpty(), separatorBefore: true})
+                .setTriggerProcedure(() => inputDevice.setValue(Option.None)))
         AudioDevices.inputs.forEach(device => parent.addMenuItem(MenuItem.default({
             label: device.label,
             checked: inputDevice.getValue().mapOr(({deviceId}) => deviceId === device.deviceId, false)
@@ -256,8 +264,6 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
             action()
         }),
         editor.clipboard.subscribe(refresh),
-        inputDevice.catchupAndSubscribe(owner =>
-            inputLabel.textContent = owner.getValue().mapOr(({label}) => label, "Default Input")),
         viewport.subscribe(() => {
             repaint()
             refresh()
@@ -315,16 +321,30 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
         })
     )
     const installSelection = (element: HTMLElement): void => {
+        const xOf = (clientX: number): number => clientX - element.getBoundingClientRect().left
+        const edgeAt = (document: SampleDocument, clientX: number): Option<int> => {
+            if (!document.hasSelection) {return Option.None}
+            const {from, to} = document.selection.getValue()
+            const x = xOf(clientX)
+            if (Math.abs(x - viewport.xOf(from)) <= SelectionEdgeWidth) {return Option.wrap(to)}
+            if (Math.abs(x - viewport.xOf(to)) <= SelectionEdgeWidth) {return Option.wrap(from)}
+            return Option.None
+        }
         lifecycle.ownAll(
+            Events.subscribe(element, "pointermove", (event: PointerEvent) => {
+                if (event.buttons !== 0) {return}
+                element.classList.toggle("edge", current().mapOr(document => edgeAt(document, event.clientX).nonEmpty(), false))
+            }),
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
                 if (event.button !== 0) {return}
                 current().ifSome(document => {
                     stop()
-                    const frameOf = (clientX: number) =>
-                        viewport.frameAt(clientX - element.getBoundingClientRect().left)
+                    const frameOf = (clientX: number) => viewport.frameAt(xOf(clientX))
                     const {from, to} = document.selection.getValue()
                     const pointer = frameOf(event.clientX)
-                    const anchor = event.shiftKey ? (Math.abs(pointer - from) < Math.abs(pointer - to) ? to : from) : pointer
+                    const anchor = edgeAt(document, event.clientX).unwrapOrElse(() => event.shiftKey
+                        ? (Math.abs(pointer - from) < Math.abs(pointer - to) ? to : from)
+                        : pointer)
                     document.select(anchor, pointer)
                     element.setPointerCapture(event.pointerId)
                     const moving = new Terminator()
@@ -338,84 +358,108 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
             Events.subscribe(element, "dblclick", () => current().ifSome(document => document.selectAll())),
             Events.subscribe(element, "wheel", (event: WheelEvent) => {
                 event.preventDefault()
-                if (event.ctrlKey || event.metaKey) {
-                    viewport.zoom(Math.exp(event.deltaY * 0.01), event.clientX - element.getBoundingClientRect().left)
+                if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+                    viewport.scrollBy(event.deltaX)
                 } else {
-                    viewport.scrollBy(Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY)
+                    viewport.zoom(Math.exp(event.deltaY * 0.01), event.clientX - element.getBoundingClientRect().left)
                 }
             }, {passive: false})
         )
     }
     const installOverview = (element: HTMLElement): void => {
-        const center = (clientX: number) => {
+        const frameAt = (clientX: number): number => {
             const {left, width} = element.getBoundingClientRect()
-            const frame = (clientX - left) / width * viewport.numberOfFrames
-            viewport.scrollTo(frame - (viewport.end - viewport.start) * 0.5)
+            return (clientX - left) / width * viewport.numberOfFrames
         }
-        lifecycle.own(Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0 || viewport.numberOfFrames === 0) {return}
-            center(event.clientX)
-            element.setPointerCapture(event.pointerId)
-            const moving = new Terminator()
-            moving.ownAll(
-                Events.subscribe(element, "pointermove", (move: PointerEvent) => center(move.clientX)),
-                Events.subscribe(element, "pointerup", () => moving.terminate()),
-                Events.subscribe(element, "lostpointercapture", () => moving.terminate()))
-        }))
+        const edgeAt = (clientX: number): Option<"start" | "end"> => {
+            if (viewport.numberOfFrames === 0) {return Option.None}
+            const {left, width} = element.getBoundingClientRect()
+            const xOf = (frame: number) => left + frame / viewport.numberOfFrames * width
+            if (Math.abs(clientX - xOf(viewport.start)) <= OverviewEdgeWidth) {return Option.wrap("start")}
+            if (Math.abs(clientX - xOf(viewport.end)) <= OverviewEdgeWidth) {return Option.wrap("end")}
+            return Option.None
+        }
+        lifecycle.ownAll(
+            Events.subscribe(element, "pointermove", (event: PointerEvent) => {
+                if (event.buttons === 0) {element.classList.toggle("edge", edgeAt(event.clientX).nonEmpty())}
+            }),
+            Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+                if (event.button !== 0 || viewport.numberOfFrames === 0) {return}
+                const edge = edgeAt(event.clientX)
+                const length = viewport.end - viewport.start
+                const pointer = frameAt(event.clientX)
+                const inside = pointer >= viewport.start && pointer <= viewport.end
+                if (edge.isEmpty() && !inside) {viewport.scrollTo(pointer - length * 0.5)}
+                const offset = pointer - viewport.start
+                const drag = (clientX: number): void => {
+                    const frame = frameAt(clientX)
+                    edge.match({
+                        none: () => viewport.scrollTo(frame - offset),
+                        some: side => side === "start"
+                            ? viewport.zoomTo(Math.min(frame, viewport.end - 1), viewport.end)
+                            : viewport.zoomTo(viewport.start, Math.max(frame, viewport.start + 1))
+                    })
+                }
+                element.setPointerCapture(event.pointerId)
+                const moving = new Terminator()
+                moving.ownAll(
+                    Events.subscribe(element, "pointermove", (move: PointerEvent) => drag(move.clientX)),
+                    Events.subscribe(element, "pointerup", () => moving.terminate()),
+                    Events.subscribe(element, "lostpointercapture", () => moving.terminate()))
+            }))
     }
     return (
         <div className={className}>
             <header>
-                <Button lifecycle={lifecycle}
-                        onClick={() => RouteLocation.get().navigateTo(service.hasProfile ? "/create" : "/")}
-                        appearance={{tooltip: "Exit editor"}}>
-                    <span>Exit</span> <Icon symbol={IconSymbol.Exit}/>
-                </Button>
-                <MenuButton root={fileMenu} appearance={{tinyTriangle: true, color: Colors.dark}}>
-                    <span>File</span>
-                </MenuButton>
-                <Button lifecycle={lifecycle} onClick={undo} disabled={cannotUndo} appearance={{tooltip: "Undo"}}>
-                    <Icon symbol={IconSymbol.Undo}/>
-                </Button>
-                <Button lifecycle={lifecycle} onClick={redo} disabled={cannotRedo} appearance={{tooltip: "Redo"}}>
-                    <Icon symbol={IconSymbol.Redo}/>
-                </Button>
-                {nameLabel}
-                {infoLabel}
-            </header>
-            <div className="toolbar">
+                <div className="group menus">
+                    <MenuButton root={fileMenu} appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
+                        <h5>File</h5>
+                    </MenuButton>
+                    <MenuButton root={effectsMenu} appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
+                        <h5>Effects</h5>
+                    </MenuButton>
+                    <MenuButton root={recordingMenu} appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
+                        <h5>Recording</h5>
+                    </MenuButton>
+                </div>
+                <hr/>
+                <div className="group">
+                    <Button lifecycle={lifecycle} onClick={undo} disabled={cannotUndo} appearance={{tooltip: "Undo"}}>
+                        <Icon symbol={IconSymbol.Undo}/>
+                    </Button>
+                    <Button lifecycle={lifecycle} onClick={redo} disabled={cannotRedo} appearance={{tooltip: "Redo"}}>
+                        <Icon symbol={IconSymbol.Redo}/>
+                    </Button>
+                </div>
+                <hr/>
                 <div className="group">
                     <Button lifecycle={lifecycle} onClick={toggleRecording}
                             onInit={element => lifecycle.own(isRecording.catchupAndSubscribe(owner =>
-                                element.classList.toggle("recording", owner.getValue())))}
-                            appearance={{tooltip: "Record (R)"}}>
+                                element.classList.toggle("active", owner.getValue())))}
+                            appearance={{color: Colors.shadow, activeColor: Colors.red, tooltip: "Record (R)"}}>
                         <Icon symbol={IconSymbol.Record}/>
                     </Button>
-                    <MenuButton root={inputMenu} appearance={{tinyTriangle: true, color: Colors.dark}}>
-                        {inputLabel}
-                    </MenuButton>
-                    <RadioGroup lifecycle={lifecycle} model={channelCount} appearance={{framed: true}}
-                                elements={[
-                                    {value: 1, element: <span>Mono</span>},
-                                    {value: 2, element: <span>Stereo</span>}
-                                ]}/>
-                    <div className="meter">{meterBar}</div>
-                    {recordTime}
-                </div>
-                <div className="group">
                     <Button lifecycle={lifecycle} onClick={play} disabled={noDocument}
                             onInit={element => lifecycle.own(player.isPlaying.catchupAndSubscribe(owner =>
                                 element.classList.toggle("active", owner.getValue())))}
-                            appearance={{tooltip: "Play (Space)"}}>
+                            appearance={{color: Colors.shadow, activeColor: Colors.green, tooltip: "Play (Space)"}}>
                         <Icon symbol={IconSymbol.Play}/>
                     </Button>
-                    <Button lifecycle={lifecycle} onClick={stop} disabled={noDocument} appearance={{tooltip: "Stop"}}>
+                    <Button lifecycle={lifecycle} onClick={stop} disabled={noDocument}
+                            appearance={{color: Colors.shadow, tooltip: "Stop"}}>
                         <Icon symbol={IconSymbol.Stop}/>
                     </Button>
-                    <Checkbox lifecycle={lifecycle} model={loop} appearance={{tooltip: "Loop selection"}}>
+                    <Checkbox lifecycle={lifecycle} model={loop}
+                              appearance={{color: Colors.shadow, activeColor: Colors.blue, tooltip: "Loop selection"}}>
                         <Icon symbol={IconSymbol.Loop}/>
                     </Checkbox>
                 </div>
+                <hr/>
+                <div className="group">
+                    <div className="meter">{meterBar}</div>
+                    {recordTime}
+                </div>
+                <hr/>
                 <div className="group">
                     <Button lifecycle={lifecycle} onClick={cut} disabled={noSelection} appearance={{tooltip: "Cut"}}>
                         <Icon symbol={IconSymbol.Scissors}/>
@@ -438,12 +482,8 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                         <span>Silence</span>
                     </Button>
                 </div>
+                <hr/>
                 <div className="group">
-                    <MenuButton root={effectsMenu} appearance={{tinyTriangle: true, color: Colors.dark}}>
-                        <span>Effects</span>
-                    </MenuButton>
-                </div>
-                <div className="group zoom">
                     <Button lifecycle={lifecycle} onClick={() => viewport.zoom(2.0)} disabled={noDocument}
                             appearance={{tooltip: "Zoom out"}}>
                         <span>−</span>
@@ -461,7 +501,12 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                         <Icon symbol={IconSymbol.ZoomFit}/>
                     </Button>
                 </div>
-            </div>
+                <hr/>
+                {nameLabel}
+                {infoLabel}
+                <div className="spacer"/>
+                <div className="back"><BackButton lifecycle={lifecycle} service={service}/></div>
+            </header>
             <div className="overview" onInit={installOverview}>{overviewCanvas}</div>
             <div className="editor">
                 <div className="ruler">{rulerCanvas}</div>

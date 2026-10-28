@@ -107,7 +107,7 @@ interface SampleEffect {
 ## Storage
 
 1. Open: a sample picker (stock and local samples) or import an audio file (decoded in the editor, not stored). The bare route shows an empty editor.
-2. Save As New Sample: new uuid through `SampleService.importFile`, name suffix " (edited)", bpm kept.
+2. Save As New Sample: asks for a name (suggested with the suffix " (edited)"), new uuid through `SampleService.importFile`, bpm kept.
 3. Save (overwrite): local samples only, confirm dialog naming that projects using it change, same uuid, then the sample loader is invalidated and the open project's file duration updated.
 4. Export: WAV/FLAC through the shared `AudioFormatSelector`.
 5. The document lives in `SampleEditorService`, so leaving the route keeps it. Replacing it (open, new, import) asks to discard unsaved changes, closing the tab warns.

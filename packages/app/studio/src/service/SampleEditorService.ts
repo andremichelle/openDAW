@@ -88,7 +88,8 @@ export class SampleEditorService {
 
     async openPicker(): Promise<void> {
         const {status, value: sample} = await Promises.tryCatch(
-            SampleEditorDialogs.pickSample(await this.#service.sampleService.list()))
+            SampleEditorDialogs.pickSample((await this.#service.sampleService.list())
+                .filter(({origin}) => origin !== "openDAW")))
         if (status === "rejected") {return}
         return this.openSample(sample)
     }
@@ -126,7 +127,9 @@ export class SampleEditorService {
         if (document.audio.numberOfFrames === 0) {
             return RuntimeNotifier.info({headline: "Empty Sample", message: "There is no audio to save."})
         }
-        const name = document.source.isEmpty() ? document.name : `${document.name} (edited)`
+        const suggested = document.source.isEmpty() ? document.name : `${document.name} (edited)`
+        const {status, value: name} = await Promises.tryCatch(SampleEditorDialogs.askName(suggested))
+        if (status === "rejected") {return}
         const bpm = document.source.mapOr(({meta}) => meta.bpm, 0)
         const source = await this.#store(document, UUID.generate(), name, bpm)
         if (source.isEmpty()) {return}

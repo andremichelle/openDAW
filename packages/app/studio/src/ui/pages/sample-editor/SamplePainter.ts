@@ -34,7 +34,9 @@ export namespace SamplePainter {
         context.clearRect(0, 0, pixelWidth, pixelHeight)
         const {numberOfChannels, numberOfFrames, frames} = audio
         if (numberOfFrames === 0) {return}
-        const xOf = (frame: number) => Math.round(viewport.xOf(frame) * devicePixelRatio)
+        const framesPerPixel = viewport.framesPerPixel / devicePixelRatio
+        const start = framesPerPixel >= 1.0 ? Math.round(viewport.start / framesPerPixel) * framesPerPixel : viewport.start
+        const xOf = (frame: number) => Math.round((frame - start) / framesPerPixel)
         if (selection.to > selection.from) {
             const x0 = Math.max(0, xOf(selection.from))
             const x1 = Math.min(pixelWidth, xOf(selection.to))
@@ -44,7 +46,6 @@ export namespace SamplePainter {
             context.globalAlpha = 1.0
         }
         const laneHeight = pixelHeight / numberOfChannels
-        const framesPerPixel = viewport.framesPerPixel / devicePixelRatio
         const usePeaks = framesPerPixel >= PeaksThreshold
             && peaks.mapOr(({numFrames, numChannels}) =>
                 numFrames === numberOfFrames && numChannels === numberOfChannels, false)
@@ -59,10 +60,10 @@ export namespace SamplePainter {
             context.strokeStyle = Colors.blue.toString()
             if (usePeaks) {
                 PeaksPainter.renderPixelStrips(context, peaks.unwrap(), channel, {
-                    u0: viewport.start, u1: viewport.end, x0: 0, x1: pixelWidth, y0, y1, v0: 1.0, v1: -1.0
+                    u0: start, u1: start + pixelWidth * framesPerPixel, x0: 0, x1: pixelWidth, y0, y1, v0: 1.0, v1: -1.0
                 })
             } else {
-                paintFrames(context, frames[channel], viewport.start, framesPerPixel, pixelWidth, y0, y1)
+                paintFrames(context, frames[channel], start, framesPerPixel, pixelWidth, y0, y1)
             }
         }
         if (selection.to === selection.from) {
@@ -117,12 +118,15 @@ export namespace SamplePainter {
         })
         const x0 = Math.floor(viewport.start / numberOfFrames * pixelWidth)
         const x1 = Math.ceil(Math.min(viewport.end, numberOfFrames) / numberOfFrames * pixelWidth)
+        const radius = 3 * devicePixelRatio
+        context.beginPath()
+        context.roundRect(x0 + 0.5, 0.5, Math.max(2, x1 - x0) - 1, pixelHeight - 1, radius)
         context.fillStyle = Colors.blue.toString()
         context.globalAlpha = 0.2
-        context.fillRect(x0, 0, Math.max(2, x1 - x0), pixelHeight)
+        context.fill()
         context.globalAlpha = 1.0
         context.strokeStyle = Colors.blue.toString()
-        context.strokeRect(x0 + 0.5, 0.5, Math.max(2, x1 - x0) - 1, pixelHeight - 1)
+        context.stroke()
     }
 
     const paintFrames = (context: CanvasRenderingContext2D, channel: Float32Array, start: number,

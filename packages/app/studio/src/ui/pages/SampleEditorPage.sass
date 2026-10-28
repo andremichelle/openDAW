@@ -9,53 +9,62 @@ component
   color: var(--color-dark)
   @include colors.panel-background
 
+  hr
+    min-width: 1px
+    height: 50%
+    border: none
+    outline: none
+    background-color: rgba(white, 0.06)
+
+  // borrowed from Header.sass
   > header
-    height: 30px
-    padding: 1em
+    height: 2.5em
+    padding: 0.25em 1.25em
+    column-gap: 1.5em
     display: flex
-    align-items: center
-    column-gap: 1em
-    background-color: black
-    font-size: 11px
-    margin-bottom: 1px
-    border-top: 1px solid rgba(white, 0.1)
+    place-items: center
+    background-color: var(--color-header-background)
+
+    h5
+      font-size: 0.75rem
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      position: relative
 
     > span.name
-      margin-left: auto
+      font-size: 0.75rem
       color: var(--color-gray)
       white-space: nowrap
       overflow: hidden
       text-overflow: ellipsis
 
     > span.info
+      font-size: 0.75rem
       color: var(--color-shadow)
       white-space: nowrap
 
-  > div.toolbar
-    padding: 0.5em 1em
-    display: flex
-    align-items: center
-    column-gap: 1.5em
-    font-size: 11px
-    border-bottom: 1px solid rgba(black, 0.5)
+    > div.spacer
+      flex: 1
+
+    > div.back
+      display: flex
+      align-items: center
+
+      a
+        margin: 0
+
+    > div.group span
+      font-size: 0.75rem
 
     > div.group
+      height: 100%
       display: flex
       align-items: center
       column-gap: 0.5em
 
-      &.zoom
-        margin-left: auto
-
-      > [data-class="button"].recording
-        --color: var(--color-red)
-
-      > [data-class="radio-group"]
-        display: flex
-        column-gap: 0.25em
-
-        > label
-          padding: 0 0.5em
+      &.menus
+        column-gap: 1.5em
 
       > div.meter
         width: 6em
@@ -79,7 +88,9 @@ component
     margin: 0.5em 1em
     border-radius: 2px
     background-color: rgba(black, 0.25)
-    cursor: pointer
+
+    &.edge
+      cursor: ew-resize
 
     > canvas
       width: 100%
@@ -109,6 +120,9 @@ component
       background-color: rgba(black, 0.25)
       cursor: text
 
+      &.edge
+        cursor: ew-resize
+
       > div.lanes
         position: absolute
         inset: 0
@@ -128,7 +142,7 @@ component
 
         > p
           margin: 0
-          color: var(--color-shadow)
+          color: rgba(white, 0.3)
 
   > footer
     height: 2em
