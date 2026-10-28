@@ -136,3 +136,22 @@ send exclusion, feedback rejection, transfers and old-preview-file decoding are 
 This supersedes the earlier independent custom-output/folder behavior. See `track-groups.md`.
 Hosted output-menu checks and a saved/reopened copy confirm that both views follow the same routing
 hierarchy. The old preview project opened correctly; its original library entry was left unchanged.
+
+## Upstream rebase (2026-10-28)
+
+Rebased all 31 grouping commits onto official `main` at
+`dde73478661dba89fd974b97e16fead359920d1d`. The pre-rebase source is
+`cc0564033f2e3fd5ca8c04a92c70e0da21480ab7`, retained locally as
+`codex/track-groups-before-rebase-2026-10-28`; earlier rollback tags are unchanged.
+
+Conflict resolutions preserve upstream WebCLAP parameter editing, mute/solo/create-track shortcuts
+and community-script dragging alongside multi-track grouping and duplication. Group headers continue
+to accept audio effects only. Instrument browser creation retains upstream automatic note regions and
+selection-aware insertion; an integration regression checks group routing, the new region and one-step undo.
+
+The production Studio/dependency build regenerates matching box/WASM registries and passes all 25 tasks.
+Core (876 tests / 86 files), adapters (360 / 31) and the two real-WASM grouping/audio checks pass.
+The existing comparison deployments are left unchanged by this source-only rebase.
+Studio passes 228 tests in 37 files with two workers. Its first run, concurrent with the other suites,
+hit the existing five-second automation-snap test timeout; the full isolated rerun passes with unchanged
+assertions/timeouts. `git diff --check` also passes.
