@@ -9,7 +9,7 @@ import {StudioService} from "@/service/StudioService"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
@@ -23,6 +23,7 @@ import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {Checkbox} from "@/ui/components/Checkbox"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -64,6 +65,20 @@ export const Header = ({lifecycle, service}: Construct) => {
     const manuals: HTMLAnchorElement = (
         <a className="manuals" href="/manuals/" target="manuals" title="Manuals"><Icon symbol={IconSymbol.Help}/></a>
     )
+    const spotlight: HTMLElement = (
+        <Checkbox lifecycle={lifecycle}
+                  model={service.spotlight.isOpen}
+                  onInit={element => lifecycle.own(
+                      Events.subscribe(element, "mousedown", event => event.preventDefault()))}
+                  appearance={{
+                      color: Colors.gray,
+                      activeColor: Colors.orange,
+                      cursor: "pointer",
+                      tooltip: ShortcutTooltip.create("Spotlight", GlobalShortcuts["open-spotlight"].shortcut)
+                  }}>
+            <Icon symbol={IconSymbol.Search}/>
+        </Checkbox>
+    )
     TourAnchors.register(lifecycle, manuals, "manuals")
     TourAnchors.register(lifecycle, transport, "transport")
     TourAnchors.register(lifecycle, timecodes, "timecodes")
@@ -74,7 +89,11 @@ export const Header = ({lifecycle, service}: Construct) => {
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
                 <h5>openDAW</h5>
             </MenuButton>
-            {manuals}
+            <hr/>
+            <div style={{display: "flex", alignItems: "center", columnGap: "4px"}}>
+                {manuals}
+                {spotlight}
+            </div>
             <hr/>
             <Group onInit={element => StudioPreferences.catchupAndSubscribe(enabled =>
                 element.classList.toggle("hidden", !enabled), "visibility", "enable-history-buttons")}>

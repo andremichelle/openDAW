@@ -1,5 +1,14 @@
 import css from "./Spotlight.sass?inline"
-import {DefaultObservableValue, int, MutableObservableOption, Option, Point, Terminable, Terminator} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    int,
+    MutableObservableOption,
+    MutableObservableValue,
+    Option,
+    Point,
+    Terminable,
+    Terminator
+} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -24,18 +33,26 @@ const MAX_RESULTS = 100
 
 export class Spotlight {
     readonly #service: StudioService
+    readonly #isOpen: DefaultObservableValue<boolean>
 
     #position: Option<Point> = Option.None
     #session: Option<Terminator> = Option.None
 
-    constructor(service: StudioService) {this.#service = service}
-
-    toggle(): void {
-        this.#session.match({
-            some: session => session.terminate(),
-            none: () => this.#open()
+    constructor(service: StudioService) {
+        this.#service = service
+        this.#isOpen = new DefaultObservableValue<boolean>(false)
+        this.#isOpen.subscribe(owner => {
+            if (owner.getValue()) {
+                if (this.#session.isEmpty()) {this.#open()}
+            } else {
+                this.#session.ifSome(session => session.terminate())
+            }
         })
     }
+
+    get isOpen(): MutableObservableValue<boolean> {return this.#isOpen}
+
+    toggle(): void {this.#isOpen.setValue(!this.#isOpen.getValue())}
 
     #open(): void {
         const service = this.#service
@@ -287,6 +304,7 @@ export class Spotlight {
             {
                 terminate: () => {
                     this.#session = Option.None
+                    this.#isOpen.setValue(false)
                     element.remove()
                 }
             }
