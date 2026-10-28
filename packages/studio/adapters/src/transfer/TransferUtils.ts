@@ -1,4 +1,3 @@
-import {ppqn} from "@opendaw/lib-dsp"
 import {
     Arrays,
     asInstanceOf,
@@ -14,14 +13,15 @@ import {
     SortedSet,
     UUID
 } from "@opendaw/lib-std"
+import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, ModulationBox, RootBox, TrackBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
-import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {ProjectSkeleton} from "../project/ProjectSkeleton"
-import {AnyRegionBox, UnionBoxTypes} from "../unions"
 import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {ProjectSkeleton} from "../project/ProjectSkeleton"
+import {AnyRegionBox, UnionBoxTypes} from "../unions"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -174,7 +174,7 @@ export namespace TransferUtils {
                 Number(left.type.getValue() === "output") - Number(right.type.getValue() === "output"))
             const maxOrder = targets.reduce((max, box) =>
                 Math.max(max, AudioUnitOrdering[box.type.getValue()] ?? 0), 0)
-            let position = stable.findIndex(box => !isDefined(AudioUnitGroups.parent(box))
+            let position = stable.findIndex(box => !isDefined(AudioUnitGroups.parent(box).unwrapOrUndefined())
                 && !box.isGroup.getValue() && (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
             if (position === -1) {position = stable.length}
             ordered = [...stable.slice(0, position), ...targets, ...stable.slice(position)]

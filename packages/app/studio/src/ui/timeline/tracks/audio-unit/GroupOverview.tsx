@@ -1,12 +1,12 @@
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, AudioUnitGroups, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {CanvasPainter, TimeGrid} from "@opendaw/studio-core"
-import {StudioService} from "@/service/StudioService"
-import {RegionLaneClassName} from "./TrackStyles"
-import {affectsGroupOverview} from "./GroupOverviewUpdates"
 import {groupOverviewLayout} from "./GroupOverviewLayout"
+import {subscribeGroupOverview} from "./GroupOverviewUpdates"
+import {RegionLaneClassName} from "./TrackStyles"
+import {StudioService} from "@/service/StudioService"
 
 type Construct = {lifecycle: Lifecycle, service: StudioService, unit: AudioUnitBox}
 
@@ -39,9 +39,7 @@ export const GroupOverview = ({lifecycle, service, unit}: Construct): HTMLElemen
     }))
     lifecycle.ownAll(
         range.subscribe(painter.requestUpdate),
-        project.boxGraph.subscribeToAllUpdates({onUpdate: update => {
-            if (unit.groupCollapsed.getValue() && affectsGroupOverview(project.boxGraph, update)) {painter.requestUpdate()}
-        }}),
+        subscribeGroupOverview(project, unit, painter.requestUpdate),
         unit.groupCollapsed.subscribe(painter.requestUpdate),
         project.timelineBoxAdapter.signatureTrack.subscribe(painter.requestUpdate)
     )

@@ -1,6 +1,6 @@
 import {DefaultObservableValue, isDefined, Optional, Terminator} from "@opendaw/lib-std"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {Devices} from "@opendaw/studio-adapters"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import type {Project} from "./Project"
 
@@ -9,13 +9,21 @@ export class AudioUnitSelection {
     readonly value: DefaultObservableValue<ReadonlyArray<AudioUnitBox>>
     readonly #subscriptions: Terminator
     #anchor: Optional<AudioUnitBox>
-    #hasExplicitSelection = false
     constructor(readonly project: Project) {
         this.value = new DefaultObservableValue<ReadonlyArray<AudioUnitBox>>([])
         this.#subscriptions = new Terminator()
+        this.#anchor = undefined
     }
-    get hasExplicitSelection(): boolean {return this.#hasExplicitSelection}
+    get hasExplicitSelection(): boolean {return this.selected.length > 0}
     get selected(): ReadonlyArray<AudioUnitBox> {return this.value.getValue().filter(unit => unit.isAttached())}
+    get commandTargets(): ReadonlyArray<AudioUnitBox> {
+        const selected = this.selected
+        if (selected.length > 0) {return selected}
+        return this.project.userEditingManager.audioUnit.get().mapOr(vertex => {
+            const unit = this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box
+            return unit.isAttached() && unit.type.getValue() !== AudioUnitType.Output ? [unit] : []
+        }, [])
+    }
     has(unit: AudioUnitBox): boolean {return this.selected.includes(unit)}
     isHighlighted(unit: AudioUnitBox): boolean {
         const selected = this.selected
@@ -24,10 +32,10 @@ export class AudioUnitSelection {
             this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box === unit, false)
     }
     set(units: ReadonlyArray<AudioUnitBox>): void {
-        this.#hasExplicitSelection = true
         this.#subscriptions.terminate()
         const next = [...new Set(units)].filter(unit => unit.isAttached() && unit.type.getValue() !== AudioUnitType.Output)
         next.forEach(unit => this.#subscriptions.own(unit.subscribeDeletion(() => this.set(this.selected.filter(item => item !== unit)))))
+        if (isDefined(this.#anchor) && !next.includes(this.#anchor)) {this.#anchor = undefined}
         this.value.setValue(next)
     }
     click(unit: AudioUnitBox, {shiftKey, metaKey, ctrlKey}: {shiftKey: boolean, metaKey: boolean, ctrlKey: boolean}): void {
@@ -39,7 +47,7 @@ export class AudioUnitSelection {
             this.set(metaKey || ctrlKey ? [...this.selected, ...range] : range)
         } else if (metaKey || ctrlKey) {
             this.set(this.has(unit) ? this.selected.filter(item => item !== unit) : [...this.selected, unit])
-            this.#anchor = unit
+            this.#anchor = this.has(unit) ? unit : undefined
         } else {
             this.set([unit])
             this.#anchor = unit

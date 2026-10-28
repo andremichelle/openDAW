@@ -1,14 +1,15 @@
-import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {asInstanceOf, assert, int, isDefined, UUID} from "@opendaw/lib-std"
 import {Box, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
+import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "./TransferUtils"
 
 export namespace TransferAudioUnits {
     export type TransferOptions = {
         insertIndex?: int,
+        includeGroupDescendants?: boolean,
         /** Same-project duplication only: initialize external output references to the originals. */
         preserveExternalConnections?: boolean,
         deleteSource?: boolean,
@@ -24,7 +25,7 @@ export namespace TransferAudioUnits {
         const sourceRoot = audioUnitBoxes[0]?.collection.targetVertex.unwrapOrNull()?.box
         const sources = sourceRoot instanceof RootBox ? [...new Set(audioUnitBoxes
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
-            .flatMap(box => AudioUnitGroups.subtree(sourceRoot, box)))] : []
+            .flatMap(box => options.includeGroupDescendants ? AudioUnitGroups.subtree(sourceRoot, box) : [box]))] : []
         if (sources.length === 0) {return []}
         const excludeBox = (box: Box): boolean =>
             TransferUtils.shouldExclude(box)

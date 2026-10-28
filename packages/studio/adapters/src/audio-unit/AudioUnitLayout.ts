@@ -1,4 +1,4 @@
-import {isDefined, Optional, Option} from "@opendaw/lib-std"
+import {asDefined, Optional, Option} from "@opendaw/lib-std"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "./AudioUnitGroups"
 
@@ -9,22 +9,12 @@ export class AudioUnitLayout {
     readonly boundaries: ReadonlyArray<AudioUnitLayout.Boundary>
     readonly #byUnit: ReadonlyMap<AudioUnitBox, AudioUnitLayout.Row>
     constructor(root: RootBox) {
-        const units = AudioUnitGroups.all(root)
-        const members = new Set(units)
-        const children = new Map<Optional<AudioUnitBox>, AudioUnitBox[]>()
-        units.forEach(unit => {
-            const candidate = AudioUnitGroups.parent(unit)
-            const parent = isDefined(candidate) && members.has(candidate) ? candidate : undefined
-            const siblings = children.get(parent) ?? []
-            if (!children.has(parent)) {children.set(parent, siblings)}
-            siblings.push(unit)
-        })
-        children.forEach(siblings => siblings.sort(AudioUnitGroups.compareCategories))
-        const rows: AudioUnitLayout.Row[] = [], visible: AudioUnitLayout.Row[] = []
+        const rows: AudioUnitLayout.Row[] = []
+        const visible: AudioUnitLayout.Row[] = []
         const boundaries: AudioUnitLayout.Boundary[] = []
         const byUnit = new Map<AudioUnitBox, AudioUnitLayout.Row>()
-        const visit = (unit: AudioUnitBox, ancestors: ReadonlyArray<AudioUnitBox>, hidden: boolean): void => {
-            if (byUnit.has(unit)) {return}
+        AudioUnitGroups.visit(root, (unit, ancestors) => {
+            const hidden = ancestors.some(ancestor => byUnit.get(ancestor)?.collapsed)
             const depth = ancestors.length
             const row: AudioUnitLayout.Row = {
                 unit, parent: ancestors.at(-1), ancestors, depth, indent: depth * AudioUnitLayout.Indent,
@@ -34,17 +24,18 @@ export class AudioUnitLayout {
             rows.push(row)
             byUnit.set(unit, row)
             if (!hidden) {visible.push(row)}
-            const boundaryIndex = boundaries.length
-            if (!hidden && row.isGroup) {
-                boundaries.push({unit, start: row.visibleIndex, end: 0, depth, indent: row.indent})
+        })
+        const stack: number[] = []
+        visible.forEach(row => {
+            while (stack.length > 0 && boundaries[stack[stack.length - 1]].depth >= row.depth) {
+                const index = asDefined(stack.pop())
+                boundaries[index] = {...boundaries[index], end: row.visibleIndex}
             }
-            children.get(unit)?.forEach(child => visit(child, [...ancestors, unit], hidden || row.collapsed && row.isGroup))
-            if (!hidden && row.isGroup) {
-                boundaries[boundaryIndex] = {...boundaries[boundaryIndex], end: visible.length}
+            if (row.isGroup) {
+                stack.push(boundaries.length)
+                boundaries.push({unit: row.unit, start: row.visibleIndex, end: visible.length, depth: row.depth, indent: row.indent})
             }
-        }
-        children.get(undefined)?.forEach(unit => visit(unit, [], false))
-        units.forEach(unit => visit(unit, [], false))
+        })
         this.rows = rows
         this.visibleRows = visible
         this.boundaries = boundaries

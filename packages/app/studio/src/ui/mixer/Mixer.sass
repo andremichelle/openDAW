@@ -56,8 +56,21 @@ component
       pointer-events: none
       z-index: 7
 
-  [data-unit].group-drop-before
-    box-shadow: inset 2px 0 var(--color-blue)
+  [data-unit].group-drop-before, [data-unit].group-drop-after
+    position: relative
 
-  [data-unit].group-drop-after
-    box-shadow: inset -2px 0 var(--color-blue)
+    &:after
+      content: ""
+      position: absolute
+      top: calc(-1 * var(--group-rail-height, 0px) + var(--drop-indent, 0px) - 4px)
+      bottom: 0
+      width: 2px
+      background: var(--color-blue)
+      pointer-events: none
+      z-index: 7
+
+  [data-unit].group-drop-before:after
+    left: -5px
+
+  [data-unit].group-drop-after:after
+    right: -5px

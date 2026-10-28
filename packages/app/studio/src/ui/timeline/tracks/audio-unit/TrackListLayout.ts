@@ -9,7 +9,8 @@ export class TrackListLayout<CONTENT> {
     readonly boundaries: ReadonlyArray<AudioUnitLayout.Boundary>
     constructor(channels: AudioUnitLayout, contents: ReadonlyMap<AudioUnitBox, TrackListLayout.Channel<CONTENT>>,
                 tail: ReadonlyArray<CONTENT> = []) {
-        const rows: TrackListLayout.Row<CONTENT>[] = [], units: TrackListLayout.Unit[] = []
+        const rows: TrackListLayout.Row<CONTENT>[] = []
+        const units: TrackListLayout.Unit[] = []
         const offsets: number[] = []
         channels.visibleRows.forEach(channel => {
             offsets.push(rows.length)
@@ -25,7 +26,8 @@ export class TrackListLayout<CONTENT> {
         })
         offsets.push(rows.length)
         this.boundaries = channels.boundaries.flatMap(boundary => {
-            const start = offsets[boundary.start], end = offsets[boundary.end]
+            const start = offsets[boundary.start]
+            const end = offsets[boundary.end]
             return isDefined(start) && isDefined(end) && end > start ? [{...boundary, start, end}] : []
         })
         tail.forEach(content => rows.push({content, index: rows.length, unit: undefined, depth: 0, indent: 0}))

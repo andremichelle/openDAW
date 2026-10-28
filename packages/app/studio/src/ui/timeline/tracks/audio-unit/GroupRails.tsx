@@ -1,9 +1,10 @@
-import css from "./GroupRails.sass?inline"
+import {asDefined, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
+import {Events, Html} from "@opendaw/lib-dom"
+import {createElement} from "@opendaw/lib-jsx"
 import {AudioUnitBoxAdapter, AudioUnitLayout, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {Project} from "@opendaw/studio-core"
-import {asDefined, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
-import {Events, Html} from "@opendaw/lib-dom"
+import css from "./GroupRails.sass?inline"
 
 const className = Html.adoptStyleSheet(css, "GroupRails")
 
@@ -30,9 +31,7 @@ export class GroupRails implements Terminable {
         spans.forEach(({unit, start, end, indent}) => {
             if (!this.#rails.has(unit)) {
                 const lifecycle = this.#lifecycle.spawn()
-                const button = document.createElement("button")
-                button.type = "button"
-                button.className = `${className} ${this.horizontal ? "horizontal" : "vertical"}`
+                const button: HTMLButtonElement = <button type="button" className={`${className} ${this.horizontal ? "horizontal" : "vertical"}`}/>
                 const adapter = this.project.boxAdapters.adapterFor(unit, AudioUnitBoxAdapter)
                 button.style.setProperty("--color", ColorCodes.forAudioType(adapter.type).toString())
                 lifecycle.ownAll(

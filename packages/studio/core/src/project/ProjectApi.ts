@@ -19,29 +19,8 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {
-    AudioClipBox,
-    AudioEffectCompositeBox,
-    AudioEffectCompositeCellBox,
-    AudioRegionBox,
-    AudioUnitBox,
-    CaptureAudioBox,
-    CaptureMidiBox,
-    InstrumentCompositeBox,
-    InstrumentCompositeCellBox,
-    NoteClipBox,
-    NoteEventBox,
-    NoteEventCollectionBox,
-    NoteRegionBox,
-    TrackBox,
-    ValueClipBox,
-    ValueEventBox,
-    ValueEventCollectionBox,
-    ValueRegionBox
-} from "@opendaw/studio-boxes"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
@@ -73,17 +52,38 @@ import {
     TrackType,
     TransferUtils
 } from "@opendaw/studio-adapters"
-import {Project} from "./Project"
-import {ProjectModulation} from "./ProjectModulation"
+import {
+    AudioClipBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    AudioRegionBox,
+    AudioUnitBox,
+    CaptureAudioBox,
+    CaptureMidiBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
+    NoteClipBox,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    NoteRegionBox,
+    TrackBox,
+    ValueClipBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
+    ValueRegionBox
+} from "@opendaw/studio-boxes"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {BoxGraphCopy} from "../BoxGraphCopy"
+import {EffectBox} from "../EffectBox"
 import {EffectFactory} from "../EffectFactory"
 import {EffectFactories} from "../EffectFactories"
-import {EffectBox} from "../EffectBox"
-import {AudioContentFactory} from "./audio"
-import {NoteMidiExport} from "./NoteMidiExport"
-import {AudioWavExport} from "./AudioWavExport"
-import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
-import {BoxGraphCopy} from "../BoxGraphCopy"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
+import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {AudioWavExport} from "./AudioWavExport"
+import {NoteMidiExport} from "./NoteMidiExport"
+import {Project} from "./Project"
+import {ProjectModulation} from "./ProjectModulation"
+import {AudioContentFactory} from "./audio"
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -179,15 +179,13 @@ export class ProjectApi {
     }
 
     createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
-        const {trackSelection, audioUnitLayout, userEditingManager, rootBox, grouping} = this.#project
-        const selected = AudioUnitGroups.roots(trackSelection.selected)
+        const {trackSelection, audioUnitLayout, rootBox, grouping} = this.#project
+        const selected = AudioUnitGroups.roots(trackSelection.commandTargets)
         const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
-            ?? (!trackSelection.hasExplicitSelection ? userEditingManager.audioUnit.get().map(vertex =>
-                this.#project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box).unwrapOrUndefined() : undefined)
-        const parent = isDefined(anchor) ? AudioUnitGroups.parent(anchor) : undefined
+        const parent = isDefined(anchor) ? AudioUnitGroups.parent(anchor).unwrapOrUndefined() : undefined
         const siblings = AudioUnitGroups.children(rootBox, parent)
         const before = isDefined(anchor) ? siblings[siblings.indexOf(anchor) + 1] : undefined
-        const destination = isDefined(parent) ? AudioUnitGroups.bus(parent) : undefined
+        const destination = isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined
         const product = this.createInstrument(factory, {destination})
         if (isDefined(anchor) && anchor.type.getValue() !== AudioUnitType.Output) {
             grouping.move([product.audioUnitBox], parent, before)

@@ -1,12 +1,12 @@
-import {Int32Field} from "@opendaw/lib-box"
 import {asDefined, clamp, Lifecycle, Option} from "@opendaw/lib-std"
+import {Int32Field} from "@opendaw/lib-box"
 import {AnimationFrame, Dragging, Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {MaxTrackHeight} from "@opendaw/studio-enums"
-import {StudioService} from "@/service/StudioService"
 import {TrackHeaderClassName} from "./TrackStyles"
-import {TracksManager} from "./TracksManager"
+import type {TracksManager} from "./TracksManager"
+import {StudioService} from "@/service/StudioService"
 
 const AutoScrollPadding = 24
 const AutoScrollSpeed = 6.0 // px/s per px of depth into the padding

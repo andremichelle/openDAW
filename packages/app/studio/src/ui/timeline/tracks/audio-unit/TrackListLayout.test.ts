@@ -14,7 +14,7 @@ const fixture = () => {
     const create = (group: boolean, parent?: AudioUnitBox): AudioUnitBox => {
         const unit = AudioUnitBox.create(graph, UUID.generate(), box => {
             box.collection.refer(rootBox.audioUnits)
-            box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent)) : primaryAudioBusBox).input)
+            box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent).unwrapOrUndefined()) : primaryAudioBusBox).input)
             box.index.setValue(index++)
             box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
             box.isGroup.setValue(group)

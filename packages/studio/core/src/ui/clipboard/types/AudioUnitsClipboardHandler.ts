@@ -1,6 +1,14 @@
 import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {
+    AudioUnitBoxAdapter,
+    AudioUnitGroups,
+    AudioUnitOrdering,
+    isModulatorBox,
+    RootBoxAdapter,
+    TransferUtils,
+    UserEditing
+} from "@opendaw/studio-adapters"
 import {
     AudioBusBox,
     AudioUnitBox,
@@ -11,17 +19,10 @@ import {
     RootBox,
     TrackBox
 } from "@opendaw/studio-boxes"
-import {
-    AudioUnitBoxAdapter,
-    AudioUnitGroups,
-    isModulatorBox,
-    RootBoxAdapter,
-    TransferUtils,
-    UserEditing
-} from "@opendaw/studio-adapters"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
-import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 export type ClipboardAudioUnits = ClipboardEntry<"audio-units">
@@ -247,8 +248,10 @@ export namespace AudioUnitsClipboard {
                                          rootBoxAdapter: RootBoxAdapter): void => {
         const rootBox = rootBoxAdapter.box
         const existing = AudioUnitGroups.ordered(rootBox).filter(unit => unit !== pastedAudioUnit)
-        let position = insertAfterIndex < 0 ? -1 : existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
-            && !isDefined(AudioUnitGroups.parent(unit)))
+        let position = insertAfterIndex < 0 ? existing.findIndex(unit => AudioUnitGroups.parent(unit).isEmpty()
+            && (unit.isGroup.getValue() ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[unit.type.getValue()])
+            >= AudioUnitOrdering[pastedAudioUnit.type.getValue()]) : existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
+            && !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined()))
         if (position === -1) {position = existing.length}
         const output = existing.findIndex(unit => unit.type.getValue() === AudioUnitType.Output)
         if (output >= 0) {position = Math.min(position, output)}

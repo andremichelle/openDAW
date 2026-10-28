@@ -25,8 +25,8 @@ drag targets and timeline hit testing follow the same shared order.
 - Creating an instrument from the browser or Add instrument inserts after the selected track, within the
   same parent group. A multiple selection inserts after its last visible selected root. Selecting a group
   inserts after its complete subtree. Repeated additions advance selection to the new channel.
-- Browser insertion uses active editing only before an explicit track selection exists. Cleared/deleted
-  selection falls back to normal creation placement. Explicit drag/drop and low-level creation retain
+- Browser insertion uses the edited unit when track selection is empty, including after clearing/deleting
+  the explicit selection. Explicit drag/drop and low-level creation retain
   their existing APIs.
 
 ## Audio and persistence scope
@@ -63,7 +63,7 @@ historical evidence in `track-groups.md`.
 
 - Refactored demo: https://d3vptcx5s0ph2g.cloudfront.net/
 - Original behavior/appearance reference: https://d2194sm5auuuqe.cloudfront.net/
-- Current refactored build: `afc1b8b7-8efd-47f0-8e89-fc11518f3266`.
+- Current refactored build: `e774216a-88b8-4017-b789-53273ab957e1` (2026-10-28 review follow-up).
 - Original demo build: `1efc199a-bc44-4479-bcb4-dfdfe771f00d`.
 - Pre-refactor official source: `b4bf236ab6275414f35617a288b1f5976844be5d`.
 - Pre-refactor deployed source: `b4848a8a2d9b9cfca0aef9285403ff3d9b4dac0f`.
@@ -155,3 +155,61 @@ The existing comparison deployments are left unchanged by this source-only rebas
 Studio passes 228 tests in 37 files with two workers. Its first run, concurrent with the other suites,
 hit the existing five-second automation-snap test timeout; the full isolated rerun passes with unchanged
 assertions/timeouts. `git diff --check` also passes.
+
+## Review follow-up (2026-10-28)
+
+Addressed the source audit in PR comment 6475924787 and the mixer feedback in 6474326622.
+
+- Plain reorders preserve custom bus routes and No Output. Only a change of folder parent rewrites the
+  main output. A nested move out still routes to the enclosing group, or master at the root.
+- Ordinary channel creation and DAWproject import use the original Instrument/Aux/Bus ordering again.
+  Folders retain their chosen sibling positions. Creation shifts only indices at/after the new slot,
+  without normalizing every preceding channel. Paste without an edited channel again starts at the
+  first matching channel section; explicit paste anchors retain their position.
+- Multi-track duplicate, output preservation and insertion after the selected instrument remain
+  deliberate requested behavior. Generic transfers no longer expand folders implicitly;
+  `includeGroupDescendants` is explicit and enabled by group-aware duplication.
+- Hidden content/automation lanes receive listIndex -1 on every layout. Region and launcher clip move
+  gestures exclude those lanes, so selected hidden content stays on its original track and position.
+  Region move/copy plus undo have regressions.
+- TracksManager caches visible TrackContexts until layout invalidation. Per-lane renderer lookups now
+  index the cached array rather than rebuilding it. No new measured performance claim is made.
+- Folded overviews subscribe only to descendant region/track collections, enabled state and order.
+  They rebuild subscriptions when their membership/order changes, and release them while unfolded.
+  An unrelated region edit, mixer parameter change or unrelated layout change does not repaint them.
+- Empty track selection now restores the edited-unit command fallback. Deleted/deselected Shift anchors
+  are cleared. Commands and instrument insertion share AudioUnitSelection.commandTargets.
+- AudioUnitGroups.visit is the single hierarchy traversal for ordered queries, flat snapshots and moves;
+  duplicate span/walker code is removed. UnitLane/resize use type-only TracksManager imports.
+  Rails use JSX; fallible group/routing/drop lookups return Option. Removed the pointer cast and cleaned
+  imports, multiple declarations and lambda names in the changed production code.
+- Inactive rails are fully desaturated, have no pointer cursor or hover promotion, and retain keyboard
+  focus feedback. Mixer gaps resolve at their midpoint; one insertion marker spans to the destination's
+  rail depth, and no-op boundaries show no marker. Group inside feedback remains corner-only.
+
+The legacy fixture is explicitly for pre-release preview files, not a released-format migration.
+Keep it and reserve keys 31/32 so existing tester projects cannot be misread if those keys are reused.
+It adds no fields or runtime migration. The fixture verifies route preservation and resaving.
+
+Validation: 880 core tests / 86 files, 360 adapter tests / 31 files, 231 Studio tests / 38 files;
+production dependency/Studio build passes 25 tasks. Tests cover route preservation/undo, bus placement
+without preceding index writes, deleted Shift anchors, explicit transfer scope, descendant-only redraws,
+hidden region moves/copies and mixer gap geometry. Source before this review: 3bf40ab0a86b2e3276a9e4ab0e6132329dc369e2;
+comparison build before this review: 573e4068-1514-4ed9-a97c-90d7fa096e38.
+
+The two real-WASM group audio tests pass. Published comparison build
+`e774216a-88b8-4017-b789-53273ab957e1` to the existing refactor prefix only. CloudFront invalidation
+`ID1GCEEJ4YMQSKZS7PZG9904AF` completed. Public build metadata and /create return no-cache, versioned
+engine WASM returns application/wasm with immutable caching and the correct magic, and COOP/COEP plus
+factory sample/community-script endpoints remain available. The baseline build stays
+`1efc199a-bc44-4479-bcb4-dfdfe771f00d`. Previous comparison entry files are retained locally in
+`/tmp/pr-496-review-rollback` and old hashed assets remain on S3.
+
+Hosted browser checks used a separate saved copy, `PR review fixes verification`: a Neon channel kept
+No Output through a native mixer reorder; direct expanded-group drop routed it into the group;
+dragging out routed to Output, and Undo restored the group route. Cmd-click deselection followed by
+Cmd+G created a nested group around the edited Neon. Double-click rename, save, reload and reopen
+preserved the subgroup and routes. Inactive rails compute grayscale(1) with a default cursor; selected
+strip still has its top/name indicator. No console errors. Completed native gestures and source geometry
+regressions are separate evidence; no live pointer-hold capture is claimed. Screenshot:
+`/tmp/pr-496-review-demo.png` (verification artifact, not shipped).

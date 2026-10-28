@@ -1,12 +1,12 @@
-import {AudioUnitType} from "@opendaw/studio-enums"
 import {int, isDefined, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, CaptureAudioBox, CaptureMidiBox, RootBox} from "@opendaw/studio-boxes"
-import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
-import {AudioUnitOrdering} from "./AudioUnitOrdering"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {CaptureBox} from "../CaptureBox"
+import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TrackType} from "../timeline/TrackType"
+import {AudioUnitOrdering} from "./AudioUnitOrdering"
 
 export namespace AudioUnitFactory {
     export const create = ({boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}}: ProjectSkeleton,
@@ -26,11 +26,14 @@ export namespace AudioUnitFactory {
     export const orderAndGetIndex = (rootBox: RootBox, type: AudioUnitType): int => {
         const boxes = AudioUnitGroups.ordered(rootBox)
         const order = AudioUnitOrdering[type]
-        let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box))
-            && AudioUnitOrdering[box.type.getValue()] > order)
+        let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box).unwrapOrUndefined())
+            && (box.isGroup.getValue() ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[box.type.getValue()]) > order)
         if (index < 0) {index = boxes.length}
-        boxes.forEach((box, position) => box.index.setValue(position < index ? position : position + 1))
-        return index
+        const insertIndex = index < boxes.length ? boxes[index].index.getValue()
+            : Math.max(-1, ...boxes.map(box => box.index.getValue())) + 1
+        boxes.filter(box => box.index.getValue() >= insertIndex)
+            .forEach(box => box.index.setValue(box.index.getValue() + 1))
+        return insertIndex
     }
 
     export const trackTypeToCapture = (boxGraph: BoxGraph, trackType: TrackType): Option<CaptureBox> => {

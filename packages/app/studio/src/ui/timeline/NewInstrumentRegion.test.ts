@@ -68,13 +68,13 @@ describe("NewInstrumentRegion", () => {
     it("keeps group-aware instrument insertion and upstream automatic regions in one undo step", async () => {
         const project = await setup(PPQN.Bar)
         const first = project.editing.modify(() => project.api.createAnyInstrument(InstrumentFactories.Vaporisateur).audioUnitBox).unwrap()
-        const group = asDefined(project.editing.modify(() => project.grouping.create([first])).unwrap())
+        const group = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
         project.trackSelection.set([first])
         const service = {project, timeline: {snapping: barSnapping(project)}} as StudioService
         project.editing.modify(() => DefaultInstrumentFactory.create(service, InstrumentFactories.Neon))
         const [added] = project.trackSelection.selected
         expect(AudioUnitGroups.children(project.rootBox, group)).toEqual([first, added])
-        expect(added.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(group))
+        expect(added.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(group).unwrapOrUndefined())
         expect(regionsOf(added).map(region => region.position.getValue())).toEqual([PPQN.Bar])
         expect(project.editing.undo()).true
         expect(added.isAttached()).false

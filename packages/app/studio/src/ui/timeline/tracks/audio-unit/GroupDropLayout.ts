@@ -1,6 +1,6 @@
+import {Client, isDefined, Option, Optional, Rect} from "@opendaw/lib-std"
 import {AudioUnitLayout} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {Client, isDefined, Option, Optional, Rect} from "@opendaw/lib-std"
 
 export namespace GroupDropLayout {
     export type Row = {readonly unit: AudioUnitBox, readonly bounds: Rect, readonly header: Rect}
@@ -17,7 +17,11 @@ export namespace GroupDropLayout {
         const coordinate = horizontal ? pointer.clientX : pointer.clientY
         const start = (bounds: Rect): number => horizontal ? bounds.x : bounds.y
         const size = (bounds: Rect): number => horizontal ? bounds.width : bounds.height
-        const hit = rows.find(row => coordinate < start(row.bounds) + size(row.bounds)) ?? rows.at(-1)
+        const hit = rows.find((row, index) => {
+            const next = rows[index + 1]
+            const end = start(row.bounds) + size(row.bounds)
+            return coordinate < (isDefined(next) ? (end + start(next.bounds)) / 2 : end)
+        }) ?? rows.at(-1)
         if (!isDefined(hit)) {return Option.None}
         const model = layout.row(hit.unit).unwrap()
         const headerOffset = coordinate - start(hit.header)

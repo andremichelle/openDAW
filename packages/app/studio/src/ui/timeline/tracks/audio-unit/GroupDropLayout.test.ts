@@ -14,7 +14,7 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
     const create = (group: boolean, parent?: AudioUnitBox): AudioUnitBox => {
         const unit = AudioUnitBox.create(graph, UUID.generate(), box => {
             box.collection.refer(rootBox.audioUnits)
-            box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent)) : primaryAudioBusBox).input)
+            box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent).unwrapOrUndefined()) : primaryAudioBusBox).input)
             box.index.setValue(index++)
             box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
             box.isGroup.setValue(group)
@@ -172,6 +172,19 @@ describe("track drop layout", () => {
         expect([above.before, below.before]).toEqual([group, group])
         expect(above.row).toBe(below.row)
         expect(above.after).toBe(false)
+    })
+    it("changes mixer gap ownership at its midpoint with one physical marker and distinct nesting", () => {
+        const {group, lastChild, after, build} = fixture({horizontal: true})
+        const {row, resolve} = build()
+        const end = row(lastChild).bounds.x + row(lastChild).bounds.width
+        const start = row(after).bounds.x
+        const nested = resolve(end + 1, 150)
+        const outer = resolve(start - 1, 150)
+        expect(nested.parent).toBe(group)
+        expect(outer.parent).toBeUndefined()
+        expect(nested.row).toBe(outer.row)
+        expect([nested.after, outer.after]).toEqual([false, false])
+        expect([nested.indent, outer.indent]).toEqual([5, 0])
     })
     it("keeps expanded mixer group targets stable when entering from the right", () => {
         const {group, inner, build} = fixture({horizontal: true})

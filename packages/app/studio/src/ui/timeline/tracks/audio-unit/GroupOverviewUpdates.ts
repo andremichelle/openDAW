@@ -1,19 +1,41 @@
-import {BoxGraph, Update} from "@opendaw/lib-box"
-import {AudioBusBox, AudioRegionBox, AudioUnitBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {Observer, Terminable, Terminator} from "@opendaw/lib-std"
+import {AudioUnitBoxAdapter, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
+import type {Project} from "@opendaw/studio-core"
 
-export const affectsGroupOverview = (graph: BoxGraph, update: Update): boolean => {
-    if (update.type === "new" || update.type === "delete") {
-        return [AudioUnitBox.ClassName, AudioBusBox.ClassName, TrackBox.ClassName, NoteRegionBox.ClassName, AudioRegionBox.ClassName].includes(update.name)
+export const subscribeGroupOverview = (project: Project, unit: AudioUnitBox, redraw: Observer<void>): Terminable => {
+    const lifecycle = new Terminator()
+    const descendants = lifecycle.own(new Terminator())
+    let members: ReadonlyArray<AudioUnitBox> = []
+    const refresh = (): void => {
+        const next = unit.groupCollapsed.getValue()
+            ? project.audioUnitLayout.snapshot.rows.filter(row => row.ancestors.includes(unit)).map(row => row.unit) : []
+        if (members.length === next.length && members.every((member, index) => member === next[index])) {return}
+        members = next
+        descendants.terminate()
+        members.forEach(member => {
+            const tracks = project.boxAdapters.adapterFor(member, AudioUnitBoxAdapter).tracks
+            const subscriptions = new Map<TrackBoxAdapter, Terminable>()
+            descendants.ownAll(
+                {terminate: () => subscriptions.forEach(subscription => subscription.terminate())},
+                tracks.catchupAndSubscribe({
+                    onAdd: track => {
+                        if (track.type !== TrackType.Notes && track.type !== TrackType.Audio) {return}
+                        subscriptions.set(track, Terminable.many(track.regions.subscribeChanges(redraw), track.enabled.subscribe(() => redraw())))
+                        redraw()
+                    },
+                    onRemove: track => {
+                        subscriptions.get(track)?.terminate()
+                        subscriptions.delete(track)
+                        redraw()
+                    },
+                    onReorder: () => redraw()
+                })
+            )
+        })
+        redraw()
     }
-    const box = graph.findBox(update.address.uuid).unwrapOrUndefined()
-    if (box instanceof AudioUnitBox) {
-        return [box.output.address, box.index.address, box.isGroup.address]
-            .some(address => address.equals(update.address))
-    }
-    if (box instanceof AudioBusBox) {return box.output.address.equals(update.address)}
-    if (box instanceof TrackBox) {
-        return box.enabled.address.equals(update.address) || box.tracks.address.equals(update.address)
-            || box.index.address.equals(update.address)
-    }
-    return box instanceof NoteRegionBox || box instanceof AudioRegionBox
+    lifecycle.own(project.audioUnitLayout.value.subscribe(refresh))
+    refresh()
+    return lifecycle
 }

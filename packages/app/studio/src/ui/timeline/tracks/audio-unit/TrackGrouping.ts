@@ -1,29 +1,22 @@
-import {GroupDropLayout} from "./GroupDropLayout"
-import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
-import {AudioUnitType} from "@opendaw/studio-enums"
+import {asDefined, isDefined, Lifecycle, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
+import {Browser, Dragging, Events} from "@opendaw/lib-dom"
+import {AudioUnitGroups} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
-import {Browser, Dragging, Events} from "@opendaw/lib-dom"
-import {asDefined, isDefined, Lifecycle, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
+import {AudioUnitType} from "@opendaw/studio-enums"
+import {GroupDropLayout} from "./GroupDropLayout"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export const groupSelectedTracks = (project: Project): void => {
-    const selected = project.trackSelection.selected
-    const active = project.userEditingManager.audioUnit.get().map(vertex =>
-        project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box).unwrapOrUndefined()
-    const units = selected.length > 0 ? selected : !project.trackSelection.hasExplicitSelection && isDefined(active) ? [active] : []
-    const group = project.editing.modify(() => project.grouping.create(units)).unwrapOrUndefined()
-    if (!isDefined(group)) {return}
-    project.trackSelection.set([group])
-    project.userEditingManager.audioUnit.edit(group.editing)
+    const group = project.editing.modify(() => project.grouping.create(project.trackSelection.commandTargets)).unwrapOrElse(Option.None)
+    if (group.isEmpty()) {return}
+    const unit = group.unwrap()
+    project.trackSelection.set([unit])
+    project.userEditingManager.audioUnit.edit(unit.editing)
 }
 
 export const duplicateSelectedTracks = (project: Project): void => {
-    const selected = project.trackSelection.selected
-    const active = project.userEditingManager.audioUnit.get().map(vertex =>
-        project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box).unwrapOrUndefined()
-    const units = selected.length > 0 ? selected : !project.trackSelection.hasExplicitSelection && isDefined(active) ? [active] : []
-    const copies = project.editing.modify(() => project.grouping.duplicate(units)).unwrapOrElse([])
+    const copies = project.editing.modify(() => project.grouping.duplicate(project.trackSelection.commandTargets)).unwrapOrElse([])
     if (copies.length === 0) {return}
     project.trackSelection.set(copies)
     project.userEditingManager.audioUnit.edit(copies[0].editing)
@@ -38,7 +31,7 @@ export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuIte
             }),
         MenuItem.default({label: "Ungroup (Keep Tracks)", hidden: !unit.isGroup.getValue()})
             .setTriggerProcedure(() => project.editing.modify(() => project.grouping.ungroup(unit))),
-        MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit))})
+        MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
             .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,
                 project.trackSelection.has(unit) ? project.trackSelection.selected : [unit])))
     ]
@@ -46,7 +39,8 @@ export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuIte
 
 export const installTrackSelection = (lifecycle: Lifecycle, project: Project, header: HTMLElement, unit: AudioUnitBox,
                                       populateMenu?: Procedure<MenuItem>): void => {
-    let pendingSingle = false, dragged = false
+    let pendingSingle = false
+    let dragged = false
     lifecycle.ownAll(
         Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
             dragged = false
@@ -80,14 +74,15 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
 export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number, headerHeight: number}
 
 /** Header centre means add to folder; row edges mean insert. Pointer indentation chooses the parent at edges. */
-export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Optional<GroupDrop> => {
+export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Option<GroupDrop> => {
     const elements = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
         .map(row => [row.dataset.unit, row]))
     const headers = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-group-header]"))
         .map(header => [header.dataset.groupHeader, header]))
     const layout = project.audioUnitLayout.snapshot
     const rows = layout.visibleRows.flatMap(row => {
-        const uuid = UUID.toString(row.unit.address.uuid), element = elements.get(uuid)
+        const uuid = UUID.toString(row.unit.address.uuid)
+        const element = elements.get(uuid)
         if (!isDefined(element) || element.getClientRects().length === 0) {return []}
         return [{unit: row.unit, bounds: element.getBoundingClientRect(),
             header: (headers.get(uuid) ?? element).getBoundingClientRect()}]
@@ -96,7 +91,7 @@ export const resolveGroupDrop = (project: Project, container: HTMLElement, event
         parent: target.parent, before: target.before,
         row: asDefined(elements.get(UUID.toString(target.row.unit.address.uuid))),
         inside: target.inside, after: target.after, indent: target.indent, headerHeight: target.row.header.height
-    })).unwrapOrUndefined()
+    }))
 }
 
 export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void => {
@@ -130,7 +125,7 @@ export const installGroupTrackDrag = (handle: HTMLElement, project: Project, uni
                 }
                 clear()
                 surface = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-group-surface]") ?? undefined
-                target = isDefined(surface) ? resolveGroupDrop(project, surface, event, surface.dataset.groupSurface === "mixer") : undefined
+                target = isDefined(surface) ? resolveGroupDrop(project, surface, event, surface.dataset.groupSurface === "mixer").unwrapOrUndefined() : undefined
                 if (isDefined(target) && !(target.inside
                     ? project.grouping.canMove(units, target.parent)
                     : project.grouping.canDrop(units, target.parent, target.before))) {target = undefined}

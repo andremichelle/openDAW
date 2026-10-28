@@ -1,6 +1,3 @@
-import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {TrackListLayout} from "./TrackListLayout"
-import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {
     Arrays,
     asDefined,
@@ -19,26 +16,29 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
+import {Dragging} from "@opendaw/lib-dom"
 import {
     AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, ColorCodes,
     IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter,
     TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
-import {Pointers} from "@opendaw/studio-enums"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {StudioPreferences} from "@opendaw/studio-core"
-import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {StudioService} from "@/service/StudioService.ts"
-import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
+import {Pointers} from "@opendaw/studio-enums"
+import {TrackListLayout} from "./TrackListLayout"
 import {ClipModifier} from "./clips/ClipModifier"
-import {Dragging} from "@opendaw/lib-dom"
+import {StudioService} from "@/service/StudioService.ts"
+import {ScrollModel} from "@/ui/components/ScrollModel.ts"
+import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
-import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
-import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
+import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx"
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
-import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
-import {ScrollModel} from "@/ui/components/ScrollModel.ts"
+import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
+import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
+import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
+import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 
 type AudioUnitEntry = {
     uuid: UUID.Bytes
@@ -86,6 +86,7 @@ export class TracksManager implements Terminable {
 
     #currentClipModifier: Option<ClipModifier> = Option.None
     #currentRegionModifier: Option<RegionModifier> = Option.None
+    #visibleTracks: Option<ReadonlyArray<TrackContext>> = Option.None
     #layout: Option<TrackListLayout<RowContent>> = Option.None
 
     constructor(service: StudioService, scrollContainer: Element, scrollModel: ScrollModel, factory: TrackFactory) {
@@ -199,7 +200,10 @@ export class TracksManager implements Terminable {
     getByIndex(index: number): Option<TrackContext> {return Option.wrap(this.tracks()[index])}
 
     tracks(): ReadonlyArray<TrackContext> {
-        return this.#flatLayout().rows.flatMap(row => row.content.kind === "track" ? [row.content.track] : [])
+        if (this.#visibleTracks.isEmpty()) {
+            this.#visibleTracks = Option.wrap(this.#flatLayout().rows.flatMap(row => row.content.kind === "track" ? [row.content.track] : []))
+        }
+        return this.#visibleTracks.unwrap()
     }
 
     numTracks(): int {return this.tracks().length}
@@ -209,6 +213,7 @@ export class TracksManager implements Terminable {
         this.#audioUnits.clear()
         this.#modulators.clear()
         this.#layout = Option.None
+        this.#visibleTracks = Option.None
         this.#terminator.terminate()
     }
 
@@ -429,6 +434,7 @@ export class TracksManager implements Terminable {
 
     #invalidateOrder(): void {
         this.#layout = Option.None
+        this.#visibleTracks = Option.None
         if (this.#initializing || this.#terminated || this.#layoutQueued) {return}
         const {boxGraph} = this.#service.project
         if (boxGraph.inTransaction()) {
@@ -488,6 +494,7 @@ export class TracksManager implements Terminable {
 
     #refreshOrder(): void {
         this.#layout = Option.None
+        this.#visibleTracks = Option.None
         const layout = this.#flatLayout()
         const visible = new Set<Element>(layout.rows.map(row => this.#element(row.content)))
         this.#tracks.values().forEach(track => track.element.classList.toggle("collapsed-away", !visible.has(track.element)))
@@ -524,6 +531,7 @@ export class TracksManager implements Terminable {
         const extra = this.#scrollContainer.querySelector<HTMLElement>(":scope > .extra")
         if (isNotNull(extra)) {extra.style.gridRow = String(layout.rows.length + 1)}
         this.#groupRails.update(layout.boundaries)
+        this.#tracks.values().forEach(({trackBoxAdapter}) => trackBoxAdapter.listIndex = -1)
         this.tracks().forEach(({trackBoxAdapter}, index) => trackBoxAdapter.listIndex = index)
         this.#refreshSelectionRows()
         this.#refreshHeaderDedup()
