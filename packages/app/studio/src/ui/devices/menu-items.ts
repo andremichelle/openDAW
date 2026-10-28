@@ -4,13 +4,14 @@ import {
     DeviceHost,
     Devices,
     EffectDeviceBoxAdapter,
+    InstrumentBox,
     InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {
-    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectFactories, MenuItem, NestedHostExit,
+    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectBox, EffectFactories, MenuItem, NestedHostExit,
     PresetEntry
 } from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
@@ -55,6 +56,18 @@ export namespace MenuItems {
                 })))
             return
         }
+        const instrumentBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
+        const instrumentKey = isDefined(instrumentBox) ? InstrumentFactories.keyOfBox(instrumentBox) : undefined
+        parent.addMenuItem(MenuItem.default({
+            label: "Wrap into Composite",
+            hidden: !isDefined(instrumentKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[instrumentKey])
+        }).setTriggerProcedure(() => {
+            if (!isDefined(instrumentBox)) {return}
+            editing.modify(() => {
+                const attempt = api.wrapInstrumentIntoComposite(instrumentBox as InstrumentBox)
+                if (attempt.isFailure()) {console.debug(attempt.failureReason())}
+            })
+        }))
         populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
         parent.addMenuItem(copyAudioUnit(audioUnit, {separatorBefore: true}))
         deviceHost.inputAdapter.ifSome(input => {
@@ -129,7 +142,14 @@ export namespace MenuItems {
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
             MenuItem.default({label: "Replace…"})
-                .setTriggerProcedure(() => DeviceDialog.open(service, DeviceSlot.forEffect(device)))
+                .setTriggerProcedure(() => DeviceDialog.open(service, DeviceSlot.forEffect(device))),
+            MenuItem.default({label: "Wrap into Composite", hidden: device.type !== "audio-effect"})
+                .setTriggerProcedure(() => editing.modify(() => {
+                    const boxes = selectedInChain(service, device).map(({box}) => box)
+                        .filter((box): box is EffectBox => box.tags.deviceType === "audio-effect")
+                    const attempt = project.api.wrapEffectsIntoComposite(boxes)
+                    if (attempt.isFailure()) {console.debug(attempt.failureReason())}
+                }))
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})
         parent.addMenuItem(
@@ -175,6 +195,14 @@ export namespace MenuItems {
         const label = `Delete '${device.labelField.getValue()}'`
         return MenuItem.default({label, separatorBefore: options?.separatorBefore})
             .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices([device])))
+    }
+
+    // the selected effects sharing the device's chain, the device itself always among them
+    const selectedInChain = (service: StudioService, device: EffectDeviceBoxAdapter): ReadonlyArray<EffectDeviceBoxAdapter> => {
+        const host = device.deviceHost()
+        const sameChain = service.project.deviceSelection.selected()
+            .filter((selected): selected is EffectDeviceBoxAdapter => selected.type === device.type && selected.deviceHost() === host)
+        return sameChain.includes(device) ? sameChain : [...sameChain, device]
     }
 
     type PresetContext =

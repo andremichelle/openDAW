@@ -3,7 +3,7 @@ import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {InstrumentCompositeBoxAdapter, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {EffectFactories} from "../EffectFactories"
 import {
-    AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox,
+    AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox,
     NoteRegionBox, PitchDeviceBox, TrackBox, VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -260,6 +260,79 @@ describe("paste an audio unit as a layer", () => {
         const attempt = project.editing.modify(() => api.pasteAudioUnitAsLayer(composite, entry.data)).unwrap()
         expect(attempt.isFailure()).toBe(true)
         expect(composite.cells.pointerHub.incoming().length).toBe(0)
+        project.terminate()
+    })
+})
+
+describe("wrap effects into an FX Composite", () => {
+    const setup = async () => {
+        const project = await createProject()
+        const {api, boxGraph} = project
+        const boxes = project.editing.modify(() => {
+            const {audioUnitBox} = api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const pitch = api.insertEffect(audioUnitBox.midiEffects, EffectFactories.MidiNamed.Pitch) as PitchDeviceBox
+            const [delayA, delayB, delayC] = [0, 1, 2].map(() =>
+                api.insertEffect(audioUnitBox.audioEffects, EffectFactories.AudioNamed.Delay) as DelayDeviceBox)
+            const lane = TrackBox.create(boxGraph, UUID.generate(), box => {
+                box.tracks.refer(audioUnitBox.tracks)
+                box.type.setValue(TrackType.Value)
+                box.target.refer(delayB.feedback)
+                box.index.setValue(1)
+            })
+            return {audioUnitBox, pitch, delayA, delayB, delayC, lane}
+        }).unwrap()
+        const chain = () => boxes.audioUnitBox.audioEffects.pointerHub.incoming()
+            .map(pointer => pointer.box as DelayDeviceBox | AudioEffectCompositeBox)
+            .toSorted((left, right) => left.index.getValue() - right.index.getValue())
+        return {project, ...boxes, chain}
+    }
+
+    it("puts the effects into the first entry at the position of the first one, keeps order and automation", async () => {
+        const {project, delayA, delayB, delayC, lane, chain} = await setup()
+        const composite = project.editing.modify(() => project.api.wrapEffectsIntoComposite([delayC, delayB]).result()).unwrap()
+        expect(chain().map(box => box.name)).toStrictEqual(["DelayDeviceBox", "AudioEffectCompositeBox"])
+        expect(chain()[0]).toBe(delayA)
+        expect(chain().map(box => box.index.getValue())).toStrictEqual([0, 1])
+        const cells = composite.entries.pointerHub.incoming().map(pointer => pointer.box as AudioEffectCompositeCellBox)
+        expect(cells.length).toBe(1)
+        expect(cells[0].index.getValue()).toBe(0)
+        expect(delayB.host.targetAddress.unwrap().toString()).toBe(cells[0].audioEffects.address.toString())
+        expect(delayC.host.targetAddress.unwrap().toString()).toBe(cells[0].audioEffects.address.toString())
+        expect([delayB.index.getValue(), delayC.index.getValue()], "chain order kept").toStrictEqual([0, 1])
+        expect(lane.target.targetAddress.unwrap().toString(), "the lane still targets the moved delay")
+            .toBe(delayB.feedback.address.toString())
+        project.terminate()
+    })
+
+    it("undo restores the chain", async () => {
+        const {project, delayA, delayB, delayC, chain} = await setup()
+        project.editing.modify(() => project.api.wrapEffectsIntoComposite([delayB]))
+        expect(chain().length).toBe(3)
+        project.editing.undo()
+        expect(chain()).toStrictEqual([delayA, delayB, delayC])
+        expect(chain().map(box => box.index.getValue())).toStrictEqual([0, 1, 2])
+        project.terminate()
+    })
+
+    it("wraps an effect inside a composite entry into a nested composite", async () => {
+        const {project, delayA, delayB} = await setup()
+        const outer = project.editing.modify(() => project.api.wrapEffectsIntoComposite([delayA, delayB]).result()).unwrap()
+        const inner = project.editing.modify(() => project.api.wrapEffectsIntoComposite([delayB]).result()).unwrap()
+        const outerCell = outer.entries.pointerHub.incoming()[0].box as AudioEffectCompositeCellBox
+        expect(inner.host.targetAddress.unwrap().toString()).toBe(outerCell.audioEffects.address.toString())
+        expect([delayA.index.getValue(), inner.index.getValue()]).toStrictEqual([0, 1])
+        project.terminate()
+    })
+
+    it("refuses midi effects, effects of different chains and an empty list", async () => {
+        const {project, pitch, delayA, delayB, chain} = await setup()
+        const {api} = project
+        const outer = project.editing.modify(() => api.wrapEffectsIntoComposite([delayA]).result()).unwrap()
+        expect(project.editing.modify(() => api.wrapEffectsIntoComposite([pitch]).isFailure()).unwrap()).toBe(true)
+        expect(project.editing.modify(() => api.wrapEffectsIntoComposite([delayA, delayB]).isFailure()).unwrap()).toBe(true)
+        expect(project.editing.modify(() => api.wrapEffectsIntoComposite([]).isFailure()).unwrap()).toBe(true)
+        expect(chain()[0]).toBe(outer)
+        expect(pitch.host.targetVertex.unwrap().box.name, "untouched").toBe("AudioUnitBox")
         project.terminate()
     })
 })

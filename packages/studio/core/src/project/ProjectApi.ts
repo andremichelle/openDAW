@@ -24,6 +24,8 @@ import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
     AudioRegionBox,
     AudioUnitBox,
     CaptureAudioBox,
@@ -72,6 +74,7 @@ import {
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
 import {EffectFactory} from "../EffectFactory"
+import {EffectFactories} from "../EffectFactories"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
@@ -272,6 +275,24 @@ export class ProjectApi {
         this.moveEffects(cellBox.midiEffects, midiEffects, 0)
         this.moveEffects(cellBox.audioEffects, audioEffects, 0)
         return Attempts.ok({cellBox, instrumentBox})
+    }
+
+    // re-hosts by pointer, nothing is copied: automation lanes keep their targets
+    wrapEffectsIntoComposite(effects: ReadonlyArray<EffectBox>): Attempt<AudioEffectCompositeBox, string> {
+        if (effects.length === 0) {return Attempts.err("No effects to wrap")}
+        if (!effects.every(box => box.tags.deviceType === "audio-effect")) {return Attempts.err("Only audio effects can be wrapped")}
+        const field = effects[0].host.targetVertex.unwrap("effect.host") as Field<EffectPointerType>
+        if (!effects.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))) {
+            return Attempts.err("The effects are not in the same chain")
+        }
+        const index = Math.min(...effects.map(box => box.index.getValue()))
+        const composite = asInstanceOf(EffectFactories.AudioEffectComposite.create(this.#project, field, index), AudioEffectCompositeBox)
+        const cellBox = AudioEffectCompositeCellBox.create(this.#project.boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.entries)
+            box.index.setValue(0)
+        })
+        this.moveEffects(cellBox.audioEffects, effects, 0)
+        return Attempts.ok(composite)
     }
 
     pasteAudioUnitAsLayer(composite: InstrumentCompositeBox, data: ArrayBufferLike,
