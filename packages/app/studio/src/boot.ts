@@ -156,8 +156,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
-    StudioPreferences.catchupAndSubscribe(({"neutral-hue": hue, "neutral-saturation": saturation}) => {
-        setColorScheme({hue, saturation: saturation / 100.0})
+    StudioPreferences.catchupAndSubscribe(({"color-scheme": scheme}) => {
+        setColorScheme(scheme)
         Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
     }, "appearance")
     document.querySelector("#preloader")?.remove()

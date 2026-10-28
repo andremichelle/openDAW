@@ -1,4 +1,5 @@
 import {z} from "zod"
+import {ColorSchemes, DefaultColorScheme} from "@opendaw/studio-enums"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
@@ -38,12 +39,10 @@ export const StudioSettingsSchema = z.object({
         "follow-cursor": false
     }),
     "appearance": z.object({
-        "neutral-hue": z.number().catch(197),
-        "neutral-saturation": z.number().catch(100),
+        "color-scheme": z.enum(ColorSchemes).catch(DefaultColorScheme),
         "clamp-to-60fps": z.boolean().catch(true)
     }).default({
-        "neutral-hue": 197,
-        "neutral-saturation": 100,
+        "color-scheme": DefaultColorScheme,
         "clamp-to-60fps": true
     }),
     "time-display": z.object({
