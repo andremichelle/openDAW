@@ -1,5 +1,5 @@
 import css from "./AudioCompositeEntry.sass?inline"
-import {isDefined, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -58,18 +58,13 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
             onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
         }), Terminable.Empty),
         TextTooltip.default(element, () => layer.label),
-        Events.subscribe(element, "click", (event: Event) => {
-            const target = event.target
-            if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {return}
-            userEditingManager.audioUnit.edit(layer.box)
-        }),
+        Events.subscribe(iconsElement, "click", () => userEditingManager.audioUnit.edit(layer.box)),
         InstrumentCompositeLayerDnD.installTarget({element, project, composite, layer, getIndex}),
         InstrumentCompositeLayerDnD.installHandle({
             handle: iconsElement, classReceiver: element, composite, uuid: layer.uuid, getIndex
         }),
         TextTooltip.default(remove, () => "Delete layer"),
-        Events.subscribe(remove, "click", (event: Event) => {
-            event.stopPropagation()
+        Events.subscribe(remove, "click", () => {
             editing.modify(() => api.deleteCompositeLayer(layer.box))
         })
     )

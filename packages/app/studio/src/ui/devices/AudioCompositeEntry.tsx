@@ -1,5 +1,5 @@
 import css from "./AudioCompositeEntry.sass?inline"
-import {isDefined, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -51,18 +51,13 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         entry.audioEffects.mapOr(collection => collection.subscribe({
             onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
         }), Terminable.Empty),
-        Events.subscribe(element, "click", (event: Event) => {
-            const target = event.target
-            if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {return}
-            userEditingManager.audioUnit.edit(entry.box)
-        }),
+        Events.subscribe(iconsElement, "click", () => userEditingManager.audioUnit.edit(entry.box)),
         AudioCompositeEntryDnD.installTarget({element, project, composite, entry, getIndex, branchable: !fixed})
     )
     if (!fixed) {
         lifecycle.ownAll(
             TextTooltip.default(remove, () => "Delete entry"),
-            Events.subscribe(remove, "click", (event: Event) => {
-                event.stopPropagation() // deleting must not also enter the row being deleted
+            Events.subscribe(remove, "click", () => {
                 const survivors = composite.entries.adapters().filter(other => other !== entry)
                 editing.modify(() => {
                     entry.box.delete()
