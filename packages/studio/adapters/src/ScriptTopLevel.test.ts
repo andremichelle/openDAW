@@ -89,9 +89,9 @@ describe("ScriptTopLevel.check accepts", () => {
         it(name, () => expect(violations(code)).toEqual([]))
     }
     it("every shipped example", () => {
-        const root = resolve(__dirname, "../../../app/studio/src/ui/devices")
-        for (const folder of ["audio-effects", "instruments", "midi-effects"]) {
-            const directory = resolve(root, folder, "examples")
+        const root = resolve(__dirname, "../../core-wasm/test/assets")
+        for (const folder of ["werkstatt", "apparat", "spielwerk"]) {
+            const directory = resolve(root, folder)
             for (const file of readdirSync(directory).filter(name => name.endsWith(".js"))) {
                 expect(violations(readFileSync(resolve(directory, file), "utf8")), file).toEqual([])
             }
