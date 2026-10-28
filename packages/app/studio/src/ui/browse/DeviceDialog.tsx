@@ -62,11 +62,14 @@ const headlineOf = (slot: DeviceSlot): string => {
     switch (slot.type) {
         case "insert":
             return slot.accepts === "midi" ? "Add MIDI Effect" : "Add Audio Effect"
+        case "new-entry":
+            return "Add Audio Effect"
         case "replace-effect":
             return slot.accepts === "midi" ? "Replace MIDI Effect" : "Replace Audio Effect"
         case "replace-instrument":
             return "Replace Instrument"
         case "new-instrument":
+        case "new-layer":
             return "Add Instrument"
     }
 }

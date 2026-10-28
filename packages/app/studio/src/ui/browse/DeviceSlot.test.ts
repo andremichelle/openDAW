@@ -2,9 +2,9 @@ import {describe, expect, it, vi} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {BoxEditing, IndexedBox} from "@opendaw/lib-box"
 import {
-    DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
+    AudioEffectCompositeBoxAdapter, DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
 } from "@opendaw/studio-adapters"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox, InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {DeviceSlot} from "./DeviceSlot"
@@ -157,6 +157,81 @@ describe("DeviceSlot", () => {
         project.editing.modify(() => DeviceSlot.placeInstrument(project, {type: "new-instrument", anchor: Option.None},
             InstrumentFactories.Nano))
         expect(unitCount()).toBe(before + 1)
+    })
+    const layerSetup = async () => {
+        const context = await rackSetup()
+        const {project} = context
+        const composite = project.editing.modify(() =>
+            project.api.createInstrument(InstrumentFactories.InstrumentComposite).instrumentBox as InstrumentCompositeBox).unwrap()
+        const compositeHost = project.boxAdapters.adapterFor(composite.host.targetVertex.unwrap().box, Devices.isHost)
+        const slot: DeviceSlot = {type: "new-layer", host: compositeHost, composite}
+        const layerNames = (): ReadonlyArray<string> => IndexedBox.collectIndexedBoxes(composite.cells, InstrumentCompositeCellBox)
+            .map(cell => cell.instrument.pointerHub.incoming().at(0)?.box.name ?? "none")
+        return {...context, slot, layerNames}
+    }
+
+    it("lists only layer instruments for a new layer and no racks", async () => {
+        const {slot} = await layerSetup()
+        expect(DeviceSlot.categoryOf(slot)).toBe("instrument")
+        expect(DeviceSlot.takesNotes(slot)).true
+        expect(DeviceSlot.isReplace(slot)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Nano)).true
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.InstrumentComposite)).true
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Tape)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.MIDIOutput)).false
+        expect(DeviceSlot.acceptsRack(slot, InstrumentFactories.Nano)).false
+        expect(DeviceSlot.hasTimeline(slot)).false
+    })
+
+    it("appends a layer with a stock instrument", async () => {
+        const {project, slot, layerNames} = await layerSetup()
+        project.editing.modify(() => DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Nano))
+        project.editing.modify(() => DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Vaporisateur))
+        expect(layerNames()).toEqual(["NanoDeviceBox", "VaporisateurDeviceBox"])
+    })
+
+    it("appends a layer from an instrument preset, a misfit leaves no layer behind", async () => {
+        const {project, slot, rack, chain, layerNames} = await layerSetup()
+        expect(project.editing.modify(() => DeviceSlot.placePreset(project, slot, rack, "Nano", true)).unwrap()).true
+        expect(layerNames()).toEqual(["NanoDeviceBox"])
+        expect(project.editing.modify(() => DeviceSlot.placePreset(project, slot, rack, "Unknown", true)).unwrap()).false
+        expect(layerNames()).toEqual(["NanoDeviceBox"])
+        project.editing.modify(() => DeviceSlot.placePreset(project, slot, chain, "Nano", true))
+        expect(layerNames().length).toBe(2)
+    })
+
+    const entrySetup = async () => {
+        const context = await rackSetup()
+        const {project, EffectFactories, host, audioField} = context
+        const box = project.editing.modify(() =>
+            project.api.insertEffect(audioField, EffectFactories.AudioNamed.AudioEffectComposite, 2)).unwrap()
+        const composite = project.boxAdapters.adapterFor(box, AudioEffectCompositeBoxAdapter)
+        const slot: DeviceSlot = {type: "new-entry", host, composite}
+        const entryNames = (): ReadonlyArray<ReadonlyArray<string>> =>
+            IndexedBox.collectIndexedBoxes(composite.box.entries, AudioEffectCompositeCellBox)
+                .map(cell => IndexedBox.collectIndexedBoxes(cell.audioEffects).map(effect => effect.name))
+        return {...context, slot, entryNames}
+    }
+
+    it("appends an FX Composite entry holding the effect", async () => {
+        const {project, EffectFactories, slot, entryNames, effectNames} = await entrySetup()
+        expect(DeviceSlot.categoryOf(slot)).toBe("audio-effect")
+        expect(DeviceSlot.isReplace(slot)).false
+        project.editing.modify(() => DeviceSlot.placeEffect(slot, (field, index) =>
+            project.api.insertEffect(field, EffectFactories.AudioNamed.Compressor, index)))
+        project.editing.modify(() => DeviceSlot.placeEffect(slot, (field, index) =>
+            project.api.insertEffect(field, EffectFactories.AudioNamed.Delay, index)))
+        expect(entryNames()).toEqual([["CompressorDeviceBox"], ["DelayDeviceBox"]])
+        expect(effectNames(), "the outer chain is untouched").toEqual(["DelayDeviceBox", "ReverbDeviceBox", "AudioEffectCompositeBox"])
+    })
+
+    it("appends an FX Composite entry from a chain preset, a misfit leaves no entry behind", async () => {
+        const {project, slot, chain, entryNames} = await entrySetup()
+        expect(project.editing.modify(() => DeviceSlot.placePreset(project, slot, chain, "", true)).unwrap()).true
+        expect(entryNames()).toEqual([["CompressorDeviceBox", "GateDeviceBox"]])
+        const garbage = new Uint8Array(16).buffer
+        expect(project.editing.modify(() => DeviceSlot.placePreset(project, slot, garbage, "", true)).unwrap()).false
+        expect(entryNames()).toEqual([["CompressorDeviceBox", "GateDeviceBox"]])
     })
 })
 

@@ -13,6 +13,7 @@ import {CompositeEntryList} from "@/ui/devices/CompositeEntryList"
 import {AudioCompositeEntry} from "@/ui/devices/AudioCompositeEntry"
 import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
 import {StudioService} from "@/service/StudioService"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "AudioEffectCompositeDeviceEditor")
@@ -36,8 +37,8 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                                  fixed={adapter.entriesFixed}/>
         ))
     const footer: Option<HTMLElement> = adapter.entriesFixed ? Option.None : Option.wrap(
-        <AddEffectButton
-            select={factory => AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)}/>
+        <AddEffectButton lifecycle={lifecycle}
+                         onClick={() => DeviceDialog.open(service, {type: "new-entry", host: deviceHost, composite: adapter})}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}

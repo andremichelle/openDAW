@@ -1,6 +1,7 @@
-import {asInstanceOf, int, isAbsent, isInstanceOf, Option, UUID} from "@opendaw/lib-std"
-import {Box, Field} from "@opendaw/lib-box"
+import {asInstanceOf, int, isAbsent, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
+import {Box, Field, IndexedBox} from "@opendaw/lib-box"
 import {
+    AudioCompositeAdapter,
     AudioUnitBoxAdapter,
     DeviceHost,
     Devices,
@@ -14,7 +15,7 @@ import {
     PresetHeader,
     TrackType
 } from "@opendaw/studio-adapters"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox} from "@opendaw/studio-boxes"
 import {EffectFactories, Project} from "@opendaw/studio-core"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 
@@ -24,6 +25,8 @@ export type DeviceSlot =
     | { readonly type: "replace-effect", readonly host: DeviceHost, readonly accepts: "audio" | "midi", readonly index: int }
     | { readonly type: "replace-instrument", readonly host: DeviceHost }
     | { readonly type: "new-instrument", readonly anchor: Option<UUID.Bytes> }
+    | { readonly type: "new-layer", readonly host: DeviceHost, readonly composite: InstrumentCompositeBox }
+    | { readonly type: "new-entry", readonly host: DeviceHost, readonly composite: AudioCompositeAdapter }
 
 export namespace DeviceSlot {
     export const forEffect = (adapter: EffectDeviceBoxAdapter): DeviceSlot => ({
@@ -36,14 +39,17 @@ export namespace DeviceSlot {
             case "insert":
             case "replace-effect":
                 return slot.accepts === "midi" ? "midi-effect" : "audio-effect"
+            case "new-entry":
+                return "audio-effect"
             case "replace-instrument":
             case "new-instrument":
+            case "new-layer":
                 return "instrument"
         }
     }
 
     // whether notes played into the slot's audio unit reach what is auditioned
-    export const takesNotes = (slot: DeviceSlot): boolean => slot.type === "new-instrument"
+    export const takesNotes = (slot: DeviceSlot): boolean => slot.type === "new-instrument" || slot.type === "new-layer"
         || slot.host.audioUnitBoxAdapter().inputAdapter.mapOr(input => input.accepts === "midi", false)
 
     export const isReplace = (slot: DeviceSlot): boolean =>
@@ -78,6 +84,8 @@ export namespace DeviceSlot {
         switch (slot.type) {
             case "new-instrument":
                 return factory !== InstrumentFactories.Tape
+            case "new-layer":
+                return InstrumentFactories.isLayerInstrument(factory)
             case "replace-instrument":
                 if (factory === InstrumentFactories.InstrumentComposite) {return false}
                 if (isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter)) {
@@ -125,8 +133,16 @@ export namespace DeviceSlot {
         isInstanceOf(host, InstrumentCompositeCellBoxAdapter)
         || (isInstanceOf(host, AudioUnitBoxAdapter) && host.inputAdapter.mapOr(input => input.accepts === "midi", false))
 
-    const effectField = (slot: DeviceSlot): Option<Field<EffectPointerType>> =>
-        slot.type === "insert" || slot.type === "replace-effect" ? DeviceHost.chainFieldOf(slot.host, slot.accepts) : Option.None
+    // a new-entry slot appends the entry it places into
+    const effectField = (slot: DeviceSlot): Option<Field<EffectPointerType>> => {
+        if (slot.type === "insert" || slot.type === "replace-effect") {return DeviceHost.chainFieldOf(slot.host, slot.accepts)}
+        if (slot.type !== "new-entry") {return Option.None}
+        const {entries} = slot.composite.box
+        return Option.wrap(AudioEffectCompositeCellBox.create(entries.graph, UUID.generate(), box => {
+            box.composite.refer(entries)
+            box.index.setValue(IndexedBox.collectIndexedBoxes(entries).length)
+        }).audioEffects)
+    }
 
     const removeReplaced = (slot: DeviceSlot, replaced: Option<EffectDeviceBoxAdapter>): void =>
         replaced.ifSome(adapter => {if (slot.type === "replace-effect") {Devices.deleteEffectDevices([adapter])}})
@@ -156,6 +172,8 @@ export namespace DeviceSlot {
                 }
                 return currentInstrument(slot).flatMap(box => api.replaceMIDIInstrument(box, factory).asOption())
             }
+            case "new-layer":
+                return api.createCompositeLayer(slot.composite, factory).asOption().map(({instrumentBox}) => instrumentBox)
             default:
                 return Option.None
         }
@@ -180,6 +198,12 @@ export namespace DeviceSlot {
                     return true
                 }, false)
             }
+            case "new-entry":
+                return effectField(slot).mapOr(field => {
+                    if (PresetDecoder.insertEffectChain(bytes, field, 0, PresetHeader.ChainKind.Audio).isSuccess()) {return true}
+                    field.box.delete()
+                    return false
+                }, false)
             case "replace-instrument": {
                 if (isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter)) {
                     return PresetDecoder.replaceLayerInstrument(bytes, slot.host.box).isSuccess()
@@ -194,6 +218,12 @@ export namespace DeviceSlot {
                 project.api.placeAudioUnitBefore(audioUnitBox, slot.anchor)
                 return PresetDecoder.replaceAudioUnit(bytes, asInstanceOf(audioUnitBox, AudioUnitBox),
                     {keepMIDIEffects: true, keepAudioEffects: true}).isSuccess()
+            }
+            case "new-layer": {
+                const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[device as InstrumentFactories.Keys]
+                if (isAbsent(factory)) {return false}
+                return project.api.createCompositeLayer(slot.composite, factory).asOption()
+                    .mapOr(({cellBox}) => PresetDecoder.replaceLayerInstrument(bytes, cellBox).isSuccess(), false)
             }
         }
     }
