@@ -32,18 +32,6 @@ component
       column-gap: 0.5em
       position: relative
 
-    > span.name
-      font-size: 0.75rem
-      color: var(--color-gray)
-      white-space: nowrap
-      overflow: hidden
-      text-overflow: ellipsis
-
-    > span.info
-      font-size: 0.75rem
-      color: var(--color-shadow)
-      white-space: nowrap
-
     > div.spacer
       flex: 1
 
@@ -67,21 +55,16 @@ component
         column-gap: 1.5em
 
       > div.meter
-        width: 6em
-        height: 0.5em
+        width: 3em
+        height: 0.375em
         border-radius: 1px
-        background-color: rgba(black, 0.4)
+        background-color: rgba(white, 0.06)
         overflow: hidden
 
         > div.bar
           width: 0
           height: 100%
           background-color: var(--color-green)
-
-      > span.record-time
-        min-width: 4em
-        color: var(--color-red)
-        font-variant-numeric: tabular-nums
 
   > div.overview
     height: 32px
@@ -142,6 +125,7 @@ component
 
         > p
           margin: 0
+          font-size: 12px
           color: rgba(white, 0.3)
 
   > footer
@@ -153,3 +137,30 @@ component
     font-size: 11px
     font-variant-numeric: tabular-nums
     color: var(--color-shadow)
+
+    > div.status
+      flex-shrink: 0
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      white-space: nowrap
+
+      > span.value
+        margin-right: 1.5em
+        color: var(--color-gray)
+
+    > span.record-time
+      color: var(--color-red)
+
+    > div.spacer
+      flex: 1
+
+    > span.name
+      min-width: 0
+      color: var(--color-gray)
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+    > span.info
+      white-space: nowrap

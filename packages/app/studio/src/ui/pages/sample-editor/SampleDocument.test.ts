@@ -33,9 +33,23 @@ describe("SampleDocument", () => {
         document.select(2, 2)
         expect(document.hasSelection).toBe(false)
     })
-    test("a loaded sample has no unsaved changes, a new one has", () => {
+    test("a loaded or imported sample has no unsaved changes, a new recording has", () => {
         expect(documentOf([[1]]).hasUnsavedChanges).toBe(false)
-        expect(new SampleDocument(create([[1]]), "New", Option.None).hasUnsavedChanges).toBe(true)
+        expect(new SampleDocument(create([[1]]), "Imported", Option.None).hasUnsavedChanges).toBe(false)
+        expect(new SampleDocument(create([[1]]), "Recording", Option.None, true).hasUnsavedChanges).toBe(true)
+    })
+    test("an edited import has unsaved changes until undone", () => {
+        const document = new SampleDocument(create([[1, 2, 3]]), "Imported", Option.None)
+        document.select(0, 1)
+        SampleEdits.remove(document)
+        expect(document.hasUnsavedChanges).toBe(true)
+        document.undo()
+        expect(document.hasUnsavedChanges).toBe(false)
+    })
+    test("saving a recording clears its unsaved state", () => {
+        const document = new SampleDocument(create([[1]]), "Recording", Option.None, true)
+        document.markSaved(source, "Recording")
+        expect(document.hasUnsavedChanges).toBe(false)
     })
     test("undo and redo restore audio and selection", () => {
         const document = documentOf([[1, 2, 3, 4, 5]])

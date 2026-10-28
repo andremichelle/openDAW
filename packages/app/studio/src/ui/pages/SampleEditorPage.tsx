@@ -64,9 +64,18 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
     const infoLabel: HTMLElement = <span className="info"/>
     const meterBar: HTMLElement = <div className="bar"/>
     const recordTime: HTMLElement = <span className="record-time"/>
-    const statusSelection: HTMLElement = <span/>
-    const statusLength: HTMLElement = <span/>
-    const statusZoom: HTMLElement = <span/>
+    const selectionValue: HTMLElement = <span className="value"/>
+    const framesValue: HTMLElement = <span className="value"/>
+    const lengthValue: HTMLElement = <span className="value"/>
+    const zoomValue: HTMLElement = <span className="value"/>
+    const status: HTMLElement = (
+        <div className="status">
+            <span>Selection</span>{selectionValue}
+            <span>Frames</span>{framesValue}
+            <span>Length</span>{lengthValue}
+            <span>Zoom</span>{zoomValue}
+        </div>
+    )
     const overviewCanvas: HTMLCanvasElement = <canvas/>
     const rulerCanvas: HTMLCanvasElement = <canvas/>
     const waveformCanvas: HTMLCanvasElement = <canvas/>
@@ -76,6 +85,12 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
             <p>Open a sample from the File menu or press Record.</p>
         </div>
     )
+    let fittedFrames: int = -1
+    const fitWidth = (element: HTMLElement, longest: string): void => {
+        element.style.minWidth = "0"
+        element.textContent = longest
+        element.style.minWidth = `${Math.ceil(element.getBoundingClientRect().width)}px`
+    }
     const refresh = (): void => {
         const document = current()
         noDocument.setValue(document.isEmpty())
@@ -89,9 +104,7 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
             none: () => {
                 nameLabel.textContent = ""
                 infoLabel.textContent = ""
-                statusSelection.textContent = ""
-                statusLength.textContent = ""
-                statusZoom.textContent = ""
+                status.classList.add("hidden")
             },
             some: document => {
                 const {audio: {sampleRate, numberOfChannels, numberOfFrames}} = document
@@ -100,13 +113,20 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                 nameLabel.textContent = `${document.name}${document.hasUnsavedChanges ? " *" : ""}`
                 infoLabel.textContent = `${sampleRate / 1000} kHz · ${numberOfChannels === 1 ? "Mono" : numberOfChannels === 2
                     ? "Stereo" : `${numberOfChannels} Channels`} · ${seconds(numberOfFrames)}`
-                statusSelection.textContent = to > from
-                    ? `Selection ${seconds(from)} – ${seconds(to)} (${to - from} frames)`
-                    : `Cursor ${seconds(from)}`
-                statusLength.textContent = `Length ${numberOfFrames} frames`
-                statusZoom.textContent = viewport.framesPerPixel >= 1.0
-                    ? `Zoom 1:${Math.round(viewport.framesPerPixel)}`
-                    : `Zoom ${Math.round(1.0 / viewport.framesPerPixel)}:1`
+                status.classList.remove("hidden")
+                if (status.isConnected && fittedFrames !== numberOfFrames) {
+                    fitWidth(selectionValue, `${seconds(numberOfFrames)} – ${seconds(numberOfFrames)}`)
+                    fitWidth(framesValue, String(numberOfFrames))
+                    fitWidth(lengthValue, String(numberOfFrames))
+                    fitWidth(zoomValue, `1:${numberOfFrames}`)
+                    fittedFrames = numberOfFrames
+                }
+                selectionValue.textContent = to > from ? `${seconds(from)} – ${seconds(to)}` : seconds(from)
+                framesValue.textContent = String(to - from)
+                lengthValue.textContent = String(numberOfFrames)
+                zoomValue.textContent = viewport.framesPerPixel >= 1.0
+                    ? `1:${Math.round(viewport.framesPerPixel)}`
+                    : `${Math.round(1.0 / viewport.framesPerPixel)}:1`
             }
         })
     }
@@ -453,11 +473,7 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                               appearance={{color: Colors.shadow, activeColor: Colors.blue, tooltip: "Loop selection"}}>
                         <Icon symbol={IconSymbol.Loop}/>
                     </Checkbox>
-                </div>
-                <hr/>
-                <div className="group">
                     <div className="meter">{meterBar}</div>
-                    {recordTime}
                 </div>
                 <hr/>
                 <div className="group">
@@ -501,9 +517,6 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                         <Icon symbol={IconSymbol.ZoomFit}/>
                     </Button>
                 </div>
-                <hr/>
-                {nameLabel}
-                {infoLabel}
                 <div className="spacer"/>
                 <div className="back"><BackButton lifecycle={lifecycle} service={service}/></div>
             </header>
@@ -513,9 +526,11 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                 <div className="lanes-wrapper" onInit={installSelection}>{lanes}{empty}</div>
             </div>
             <footer>
-                {statusSelection}
-                {statusLength}
-                {statusZoom}
+                {status}
+                {recordTime}
+                <div className="spacer"/>
+                {nameLabel}
+                {infoLabel}
             </footer>
         </div>
     )

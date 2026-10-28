@@ -1,6 +1,7 @@
 import {
     Arrays,
     DefaultObservableValue,
+    EmptyExec,
     Errors,
     isDefined,
     MutableObservableOption,
@@ -41,6 +42,12 @@ export class SampleEditorService {
         this.clipboard = new MutableObservableOption<AudioData>()
         this.#effectValues = new Map()
         this.#fileBox = Option.None
+        let inEditor = false
+        RouteLocation.get().catchupAndSubscribe(({path}) => {
+            const wasInEditor = inEditor
+            inEditor = path === SampleEditorRoute
+            if (wasInEditor && !inEditor) {this.#leave().then(EmptyExec, console.warn)}
+        })
     }
 
     get hasUnsavedChanges(): boolean {return this.document.mapOr(document => document.hasUnsavedChanges, false)}
@@ -96,7 +103,7 @@ export class SampleEditorService {
 
     async openRecording(audio: AudioData): Promise<void> {
         if (!await this.#approveDiscard()) {return}
-        this.#open(new SampleDocument(audio, "Recording", Option.None), Option.None)
+        this.#open(new SampleDocument(audio, "Recording", Option.None, true), Option.None)
     }
 
     async close(): Promise<void> {
@@ -213,6 +220,16 @@ export class SampleEditorService {
             SampleEditorService.#setDuration(box, audio)
             return box
         })
+    }
+
+    async #leave(): Promise<void> {
+        if (this.document.isEmpty()) {return}
+        if (this.hasUnsavedChanges && !await this.#approveDiscard()) {
+            this.navigate()
+            return
+        }
+        this.#fileBox = Option.None
+        this.document.clear()
     }
 
     async #approveDiscard(): Promise<boolean> {

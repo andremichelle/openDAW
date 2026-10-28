@@ -35,8 +35,9 @@ export class SampleDocument {
     #name: string
     #source: Option<SampleSource>
     #savedStep: Nullable<Step>
+    #modified: boolean
 
-    constructor(audio: AudioData, name: string, source: Option<SampleSource>) {
+    constructor(audio: AudioData, name: string, source: Option<SampleSource>, modified: boolean = false) {
         this.#audio = audio
         this.#name = name
         this.#source = source
@@ -45,6 +46,7 @@ export class SampleDocument {
         this.#undo = []
         this.#redo = []
         this.#savedStep = null
+        this.#modified = modified
     }
 
     get audio(): AudioData {return this.#audio}
@@ -52,7 +54,7 @@ export class SampleDocument {
     get source(): Option<SampleSource> {return this.#source}
     get canUndo(): boolean {return this.#undo.length > 0}
     get canRedo(): boolean {return this.#redo.length > 0}
-    get hasUnsavedChanges(): boolean {return this.#source.isEmpty() || this.#topStep() !== this.#savedStep}
+    get hasUnsavedChanges(): boolean {return this.#modified || this.#topStep() !== this.#savedStep}
     get hasSelection(): boolean {
         const {from, to} = this.selection.getValue()
         return to > from
@@ -97,6 +99,7 @@ export class SampleDocument {
         this.#source = Option.wrap(source)
         this.#name = name
         this.#savedStep = this.#topStep()
+        this.#modified = false
         this.#notifier.notify(this)
     }
 

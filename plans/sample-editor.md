@@ -110,7 +110,7 @@ interface SampleEffect {
 2. Save As New Sample: asks for a name (suggested with the suffix " (edited)"), new uuid through `SampleService.importFile`, bpm kept.
 3. Save (overwrite): local samples only, confirm dialog naming that projects using it change, same uuid, then the sample loader is invalidated and the open project's file duration updated.
 4. Export: WAV/FLAC through the shared `AudioFormatSelector`.
-5. The document lives in `SampleEditorService`, so leaving the route keeps it. Replacing it (open, new, import) asks to discard unsaved changes, closing the tab warns.
+5. The document lives in `SampleEditorService`. Leaving the route closes it, with unsaved changes it asks first (Cancel returns to the editor). Replacing it (open, new, import) asks to discard unsaved changes, closing the tab warns. A fresh import starts unchanged, a new recording starts unsaved.
 
 ## Entry points
 
