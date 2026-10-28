@@ -28,7 +28,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
             <MenuButton
                 style={{marginLeft: "8px"}}
-                appearance={{color: Colors.shadow, tinyTriangle: true, tooltip: "Add track"}}
+                appearance={{color: Colors.shadow, tooltip: "Add track"}}
                 root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.default({
                         label: "Add Instrument…", icon: IconSymbol.Piano, selectable: service.hasProfile,
@@ -39,7 +39,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                         shortcut: GlobalShortcuts["add-audio-track"].shortcut.format()
                     }).setTriggerProcedure(() => CreateTrack.audioTrack(service))
                 ))}>
-                <Icon symbol={IconSymbol.Add}/>
+                <Icon symbol={IconSymbol.Add} style={{fontSize: "1.25em"}}/>
             </MenuButton>
             <FlexSpacer/>
             <Checkbox lifecycle={lifecycle}
