@@ -8,6 +8,7 @@ import {
     Exec,
     int,
     isDefined,
+    isInstanceOf,
     JSONValue,
     Listeners,
     Option,
@@ -66,6 +67,7 @@ export class BoxGraph<BoxMap = any> {
         final: Option<Address>,
         index: int
     }>
+    readonly #severedPointers: Array<{ pointer: PointerField, target: Vertex }>
     readonly #finalizeTransactionObservers: Array<Exec>
     readonly #deletionListeners: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, listeners: Set<Exec> }>
 
@@ -86,6 +88,7 @@ export class BoxGraph<BoxMap = any> {
         this.#transactionListeners = new Listeners<TransactionListener>()
         this.#edges = new GraphEdges()
         this.#pointerTransactionState = Address.newSet(({pointer}) => pointer.address)
+        this.#severedPointers = []
         this.#finalizeTransactionObservers = []
         this.#deletionListeners = UUID.newSet<{ uuid: UUID.Bytes, listeners: Set<Exec> }>(entry => entry.uuid)
     }
@@ -338,6 +341,16 @@ export class BoxGraph<BoxMap = any> {
 
     #finalizeTransaction(): void {
         this.#deferredPointerFields.clear()
+        this.#severedPointers.splice(0).forEach(({pointer, target}) => {
+            target.pointerHub.onRemoved(pointer)
+            if (this.#pointerTransactionState.hasKey(pointer.address)) {return}
+            this.findVertex(pointer.address).ifSome(replacement => {
+                if (isInstanceOf(replacement, PointerField)
+                    && replacement.targetAddress.mapOr(address => address.equals(target.address), false)) {
+                    target.pointerHub.onAdded(replacement)
+                }
+            })
+        })
         this.#pointerTransactionState.values()
             .toSorted((a, b) => a.index - b.index)
             .forEach(({pointer, initial, final}) => {
@@ -360,6 +373,12 @@ export class BoxGraph<BoxMap = any> {
 
     #rollback(): void {
         this.#rollingBack = true
+        // the rollback recreates deleted boxes as new instances, so listeners must let go of the old pointers
+        this.#pointerTransactionState.forEach(({pointer, initial}) => {
+            if (this.findBox(pointer.box.address.uuid).mapOr(box => box === pointer.box, false)) {return}
+            initial.flatMap(address => this.findVertex(address))
+                .ifSome(target => this.#severedPointers.push({pointer, target}))
+        })
         for (const {update} of this.#deferredPointerUpdates) {
             this.#transactionUpdates.push(update)
         }
