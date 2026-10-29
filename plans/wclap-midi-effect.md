@@ -75,21 +75,21 @@ and instructions in open-webclap. She sends back the bundle.
 8. Node tests `core-wasm/test/wclap-midi-effect.test.ts`: Thru, Harmony, Echo across quanta, two composite layers,
    all within a sample. `duration` is only read by scripts, plugin notes carry 0 like live notes.
 
-### 4. SDK release
+### 4. SDK release (published 2026-10-29, f86d78067, site bumped to studio-core 0.2.12)
 
 1. Publish the studio packages with the new box and factory, additive only (SDK consumers).
 2. Bump the site's dependencies.
 
-### 5. Site page for MIDI effects (open-webclap `site/`, built 2026-10-29 against local SDK builds, needs phase 4 before a push)
+### 5. Site page for MIDI effects (open-webclap `site/`, 1097812)
 
 1. Plugin kind `midi-effect` in `plugins.ts`, the session builds a track: notes, the WebCLAP MIDI effect, then an
    instrument.
-2. Input: the Keyboard component, Web MIDI in, and a looping note region with a small step grid as piano roll.
+2. Input: the Keyboard component (on screen, computer keys) and Web MIDI in.
 3. Output select: a stock sine (Vaporisateur preset) or an external MIDI device through MIDI Output.
 4. The device panel view shown as in the studio, plus the big window and the message log.
 5. Note-lab listed on the site and in the catalogue as the reference.
 
-### 6. Porting kit for her (open-webclap)
+### 6. Porting kit for her (open-webclap `docs/porting-a-midi-effect.md`, 2026-10-29)
 
 1. `docs/porting-a-midi-effect.md`: clone, emsdk, build note-lab, `npm run dev`, `?local`, Import of her own
    bundle, where logs show, the node check.
