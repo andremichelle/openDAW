@@ -80,7 +80,7 @@ and instructions in open-webclap. She sends back the bundle.
 1. Publish the studio packages with the new box and factory, additive only (SDK consumers).
 2. Bump the site's dependencies.
 
-### 5. Site page for MIDI effects (open-webclap `site/`)
+### 5. Site page for MIDI effects (open-webclap `site/`, built 2026-10-29 against local SDK builds, needs phase 4 before a push)
 
 1. Plugin kind `midi-effect` in `plugins.ts`, the session builds a track: notes, the WebCLAP MIDI effect, then an
    instrument.
