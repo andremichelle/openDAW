@@ -1,6 +1,6 @@
 import css from "./PreferencePanel.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, Optional} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Optional} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -9,6 +9,7 @@ import {NumberInput} from "@/ui/components/NumberInput"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Preferences} from "@opendaw/lib-fusion"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {DropDown} from "@/ui/composite/DropDown"
 
 const className = Html.adoptStyleSheet(css, "PreferencePanel")
 
@@ -36,10 +37,11 @@ type Construct<ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS> = {
     pathPrefix?: ReadonlyArray<string>
     labels: NestedLabels<SETTINGS>
     options?: SelectOptions<SETTINGS>
+    dropdowns?: SelectOptions<SETTINGS>
 }
 
 export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
-    {lifecycle, preferences, pathPrefix = [], labels, options}: Construct<ROOT_SETTINGS, SETTINGS>
+    {lifecycle, preferences, pathPrefix = [], labels, options, dropdowns}: Construct<ROOT_SETTINGS, SETTINGS>
 ) => {
     const settings = pathPrefix.reduce(
         (obj, key) => (obj as Record<string, unknown>)[key],
@@ -57,6 +59,7 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
                 if (typeof setting === "object" && setting !== null && typeof label === "object" && "fields" in label) {
                     const nestedLabels = label as { label: string; fields: NestedLabels<typeof setting> }
                     const nestedOptions = options?.[pKey] as Optional<SelectOptions<typeof setting>>
+                    const nestedDropdowns = dropdowns?.[pKey] as Optional<SelectOptions<typeof setting>>
                     return (
                         <details className="accordion" open>
                             <summary>{nestedLabels.label}</summary>
@@ -65,7 +68,8 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
                                 preferences={preferences}
                                 pathPrefix={currentPath}
                                 labels={nestedLabels.fields}
-                                options={nestedOptions}/>
+                                options={nestedOptions}
+                                dropdowns={nestedDropdowns}/>
                         </details>
                     )
                 }
@@ -122,6 +126,23 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
                         )
                     }
                     case "string": {
+                        const dropdownOptions = dropdowns?.[pKey] as Optional<ReadonlyArray<{
+                            value: string;
+                            label: string
+                        }>>
+                        if (isDefined(dropdownOptions)) {
+                            return (
+                                <div className="select-field">
+                                    <span style={{color: Colors.shadow.toString()}}>{label}</span>
+                                    <hr/>
+                                    <DropDown lifecycle={lifecycle}
+                                              owner={createModel()}
+                                              provider={() => dropdownOptions.map(option => option.value)}
+                                              mapping={(value: string) => dropdownOptions
+                                                  .find(option => option.value === value)?.label ?? value}/>
+                                </div>
+                            )
+                        }
                         const fieldOptions = options?.[pKey] as ReadonlyArray<{
                             value: string;
                             label: string

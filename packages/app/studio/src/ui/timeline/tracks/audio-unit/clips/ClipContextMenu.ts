@@ -8,15 +8,17 @@ import {DebugMenus} from "@/ui/menu/debug"
 import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
+import {SampleEditorService} from "@/service/SampleEditorService"
 
 type Creation = {
     element: HTMLElement
     project: Project
     capturing: ElementCapturing<ClipCaptureTarget>
     selection: Selection<AnyClipBoxAdapter>
+    sampleEditor: SampleEditorService
 }
 
-export const installClipContextMenu = ({element, project, selection, capturing}: Creation) =>
+export const installClipContextMenu = ({element, project, selection, capturing, sampleEditor}: Creation) =>
     ContextMenu.subscribe(element, collector => {
         const client = collector.client
         const target = capturing.captureEvent(client)
@@ -52,6 +54,10 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                 MenuItem.default({label: "Consolidate", selectable: clip.isMirrowed})
                     .setTriggerProcedure(() => editing.modify(() =>
                         selection.selected().forEach(clip => clip.consolidate()))),
+                MenuItem.default({label: "Edit in Sample Editor", hidden: clip.type !== "audio-clip"})
+                    .setTriggerProcedure(() => {
+                        if (clip.type === "audio-clip") {sampleEditor.openFile(clip.file).then(EmptyExec, console.warn)}
+                    }),
                 MenuItem.default({
                     label: "Playback",
                     hidden: clip.type !== "audio-clip",

@@ -11,12 +11,14 @@ export namespace PresetDialogs {
         headline: string
         suggestedName?: string
         suggestedDescription?: string
+        suggestedTags?: ReadonlyArray<string>
         showTimelineToggle?: boolean
     }
 
     export type SaveResult = {
         name: string
         description: string
+        tags: ReadonlyArray<string>
         includeTimeline: boolean
     }
 
@@ -24,6 +26,7 @@ export namespace PresetDialogs {
                                                    headline,
                                                    suggestedName = "",
                                                    suggestedDescription = "",
+                                                   suggestedTags = [],
                                                    showTimelineToggle = true
                                                }: SaveInput): Promise<SaveResult> => {
         const lifecycle = new Terminator()
@@ -37,6 +40,9 @@ export namespace PresetDialogs {
                       rows={3}
                       placeholder="Optional description">{suggestedDescription}</textarea>
         )
+        const tagsField: HTMLInputElement = (
+            <input className="default" type="text" placeholder="Optional, comma separated" value={suggestedTags.join(", ")}/>
+        )
         const includeTimelineModel = new DefaultObservableValue(false)
         const approve = () => {
             const name = nameField.value.trim()
@@ -47,6 +53,8 @@ export namespace PresetDialogs {
             resolve({
                 name,
                 description: descriptionField.value.trim(),
+                tags: Array.from(new Set(tagsField.value.split(",")
+                    .map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0))),
                 includeTimeline: includeTimelineModel.getValue()
             })
             return true
@@ -76,6 +84,8 @@ export namespace PresetDialogs {
                     {nameField}
                     <div style={{paddingTop: "0.35em"}}>Description:</div>
                     {descriptionField}
+                    <div style={{paddingTop: "0.35em"}}>Tags:</div>
+                    {tagsField}
                     {showTimelineToggle && (
                         <Frag>
                             <div style={{paddingTop: "0.15em"}}>Include timeline:</div>
@@ -99,75 +109,6 @@ export namespace PresetDialogs {
         dialog.showModal()
         nameField.select()
         nameField.focus()
-        return promise
-    }
-
-    export type RackCompositionChoice = "entire-chain" | "only-instrument"
-
-    export type RackCompositionResult = {
-        choice: RackCompositionChoice
-        includeTimeline: boolean
-    }
-
-    export const showRackCompositionDialog = async (headline: string,
-                                                    message: string,
-                                                    showTimelineToggle: boolean = false,
-                                                    initialIncludeTimeline: boolean = false): Promise<RackCompositionResult> => {
-        const lifecycle = new Terminator()
-        const {resolve, reject, promise} = Promise.withResolvers<RackCompositionResult>()
-        promise.finally(() => lifecycle.terminate())
-        const includeTimelineModel = new DefaultObservableValue(initialIncludeTimeline)
-        const dialog: HTMLDialogElement = (
-            <Dialog headline={headline}
-                    icon={IconSymbol.Box}
-                    cancelable={true}
-                    buttons={[
-                        {
-                            text: "Cancel",
-                            onClick: handler => {
-                                reject(Errors.AbortError)
-                                handler.close()
-                            }
-                        },
-                        {
-                            text: "Only Instrument",
-                            onClick: handler => {
-                                resolve({choice: "only-instrument", includeTimeline: includeTimelineModel.getValue()})
-                                handler.close()
-                            }
-                        },
-                        {
-                            text: "Entire Chain",
-                            primary: true,
-                            onClick: handler => {
-                                resolve({choice: "entire-chain", includeTimeline: includeTimelineModel.getValue()})
-                                handler.close()
-                            }
-                        }
-                    ]}>
-                <div style={{padding: "1em 0", minWidth: "20em", display: "flex", color: Colors.dark.toString(),
-                    flexDirection: "column", rowGap: "0.75em"}}>
-                    <div>{message}</div>
-                    {showTimelineToggle && (
-                        <div style={{
-                            display: "grid",
-                            gridTemplateColumns: "auto 1fr",
-                            columnGap: "1em",
-                            alignItems: "center"
-                        }}>
-                            <div>Include timeline:</div>
-                            <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
-                                      appearance={{framed: true, color: Colors.black}}>
-                                <Icon symbol={IconSymbol.Checkbox}/>
-                            </Checkbox>
-                        </div>
-                    )}
-                </div>
-            </Dialog>
-        )
-        dialog.oncancel = () => reject(Errors.AbortError)
-        Surface.get().flyout.appendChild(dialog)
-        dialog.showModal()
         return promise
     }
 
@@ -203,7 +144,7 @@ export namespace PresetDialogs {
                             }
                         },
                         {
-                            text: "Replace",
+                            text: "Overwrite",
                             primary: true,
                             onClick: handler => {
                                 resolve({includeTimeline: includeTimelineModel.getValue()})

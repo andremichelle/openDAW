@@ -34,7 +34,8 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                     <PreferencePanel lifecycle={lifecycle}
                                      preferences={StudioPreferences}
                                      labels={PreferencesPageLabels.StudioSettingsLabels}
-                                     options={PreferencesPageLabels.StudioSettingsOptions}/>
+                                     options={PreferencesPageLabels.StudioSettingsOptions}
+                                     dropdowns={PreferencesPageLabels.StudioSettingsDropdowns}/>
                 </section>
                 <section>
                     <div className="header">

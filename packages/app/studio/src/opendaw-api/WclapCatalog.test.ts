@@ -1,4 +1,6 @@
 import {afterAll, beforeAll, describe, expect, it, vi} from "vitest"
+import {Errors} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {WclapCatalog} from "./WclapCatalog"
 import {OpenWclapAPI} from "./OpenWclapAPI"
 import {CommunityAPI} from "./CommunityAPI"
@@ -25,14 +27,17 @@ const routes: Record<string, string> = {
 }
 
 const requested: Array<string> = []
+const hooks: { onRequest: (url: string) => void } = {onRequest: () => {}}
 
 const text = async (archive: Promise<ArrayBuffer>): Promise<string> => new TextDecoder().decode(await archive)
 
 describe("WclapCatalog.load", () => {
     beforeAll(() => {
-        vi.stubGlobal("fetch", async (input: string): Promise<Response> => {
+        vi.stubGlobal("fetch", async (input: string, init?: RequestInit): Promise<Response> => {
             const url = input.split("?")[0]
             requested.push(url)
+            hooks.onRequest(url)
+            init?.signal?.throwIfAborted()
             const body = routes[url]
             return body === undefined ? new Response("missing", {status: 404}) : new Response(body, {status: 200})
         })
@@ -55,5 +60,14 @@ describe("WclapCatalog.load", () => {
             `${OpenWclapAPI.FileRoot}/${Unknown}.wclap`,
             `${CommunityAPI.FileRoot}/wclaps/${Unknown}.wclap`
         ])
+    })
+    it("a cancelled download rejects as aborted, without retries or asking the other server", async () => {
+        const controller = new AbortController()
+        hooks.onRequest = url => {if (url.endsWith(".wclap")) {controller.abort(Errors.AbortError)}}
+        requested.length = 0
+        const result = await Promises.tryCatch(WclapCatalog.get().load(CloudDropped, undefined, controller.signal))
+        hooks.onRequest = () => {}
+        expect(result.status === "rejected" && Errors.isAbort(result.error)).true
+        expect(requested.filter(url => url.endsWith(".wclap"))).toEqual([`${OpenWclapAPI.FileRoot}/${CloudDropped}.wclap`])
     })
 })

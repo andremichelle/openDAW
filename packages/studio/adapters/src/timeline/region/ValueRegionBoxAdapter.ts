@@ -185,8 +185,12 @@ export class ValueRegionBoxAdapter
     moveContentStart(delta: ppqn): void {
         if (delta === 0) {return}
         this.consolidate()
-        this.optCollection.ifSome(collection => collection.events.asArray().slice()
-            .forEach(event => event.box.position.setValue(event.position - delta)))
+        // walk away from the shift so no point lands on one that has not moved yet
+        this.optCollection.ifSome(collection => {
+            const events = collection.events.asArray().slice()
+            if (delta < 0) {events.reverse()}
+            events.forEach(event => event.box.position.setValue(event.position - delta))
+        })
         this.position = this.position + delta
         this.loopDuration = this.loopDuration - delta
         this.duration = this.duration - delta

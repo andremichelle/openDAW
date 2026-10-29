@@ -57,6 +57,7 @@ import {
     NanoDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    WclapMidiEffectBox,
     WclapInstrumentBox,
     NeuralAmpModelBox,
     NoteClipBox,
@@ -179,6 +180,7 @@ import {ConvolverDeviceBoxAdapter} from "./devices/audio-effects/ConvolverDevice
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WclapDeviceBoxAdapter} from "./devices/audio-effects/WclapDeviceBoxAdapter"
+import {WclapMidiEffectBoxAdapter} from "./devices/midi-effects/WclapMidiEffectBoxAdapter"
 import {WclapInstrumentBoxAdapter} from "./devices/instruments/WclapInstrumentBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
 import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
@@ -291,6 +293,7 @@ export class BoxAdapters implements Terminable {
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
+            visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => new WclapMidiEffectBoxAdapter(this.#context, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => new WclapInstrumentBoxAdapter(this.#context, box),
             visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),

@@ -9,6 +9,8 @@ import {PPQN} from "@opendaw/lib-dsp"
 import {
     AudioUnitBox,
     CaptureMidiBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     MIDIOutputBox,
     MIDIOutputDeviceBox,
     MIDIOutputParameterBox,
@@ -30,7 +32,8 @@ const PACKAGE_INT_ARRAY = 3
 
 type MidiRecord = {device: number, status: number, data1: number, data2: number, length: number, timeMs: number}
 
-const build = (options: {sendTransport: boolean, withNote: boolean, withParameter: boolean}) => {
+const build = (options: {sendTransport: boolean, withNote: boolean, withParameter: boolean, layered?: boolean,
+    muted?: boolean, soloOther?: boolean, nested?: boolean}) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -47,8 +50,34 @@ const build = (options: {sendTransport: boolean, withNote: boolean, withParamete
         box.delayInMs.setValue(DELAY_MS)
         box.sendTransportMessages.setValue(options.sendTransport)
     })
+    // the outer layer carries mute / solo, a nested composite inside it hosts the device when asked
+    const layer = () => {
+        const composite = InstrumentCompositeBox.create(source, UUID.generate(), box => box.host.refer(unit.input))
+        if (options.soloOther === true) {
+            InstrumentCompositeCellBox.create(source, UUID.generate(), cell => {
+                cell.composite.refer(composite.cells)
+                cell.index.setValue(1)
+                cell.solo.setValue(true)
+            })
+        }
+        const outer = InstrumentCompositeCellBox.create(source, UUID.generate(), cell => {
+            cell.composite.refer(composite.cells)
+            cell.index.setValue(0)
+            cell.mute.setValue(options.muted === true)
+        })
+        if (options.nested !== true) {return {outer, leaf: outer}}
+        const inner = InstrumentCompositeBox.create(source, UUID.generate(), box => box.host.refer(outer.instrument))
+        const leaf = InstrumentCompositeCellBox.create(source, UUID.generate(), cell => {
+            cell.composite.refer(inner.cells)
+            cell.index.setValue(0)
+        })
+        return {outer, leaf}
+    }
+    const layers = options.layered === true ? layer() : undefined
+    const cell = layers?.outer
+    const host = layers?.leaf.instrument ?? unit.input
     const device = MIDIOutputDeviceBox.create(source, UUID.generate(), box => {
-        box.host.refer(unit.input)
+        box.host.refer(host)
         box.channel.setValue(CHANNEL)
         box.device.refer(outputBox.device)
     })
@@ -88,12 +117,12 @@ const build = (options: {sendTransport: boolean, withNote: boolean, withParamete
             box.regions.refer(track.regions)
             box.events.refer(events.owners)
             box.position.setValue(0)
-            box.duration.setValue(3840)
+            box.duration.setValue(3840 * 4)
             box.loopDuration.setValue(3840)
         })
     }
     source.endTransaction()
-    return {source, unitUuid: unit.address.uuid}
+    return {source, unit, unitUuid: unit.address.uuid, device, cell}
 }
 
 const drainMIDI = (engine: any, memory: WebAssembly.Memory): Array<MidiRecord> => {
@@ -143,8 +172,8 @@ const anyBit = (bits: Int32Array): number => bits[0] | bits[1] | bits[2] | bits[
 const pulsesPerQuantum = PPQN.secondsToPulses(128 / SAMPLE_RATE, BPM)
 
 describe("MIDI output instrument (wasm engine)", () => {
-    it("emits byte-exact note records with TS timing and lights the note indicator", async () => {
-        const {source, unitUuid} = build({sendTransport: false, withNote: true, withParameter: true})
+    it.each([false, true])("emits byte-exact note records with TS timing and lights the note indicator (layered: %s)", async layered => {
+        const {source, unitUuid} = build({sendTransport: false, withNote: true, withParameter: true, layered})
         const {engine, memory} = await loadFullEngine(SAMPLE_RATE)
         const sync = connectSyncToEngine(engine, memory, source)
         await sync.settle(); engine.bind(); await sync.settle()
@@ -221,5 +250,92 @@ describe("MIDI output instrument (wasm engine)", () => {
         const afterSeek = drainMIDI(engine, memory)
         // SongPosition: Math.floor(3840 / 96) = 40 -> lsb 40, msb 0 (the mirrored TS constant).
         expect(afterSeek).toEqual([{device: 0, status: 0xF2, data1: 40, data2: 0, length: 3, timeMs: DELAY_MS}])
+    }, 60000)
+
+    it.each([false, true])("binds a CC parameter added later and goes quiet once removed (layered: %s)", async layered => {
+        const {source, unit, device} = build({sendTransport: false, withNote: false, withParameter: false, layered})
+        const {engine, memory} = await loadFullEngine(SAMPLE_RATE)
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+        expect(drainMIDI(engine, memory), "no parameters, no initial push").toEqual([])
+        source.beginTransaction()
+        const parameter = MIDIOutputParameterBox.create(source, UUID.generate(), box => {
+            box.owner.refer(device.parameters)
+            box.controller.setValue(7)
+            box.value.setValue(0.5)
+        })
+        TrackBox.create(source, UUID.generate(), box => {
+            box.index.setValue(0)
+            box.target.refer(parameter.value)
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(unit.tracks)
+        })
+        source.endTransaction()
+        await sync.settle()
+        engine.play()
+        for (let quantum = 0; quantum < 4; quantum++) {engine.render()}
+        expect(drainMIDI(engine, memory), "a joining parameter stays silent").toEqual([])
+        source.beginTransaction()
+        parameter.value.setValue(1.0)
+        source.endTransaction()
+        await sync.settle()
+        for (let quantum = 0; quantum < 4; quantum++) {engine.render()}
+        const changed = drainMIDI(engine, memory)
+        expect(changed.map(({status, data1, data2}) => ({status, data1, data2})))
+            .toEqual([{status: 0xB0 | CHANNEL, data1: 7, data2: 127}])
+        source.beginTransaction()
+        unit.tracks.pointerHub.incoming().forEach(({box}) => box.delete())
+        device.delete()
+        source.endTransaction()
+        await sync.settle()
+        for (let quantum = 0; quantum < 4; quantum++) {engine.render()}
+        expect(drainMIDI(engine, memory)).toEqual([])
+    }, 60000)
+
+    const playNotes = async (options: {muted?: boolean, soloOther?: boolean, nested?: boolean}) => {
+        const scene = build({sendTransport: false, withNote: true, withParameter: false, layered: true, ...options})
+        const {engine, memory} = await loadFullEngine(SAMPLE_RATE)
+        const sync = connectSyncToEngine(engine, memory, scene.source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+        engine.play()
+        return {...scene, engine, memory, sync}
+    }
+
+    it.each([{muted: true}, {soloOther: true}, {muted: true, nested: true}, {soloOther: true, nested: true}])(
+        "a layer that is silent (%o) sends no new notes", async options => {
+        const {engine, memory} = await playNotes(options)
+        const records: Array<MidiRecord> = []
+        for (let quantum = 0; quantum < 200; quantum++) {
+            engine.render()
+            records.push(...drainMIDI(engine, memory))
+        }
+        expect(records).toEqual([])
+    }, 60000)
+
+    it.each([false, true])("muting a layer while its note is held still releases that note, unmuting lets the next one through (nested: %s)", async nested => {
+        const {engine, memory, sync, source, cell} = await playNotes({nested})
+        const records: Array<MidiRecord> = []
+        const render = (quanta: number) => {
+            for (let quantum = 0; quantum < quanta; quantum++) {
+                engine.render()
+                records.push(...drainMIDI(engine, memory))
+            }
+        }
+        render(10)
+        expect(records.map(record => record.status), "the note started").toEqual([0x90 | CHANNEL])
+        source.beginTransaction()
+        asDefined(cell).mute.setValue(true)
+        source.endTransaction()
+        await sync.settle()
+        render(900) // past the note end (960) and the second cycle start (3840)
+        expect(records.map(record => record.status), "released, the looped start dropped").toEqual([0x90 | CHANNEL, 0x80 | CHANNEL])
+        source.beginTransaction()
+        asDefined(cell).mute.setValue(false)
+        source.endTransaction()
+        await sync.settle()
+        render(800) // past the third cycle start (7680)
+        expect(records.filter(record => record.status === (0x90 | CHANNEL)).length, "unmuted, the next cycle plays").toBe(2)
     }, 60000)
 })

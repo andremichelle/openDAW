@@ -2,6 +2,7 @@ import css from "./DevicePanel.sass?inline"
 import {
     asDefined,
     isAbsent,
+    isDefined,
     isInstanceOf,
     isNotNull,
     Lifecycle,
@@ -9,6 +10,7 @@ import {
     Nullable,
     ObservableOption,
     Option,
+    Provider,
     Terminable,
     Terminator,
     UUID
@@ -21,6 +23,7 @@ import {
     AudioUnitInputAdapter,
     DeviceHost,
     Devices,
+    EffectDeviceBoxAdapter,
     IndexedBoxAdapterCollection,
     InstrumentCompositeCellBoxAdapter,
     MidiEffectDeviceAdapter,
@@ -36,7 +39,6 @@ import {DevicePanelShortcuts} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
 import {CompositeCellEditor} from "@/ui/devices/CompositeCellEditor"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
-import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
@@ -44,6 +46,9 @@ import {DevicesClipboard, Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
+import {InsertButton} from "@/ui/devices/panel/InsertButton"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
+import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
 
@@ -77,6 +82,8 @@ type Construct = {
 
 type Context = { deviceHost: DeviceHost, instrument: ObservableOption<AudioUnitInputAdapter> }
 
+type InsertSlot = { readonly element: HTMLElement, slot: Provider<DeviceSlot> }
+
 export const DevicePanel = ({lifecycle, service}: Construct) => {
     const cellContainer: HTMLElement = <div className="cell-container"/>
     const midiEffectsContainer: HTMLElement = <div className="midi-container"/>
@@ -86,9 +93,30 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     const noAudioUnitSelectedPlaceholder: HTMLElement = (
         <NoAudioUnitSelectedPlaceholder lifecycle={lifecycle} service={service}/>
     )
-    const noEffectPlaceholder: HTMLElement = (
-        <NoEffectPlaceholder service={service}/>
-    )
+    const insertSlots = new Map<string, InsertSlot>()
+    const insertButton = (key: string, slot: Provider<DeviceSlot>): HTMLElement => {
+        const existing = insertSlots.get(key)
+        if (isDefined(existing)) {
+            existing.slot = slot
+            return existing.element
+        }
+        const entry = {
+            element: InsertButton({onClick: () => DeviceDialog.open(service, entry.slot())}),
+            slot
+        }
+        insertSlots.set(key, entry)
+        return entry.element
+    }
+    const insertButtons = (host: DeviceHost, accepts: "audio" | "midi",
+                           adapters: ReadonlyArray<EffectDeviceBoxAdapter>,
+                           editor: (uuid: UUID.Bytes) => JsxValue): Array<JsxValue> => [
+        insertButton(`${accepts}:lead`, () => ({type: "insert", host, accepts, index: 0})),
+        ...adapters.flatMap(adapter => [
+            editor(adapter.uuid),
+            insertButton(`${accepts}:${UUID.toString(adapter.uuid)}`,
+                () => ({type: "insert", host, accepts, index: adapter.indexField.getValue() + 1}))
+        ])
+    ]
     const containers: HTMLElement = (
         <div className="containers">
             {cellContainer}
@@ -101,7 +129,6 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         <div className="editors">
             {containers}
             {noAudioUnitSelectedPlaceholder}
-            {noEffectPlaceholder}
         </div>
     )
     const scrollModel = new ScrollModel()
@@ -152,7 +179,6 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         const {project} = profile.unwrap()
         const optEditing = project.userEditingManager.audioUnit.get()
         noAudioUnitSelectedPlaceholder.classList.toggle("hidden", optEditing.nonEmpty())
-        noEffectPlaceholder.classList.toggle("hidden", optEditing.isEmpty())
         if (optEditing.isEmpty()) {
             clearChains()
             return
@@ -177,20 +203,25 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         })
         // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
         const midiAdapters = deviceHost.midiEffects.mapOr(chain => chain.adapters(), [])
-        reconcileChildren(midiEffectsContainer, midiLead, midiAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
+        const editorOf = (uuid: UUID.Bytes): JsxValue => mounts.get(uuid).editor()
+        reconcileChildren(midiEffectsContainer, midiLead, DeviceHost.takesEffect(deviceHost, "midi")
+            ? insertButtons(deviceHost, "midi", midiAdapters, editorOf)
+            : midiAdapters.map(adapter => editorOf(adapter.uuid)))
         // A composite entry's back editor is AUDIO, so its slot line reads blue, not the instrument green.
         instrumentContainer.classList.toggle("as-audio", instrument.isEmpty() && !deviceHost.hostsInstrument)
         reconcileChildren(instrumentContainer, instrument.match({
             // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
             none: () => deviceHost.hostsInstrument
-                ? <div/>
+                ? DeviceSlot.canReplaceInstrument(deviceHost)
+                    ? insertButton("instrument", () => ({type: "replace-instrument", host: deviceHost}))
+                    : <div/>
                 : <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>,
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))
         const audioAdapters = deviceHost.audioEffects.mapOr(chain => chain.adapters(), [])
-        reconcileChildren(audioEffectsContainer, audioAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
-        const hidden = !optEditing.nonEmpty() || midiAdapters.length > 0 || audioAdapters.length > 0
-        noEffectPlaceholder.classList.toggle("hidden", hidden)
+        reconcileChildren(audioEffectsContainer, deviceHost.audioEffects.nonEmpty()
+            ? insertButtons(deviceHost, "audio", audioAdapters, editorOf)
+            : audioAdapters.map(adapter => editorOf(adapter.uuid)))
         appendChildren(channelStripContainer, (
             <ChannelStrip lifecycle={chainLifecycle}
                           service={service}
@@ -298,7 +329,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         })
     )
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-device-panel>
             <div className="devices">
                 {devices}
                 <Scroller lifecycle={lifecycle} model={scrollModel} floating={true}
@@ -363,7 +394,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         }, {passive: false}),
         installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX,
             {padding: [0, 32, 0, 0], dragPadding: [0, 32, 0, 32]}),
-        DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
+        DevicePanelDragAndDrop.install(service, service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target
             if (target instanceof Element && isAbsent(target.closest("[data-drag]"))) {

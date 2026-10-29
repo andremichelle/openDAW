@@ -132,7 +132,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",
-        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
+        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com",
+        SoundCloud: "t2NZPSxHxTi38C9g6gCMfMr7V1zjdEPa"
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider, chainedWclapProvider,
@@ -156,8 +157,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
-    StudioPreferences.catchupAndSubscribe(({"neutral-hue": hue, "neutral-saturation": saturation}) => {
-        setColorScheme({hue, saturation: saturation / 100.0})
+    StudioPreferences.catchupAndSubscribe(({"color-scheme": scheme}) => {
+        setColorScheme(scheme)
         Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
     }, "appearance")
     document.querySelector("#preloader")?.remove()

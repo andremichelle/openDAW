@@ -1,29 +1,22 @@
 import css from "./AddEffectButton.sass?inline"
-import {Procedure} from "@opendaw/lib-std"
+import {Exec, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {InstrumentFactories, InstrumentFactory} from "@opendaw/studio-adapters"
-import {MenuItem} from "@opendaw/studio-core"
-import {MenuButton} from "@/ui/components/MenuButton"
+import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "AddEffectButton")
 
 type Construct = {
-    select: Procedure<InstrumentFactory>
+    lifecycle: Lifecycle
+    onClick: Exec
 }
 
-export const AddLayerButton = ({select}: Construct) => (
+export const AddLayerButton = ({lifecycle, onClick}: Construct) => (
     <div className={className}>
-        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
-            .addMenuItem(...InstrumentFactories.Sorted
-                .map(([, factory]) => factory)
-                .filter(factory => InstrumentFactories.isLayerInstrument(factory))
-                .map(factory => MenuItem.default({label: factory.defaultName, icon: factory.defaultIcon})
-                    .setTriggerProcedure(() => select(factory)))))}
-                    appearance={{color: Colors.shadow}}>
-            <span>Add Layer</span> <Icon symbol={IconSymbol.Add}/>
-        </MenuButton>
+        <Button lifecycle={lifecycle} onClick={() => onClick()} appearance={{color: Colors.shadow, cursor: "pointer"}}>
+            <span>Add Instrument</span> <Icon symbol={IconSymbol.Add}/>
+        </Button>
     </div>
 )

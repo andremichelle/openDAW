@@ -40,6 +40,10 @@ const POLL_PER_CHUNK = 16 // get_value calls per quantum, a plugin's get_value m
 const EVENT_SLOT_SIZE = 48 // the largest record written (clap_event_param_value / param_mod)
 const EVENT_SLOTS = MAX_PARAM_EVENTS * 2 + MAX_NOTE_EVENTS
 const NOTE_EVENT_SIZE = 40
+const MAX_PULLED_NOTES = 256 // WASM CONTRACT: device-wclap-midi's pull scratch, the notes one span hands in
+const RECORD_SIZE = 40 // WASM CONTRACT: abi::EventRecord
+const RECORD_NOTE_ON = 0 // abi::EVENT_NOTE_ON
+const RECORD_NOTE_OFF = 1 // abi::EVENT_NOTE_OFF
 const MAX_MESSAGE_BYTES = 16 << 20
 const LOG_LIMIT = 200 // console lines per plugin instance before its output is muted
 const PARAM_KIND_UNIT = 0 // abi::PARAM_KIND_UNIT: a 0..1 automation value to map into the parameter's range
@@ -76,7 +80,9 @@ type Loaded = {
     scratchSize: number
     steadyTime: number
     eventsPtr: number
+    eventSlots: number
     eventCount: number
+    noteEffect: boolean
     pendingNotes: Array<PendingNote>
     paramInfos: Map<number, WclapParamInfo>
     paramIds: Array<number>
@@ -100,6 +106,8 @@ type Loaded = {
 }
 
 type PendingNote = { on: boolean, key: number, velocity: number }
+type NoteOut = { offset: number, on: boolean, key: number, velocity: number }
+type NoteSpan = { serial: number, position: number, notes: ReadonlyArray<NoteOut> }
 type PendingParam = { kind: number, value: number, modulation: number }
 type Booted = { memory: WebAssembly.Memory, table: WebAssembly.Table, malloc: (size: number) => number, entry: number }
 
@@ -120,6 +128,9 @@ class Plugin {
     flushRequested: boolean = false
     callbackRequested: boolean = false
     restartRequested: boolean = false
+    references: number = 1 // every composite cell holds its own replica of a unit-level MIDI effect, one plugin for all
+    collected: Nullable<Array<NoteOut>> = null // the notes the plugin sends during a note effect's process call
+    lastSpan: Nullable<NoteSpan> = null
     // host-side values per clap id, kept before the plugin is up and pushed with its first process call
     readonly pendingParams = new Map<number, PendingParam>()
 
@@ -151,6 +162,8 @@ export class WclapBridges {
                 this.#process(handle, in0, in1, out0, out1, frames, bpm, position, flags),
             host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left, right, frames),
             host_wclap_note: (handle, on, key, velocity) => this.#note(handle, on !== 0, key, velocity),
+            host_wclap_process_notes: (handle, serial, inPtr, inCount, outPtr, outMax, frames, bpm, position, flags) =>
+                this.#processNotes(handle, serial >>> 0, inPtr, inCount, outPtr, outMax, frames, bpm, position, flags),
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
             host_wclap_state: (handle, ptr, len) =>
                 this.#state(handle, decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))),
@@ -324,7 +337,11 @@ export class WclapBridges {
     #create(uuidPtr: number): number {
         const uuid = UUID.toString(new Uint8Array(this.#memory.buffer, uuidPtr, 16).slice() as UUID.Bytes)
         const existing = this.#byUuid.get(uuid)
-        if (isDefined(existing)) {return existing}
+        if (isDefined(existing)) {
+            const plugin = this.#plugins.get(existing)
+            if (isDefined(plugin)) {plugin.references++}
+            return existing
+        }
         const handle = this.#nextHandle++
         this.#plugins.set(handle, new Plugin(uuid))
         this.#byUuid.set(uuid, handle)
@@ -356,7 +373,7 @@ export class WclapBridges {
         plugin.loading = true
         this.#host.sendStatus(plugin.uuid, {state: "loading", message: "", inputs: []})
         const load = this.#module(url)
-            .then(({module}) => this.#instantiate(plugin, module))
+            .then(({module}) => this.#instantiate(plugin, module, generation))
             .then(loaded => {
                 if (plugin.generation !== generation) {return}
                 plugin.loaded = loaded
@@ -529,14 +546,14 @@ export class WclapBridges {
             audio: [new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
             plugin: 0, webview: 0, gui: 0, panel: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
             inputs: [0, 0], outputs: [0, 0], inputPorts: 0, inputPortInfos: [], auxInputs: [], auxFed: [], auxSilent: [], scratchPtr: 0, scratchSize: 0, steadyTime: 0,
-            eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
+            eventsPtr: 0, eventSlots: EVENT_SLOTS, eventCount: 0, noteEffect: false, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
             latencyExt: 0, latency: 0,
             gestures: new Set(), state: 0, params: 0, inEvents: 0, outEvents: 0, istream: 0, ostream: 0,
             readSource: null, writeChunks: [], logCount: 0
         }
     }
 
-    async #instantiate(plugin: Plugin, module: WebAssembly.Module): Promise<Loaded> {
+    async #instantiate(plugin: Plugin, module: WebAssembly.Module, generation: number): Promise<Loaded> {
         const bundle = (await this.#module(plugin.url)).bundle
         const holder: { loaded: Nullable<Loaded> } = {loaded: null}
         const log = (line: string): void => {if (isNotNull(holder.loaded)) {this.#log(plugin, holder.loaded, line)}}
@@ -557,6 +574,7 @@ export class WclapBridges {
             this.#cstr(memory, this.#u32(memory, descriptorOf(index) + ClapAbi.PluginDescriptor.ID)) === plugin.clapId)
         if (!isDefined(found)) {throw new Error(`plugin id ${plugin.clapId} not in bundle`)}
         const features = this.#cstrList(memory, this.#u32(memory, descriptorOf(found) + ClapAbi.PluginDescriptor.FEATURES))
+        loaded.noteEffect = features.includes(ClapAbi.Feature.NOTE_EFFECT)
         loaded.plugin = this.#call(loaded, factory + ClapAbi.PluginFactory.CREATE_PLUGIN, factory, host, idPtr)
         if (loaded.plugin === 0) {throw new Error("create_plugin returned null")}
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.INIT, loaded.plugin) === 0) {
@@ -576,6 +594,8 @@ export class WclapBridges {
         loaded.uriPtr = malloc(URI_CAPACITY)
         loaded.sizePtr = malloc(ClapAbi.ResizeHints.SIZE)
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
+        // a load replaced while it awaited leaves the pending state to the load that replaced it
+        if (plugin.generation !== generation) {throw new Error("superseded")}
         this.#loadState(plugin, loaded)
         const audioPorts = this.#extension(loaded, ClapAbi.Ext.AUDIO_PORTS)
         loaded.inputPortInfos = audioPorts === 0 ? [] : this.#readPorts(loaded, audioPorts, true)
@@ -746,7 +766,8 @@ export class WclapBridges {
         const inEvents = malloc(ClapAbi.InputEvents.SIZE)
         const outEvents = malloc(ClapAbi.OutputEvents.SIZE)
         loaded.transportPtr = malloc(ClapAbi.TransportEvent.SIZE)
-        loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
+        loaded.eventSlots = EVENT_SLOTS + (loaded.noteEffect ? MAX_PULLED_NOTES : 0)
+        loaded.eventsPtr = malloc(loaded.eventSlots * EVENT_SLOT_SIZE)
         // taken after the allocations: malloc may grow the memory, which detaches every earlier view
         const view = this.#view(loaded)
         for (const buffer of [...loaded.auxInputs.flat(), ...loaded.outputs, scratch, silence]) {
@@ -804,6 +825,8 @@ export class WclapBridges {
                 } else if (type === ClapAbi.EventType.PARAM_GESTURE_END) {
                     loaded.gestures.delete(paramId)
                     this.#host.sendParam(plugin.uuid, paramId, 0, 2)
+                } else if (isNotNull(plugin.collected)) {
+                    this.#collect(plugin.collected, eventView, eventPtr, type)
                 }
                 return 1
             }))
@@ -882,21 +905,112 @@ export class WclapBridges {
             this.#silenceUnfedInputs(loaded)
             const status = this.#onAudioThread(() =>
                 this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
-            loaded.eventCount = 0
-            plugin.receivedSinceProcess = false
-            plugin.flushRequested = false
-            this.#runCallback(plugin, loaded)
-            if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
-            if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
-                plugin.dirtyCountdown = -1
-                this.#host.requestSave(plugin.uuid)
-            }
+            this.#afterProcess(plugin, loaded)
             if (status === ClapAbi.ProcessStatus.ERROR) {return 0}
             const [, , afterLeft, afterRight] = this.#audio(loaded)
             new Float32Array(engine, out0, frames).set(afterLeft.subarray(0, frames))
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
             return 1
         })
+    }
+
+    #afterProcess(plugin: Plugin, loaded: Loaded): void {
+        loaded.eventCount = 0
+        plugin.receivedSinceProcess = false
+        plugin.flushRequested = false
+        this.#runCallback(plugin, loaded)
+        if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
+        if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
+            plugin.dirtyCountdown = -1
+            this.#host.requestSave(plugin.uuid)
+        }
+    }
+
+    // A note effect's span: the device's notes in at their offsets, the plugin's notes back as records, -1 = no
+    // plugin (the device passes its notes on). Every composite cell pulls a unit-level effect, the cells after
+    // the first get the span's notes again without a second process call.
+    #processNotes(handle: number, serial: number, inPtr: number, inCount: number, outPtr: number, outMax: number,
+                  frames: number, bpm: number, position: number, flags: number): number {
+        const plugin = this.#plugins.get(handle)
+        if (!isDefined(plugin) || isNull(plugin.loaded)) {return -1}
+        const loaded = plugin.loaded
+        const last = plugin.lastSpan
+        if (isNotNull(last) && last.serial === serial && last.position === position) {return this.#writeRecords(last.notes, outPtr, outMax)}
+        return this.#contain(plugin, -1, () => {
+            if (plugin.restartRequested) {this.#restart(plugin, loaded)}
+            const view = this.#view(loaded)
+            this.#writeU64(view, loaded.processPtr + ClapAbi.Process.STEADY_TIME, loaded.steadyTime)
+            view.setUint32(loaded.processPtr + ClapAbi.Process.FRAMES_COUNT, frames, true)
+            loaded.steadyTime += frames
+            this.#writeTransport(loaded, view, bpm, position, flags)
+            this.#writeEvents(plugin, loaded, view)
+            this.#writeInputNotes(loaded, view, inPtr, inCount, frames)
+            this.#silenceUnfedInputs(loaded)
+            const notes: Array<NoteOut> = []
+            plugin.collected = notes
+            const status = this.#onAudioThread(() =>
+                this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
+            plugin.collected = null
+            this.#afterProcess(plugin, loaded)
+            if (status === ClapAbi.ProcessStatus.ERROR) {return -1}
+            plugin.lastSpan = {serial, position, notes}
+            return this.#writeRecords(notes, outPtr, outMax)
+        })
+    }
+
+    // The device's records as CLAP notes after the parameter events, at their sample offsets (sorted already)
+    #writeInputNotes(loaded: Loaded, view: DataView, inPtr: number, inCount: number, frames: number): void {
+        const records = new DataView(this.#memory.buffer, inPtr, inCount * RECORD_SIZE)
+        const count = Math.min(inCount, loaded.eventSlots - loaded.eventCount)
+        for (let index = 0; index < count; index++) {
+            const record = index * RECORD_SIZE
+            const kind = records.getUint32(record + 12, true)
+            const ptr = loaded.eventsPtr + loaded.eventCount++ * EVENT_SLOT_SIZE
+            view.setUint32(ptr, NOTE_EVENT_SIZE, true)
+            view.setUint32(ptr + ClapAbi.EventHeader.TIME, Math.min(Math.max(0, frames - 1), records.getUint32(record + 8, true)), true)
+            view.setUint16(ptr + ClapAbi.EventHeader.SPACE_ID, 0, true)
+            view.setUint16(ptr + ClapAbi.EventHeader.TYPE, kind === RECORD_NOTE_ON ? ClapAbi.EventType.NOTE_ON : ClapAbi.EventType.NOTE_OFF, true)
+            view.setUint32(ptr + ClapAbi.EventHeader.FLAGS, 0, true)
+            view.setInt32(ptr + ClapAbi.NoteEvent.NOTE_ID, -1, true)
+            view.setInt16(ptr + ClapAbi.NoteEvent.PORT_INDEX, 0, true)
+            view.setInt16(ptr + ClapAbi.NoteEvent.CHANNEL, 0, true)
+            view.setInt16(ptr + ClapAbi.NoteEvent.KEY, records.getUint32(record + 20, true), true)
+            view.setFloat64(ptr + ClapAbi.NoteEvent.VELOCITY, kind === RECORD_NOTE_ON ? records.getFloat32(record + 24, true) : 0, true)
+        }
+    }
+
+    // A note the plugin sends (CLAP or MIDI 1 dialect) at its sample offset
+    #collect(notes: Array<NoteOut>, view: DataView, eventPtr: number, type: number): void {
+        const offset = view.getUint32(eventPtr + ClapAbi.EventHeader.TIME, true)
+        if (type === ClapAbi.EventType.NOTE_ON || type === ClapAbi.EventType.NOTE_OFF || type === ClapAbi.EventType.NOTE_CHOKE) {
+            const key = view.getInt16(eventPtr + ClapAbi.NoteEvent.KEY, true)
+            if (key < 0 || key > 127) {return}
+            notes.push({offset, on: type === ClapAbi.EventType.NOTE_ON, key, velocity: view.getFloat64(eventPtr + ClapAbi.NoteEvent.VELOCITY, true)})
+        } else if (type === ClapAbi.EventType.MIDI) {
+            const status = view.getUint8(eventPtr + ClapAbi.MidiEvent.DATA) & 0xf0
+            const key = view.getUint8(eventPtr + ClapAbi.MidiEvent.DATA + 1) & 0x7f
+            const velocity = view.getUint8(eventPtr + ClapAbi.MidiEvent.DATA + 2) & 0x7f
+            if (status === 0x90 || status === 0x80) {notes.push({offset, on: status === 0x90 && velocity > 0, key, velocity: velocity / 127})}
+        }
+    }
+
+    // The plugin's notes as abi::EventRecords (kind, pitch, velocity, offset), the device sets position and id
+    #writeRecords(notes: ReadonlyArray<NoteOut>, outPtr: number, outMax: number): number {
+        const count = Math.min(notes.length, outMax)
+        const records = new DataView(this.#memory.buffer, outPtr, count * RECORD_SIZE)
+        for (let index = 0; index < count; index++) {
+            const {offset, on, key, velocity} = notes[index]
+            const record = index * RECORD_SIZE
+            records.setFloat64(record, 0, true)
+            records.setUint32(record + 8, offset, true)
+            records.setUint32(record + 12, on ? RECORD_NOTE_ON : RECORD_NOTE_OFF, true)
+            records.setUint32(record + 16, 0, true)
+            records.setUint32(record + 20, key, true)
+            records.setFloat32(record + 24, on ? velocity : 0, true)
+            records.setFloat32(record + 28, 0, true)
+            records.setFloat64(record + 32, 0, true)
+        }
+        return count
     }
 
     #readLatency(loaded: Loaded): void {
@@ -1058,13 +1172,14 @@ export class WclapBridges {
         const loaded = plugin.loaded
         loaded.steadyTime = 0
         loaded.pendingNotes.length = 0
+        plugin.lastSpan = null
         this.#contain(plugin, undefined, () =>
             this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.RESET, loaded.plugin)))
     }
 
     #release(handle: number): void {
         const plugin = this.#plugins.get(handle)
-        if (!isDefined(plugin)) {return}
+        if (!isDefined(plugin) || --plugin.references > 0) {return}
         this.#destroy(plugin)
         this.#plugins.delete(handle)
         if (this.#byUuid.get(plugin.uuid) === handle) {this.#byUuid.delete(plugin.uuid)}

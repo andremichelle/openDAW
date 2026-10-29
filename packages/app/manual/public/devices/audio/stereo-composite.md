@@ -74,8 +74,7 @@ By default Wet is at 0 dB.
 
 ## 6. Drag & Drop
 
-- **From the Device Browser onto a branch** — the effect is added to that branch's (L or R) chain. Because the two branches are fixed, a drop never creates a new branch; it always goes into the branch you drop on.
-- **An existing effect onto a branch** — moves that effect into the L or R chain.
+- **An existing effect onto a branch** — moves that effect into the L or R chain. Because the two branches are fixed, a drop never creates a new branch; it always goes into the branch you drop on.
 - **An effect onto the back button (inside a branch)** — moves the effect out of the branch and onto the parent chain, next to the composite.
 
 ---

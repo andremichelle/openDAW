@@ -7,6 +7,7 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
 import {SoundfontFileBox} from "@opendaw/studio-boxes"
 import {ResourceSelection, truncateList} from "@/ui/browse/ResourceSelection"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 export class SoundfontSelection implements ResourceSelection<Soundfont> {
     readonly #service: StudioService
@@ -24,12 +25,14 @@ export class SoundfontSelection implements ResourceSelection<Soundfont> {
             await this.#service.newProject()
             if (!this.#service.hasProfile) {return}
         }
-        const {boxGraph, api, editing} = this.#service.project
+        const {project} = this.#service
+        const {boxGraph, api, editing} = project
         const uuid = UUID.parse(soundfont.uuid)
         editing.modify(() => {
             const fileBox = boxGraph.findBox<SoundfontFileBox>(uuid).unwrapOrElse(() =>
                 SoundfontFileBox.create(boxGraph, uuid, box => box.fileName.setValue(soundfont.name)))
-            api.createInstrument(InstrumentFactories.Soundfont, {attachment: fileBox})
+            const {audioUnitBox} = api.createInstrument(InstrumentFactories.Soundfont, {attachment: fileBox})
+            NewInstrumentRegion.create(project, this.#service.timeline.snapping, audioUnitBox)
         })
     }
 

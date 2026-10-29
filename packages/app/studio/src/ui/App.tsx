@@ -1,5 +1,5 @@
 import {isDefined, Terminator} from "@opendaw/lib-std"
-import {createElement, Frag, Router} from "@opendaw/lib-jsx"
+import {createElement, Frag, RouteLocation, Router} from "@opendaw/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ComponentsPage} from "@/ui/pages/ComponentsPage.tsx"
@@ -29,6 +29,10 @@ import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
 import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
 import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
+import {SampleEditorRoute} from "@/service/SampleEditorService"
+
+const StandaloneRoutes: ReadonlySet<string> = new Set([SampleEditorRoute])
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -37,10 +41,17 @@ export const App = (service: StudioService) => {
         terminator.own(service.roomAwareness.catchupAndSubscribe(owner =>
             favicon.href = isDefined(owner.getValue()) ? "/favicon-live.svg" : "/favicon.svg"))
     }
+    const header: HTMLElement = <Header lifecycle={new Terminator()} service={service}/>
+    const footer: HTMLElement = <Footer lifecycle={terminator} service={service}/>
+    terminator.own(RouteLocation.get().catchupAndSubscribe(({path}) => {
+        const standalone = StandaloneRoutes.has(path)
+        header.classList.toggle("hidden", standalone)
+        footer.classList.toggle("hidden", standalone)
+    }))
     return (
         <Frag>
             <RoomStatus lifecycle={terminator} service={service}/>
-            <Header lifecycle={new Terminator()} service={service}/>
+            {header}
             <Router
                 runtime={terminator}
                 service={service}
@@ -60,6 +71,7 @@ export const App = (service: StudioService) => {
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
+                    {path: SampleEditorRoute, factory: SampleEditorPage},
                     {path: "/components", factory: ComponentsPage},
                     {path: "/automation", factory: AutomationPage},
                     {path: "/errors", factory: ErrorsPage},
@@ -84,7 +96,7 @@ export const App = (service: StudioService) => {
                 ]}
             />
             <ChatOverlay lifecycle={terminator} service={service}/>
-            <Footer lifecycle={terminator} service={service}/>
+            {footer}
         </Frag>
     )
 }

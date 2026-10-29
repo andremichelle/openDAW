@@ -1,6 +1,5 @@
 import {
     Arrays,
-    isDefined,
     isNull,
     JSONValue,
     Objects,
@@ -23,10 +22,10 @@ import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsS
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
+import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
+import {ShortcutStorage} from "@/service/ShortcutStorage"
 
 export namespace StudioShortcutManager {
-    const localStorageKey = "shortcuts"
-
     export type ShortcutsMap = Record<string, ShortcutDefinitions>
 
     export const Contexts = {
@@ -56,11 +55,7 @@ export namespace StudioShortcutManager {
         }
     }
 
-    export const store = (): void => {
-        const shortcuts: ShortcutsMap = {}
-        Objects.entries(Contexts).forEach(([key, {workingDefinition}]) => shortcuts[key] = workingDefinition)
-        toJSONString(shortcuts).ifSome(jsonString => localStorage.setItem(localStorageKey, jsonString))
-    }
+    export const store = (): void => ShortcutStorage.store(Contexts, localStorage)
 
     export const install = (service: StudioService): Subscription => {
         const {global: gc} = ShortcutManager.get()
@@ -76,17 +71,7 @@ export namespace StudioShortcutManager {
             }
         } = service
         const gs = GlobalShortcuts
-        const storedShortcuts = localStorage.getItem(localStorageKey)
-        if (isDefined(storedShortcuts)) {
-            const {status, value: stored, error} = tryCatch(() => JSON.parse(storedShortcuts))
-            if (status === "success") {
-                Objects.entries(Contexts).forEach(([name, {workingDefinition}]) =>
-                    ShortcutDefinitions.fromJSON(workingDefinition, stored[name]))
-                console.debug("Custom shortcuts loaded.")
-            } else {
-                console.warn(error)
-            }
-        }
+        if (ShortcutStorage.load(Contexts, localStorage)) {console.debug("Custom shortcuts loaded.")}
         return Terminable.many(
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo()), {allowRepeat: true}),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo()), {allowRepeat: true}),
@@ -167,7 +152,9 @@ export namespace StudioShortcutManager {
                             }
                         })
                     }))),
-            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
+            gc.register(gs["add-instrument"].shortcut, () => {if (service.hasProfile) {CreateTrack.instrument(service)}}),
+            gc.register(gs["add-audio-track"].shortcut, () => {if (service.hasProfile) {CreateTrack.audioTrack(service)}}),
+            gc.register(gs["copy-device"].shortcut,() => service.runIfProject(
                 ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
                         const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)

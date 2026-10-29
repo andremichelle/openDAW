@@ -1,0 +1,166 @@
+@use "@/colors"
+
+component
+  flex: 1
+  display: flex
+  flex-direction: column
+  min-height: 0
+  position: relative
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  hr
+    min-width: 1px
+    height: 50%
+    border: none
+    outline: none
+    background-color: rgba(white, 0.06)
+
+  // borrowed from Header.sass
+  > header
+    height: 2.5em
+    padding: 0.25em 1.25em
+    column-gap: 1.5em
+    display: flex
+    place-items: center
+    background-color: var(--color-header-background)
+
+    h5
+      font-size: 0.75rem
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      position: relative
+
+    > div.spacer
+      flex: 1
+
+    > div.back
+      display: flex
+      align-items: center
+
+      a
+        margin: 0
+
+    > div.group span
+      font-size: 0.75rem
+
+    > div.group
+      height: 100%
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+
+      &.menus
+        column-gap: 1.5em
+
+      > div.meter
+        width: 3em
+        height: 0.375em
+        border-radius: 1px
+        background-color: rgba(white, 0.06)
+        overflow: hidden
+
+        > div.bar
+          width: 0
+          height: 100%
+          background-color: var(--color-green)
+
+  > div.overview
+    height: 32px
+    margin: 0.5em 1em
+    border-radius: 2px
+    background-color: rgba(black, 0.25)
+
+    &.edge
+      cursor: ew-resize
+
+    > canvas
+      width: 100%
+      height: 100%
+      display: block
+
+  > div.editor
+    flex: 1
+    min-height: 0
+    margin: 0 1em
+    display: flex
+    flex-direction: column
+
+    > div.ruler
+      height: 20px
+
+      > canvas
+        width: 100%
+        height: 100%
+        display: block
+
+    > div.lanes-wrapper
+      flex: 1
+      min-height: 0
+      position: relative
+      border-radius: 2px
+      background-color: rgba(black, 0.25)
+      cursor: text
+
+      &.edge
+        cursor: ew-resize
+
+      > div.lanes
+        position: absolute
+        inset: 0
+
+        > canvas
+          width: 100%
+          height: 100%
+          display: block
+
+      > div.empty
+        position: absolute
+        inset: 0
+        display: flex
+        align-items: center
+        justify-content: center
+        pointer-events: none
+
+        > p
+          margin: 0
+          font-size: 12px
+          color: rgba(white, 0.3)
+
+  > footer
+    height: 2em
+    padding: 0 1em
+    display: flex
+    align-items: center
+    column-gap: 2em
+    font-size: 11px
+    font-variant-numeric: tabular-nums
+    color: var(--color-shadow)
+
+    > div.status
+      flex-shrink: 0
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      white-space: nowrap
+
+      > span.value
+        margin-right: 1.5em
+        color: var(--color-gray)
+
+    > span.record-time
+      color: var(--color-red)
+
+    > div.spacer
+      flex: 1
+
+    > span.name
+      min-width: 0
+      color: var(--color-gray)
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+    > span.info
+      white-space: nowrap

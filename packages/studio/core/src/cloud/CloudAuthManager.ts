@@ -1,13 +1,15 @@
-import {asDefined, Errors, isDefined, isNull, Maps, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {asDefined, Errors, isDefined, isNull, Maps, panic, Provider, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {CloudService} from "./CloudService"
 import {CloudHandler} from "./CloudHandler"
 import {DropboxHandler} from "./DropboxHandler"
 import {GoogleDriveHandler} from "./GoogleDriveHandler"
+import {SoundCloudApi} from "./SoundCloudApi"
 
 type ClientIds = {
     Dropbox: string
     GoogleDrive: string
+    SoundCloud?: string
 }
 
 export class CloudAuthManager {
@@ -34,7 +36,25 @@ export class CloudAuthManager {
 
     readonly #memoizedHandlers = new Map<CloudService, () => Promise<CloudHandler>>()
 
-    private constructor(clientIds: ClientIds) {this.#clientIds = clientIds}
+    #memoizedSoundCloud: Provider<Promise<SoundCloudApi>>
+
+    private constructor(clientIds: ClientIds) {
+        this.#clientIds = clientIds
+        this.#memoizedSoundCloud = this.#createSoundCloudMemo()
+    }
+
+    soundCloud(): Promise<SoundCloudApi> {return this.#memoizedSoundCloud()}
+
+    #createSoundCloudMemo(): Provider<Promise<SoundCloudApi>> {
+        return Promises.memoizeAsync(() => this.#oauthPkceFlow({
+            service: "SoundCloud",
+            clientId: asDefined(this.#clientIds.SoundCloud, "No SoundCloud client id"),
+            authUrlBase: "https://secure.soundcloud.com/authorize",
+            tokenUrl: "https://api.opendaw.studio/soundcloud/token.php",
+            scope: ""
+        }).then(token => new SoundCloudApi(token, () => this.#memoizedSoundCloud = this.#createSoundCloudMemo())),
+            TimeSpan.minutes(55))
+    }
 
     async getHandler(service: CloudService): Promise<CloudHandler> {
         const memo = Maps.createIfAbsent(this.#memoizedHandlers, service, service => {
@@ -69,7 +89,7 @@ export class CloudAuthManager {
         scope: string
         extraAuthParams?: Record<string, string>
         extraTokenParams?: Record<string, string>
-    }): Promise<CloudHandler> {
+    }): Promise<string> {
         const redirectUri = `${location.origin}/auth-callback.html`
         const {codeVerifier, codeChallenge} = await CloudAuthManager.#createCodes()
         const params = new URLSearchParams({
@@ -87,7 +107,7 @@ export class CloudAuthManager {
         if (isNull(authWindow)) {
             return Errors.warn("Failed to open authentication window. Please check popup blockers.")
         }
-        const {resolve, reject, promise} = Promise.withResolvers<CloudHandler>()
+        const {resolve, reject, promise} = Promise.withResolvers<string>()
         const channel = new BroadcastChannel("auth-callback")
         const dialog = RuntimeNotifier.progress({
             headline: "Cloud Service",
@@ -126,7 +146,7 @@ export class CloudAuthManager {
                     if (!accessToken) {
                         return panic("No access_token in token response")
                     }
-                    resolve(await this.#createHandler(config.service, accessToken))
+                    resolve(accessToken)
                 } catch (err) {
                     console.debug("[CloudAuth] Token exchange failed:", err)
                     reject(err)
@@ -157,7 +177,7 @@ export class CloudAuthManager {
             extraAuthParams: {
                 token_access_type: "offline"
             }
-        })
+        }).then(token => this.#createHandler("dropbox", token))
     }
 
     async #oauthGoogle(): Promise<CloudHandler> {

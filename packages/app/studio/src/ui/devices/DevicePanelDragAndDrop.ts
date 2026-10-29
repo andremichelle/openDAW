@@ -1,4 +1,4 @@
-import {asDefined, isAbsent, isDefined, Optional, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isAbsent, isDefined, Option, Optional, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
@@ -19,9 +19,13 @@ import {EffectBox, EffectFactories, PresetSource, Project} from "@opendaw/studio
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import type {StudioService} from "@/service/StudioService"
+import {CommunityScript} from "@/opendaw-api/CommunityIndex"
+import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 
 export namespace DevicePanelDragAndDrop {
-    export const install = (project: Project,
+    export const install = (service: StudioService,
+                            project: Project,
                             editors: HTMLElement,
                             midiEffectsContainer: HTMLElement,
                             instrumentContainer: HTMLElement,
@@ -65,6 +69,24 @@ export namespace DevicePanelDragAndDrop {
                     }
                     return false
                 }
+                if (type === "script") {
+                    const {target} = dragData.script
+                    if (target === "werkstatt" || target === "spielwerk") {
+                        const accepts = target === "werkstatt" ? "audio" : "midi"
+                        if (!DeviceHost.takesEffect(deviceHost, accepts)) {return false}
+                        const container = accepts === "audio" ? audioEffectsContainer : midiEffectsContainer
+                        const [_index, successor] = DragAndDrop.findInsertLocation(event, container)
+                        container.insertBefore(insertMarker, successor)
+                        return true
+                    }
+                    if (target === "apparat" && (deviceHost instanceof InstrumentCompositeCellBoxAdapter
+                        || (deviceHost.isAudioUnit
+                            && !deviceHost.inputAdapter.mapOr(input => input instanceof AudioBusBoxAdapter, false)))) {
+                        instrumentContainer.style.opacity = "0.5"
+                        return true
+                    }
+                    return false
+                }
                 let container: HTMLElement
                 if (type === "audio-effect") {
                     if (!DeviceHost.takesEffect(deviceHost, "audio")) {return false}
@@ -103,6 +125,10 @@ export namespace DevicePanelDragAndDrop {
                             ? DragAndDrop.findInsertLocation(event, midiEffectsContainer)[0]
                             : 0
                     handlePresetDrop(project, dragData, dropIndex).catch(console.warn)
+                    return
+                }
+                if (type === "script") {
+                    handleScriptDrop(service, project, dragData.script, event, midiEffectsContainer, audioEffectsContainer)
                     return
                 }
                 if (type !== "midi-effect" && type !== "audio-effect" && type !== "instrument") {return}
@@ -180,6 +206,35 @@ export namespace DevicePanelDragAndDrop {
                 if (insertMarker.isConnected) {insertMarker.remove()}
             }
         })
+    }
+
+    const handleScriptDrop = (service: StudioService, project: Project, script: CommunityScript, event: DragEvent,
+                              midiEffectsContainer: HTMLElement, audioEffectsContainer: HTMLElement): void => {
+        const {target} = script
+        if (target === "project") {return}
+        const editing = project.userEditingManager.audioUnit.get()
+        if (editing.isEmpty()) {return}
+        const deviceHost = project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
+        if (target === "apparat") {
+            const factory = SpotlightCreate.ScriptHosts.apparat
+            if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+                SpotlightCreate.script(service, script, Option.wrap(project =>
+                    project.api.setLayerInstrument(deviceHost.box, factory).asOption()))
+            } else if (deviceHost instanceof AudioUnitBoxAdapter) {
+                const inputBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
+                if (isAbsent(inputBox)) {return}
+                SpotlightCreate.script(service, script, Option.wrap(project =>
+                    project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory).asOption()))
+            }
+            return
+        }
+        const factory = SpotlightCreate.ScriptHosts[target]
+        const field = DeviceHost.chainFieldOf(deviceHost, factory.type)
+        if (field.isEmpty()) {return}
+        const container = factory.type === "audio" ? audioEffectsContainer : midiEffectsContainer
+        const [index] = DragAndDrop.findInsertLocation(event, container)
+        SpotlightCreate.script(service, script, Option.wrap(project =>
+            Option.wrap(project.api.insertEffect(field.unwrap(), factory, index))))
     }
 
     const resolveKeepTimeline = async (bytes: ArrayBuffer, targetAudioUnit: AudioUnitBox): Promise<boolean | "abort"> => {

@@ -89,31 +89,19 @@ The head shows the composite's name, the layer's gain, pan, mute and solo, a **b
 
 Inside a layer everything works as on a normal track. Add, remove and reorder effects, open presets for the instrument, or save the layer's instrument as a preset. The instrument's menu also offers **Duplicate layer** and **Delete layer**.
 
-Deleting the instrument leaves an empty layer behind. Drop a new instrument into it, or delete the layer.
+Deleting the instrument leaves an empty layer behind. Click the **+** in its instrument slot to pick a new one in the [Device Browser](/manuals/device-browser), or delete the layer. **Replace…** in the instrument's menu swaps the instrument of a layer the same way.
 
 ---
 
 ## 5. Drag & Drop
 
-**An instrument from the Device Browser onto a layer**
-
-Drop it on the top or bottom edge of a layer to create a new layer there. Drop it on the middle to replace that layer's instrument. The layer keeps its strip and its effects.
-
-**An instrument onto Add Layer, or onto an empty composite**
-
-Creates a new last layer.
-
 **An effect onto a layer**
 
-Appends it to that layer's chain. This works for a new effect from the Device Browser and for an effect dragged out of another chain. A MIDI effect needs an instrument in the layer.
+Appends it to that layer's chain. Drag the effect out of another chain. A MIDI effect needs an instrument in the layer.
 
 **A layer by its icons onto another layer**
 
 Reorders the layers.
-
-**An instrument onto the instrument slot of an entered layer**
-
-Replaces that layer's instrument.
 
 ---
 

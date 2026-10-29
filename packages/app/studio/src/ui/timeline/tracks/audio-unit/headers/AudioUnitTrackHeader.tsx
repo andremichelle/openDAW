@@ -18,6 +18,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {createHoverEditSwitch, isDeviceDrag} from "./HoverEditSwitch"
+import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -136,7 +137,8 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => {
                 if (isDeviceDrag(data)) {hoverSwitch.hover()}
-                return (data.type === "midi-effect" || data.type === "audio-effect") && data.uuids === null
+                return ((data.type === "midi-effect" || data.type === "audio-effect") && data.uuids === null)
+                    || (data.type === "script" && (data.script.target === "werkstatt" || data.script.target === "spielwerk"))
             },
             drop: (_event: DragEvent, data: AnyDragData) => {
                 hoverSwitch.cancel()
@@ -155,6 +157,16 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
                     const effectField = audioUnitBoxAdapter.box.audioEffects
                     project.editing.modify(() =>
                         factory.create(project, effectField, effectField.pointerHub.incoming().length))
+                } else if (data.type === "script" && (data.script.target === "werkstatt" || data.script.target === "spielwerk")) {
+                    const factory = SpotlightCreate.ScriptHosts[data.script.target]
+                    if (factory.type === "midi" && factory.type !== audioUnitBoxAdapter.input.adapter().unwrapOrNull()?.accepts) {
+                        return
+                    }
+                    const effectField = factory.type === "midi"
+                        ? audioUnitBoxAdapter.box.midiEffects
+                        : audioUnitBoxAdapter.box.audioEffects
+                    SpotlightCreate.script(service, data.script, Option.wrap(project =>
+                        Option.wrap(project.api.insertEffect(effectField, factory))))
                 }
             },
             enter: (allowDrop: boolean) => element.classList.toggle("accept-drop", allowDrop),

@@ -254,12 +254,12 @@ describe("ScriptEntryPoints arguments", () => {
 })
 
 describe("ScriptEntryPoints over the shipped examples", () => {
-    const root = resolve(__dirname, "../../../app/studio/src/ui/devices")
+    const root = resolve(__dirname, "../../core-wasm/test/assets")
     const kinds: ReadonlyArray<[string, ScriptEntryPoints.Api]> = [
-        ["audio-effects", AUDIO_EFFECT], ["instruments", INSTRUMENT], ["midi-effects", MIDI_EFFECT]
+        ["werkstatt", AUDIO_EFFECT], ["apparat", INSTRUMENT], ["spielwerk", MIDI_EFFECT]
     ]
     for (const [folder, scriptApi] of kinds) {
-        const directory = resolve(root, folder, "examples")
+        const directory = resolve(root, folder)
         const files = readdirSync(directory).filter(name => name.endsWith(".js"))
         for (const file of files) {
             it(`${folder}/${file} finds every declared entry point and no warnings`, () => {

@@ -4,11 +4,11 @@ import {StudioService} from "@/service/StudioService.ts"
 import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser.tsx"
-import {PresetBrowser} from "@/ui/browse/PresetBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "BrowserPanel")
 
@@ -25,9 +25,6 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
         contentLifecycle.terminate()
         replaceChildren(placeholder, (() => {
             switch (owner.getValue()) {
-                case BrowseScope.Presets:
-                    return <PresetBrowser lifecycle={contentLifecycle}
-                                          service={service}/>
                 case BrowseScope.Samples:
                     return <SampleBrowser lifecycle={contentLifecycle}
                                           service={service}
@@ -45,12 +42,12 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
     }))
     const tabs: HTMLElement = (
         <RadioGroup lifecycle={lifecycle} elements={[
-            {value: BrowseScope.Presets, element: <span>Presets</span>},
             {value: BrowseScope.Samples, element: <span>Samples</span>},
             {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
-        ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
+        ]} model={scope} appearance={{color: Colors.shadow, activeColor: Colors.orange}}
+                    style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
     )
-    TourAnchors.register(lifecycle, tabs, "presets", "samples", "soundfonts")
+    TourAnchors.register(lifecycle, tabs, "samples", "soundfonts")
     return (
         <div className={className}>
             {tabs}

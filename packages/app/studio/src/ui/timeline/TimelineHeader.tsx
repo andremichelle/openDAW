@@ -12,6 +12,7 @@ import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@opendaw/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
+import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -25,6 +26,21 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
+            <MenuButton
+                style={{marginLeft: "8px"}}
+                appearance={{color: Colors.shadow, tooltip: "Add track"}}
+                root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    MenuItem.default({
+                        label: "Add Instrument…", icon: IconSymbol.Piano, selectable: service.hasProfile,
+                        shortcut: GlobalShortcuts["add-instrument"].shortcut.format()
+                    }).setTriggerProcedure(() => CreateTrack.instrument(service)),
+                    MenuItem.default({
+                        label: "Add Audio Track", icon: IconSymbol.Tape, selectable: service.hasProfile,
+                        shortcut: GlobalShortcuts["add-audio-track"].shortcut.format()
+                    }).setTriggerProcedure(() => CreateTrack.audioTrack(service))
+                ))}>
+                <Icon symbol={IconSymbol.Add} style={{fontSize: "1.25em"}}/>
+            </MenuButton>
             <FlexSpacer/>
             <Checkbox lifecycle={lifecycle}
                       model={followCursor}

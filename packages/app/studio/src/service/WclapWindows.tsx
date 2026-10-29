@@ -1,4 +1,4 @@
-import {WclapDeviceBoxAdapter, WclapInstrumentBoxAdapter} from "@opendaw/studio-adapters"
+import {WclapDeviceBoxAdapter, WclapInstrumentBoxAdapter, WclapMidiEffectBoxAdapter} from "@opendaw/studio-adapters"
 import {Notifier, Procedure, RuntimeNotifier, Subscription, Terminator, UUID} from "@opendaw/lib-std"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioPreferences, WclapBundles, WclapGuis, WclapZoomOptions} from "@opendaw/studio-core"
@@ -6,7 +6,7 @@ import {FloatingWindow, FloatingWindowHandle} from "@/ui/components/FloatingWind
 import {StudioService} from "@/service/StudioService"
 import {WclapFrame} from "@/service/WclapFrame"
 
-export type WclapAdapter = WclapDeviceBoxAdapter | WclapInstrumentBoxAdapter
+export type WclapAdapter = WclapDeviceBoxAdapter | WclapInstrumentBoxAdapter | WclapMidiEffectBoxAdapter
 
 const DEFAULT_SIZE = {width: 640, height: 480}
 

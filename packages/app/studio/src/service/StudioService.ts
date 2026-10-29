@@ -34,6 +34,7 @@ import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
+import {SampleEditorService} from "@/service/SampleEditorService"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
@@ -102,7 +103,7 @@ const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wa
 export class StudioService implements ProjectEnv {
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
-        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Presets)
+        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Samples)
     } as const
     readonly timeline = {
         range,
@@ -124,6 +125,7 @@ export class StudioService implements ProjectEnv {
     readonly panelLayout = new PanelContents(createPanelFactory(this))
     readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
+    readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
     readonly presets = new PresetService(this)
@@ -166,6 +168,7 @@ export class StudioService implements ProjectEnv {
             soundfont
         }))
         this.samplePlayback = new SamplePlayback()
+        this.sampleEditor = new SampleEditorService(this)
         ModulatorReveal.requested.subscribe(option =>
             option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
         this.#projectProfileService = new ProjectProfileService({
@@ -188,6 +191,7 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
+    restartEngine(): void {this.runIfProject(({engine}) => engine.restart())}
 
     async newProject() {
         if (!await this.#projectProfileService.approveLosingChanges()) {return}
@@ -562,7 +566,7 @@ export class StudioService implements ProjectEnv {
         if (Browser.isLocalHost()) {return}
         window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine) {event.preventDefault()}
-            if (this.hasProfile && this.profile.hasUnsavedChanges()) {
+            if ((this.hasProfile && this.profile.hasUnsavedChanges()) || this.sampleEditor.hasUnsavedChanges) {
                 event.preventDefault()
             }
         })
@@ -583,5 +587,7 @@ export class StudioService implements ProjectEnv {
             document.body.classList.toggle("experimental-visible", value), "debug", "enable-beta-features")
         StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("help-hidden", !value), "visibility", "visible-help-hints")
+        StudioPreferences.catchupAndSubscribe(value =>
+            AnimationFrame.clampTo60fps = value, "appearance", "clamp-to-60fps")
     }
 }

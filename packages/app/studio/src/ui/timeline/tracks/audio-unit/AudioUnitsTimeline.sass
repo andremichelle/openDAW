@@ -46,19 +46,9 @@ component
       font-size: 10px
       @include colors.panel-background
 
-      > div.create-instrument
+      > div.create-buttons
         grid-column: 1 / calc(var(--clips-count) + 2)
-        height: fit-content
-        pointer-events: all
-        font-size: 10px
         z-index: 1
-        padding: 0.5em
-        border-radius: 0.5em
-        border: 0.5px solid rgba(white, 0.1)
-
-        svg
-          margin-left: 6px
-          font-size: 14px
 
       > div.region-area
         margin-top: 0.5em

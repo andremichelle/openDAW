@@ -1,0 +1,164 @@
+@use "@/mixins"
+
+component
+  flex: 1 1 0
+  display: grid
+  grid-template-columns: minmax(22em, 4fr) minmax(22em, 2fr)
+  grid-template-rows: auto 1fr auto
+  column-gap: 8px
+  row-gap: 12px
+  min-height: 0
+
+  > div.filter-bar
+    grid-column: 1 / -1
+    display: flex
+    align-items: center
+    column-gap: 4px
+    font-size: 13px
+
+    > div.separator
+      width: 12px
+
+    > span.count
+      flex: 0 0 5.5em
+      margin-left: 8px
+      text-align: right
+      font-variant-numeric: tabular-nums
+      color: var(--color-shadow)
+      white-space: nowrap
+
+    > :has(> input)
+      flex: 1 1 auto
+      margin-left: 12px
+      min-height: 22px
+
+      > svg
+        font-size: 14px
+
+      > input
+        font-size: 12px
+
+  > svg
+    grid-column: 1 / -1
+
+  > div.list
+    grid-row: 2
+    grid-column: 1
+    min-height: 0
+    overflow: hidden scroll
+    padding: 12px 12px 12px 0
+    mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+    > div.rows
+      display: grid
+      grid-template-columns: 16px auto 1fr 16px auto
+      column-gap: 7px
+      color: var(--color)
+
+      > span.empty
+        grid-column: 1 / -1
+        color: var(--color-dark)
+
+      > div.loading
+        grid-column: 1 / -1
+        display: flex
+        justify-content: center
+        padding-top: 24px
+
+      > div.entry
+        @include mixins.library-device-row
+        margin-bottom: 1px
+
+        > div.icon
+          @include mixins.color-icon-tile(16px)
+
+        &:hover
+          color: var(--color-gray)
+
+        &.selected
+          color: var(--color-bright)
+          background-color: rgba(white, 0.08)
+
+        > span.brief.missing
+          opacity: 0.3
+
+        > span.bundle
+          display: flex
+          justify-content: center
+          font-size: 14px
+          color: var(--color-shadow)
+
+        > span.badge
+          display: flex
+          padding-right: 4px
+          font-size: 14px
+          color: var(--color-shadow)
+
+  > div.card
+    grid-row: 2
+    grid-column: 2
+    display: flex
+    flex-direction: column
+    row-gap: 16px
+    min-height: 0
+    padding: 16px 20px
+    border-radius: 4px
+    background-color: rgba(black, 0.15)
+    line-height: 1.5
+    overflow: hidden scroll
+
+    > *
+      flex: 0 0 auto
+
+    > p.placeholder
+      color: var(--color-shadow)
+      font-size: 10px
+
+    > h2
+      margin: 0
+      color: var(--color)
+
+    > span.caption
+      margin-top: -12px
+      color: var(--color-shadow)
+
+    > p.description
+      margin: 0
+      color: var(--color-gray)
+
+    > div.facts
+      display: grid
+      grid-template-columns: auto 1fr
+      column-gap: 16px
+      row-gap: 6px
+
+      > span:nth-child(odd)
+        color: var(--color-shadow)
+
+      > span:nth-child(even)
+        color: var(--color-gray)
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+
+    > div.tags
+      display: flex
+      flex-wrap: wrap
+      gap: 0.5em
+
+      > button.tag
+        padding: 0.25em 0.75em
+        border: none
+        border-radius: 3px
+        font: inherit
+        color: var(--color-blue)
+        background-color: rgba(white, 0.08)
+        cursor: pointer
+
+        &:hover
+          background-color: rgba(white, 0.16)
+
+    > div.actions
+      display: flex
+      flex-wrap: wrap
+      gap: 0.5em

@@ -14,6 +14,7 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {Button} from "@/ui/components/Button"
 import {Colors} from "@opendaw/studio-enums"
 import {PublishMusic} from "@/ui/info-panel/PublishMusic"
+import {UploadSoundCloud} from "@/ui/info-panel/UploadSoundCloud"
 import {Promises} from "@opendaw/lib-runtime"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 
@@ -48,6 +49,13 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                   placeholder="Type in your's project description"
                   value={meta.description}/>
     )
+    // save current input values before a dialog steals focus
+    const storeInputs = () => {
+        profile.updateMetaData("name", inputName.value)
+        profile.updateMetaData("artist", inputArtist.value)
+        profile.updateMetaData("tags", inputTags.value.split(",").map(tag => tag.trim()))
+        profile.updateMetaData("description", inputDescription.value)
+    }
     const coverModel = new MutableObservableOption<ArrayBuffer>(cover.unwrapOrUndefined())
     const buttonPublishText = Inject.value(isDefined(meta.radioToken) ? "Republish" : "Publish")
     const unpublishButton: HTMLElement = (
@@ -102,11 +110,7 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                     <div style={{display: "flex", columnGap: "1em"}}>
                         <Button lifecycle={lifecycle}
                                 onClick={async () => {
-                                    // Save current input values before dialog steals focus
-                                    profile.updateMetaData("name", inputName.value)
-                                    profile.updateMetaData("artist", inputArtist.value)
-                                    profile.updateMetaData("tags", inputTags.value.split(",").map(x => x.trim()))
-                                    profile.updateMetaData("description", inputDescription.value)
+                                    storeInputs()
                                     const approved = await RuntimeNotifier.approve({
                                         headline: "Publish Your Music",
                                         message: `Ensure all samples, soundfonts, and images are cleared of copyright.
@@ -151,6 +155,17 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                         {unpublishButton}
                     </div>
                 </div>
+            </div>
+            <div className="label">Upload</div>
+            <div style={{display: "flex"}}>
+                <Button lifecycle={lifecycle}
+                        onClick={async () => {
+                            storeInputs()
+                            await UploadSoundCloud.upload(service, profile)
+                        }}
+                        appearance={{framed: true, color: Colors.orange}}>
+                    SoundCloud
+                </Button>
             </div>
         </div>
     )

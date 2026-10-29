@@ -1,6 +1,7 @@
 import {byte, int, Nullable, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Sample, Soundfont} from "@opendaw/studio-adapters"
 import {EffectFactories, PresetCategory, PresetSource} from "@opendaw/studio-core"
+import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 
 export type DragCopyHint = { copy?: boolean }
 export type DragSample = { type: "sample", sample: Sample } & DragCopyHint
@@ -56,6 +57,7 @@ export type DragPreset = {
     uuid: UUID.String
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
+export type DragScript = { type: "script", script: CommunityScript } & DragCopyHint
 
 // The dragged modulators, reordering them in the modulation panel's list: the whole selection when the one
 // under the pointer belongs to it, else that one alone. `index` is the dragged one's own place, which tells
@@ -68,4 +70,4 @@ export type DragModulator = {
 
 export type AnyDragData =
     DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
-    | DragCompositeEntry | DragModulator
+    | DragCompositeEntry | DragModulator | DragScript

@@ -31,6 +31,7 @@ import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
 import {WclapParameterBox} from "./audio-effects/WclapParameterBox"
+import {WclapMidiEffectBox} from "./midi-effects/WclapMidiEffectBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -92,6 +93,7 @@ export const DeviceDefinitions = [
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapParameterBox,
+    WclapMidiEffectBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,

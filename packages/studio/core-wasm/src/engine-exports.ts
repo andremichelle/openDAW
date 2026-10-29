@@ -125,6 +125,7 @@ export type EngineExports = {
     // Maps a pulse position to its sample offset in the current quantum; a generative device (arp) times
     // its emitted events with it.
     host_pulse_to_offset: (pulse: number) => number
+    host_block_at: (pulse: number, outPtr: number) => number
     // Route D parameter hooks. `host_bind_parameter` registers a parameter by its field-key path (a u16
     // slice in the device's memory) from `init`, returning its id (the host is mapping-agnostic — the device
     // maps). `host_update_parameters` pulls the device's parameters that changed at a position into a

@@ -18,11 +18,7 @@ import {
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
-import {Icon} from "@/ui/components/Icon"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {MenuButton} from "@/ui/components/MenuButton"
-import {AudioUnitsClipboard, ClipboardManager, MenuItem} from "@opendaw/studio-core"
-import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
+import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {IndexedBox} from "@opendaw/lib-box"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -31,6 +27,10 @@ import {installAutoScroll} from "@/ui/AutoScroll"
 import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
+import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
+import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -47,20 +47,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         <div className="scrollable">
             <div className="fill"/>
             <div className="extra">
-                <div className="create-instrument">
-                    <MenuButton root={MenuItem.root()
-                        .setRuntimeChildrenProcedure(parent => parent
-                            .addMenuItem(...InstrumentFactories.Sorted.map(([_key, factory]) =>
-                                MenuItem.default({
-                                    label: factory.defaultName,
-                                    icon: factory.defaultIcon
-                                }).setTriggerProcedure(() => {
-                                    const {project: {api, editing}} = service
-                                    editing.modify(() => DefaultInstrumentFactory.create(api, factory))
-                                }))))}
-                                appearance={{color: Colors.shadow}}>
-                        <span>Add instrument</span> <Icon symbol={IconSymbol.Add}/>
-                    </MenuButton>
+                <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
+                    <CreateTrackButtons lifecycle={lifecycle} service={service}/>
                 </div>
                 <div className="region-area help-section">Drop instruments or samples here</div>
             </div>
@@ -125,6 +113,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const isNewUnit = (dragData: AnyDragData): boolean =>
         (dragData.type === "instrument" && dragData.device !== null)
         || (dragData.type === "preset" && (dragData.category === "instrument" || dragData.category === "audio-unit"))
+        || (dragData.type === "script" && dragData.script.target === "apparat")
     lifecycle.ownAll(
         // The root sees drags over headers, lanes, gaps and the empty band alike, so a new unit can land
         // between any two units. The inner targets (effects onto a header, samples onto a lane) keep theirs.
@@ -140,15 +129,26 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 const anchor = unitInsertion.anchorAt(event.clientY)
                 if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
-                    editing.modify(() => api.placeAudioUnitBefore(api.createAnyInstrument(factory).audioUnitBox, anchor))
+                    editing.modify(() => {
+                        const {audioUnitBox} = api.createAnyInstrument(factory)
+                        api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        NewInstrumentRegion.create(service.project, service.timeline.snapping, audioUnitBox)
+                    })
                 } else if (dragData.type === "preset") {
                     if (dragData.category === "audio-unit") {
-                        PresetApplication.createNewAudioUnitFromRack(service.project, dragData.uuid, dragData.source, anchor)
+                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, anchor)
                             .catch(console.warn)
                     } else if (isNotNull(dragData.device)) {
                         PresetApplication.createNewAudioUnitFromInstrument(
-                            service.project, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
+                            service, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
                     }
+                } else if (dragData.type === "script") {
+                    SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
+                        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(SpotlightCreate.ScriptHosts.apparat)
+                        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
+                        return Option.wrap(instrumentBox)
+                    }))
                 }
             },
             enter: () => {},

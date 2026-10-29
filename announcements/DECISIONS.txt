@@ -7,6 +7,9 @@ Writing style (all channels)
 • No semicolons. Split into two sentences, or use a comma.
 • No exclamation marks, not even in headlines.
 • Plain language. No marketing speak (for example, avoid "The point:").
+• No ad style, we are not selling anything. Describe what a feature does, like a manual would. No
+  catchy sublines ("Hear It First"), no promised benefits ("lowers the barrier", "nothing can break
+  the project", "turns choosing into listening"), no "Try it", no "explains everything step by step".
 • Opening paragraph states what the thing is and what it does, in plain words. No hype openers
   like "a proper convolution reverb" or "your track sits right in it", also not on Discord.
 • No long text. Handle every subject brief and to the point.

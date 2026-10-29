@@ -98,6 +98,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyS),
         description: "Toggle solo of the edited audio unit"
     },
+    "add-instrument": {
+        shortcut: Shortcut.of(Key.KeyI, {shift}),
+        description: "Add an instrument track"
+    },
+    "add-audio-track": {
+        shortcut: Shortcut.of(Key.KeyA, {shift}),
+        description: "Add an audio track"
+    },
     "copy-device": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
         description: "Duplicate selected device"
@@ -122,21 +130,21 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.Digit2, {shift}),
         description: "Go to mixer view"
     },
-    "workspace-screen-piano": {
+    "workspace-screen-modulation": {
         shortcut: Shortcut.of(Key.Digit3, {shift}),
+        description: "Go to modulation view"
+    },
+    "workspace-screen-piano": {
+        shortcut: Shortcut.of(Key.Digit4, {shift}),
         description: "Go to piano roll"
     },
     "workspace-screen-project": {
-        shortcut: Shortcut.of(Key.Digit4, {shift}),
+        shortcut: Shortcut.of(Key.Digit5, {shift}),
         description: "Go to project settings"
     },
     "workspace-screen-shadertoy": {
-        shortcut: Shortcut.of(Key.Digit5, {shift}),
-        description: "Go to shader visualizer"
-    },
-    "workspace-screen-modulation": {
         shortcut: Shortcut.of(Key.Digit6, {shift}),
-        description: "Go to modulation view"
+        description: "Go to shader visualizer"
     },
     "workspace-screen-tap": {
         shortcut: Shortcut.of(Key.Digit7, {shift}),

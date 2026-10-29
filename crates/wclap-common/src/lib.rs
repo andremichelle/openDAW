@@ -37,6 +37,9 @@ impl WclapLink {
         self.state_field_id = abi::observe_field(&STATE_FIELD);
     }
 
+    /// Whether a change of field `id` loads the plugin again (url or clap id).
+    pub fn reloads(&self, id: u32) -> bool {id == self.url_field_id || id == self.clap_id_field_id}
+
     pub fn url(&self) -> &[u8] {&self.url[..self.url_len]}
     pub fn clap_id(&self) -> &[u8] {&self.clap_id[..self.clap_id_len]}
 

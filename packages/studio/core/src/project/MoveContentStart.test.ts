@@ -300,6 +300,20 @@ describe("moveContentStart while a listener reads the events", () => {
         project.terminate()
     })
 
+    // Live error 1192: points a bar apart moved a bar later, the first landed on the second before it moved.
+    it.each([-Bar, Bar])("moving points a bar apart by %d keeps every point while the value editor watches it", async delta => {
+        const points: ReadonlyArray<Point> = [0, 1, 2].map(index => ({position: index * Bar, value: index / 4}))
+        const span: Span = {position: 2 * Bar, duration: 3 * Bar, loopOffset: 0, loopDuration: 3 * Bar}
+        const {project, regions: [region]} = await buildValueRegions(points, [span])
+        const events = region.optCollection.unwrap("points").events
+        const segment = events.asArray()[2]
+        const subscription = region.subscribeChange(() => events.contains(segment))
+        project.editing.modify(() => region.moveContentStart(delta))
+        subscription.terminate()
+        expect(storedPoints(region)).toEqual(points.map(({position, value}) => [position - delta, value]))
+        project.terminate()
+    })
+
     it("moving the content start a bar earlier without a listener moves each event once", async () => {
         const notes = await buildNoteRegions(BeatNotes, Single)
         const points = await buildValueRegions(BeatPoints, Single)

@@ -41,6 +41,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Community Scripts", path: "/manuals/community-scripts"},
             {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
             {type: "page", label: "Connect MIDI Device", path: "/manuals/connect-midi-device"},
+            {type: "page", label: "Device Browser", path: "/manuals/device-browser"},
             {type: "page", label: "Education", path: "/manuals/education"},
             {type: "page", label: "Firefox MIDI", path: "/manuals/firefox-midi"},
             {type: "page", label: "Freeze AudioUnit", path: "/manuals/freeze-audiounit"},

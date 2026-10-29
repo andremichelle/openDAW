@@ -29,13 +29,11 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
             })
     }
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
-        // just for the preview. it behaves like having an effect-offset
-        return region.loopOffset + this.#computeDelta(region)
-    }
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
-        return region.loopDuration - this.#computeDelta(region)
+        return region.loopDuration - (this.readPosition(region) - region.position)
     }
+    readContentShift(region: AnyRegionBoxAdapter): ppqn {return region.position - this.readPosition(region)}
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.isMirrowed}
     translateTrackIndex(value: int): int {return value}
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {

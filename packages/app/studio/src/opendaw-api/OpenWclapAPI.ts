@@ -34,8 +34,8 @@ export class OpenWclapAPI {
     }
 
     // the body is read inside the attempt, a stream the host breaks halfway (HTTP/2 protocol error) is retried too
-    load(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
-        return retryTransient(() => fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, OpenDAWHeaders)
+    load(uuid: string, progress: Progress.Handler = Progress.Empty, signal?: AbortSignal): Promise<ArrayBuffer> {
+        return retryTransient(() => fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, {...OpenDAWHeaders, signal})
             .then(response => response.ok
                 ? network.progress(progress)(response).arrayBuffer()
                 : Promise.reject(new HttpStatus(response.status))), 4)

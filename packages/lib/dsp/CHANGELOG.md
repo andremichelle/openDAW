@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.98](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dsp@0.0.97...@opendaw/lib-dsp@0.0.98) (2026-10-29)
+
+### Bug Fixes
+
+- **dsp:** carry rounded subframes in SMPTE.fromSeconds ([96273b9](https://github.com/andremichelle/openDAW/commit/96273b981b8c548f43a7057ebf0228c947da4353))
+
 ## [0.0.97](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dsp@0.0.96...@opendaw/lib-dsp@0.0.97) (2026-10-22)
 
 **Note:** Version bump only for package @opendaw/lib-dsp

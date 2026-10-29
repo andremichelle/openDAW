@@ -1,13 +1,42 @@
-import {Color, unitValue} from "@opendaw/lib-std"
+import {Color} from "@opendaw/lib-std"
 
-export type ColorScheme = {hue: number, saturation: unitValue}
+export const ColorSchemes = ["classic", "modern", "contrast"] as const
 
-export const DefaultColorScheme: ColorScheme = {hue: 197, saturation: 1.0}
+export type ColorScheme = typeof ColorSchemes[number]
 
-const scheme: ColorScheme = {...DefaultColorScheme}
+export const DefaultColorScheme: ColorScheme = "classic"
 
-const neutral = (saturation: number, lightness: number): Color =>
-    new Color(scheme.hue, saturation * scheme.saturation, lightness)
+type NeutralName = "bright" | "gray" | "dark" | "shadow" | "black" | "background" | "panelBackground"
+    | "panelBackgroundBright" | "panelBackgroundDark" | "headerBackground" | "footerBackground"
+
+type Neutral = readonly [saturation: number, lightness: number]
+
+const NeutralHue = 197
+
+const Neutrals: Record<ColorScheme, Record<NeutralName, Neutral>> = {
+    classic: {
+        bright: [5, 100], gray: [31, 91], dark: [15, 84], shadow: [10, 60], black: [10, 30],
+        background: [8, 9], panelBackground: [14, 12], panelBackgroundBright: [13, 16], panelBackgroundDark: [14, 11],
+        headerBackground: [14, 3], footerBackground: [14, 9]
+    },
+    modern: {
+        bright: [0, 100], gray: [0, 70], dark: [0, 58], shadow: [0, 39], black: [0, 24],
+        background: [0, 13], panelBackground: [0, 15], panelBackgroundBright: [0, 20], panelBackgroundDark: [0, 12],
+        headerBackground: [0, 18], footerBackground: [0, 11]
+    },
+    contrast: {
+        bright: [10, 100], gray: [10, 94], dark: [10, 88], shadow: [10, 73], black: [10, 50],
+        background: [10, 19], panelBackground: [10, 21], panelBackgroundBright: [10, 29], panelBackgroundDark: [10, 19],
+        headerBackground: [10, 10], footerBackground: [10, 10]
+    }
+}
+
+let scheme: ColorScheme = DefaultColorScheme
+
+const neutral = (name: NeutralName): Color => {
+    const [saturation, lightness] = Neutrals[scheme][name]
+    return new Color(NeutralHue, saturation, lightness)
+}
 
 export const Colors = {
     white: new Color(0, 0, 100),
@@ -19,23 +48,20 @@ export const Colors = {
     red: new Color(354, 100, 65),
     purple: new Color(314, 100, 78),
     menuActive: new Color(210, 90, 40),
-    get bright(): Color {return neutral(5, 100)},
-    get gray(): Color {return neutral(31, 91)},
-    get dark(): Color {return neutral(15, 84)},
-    get shadow(): Color {return neutral(10, 60)},
-    get black(): Color {return neutral(10, 30)},
-    get background(): Color {return neutral(8, 9)},
-    get panelBackground(): Color {return neutral(14, 12)},
-    get panelBackgroundBright(): Color {return neutral(13, 16)},
-    get panelBackgroundDark(): Color {return neutral(14, 11)},
-    get headerBackground(): Color {return neutral(14, 3)},
-    get footerBackground(): Color {return neutral(14, 9)}
+    get bright(): Color {return neutral("bright")},
+    get gray(): Color {return neutral("gray")},
+    get dark(): Color {return neutral("dark")},
+    get shadow(): Color {return neutral("shadow")},
+    get black(): Color {return neutral("black")},
+    get background(): Color {return neutral("background")},
+    get panelBackground(): Color {return neutral("panelBackground")},
+    get panelBackgroundBright(): Color {return neutral("panelBackgroundBright")},
+    get panelBackgroundDark(): Color {return neutral("panelBackgroundDark")},
+    get headerBackground(): Color {return neutral("headerBackground")},
+    get footerBackground(): Color {return neutral("footerBackground")}
 }
 
-export const setColorScheme = ({hue, saturation}: ColorScheme): void => {
-    scheme.hue = hue
-    scheme.saturation = saturation
-}
+export const setColorScheme = (value: ColorScheme): void => {scheme = value}
 
 export const initializeColors = (root: { style: { setProperty: (name: string, value: string) => void } }) => {
     Object.entries(Colors).forEach(([name, value]) => {

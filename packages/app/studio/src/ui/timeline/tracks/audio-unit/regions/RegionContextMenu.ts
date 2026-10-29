@@ -137,6 +137,12 @@ export const installRegionContextMenu =
                         MonoConversions.convertRegion(service, region).then(EmptyExec, console.warn)
                     }
                 }),
+                MenuItem.default({label: "Edit in Sample Editor", hidden: region.type !== "audio-region"})
+                    .setTriggerProcedure(() => {
+                        if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                            service.sampleEditor.openFile(region.file).then(EmptyExec, console.warn)
+                        }
+                    }),
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)

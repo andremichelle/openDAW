@@ -152,6 +152,7 @@ pub struct Block {
 extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
+    fn host_block_at(pulse: f64, out_ptr: u32) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
     fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32, package_type: u32) -> u32;
     fn host_broadcast_ptr(id: u32) -> u32;
@@ -188,6 +189,8 @@ extern "C" {
                           bpm: f32, position: f64, flags: u32) -> u32;
     fn host_wclap_input(handle: u32, index: u32, left_ptr: u32, right_ptr: u32, frames: u32);
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
+    fn host_wclap_process_notes(handle: u32, serial: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
+                                frames: u32, bpm: f32, position: f64, flags: u32) -> i32;
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
     fn host_wclap_state_bytes(handle: u32, ptr: u32, len: u32);
@@ -253,6 +256,20 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
     { unsafe { host_pull_events(from, to, flags, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (from, to, flags, out.len()); 0 }
+}
+
+/// The block of the current quantum holding `pulse`, with the quantum's serial (never 0), so a device pulled
+/// more than once per block tells a repeat from a new quantum. Native stub returns `None`.
+#[inline]
+pub fn block_at(pulse: f64) -> Option<(Block, u32)> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0};
+        let serial = unsafe { host_block_at(pulse, &mut block as *mut Block as u32) };
+        if serial == 0 { None } else { Some((block, serial)) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = pulse; None }
 }
 
 /// Map a pulse position to its sample offset within the current quantum (the host resolves it against the
@@ -1105,6 +1122,26 @@ pub fn wclap_note(handle: u32, on: bool, key: u32, velocity: f32) {
     { unsafe { host_wclap_note(handle, on as u32, key, velocity) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, on, key, velocity); }
+}
+
+/// Run a note effect over `frames` samples from pulse `position`: the `input` notes carry their sample
+/// `offset` within the span, the plugin's notes come back into `output` the same way (kind, pitch,
+/// velocity, offset). A repeat of the same `serial` and `position` (a composite cell's replica of a unit
+/// effect) gets the same notes without processing again. `None` = no plugin, the device passes its input
+/// on. Native stub returns `None`.
+#[inline]
+pub fn wclap_process_notes(handle: u32, serial: u32, input: &[EventRecord], output: &mut [EventRecord], frames: usize,
+                           bpm: f32, position: f64, flags: BlockFlags) -> Option<usize> {
+    #[cfg(target_family = "wasm")]
+    {
+        let count = unsafe {
+            host_wclap_process_notes(handle, serial, input.as_ptr() as u32, input.len() as u32, output.as_mut_ptr() as u32,
+                                     output.len() as u32, frames as u32, bpm, position, flags.0)
+        };
+        if count < 0 { None } else { Some((count as usize).min(output.len())) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, serial, input, output, frames, bpm, position, flags); None }
 }
 
 /// Queue a resolved parameter change for the plugin's next process call, the last one per id wins within a

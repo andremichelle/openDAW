@@ -23,6 +23,7 @@ import {
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapInstrumentBox,
+    WclapMidiEffectBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -75,6 +76,7 @@ import {
     NeuralAmpDeviceBoxAdapter,
     WclapDeviceBoxAdapter,
     WclapInstrumentBoxAdapter,
+    WclapMidiEffectBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -169,6 +171,12 @@ export namespace DeviceEditorFactory {
                                       service={service}
                                       adapter={service.project.boxAdapters.adapterFor(box, VelocityDeviceBoxAdapter)}
                                       deviceHost={deviceHost}/>
+            ),
+            visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => (
+                <WclapDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, WclapMidiEffectBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => (
                 <ZeitgeistDeviceEditor lifecycle={lifecycle}
