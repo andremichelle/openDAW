@@ -28,7 +28,6 @@ export const GroupClipLane = ({lifecycle, service, unit}: Construct): HTMLElemen
             const cell: HTMLButtonElement = <button className="group-clip" type="button"
                 aria-label={`Launch group scene ${index + 1}`} style={{gridColumn: `${index + 1} / ${index + 2}`}}
                 onclick={() => launcher.toggle(index)}>
-                <span className="label">Scene {index + 1}</span>
                 <span className="content">
                     <Icon symbol={IconSymbol.Play} className="play"/>
                     <Icon symbol={IconSymbol.Stop} className="stop"/>

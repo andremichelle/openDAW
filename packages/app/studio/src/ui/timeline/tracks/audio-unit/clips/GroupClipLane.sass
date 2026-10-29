@@ -10,20 +10,14 @@ component
     width: var(--clips-width)
     height: 100%
     border: 0
+    outline: none
     border-radius: 2px
     overflow: hidden
     display: grid
-    grid-template-rows: 13.5px 1fr
+    grid-template-rows: 1fr
     cursor: pointer
     color: var(--color-gray)
     background: transparent
-
-    > span.label
-      width: 100%
-      font-size: 9px
-      line-height: 13.5px
-      color: hsl(200, 60%, 60%)
-      background: hsla(200, 45%, 60%, 0.15)
 
     > span.content
       width: 100%
@@ -57,16 +51,13 @@ component
           min-height: 1px
 
     &:hover:not(:disabled), &:focus-visible
-      outline: 1px solid hsl(200, 60%, 60%)
-      outline-offset: -1px
-
       > span.content > svg
         opacity: 1
 
     &.playing, &.waiting
-      > span.label
-        color: hsl(200, 60%, 10%)
-        background: hsla(200, 100%, 60%, 0.75)
+      > span.content > svg
+        color: hsl(200, 60%, 60%)
+        opacity: 1
 
       > span.content > svg.play
         display: none
@@ -74,13 +65,9 @@ component
       > span.content > svg.stop
         display: block
 
-    &.waiting
-      outline: 1px dashed hsl(200, 60%, 60%)
-      outline-offset: -1px
-
     &:disabled
       cursor: default
       @include colors.panel-background-stripes-dark
 
-      > span.label, > span.content
+      > span.content
         opacity: 0.3

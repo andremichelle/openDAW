@@ -273,3 +273,9 @@ No DSP, worklet commands, schema fields or launch quantization changed. PresetDe
 Validation: production dependency/Studio build (25 tasks); core 887 tests/86 files; adapters 360/31; Studio 259/42; real WASM grouping/MIDI Output 13/2. New regressions cover captured nested insertion (middle/last child, edit-mode fallback, presets, serialized routes and undo/redo), nested/muted clip batches, group automation, scene indices, outside exclusion, playback notifications, rerouting/undo and subscription disposal.
 
 Hosted comparison build `ec9fcd60-d4e3-4938-9163-0eaa5744f526` uses the existing isolated URL. Browser checks verify Add instrument after the last child in a nested group, its matching mixer output, and saved-copy reopening with that route and clip colors retained. The group tiles must set pointer-events and a positive stacking layer: timeline rows otherwise pass input to the transparent clip-selection surface. The corrected release launches three child clips together and shows parent/nested playing states, scene switching and collapsed-folder feedback. No subjective listening assessment is claimed. Previous source remains `f36982d927d93a6e018b0e2fef779d6b8c9cbcc4` for rollback; the original comparison demo is unchanged.
+
+### Simpler group launcher tiles
+
+The launcher tiles now show only the play/stop icon and child color preview. Visible Scene labels and hover/queued outlines are removed. Hover and keyboard focus brighten the icon; playing/queued states use the icon color and stop symbol. Scene numbers remain in accessible labels. Launch scheduling is unchanged.
+
+Verified the Studio production build and four launcher regressions. Comparison build `1d219544-f2a3-4482-8eaa-23f68a1f6171` passes native browser launch/stop checks with no visible Scene text, no outline or box shadow while hovered, and the stacked colors retained. Accessible scene labels remain present.
