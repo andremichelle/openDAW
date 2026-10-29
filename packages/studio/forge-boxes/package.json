@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-forge-boxes",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "exports": {
@@ -14,11 +14,11 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.99",
-    "@opendaw/lib-dsp": "^0.0.97",
+    "@opendaw/lib-box": "^0.0.100",
+    "@opendaw/lib-dsp": "^0.0.98",
     "@opendaw/lib-runtime": "^0.0.89",
     "@opendaw/lib-std": "^0.0.88",
-    "@opendaw/studio-enums": "^0.1.8"
+    "@opendaw/studio-enums": "^0.1.9"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
