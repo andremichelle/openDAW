@@ -1,0 +1,86 @@
+@use "@/colors"
+
+component
+  > button.group-clip
+    pointer-events: all
+    position: relative
+    z-index: 1
+    appearance: none
+    padding: 0
+    width: var(--clips-width)
+    height: 100%
+    border: 0
+    border-radius: 2px
+    overflow: hidden
+    display: grid
+    grid-template-rows: 13.5px 1fr
+    cursor: pointer
+    color: var(--color-gray)
+    background: transparent
+
+    > span.label
+      width: 100%
+      font-size: 9px
+      line-height: 13.5px
+      color: hsl(200, 60%, 60%)
+      background: hsla(200, 45%, 60%, 0.15)
+
+    > span.content
+      width: 100%
+      min-height: 0
+      position: relative
+      display: grid
+      place-items: center
+      background: hsla(200, 60%, 60%, 0.06)
+
+      > svg
+        font-size: 0.75em
+        opacity: 0.65
+
+      > svg.stop
+        display: none
+
+      > span.colors
+        position: absolute
+        top: 3px
+        bottom: 3px
+        right: 3px
+        width: 5px
+        display: flex
+        flex-direction: column
+        gap: 1px
+        overflow: hidden
+        border-radius: 1px
+
+        > span
+          flex: 1 1 0
+          min-height: 1px
+
+    &:hover:not(:disabled), &:focus-visible
+      outline: 1px solid hsl(200, 60%, 60%)
+      outline-offset: -1px
+
+      > span.content > svg
+        opacity: 1
+
+    &.playing, &.waiting
+      > span.label
+        color: hsl(200, 60%, 10%)
+        background: hsla(200, 100%, 60%, 0.75)
+
+      > span.content > svg.play
+        display: none
+
+      > span.content > svg.stop
+        display: block
+
+    &.waiting
+      outline: 1px dashed hsl(200, 60%, 60%)
+      outline-offset: -1px
+
+    &:disabled
+      cursor: default
+      @include colors.panel-background-stripes-dark
+
+      > span.label, > span.content
+        opacity: 0.3

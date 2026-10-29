@@ -6,6 +6,7 @@ import {AudioUnitBoxAdapter, InstrumentFactories, TrackType} from "@opendaw/stud
 import {TrackBox} from "@opendaw/studio-boxes"
 import {AudioContentFactory, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
+import {GroupClipLane} from "./clips/GroupClipLane"
 import {GroupOverview} from "./GroupOverview"
 import {installTrackResize} from "./TrackResize"
 import type {TracksManager} from "./TracksManager"
@@ -41,6 +42,7 @@ type Construct = {
 // (header + deactive body), carrying the unit head duties (channel controls, menu, editing focus, unit drag).
 export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}: Construct) => {
     const {project} = service
+    const {box} = audioUnitBoxAdapter
     const populateMenu = installTrackHeaderMenu(service, audioUnitBoxAdapter, Option.None)
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const iconHost: HTMLElement = (
@@ -100,7 +102,9 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
     const regionArea: HTMLElement = audioUnitBoxAdapter.box.isGroup.getValue()
         ? GroupOverview({lifecycle, service, unit: audioUnitBoxAdapter.box})
         : <div className={Html.buildClassList(RegionLaneClassName, "deactive")}/>
-    const clipArea: HTMLElement = <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
+    const clipArea: HTMLElement = box.isGroup.getValue()
+        ? GroupClipLane({lifecycle, service, unit: box})
+        : <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
     const element: HTMLElement = (
         <div className={Html.buildClassList(TrackClassName, "unit-lane")} tabindex={-1}>
             {header}
@@ -160,6 +164,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             nameLabel.textContent = option.unwrapOrElse("")),
         // The clip column mirrors the ClipLane's placeholder cells (no clips can exist on this lane).
         service.timeline.clips.visible.catchupAndSubscribe(visibleOwner => {
+            if (box.isGroup.getValue()) {return}
             clipCellsLifecycle.terminate()
             Html.empty(clipArea)
             if (visibleOwner.getValue()) {

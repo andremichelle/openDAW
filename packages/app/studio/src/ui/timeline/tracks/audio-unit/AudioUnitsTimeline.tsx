@@ -129,22 +129,21 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
                     editing.modify(() => {
-                        const {audioUnitBox} = api.createAnyInstrument(factory)
-                        api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        const {audioUnitBox} = api.createInstrumentAt(factory, api.insertionBefore(anchor))
                         NewInstrumentRegion.create(service.project, service.timeline.snapping, audioUnitBox)
                     })
                 } else if (dragData.type === "preset") {
                     if (dragData.category === "audio-unit") {
-                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, anchor)
+                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, api.insertionBefore(anchor))
                             .catch(console.warn)
                     } else if (isNotNull(dragData.device)) {
                         PresetApplication.createNewAudioUnitFromInstrument(
-                            service, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
+                            service, dragData.uuid, dragData.device, dragData.source, api.insertionBefore(anchor)).catch(console.warn)
                     }
                 } else if (dragData.type === "script") {
                     SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
-                        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(SpotlightCreate.ScriptHosts.apparat)
-                        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        const {audioUnitBox, instrumentBox} = project.api.createInstrumentAt(
+                            SpotlightCreate.ScriptHosts.apparat, project.api.insertionBefore(anchor))
                         NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
                         return Option.wrap(instrumentBox)
                     }))

@@ -45,6 +45,7 @@ import {
     isModulatorBox,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    PresetDecoder,
     ProjectQueries,
     RegionAdapters,
     RegionOverlap,
@@ -84,6 +85,11 @@ import {NoteMidiExport} from "./NoteMidiExport"
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
 import {AudioContentFactory} from "./audio"
+
+export type AudioUnitInsertion = {
+    readonly before: Option<UUID.Bytes>
+    readonly parent: Option<UUID.Bytes>
+}
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -179,19 +185,58 @@ export class ProjectApi {
     }
 
     createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
-        const {trackSelection, audioUnitLayout, rootBox, grouping} = this.#project
+        const {trackSelection, audioUnitLayout} = this.#project
         const selected = AudioUnitGroups.roots(trackSelection.commandTargets)
         const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
-        const parent = isDefined(anchor) ? AudioUnitGroups.parent(anchor).unwrapOrUndefined() : undefined
-        const siblings = AudioUnitGroups.children(rootBox, parent)
-        const before = isDefined(anchor) ? siblings[siblings.indexOf(anchor) + 1] : undefined
-        const destination = isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined
+        return this.createInstrumentAt(factory, this.insertionAfter(Option.wrap(anchor)))
+    }
+
+    insertionAfterEditing(): AudioUnitInsertion {
+        return this.insertionAfter(this.#project.userEditingManager.audioUnit.get()
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None))
+    }
+
+    insertionAfter(anchor: Option<AudioUnitBox>): AudioUnitInsertion {
+        const parent = anchor.flatMap(AudioUnitGroups.parent)
+        const siblings = AudioUnitGroups.children(this.#project.rootBox, parent.unwrapOrUndefined())
+        const before = anchor.flatMap(unit => Option.wrap(siblings[siblings.indexOf(unit) + 1]))
+        return {before: before.map(unit => unit.address.uuid), parent: parent.map(unit => unit.address.uuid)}
+    }
+
+    insertionBefore(anchor: Option<UUID.Bytes>): AudioUnitInsertion {
+        return {before: anchor, parent: anchor.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(AudioUnitGroups.parent).map(unit => unit.address.uuid)}
+    }
+
+    createInstrumentAt(factory: InstrumentFactory, insertion: AudioUnitInsertion): InstrumentProduct<InstrumentBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
         const product = this.createInstrument(factory, {destination})
-        if (isDefined(anchor) && anchor.type.getValue() !== AudioUnitType.Output) {
-            grouping.move([product.audioUnitBox], parent, before)
-        }
-        trackSelection.set([product.audioUnitBox])
+        this.placeAudioUnitsAt([product.audioUnitBox], insertion)
+        this.#project.trackSelection.set([product.audioUnitBox])
         return product
+    }
+
+    importAudioUnitsAt(bytes: ArrayBuffer, insertion: AudioUnitInsertion): ReadonlyArray<AudioUnitBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const imported = PresetDecoder.decode(bytes, this.#project.skeleton, undefined, destination)
+        this.placeAudioUnitsAt(AudioUnitGroups.roots(imported), insertion)
+        return imported
+    }
+
+    placeAudioUnitsAt(units: ReadonlyArray<AudioUnitBox>, insertion: AudioUnitInsertion): void {
+        if (insertion.parent.isEmpty() && insertion.before.isEmpty()) {return}
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const before = insertion.before.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.parent(unit).equals(parent) ? Option.wrap(unit) : Option.None)
+        this.#project.grouping.move(units, parent.unwrapOrUndefined(), before.unwrapOrUndefined())
+    }
+
+    #audioUnit(uuid: UUID.Bytes): Option<AudioUnitBox> {
+        return this.#project.boxGraph.findBox(uuid).flatMap(box => box instanceof AudioUnitBox ? Option.wrap(box) : Option.None)
     }
 
     // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).

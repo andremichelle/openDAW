@@ -1,14 +1,13 @@
-import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {Box, IndexedBox} from "@opendaw/lib-box"
-import {AudioUnitType} from "@opendaw/studio-enums"
+import {Box} from "@opendaw/lib-box"
 import {
-    ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WerkstattDeviceBox
+    ApparatDeviceBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler, WclapPluginInfo
 } from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, WclapStates, WclapStorage} from "@opendaw/studio-core"
+import {AudioUnitInsertion, EffectFactories, EffectFactory, PresetEntry, Project, WclapStates, WclapStorage} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
@@ -38,20 +37,11 @@ export namespace SpotlightCreate {
     const editingHost = (project: Project): Option<DeviceHost> => project.userEditingManager.audioUnit.get()
         .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost))
 
-    // the unit after the edit-mode instrument, a new unit is placed before it
-    export const anchorAfterEditing = (project: Project): Option<UUID.Bytes> => editingHost(project)
-        .flatMap(host => {
-            const unit = host.audioUnitBoxAdapter().box
-            if (unit.type.getValue() !== AudioUnitType.Instrument) {return Option.None}
-            const units = IndexedBox.collectIndexedBoxes(project.rootBox.audioUnits, AudioUnitBox)
-            return Option.wrap(units.at(unit.index.getValue() + 1)).map(next => next.address.uuid)
-        })
+    export const insertionAfterEditing = (project: Project): AudioUnitInsertion => project.api.insertionAfterEditing()
 
     const createInstrument = (service: StudioService, factory: InstrumentFactory): InstrumentBox => {
         const {project} = service
-        const anchor = anchorAfterEditing(project)
-        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(factory)
-        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+        const {audioUnitBox, instrumentBox} = project.api.createInstrumentAt(factory, insertionAfterEditing(project))
         NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
         return instrumentBox
     }
@@ -72,10 +62,10 @@ export namespace SpotlightCreate {
             switch (entry.category) {
                 case "instrument":
                     return PresetApplication.createNewAudioUnitFromInstrument(
-                        service, entry.uuid, entry.device, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.device, entry.source, insertionAfterEditing(project))
                 case "audio-unit":
                     return PresetApplication.createNewAudioUnitFromRack(
-                        service, entry.uuid, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.source, insertionAfterEditing(project))
                 default:
                     return service.presets.activatePreset(entry)
             }

@@ -261,3 +261,15 @@ still build `1efc199a-bc44-4479-bcb4-dfdfe771f00d`. Prior comparison entry files
 Hosted checks open the existing saved nested-group project on the rebuilt engine, verify mixer routing,
 run Shift+Cmd+G and one Undo, then save/reopen with both groups restored. No browser console errors.
 Screenshot: `/tmp/group-main-refresh-demo.png` (verification artifact only).
+
+## Group insertion and clip launcher (2026-10-28)
+
+New instrument dialogs, Spotlight, presets/racks, audio-track creation and browser drops use a captured insertion with a next-sibling UUID and parent-group UUID. These are transient UI placement data, not box schema fields. The primary group bus is assigned at construction/import; list placement does not repair an already-created output pointer. The last child keeps its parent even when it has no following sibling. Deleted anchors are resolved safely when asynchronous loads finish. Default placement without a selected insertion stays unchanged.
+
+Group launcher tiles show Scene numbers, the existing play/stop symbols and a narrow stacked preview of clip hues. Each tile launches that scene in one existing scheduleClipPlay call. It includes nested/collapsed descendants and the group's own automation tracks, excludes outside units and launches muted clips silently like ordinary clips. Empty child slots continue playing, matching the existing global column launcher. Clicking a queued/playing tile stops the group's tracks only. Waiting/playing feedback follows engine notifications, including restored playing state on remount. Clip edits, routing, track changes and undo refresh the preview; subscriptions exist only while the launcher is visible and release with the row.
+
+No DSP, worklet commands, schema fields or launch quantization changed. PresetDecoder accepts an optional destination bus so imported root routes point at their parent from the start; internal rack routes remain intact.
+
+Validation: production dependency/Studio build (25 tasks); core 887 tests/86 files; adapters 360/31; Studio 259/42; real WASM grouping/MIDI Output 13/2. New regressions cover captured nested insertion (middle/last child, edit-mode fallback, presets, serialized routes and undo/redo), nested/muted clip batches, group automation, scene indices, outside exclusion, playback notifications, rerouting/undo and subscription disposal.
+
+Hosted comparison build `ec9fcd60-d4e3-4938-9163-0eaa5744f526` uses the existing isolated URL. Browser checks verify Add instrument after the last child in a nested group, its matching mixer output, and saved-copy reopening with that route and clip colors retained. The group tiles must set pointer-events and a positive stacking layer: timeline rows otherwise pass input to the transparent clip-selection surface. The corrected release launches three child clips together and shows parent/nested playing states, scene switching and collapsed-folder feedback. No subjective listening assessment is claimed. Previous source remains `f36982d927d93a6e018b0e2fef779d6b8c9cbcc4` for rollback; the original comparison demo is unchanged.
