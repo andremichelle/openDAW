@@ -279,3 +279,9 @@ Hosted comparison build `ec9fcd60-d4e3-4938-9163-0eaa5744f526` uses the existing
 The launcher tiles now show only the play/stop icon and child color preview. Visible Scene labels and hover/queued outlines are removed. Hover and keyboard focus brighten the icon; playing/queued states use the icon color and stop symbol. Scene numbers remain in accessible labels. Launch scheduling is unchanged.
 
 Verified the Studio production build and four launcher regressions. Comparison build `1d219544-f2a3-4482-8eaa-23f68a1f6171` passes native browser launch/stop checks with no visible Scene text, no outline or box shadow while hovered, and the stacked colors retained. Accessible scene labels remain present.
+
+### Restore launcher headers, retain border-free feedback
+
+The scene header and name are restored, including their queued/playing fill. Hover and keyboard focus still brighten the icon without outlining the tile. Queued tiles also have no outline. This supersedes the icon-only appearance above; color previews and launch behavior remain unchanged.
+
+Studio production build passed. Hosted build `46c5d859-72ac-45d9-b984-32781ec61084` shows Scene names and active header fill, launches/stops the child clips, and reports no outline or box shadow while hovered. No console errors. This change restores the original header markup/styles; clip scheduling is untouched.

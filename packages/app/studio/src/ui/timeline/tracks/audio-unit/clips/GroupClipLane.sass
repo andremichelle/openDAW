@@ -14,10 +14,17 @@ component
     border-radius: 2px
     overflow: hidden
     display: grid
-    grid-template-rows: 1fr
+    grid-template-rows: 13.5px 1fr
     cursor: pointer
     color: var(--color-gray)
     background: transparent
+
+    > span.label
+      width: 100%
+      font-size: 9px
+      line-height: 13.5px
+      color: hsl(200, 60%, 60%)
+      background: hsla(200, 45%, 60%, 0.15)
 
     > span.content
       width: 100%
@@ -55,9 +62,9 @@ component
         opacity: 1
 
     &.playing, &.waiting
-      > span.content > svg
-        color: hsl(200, 60%, 60%)
-        opacity: 1
+      > span.label
+        color: hsl(200, 60%, 10%)
+        background: hsla(200, 100%, 60%, 0.75)
 
       > span.content > svg.play
         display: none
@@ -69,5 +76,5 @@ component
       cursor: default
       @include colors.panel-background-stripes-dark
 
-      > span.content
+      > span.label, > span.content
         opacity: 0.3
