@@ -7,6 +7,7 @@ import {
     MutableObservableOption,
     Nullable,
     Option,
+    Terminable,
     Terminator
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -38,6 +39,9 @@ const className = Html.adoptStyleSheet(css, "DeviceDialog")
 
 const Gap = 16
 const MinHeight = 240
+const VisibleEntries = 3
+const EntryHeight = 19 // a row's height until one is rendered (16px icon, its padding and gap)
+const ListPadding = 24
 
 const searchOf: Record<PresetCategoryKey, DefaultObservableValue<string>> = {
     "instrument": new DefaultObservableValue(""),
@@ -129,18 +133,39 @@ const byRelevance = (query: string) => (left: DeviceEntry, right: DeviceEntry): 
     || DeviceCatalog.rankOf[left.kind] - DeviceCatalog.rankOf[right.kind]
     || DeviceCatalog.compare(left, right)
 
-// between the app header and the device panel, so the auditioned device stays in sight
-const placeAbovePanel = (dialog: HTMLDialogElement): void => {
-    const panel = document.querySelector<HTMLElement>("[data-device-panel]")
-    const header = document.querySelector<HTMLElement>("[data-app-header]")
-    if (!isDefined(panel) || panel.getBoundingClientRect().height === 0) {return}
-    const top = (isDefined(header) ? header.getBoundingClientRect().bottom : 0) + Gap
-    const bottom = panel.getBoundingClientRect().top - Gap
-    if (bottom - top < MinHeight) {return}
-    dialog.style.height = `${bottom - top}px`
-    dialog.style.maxHeight = `${bottom - top}px`
-    dialog.style.top = `${top}px`
-    dialog.style.transform = "translate(-50%, 0)"
+// below the app header down to the device panel, so the auditioned device stays in sight, at least three entries
+// high (then over the panel, within the window), placed again whenever the window, header or panel resizes
+const followLayout = (dialog: HTMLDialogElement, list: HTMLElement): Terminable => {
+    const chrome = {height: MinHeight - ListPadding - VisibleEntries * EntryHeight}
+    const place = (): void => {
+        const panel = document.querySelector<HTMLElement>("[data-device-panel]")
+        const header = document.querySelector<HTMLElement>("[data-app-header]")
+        const entry = list.querySelector<HTMLElement>(".entry")
+        const entryHeight = isDefined(entry) ? entry.getBoundingClientRect().height + 1 : EntryHeight
+        const minimum = ListPadding + VisibleEntries * entryHeight
+        const listHeight = list.getBoundingClientRect().height
+        if (dialog.open && listHeight >= minimum) {chrome.height = dialog.getBoundingClientRect().height - listHeight}
+        const top = (isDefined(header) ? header.getBoundingClientRect().bottom : 0) + Gap
+        const panelTop = isDefined(panel) && panel.getBoundingClientRect().height > 0
+            ? panel.getBoundingClientRect().top : window.innerHeight
+        const height = Math.max(0, Math.min(window.innerHeight - Gap - top, Math.max(panelTop - Gap - top, chrome.height + minimum)))
+        dialog.style.height = `${height}px`
+        dialog.style.maxHeight = `${height}px`
+        dialog.style.top = `${top}px`
+        dialog.style.transform = "translate(-50%, 0)"
+    }
+    const observer = new ResizeObserver(place)
+    for (const element of [document.querySelector<HTMLElement>("[data-device-panel]"), document.querySelector<HTMLElement>("[data-app-header]"), list]) {
+        if (isDefined(element)) {observer.observe(element)}
+    }
+    const resize = Events.subscribe(window, "resize", place)
+    place()
+    return {
+        terminate: () => {
+            observer.disconnect()
+            resize.terminate()
+        }
+    }
 }
 
 export namespace DeviceDialog {
@@ -406,8 +431,8 @@ export namespace DeviceDialog {
             lifecycle.terminate()
         }, {once: true})
         Surface.get().body.appendChild(dialog)
-        placeAbovePanel(dialog)
         dialog.showModal()
+        lifecycle.own(followLayout(dialog, list))
         search.focus()
         search.querySelector("input")?.select()
     }
