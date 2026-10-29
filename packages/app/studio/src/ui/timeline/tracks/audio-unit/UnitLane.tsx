@@ -103,7 +103,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         ? GroupOverview({lifecycle, service, unit: audioUnitBoxAdapter.box})
         : <div className={Html.buildClassList(RegionLaneClassName, "deactive")}/>
     const clipArea: HTMLElement = box.isGroup.getValue()
-        ? GroupClipLane({lifecycle, service, unit: box})
+        ? GroupClipLane({lifecycle, service, unit: box, selection: trackManager.groupClipSelection})
         : <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
     const element: HTMLElement = (
         <div className={Html.buildClassList(TrackClassName, "unit-lane")} tabindex={-1}>

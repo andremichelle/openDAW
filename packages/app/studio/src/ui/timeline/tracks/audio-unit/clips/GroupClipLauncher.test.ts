@@ -5,6 +5,7 @@ import {NoteClipBox, NoteEventCollectionBox} from "@opendaw/studio-boxes"
 import {PPQN} from "@opendaw/lib-dsp"
 import {GroupClipAppearance} from "./GroupClipAppearance"
 import {GroupClipLauncher} from "./GroupClipLauncher"
+import {GroupClipSelection} from "./GroupClipSelection"
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -47,6 +48,43 @@ const setup = async () => {
 const ids = (values: ReadonlyArray<UUID.Bytes>) => values.map(UUID.toString)
 
 describe("group clip launcher", () => {
+    it("selects just the group tile without launching, stopping or selecting its children", async () => {
+        const {project, group, nested, clips, products, play, stop, launcher} = await setup()
+        const selection = new GroupClipSelection(project)
+        project.selection.select(clips[0], clips[2], products[0].instrumentBox)
+        selection.select(group, 0)
+        expect(selection.isSelected(group, 0)).true
+        expect(selection.isSelected(nested, 0)).false
+        expect(clips.some(clip => project.selection.isSelected(clip))).false
+        expect(project.selection.isSelected(products[0].instrumentBox)).true
+        expect(play).not.toHaveBeenCalled()
+        expect(stop).not.toHaveBeenCalled()
+        selection.select(group, 1)
+        expect(selection.isSelected(group, 0)).false
+        expect(selection.isSelected(group, 1)).true
+        selection.select(nested, 0)
+        expect(selection.isSelected(group, 1)).false
+        expect(selection.isSelected(nested, 0)).true
+        project.selection.select(clips[0])
+        expect(selection.value.isEmpty()).true
+        selection.terminate()
+        launcher.terminate()
+        project.terminate()
+    })
+    it("clears a selected tile when its group is deleted and releases selection listeners", async () => {
+        const {project, nested, clips, launcher} = await setup()
+        const selection = new GroupClipSelection(project)
+        selection.select(nested, 0)
+        project.editing.modify(() => project.grouping.deleteGroup(nested))
+        expect(selection.value.isEmpty()).true
+        const changed = vi.fn()
+        selection.value.subscribe(changed)
+        selection.terminate()
+        project.selection.select(clips[0])
+        expect(changed).not.toHaveBeenCalled()
+        launcher.terminate()
+        project.terminate()
+    })
     it("launches one column in a single batch, including hidden nested clips and muted clips, excluding outside tracks", async () => {
         const {project, group, nested, clips, play, launcher} = await setup()
         project.editing.modify(() => {group.groupCollapsed.setValue(true); nested.groupCollapsed.setValue(true); clips[1].mute.setValue(true)})

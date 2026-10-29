@@ -27,6 +27,7 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackListLayout} from "./TrackListLayout"
+import {GroupClipSelection} from "./clips/GroupClipSelection"
 import {ClipModifier} from "./clips/ClipModifier"
 import {StudioService} from "@/service/StudioService.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
@@ -63,6 +64,7 @@ export interface TrackFactory {
 }
 
 export class TracksManager implements Terminable {
+    readonly groupClipSelection: GroupClipSelection
     readonly #service: StudioService
     readonly #scrollContainer: Element
     readonly #scrollModel: ScrollModel
@@ -96,6 +98,7 @@ export class TracksManager implements Terminable {
         this.#factory = factory
 
         this.#terminator = new Terminator()
+        this.groupClipSelection = this.#terminator.own(new GroupClipSelection(service.project))
         this.#audioUnits = UUID.newSet(({uuid}) => uuid)
         this.#modulators = UUID.newSet(({uuid}) => uuid)
         this.#modulatorLanes = ModulatorLanes()
