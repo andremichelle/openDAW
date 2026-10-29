@@ -10,8 +10,8 @@ strings sit at the values that keep the old sound).
 
 - Presets are entries in the `Factory` list in
   `packages/studio/adapters/src/devices/instruments/KorpusPresets.ts`. Each entry is a name plus the 19 knob values.
-- While the list is empty, the preset selector beside object A and the device menu's **Presets** item are hidden.
-  Both come back automatically as soon as the list has an entry.
+- The preset selector beside object A and the device menu's **Presets** item show whenever the list has an
+  entry; the factory bank keeps them visible.
 - Loading a preset is one undoable edit, and it cuts any notes that are sounding.
 - After editing the file, rebuild the adapters package (`npm run build -w @opendaw/studio-adapters`) and reload the app;
   the app reads that package from its build output.
@@ -253,7 +253,9 @@ Stroke, its exciter is Breath or Wind.
 
 ## Restoring them in code
 
-Paste these entries back inside `export const Factory: ReadonlyArray<Preset> = [ … ]` in `KorpusPresets.ts`:
+Paste these entries back inside `export const Factory: ReadonlyArray<Preset> = [ … ]` in `KorpusPresets.ts` —
+but skip Pan Flute, Silver Flute and Shakuhachi, which already ship in the factory bank (pasting them again
+would put duplicate names in the selector):
 
 ```ts
         {
