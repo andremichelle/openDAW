@@ -81,9 +81,9 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
     }
     const vitals = terminator.own(new VitalSigns())
     const connection = terminator.own(new Terminator())
-    const link: { port: Option<MessagePort>, loads: number, pointer: boolean } = {port: Option.None, loads: 0, pointer: false}
+    const link: { port: Option<MessagePort>, loads: number } = {port: Option.None, loads: 0}
     const post = (message: object): void => link.port.ifSome(port => port.postMessage(message))
-    // in-page right-click and double-click are enabled by the plugin's first clap.param-hovered report
+    // in-page right-click and double-click go to the studio while the plugin reports a hovered parameter
     const menuParameter: { parameter: Optional<AutomatableParameterFieldAdapter> } = {parameter: undefined}
     const hoveredParameter = (): Optional<AutomatableParameterFieldAdapter> => {
         const paramId = WclapGuis.hoveredParam(uuidString)
@@ -142,7 +142,7 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
         if (!link.port.contains(port)) {return}
         if (reopened.length === 0) {return lost()}
         post({type: "wclap-open", uuid: uuidString, page: pagePath(reopened), files: bundle.files, transparent: transparent === true})
-        if (link.pointer) {post({type: "wclap-pointer-enable"})}
+        post({type: "wclap-hovered", hovered: WclapGuis.hoveredParam(uuidString) >= 0})
         return reloaded()
     }
     const connect = (port: MessagePort): void => {
@@ -227,11 +227,7 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
             if (data.type === "sample") {dragSample(data.sample)} else {letThrough()}
         })),
         WclapGuis.register(uuidString, bytes => post({type: "wclap-message", bytes})),
-        WclapGuis.subscribeHovered(uuidString, paramId => {
-            if (paramId < 0) {return}
-            link.pointer = true
-            post({type: "wclap-pointer-enable"})
-        }),
+        WclapGuis.subscribeHovered(uuidString, paramId => post({type: "wclap-hovered", hovered: paramId >= 0})),
         ContextMenu.subscribe(iframe, collector => {
             const parameter = menuParameter.parameter
             if (!isDefined(parameter)) {return}

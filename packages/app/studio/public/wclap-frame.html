@@ -20,7 +20,7 @@
     const files = new Map()
     // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
     const channel = new MessageChannel()
-    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, transparent: false, dragging: false}
+    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, hovered: false, transparent: false, dragging: false}
 
     const post = message => channel.port1.postMessage(message)
     const fail = message => {
@@ -62,17 +62,19 @@
         worker.postMessage({type: "wclap-host"})
     }
 
-    // only once the plugin reported clap.param-hovered, otherwise the page keeps its own behaviour
+    // only while the plugin reports a hovered parameter, otherwise the page keeps its own behaviour
     const forwardPointer = () => {
         const target = state.inner?.contentWindow
         if (!state.pointer || !target || target.__wclapPointer) {return}
         target.__wclapPointer = true
         target.addEventListener("contextmenu", event => {
+            if (!state.hovered) {return}
             event.preventDefault()
             event.stopPropagation()
             post({type: "wclap-contextmenu", x: event.clientX, y: event.clientY})
         }, {capture: true})
         target.addEventListener("dblclick", event => {
+            if (!state.hovered) {return}
             event.preventDefault()
             event.stopPropagation()
             post({type: "wclap-dblclick", x: event.clientX, y: event.clientY})
@@ -198,8 +200,9 @@
             open(data).catch(error => fail(`The plugin page could not start: ${error.message ?? error}`))
         } else if (data?.type === "wclap-message" && inner !== null && inner.contentWindow !== null) {
             inner.contentWindow.postMessage(data.bytes, "*")
-        } else if (data?.type === "wclap-pointer-enable") {
-            state.pointer = true
+        } else if (data?.type === "wclap-hovered") {
+            state.hovered = data.hovered === true
+            state.pointer = state.pointer || state.hovered
             forwardPointer()
         } else if (data?.type === "wclap-drag" && inner !== null) {
             dragOver(data, new File([], `${data.name}.wav`, {type: "audio/wav"}))
