@@ -4,7 +4,7 @@
 //! rings through (serial). Stereo throughout.
 
 use abi::EventRecord;
-use libm::{fabsf, floorf, powf, sinf};
+use libm::{expf, fabsf, floorf, powf, sinf};
 use voicing::Voice;
 
 use crate::engine::bow::BowState;
@@ -17,6 +17,8 @@ use crate::engine::wind::WindState;
 pub const CHUNK_MAX: usize = 128;
 const TAIL_SILENCE_BLOCKS: u32 = 16;
 const TAIL_THRESHOLD: f32 = 1.0e-4;
+const FORCE_STOP_FADE_SECONDS: f32 = 0.003;
+const FADE_SILENCE: f32 = 1.0e-4;
 const OBJECT_B_OFF: i32 = 6;
 const BREATH_DRIVE: f32 = 100.0; // unity-peak modes pass only their sliver of the noise band
 const BREATH_BLEED: f32 = 0.004; // chiff + air survive dark objects via a little direct bleed
@@ -171,6 +173,8 @@ pub struct KorpusVoice {
     gate: bool,
     tail_blocks: u32,
     active: bool,
+    dying: bool, // stolen: renders through a short fade instead of cutting
+    fade: f32,
     on: NoteOn,
     live: Live,
 }
@@ -179,8 +183,8 @@ impl Default for KorpusVoice {
     fn default() -> Self {
         Self {state: EngineState::Idle, bank_b: DrivenBank::silent(), has_b: false, serial: false,
             gain_a: 1.0, gain_b: 0.38, serial_gain: SERIAL_B, release_t60: 1.0, frequency: 220.0,
-            velocity: 0.8, pending_glide: 0.0, gate: false, tail_blocks: 0, active: false,
-            on: NoteOn::silent(), live: Live::silent()}
+            velocity: 0.8, pending_glide: 0.0, gate: false, tail_blocks: 0, active: false, dying: false,
+            fade: 1.0, on: NoteOn::silent(), live: Live::silent()}
     }
 }
 
@@ -409,6 +413,8 @@ impl Voice for KorpusVoice {
         self.gate = true;
         self.tail_blocks = 0;
         self.active = true;
+        self.dying = false;
+        self.fade = 1.0;
     }
 
     fn stop(&mut self) {
@@ -450,7 +456,7 @@ impl Voice for KorpusVoice {
 
     fn force_stop(&mut self) {
         self.gate = false;
-        self.active = false;
+        self.dying = true;
     }
 
     fn start_glide(&mut self, target_frequency: f32, _glide_duration: f64) {
@@ -566,11 +572,23 @@ impl Voice for KorpusVoice {
                 }
             }
         }
+        if self.dying {
+            let fade_coeff = expf(-1.0 / (FORCE_STOP_FADE_SECONDS * shared.sample_rate));
+            for index in 0..len {
+                voice_l[index] *= self.fade;
+                voice_r[index] *= self.fade;
+                self.fade *= fade_coeff;
+            }
+        }
         let mut peak = floor;
         for index in 0..len {
             out_left[index] += voice_l[index];
             out_right[index] += voice_r[index];
             peak = peak.max(fabsf(voice_l[index])).max(fabsf(voice_r[index]));
+        }
+        if self.dying && self.fade < FADE_SILENCE {
+            self.active = false;
+            return true;
         }
         // A held note is never done — slow bow/breath attacks are quiet for their first
         // ~50ms and must not be freed mid-swell. Tail detection only runs after release.

@@ -804,6 +804,52 @@ fn pick_release_is_click_free() {
     }
 }
 
+// A stolen voice fades out within a few ms (the pool keeps rendering it) instead of being cut mid-wave.
+#[test]
+fn stolen_voice_fades_out() {
+    let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0, s0: 0, s1: 0};
+    let steal_at = (0.3 * SAMPLE_RATE) as usize / CHUNK_MAX * CHUNK_MAX;
+    let total = steal_at + (0.1 * SAMPLE_RATE) as usize;
+    let max_step = |samples: &[f32]| (steal_at - 64..steal_at + 512)
+        .map(|index| (samples[index + 1] - samples[index]).abs()).fold(0.0f32, f32::max);
+    for config in configs() {
+        for pitch in [45u32, 69] {
+            let mut outputs = [Vec::with_capacity(total), Vec::with_capacity(total)];
+            let mut finished_at = None;
+            for (run, output) in outputs.iter_mut().enumerate() {
+                let shared = shared_for(&config);
+                let mut voice = KorpusVoice::default();
+                let frequency = 440.0 * libm::powf(2.0, (pitch as f32 - 69.0) / 12.0);
+                voice.start(&note_on(pitch, 0.9), frequency, 1.0, 0.0, 1, &shared);
+                let mut done = false;
+                let mut position = 0;
+                while position < total {
+                    if run == 1 && position == steal_at {
+                        voice.force_stop();
+                    }
+                    let mut left = [0.0f32; CHUNK_MAX];
+                    let mut right = [0.0f32; CHUNK_MAX];
+                    if !done {
+                        done = voice.process([&mut left, &mut right], &block, &shared);
+                        if done && run == 1 && finished_at.is_none() {
+                            finished_at = Some(position);
+                        }
+                    }
+                    output.extend_from_slice(&left);
+                    position += CHUNK_MAX;
+                }
+            }
+            let [held, stolen] = &outputs;
+            let (held_step, stolen_step) = (max_step(held), max_step(stolen));
+            let finished = finished_at.expect("a stolen voice must finish") - steal_at;
+            println!("{} pitch {pitch}: max step held {held_step:.5} stolen {stolen_step:.5}, done after {finished} frames",
+                config.name);
+            assert!(stolen_step <= held_step * 1.05 + 1.0e-6, "{} pitch {pitch}: stolen voice cut", config.name);
+            assert!(finished <= (0.03 * SAMPLE_RATE) as usize, "{} pitch {pitch}: fade too long", config.name);
+        }
+    }
+}
+
 // A's render is deterministic and B never feeds back into it, so B alone = pair − make-up·(A alone).
 fn isolate_b(pair: &[f32], alone: &[f32], make_up: f32) -> Vec<f32> {
     pair.iter().zip(alone).map(|(with, solo)| with - make_up * solo).collect()

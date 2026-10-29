@@ -91,7 +91,7 @@ The noise of the playing itself. 50 % is the natural balance.
 ### 1.6 Stroke
 
 The physical stroke behind the note — how the exciter moves, where Intensity sets what it is
-made of. 50 % is today's stroke; Breath and Wind ignore it, and the knob dims there.
+made of. 50 % is the default stroke; Breath and Wind ignore it, and the knob dims there.
 
 - **Strike**: mallet weight, a third of the default head to three times it. A heavy head hands
   the bar more momentum and keeps pushing after the felt lets go — fuller, rounder, louder —
