@@ -320,3 +320,8 @@ After Save and a full page reload, reopening the verification project retains bo
 ## Flush child-color previews (2026-10-29)
 
 Remove the group launcher preview's 3px top/bottom/right insets and its independent corner radius. The child-color strip spans the full playback area below the header and shares the header/tile right edge; 1px separators between child colors remain. This is a Sass-only change. Production Studio build passes. Hosted build `450461ab-e5fd-40d1-b359-d2ed177a6d6e` measures zero top/bottom/right gaps on all four populated preview strips, including the nested group. Header selection still works and the browser reports no console errors. Screenshot: `/tmp/group-color-preview-edge.png` (local verification only).
+
+
+### Separate the first preview color from the header
+
+The preview keeps its flush right/bottom edges and now starts 1px below the header, matching the separators between child colors. This supersedes the zero top gap above. The production Studio build passes. Hosted build `edb29775-0a17-4e2d-810b-ea1aff67afc3` measures top gap 1px, internal gap 1px, and right/bottom gaps 0px on all four populated strips, including the nested group. Screenshot: `/tmp/group-preview-header-gap.png` (local verification only).
