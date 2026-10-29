@@ -15,6 +15,9 @@ export class GroupRails implements Terminable {
                 readonly horizontal: boolean, readonly reveal: Procedure<AudioUnitBox>) {
         this.#lifecycle = new Terminator()
         this.#rails = new Map()
+        if (container instanceof HTMLElement) {
+            container.style.setProperty("--unit-line-width", `${AudioUnitLayout.RailWidth}px`)
+        }
         this.#lifecycle.ownAll(
             project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelection())
         )
@@ -53,14 +56,17 @@ export class GroupRails implements Terminable {
             if (button.parentElement !== this.container) {this.container.appendChild(button)}
         })
         if (this.container instanceof HTMLElement && this.horizontal) {
-            this.container.style.setProperty("--group-rail-height", `${spans.length === 0 ? 0 :
-                8 + Math.max(...spans.map(span => span.depth)) * AudioUnitLayout.Indent}px`)
+            // Include one nesting step per rail, accounting for the grid's first control-row gap.
+            // The final rail-to-strip gap then matches the gap between nested rails.
+            const height = spans.length === 0 ? "0px" :
+                `calc(${(1 + Math.max(...spans.map(span => span.depth))) * AudioUnitLayout.Indent}px - var(--mixer-row-gap, 4px))`
+            this.container.style.setProperty("--group-rail-height", height)
         }
         this.#refreshSelection()
     }
     #refreshSelection(): void {
         this.#rails.forEach(({button}, unit) => button.classList.toggle("line-active",
-            this.project.trackSelection.isEdited(unit)))
+            this.project.trackSelection.isLineHighlighted(unit)))
     }
     terminate(): void {
         this.#lifecycle.terminate()

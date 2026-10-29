@@ -325,3 +325,18 @@ Remove the group launcher preview's 3px top/bottom/right insets and its independ
 ### Separate the first preview color from the header
 
 The preview keeps its flush right/bottom edges and now starts 1px below the header, matching the separators between child colors. This supersedes the zero top gap above. The production Studio build passes. Hosted build `edb29775-0a17-4e2d-810b-ea1aff67afc3` measures top gap 1px, internal gap 1px, and right/bottom gaps 0px on all four populated strips, including the nested group. Screenshot: `/tmp/group-preview-header-gap.png` (local verification only).
+
+
+## Latest mixer and preview review (2026-10-29)
+
+Follow André's parent-propagation variant: the edited audio unit and each routed parent group get an active line. Explicit multi-selection still controls name/row highlights separately. AudioUnitSelection.isLineHighlighted reads the shared layout ancestry; both views refresh line state on layout/routing changes as well as editor changes. The new regression covers unrelated selected tracks, nested/collapsed parents, rerouting out of a group and cleared editing.
+
+The mixer now uses the same 4px RailWidth for group rails and full mixer strip top borders. Its rail-row reservation accounts for the existing control-grid gap, leaving 1px between nested rails and between the deepest rail and strip. The compact device-panel fallback is retained. Drop markers use the same control-grid gap variable.
+
+Launcher color strips show only when their own group is collapsed, matching the arrangement overview. Header selection, launch/stop, names and menus remain available while expanded. The flush right/bottom edges and 1px header/child separators remain. No schema, routing or audio-engine changes.
+
+Verification: 44 grouping tests, 265 Studio tests / 42 files, core compilation and the production Studio build pass. Hosted checks measure all full mixer borders and rails at 4px, nested rails at y=77..81 and y=82..86, with channel borders starting y=87 (both gaps 1px). Editing Neon activates both routed parent lines; unrelated strips stay inactive. Expanded launcher groups show no child-color strips while retaining 16 headers; folding only the subgroup shows its two populated previews and leaves the expanded parent previews hidden. Unfolding restores the children.
+
+Final comparison build: `99fc9f46-cd5d-4382-8a6f-ad8faa21cea0`, with completed invalidation `IA5Z37LLPMFOEU4N2V5UI6SR04`. Saved and reopened the verification fixture with both groups expanded, all four clips and the Verse name retained. Final-build checks reconfirm zero expanded previews, both parent timeline rails active for saved Neon editing, all mixer borders/rails 4px and both nearest gaps 1px, with no browser console errors. Screenshots: `/tmp/group-review-mixer-parents.png` and `/tmp/group-review-collapsed-preview.png` (local verification only).
+
+The earlier clip-selection recording shows group-header interaction. The split header/play controls, single GroupClipSelection and selected-header fill from c4db18e4b cover that recorded case; the previously verified header clicks remain independent of playback. No new claim is made about unrelated regular-clip gestures. Upstream merge conflicts remain a separate rebase task.

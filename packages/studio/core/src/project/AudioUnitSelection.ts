@@ -34,6 +34,13 @@ export class AudioUnitSelection {
         return this.project.userEditingManager.audioUnit.get().mapOr(vertex =>
             this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box === unit, false)
     }
+    isLineHighlighted(unit: AudioUnitBox): boolean {
+        return this.project.userEditingManager.audioUnit.get().mapOr(vertex => {
+            const edited = this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box
+            return edited === unit || this.project.audioUnitLayout.snapshot.row(edited)
+                .mapOr(row => row.ancestors.includes(unit), false)
+        }, false)
+    }
     set(units: ReadonlyArray<AudioUnitBox>): void {
         this.#subscriptions.terminate()
         const next = [...new Set(units)].filter(unit => unit.isAttached() && unit.type.getValue() !== AudioUnitType.Output)

@@ -82,6 +82,7 @@ export const GroupClipLane = ({lifecycle, service, unit, selection}: Construct):
         element.scrollLeft = clips.scroll.getValue()
     }
     lifecycle.ownAll(
+        unit.groupCollapsed.catchupAndSubscribe(field => element.classList.toggle("collapsed", field.getValue())),
         clips.columns.subscribe(() => {
             element.style.setProperty("--clip-columns", String(clips.columns.getValue()))
             rebuild()

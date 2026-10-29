@@ -23,11 +23,12 @@ export const AudioUnitTracks = ({lifecycle, project, adapter}: Construct) => {
     const audioUnitEditing = project.userEditingManager.audioUnit
     const refreshSelection = () => {
         element.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
-        element.classList.toggle("line-active", project.trackSelection.isEdited(adapter.box))
+        element.classList.toggle("line-active", project.trackSelection.isLineHighlighted(adapter.box))
     }
     lifecycle.ownAll(
         project.trackSelection.value.catchupAndSubscribe(refreshSelection),
-        audioUnitEditing.catchupAndSubscribe(refreshSelection)
+        audioUnitEditing.catchupAndSubscribe(refreshSelection),
+        project.audioUnitLayout.value.subscribe(refreshSelection)
     )
     return element
 }

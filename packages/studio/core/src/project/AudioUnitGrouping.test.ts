@@ -204,6 +204,26 @@ describe("track folders", () => {
         expect(project.editing.modify(() => project.grouping.move([group], undefined, group)).unwrap()).toBe(false)
         project.terminate()
     })
+    it("highlights the edited unit and its routed ancestors without changing explicit track selection", async () => {
+        const {project, units: [first, second, outside]} = await setup()
+        const parent = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
+        const nested = project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap()
+        const selection = project.trackSelection
+        project.userEditingManager.audioUnit.edit(first.editing)
+        selection.set([second])
+        const units = [parent, nested, first, second, outside]
+        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, true, false, false])
+        expect(units.map(unit => selection.isHighlighted(unit))).toEqual([false, false, false, true, false])
+        project.editing.modify(() => {nested.groupCollapsed.setValue(true); parent.groupCollapsed.setValue(true)})
+        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, true, false, false])
+        project.editing.modify(() => project.grouping.move([first]))
+        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([false, false, true, false, false])
+        project.userEditingManager.audioUnit.edit(nested.editing)
+        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, false, false, false])
+        project.userEditingManager.audioUnit.clear()
+        expect(units.some(unit => selection.isLineHighlighted(unit))).false
+        project.terminate()
+    })
     it("falls back to the active editor highlight after clearing the selection", async () => {
         const {project, units: [first, second, third]} = await setup()
         const selection = project.trackSelection

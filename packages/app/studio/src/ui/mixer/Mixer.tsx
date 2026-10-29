@@ -91,7 +91,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     })
     const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) => {
         editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
-        editor.classList.toggle("line-active", project.trackSelection.isEdited(adapter.box))
+        editor.classList.toggle("line-active", project.trackSelection.isLineHighlighted(adapter.box))
     })
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
@@ -136,7 +136,10 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             },
             onReorder: (_adapter: AudioUnitBoxAdapter) => updateDom.request()
         }),
-        project.audioUnitLayout.value.subscribe(() => updateDom.request()),
+        project.audioUnitLayout.value.subscribe(() => {
+            updateDom.request()
+            refreshEditingIndicators()
+        }),
         project.trackSelection.value.subscribe(refreshEditingIndicators),
         project.userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex.match({
             none: refreshEditingIndicators,

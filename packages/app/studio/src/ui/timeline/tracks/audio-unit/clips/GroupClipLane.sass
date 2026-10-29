@@ -60,7 +60,7 @@ component
         bottom: 0
         right: 0
         width: 5px
-        display: flex
+        display: none
         flex-direction: column
         gap: 1px
         overflow: hidden
@@ -98,3 +98,6 @@ component
 
       &:not(.named):not(.selected) > button.label
         opacity: 0.3
+
+  &.collapsed > div.group-clip > button.content > span.colors
+    display: flex

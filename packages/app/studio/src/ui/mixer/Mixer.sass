@@ -23,7 +23,8 @@ component
       grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto 40px 1fr auto
       grid-auto-flow: column dense
       justify-content: start
-      row-gap: 4px
+      --mixer-row-gap: 4px
+      row-gap: var(--mixer-row-gap)
       column-gap: 8px
 
       > [data-unit]
@@ -62,7 +63,7 @@ component
     &:after
       content: ""
       position: absolute
-      top: calc(-1 * var(--group-rail-height, 0px) + var(--drop-indent, 0px) - 4px)
+      top: calc(-1 * var(--group-rail-height, 0px) + var(--drop-indent, 0px) - var(--mixer-row-gap))
       bottom: 0
       width: 2px
       background: var(--color-blue)
