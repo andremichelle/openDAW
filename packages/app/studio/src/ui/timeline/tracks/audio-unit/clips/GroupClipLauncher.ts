@@ -2,6 +2,7 @@ import {int, Notifier, Observer, SortedSet, Subscription, Terminable, Terminator
 import {AnyClipBoxAdapter, AudioUnitBoxAdapter, ClipNotification, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
+import {GroupClipAppearance} from "./GroupClipAppearance"
 
 export type GroupClipState = "idle" | "waiting" | "playing"
 
@@ -26,6 +27,7 @@ export class GroupClipLauncher implements Terminable {
         )
     }
     clips(index: int): ReadonlyArray<AnyClipBoxAdapter> {
+        if (!this.group.isAttached()) {return []}
         return this.#tracks.flatMap(track => track.clips.collection.getAdapterByIndex(index).match({none: () => [], some: clip => [clip]}))
     }
     state(index: int): GroupClipState {
@@ -35,12 +37,47 @@ export class GroupClipLauncher implements Terminable {
         return clips.some(clip => this.#playing.hasKey(clip.uuid)) ? "playing" : "idle"
     }
     toggle(index: int): void {
+        if (!this.group.isAttached()) {return}
         if (this.state(index) === "idle") {
             const clips = this.clips(index)
             if (clips.length > 0) {this.project.engine.scheduleClipPlay(clips.map(clip => clip.uuid))}
         } else {
             this.project.engine.scheduleClipStop(this.#tracks.map(track => track.uuid))
         }
+    }
+    rename(index: int, label: string): void {
+        if (!this.group.isAttached()) {return}
+        this.project.editing.modify(() => GroupClipAppearance.store(this.group, index,
+            {...GroupClipAppearance.read(this.group, index), label}))
+    }
+    setColor(index: int, hue: number): void {
+        if (!this.group.isAttached()) {return}
+        this.project.editing.modify(() => GroupClipAppearance.store(this.group, index,
+            {...GroupClipAppearance.read(this.group, index), hue}))
+    }
+    isMuted(index: int): boolean {
+        const clips = this.clips(index)
+        return clips.length > 0 && clips.every(clip => clip.mute)
+    }
+    setMuted(index: int, muted: boolean): void {
+        this.project.editing.modify(() => this.clips(index).forEach(clip => clip.box.mute.setValue(muted)))
+    }
+    isLooping(index: int): boolean {
+        const clips = this.clips(index)
+        return clips.length > 0 && clips.every(clip => clip.box.triggerMode.loop.getValue())
+    }
+    setLooping(index: int, loop: boolean): void {
+        this.project.editing.modify(() => this.clips(index).forEach(clip => clip.box.triggerMode.loop.setValue(loop)))
+    }
+    consolidate(index: int): void {
+        this.project.editing.modify(() => this.clips(index).filter(clip => clip.isMirrowed).forEach(clip => clip.consolidate()))
+    }
+    delete(index: int): void {
+        if (!this.group.isAttached()) {return}
+        this.project.editing.modify(() => {
+            this.clips(index).forEach(clip => clip.box.delete())
+            this.#units.filter(unit => unit.isGroup.getValue()).forEach(unit => GroupClipAppearance.clear(unit, index))
+        })
     }
     subscribe(observer: Observer<void>): Subscription {return this.#changes.subscribe(observer)}
     #refresh(): void {

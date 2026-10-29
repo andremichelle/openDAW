@@ -20,11 +20,16 @@ component
     background: transparent
 
     > span.label
+      box-sizing: border-box
+      padding: 0 0.25em
+      white-space: nowrap
+      text-overflow: ellipsis
+      overflow: hidden
       width: 100%
       font-size: 9px
       line-height: 13.5px
-      color: hsl(200, 60%, 60%)
-      background: hsla(200, 45%, 60%, 0.15)
+      color: hsl(var(--hue), 60%, 60%)
+      background: hsla(var(--hue), 45%, 60%, 0.15)
 
     > span.content
       width: 100%
@@ -32,7 +37,7 @@ component
       position: relative
       display: grid
       place-items: center
-      background: hsla(200, 60%, 60%, 0.06)
+      background: hsla(var(--hue), 60%, 60%, 0.06)
 
       > svg
         font-size: 0.75em
@@ -57,14 +62,14 @@ component
           flex: 1 1 0
           min-height: 1px
 
-    &:hover:not(:disabled), &:focus-visible
+    &:hover:not(.empty), &:focus-visible
       > span.content > svg
         opacity: 1
 
     &.playing, &.waiting
       > span.label
-        color: hsl(200, 60%, 10%)
-        background: hsla(200, 100%, 60%, 0.75)
+        color: hsl(var(--hue), 60%, 10%)
+        background: hsla(var(--hue), 100%, 60%, 0.75)
 
       > span.content > svg.play
         display: none
@@ -72,9 +77,15 @@ component
       > span.content > svg.stop
         display: block
 
-    &:disabled
+    &.muted
+      filter: saturate(25%)
+
+    &.empty
       cursor: default
       @include colors.panel-background-stripes-dark
 
-      > span.label, > span.content
+      > span.content
+        opacity: 0.3
+
+      &:not(.named) > span.label
         opacity: 0.3

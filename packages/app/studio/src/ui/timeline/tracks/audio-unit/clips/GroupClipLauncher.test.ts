@@ -3,6 +3,7 @@ import {DefaultObservableValue, Notifier, Option, Terminable, UUID} from "@opend
 import {ClipNotification, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {NoteClipBox, NoteEventCollectionBox} from "@opendaw/studio-boxes"
 import {PPQN} from "@opendaw/lib-dsp"
+import {GroupClipAppearance} from "./GroupClipAppearance"
 import {GroupClipLauncher} from "./GroupClipLauncher"
 
 vi.hoisted(() => {
@@ -111,4 +112,91 @@ describe("group clip launcher", () => {
         expect(changed).not.toHaveBeenCalled()
         project.terminate()
     })
+    it("starts unnamed and saves independent scene names/colors through reload and duplication", async () => {
+        const {project, group, nested, clips, launcher} = await setup()
+        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "", hue: 200})
+        const updated = vi.fn()
+        const subscription = GroupClipAppearance.subscribe(group, 0, updated)
+        launcher.rename(0, "Verse")
+        launcher.setColor(0, 322)
+        expect(updated).toHaveBeenCalled()
+        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "Verse", hue: 322})
+        expect(GroupClipAppearance.read(nested, 0)).toEqual({label: "", hue: 200})
+        expect(GroupClipAppearance.read(group, 1)).toEqual({label: "", hue: 200})
+        expect(clips.map(clip => clip.hue.getValue())).toEqual([0, 120, 240])
+        const saved = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
+        const restored = saved.boxGraph.findBox(group.address.uuid).unwrap()
+        expect(GroupClipAppearance.read(restored as typeof group, 0)).toEqual({label: "Verse", hue: 322})
+        const [copy] = project.editing.modify(() => project.grouping.duplicate([group])).unwrap()
+        expect(GroupClipAppearance.read(copy, 0)).toEqual({label: "Verse", hue: 322})
+        subscription.terminate()
+        updated.mockClear()
+        launcher.rename(0, "Chorus")
+        expect(updated).not.toHaveBeenCalled()
+        launcher.terminate()
+        project.terminate()
+    })
+    it("applies mute and trigger loop to the nested column in separate undo steps", async () => {
+        const {project, clips, second, launcher} = await setup()
+        const nextScene = project.editing.modify(() => project.api.createNoteClip(second.trackBox, 1)).unwrap()
+        const outsideLoop = clips[2].triggerMode.loop.getValue()
+        launcher.setMuted(0, true)
+        expect(launcher.isMuted(0)).true
+        expect(clips.map(clip => clip.mute.getValue())).toEqual([true, true, false])
+        expect(nextScene.mute.getValue()).false
+        launcher.setLooping(0, false)
+        expect(launcher.isLooping(0)).false
+        expect(clips.slice(0, 2).every(clip => !clip.triggerMode.loop.getValue())).true
+        expect(clips[2].triggerMode.loop.getValue()).toBe(outsideLoop)
+        expect(project.editing.undo()).true
+        expect(launcher.isLooping(0)).true
+        expect(launcher.isMuted(0)).true
+        expect(project.editing.undo()).true
+        expect(launcher.isMuted(0)).false
+        launcher.terminate()
+        project.terminate()
+    })
+    it("deletes only the group's column and nested tile metadata, with full undo/redo", async () => {
+        const {project, group, nested, clips, second, launcher} = await setup()
+        const nextScene = project.editing.modify(() => {
+            GroupClipAppearance.store(nested, 0, {label: "Inside", hue: 60})
+            return project.api.createNoteClip(second.trackBox, 1)
+        }).unwrap()
+        launcher.rename(0, "Verse")
+        launcher.rename(1, "Chorus")
+        launcher.delete(0)
+        expect(launcher.clips(0)).toHaveLength(0)
+        expect(GroupClipAppearance.read(group, 0).label).toBe("")
+        expect(GroupClipAppearance.read(nested, 0).label).toBe("")
+        expect(GroupClipAppearance.read(group, 1).label).toBe("Chorus")
+        expect(clips[2].isAttached()).true
+        expect(nextScene.isAttached()).true
+        expect(project.editing.undo()).true
+        expect(launcher.clips(0)).toHaveLength(2)
+        expect(GroupClipAppearance.read(group, 0).label).toBe("Verse")
+        expect(GroupClipAppearance.read(nested, 0).label).toBe("Inside")
+        expect(project.editing.redo()).true
+        expect(launcher.clips(0)).toHaveLength(0)
+        project.boxGraph.verifyPointers()
+        launcher.terminate()
+        project.terminate()
+    })
+    it("allows naming and clearing an empty tile without creating clips", async () => {
+        const {project, group, launcher} = await setup()
+        const update = vi.fn()
+        const subscription = GroupClipAppearance.subscribe(group, 4, update)
+        launcher.rename(4, "Break")
+        launcher.setColor(4, 60)
+        expect(launcher.clips(4)).toHaveLength(0)
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break", hue: 60})
+        launcher.delete(4)
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "", hue: 200})
+        expect(project.editing.undo()).true
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break", hue: 60})
+        expect(update.mock.calls.length).toBeGreaterThan(2)
+        subscription.terminate()
+        launcher.terminate()
+        project.terminate()
+    })
+
 })
