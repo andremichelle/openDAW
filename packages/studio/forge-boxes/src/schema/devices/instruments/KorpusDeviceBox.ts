@@ -1,4 +1,4 @@
-import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
+import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
@@ -26,14 +26,6 @@ export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
         value: 6, constraints: {min: 0, max: 6}, unit: ""
     },
     19: {type: "float32", name: "damping-b", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
-    20: {
-        type: "int32", name: "deprecated-tune-b", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: -24, max: 24}, unit: "st", deprecated
-    },
-    21: {
-        type: "float32", name: "deprecated-detune-b", pointerRules: ParameterPointerRules,
-        value: 0.0, constraints: {min: -25.0, max: 25.0, scaling: "linear"}, unit: "ct", deprecated
-    },
     22: {type: "float32", name: "width-b", pointerRules: ParameterPointerRules, value: 0.8, ...UnipolarConstraints},
     23: {type: "float32", name: "level-b", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     24: {

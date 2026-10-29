@@ -8,7 +8,6 @@ import {
     BoxVisitor,
     DelayDeviceBox,
     GrooveShuffleBox,
-    KorpusDeviceBox,
     MIDIOutputDeviceBox,
     NeuralAmpDeviceBox,
     RevampDeviceBox,
@@ -34,7 +33,6 @@ import {
     migrateCaptureTrackMismatch,
     migrateDefaultLabels,
     migrateDelayDeviceBox,
-    migrateKorpusDeviceBox,
     migrateMIDIOutputDeviceBox,
     migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
@@ -133,7 +131,6 @@ export class ProjectMigration {
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
             visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
-            visitKorpusDeviceBox: (box: KorpusDeviceBox) => migrateKorpusDeviceBox(boxGraph, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => migrateWclapState(boxGraph, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => migrateWclapState(boxGraph, box)
         }))
