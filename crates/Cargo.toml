@@ -54,6 +54,9 @@ opt-level = 3
 
 [profile.release.package.device-wclap-instrument]
 opt-level = 3
+
+[profile.release.package.device-wclap-midi]
+opt-level = 3
 [profile.release.package.device-revamp]
 opt-level = 3
 [profile.release.package.device-reverb]

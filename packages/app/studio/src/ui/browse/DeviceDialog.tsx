@@ -337,7 +337,7 @@ export namespace DeviceDialog {
                     <div className="separator"/>
                     {toggle(filter.showPresets, "Show presets", IconSymbol.Folder)}
                     {toggle(filter.showScripts, "Show community scripts", IconSymbol.Code)}
-                    {category !== "midi-effect" && toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
+                    {toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
                     {category === "instrument" && toggle(filter.showSoundfonts, "Show soundfonts", IconSymbol.SoundFont)}
                     {search}
                     {count}

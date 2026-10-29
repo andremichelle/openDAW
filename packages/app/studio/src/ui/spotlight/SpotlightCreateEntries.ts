@@ -87,7 +87,8 @@ export namespace SpotlightCreateEntries {
                     return [create(`Create WebCLAP · ${name}`, [name, "WebCLAP"], [info.vendor], IconSymbol.WebClap,
                         `WebCLAP Effect${vendor}`, Group.Plugin, blocked("audio"), () => SpotlightCreate.wclap(service, wclap))]
                 case "note-effect":
-                    return []
+                    return [create(`Create WebCLAP · ${name}`, [name, "WebCLAP"], [info.vendor], IconSymbol.WebClap,
+                        `WebCLAP Note Effect${vendor}`, Group.Plugin, blocked("midi"), () => SpotlightCreate.wclap(service, wclap))]
             }
         })
         const owned = [...presets, ...scriptEntries]

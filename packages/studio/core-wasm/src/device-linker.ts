@@ -16,7 +16,7 @@ export type BridgeImports = Record<string, (...args: Array<number>) => number | 
 // The engine exports a device side-module imports from `env` (wasm-to-wasm via the loader binding). This
 // list is the CONTRACT: extend it here when the engine gains a host export, never in a loader.
 const HOST_IMPORTS: ReadonlyArray<string> = [
-    "host_pull_events", "host_pulse_to_offset",
+    "host_pull_events", "host_pulse_to_offset", "host_block_at",
     "host_bind_parameter", "host_bind_broadcast", "host_broadcast_ptr", "host_broadcast_active",
     "host_update_parameters", "host_first_update_position", "host_next_update_position",
     "host_resolve_sample", "host_observe_sample",

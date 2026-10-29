@@ -22,6 +22,7 @@ import {
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    WclapMidiEffectBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -443,6 +444,24 @@ export namespace EffectFactories {
             })
     }
 
+    export const WclapMidi: EffectFactory = {
+        defaultName: "WebCLAP",
+        defaultIcon: IconSymbol.WebClap,
+        briefDescription: "WebCLAP Note Effect",
+        description: "Hosts a CLAP note effect compiled to WebAssembly (WebCLAP bundle).",
+        manualPage: DeviceManualUrls.Wclap,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "WclapMidiEffectBox",
+        create: ({boxGraph}, hostField, index): WclapMidiEffectBox =>
+            WclapMidiEffectBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("WebCLAP")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Vocoder: EffectFactory = {
         defaultName: "Vocoder",
         defaultIcon: IconSymbol.Vocoder,
@@ -628,6 +647,7 @@ export namespace EffectFactories {
         Pitch,
         Spielwerk,
         Velocity,
+        WclapMidi,       // WebCLAP
         Zeitgeist
     }
 

@@ -1,9 +1,10 @@
 import {asInstanceOf, isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {Field} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {WclapDeviceBox, WclapInstrumentBox, WclapParameterBox} from "@opendaw/studio-boxes"
+import {WclapParameterBox} from "@opendaw/studio-boxes"
 import {WclapParamGesture, WclapParamInfo} from "@opendaw/studio-adapters"
 import {Project} from "../project"
+import {WclapBoxes} from "./WclapBoxes"
 
 // existing boxes keep their value and links, the host is the source of truth
 export namespace WclapParameters {
@@ -102,7 +103,7 @@ export namespace WclapParameters {
 
     const parametersOf =(project: Project, uuid: string): Optional<Field<Pointers.Parameter>> => {
         const box = project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrNull()
-        if (box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox) {return box.parameters}
+        if (WclapBoxes.is(box)) {return box.parameters}
         return undefined
     }
 }

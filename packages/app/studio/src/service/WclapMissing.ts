@@ -1,19 +1,14 @@
 import {Errors, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
-import {Box, BoxGraph} from "@opendaw/lib-box"
-import {WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
-import {FilePickerAcceptTypes, WclapStorage} from "@opendaw/studio-core"
+import {BoxGraph} from "@opendaw/lib-box"
+import {FilePickerAcceptTypes, WclapBoxes, WclapStorage} from "@opendaw/studio-core"
 import {WclapCatalog} from "@/opendaw-api"
-
-type WclapBox = WclapDeviceBox | WclapInstrumentBox
-
-const isWclapBox = (box: Box): box is WclapBox => box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox
 
 // A project's locally stored bundles that are gone: restored from the cloud by id, or browsed for like a missing sample
 export namespace WclapMissing {
     export const resolve = async (boxGraph: BoxGraph): Promise<void> => {
-        const boxes = boxGraph.boxes().filter(isWclapBox)
+        const boxes = boxGraph.boxes().filter(WclapBoxes.is)
         const urls = Array.from(new Set(boxes.map(box => box.url.getValue()).filter(WclapStorage.isLocal)))
         for (const url of urls) {
             const id = WclapStorage.idOf(url)

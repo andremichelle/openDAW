@@ -1,5 +1,5 @@
 import {asDefined, Exec, isDefined, Option, panic, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioFileBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
 import {Project} from "./Project"
@@ -12,7 +12,7 @@ import {SampleStorage} from "../samples"
 import type JSZip from "jszip"
 import {SoundfontStorage} from "../soundfont"
 import {ExternalLib} from "../ExternalLib"
-import {WclapStorage} from "../wclap"
+import {WclapBoxes, WclapStorage} from "../wclap"
 
 export namespace ProjectBundle {
     export const encode = async ({uuid, project, meta, cover}: ProjectProfile,
@@ -36,7 +36,7 @@ export namespace ProjectBundle {
         const wclaps = asDefined(zip.folder(WclapStorage.Folder), "Could not create folder wclap")
         // locally imported WebCLAP bundles (`opfs:` urls) travel with the project, public urls are re-fetched
         const wclapIds = Array.from(new Set(project.boxGraph.boxes()
-            .filter(box => box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox)
+            .filter(WclapBoxes.is)
             .map(box => box.url.getValue())
             .filter(WclapStorage.isLocal)
             .map(WclapStorage.idOf)))

@@ -106,6 +106,7 @@ export namespace ClapAbi {
         export const PARAM_GESTURE_BEGIN = 7
         export const PARAM_GESTURE_END = 8
         export const TRANSPORT = 9
+        export const MIDI = 10
     }
 
     export namespace NoteEvent {
@@ -115,6 +116,10 @@ export namespace ClapAbi {
         export const CHANNEL = 22
         export const KEY = 24
         export const VELOCITY = 32
+    }
+
+    export namespace MidiEvent {
+        export const DATA = 18
     }
 
     export namespace ParamValueEvent {
@@ -144,6 +149,7 @@ export namespace ClapAbi {
 
     export namespace Feature {
         export const DEVICE_PANEL = "opendaw:device-panel"
+        export const NOTE_EFFECT = "note-effect"
     }
 
     // opendaw_plugin_device_panel_t: get_uri(plugin, uri, capacity), get_width(plugin, height, *width)

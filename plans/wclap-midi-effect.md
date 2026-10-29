@@ -54,23 +54,26 @@ and instructions in open-webclap. She sends back the bundle.
 3. Inputs as today: on screen keyboard, computer keys, Web MIDI in.
 4. A note monitor: in and out events with offsets. This gives a first proof without any openDAW release.
 
-### 3. openDAW host
+### 3. openDAW host (built 2026-10-29, node tests green, not seen in the browser)
 
-1. `WclapMidiEffectBox` (forge-boxes `midi-effects`): the field keys of `WclapDeviceBox` (url, clap-id, state,
-   parameters, state bytes) so `WclapLink`, `WclapParameters` and `WclapStates` serve it unchanged.
-2. `MidiEffectFactories.Wclap`, `WclapMidiEffectBoxAdapter`, catalogue and Examples filtered by `note-effect`,
-   device dialog lists it with the MIDI effects.
-3. Crate `device-wclap-midi` (kind `DEVICE_KIND_MIDI_EFFECT`): per pulled sub range it pulls upstream, calls
-   `abi::wclap_process_notes(handle, in, count, frames, out, max)` and returns the records.
-4. Bridge `#processNotes`: in events at their sample offsets, `process` with zero audio channels and the frames
-   of the range, transport event, out events back to records. Out note ids are engine ids, a note off finds its
-   note on by key and channel. Open out notes are released on reset, bypass, plugin change, unload and device
-   removal, never left hanging.
-5. `WclapDeviceEditor` serves the third kind, host and panel strategies unchanged.
-6. Node tests (`core-wasm/test`, note-lab fixture): exact offsets per mode, notes held across ranges, removal and
-   bypass with held notes, undo of insert, the fx inside an Instrument Composite layer, MIDI Output after it.
-7. Checks before code: does anything pull the same range twice (plugin state would advance twice), and what do
-   downstream devices do with `duration` on notes of unknown length.
+1. `WclapMidiEffectBox` (forge-boxes `midi-effects`) with the field keys of `WclapDeviceBox`, so `WclapLink`,
+   `WclapParameters` and `WclapStates` serve it unchanged. `WclapBoxes.is` in studio-core names all three boxes.
+2. `EffectFactories.MidiNamed.WclapMidi` (key `WclapMidi`, `Wclap` would collide in `MergedNamed`),
+   `WclapMidiEffectBoxAdapter`, the device dialog, Spotlight and the catalogue list note effects.
+3. Engine: `host_block_at(pulse, out)` returns the block holding a pulse and a quantum serial.
+4. Crate `device-wclap-midi`: per update sub range it pulls upstream, hands the notes to
+   `abi::wclap_process_notes` at their sample offsets and returns the plugin's notes at the pulse of their sample
+   (round trip exact), with its own note ids. A plugin change or no plugin ends the notes it holds.
+5. Bridge `#processNotes`: params and notes as events, process with the span's frames and transport, the
+   plugin's notes collected only during this call (other plugins unchanged), a larger event area for note
+   effects only.
+6. Composite cells hold their own replica of a unit-level MIDI effect, all with the same box uuid, so one
+   plugin: the bridge counts references and answers a repeated span (same serial and position) from the last
+   one without processing again.
+7. Fixed on the way: a load replaced while it awaited consumed the pending state, so the load that won started
+   without it (also for audio effects and instruments).
+8. Node tests `core-wasm/test/wclap-midi-effect.test.ts`: Thru, Harmony, Echo across quanta, two composite layers,
+   all within a sample. `duration` is only read by scripts, plugin notes carry 0 like live notes.
 
 ### 4. SDK release
 
@@ -117,5 +120,7 @@ and instructions in open-webclap. She sends back the bundle.
 
 ## Open
 
-1. Blossom's framework and UI technology (JUCE, own C++, web)? JUCE works once phase 6.6 is done, ask her before
+1. A MIDI effect bypassed or removed while a note sounds leaves that note hanging downstream, for every MIDI
+   effect (checked with Pitch), because nothing pulls it any more. Engine wide, needs a decision.
+2. Blossom's framework and UI technology (JUCE, own C++, web)? JUCE works once phase 6.6 is done, ask her before
    she starts.

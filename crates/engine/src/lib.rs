@@ -629,6 +629,10 @@ shared_static! {
 shared_static! {
     static PAUSED_LOCATE: bool = false;
 }
+// Counts the quanta (never 0), so a device pulled more than once per block tells a repeat from a new quantum.
+shared_static! {
+    static QUANTUM_SERIAL: u32 = 0;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
@@ -1181,6 +1185,20 @@ pub extern "C" fn host_pulse_to_offset(pulse: f64) -> u32 {
         None => return 0
     };
     sample_offset(pulse, &block, pull.sample_rate) as u32
+}
+
+/// Host import a device calls for the block of the current quantum holding `pulse`: writes it to `out_ptr`
+/// and returns the quantum's serial, or 0 when no block holds the pulse. Reads only `PULL`.
+#[no_mangle]
+pub extern "C" fn host_block_at(pulse: f64, out_ptr: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
+    if pull.blocks.is_null() {
+        return 0;
+    }
+    let blocks = unsafe { core::slice::from_raw_parts(pull.blocks, pull.block_count) };
+    let Some(block) = blocks.iter().find(|block| pulse >= block.p0 && pulse < block.p1) else {return 0};
+    unsafe { *(out_ptr as usize as *mut Block) = *block; }
+    unsafe { *QUANTUM_SERIAL.get() }
 }
 
 /// Resolve a leaf note source for `[from, to)`: pull its events, lifecycle-sort them, and write each as an
@@ -1855,6 +1873,8 @@ impl Engine {
         unsafe {
             *SONG_POSITION.get() = self.transport.position();
             *PAUSED_LOCATE.get() = located;
+            let serial = QUANTUM_SERIAL.get();
+            *serial = serial.wrapping_add(1).max(1);
         }
         located
     }
