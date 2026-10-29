@@ -51,6 +51,12 @@
   &.output
     --color: var(--color-blue)
 
+@mixin audio-unit-line
+  --unit-line-color: color-mix(in srgb, var(--color-gray) 35%, var(--color-panel-background))
+
+  &.line-active
+    --unit-line-color: var(--color)
+
 @mixin markdown
   color: var(--color-gray)
 

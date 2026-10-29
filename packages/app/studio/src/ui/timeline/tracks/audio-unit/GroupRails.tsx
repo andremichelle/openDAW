@@ -16,7 +16,6 @@ export class GroupRails implements Terminable {
         this.#lifecycle = new Terminator()
         this.#rails = new Map()
         this.#lifecycle.ownAll(
-            project.trackSelection.value.subscribe(() => this.#refreshSelection()),
             project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelection())
         )
     }
@@ -60,8 +59,8 @@ export class GroupRails implements Terminable {
         this.#refreshSelection()
     }
     #refreshSelection(): void {
-        this.#rails.forEach(({button}, unit) => button.classList.toggle("selected",
-            this.project.trackSelection.isHighlighted(unit)))
+        this.#rails.forEach(({button}, unit) => button.classList.toggle("line-active",
+            this.project.trackSelection.isEdited(unit)))
     }
     terminate(): void {
         this.#lifecycle.terminate()

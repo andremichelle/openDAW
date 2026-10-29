@@ -89,8 +89,10 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
     })
-    const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) =>
-        editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box)))
+    const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) => {
+        editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
+        editor.classList.toggle("line-active", project.trackSelection.isEdited(adapter.box))
+    })
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
     lifecycle.ownAll(

@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from "vitest"
 import {DefaultObservableValue, Notifier, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ClipNotification, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {ClipNotification, InstrumentFactories, MetaData, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {NoteClipBox, NoteEventCollectionBox} from "@opendaw/studio-boxes"
 import {PPQN} from "@opendaw/lib-dsp"
 import {GroupClipAppearance} from "./GroupClipAppearance"
@@ -112,23 +112,25 @@ describe("group clip launcher", () => {
         expect(changed).not.toHaveBeenCalled()
         project.terminate()
     })
-    it("starts unnamed and saves independent scene names/colors through reload and duplication", async () => {
+    it("starts unnamed and saves independent scene names through reload and duplication", async () => {
         const {project, group, nested, clips, launcher} = await setup()
-        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "", hue: 200})
+        expect(GroupClipAppearance.read(group, 0)).toEqual({label: ""})
+        // Earlier previews stored header hues; keep their names without restoring per-column colors.
+        project.editing.modify(() => MetaData.store(group, {label: "Intro", hue: 322}, "opendaw.studio.group-clips.v1.0"))
+        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "Intro"})
         const updated = vi.fn()
         const subscription = GroupClipAppearance.subscribe(group, 0, updated)
         launcher.rename(0, "Verse")
-        launcher.setColor(0, 322)
         expect(updated).toHaveBeenCalled()
-        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "Verse", hue: 322})
-        expect(GroupClipAppearance.read(nested, 0)).toEqual({label: "", hue: 200})
-        expect(GroupClipAppearance.read(group, 1)).toEqual({label: "", hue: 200})
+        expect(GroupClipAppearance.read(group, 0)).toEqual({label: "Verse"})
+        expect(GroupClipAppearance.read(nested, 0)).toEqual({label: ""})
+        expect(GroupClipAppearance.read(group, 1)).toEqual({label: ""})
         expect(clips.map(clip => clip.hue.getValue())).toEqual([0, 120, 240])
         const saved = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
         const restored = saved.boxGraph.findBox(group.address.uuid).unwrap()
-        expect(GroupClipAppearance.read(restored as typeof group, 0)).toEqual({label: "Verse", hue: 322})
+        expect(GroupClipAppearance.read(restored as typeof group, 0)).toEqual({label: "Verse"})
         const [copy] = project.editing.modify(() => project.grouping.duplicate([group])).unwrap()
-        expect(GroupClipAppearance.read(copy, 0)).toEqual({label: "Verse", hue: 322})
+        expect(GroupClipAppearance.read(copy, 0)).toEqual({label: "Verse"})
         subscription.terminate()
         updated.mockClear()
         launcher.rename(0, "Chorus")
@@ -159,7 +161,7 @@ describe("group clip launcher", () => {
     it("deletes only the group's column and nested tile metadata, with full undo/redo", async () => {
         const {project, group, nested, clips, second, launcher} = await setup()
         const nextScene = project.editing.modify(() => {
-            GroupClipAppearance.store(nested, 0, {label: "Inside", hue: 60})
+            GroupClipAppearance.store(nested, 0, {label: "Inside"})
             return project.api.createNoteClip(second.trackBox, 1)
         }).unwrap()
         launcher.rename(0, "Verse")
@@ -186,13 +188,12 @@ describe("group clip launcher", () => {
         const update = vi.fn()
         const subscription = GroupClipAppearance.subscribe(group, 4, update)
         launcher.rename(4, "Break")
-        launcher.setColor(4, 60)
         expect(launcher.clips(4)).toHaveLength(0)
-        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break", hue: 60})
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break"})
         launcher.delete(4)
-        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "", hue: 200})
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: ""})
         expect(project.editing.undo()).true
-        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break", hue: 60})
+        expect(GroupClipAppearance.read(group, 4)).toEqual({label: "Break"})
         expect(update.mock.calls.length).toBeGreaterThan(2)
         subscription.terminate()
         launcher.terminate()

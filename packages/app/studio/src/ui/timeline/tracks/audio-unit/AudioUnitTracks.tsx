@@ -21,7 +21,10 @@ export const AudioUnitTracks = ({lifecycle, project, adapter}: Construct) => {
     const element: HTMLElement = (<div className={Html.buildClassList(className,
         isAux && "aux", isBus && "bus", isOutput && "output")} data-drag data-unit={UUID.toString(adapter.uuid)}/>)
     const audioUnitEditing = project.userEditingManager.audioUnit
-    const refreshSelection = () => element.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
+    const refreshSelection = () => {
+        element.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
+        element.classList.toggle("line-active", project.trackSelection.isEdited(adapter.box))
+    }
     lifecycle.ownAll(
         project.trackSelection.value.catchupAndSubscribe(refreshSelection),
         audioUnitEditing.catchupAndSubscribe(refreshSelection)

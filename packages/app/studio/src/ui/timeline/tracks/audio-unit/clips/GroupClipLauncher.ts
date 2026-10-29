@@ -50,11 +50,6 @@ export class GroupClipLauncher implements Terminable {
         this.project.editing.modify(() => GroupClipAppearance.store(this.group, index,
             {...GroupClipAppearance.read(this.group, index), label}))
     }
-    setColor(index: int, hue: number): void {
-        if (!this.group.isAttached()) {return}
-        this.project.editing.modify(() => GroupClipAppearance.store(this.group, index,
-            {...GroupClipAppearance.read(this.group, index), hue}))
-    }
     isMuted(index: int): boolean {
         const clips = this.clips(index)
         return clips.length > 0 && clips.every(clip => clip.mute)

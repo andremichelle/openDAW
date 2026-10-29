@@ -48,7 +48,6 @@ export const GroupClipLane = ({lifecycle, service, unit}: Construct): HTMLElemen
             const appearance = GroupClipAppearance.read(unit, index)
             label.textContent = appearance.label
             cell.classList.toggle("named", appearance.label !== "")
-            cell.style.setProperty("--hue", String(appearance.hue))
             cell.classList.toggle("empty", contents.length === 0)
             cell.classList.toggle("muted", launcher.isMuted(index))
             cell.classList.toggle("waiting", state === "waiting")

@@ -28,8 +28,8 @@ component
       width: 100%
       font-size: 9px
       line-height: 13.5px
-      color: hsl(var(--hue), 60%, 60%)
-      background: hsla(var(--hue), 45%, 60%, 0.15)
+      color: var(--color)
+      background: color-mix(in srgb, var(--color) 15%, transparent)
 
     > span.content
       width: 100%
@@ -37,7 +37,7 @@ component
       position: relative
       display: grid
       place-items: center
-      background: hsla(var(--hue), 60%, 60%, 0.06)
+      background: color-mix(in srgb, var(--color) 6%, transparent)
 
       > svg
         font-size: 0.75em
@@ -68,8 +68,8 @@ component
 
     &.playing, &.waiting
       > span.label
-        color: hsl(var(--hue), 60%, 10%)
-        background: hsla(var(--hue), 100%, 60%, 0.75)
+        color: hsl(from var(--color) h s 10%)
+        background: color-mix(in srgb, var(--color) 75%, transparent)
 
       > span.content > svg.play
         display: none

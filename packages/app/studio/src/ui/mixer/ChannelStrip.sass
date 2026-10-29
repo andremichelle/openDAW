@@ -13,10 +13,11 @@ component
   box-shadow: 0 2px 4px 0 rgba(black, 0.1)
   border-radius: 1px
   color: var(--color-cream)
-  border-top: 0.125em transparent solid
+  border-top: 0.125em var(--unit-line-color) solid
 
   @include mixins.dragging
   @include mixins.unit-type-colors
+  @include mixins.audio-unit-line
 
   > div.icon-container
     position: relative
@@ -48,7 +49,6 @@ component
     font-size: 18px
 
   &.editing
-    border-top-color: var(--color)
     background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)
 
     > h5.input

@@ -10,13 +10,13 @@ component
   pointer-events: none
 
   @include mixins.unit-type-colors
+  @include mixins.audio-unit-line
 
   &.modulator
     --color: var(--color-blue)
 
   &.editing
     --wash-color: var(--color)
-    --unit-border-color: var(--color)
 
   &:before
     content: ""
@@ -26,7 +26,7 @@ component
     grid-column: 1 / 2
     position: absolute
     border-radius: 0
-    background-image: linear-gradient(var(--unit-border-color, var(--color-black)), var(--unit-border-color, var(--color-black)))
+    background-image: linear-gradient(var(--unit-line-color), var(--unit-line-color))
     background-position: var(--folder-offset, 0px) 0
     background-size: 4px 100%
     background-repeat: no-repeat

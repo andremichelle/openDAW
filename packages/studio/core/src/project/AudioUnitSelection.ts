@@ -28,6 +28,9 @@ export class AudioUnitSelection {
     isHighlighted(unit: AudioUnitBox): boolean {
         const selected = this.selected
         if (selected.length > 0) {return selected.includes(unit)}
+        return this.isEdited(unit)
+    }
+    isEdited(unit: AudioUnitBox): boolean {
         return this.project.userEditingManager.audioUnit.get().mapOr(vertex =>
             this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box === unit, false)
     }
