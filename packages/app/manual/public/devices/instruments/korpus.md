@@ -12,9 +12,10 @@ sympathetically, or chained in series. All sound is computed from physics — no
 
 ## 0. Overview
 
-_Korpus_ follows the signal flow of a real acoustic instrument, and the panel reads the same way:
-**EXCITER › OBJECTS › OUT**. Choose *how* the instrument is set in motion, choose *what* resonates,
-then choose how the two objects combine.
+_Korpus_ follows the signal flow of a real acoustic instrument, and the panel reads the same way,
+left to right: **Exciter**, **Object A**, **Object B**, **Out**. Choose *how* the instrument is set
+in motion, choose *what* resonates, then choose how the two objects combine. Each section's type is
+a dropdown below its headline: the exciter, each object's material, and the routing.
 
 Example uses:
 
@@ -36,6 +37,8 @@ How the objects are set in motion. The **Intensity** and **Position** controls c
 the exciter type.
 
 ### 1.1 Exciter
+
+Chosen in the dropdown below the **Exciter** headline.
 
 - **Strike**: a physical mallet contact — a raised-cosine force pulse with contact noise.
 - **Breath**: a living breath — filtered turbulence with an attack chiff and slow drift. Sustains
@@ -107,24 +110,24 @@ made of. 50 % is today's stroke; Breath and Wind ignore it, and the knob dims th
 ## 2. Objects Section
 
 The resonators. Object **A** is always active; object **B** is optional for every exciter. Set
-its Object knob to **Off** for a single-object voice: the rest of the B row, Routing and Couple
-dim while it is off, because they only shape the pair.
+its dropdown to **Off** for a single-object voice: B's knobs, Routing and Couple dim while it is
+off, because they only shape the pair.
 
 Object A changes meaning with two exciters:
 
-- **Pick**: object A picks the string, and the knob names it — **Nylon**, **Steel**, **Chime**,
+- **Pick**: object A picks the string, and its dropdown names it — **Nylon**, **Steel**, **Chime**,
   **Banjo**, **Guitar** (steel-string acoustic) and **Wire** (stiff piano wire). Steel sustains
   strongest, banjo is short and bright, chime shimmers, and the guitar speaks with a bright pick
   attack, falls away quickly, then outlasts them all with a long ringing tail. High guitar notes
   ring out in one stage, like the other strings.
-- **Wind**: object A picks the pipe, and the knob names it — **Bamboo**, **Silver**, **Whistle**
+- **Wind**: object A picks the pipe, and its dropdown names it — **Bamboo**, **Silver**, **Whistle**
   (metal), **Husky**, **Breathy** and **Reed**.
 
 Object B is always a resonating object, whatever the exciter.
 
 ### 2.1 Object
 
-The material and geometry, each with its own mode ratios and frequency-dependent decay laws:
+Chosen in the dropdown below each object's headline. The material and geometry, each with its own mode ratios and frequency-dependent decay laws:
 
 - **Marimba**: deep-arch bar tuned 1:4:9.2 — woody, fast highs
 - **Vibraphone**: bar tuned 1:4:10 with long, glassy sustain
@@ -173,6 +176,8 @@ polarizations across the channels instead.
 
 ### 3.1 Routing
 
+Chosen in the dropdown below the **Out** headline.
+
 - **Parallel**: the exciter plays both objects side by side — layering. The bow's rosin rings
   object B at its own pitch, the same pick strikes it, and the breath blows across it.
 - **Serial**: the exciter plays object A, and A's sound plays object B — like a string mounted
@@ -203,11 +208,8 @@ Output level in dB.
 
 ## 4. Presets
 
-Korpus ships with a small factory bank — guitars (**Nylon Concert**, **Flat-Top Steel**,
-**Electric Clean**) and flutes (**Pan Flute**, **Silver Flute**, **Shakuhachi**) — in the
-preset selector beside object A and under **Presets** in the device menu (⋮ in the device
-header). Loading a preset is a single undoable edit that silences any sounding notes at once.
-A further eighteen documented patches live in the repository's preset authoring reference.
+Korpus presets are saved and loaded like those of every other instrument, through openDAW's
+preset system.
 
 ---
 

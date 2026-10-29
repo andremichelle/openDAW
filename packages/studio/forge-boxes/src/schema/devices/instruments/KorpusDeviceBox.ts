@@ -45,7 +45,6 @@ export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
         type: "float32", name: "volume", pointerRules: ParameterPointerRules,
         value: -9.0, constraints: "decibel", unit: "dB"
     },
-    27: {type: "int32", name: "preset-epoch", value: 0, constraints: "any", unit: ""},
     28: {type: "float32", name: "air", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     29: {
         type: "float32", name: "tune-b", pointerRules: ParameterPointerRules,

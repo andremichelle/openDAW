@@ -236,12 +236,11 @@ Box fields 10–31 (`KorpusDeviceBox`), grouped as the editor shows them:
 | 11 | intensity | unipolar | hardness / breath brightness / bow pressure / pick color |
 | 12 | position | unipolar | strike/bow/pluck point (mode comb) |
 | 13 | vibrato | unipolar | every exciter: motor tremolo / breath pulse / bow pitch ≤ ±15 ct / string ≤ ±20 ct / pipe breath |
-| 14–17, 30 | objectA, dampingA, tuneA, widthA, levelA | int 0–5, unipolar, ±24 st, unipolar, unipolar | object A (Pick: string type, Wind: pipe — the knob then names the string or pipe); levelA 0.5 = unity |
+| 14–17, 30 | objectA, dampingA, tuneA, widthA, levelA | int 0–5, unipolar, ±24 st, unipolar, unipolar | object A (Pick: string type, Wind: pipe — the dropdown then names the string or pipe); levelA 0.5 = unity |
 | 18, 19, 29, 22, 23 | objectB, dampingB, tuneB, widthB, levelB | as A + Off; tuneB float ±24 st | object B (6 = Off), every exciter; tuneB cents are its decimals |
 | 24 | routing | int 0–1 | Parallel (the exciter plays B), Serial (A's sound plays B) |
 | 25 | couple | unipolar | k = value²·8 Hz; eigensplit (Strike/Breath Parallel) or one-sided repel |
 | 26 | volume | decibel | default −9 dB |
-| 27 | preset-epoch | int (plain field) | bumped by every preset load; the device observes it and hard-cuts its voices (~1.5 ms declick) |
 | 28 | air | unipolar | every exciter; 0.5 = natural. Strike/Pick: contact or pick noise above 0.5 only |
 | 31 | stroke | unipolar | the stroke behind the note: mallet weight / bow speed / pluck depth; 0.5 = today's stroke, Breath and Wind ignore it |
 | 20, 21 | deprecatedTuneB, deprecatedDetuneB | int ±24 st, float ±25 ct | deprecated; `migrateKorpusDeviceBox` folds them into field 29 and moves Tune B automation there. A lone Detune B lane converts onto field 29 (affine unit remap, static semitones folded in); with both lanes automated the semitone lane wins. The engine binds neither |
@@ -321,16 +320,12 @@ Standard device recipe (see `manuals/creating-a-device.md`): schema in
 `forge-boxes/.../instruments/KorpusDeviceBox.ts` → generated box → adapter
 (`KorpusDeviceBoxAdapter.ts`, value mappings + labeled enums) → Rust crate
 `crates/stock-devices/device-korpus` (no_std, `abi::Instrument`, 16-voice
-`voicing` pool) → editor (`KorpusDeviceEditor.tsx`, signal-flow layout
-EXCITER › OBJECTS › OUT; Object B Off dims its row plus Routing and Couple) → factory
-registrations. Factory presets are in-code
-(`adapters/.../KorpusPresets.ts`), since the stock preset catalog is hosted
-outside the repository. The list is currently empty; the former set, a knob
-reference and restorable entries live in `docs/korpus-presets.md`. With
-entries present, presets load from an on-panel preset strip (step arrows +
-dropdown, current patch matched field-by-field via `KorpusPresets.matches`)
-and from the device menu, each load one `editing.modify` transaction; both
-controls are hidden while the list is empty.
+`voicing` pool) → editor (`KorpusDeviceEditor.tsx`, sections Exciter, Object A,
+Object B, Out, each with its type as a dropdown below the headline; Object B Off dims its knobs
+plus Routing and Couple) → factory
+registrations. Presets use openDAW's preset system, stock ones live in the
+openDAW cloud catalog; the knob reference and every former preset's values are in
+`docs/korpus-presets.md`.
 
 Engine-side cautions that are easy to trip:
 
@@ -355,8 +350,8 @@ Engine-side cautions that are easy to trip:
   and velocity, live bow strokes, twang settle, extremes).
   `KORPUS_RENDER_DIR=<dir>` dumps fixed-gain WAVs.
 - `packages/studio/core-wasm/test/korpus-render.test.ts` — renders thirteen
-  configurations, one Level A silence check, plus a live exciter switch, a live damping choke and a preset
-  cut through the real engine + `device_korpus.wasm`; native tests cannot catch
+  configurations, one Level A silence check, plus a live exciter switch, and a live damping choke
+  through the real engine + `device_korpus.wasm`; native tests cannot catch
   engine-path or no_std-only breaks.
 - `packages/studio/core-wasm/test/param-mapping-parity.test.ts` — TS↔Rust
   value-mapping parity for all 19 parameters.

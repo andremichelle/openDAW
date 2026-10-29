@@ -2,105 +2,63 @@
 
 component
   display: flex
-  flex-direction: column
-  row-gap: 3px
-  align-items: start
+  column-gap: 0.75em
   @include mixins.Control
-  padding: 2px 0 0.25em 0
+  padding: 2px
 
-  .presets
+  > section
     display: flex
-    align-items: center
-    justify-self: end
-    margin-left: 8px
-    column-gap: 2px
-    font-size: 9px
-    color: hsla(0, 0%, 100%, 0.55)
+    flex-direction: column
+    row-gap: 6px
 
-    > .step
-      cursor: pointer
-      padding: 0 3px
-      line-height: 12px
-      border-radius: 2px
-      color: hsla(0, 0%, 100%, 0.35)
-      &:hover
-        color: hsla(0, 0%, 100%, 0.8)
-        background: hsla(0, 0%, 100%, 0.08)
-
-    .preset-name
-      width: 7.5em
-      text-align: center
-      white-space: nowrap
-      overflow: hidden
-      text-overflow: ellipsis
-
-  > .signal
-    display: flex
-    align-items: start
-    column-gap: 10px
-
-    > .zone
+    > header
+      flex: 1
       display: flex
       flex-direction: column
-      row-gap: 3px
+      align-items: center
+      row-gap: 6px
+      padding: 2px 0.25em 0
+      font-size: 9px
+      white-space: nowrap
 
-      // Signal flow reads at header level: EXCITER >  OBJECTS >  OUT
-      &:not(.last) > h5::after
-        content: "\203A"
-        margin-left: 6px
-        font-size: 11px
-        line-height: 10px
-        color: hsla(0, 0%, 100%, 0.25)
-
-      > h5
-        font-size: 8px
-        line-height: 10px
-        letter-spacing: 0.12em
-        text-transform: uppercase
+      > h1
         margin: 0
-        padding: 0 0 0 2px
-        color: hsla(0, 0%, 100%, 0.4)
+        font-size: inherit
+        font-weight: 400
+        letter-spacing: 0.08em
+        text-align: center
+        color: var(--color-cream)
 
-      > .quad
+      button
+        margin-block: auto
+        padding: 1px 1em
+        border-radius: 0.25em
+        outline: 0.5px color-mix(in srgb, var(--color-green) 20%, transparent) solid
+        background-color: rgba(black, 0.15)
+        color: var(--color-green)
+
+        > .value
+          display: grid
+
+          > *
+            grid-area: 1 / 1
+            text-align: center
+
+          > .sizer
+            visibility: hidden
+
+    .knobs
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      padding: 0 0.25em
+      margin-bottom: 1.625em
+
+      > .row
         display: grid
-        grid-template-columns: repeat(2, 2.625em)
-        gap: 0.25em 2px
-
-        &.three
-          grid-template-columns: repeat(3, 2.625em)
-
-      > .rows
-        display: flex
-        flex-direction: column
-        row-gap: 0.25em
-
-  .row
-    display: grid
-    grid-template-columns: 1.1em max-content 1fr
-    column-gap: 4px
-    align-items: center
-
-    > .tag
-      font-size: 8px
-      line-height: 12px
-      text-align: center
-      border-radius: 2px
-      color: hsla(0, 0%, 100%, 0.45)
-      border: 1px solid hsla(0, 0%, 100%, 0.14)
-
-  .knobs
-    display: grid
-    grid-auto-flow: column
-    // Object selector column is wider (longest material name), the rest share one rhythm.
-    grid-template-columns: 3.125em
-    grid-auto-columns: 2.625em
-    justify-content: start
-    gap: 0.25em 2px
-
-    // Object B off: fade the knob cells (the direct children are display: contents wrappers).
-    &.bypassed > *:not(:first-child) > *
-      opacity: 0.3
-      transition: opacity 120ms
+        grid-auto-flow: column
+        grid-auto-columns: 3.5em
+        justify-content: center
 
   .inactive > *
     opacity: 0.3

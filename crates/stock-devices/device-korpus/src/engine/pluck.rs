@@ -17,6 +17,8 @@ const VIBRATO_RANGE: f32 = 0.0116; // ±20 cents at full knob
 const TWANG: f32 = 0.088; // a full-depth steel pluck at velocity 1 starts 78 cents sharp
 const TWANG_TIME: f32 = 0.028; // seconds at 220Hz, shorter as the string's round trips quicken
 const BITE_TIME: f32 = 0.12;
+const RELEASE_DAMP: f32 = 0.72;
+const RELEASE_TIME: f32 = 0.0025; // per stage of the two-stage ramp into the release damping
 
 // Object A picks the string; `horizontal` is that polarization's T60 relative to the vertical one.
 struct StringType {
@@ -207,6 +209,8 @@ pub struct PluckState {
     position_delay: f32,
     mix_major: f32,
     released: bool,
+    release_damp: f32,
+    release_follow: f32,
     dc_l: (f32, f32),
     dc_r: (f32, f32),
     live_freq: f32,
@@ -240,7 +244,8 @@ impl PluckState {
         Self {vertical: Polarization::silent(), horizontal: Polarization::silent(),
             excitation_pos: BODY_LEN, excitation_gain: 0.0, pick_lp: 0.5, pick_state: 0.0,
             pick_delayed: 0.0, position_delay: 20.0, mix_major: 0.72, released: false,
-            dc_l: (0.0, 0.0), dc_r: (0.0, 0.0), live_freq: 1.0, live_damping: 0.5,
+            release_damp: 1.0, release_follow: 1.0, dc_l: (0.0, 0.0), dc_r: (0.0, 0.0), live_freq: 1.0,
+            live_damping: 0.5,
             live_width: 0.6, t60_scale: 1.0, horizontal_t60: 0.72, scrape: 0.0, scrape_decay: 0.0,
             scrape_lp: 0.0, scrape_hp: 0.0, scrape_color: 0.5, noise_state: 0x6a09e667, vibrato_depth: 0.0,
             vib_phase: 0.0, vib_ramp: 0.0, vib_walk: 0.0, twang: 0.0, twang_decay: 0.0, body_lead: 0.0,
@@ -272,6 +277,8 @@ impl PluckState {
         self.position_delay = (0.04 + 0.42 * position) * self.vertical.length;
         self.mix_major = mix_major(width);
         self.released = false;
+        self.release_damp = 1.0;
+        self.release_follow = 1.0;
         self.dc_l = (0.0, 0.0);
         self.dc_r = (0.0, 0.0);
         self.live_freq = 1.0;
@@ -357,9 +364,13 @@ impl PluckState {
     /// Renders additively and writes the pick excitation into `drive`; returns the chunk peak.
     pub fn render(&mut self, body: &[f32; BODY_LEN], out_l: &mut [f32], out_r: &mut [f32],
                   drive: &mut [f32]) -> f32 {
-        let release_damp = if self.released {0.72} else {1.0};
+        let release_target = if self.released {RELEASE_DAMP} else {1.0};
+        let release_rate = 1.0 - expf(-1.0 / (RELEASE_TIME * self.sample_rate));
         let mut peak = 0.0f32;
         for index in 0..out_l.len() {
+            self.release_follow += (release_target - self.release_follow) * release_rate;
+            self.release_damp += (self.release_follow - self.release_damp) * release_rate;
+            let release_damp = self.release_damp;
             let mut input = 0.0f32;
             let mut heard = 0.0f32;
             if self.excitation_pos < BODY_LEN {

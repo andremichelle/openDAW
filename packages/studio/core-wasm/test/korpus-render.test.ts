@@ -4,7 +4,7 @@
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, KorpusDeviceBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {KorpusPresets, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -379,94 +379,5 @@ describe("korpus 2 configs through the wasm engine", () => {
         // Natural decay alone sits near 0.11x here — 0.01 only passes if the choke is live.
         expect(choked, `choked ring must collapse live (rms ${choked} vs ${ringing})`)
             .toBeLessThan(ringing * 0.01)
-    }, 30_000)
-
-    it("loading a preset silences the sounding patch at once", async () => {
-        const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
-            ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
-        source.beginTransaction()
-        const unit = AudioUnitBox.create(source, UUID.generate(), box => {
-            box.collection.refer(rootBox.audioUnits)
-            box.output.refer(primaryAudioBusBox.input)
-            box.index.setValue(1)
-        })
-        const korpus = KorpusDeviceBox.create(source, UUID.generate(), box => {
-            box.host.refer(unit.input)
-            box.exciter.setValue(4)
-            box.intensity.setValue(0.6)
-            box.objectA.setValue(0)
-        })
-        const track = TrackBox.create(source, UUID.generate(), box => {
-            box.type.setValue(TrackType.Notes)
-            box.enabled.setValue(true)
-            box.index.setValue(0)
-            box.target.refer(unit)
-            box.tracks.refer(unit.tracks)
-        })
-        const events = NoteEventCollectionBox.create(source, UUID.generate())
-        NoteEventBox.create(source, UUID.generate(), box => {
-            box.events.refer(events.events)
-            box.position.setValue(0)
-            box.duration.setValue(3840)
-            box.pitch.setValue(57)
-            box.velocity.setValue(0.8)
-            box.cent.setValue(0)
-        })
-        NoteRegionBox.create(source, UUID.generate(), box => {
-            box.regions.refer(track.regions)
-            box.events.refer(events.owners)
-            box.position.setValue(0)
-            box.duration.setValue(7680)
-            box.loopDuration.setValue(7680)
-        })
-        source.endTransaction()
-
-        const {engine, memory} = await loadFullEngine()
-        const sync = connectSyncToEngine(engine, memory, source)
-        await sync.settle(); engine.bind(); await sync.settle()
-        engine.set_metronome_enabled(0)
-
-        const len = engine.output_len() >>> 0
-        const half = len / 2
-        const renderRms = (quanta: number): number => {
-            let sum = 0
-            let count = 0
-            for (let quantum = 0; quantum < quanta; quantum++) {
-                engine.render()
-                const left = new Float32Array(memory.buffer, engine.output_ptr(), half)
-                for (let index = 0; index < half; index++) {
-                    sum += left[index] * left[index]
-                    count++
-                }
-            }
-            return Math.sqrt(sum / count)
-        }
-        engine.stop(); engine.play()
-        const blowing = renderRms(150)
-        expect(blowing, `wind must sound before the switch (rms ${blowing})`).toBeGreaterThan(1e-3)
-        // A plain knob move is live feedback, never a cut.
-        source.beginTransaction()
-        korpus.intensity.setValue(0.5)
-        source.endTransaction()
-        await sync.settle()
-        const tweaked = renderRms(40)
-        expect(tweaked, `a knob move must keep sounding (rms ${tweaked} vs ${blowing})`)
-            .toBeGreaterThan(blowing * 0.3)
-        // The note is still held and the transport never stops — only the preset loads.
-        source.beginTransaction()
-        // The factory list may be empty; any preset load must cut, so the test brings its own.
-        const preset: KorpusPresets.Preset = {
-            name: "Test Gamelan", exciter: 0, intensity: 0.45, position: 0.42, vibrato: 0.0, air: 0.5,
-            stroke: 0.5, objectA: 0, dampingA: 0.55, tuneA: 0, widthA: 0.35, levelA: 0.5,
-            objectB: 1, dampingB: 0.75, tuneB: 0.07, widthB: 0.8, levelB: 0.7,
-            routing: 0, couple: 0.22, volume: -9.0
-        }
-        KorpusPresets.apply(korpus, preset)
-        source.endTransaction()
-        await sync.settle()
-        renderRms(8) // ~20ms: the ~1.5ms declick decays to nothing in here
-        const after = renderRms(40)
-        expect(after, `the old patch must be silent after a preset load (rms ${after} vs ${blowing})`)
-            .toBeLessThan(blowing * 0.001)
     }, 30_000)
 })

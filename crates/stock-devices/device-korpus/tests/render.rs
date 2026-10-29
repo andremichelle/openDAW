@@ -783,6 +783,27 @@ fn release_damps_sustained_tails() {
         "release must damp the bow (held {held_energy:.6}, released {released_energy:.6})");
 }
 
+// A released string must fade into its damping: no step at the release (heard as a click on short notes).
+#[test]
+fn pick_release_is_click_free() {
+    let curvature = |samples: &[f32], at: usize| (at - 64..at + 256)
+        .map(|index| (samples[index + 1] - 2.0 * samples[index] + samples[index - 1]).abs())
+        .fold(0.0f32, f32::max);
+    for config in configs().into_iter().filter(|config| config.exciter == Exciter::Pick) {
+        for held in [0.01f32, 0.03, 0.08, 0.4] {
+            for pitch in [45u32, 57, 69, 81] {
+                let (held_l, _) = render(&config, pitch, 0.9, held + 0.05, 10.0);
+                let (released_l, _) = render(&config, pitch, 0.9, held + 0.05, held);
+                let at = (held * SAMPLE_RATE) as usize;
+                let peak = held_l[at.saturating_sub(512)..at].iter().fold(0.0f32, |peak, sample| peak.max(sample.abs()));
+                let excess = (curvature(&released_l, at) - curvature(&held_l, at)) / peak;
+                println!("{} held {held}s pitch {pitch}: excess curvature {excess:.5} of peak", config.name);
+                assert!(excess < 0.005, "{} held {held}s pitch {pitch}: release step ({excess:.4})", config.name);
+            }
+        }
+    }
+}
+
 // A's render is deterministic and B never feeds back into it, so B alone = pair − make-up·(A alone).
 fn isolate_b(pair: &[f32], alone: &[f32], make_up: f32) -> Vec<f32> {
     pair.iter().zip(alone).map(|(with, solo)| with - make_up * solo).collect()
@@ -1212,6 +1233,7 @@ fn checksum(left: &[f32], right: &[f32]) -> u64 {
 fn pick_stroke_default_is_bit_identical() {
     // Checksums rendered before Stroke existed: the default 0.5 must reproduce the pick bit for bit.
     // The damping-0.8 and damping-1.0 sums were re-rendered when Damping past 70% began opening the string.
+    // All four were re-rendered when the release damping started ramping in (each render ends released).
     let wire = Config {name: "wire_snap", exciter: Exciter::Pick, intensity: 0.6, position: 0.12, object_a: 5,
         damping_a: 0.8, ..BASE};
     let (left, right) = render_with(&wire, 45, 0.9, 1.6, 1.4, |time, shared| {
@@ -1232,7 +1254,7 @@ fn pick_stroke_default_is_bit_identical() {
     let (left, right) = render(&bright, 84, 1.0, 1.2, 1.0);
     sums.push(checksum(&left, &right));
     println!("pick checksums: {sums:#018x?}");
-    assert_eq!(sums, [0xb7c2_dc42_12c5_e07d_u64, 0x6391_49f7_9f35_fe05, 0xf4cd_2503_101e_296e, 0x420b_9685_cfd3_9ee0],
+    assert_eq!(sums, [0x959f_bd32_7bde_8aab_u64, 0x4de2_1b61_feff_d8a8, 0x3e88_6030_a941_b906, 0x556a_d848_a0c2_cffe],
         "Stroke 0.5 must render today's pick bit for bit");
 }
 

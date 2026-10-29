@@ -2,7 +2,7 @@
 //! pool. Parameters are fields 10..19 and 22..26 (exciter / object A / object B / out) plus 28..31
 //! (air, tune B, level A, stroke).
 
-use abi::{float_value, int_value, Block, EventRecord, FieldValue, Instrument, ParamValue, EVENT_NOTE_ON};
+use abi::{float_value, int_value, Block, EventRecord, Instrument, ParamValue, EVENT_NOTE_ON};
 use dsp::midi_to_hz_base;
 use math::value_mapping::{Decibel, Linear, LinearInteger};
 use voicing::{Voicing, VoicingMode};
@@ -12,8 +12,6 @@ use crate::voice::{Exciter, KorpusShared, KorpusVoice};
 
 const POLY_VOICES: usize = 16;
 const MONO_STACK: usize = 16;
-const PRESET_EPOCH_FIELD: [u16; 1] = [27];
-const DECLICK_DECAY: f32 = 0.985; // ~1.5ms at 48k: the cut's step eases to zero instead of popping
 
 const EXCITER_MAPPING: LinearInteger = LinearInteger {min: 0, max: 4};
 const OBJECT_A_MAPPING: LinearInteger = LinearInteger {min: 0, max: 5};
@@ -55,10 +53,6 @@ pub struct State {
     shared: KorpusShared,
     gain: f32,
     ids: [u32; param::COUNT],
-    preset_epoch_id: u32,
-    preset_epoch: i32,
-    last: (f32, f32),
-    declick: (f32, f32),
 }
 
 pub struct Device;
@@ -76,8 +70,6 @@ impl Instrument for Device {
         for index in 0..param::COUNT {
             state.ids[index] = abi::bind_parameter(&[PARAM_FIELDS[index]]);
         }
-        state.preset_epoch = i32::MIN;
-        state.preset_epoch_id = abi::observe_field(&PRESET_EPOCH_FIELD);
     }
 
     fn handle_event(state: &mut State, event: &EventRecord) {
@@ -93,32 +85,10 @@ impl Instrument for Device {
         let [out_left, out_right] = output;
         state.voicing.process([&mut *out_left, &mut *out_right], block, &state.shared);
         state.shared.advance_motor(out_left.len());
-        let (mut declick_l, mut declick_r) = state.declick;
         for index in 0..out_left.len() {
-            out_left[index] = out_left[index] * state.gain + declick_l;
-            out_right[index] = out_right[index] * state.gain + declick_r;
-            declick_l *= DECLICK_DECAY;
-            declick_r *= DECLICK_DECAY;
+            out_left[index] *= state.gain;
+            out_right[index] *= state.gain;
         }
-        state.declick = (declick_l, declick_r);
-        if let (Some(left), Some(right)) = (out_left.last(), out_right.last()) {
-            state.last = (*left, *right);
-        }
-    }
-
-    fn field_changed(state: &mut State, id: u32, value: FieldValue) {
-        if id != state.preset_epoch_id {
-            return;
-        }
-        let FieldValue::Int(epoch) = value else {
-            panic!("preset-epoch must be an int field");
-        };
-        // The init catch-up only records the epoch; later changes are preset loads or their undo.
-        if state.preset_epoch != i32::MIN && epoch != state.preset_epoch {
-            state.voicing.reset();
-            state.declick = state.last;
-        }
-        state.preset_epoch = epoch;
     }
 
     fn parameter_changed(state: &mut State, id: u32, value: ParamValue) {

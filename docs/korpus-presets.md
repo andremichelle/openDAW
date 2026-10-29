@@ -1,20 +1,15 @@
 # Korpus presets — authoring reference
 
-Korpus ships a six-preset factory bank (three guitars, three flutes) in `KorpusPresets.ts`. This file keeps the
-18 presets of the former bank, with every value exactly as it was, plus what each knob does, so presets can be
-rebuilt or new ones made. Restored as they are, they sound exactly as before: none of them used a knob that has
-since gained a job (their bow, pick and wind entries keep Object B Off, and vibrato, air, couple and the pick
-strings sit at the values that keep the old sound).
+Korpus ships without built-in presets. This file keeps the 18 presets of the former bank and the three guitars
+(Nylon Concert, Flat-Top Steel, Electric Clean), with every value exactly as it was, plus what each knob does, so
+presets can be rebuilt or new ones made. Restored as they are, they sound exactly as before: none of them used a
+knob that has since gained a job (their bow, pick and wind entries keep Object B Off, and vibrato, air, couple and
+the pick strings sit at the values that keep the old sound).
 
 ## Where presets live
 
-- Presets are entries in the `Factory` list in
-  `packages/studio/adapters/src/devices/instruments/KorpusPresets.ts`. Each entry is a name plus the 19 knob values.
-- The preset selector beside object A and the device menu's **Presets** item show whenever the list has an
-  entry; the factory bank keeps them visible.
-- Loading a preset is one undoable edit, and it cuts any notes that are sounding.
-- After editing the file, rebuild the adapters package (`npm run build -w @opendaw/studio-adapters`) and reload the app;
-  the app reads that package from its build output.
+- Presets are made in the studio: set the 19 knobs, then save the instrument with openDAW's preset system.
+- Stock presets go to the openDAW cloud catalog.
 
 ## Knobs
 
@@ -251,11 +246,10 @@ Stroke, its exciter is Breath or Wind.
 | Couple | (0 %) | (0 %) | (0 %) | (0 %) | (0 %) | 8 % |
 | Volume | −9.0 dB | −14.5 dB | −9.5 dB | −9.0 dB | −13.0 dB | −8.0 dB |
 
-## Restoring them in code
+## All values as data
 
-Paste these entries back inside `export const Factory: ReadonlyArray<Preset> = [ … ]` in `KorpusPresets.ts` —
-but skip Pan Flute, Silver Flute and Shakuhachi, which already ship in the factory bank (pasting them again
-would put duplicate names in the selector):
+Every preset in one list, the 18 former ones followed by the three guitars. Choice knobs are indices: Exciter
+0 Strike, 1 Breath, 2 Bow, 3 Pick, 4 Wind; Object B 6 is Off; Routing 0 Parallel, 1 Serial.
 
 ```ts
         {
@@ -365,6 +359,24 @@ would put duplicate names in the selector):
             objectA: 1, dampingA: 0.9, tuneA: 0, widthA: 0.5, levelA: 0.5,
             objectB: 1, dampingB: 0.85, tuneB: 12.02, widthB: 1.0, levelB: 0.5,
             routing: 0, couple: 0.08, volume: -8.0
+        },
+        {
+            name: "Nylon Concert", exciter: 3, intensity: 0.42, position: 0.32, vibrato: 0.08, air: 0.46, stroke: 0.46,
+            objectA: 0, dampingA: 0.82, tuneA: 0, widthA: 0.5, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -12.0
+        },
+        {
+            name: "Flat-Top Steel", exciter: 3, intensity: 0.65, position: 0.16, vibrato: 0.0, air: 0.55, stroke: 0.66,
+            objectA: 4, dampingA: 0.83, tuneA: 0, widthA: 0.6, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -11.0
+        },
+        {
+            name: "Electric Clean", exciter: 3, intensity: 0.42, position: 0.26, vibrato: 0.0, air: 0.45, stroke: 0.58,
+            objectA: 1, dampingA: 0.88, tuneA: 0, widthA: 0.3, levelA: 0.5,
+            objectB: 6, dampingB: 0.5, tuneB: 0.0, widthB: 0.8, levelB: 0.5,
+            routing: 0, couple: 0.0, volume: -12.5
         }
     
 ```
