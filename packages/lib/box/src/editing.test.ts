@@ -1321,3 +1321,80 @@ describe("a constructor pointer that changes again in the same transaction", () 
         expect(scene.first.pointerHub.size()).toBe(1)
     })
 })
+
+// Live errors 1159 and 1194: a rollback recreates a box deleted in the transaction as a NEW instance under the same
+// uuid. The old instance's removal is discarded, so catchupAndSubscribe's address guard swallows the new instance's
+// onAdded and the listener keeps the old, detached pointer forever (VertexSelection keeps a stale SelectionBox).
+describe("pointer hub listeners follow boxes a rollback recreates", () => {
+    const trackIncoming = (target: MandatoryBox): Map<string, PointerField> => {
+        const tracked = new Map<string, PointerField>()
+        target.pointerHub.catchupAndSubscribe({
+            onAdded: (pointer: PointerField) => tracked.set(pointer.address.toString(), pointer),
+            onRemoved: (pointer: PointerField) => {
+                expect(tracked.get(pointer.address.toString())).toBe(pointer)
+                tracked.delete(pointer.address.toString())
+            }
+        })
+        return tracked
+    }
+    const liveIncoming = (graph: BoxGraph, target: MandatoryBox): ReadonlyArray<PointerField> =>
+        graph.findBox<MandatoryBox>(target.address.uuid).unwrap().pointerHub.incoming()
+    const expectTracksLiveInstances = (graph: BoxGraph, target: MandatoryBox, tracked: Map<string, PointerField>) => {
+        const incoming = liveIncoming(graph, target)
+        expect(tracked.size).toBe(incoming.length)
+        incoming.forEach(pointer => expect(tracked.get(pointer.address.toString())).toBe(pointer))
+        tracked.forEach(pointer => expect(pointer.box.graph.findBox(pointer.box.address.uuid).unwrap()).toBe(pointer.box))
+    }
+
+    it("after abortTransaction", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        expect(tracked.size).toBe(2)
+        graph.beginTransaction()
+        deleted.delete()
+        graph.abortTransaction()
+        expect(graph.findBox(deleted.address.uuid).unwrap()).not.toBe(deleted)
+        expectTracksLiveInstances(graph, mandatory, tracked)
+    })
+
+    it("after endTransaction rolls back a failed validation", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        expect(() => {
+            graph.beginTransaction()
+            deleted.delete()
+            MandatoryBox.create(graph, UUID.generate())
+            graph.endTransaction()
+        }).toThrow(/requires an edge/)
+        expect(graph.findBox(deleted.address.uuid).unwrap()).not.toBe(deleted)
+        expectTracksLiveInstances(graph, mandatory, tracked)
+    })
+
+    it("a later delete of the recreated box is announced", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        graph.beginTransaction()
+        deleted.delete()
+        graph.abortTransaction()
+        graph.beginTransaction()
+        graph.findBox(deleted.address.uuid).unwrap().delete()
+        graph.endTransaction()
+        expectTracksLiveInstances(graph, mandatory, tracked)
+        expect(tracked.size).toBe(1)
+    })
+})

@@ -1,9 +1,9 @@
 import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {SoundfontDeviceBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {SoundfontDeviceBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler, Soundfont} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapStates} from "@opendaw/studio-core"
+import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapBoxes, WclapStates} from "@opendaw/studio-core"
 import {OpenSoundfontAPI} from "@/opendaw-api"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
@@ -210,10 +210,10 @@ export namespace DeviceCatalog {
         }
     })
 
-    const wclapEntry = (wclap: SpotlightCreate.Wclap, instrument: boolean): DeviceEntry => ({
-        key: `wclap:${wclap.id}:${wclap.info.clapId}`, kind: "wclap", local: wclap.local, name: wclap.name,
-        brief: wclap.info.vendor, caption: `WebCLAP ${instrument ? "instrument" : "audio effect"} by ${wclap.info.vendor}`,
-        description: "", icon: IconSymbol.WebClap, iconUrl: Option.None, deviceKey: "Wclap",
+    const wclapEntry = (wclap: SpotlightCreate.Wclap, kind: WclapDescriber.Kind): DeviceEntry => ({
+        key: `wclap:${wclap.id}:${wclap.info.clapId}`, kind: "wclap", local: wclap.local, name: wclap.name, brief: wclap.info.vendor,
+        caption: `WebCLAP ${kind === "instrument" ? "instrument" : kind === "note-effect" ? "note effect" : "audio effect"} by ${wclap.info.vendor}`,
+        description: "", icon: IconSymbol.WebClap, iconUrl: Option.None, deviceKey: kind === "note-effect" ? "WclapMidi" : "Wclap",
         facts: [
             {label: "Vendor", value: wclap.info.vendor},
             {label: "License", value: wclap.license.length > 0 ? wclap.license : "-"},
@@ -225,12 +225,16 @@ export namespace DeviceCatalog {
             const url = await SpotlightCreate.storeWclap(wclap)
             const {clapId, name} = wclap.info
             return plainCandidate((project, slot) => {
-                const box: Option<WclapDeviceBox | WclapInstrumentBox> = instrument
+                const box: Option<WclapBoxes.Any> = kind === "instrument"
                     ? DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Wclap)
                         .map(box => asInstanceOf(box, WclapInstrumentBox))
-                    : DeviceSlot.placeEffect(slot, (field, index) =>
-                        project.api.insertEffect(field, EffectFactories.AudioNamed.Wclap, index))
-                        .map(box => asInstanceOf(box, WclapDeviceBox))
+                    : kind === "note-effect"
+                        ? DeviceSlot.placeEffect(slot, (field, index) =>
+                            project.api.insertEffect(field, EffectFactories.MidiNamed.WclapMidi, index))
+                            .map(box => asInstanceOf(box, WclapMidiEffectBox))
+                        : DeviceSlot.placeEffect(slot, (field, index) =>
+                            project.api.insertEffect(field, EffectFactories.AudioNamed.Wclap, index))
+                            .map(box => asInstanceOf(box, WclapDeviceBox))
                 box.ifSome(box => {
                     box.url.setValue(url)
                     box.clapId.setValue(clapId)
@@ -268,7 +272,8 @@ export namespace DeviceCatalog {
         const stockByKey = new Map(stocks.map(stock => [stock.key, stock]))
         const scriptTarget: SpotlightCreate.ScriptTarget = category === "instrument" ? "apparat" : category === "audio-effect" ? "werkstatt" : "spielwerk"
         const scriptHost = stockByKey.get(SpotlightCreate.scriptConfigs[scriptTarget])
-        const wclapKind = category === "instrument" ? "instrument" : category === "audio-effect" ? "audio-effect" : null
+        const wclapKind: WclapDescriber.Kind = category === "instrument" ? "instrument" : category === "audio-effect" ? "audio-effect" : "note-effect"
+        const wclapStock = wclapKind === "note-effect" ? "WclapMidi" : "Wclap"
         return [
             ...stocks.map(deviceEntry),
             ...presets
@@ -293,9 +298,8 @@ export namespace DeviceCatalog {
                 const player = stockByKey.get("Soundfont")
                 return isDefined(player) ? [soundfontEntry(source, player)] : []
             }),
-            ...(isDefined(wclapKind) && stockByKey.has("Wclap")
-                ? wclaps.filter(({info}) => WclapDescriber.kindOf(info) === wclapKind)
-                    .map(wclap => wclapEntry(wclap, wclapKind === "instrument"))
+            ...(stockByKey.has(wclapStock)
+                ? wclaps.filter(({info}) => WclapDescriber.kindOf(info) === wclapKind).map(wclap => wclapEntry(wclap, wclapKind))
                 : [])
         ].toSorted(compare)
     }

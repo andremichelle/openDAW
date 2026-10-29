@@ -1,7 +1,7 @@
 import {ByteArrayInput, int, isDefined, Nullable, Option, Procedure, tryCatch, unitValue, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {StorageWalk} from "@opendaw/lib-fusion"
-import {AudioFileBox, BoxIO, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, BoxIO, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
 import {PresetHeader, ProjectSkeleton} from "@opendaw/studio-adapters"
 
 export namespace StorageScan {
@@ -121,7 +121,7 @@ export namespace StorageScan {
             } else if (box instanceof SoundfontFileBox) {
                 const id = UUID.toString(box.address.uuid)
                 refs.set(`soundfont:${id}`, {kind: "soundfont", id})
-            } else if (box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox) {
+            } else if (box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox || box instanceof WclapMidiEffectBox) {
                 const url = box.url.getValue()
                 if (!url.startsWith(WclapScheme)) {continue}
                 const id = url.substring(WclapScheme.length)

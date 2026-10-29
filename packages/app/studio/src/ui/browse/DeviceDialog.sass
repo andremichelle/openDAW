@@ -19,7 +19,15 @@ component
     > div.separator
       width: 12px
 
-    > :last-child
+    > span.count
+      flex: 0 0 5.5em
+      margin-left: 8px
+      text-align: right
+      font-variant-numeric: tabular-nums
+      color: var(--color-shadow)
+      white-space: nowrap
+
+    > :has(> input)
       flex: 1 1 auto
       margin-left: 12px
       min-height: 22px

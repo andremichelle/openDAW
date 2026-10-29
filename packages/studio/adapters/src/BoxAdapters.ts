@@ -57,6 +57,7 @@ import {
     NanoDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    WclapMidiEffectBox,
     WclapInstrumentBox,
     NeuralAmpModelBox,
     NoteClipBox,
@@ -92,6 +93,7 @@ import {
     ValueEventCollectionBox,
     ValueRegionBox,
     CubedDeviceBox,
+    KorpusDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -137,6 +139,7 @@ import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapte
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
+import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
@@ -177,6 +180,7 @@ import {ConvolverDeviceBoxAdapter} from "./devices/audio-effects/ConvolverDevice
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WclapDeviceBoxAdapter} from "./devices/audio-effects/WclapDeviceBoxAdapter"
+import {WclapMidiEffectBoxAdapter} from "./devices/midi-effects/WclapMidiEffectBoxAdapter"
 import {WclapInstrumentBoxAdapter} from "./devices/instruments/WclapInstrumentBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
 import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
@@ -252,6 +256,7 @@ export class BoxAdapters implements Terminable {
             visitWarpMarkerBox: (box: WarpMarkerBox) => new WarpMarkerBoxAdapter(this.#context, box),
             visitApparatDeviceBox: (box: ApparatDeviceBox) => new ApparatDeviceBoxAdapter(this.#context, box),
             visitCubedDeviceBox: (box: CubedDeviceBox) => new CubedDeviceBoxAdapter(this.#context, box),
+            visitKorpusDeviceBox: (box: KorpusDeviceBox) => new KorpusDeviceBoxAdapter(this.#context, box),
             visitAudioRegionBox: (box: AudioRegionBox) => new AudioRegionBoxAdapter(this.#context, box),
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
@@ -288,6 +293,7 @@ export class BoxAdapters implements Terminable {
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
+            visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => new WclapMidiEffectBoxAdapter(this.#context, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => new WclapInstrumentBoxAdapter(this.#context, box),
             visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),

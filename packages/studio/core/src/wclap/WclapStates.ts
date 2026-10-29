@@ -1,13 +1,14 @@
 import {Optional, Strings, UUID} from "@opendaw/lib-std"
-import {WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {WclapInstrumentBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, ProjectQueries} from "@opendaw/studio-adapters"
 import {Project} from "../project"
+import {WclapBoxes} from "./WclapBoxes"
 
 // The plugin's own state blob, pushed by the bridge after it changed, kept on the device box as bytes
 export namespace WclapStates {
     export const store = (project: Project, uuid: string, bytes: ArrayBuffer): void => {
         project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
-            if (!(box instanceof WclapDeviceBox) && !(box instanceof WclapInstrumentBox)) {return}
+            if (!WclapBoxes.is(box)) {return}
             const next = new Int8Array(bytes.slice(0))
             if (equals(box.pluginState.getValue(), next) && box.state.getValue() === "") {return}
             project.editing.modify(() => {
@@ -20,14 +21,14 @@ export namespace WclapStates {
     // a save the engine posted before it saw a new url or clapId belongs to the plugin the device no longer names
     export const storeFrom = (project: Project, uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void => {
         project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
-            if (!(box instanceof WclapDeviceBox) && !(box instanceof WclapInstrumentBox)) {return}
+            if (!WclapBoxes.is(box)) {return}
             if (box.url.getValue() !== url || box.clapId.getValue() !== clapId) {return}
             store(project, uuid, bytes)
         })
     }
 
     // inside a modify: another build of the same plugin reads the state, another plugin starts without it
-    export const select = (box: WclapDeviceBox | WclapInstrumentBox, url: string, clapId: string): void => {
+    export const select = (box: WclapBoxes.Any, url: string, clapId: string): void => {
         if (box.clapId.getValue() !== clapId) {
             box.pluginState.setValue(new Int8Array(0))
             box.state.setValue("")
@@ -37,12 +38,12 @@ export namespace WclapStates {
     }
 
     // inside a modify: the device takes its plugin's name, unless the user renamed it
-    export const name = (project: Project, box: WclapDeviceBox | WclapInstrumentBox,
+    export const name = (project: Project, box: WclapBoxes.Any,
                          previous: Optional<string>, next: string): void => {
         const label = box.label.getValue()
         const base = label.replace(/\s+\d+$/, "")
         if (base !== InstrumentFactories.Wclap.defaultName && base !== previous) {return}
-        if (box instanceof WclapDeviceBox) {
+        if (!(box instanceof WclapInstrumentBox)) {
             box.label.setValue(next)
             return
         }

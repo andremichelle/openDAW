@@ -78,7 +78,7 @@ describe("DeviceSlot", () => {
         const create: DeviceSlot = {type: "new-instrument", insertion: {before: Option.None, parent: Option.None}}
         expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.Nano)).true
         expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.Tape)).false
-        expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.InstrumentComposite)).false
+        expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.InstrumentComposite)).true
         expect(DeviceSlot.acceptsInstrument(create, InstrumentFactories.Tape)).false
         expect(DeviceSlot.acceptsInstrument(create, InstrumentFactories.InstrumentComposite)).true
         expect(DeviceSlot.canReplaceInstrument(host)).true

@@ -1,0 +1,65 @@
+@use "@/mixins"
+
+component
+  display: flex
+  column-gap: 0.75em
+  @include mixins.Control
+  padding: 2px
+
+  > section
+    display: flex
+    flex-direction: column
+    row-gap: 6px
+
+    > header
+      flex: 1
+      display: flex
+      flex-direction: column
+      align-items: center
+      row-gap: 6px
+      padding: 2px 0.25em 0
+      font-size: 9px
+      white-space: nowrap
+
+      > h1
+        margin: 0
+        font-size: inherit
+        font-weight: 400
+        letter-spacing: 0.08em
+        text-align: center
+        color: var(--color-cream)
+
+      button
+        margin-block: auto
+        padding: 1px 1em
+        border-radius: 0.25em
+        outline: 0.5px color-mix(in srgb, var(--color-green) 20%, transparent) solid
+        background-color: rgba(black, 0.15)
+        color: var(--color-green)
+
+        > .value
+          display: grid
+
+          > *
+            grid-area: 1 / 1
+            text-align: center
+
+          > .sizer
+            visibility: hidden
+
+    .knobs
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      padding: 0 0.25em
+      margin-bottom: 1.625em
+
+      > .row
+        display: grid
+        grid-auto-flow: column
+        grid-auto-columns: 3.5em
+        justify-content: center
+
+  .inactive > *
+    opacity: 0.3
+    transition: opacity 120ms

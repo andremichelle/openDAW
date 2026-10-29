@@ -32,6 +32,7 @@ import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
+import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
@@ -73,6 +74,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const uuid = adapter.uuid
     const uuidString = UUID.toString(uuid)
     const {parameters: parametersField} = adapter.box
+    const kind: WclapDescriber.Kind = adapter.type === "midi-effect" ? "note-effect" : adapter.type
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
     const state: {
@@ -207,11 +209,11 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             RuntimeNotifier.notify({message: `${file.name} is not a WebCLAP bundle: ${error}`, icon: "Warning"})
             return []
         })
-        const plugins = described.filter(plugin => kindOf(plugin) === adapter.type)
+        const plugins = described.filter(plugin => kindOf(plugin) === kind)
         if (plugins.length === 0) {
             if (described.length > 0) {
                 RuntimeNotifier.notify({
-                    message: `${file.name} holds no ${adapter.type === "instrument" ? "instrument" : "audio effect"}`,
+                    message: `${file.name} holds no ${kind === "instrument" ? "instrument" : kind === "note-effect" ? "note effect" : "audio effect"}`,
                     icon: "Warning"
                 })
             }
@@ -299,7 +301,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                         return {...plugin, label: vendor.length > 0 ? `${shortNames[index]} (${vendor})` : shortNames[index]}
                     })
                 })
-                .filter(({info}) => kindOf(info) === adapter.type)
+                .filter(({info}) => kindOf(info) === kind)
                 .toSorted(byLabel)
         }, EmptyExec)
     }
@@ -316,7 +318,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                         const shortNames = WclapNames.distinct(plugins.map(info => info.name))
                         return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
                     })
-                    .filter(({info}) => kindOf(info) === adapter.type)
+                    .filter(({info}) => kindOf(info) === kind)
                     .toSorted(byLabel)
             })
             cloud.root = toFolder({name: "", folders})
@@ -601,13 +603,17 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           populatePanelMenu(parent)
                       }}
                       populateControls={() => controls}
-                      populateMeter={() => (
+                      populateMeter={() => adapter.type === "midi-effect" ? (
+                          <DeviceMidiMeter lifecycle={lifecycle}
+                                           receiver={project.liveStreamReceiver}
+                                           address={adapter.address}/>
+                      ) : (
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={adapter.type === "instrument"
-                          ? InstrumentFactories.Wclap.defaultIcon
-                          : EffectFactories.AudioNamed.Wclap.defaultIcon}/>
+                      icon={adapter.type === "instrument" ? InstrumentFactories.Wclap.defaultIcon
+                          : adapter.type === "midi-effect" ? EffectFactories.MidiNamed.WclapMidi.defaultIcon
+                              : EffectFactories.AudioNamed.Wclap.defaultIcon}/>
     )
 }

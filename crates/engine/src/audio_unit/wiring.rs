@@ -346,9 +346,11 @@ impl Engine {
         // a chain edit never re-emits unchanged CCs (TS keeps its AutomatableParameters across such edits).
         let mut previous_cc: Vec<(Uuid, f32)> = Vec::new();
         let mut first_build = true;
+        let mut previous_node: Option<Rc<RefCell<MidiOutProcessor>>> = None;
         match unit.wired.take() {
             Some(Wired::MidiOut(previous)) => {
                 first_build = false;
+                previous_node = Some(previous.node.clone());
                 previous_cc = previous.node.borrow().cc_snapshot();
                 for sub in previous.subs {
                     self.graph.unsubscribe(sub);
@@ -411,6 +413,7 @@ impl Engine {
             }
         }
         node.borrow_mut().set_pull_chain(pull);
+        if let Some(previous) = previous_node {previous.borrow().hand_over(&node.borrow())}
         // The unit's AUDIO-effects chain over the silent output + the channel strip, exactly like the tape.
         let signal = unit.mark.signal();
         let mut audio_members: Vec<Member> = Vec::new();
@@ -552,6 +555,7 @@ impl Engine {
     }
 
     pub(crate) fn teardown_midi_out_device(&mut self, device: MidiOutDevice) {
+        device.node.borrow().end_held_notes(); // nothing else ends the notes a node leaving the graph holds
         for sub in device.subs.into_iter().chain(device.cc_subs) {
             self.graph.unsubscribe(sub);
         }

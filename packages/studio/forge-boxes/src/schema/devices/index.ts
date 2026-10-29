@@ -31,6 +31,7 @@ import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
 import {WclapParameterBox} from "./audio-effects/WclapParameterBox"
+import {WclapMidiEffectBox} from "./midi-effects/WclapMidiEffectBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -44,6 +45,7 @@ import {ScriptBufferChunkBox} from "./audio-effects/ScriptBufferChunkBox"
 import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {CubedDeviceBox} from "./instruments/CubedDeviceBox"
+import {KorpusDeviceBox} from "./instruments/KorpusDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
 import {InstrumentCompositeBox} from "./instruments/InstrumentCompositeBox"
 import {InstrumentCompositeCellBox} from "./instruments/InstrumentCompositeCellBox"
@@ -91,6 +93,7 @@ export const DeviceDefinitions = [
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapParameterBox,
+    WclapMidiEffectBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
@@ -104,6 +107,7 @@ export const DeviceDefinitions = [
     SpielwerkDeviceBox,
     ApparatDeviceBox,
     CubedDeviceBox,
+    KorpusDeviceBox,
     NoopInstrumentBox,
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,

@@ -2,12 +2,12 @@ import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier} f
 import {Promises} from "@opendaw/lib-runtime"
 import {Box} from "@opendaw/lib-box"
 import {
-    ApparatDeviceBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WerkstattDeviceBox
+    ApparatDeviceBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox, WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler, WclapPluginInfo
 } from "@opendaw/studio-adapters"
-import {AudioUnitInsertion, EffectFactories, EffectFactory, PresetEntry, Project, WclapStates, WclapStorage} from "@opendaw/studio-core"
+import {AudioUnitInsertion, EffectFactories, EffectFactory, PresetEntry, Project, WclapBoxes, WclapStates, WclapStorage} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
@@ -184,10 +184,14 @@ export namespace SpotlightCreate {
             }
             const {clapId, name} = wclap.info
             project.editing.modify(() => {
-                const box: Option<WclapDeviceBox | WclapInstrumentBox> = WclapDescriber.kindOf(wclap.info) === "instrument"
+                const kind = WclapDescriber.kindOf(wclap.info)
+                const box: Option<WclapBoxes.Any> = kind === "instrument"
                     ? Option.wrap(asInstanceOf(createInstrument(service, InstrumentFactories.Wclap), WclapInstrumentBox))
-                    : effectField(project, "audio").map(field => asInstanceOf(
-                        EffectFactories.AudioNamed.Wclap.create(project, field, field.pointerHub.incoming().length), WclapDeviceBox))
+                    : kind === "note-effect"
+                        ? effectField(project, "midi").map(field => asInstanceOf(
+                            EffectFactories.MidiNamed.WclapMidi.create(project, field, field.pointerHub.incoming().length), WclapMidiEffectBox))
+                        : effectField(project, "audio").map(field => asInstanceOf(
+                            EffectFactories.AudioNamed.Wclap.create(project, field, field.pointerHub.incoming().length), WclapDeviceBox))
                 box.ifSome(box => {
                     box.url.setValue(url.value)
                     box.clapId.setValue(clapId)

@@ -340,3 +340,12 @@ Verification: 44 grouping tests, 265 Studio tests / 42 files, core compilation a
 Final comparison build: `99fc9f46-cd5d-4382-8a6f-ad8faa21cea0`, with completed invalidation `IA5Z37LLPMFOEU4N2V5UI6SR04`. Saved and reopened the verification fixture with both groups expanded, all four clips and the Verse name retained. Final-build checks reconfirm zero expanded previews, both parent timeline rails active for saved Neon editing, all mixer borders/rails 4px and both nearest gaps 1px, with no browser console errors. Screenshots: `/tmp/group-review-mixer-parents.png` and `/tmp/group-review-collapsed-preview.png` (local verification only).
 
 The earlier clip-selection recording shows group-header interaction. The split header/play controls, single GroupClipSelection and selected-header fill from c4db18e4b cover that recorded case; the previously verified header clicks remain independent of playback. No new claim is made about unrelated regular-clip gestures. Upstream merge conflicts remain a separate rebase task.
+
+
+## Merge latest main without rewriting grouping history (2026-10-29)
+
+At the founder's request, merge official upstream/main at 3d28358bfcd7310b9d18bfef8ba05085f60c2edc into the grouping branch instead of rebasing. This preserves the existing grouping commits for branches that already contain them. The pre-merge tip ce7baf106a1cf6afaaf08b6284750a78ec3b3995 is retained on local backup branch codex/track-groups-before-main-merge-2026-10-29. No force push is needed.
+
+The only conflict is SpotlightCreate imports. Keep AudioUnitInsertion for group-aware placement and accept upstream WclapBoxes/WclapMidiEffectBox for MIDI effects. Upstream Korpus, WebCLAP MIDI effects and selection rollback repairs remain intact. Regenerated TypeScript/Rust boxes and rebuilt the matching WASM engine. No grouping behavior or DSP changes are introduced by the conflict resolution itself.
+
+Verification of the combined source: all 25 production Studio/dependency build tasks pass; 896 core tests / 87 files, 360 adapter tests / 31 files, 265 Studio tests / 42 files and 204 box-graph tests / 7 files pass. Real WASM integration passes 42 tests / 5 files covering nested group routing/effects/live sync, MIDI Output, WebCLAP MIDI effects and Korpus. The core/Studio suites use two workers. Preview hosting changes remain separate from public PR source; the original baseline demo is preserved. These automated checks do not claim subjective listening or hardware MIDI verification.

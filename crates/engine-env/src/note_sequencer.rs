@@ -239,19 +239,18 @@ impl NoteEventSource for NoteSequencer {
         self.raw_notes.push(RawNote {pitch, velocity, gate: true, running: None});
     }
 
-    // Mirrors TS `pushRawNoteOff`: drop never-started notes while searching; gate off the FIRST started
-    // note of that pitch (its note-off is emitted by the next `process_notes`).
+    // Gate off the FIRST held note of that pitch; a never-started one (pressed and released between
+    // two blocks) is cancelled outright. Other pitches' pending notes are untouched — the TS original
+    // dropped every never-started note it walked past, wiping simultaneous note-ons (a chord strum).
     fn push_raw_note_off(&mut self, pitch: u8) {
-        let mut index = 0;
-        while index < self.raw_notes.len() {
-            if self.raw_notes[index].running.is_none() {
-                self.raw_notes.remove(index);
-            } else if self.raw_notes[index].pitch == pitch {
-                self.raw_notes[index].gate = false;
-                return;
-            } else {
-                index += 1;
-            }
+        let Some(index) = self.raw_notes.iter()
+            .position(|note| note.pitch == pitch && note.gate) else {
+            return;
+        };
+        if self.raw_notes[index].running.is_none() {
+            self.raw_notes.remove(index);
+        } else {
+            self.raw_notes[index].gate = false;
         }
     }
 
@@ -396,6 +395,21 @@ mod tests {
         assert!(matches!(released[0], Event::NoteComplete {id: complete, position, pitch: 60}
             if complete == id && position == 10.0));
         assert!(collect(&mut sequencer, 15.0, 20.0, stopped()).is_empty());
+    }
+
+    #[test]
+    fn a_staccato_release_must_not_sweep_other_pending_notes() {
+        // One event batch between two blocks: a fast melody key goes down and up while a 6-note
+        // chord strum is also pending. Only the staccato note may be cancelled.
+        let mut sequencer = sequencer();
+        sequencer.push_raw_note_on(76, 0.8);
+        for pitch in [40u8, 47, 52, 56, 59, 64] {
+            sequencer.push_raw_note_on(pitch, 0.8);
+        }
+        sequencer.push_raw_note_off(76);
+        let events = collect(&mut sequencer, 0.0, 5.0, stopped());
+        let starts = events.iter().filter(|event| matches!(event, Event::NoteStart {..})).count();
+        assert_eq!(starts, 6, "the chord must sound; only the staccato note is cancelled");
     }
 
     #[test]

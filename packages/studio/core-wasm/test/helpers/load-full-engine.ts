@@ -9,7 +9,7 @@ import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 import {NamBridges} from "../../src/nam-bridge"
-import {WclapBridges} from "../../src/wclap/wclap-bridge"
+import {WclapBridges, WclapHostCallbacks} from "../../src/wclap/wclap-bridge"
 import {linkDevice, registerComposite, registerEffectComposite} from "../../src/device-linker"
 import {COMPOSITES, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
 
@@ -26,6 +26,7 @@ export type FullEngine = {
     memory: WebAssembly.Memory
     namBridges: NamBridges
     scriptBridges: ScriptBridges
+    wclapBridges: WclapBridges
     deviceBuilds(): number
     // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
     // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
@@ -36,7 +37,8 @@ export type FullEngine = {
 
 export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {},
-                                     broadcaster: () => LiveStreamBroadcaster | null = () => null): Promise<FullEngine> => {
+                                     broadcaster: () => LiveStreamBroadcaster | null = () => null,
+                                     wclap: Partial<WclapHostCallbacks> = {}): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(DIST, "wasm", "engine.wasm")))
@@ -57,12 +59,13 @@ export const loadFullEngine = async (sampleRate = 48000,
         // A node Buffer can sit at an offset inside a pooled ArrayBuffer; hand over exactly the file's bytes.
         return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
     }, sampleRate)
-    // The wclap bridge hosts CLAP plugins; no test loads a bundle, so the loader rejects and the device passes through.
+    // The wclap bridge hosts CLAP plugins; without a loader from the test it rejects and the device passes through.
     const wclapBridges = new WclapBridges(memory, sampleRate, {
         loadBundle: () => Promise.reject(new Error("no wclap bundles in node tests")),
         sendGui: () => {}, sendState: () => {}, sendParams: () => {}, sendParam: () => {}, sendHovered: () => {},
-        requestGuiResize: () => {},
-        sendStatus: () => {}, requestSave: () => {}, track: () => {}
+        requestGuiResize: () => {}, requestGuiShow: () => {}, requestGuiHide: () => {},
+        sendStatus: () => {}, requestSave: () => {}, track: () => {},
+        ...wclap
     })
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
 
@@ -112,5 +115,5 @@ export const loadFullEngine = async (sampleRate = 48000,
         }
         return satisfied
     }
-    return {engine, memory, namBridges, scriptBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
+    return {engine, memory, namBridges, scriptBridges, wclapBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }
