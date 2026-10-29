@@ -166,6 +166,7 @@ export namespace DeviceDialog {
             <div className="card" onConnect={element => lifecycle.own(installScrollbars(element))}/>
         )
         const search: HTMLElement = <SearchInput lifecycle={lifecycle} model={searchText} placeholder="Search names and tags"/>
+        const count: HTMLElement = <span className="count"/>
         const toggle = (model: DefaultObservableValue<boolean>, tooltip: string, symbol: IconSymbol) => (
             <Checkbox lifecycle={lifecycle} model={model}
                       appearance={{tooltip, activeColor: Colors.blue, framed: true, landscape: true}}>
@@ -258,9 +259,11 @@ export namespace DeviceDialog {
                 return
             }
             const query = searchText.getValue().trim()
-            visible.splice(0, visible.length, ...DeviceCatalog.entriesFor(slot, sources.getValue())
+            const entries = DeviceCatalog.entriesFor(slot, sources.getValue())
+            visible.splice(0, visible.length, ...entries
                 .filter(entry => isVisible(entry) && matches(entry, query))
                 .toSorted(query.length > 0 ? byRelevance(query) : () => 0))
+            count.textContent = `${visible.length} / ${entries.length}`
             rows.replaceChildren(...visible.map(elementOf))
             if (visible.length === 0) {rows.appendChild(<span className="empty">Nothing matches.</span>)}
             markSelection()
@@ -337,6 +340,7 @@ export namespace DeviceDialog {
                     {category !== "midi-effect" && toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
                     {category === "instrument" && toggle(filter.showSoundfonts, "Show soundfonts", IconSymbol.SoundFont)}
                     {search}
+                    {count}
                 </div>
                 {list}
                 {card}

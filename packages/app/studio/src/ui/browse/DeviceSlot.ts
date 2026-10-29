@@ -87,7 +87,6 @@ export namespace DeviceSlot {
             case "new-layer":
                 return InstrumentFactories.isLayerInstrument(factory)
             case "replace-instrument":
-                if (factory === InstrumentFactories.InstrumentComposite) {return false}
                 if (isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter)) {
                     return InstrumentFactories.isLayerInstrument(factory)
                 }
