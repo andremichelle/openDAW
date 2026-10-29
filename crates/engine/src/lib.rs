@@ -765,6 +765,21 @@ enum PullLink {
     MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
 }
 
+impl PullLink {
+    /// The same producers in the same order: a rewire rebuilt the chain, every note it started still gets its end.
+    fn same(&self, other: &PullLink) -> bool {
+        match (self, other) {
+            (PullLink::Source(a), PullLink::Source(b)) => Rc::ptr_eq(a, b),
+            (PullLink::SlotRoute {upstream: a, choke: a_choke, gate: a_gate},
+                PullLink::SlotRoute {upstream: b, choke: b_choke, gate: b_gate}) =>
+                Rc::ptr_eq(a, b) && a_choke[..] == b_choke[..] && Rc::ptr_eq(a_gate, b_gate),
+            (PullLink::MidiFx {effect: a, upstream: a_upstream}, PullLink::MidiFx {effect: b, upstream: b_upstream}) =>
+                Rc::ptr_eq(a, b) && a_upstream.same(b_upstream),
+            _ => false
+        }
+    }
+}
+
 /// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
 /// link (shifted as the chain is descended), the quantum's blocks (to map a pulse position to a sample
 /// offset), the sample rate, and a reusable scratch. The blocks pointer borrows the live `ProcessInfo`

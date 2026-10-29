@@ -9,6 +9,7 @@ import {PPQN} from "@opendaw/lib-dsp"
 import {
     AudioUnitBox,
     CaptureMidiBox,
+    DelayDeviceBox,
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,
     MIDIOutputBox,
@@ -16,10 +17,11 @@ import {
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    PitchDeviceBox,
     TrackBox,
     WclapMidiEffectBox
 } from "@opendaw/studio-boxes"
-import {ProjectSkeleton, TrackType, WclapStatus} from "@opendaw/studio-adapters"
+import {InstrumentFactories, ProjectSkeleton, TrackType, WclapStatus} from "@opendaw/studio-adapters"
 import type {WclapBundle} from "../src/wclap/wclap-bridge"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
@@ -51,7 +53,9 @@ const stateOf = (preset: Preset): Int8Array => {
 
 type Note = { on: boolean, pitch: number, channel: number, velocity: number, ms: number }
 
-const build = (preset: Preset, layers: number, notes: ReadonlyArray<[number, number, number]>) => {
+type Options = { instrument?: "midi-output" | "vaporisateur", effect?: "wclap" | "pitch" }
+
+const build = (preset: Preset, layers: number, notes: ReadonlyArray<[number, number, number]>, options: Options = {}) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -61,19 +65,22 @@ const build = (preset: Preset, layers: number, notes: ReadonlyArray<[number, num
         box.index.setValue(1)
     })
     unit.capture.refer(CaptureMidiBox.create(source, UUID.generate()))
-    const output = MIDIOutputBox.create(source, UUID.generate(), box => {
+    const output = () => MIDIOutputBox.create(source, UUID.generate(), box => {
         box.root.refer(rootBox.outputMidiDevices)
         box.id.setValue("test-midi-device")
         box.label.setValue("Test Device")
         box.delayInMs.setValue(0)
     })
+    const device = options.instrument === "vaporisateur" ? null : output()
     const outputOn = (host: AudioUnitBox["input"] | InstrumentCompositeCellBox["instrument"], channel: number) =>
         MIDIOutputDeviceBox.create(source, UUID.generate(), box => {
             box.host.refer(host)
             box.channel.setValue(channel)
-            box.device.refer(output.device)
+            if (device !== null) {box.device.refer(device.device)}
         })
-    if (layers === 0) {
+    if (options.instrument === "vaporisateur") {
+        InstrumentFactories.Vaporisateur.create(source, unit.input, "Vaporisateur", InstrumentFactories.Vaporisateur.defaultIcon)
+    } else if (layers === 0) {
         outputOn(unit.input, 0)
     } else {
         const composite = InstrumentCompositeBox.create(source, UUID.generate(), box => box.host.refer(unit.input))
@@ -85,13 +92,19 @@ const build = (preset: Preset, layers: number, notes: ReadonlyArray<[number, num
             outputOn(cell.instrument, index)
         }
     }
-    const effect = WclapMidiEffectBox.create(source, UUID.generate(), box => {
-        box.host.refer(unit.midiEffects)
-        box.index.setValue(0)
-        box.url.setValue("test:note-lab")
-        box.clapId.setValue("studio.opendaw.note-lab")
-        box.pluginState.setValue(stateOf(preset))
-    })
+    const effect: WclapMidiEffectBox | PitchDeviceBox = options.effect === "pitch"
+        ? PitchDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.midiEffects)
+            box.index.setValue(0)
+            box.octaves.setValue(1)
+        })
+        : WclapMidiEffectBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.midiEffects)
+            box.index.setValue(0)
+            box.url.setValue("test:note-lab")
+            box.clapId.setValue("studio.opendaw.note-lab")
+            box.pluginState.setValue(stateOf(preset))
+        })
     const track = TrackBox.create(source, UUID.generate(), box => {
         box.type.setValue(TrackType.Notes)
         box.enabled.setValue(true)
@@ -117,7 +130,7 @@ const build = (preset: Preset, layers: number, notes: ReadonlyArray<[number, num
         box.loopDuration.setValue(3840 * 8)
     })
     source.endTransaction()
-    return {source, effect}
+    return {source, effect, unit}
 }
 
 const drainNotes = (engine: any, memory: WebAssembly.Memory, quantum: number): Array<Note> => {
@@ -197,5 +210,84 @@ describe("WebCLAP note effect (wasm engine)", () => {
             expect(ons.length).toBe(4)
             ons.forEach((note, repeat) => expect(Math.abs(note.ms - repeat * 250)).toBeLessThan(SAMPLE_MS))
         }
+    }, 60000)
+})
+
+// A MIDI effect that leaves the chain while its note sounds: the instrument after it (here a MIDI Output) ends
+// the notes it got through the old chain, a rewire that keeps the chain keeps them
+describe("WebCLAP note effect, held notes", () => {
+    type Run = { notes: ReadonlyArray<string>, peakAfter: number }
+    const holdThenChange = async (change: (built: ReturnType<typeof build>) => void, layers: number = 0,
+                                  options: Options = {}): Promise<Run> => {
+        const built = build(Preset.Thru, layers, [[0, 3840 * 4, 60]], options)
+        const ready = {resolve: () => {}}
+        const up = new Promise<void>(resolve => {ready.resolve = resolve})
+        const {engine, memory} = await loadFullEngine(SAMPLE_RATE, () => {}, () => null, {
+            loadBundle: () => Promise.resolve(bundle),
+            sendStatus: (_uuid, status) => {if (status.state === "ready") {ready.resolve()}}
+        })
+        const sync = connectSyncToEngine(engine, memory, built.source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+        engine.render()
+        if (options.effect !== "pitch") {await up}
+        drainNotes(engine, memory, 0)
+        engine.play()
+        const sent: Array<Note> = []
+        for (let quantum = 0; quantum < 100; quantum++) {
+            engine.render()
+            sent.push(...drainNotes(engine, memory, quantum))
+        }
+        built.source.beginTransaction()
+        change(built)
+        built.source.endTransaction()
+        await sync.settle()
+        let peakAfter = 0
+        for (let quantum = 100; quantum < 300; quantum++) {
+            engine.render()
+            sent.push(...drainNotes(engine, memory, quantum))
+            if (quantum >= 200) {
+                const output = new Float32Array(memory.buffer, engine.output_ptr(), 256)
+                peakAfter = output.reduce((peak, sample) => Math.max(peak, Math.abs(sample)), peakAfter)
+            }
+        }
+        return {notes: brief(sent), peakAfter}
+    }
+
+    it("ends the note it holds when it is bypassed", async () => {
+        expect((await holdThenChange(({effect}) => effect.enabled.setValue(false))).notes).toEqual(["+60/0", "-60/0"])
+    }, 60000)
+
+    it("ends the note it holds when it is removed", async () => {
+        expect((await holdThenChange(({effect}) => effect.delete())).notes).toEqual(["+60/0", "-60/0"])
+    }, 60000)
+
+    it("keeps the note when a rewire leaves the MIDI effects as they are", async () => {
+        expect((await holdThenChange(({source, unit}) => DelayDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        }))).notes).toEqual(["+60/0"])
+    }, 60000)
+
+    it("ends a stock MIDI effect's note too (Pitch, an octave up)", async () => {
+        expect((await holdThenChange(({effect}) => effect.enabled.setValue(false), 0, {effect: "pitch"})).notes)
+            .toEqual(["+72/0", "-72/0"])
+    }, 60000)
+
+    it("ends it in a composite layer, whose MIDI Output survives the edit", async () => {
+        expect((await holdThenChange(({effect}) => effect.enabled.setValue(false), 1)).notes).toEqual(["+60/0", "-60/0"])
+    }, 60000)
+
+    it("silences a plugin instrument's voice of it", async () => {
+        const {peakAfter} = await holdThenChange(({effect}) => effect.enabled.setValue(false), 0, {instrument: "vaporisateur"})
+        expect(peakAfter).toBe(0)
+    }, 60000)
+
+    it("keeps a plugin instrument's voice when a rewire leaves the MIDI effects as they are", async () => {
+        const {peakAfter} = await holdThenChange(({source, unit}) => DelayDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        }), 0, {instrument: "vaporisateur"})
+        expect(peakAfter).toBeGreaterThan(0.01)
     }, 60000)
 })

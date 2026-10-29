@@ -129,8 +129,11 @@ impl PluginInstrument {
         }
     }
 
+    /// TS `setNoteEventSource` resets its receiver: a note a removed or bypassed MIDI effect started never gets its end.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
+        let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
         self.pull_chain = Some(chain);
+        if changed { self.reset(); }
     }
 
     /// The peak/RMS broadcast slot of this instrument's output.
