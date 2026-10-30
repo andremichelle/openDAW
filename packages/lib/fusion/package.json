@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-fusion",
-  "version": "0.0.110",
+  "version": "0.0.111",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "license": "AGPL-3.0-or-later",
@@ -23,7 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.101",
+    "@opendaw/lib-box": "^0.0.102",
     "@opendaw/lib-dom": "^0.0.95",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89"

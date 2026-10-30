@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-scripting",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -31,12 +31,12 @@
     "docs": "typedoc && node scripts/docs-postprocess.mjs ../docs/scripting /docs/scripting/"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.101",
-    "@opendaw/lib-dsp": "^0.0.99",
+    "@opendaw/lib-box": "^0.0.102",
+    "@opendaw/lib-dsp": "^0.0.100",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
-    "@opendaw/studio-adapters": "^0.3.11",
-    "@opendaw/studio-boxes": "^0.0.117",
+    "@opendaw/studio-adapters": "^0.3.12",
+    "@opendaw/studio-boxes": "^0.0.118",
     "@opendaw/studio-enums": "^0.1.10"
   },
   "devDependencies": {
