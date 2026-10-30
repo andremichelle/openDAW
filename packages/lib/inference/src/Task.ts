@@ -10,6 +10,8 @@ export interface ModelDescriptor {
 
 export type ExecutionProvider = "webgpu" | "wasm"
 
+export const WASM_FALLBACK_PROVIDER: ExecutionProvider = "wasm"
+
 export interface TaskEnvironment {
     readonly session: SessionRun
     readonly progress: Procedure<unitValue>
