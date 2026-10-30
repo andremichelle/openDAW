@@ -16,7 +16,7 @@ import {
     TrackType
 } from "@opendaw/studio-adapters"
 import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox} from "@opendaw/studio-boxes"
-import {EffectFactories, Project} from "@opendaw/studio-core"
+import {AudioUnitInsertion, EffectFactories, Project} from "@opendaw/studio-core"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 
 // where the device dialog creates or replaces a device
@@ -24,7 +24,7 @@ export type DeviceSlot =
     | { readonly type: "insert", readonly host: DeviceHost, readonly accepts: "audio" | "midi", readonly index: int }
     | { readonly type: "replace-effect", readonly host: DeviceHost, readonly accepts: "audio" | "midi", readonly index: int }
     | { readonly type: "replace-instrument", readonly host: DeviceHost }
-    | { readonly type: "new-instrument", readonly anchor: Option<UUID.Bytes> }
+    | { readonly type: "new-instrument", readonly insertion: AudioUnitInsertion }
     | { readonly type: "new-layer", readonly host: DeviceHost, readonly composite: InstrumentCompositeBox }
     | { readonly type: "new-entry", readonly host: DeviceHost, readonly composite: AudioCompositeAdapter }
 
@@ -114,8 +114,7 @@ export namespace DeviceSlot {
     export const placeRack = (project: Project, slot: DeviceSlot, bytes: ArrayBuffer, keepTimeline: boolean): boolean => {
         switch (slot.type) {
             case "new-instrument": {
-                const insertIndex = slot.anchor.flatMap(unit => project.api.audioUnitIndex(unit)).unwrapOrUndefined()
-                const first = PresetDecoder.decode(bytes, project.skeleton, insertIndex).at(0)
+                const first = project.api.importAudioUnitsAt(bytes, slot.insertion).at(0)
                 if (isAbsent(first)) {return false}
                 project.userEditingManager.audioUnit.edit(first.editing)
                 return true
@@ -161,8 +160,7 @@ export namespace DeviceSlot {
         const {api} = project
         switch (slot.type) {
             case "new-instrument": {
-                const {audioUnitBox, instrumentBox} = api.createAnyInstrument(factory)
-                api.placeAudioUnitBefore(audioUnitBox, slot.anchor)
+                const {instrumentBox} = api.createInstrumentAt(factory, slot.insertion)
                 return Option.wrap(instrumentBox)
             }
             case "replace-instrument": {
@@ -213,8 +211,7 @@ export namespace DeviceSlot {
             case "new-instrument": {
                 const factory = InstrumentFactories.Named[device as InstrumentFactories.Keys]
                 if (isAbsent(factory)) {return false}
-                const {audioUnitBox} = project.api.createAnyInstrument(factory)
-                project.api.placeAudioUnitBefore(audioUnitBox, slot.anchor)
+                const {audioUnitBox} = project.api.createInstrumentAt(factory, slot.insertion)
                 return PresetDecoder.replaceAudioUnit(bytes, asInstanceOf(audioUnitBox, AudioUnitBox),
                     {keepMIDIEffects: true, keepAudioEffects: true}).isSuccess()
             }

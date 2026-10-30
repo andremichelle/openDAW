@@ -1,3 +1,4 @@
+import {AudioUnitLayoutState} from "./AudioUnitLayoutState"
 import {
     asInstanceOf,
     Editing,
@@ -78,6 +79,8 @@ import {ProjectEnv} from "./ProjectEnv"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
+import {AudioUnitGrouping} from "./AudioUnitGrouping"
+import {AudioUnitSelection} from "./AudioUnitSelection"
 import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
 import {CaptureDevices, CaptureMidi, Recording, RecordingSession, ResolvedNote} from "../capture"
@@ -147,6 +150,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly primaryAudioUnitBox: AudioUnitBox
     readonly timelineBox: TimelineBox
 
+    readonly grouping: AudioUnitGrouping
+    readonly audioUnitLayout: AudioUnitLayoutState
+    readonly trackSelection: AudioUnitSelection
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
     readonly recordingSession: RecordingSession
@@ -192,6 +198,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
+        this.grouping = new AudioUnitGrouping(this)
+        this.trackSelection = this.#terminator.own(new AudioUnitSelection(this))
         this.editing = env.createEditing?.(this.boxGraph)
             ?? new BoxEditing(this.boxGraph, box => box instanceof WclapParameterBox)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
@@ -242,6 +250,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
+        this.audioUnitLayout = this.#terminator.own(new AudioUnitLayoutState(this))
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())

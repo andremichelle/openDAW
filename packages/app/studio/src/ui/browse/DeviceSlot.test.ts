@@ -2,7 +2,7 @@ import {describe, expect, it, vi} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {BoxEditing, IndexedBox} from "@opendaw/lib-box"
 import {
-    AudioEffectCompositeBoxAdapter, DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
+    AudioEffectCompositeBoxAdapter, AudioUnitGroups, DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
 } from "@opendaw/studio-adapters"
 import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox, InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
@@ -75,7 +75,7 @@ describe("DeviceSlot", () => {
     it("lists what can take an instrument's place", async () => {
         const {host} = await setup()
         const replace: DeviceSlot = {type: "replace-instrument", host}
-        const create: DeviceSlot = {type: "new-instrument", anchor: Option.None}
+        const create: DeviceSlot = {type: "new-instrument", insertion: {before: Option.None, parent: Option.None}}
         expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.Nano)).true
         expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.Tape)).false
         expect(DeviceSlot.acceptsInstrument(replace, InstrumentFactories.InstrumentComposite)).true
@@ -90,11 +90,38 @@ describe("DeviceSlot", () => {
         const units = () => IndexedBox.collectIndexedBoxes(project.rootBox.audioUnits, AudioUnitBox)
         const first = units()[0]
         project.editing.modify(() => DeviceSlot.placeInstrument(project,
-            {type: "new-instrument", anchor: Option.wrap(next.address.uuid)}, InstrumentFactories.Tubular))
+            {type: "new-instrument", insertion: project.api.insertionBefore(Option.wrap(next.address.uuid))}, InstrumentFactories.Tubular))
         const order = units()
         expect(order[0]).toBe(first)
         expect(order[2]).toBe(next)
         expect(order.length).toBe(4)
+    })
+
+    it.each([false, true])("keeps a captured dialog insertion inside a nested group (last child=%s)", async lastChild => {
+        const {project, host} = await setup()
+        const first = host.audioUnitBoxAdapter().box
+        const second = project.editing.modify(() => project.api.createInstrument(InstrumentFactories.Neon).audioUnitBox).unwrap()
+        const outer = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
+        const inner = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
+        const selected = lastChild ? second : first
+        project.userEditingManager.audioUnit.edit(selected.editing)
+        project.trackSelection.set([])
+        const insertion = project.api.insertionAfterEditing()
+        project.userEditingManager.audioUnit.edit(outer.editing)
+        const instrument = project.editing.modify(() => DeviceSlot.placeInstrument(project,
+            {type: "new-instrument", insertion}, InstrumentFactories.Cubed).unwrap()).unwrap()
+        const added = instrument.host.targetVertex.unwrap().box as AudioUnitBox
+        expect(AudioUnitGroups.children(project.rootBox, inner)).toEqual(lastChild ? [first, second, added] : [first, added, second])
+        expect(added.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(inner).unwrap())
+        const loaded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
+        const savedAdded = loaded.boxGraph.findBox(added.address.uuid).unwrap() as AudioUnitBox
+        expect(UUID.toString(AudioUnitGroups.parent(savedAdded).unwrap().address.uuid)).toBe(UUID.toString(inner.address.uuid))
+        project.boxGraph.verifyPointers()
+        expect(project.editing.undo()).true
+        expect(added.isAttached()).false
+        expect(project.editing.redo()).true
+        expect(AudioUnitGroups.children(project.rootBox, inner).map(unit => UUID.toString(unit.address.uuid))).toContain(UUID.toString(added.address.uuid))
+        project.terminate()
     })
 
     const rackSetup = async () => {
@@ -125,11 +152,31 @@ describe("DeviceSlot", () => {
         const {project, rack, unitCount} = await rackSetup()
         const before = unitCount()
         expect(project.editing.modify(() =>
-            DeviceSlot.placeRack(project, {type: "new-instrument", anchor: Option.None}, rack, true)).unwrap()).true
+            DeviceSlot.placeRack(project, {type: "new-instrument", insertion: {before: Option.None, parent: Option.None}}, rack, true)).unwrap()).true
         expect(unitCount()).toBe(before + 1)
         const edited = project.userEditingManager.audioUnit.get().unwrap().box
         const editedHost = project.boxAdapters.adapterFor(edited, Devices.isHost)
         expect(editedHost.inputField.pointerHub.incoming().at(0)?.box.name).toBe("NanoDeviceBox")
+    })
+
+    it.each(["rack", "instrument"])("puts a %s preset below the last child and preserves its group route", async kind => {
+        const {project, host, rack} = await rackSetup()
+        const first = host.audioUnitBoxAdapter().box
+        const group = project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap()
+        project.userEditingManager.audioUnit.edit(first.editing)
+        const slot: DeviceSlot = {type: "new-instrument", insertion: project.api.insertionAfterEditing()}
+        project.editing.modify(() => kind === "rack"
+            ? DeviceSlot.placeRack(project, slot, rack, true)
+            : DeviceSlot.placePreset(project, slot, rack, "Nano", true))
+        const children = AudioUnitGroups.children(project.rootBox, group)
+        expect(children.length).toBe(2)
+        expect(children[0]).toBe(first)
+        expect(children[1].output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(group).unwrap())
+        const loaded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
+        const saved = loaded.boxGraph.findBox(children[1].address.uuid).unwrap() as AudioUnitBox
+        expect(UUID.toString(AudioUnitGroups.parent(saved).unwrap().address.uuid)).toBe(UUID.toString(group.address.uuid))
+        project.boxGraph.verifyPointers()
+        project.terminate()
     })
 
     it("inserts a chain at the slot and replaces one effect with a chain", async () => {
@@ -147,14 +194,14 @@ describe("DeviceSlot", () => {
         const replace: DeviceSlot = {type: "replace-instrument", host}
         expect(DeviceSlot.acceptsRack(replace, InstrumentFactories.Nano)).true
         expect(DeviceSlot.acceptsRack(replace, InstrumentFactories.Tape)).false
-        expect(DeviceSlot.acceptsRack({type: "new-instrument", anchor: Option.None}, InstrumentFactories.Tape)).true
+        expect(DeviceSlot.acceptsRack({type: "new-instrument", insertion: {before: Option.None, parent: Option.None}}, InstrumentFactories.Tape)).true
         expect(DeviceSlot.acceptsRack({type: "insert", host, accepts: "audio", index: 0}, InstrumentFactories.Nano)).false
     })
 
     it("creates a new instrument unit", async () => {
         const {project, unitCount} = await setup()
         const before = unitCount()
-        project.editing.modify(() => DeviceSlot.placeInstrument(project, {type: "new-instrument", anchor: Option.None},
+        project.editing.modify(() => DeviceSlot.placeInstrument(project, {type: "new-instrument", insertion: {before: Option.None, parent: Option.None}},
             InstrumentFactories.Nano))
         expect(unitCount()).toBe(before + 1)
     })

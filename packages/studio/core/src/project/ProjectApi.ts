@@ -19,9 +19,40 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {
+    AnyRegionBox,
+    AnyRegionBoxAdapter,
+    AudioClipBoxAdapter,
+    AudioRegionBoxAdapter,
+    AudioUnitBoxAdapter,
+    AudioUnitFactory,
+    AudioUnitGroups,
+    CaptureBox,
+    ColorCodes,
+    DeviceAccepts,
+    Devices,
+    DeviceBoxUtils,
+    EffectPointerType,
+    IndexedAdapterCollectionListener,
+    InstrumentBox,
+    InstrumentFactories,
+    InstrumentFactory,
+    InstrumentOptions,
+    InstrumentProduct,
+    InterpolationFieldAdapter,
+    isModulatorBox,
+    NoteEventBoxAdapter,
+    NoteEventCollectionBoxAdapter,
+    PresetDecoder,
+    ProjectQueries,
+    RegionAdapters,
+    RegionOverlap,
+    TrackBoxAdapter,
+    TrackType,
+    TransferUtils
+} from "@opendaw/studio-adapters"
 import {
     AudioClipBox,
     AudioEffectCompositeBox,
@@ -42,46 +73,23 @@ import {
     ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
-import {
-    AnyRegionBox,
-    AnyRegionBoxAdapter,
-    AudioClipBoxAdapter,
-    AudioRegionBoxAdapter,
-    AudioUnitBoxAdapter,
-    AudioUnitFactory,
-    CaptureBox,
-    ColorCodes,
-    DeviceAccepts,
-    DeviceBoxUtils,
-    EffectPointerType,
-    IndexedAdapterCollectionListener,
-    InstrumentBox,
-    InstrumentFactories,
-    InstrumentFactory,
-    InstrumentOptions,
-    InstrumentProduct,
-    InterpolationFieldAdapter,
-    isModulatorBox,
-    NoteEventBoxAdapter,
-    NoteEventCollectionBoxAdapter,
-    ProjectQueries,
-    RegionAdapters,
-    RegionOverlap,
-    TrackBoxAdapter,
-    TrackType,
-    TransferUtils
-} from "@opendaw/studio-adapters"
-import {Project} from "./Project"
-import {ProjectModulation} from "./ProjectModulation"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {BoxGraphCopy} from "../BoxGraphCopy"
+import {EffectBox} from "../EffectBox"
 import {EffectFactory} from "../EffectFactory"
 import {EffectFactories} from "../EffectFactories"
-import {EffectBox} from "../EffectBox"
-import {AudioContentFactory} from "./audio"
-import {NoteMidiExport} from "./NoteMidiExport"
-import {AudioWavExport} from "./AudioWavExport"
-import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
-import {BoxGraphCopy} from "../BoxGraphCopy"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
+import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {AudioWavExport} from "./AudioWavExport"
+import {NoteMidiExport} from "./NoteMidiExport"
+import {Project} from "./Project"
+import {ProjectModulation} from "./ProjectModulation"
+import {AudioContentFactory} from "./audio"
+
+export type AudioUnitInsertion = {
+    readonly before: Option<UUID.Bytes>
+    readonly parent: Option<UUID.Bytes>
+}
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -153,12 +161,12 @@ export class ProjectApi {
     createInstrument<A, INST extends InstrumentBox>(
         {create, defaultIcon, defaultName, trackType}: InstrumentFactory<A, INST>,
         options: InstrumentOptions<A> = {} as any): InstrumentProduct<INST> {
-        const {name, icon, index} = options
+        const {name, icon, index, destination} = options
         const {boxGraph, rootBox, userEditingManager} = this.#project
         assert(rootBox.isAttached(), "rootBox not attached")
         const existingNames = ProjectQueries.existingInstrumentNames(rootBox)
         const audioUnitBox = AudioUnitFactory.create(this.#project.skeleton,
-            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index)
+            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index, destination)
         const uniqueName = Strings.getUniqueName(existingNames, name ?? defaultName)
         const iconSymbol = icon ?? defaultIcon
         const instrumentBox = create(boxGraph, audioUnitBox.input, uniqueName, iconSymbol, options.attachment)
@@ -174,6 +182,61 @@ export class ProjectApi {
 
     createAnyInstrument(factory: InstrumentFactory<any, any>): InstrumentProduct<InstrumentBox> {
         return this.createInstrument(factory)
+    }
+
+    createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
+        const {trackSelection, audioUnitLayout} = this.#project
+        const selected = AudioUnitGroups.roots(trackSelection.commandTargets)
+        const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
+        return this.createInstrumentAt(factory, this.insertionAfter(Option.wrap(anchor)))
+    }
+
+    insertionAfterEditing(): AudioUnitInsertion {
+        return this.insertionAfter(this.#project.userEditingManager.audioUnit.get()
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None))
+    }
+
+    insertionAfter(anchor: Option<AudioUnitBox>): AudioUnitInsertion {
+        const parent = anchor.flatMap(AudioUnitGroups.parent)
+        const siblings = AudioUnitGroups.children(this.#project.rootBox, parent.unwrapOrUndefined())
+        const before = anchor.flatMap(unit => Option.wrap(siblings[siblings.indexOf(unit) + 1]))
+        return {before: before.map(unit => unit.address.uuid), parent: parent.map(unit => unit.address.uuid)}
+    }
+
+    insertionBefore(anchor: Option<UUID.Bytes>): AudioUnitInsertion {
+        return {before: anchor, parent: anchor.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(AudioUnitGroups.parent).map(unit => unit.address.uuid)}
+    }
+
+    createInstrumentAt(factory: InstrumentFactory, insertion: AudioUnitInsertion): InstrumentProduct<InstrumentBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const product = this.createInstrument(factory, {destination})
+        this.placeAudioUnitsAt([product.audioUnitBox], insertion)
+        this.#project.trackSelection.set([product.audioUnitBox])
+        return product
+    }
+
+    importAudioUnitsAt(bytes: ArrayBuffer, insertion: AudioUnitInsertion): ReadonlyArray<AudioUnitBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const imported = PresetDecoder.decode(bytes, this.#project.skeleton, undefined, destination)
+        this.placeAudioUnitsAt(AudioUnitGroups.roots(imported), insertion)
+        return imported
+    }
+
+    placeAudioUnitsAt(units: ReadonlyArray<AudioUnitBox>, insertion: AudioUnitInsertion): void {
+        if (insertion.parent.isEmpty() && insertion.before.isEmpty()) {return}
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const before = insertion.before.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.parent(unit).equals(parent) ? Option.wrap(unit) : Option.None)
+        this.#project.grouping.move(units, parent.unwrapOrUndefined(), before.unwrapOrUndefined())
+    }
+
+    #audioUnit(uuid: UUID.Bytes): Option<AudioUnitBox> {
+        return this.#project.boxGraph.findBox(uuid).flatMap(box => box instanceof AudioUnitBox ? Option.wrap(box) : Option.None)
     }
 
     // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).
@@ -680,6 +743,7 @@ export class ProjectApi {
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
         // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
         if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
+        if (audioUnitBox.isGroup.getValue()) {this.#project.grouping.deleteGroup(audioUnitBox); return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()

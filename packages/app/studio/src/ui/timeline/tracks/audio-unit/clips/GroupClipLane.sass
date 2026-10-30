@@ -1,0 +1,103 @@
+@use "@/colors"
+
+component
+  > div.group-clip
+    pointer-events: all
+    position: relative
+    z-index: 1
+    appearance: none
+    padding: 0
+    width: var(--clips-width)
+    height: 100%
+    border: 0
+    outline: none
+    border-radius: 2px
+    overflow: hidden
+    display: grid
+    grid-template-rows: 13.5px 1fr
+    cursor: pointer
+    color: var(--color-gray)
+    background: transparent
+
+    > button
+      appearance: none
+      border: 0
+      outline: none
+      padding: 0
+      color: inherit
+      cursor: pointer
+
+    > button.label
+      box-sizing: border-box
+      padding: 0 0.25em
+      white-space: nowrap
+      text-overflow: ellipsis
+      overflow: hidden
+      width: 100%
+      font-size: 9px
+      line-height: 13.5px
+      color: var(--color)
+      background: color-mix(in srgb, var(--color) 15%, transparent)
+
+    > button.content
+      width: 100%
+      min-height: 0
+      position: relative
+      display: grid
+      place-items: center
+      background: color-mix(in srgb, var(--color) 6%, transparent)
+
+      > svg
+        font-size: 0.75em
+        opacity: 0.65
+
+      > svg.stop
+        display: none
+
+      > span.colors
+        position: absolute
+        top: 1px
+        bottom: 0
+        right: 0
+        width: 5px
+        display: none
+        flex-direction: column
+        gap: 1px
+        overflow: hidden
+        border-radius: 0
+
+        > span
+          flex: 1 1 0
+          min-height: 1px
+
+    > button.content:hover:not(:disabled), > button.content:focus-visible
+      > svg
+        opacity: 1
+
+    &.selected
+      > button.label
+        color: hsl(from var(--color) h s 10%)
+        background: color-mix(in srgb, var(--color) 75%, transparent)
+
+    &.playing, &.waiting
+      > button.content > svg.play
+        display: none
+
+      > button.content > svg.stop
+        display: block
+
+    &.muted
+      filter: saturate(25%)
+
+    &.empty
+      @include colors.panel-background-stripes-dark
+
+      > button.content
+        cursor: default
+        opacity: 0.3
+
+      &:not(.named):not(.selected) > button.label
+        opacity: 0.3
+
+  &.collapsed > div.group-clip > button.content > span.colors
+    display: flex

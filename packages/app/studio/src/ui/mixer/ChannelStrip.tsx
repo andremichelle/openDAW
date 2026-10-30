@@ -21,7 +21,7 @@ import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {AutomationControl} from "../components/AutomationControl"
-import {DragAndDrop} from "../DragAndDrop"
+import {duplicateSelectedTracks, groupingMenuItems, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
@@ -39,6 +39,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
     const {mute, panning, solo, volume} = adapter.namedParameter
     const {project} = service
     const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning} = project
+    const isGroup = adapter.box.isGroup.getValue()
     const isBus = adapter.type === AudioUnitType.Bus
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
@@ -116,8 +117,20 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                        }}/>
         {adapter.isInstrument && lockIcon}
     </div>
+    if (isGroup && !compact) {
+        const folderToggle: HTMLButtonElement = <button className="folder-toggle" onclick={() => {
+            editing.modify(() => adapter.box.groupCollapsed.toggle())
+        }}/>
+        lifecycle.own(adapter.box.groupCollapsed.catchupAndSubscribe(field => {
+            folderToggle.textContent = field.getValue() ? "▾" : "▸"
+            folderToggle.setAttribute("aria-expanded", String(!field.getValue()))
+            folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
+            folderToggle.title = field.getValue() ? "Expand group" : "Collapse group"
+        }))
+        iconElement.appendChild(folderToggle)
+    }
     const classList = Html.buildClassList(className,
-        isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
+        isGroup && "group", isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
     const peakMeter: DomElement = (<PeakMeter lifecycle={lifecycle} peaks={peaks}/>)
     const element: HTMLElement = (
         <div className={classList} data-drag>
@@ -158,6 +171,13 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
         } satisfies ChannelStripView),
         ContextMenu.subscribe(element, collector => {
+            if (!project.trackSelection.has(adapter.box)) {project.trackSelection.set([adapter.box])}
+            collector.addItems(...groupingMenuItems(project, adapter.box))
+            if (isGroup) {
+                collector.addItems(MenuItem.default({
+                    label: adapter.box.groupCollapsed.getValue() ? "Expand Group" : "Collapse Group"
+                }).setTriggerProcedure(() => editing.modify(() => adapter.box.groupCollapsed.toggle())))
+            }
             if (adapter.isInstrument) {
                 const isFrozen = project.audioUnitFreeze.isFrozen(adapter)
                 collector.addItems(
@@ -176,6 +196,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                         .setTriggerProcedure(() => AutoEqAction.run(service, adapter).catch(console.warn)))
             } else {
                 collector.addItems(
+                    MenuItem.default({label: "Duplicate AudioUnit"})
+                        .setTriggerProcedure(() => duplicateSelectedTracks(project)),
                     MenuItem.default({label: `Delete '${adapter.input.label.unwrapOrElse("Untitled")}'`})
                         .setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(adapter.box))))
             }
@@ -203,11 +225,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
         TextTooltip.default(maxPeakLabel, () => "Click to reset"),
         adapter.isOutput
             ? Terminable.Empty
-            : DragAndDrop.installSource(iconElement, () => ({
-                uuid: UUID.toString(adapter.uuid),
-                type: "channelstrip",
-                start_index: adapter.indexField.getValue()
-            }), element),
+            : installGroupTrackDrag(iconElement, project, adapter.box),
         volume.subscribe(updateVolumeLabel),
         adapter.isInstrument
             ? project.audioUnitFreeze.subscribe(uuid => {

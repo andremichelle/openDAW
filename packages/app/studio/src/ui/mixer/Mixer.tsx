@@ -1,20 +1,19 @@
 import css from "./Mixer.sass?inline"
-import {clamp, isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip.tsx"
-import {IndexedBox, Vertex} from "@opendaw/lib-box"
+import {Vertex} from "@opendaw/lib-box"
 import {Orientation, Scroller} from "@/ui/components/Scroller.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
-import {DragAndDrop} from "@/ui/DragAndDrop"
-import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
-import {InsertMarker} from "@/ui/components/InsertMarker"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {installTrackSelection} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "mixer")
@@ -55,7 +54,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     )
     const scrollModel = new ScrollModel()
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-group-surface="mixer">
             {/*<TimelineNavigation lifecycle={lifecycle} service={service} />*/}
             {channelStripWrapper}
             <Scroller lifecycle={lifecycle} model={scrollModel} orientation={Orientation.horizontal} floating/>
@@ -69,21 +68,31 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     }
     const audioUnits = UUID.newSet<AudioUnitEntry>(entry => entry.adapter.uuid)
     const anchorLifecycle = lifecycle.own(new Terminator())
+    const groupRails = lifecycle.own(new GroupRails(project, channelStripContainer, true, unit => {
+        audioUnits.opt(unit.address.uuid).ifSome(({editor}) => {
+            scrollModel.position += editor.getBoundingClientRect().left - channelStripWrapper.getBoundingClientRect().left
+        })
+    }))
     const updateDom = deferNextFrame(() => {
-        Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
-        const sorted = audioUnits.values()
-            .toSorted((a, b) => a.adapter.indexField.getValue() - b.adapter.indexField.getValue())
-        sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
+        const layout = project.audioUnitLayout.snapshot
+        const sorted = layout.visibleRows.flatMap(row => audioUnits.opt(row.unit.address.uuid).mapOr(entry => [entry], []))
+        const visible = new Set(sorted.map(({editor}) => editor))
+        audioUnits.values().forEach(({editor}) => {if (!visible.has(editor)) {editor.remove()}})
+        sorted.forEach(({editor}, index) => {
+            if (editor instanceof HTMLElement) {editor.style.gridColumn = String(index + 2)}
+            channelStripContainer.appendChild(editor)
+        })
+        groupRails.update(layout.boundaries)
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
     })
-    const removeEditingIndicator = () => channelStripContainer
-        .querySelectorAll(".editing")
-        .forEach(({classList}) => classList.remove("editing"))
-    const insertMarker: HTMLElement = <InsertMarker/>
+    const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) => {
+        editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
+        editor.classList.toggle("line-active", project.trackSelection.isLineHighlighted(adapter.box))
+    })
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
     lifecycle.ownAll(
@@ -105,6 +114,8 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 const terminator = lifecycle.spawn()
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
                                                           compact={false}/>
+                editor.dataset.unit = UUID.toString(adapter.uuid)
+                installTrackSelection(terminator, project, editor, adapter.box, () => {})
                 terminator.ownAll(
                     Events.subscribe(editor, "pointerdown", () => {
                         scrollIntoViewEnabled = false
@@ -125,13 +136,17 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             },
             onReorder: (_adapter: AudioUnitBoxAdapter) => updateDom.request()
         }),
+        project.audioUnitLayout.value.subscribe(() => {
+            updateDom.request()
+            refreshEditingIndicators()
+        }),
+        project.trackSelection.value.subscribe(refreshEditingIndicators),
         project.userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex.match({
-            none: removeEditingIndicator,
+            none: refreshEditingIndicators,
             some: (vertex: Vertex) => {
-                removeEditingIndicator()
+                refreshEditingIndicators()
                 const uuid = project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().uuid
                 audioUnits.opt(uuid).ifSome(({editor}) => {
-                    editor.classList.add("editing")
                     if (scrollIntoViewEnabled) {
                         editor.scrollIntoView({behavior: "smooth", inline: "center"})
                     }
@@ -163,45 +178,6 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 }, {capture: true, passive: false})
             )
         })(),
-        DragAndDrop.installTarget(element, {
-            drag: (event: DragEvent, dragData: AnyDragData): boolean => {
-                const {type} = dragData
-                if (type !== "channelstrip") {return false}
-                const optAdapter = project.boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                if (optAdapter.isEmpty()) {return false}
-                const limit = optAdapter.unwrap().indicesLimit()
-                const [index, successor] = DragAndDrop.findInsertLocation(event, element, limit)
-                const delta = index - dragData.start_index
-                if (delta < 0 || delta > 1) {
-                    if (insertMarker.nextSibling !== successor) {
-                        channelStripContainer.insertBefore(insertMarker, successor)
-                    }
-                } else if (insertMarker.isConnected) {
-                    insertMarker.remove()
-                }
-                return true
-            },
-            drop: (event: DragEvent, dragData: AnyDragData) => {
-                if (insertMarker.isConnected) {insertMarker.remove()}
-                const {type} = dragData
-                if (type !== "channelstrip") {return}
-                const optAdapter = project.boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                const [min, max] = optAdapter.unwrap("optAdapter").indicesLimit()
-                if (min === max) {return}
-                const [index] = DragAndDrop.findInsertLocation(event, element)
-                const delta = clamp(index, min, max) - dragData.start_index
-                if (delta < 0 || delta > 1) { // if delta is zero or one, it has no effect on the order
-                    service.project.editing.modify(() =>
-                        IndexedBox.moveIndex(project.rootBox.audioUnits, dragData.start_index, delta))
-                }
-            },
-            enter: () => {},
-            leave: () => {
-                if (insertMarker.isConnected) {insertMarker.remove()}
-            }
-        }),
         installAutoScroll(channelStripWrapper, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]})
     )
     return element
