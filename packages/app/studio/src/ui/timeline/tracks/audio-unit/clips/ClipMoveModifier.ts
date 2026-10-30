@@ -24,7 +24,9 @@ class SelectedModifyStrategy implements ClipModifyStrategy {
     constructor(tool: ClipMoveModifier) {this.#tool = tool}
 
     readClipIndex(clip: AnyClipBoxAdapter): number {return clip.indexField.getValue() + this.#tool.clipDelta}
-    readMirror(clip: AnyClipBoxAdapter): boolean {return clip.canMirror && clip.isMirrowed !== this.#tool.mirroredCopy}
+    readMirror(clip: AnyClipBoxAdapter): boolean {
+        return clip.canMirror && (this.#tool.copy ? this.#tool.mirroredCopy : clip.isMirrowed)
+    }
     translateTrackIndex(index: number): number {return index - this.#tool.trackDelta}
 }
 
@@ -143,7 +145,7 @@ export class ClipMoveModifier implements ClipModifier {
                 const newTrackIndex = trackIndex + trackDelta
                 const newTrack = asDefined(tracks[newTrackIndex], "moved outside valid area")
                 occupied[newTrackIndex][newClipIndex] = true
-                return {adapter, newClipIndex, newTrack, isMirrowed: adapter.isMirrowed}
+                return {adapter, newClipIndex, newTrack}
             })
         const toDelete: Array<AnyClipBox> = []
         moveTasks.forEach(({adapter: {box}, newClipIndex, newTrack}) => {
@@ -171,10 +173,10 @@ export class ClipMoveModifier implements ClipModifier {
                 })
             }
             toDelete.forEach(box => box.delete())
-            moveTasks.forEach(({adapter, newClipIndex, newTrack, isMirrowed}) => {
+            moveTasks.forEach(({adapter, newClipIndex, newTrack}) => {
                 adapter.box.index.setValue(newClipIndex)
                 adapter.box.clips.refer(newTrack.trackBoxAdapter.box.clips)
-                if (this.#copy && (isMirrowed === this.#mirroredCopy)) {
+                if (this.#copy && !this.#mirroredCopy) {
                     adapter.consolidate()
                 }
             })

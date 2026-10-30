@@ -16,7 +16,9 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position + this.#tool.deltaPosition}
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopDuration(this.readPosition(region))}
-    readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && region.isMirrowed !== this.#tool.mirroredCopy}
+    readMirror(region: AnyRegionBoxAdapter): boolean {
+        return region.canMirror && (this.#tool.copy ? this.#tool.mirroredCopy : region.isMirrowed)
+    }
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {
         return regions.iterateRange(from - this.#tool.deltaPosition, to - this.#tool.deltaPosition)
@@ -169,7 +171,7 @@ export class RegionMoveModifier implements RegionModifier {
                     return original.copyTo({
                         position: original.position + this.#deltaPosition,
                         target: targetTrack.box.regions,
-                        consolidate: original.isMirrowed === this.#mirroredCopy
+                        consolidate: !this.#mirroredCopy
                     })
                 })
                 this.#selection.deselectAll()
