@@ -1,9 +1,10 @@
-import {Option, tryCatch} from "@opendaw/lib-std"
+import {Exec, Notifier, Option, Subscription, tryCatch} from "@opendaw/lib-std"
 import {RoundTrip} from "../RoundTrip"
 
 // measured round trips per output and input device, kept in this browser like the device names they are keyed by
 export namespace BrowserRoundTrips {
     const Key = "opendaw:round-trips"
+    const notifier = new Notifier<void>()
 
     const isEntry = (value: unknown): value is RoundTrip.Entry => {
         if (typeof value !== "object" || value === null) {return false}
@@ -21,9 +22,21 @@ export namespace BrowserRoundTrips {
         Option.wrap(all().find(entry =>
             entry.output === output && entry.input === input && entry.sampleRate === sampleRate))
 
-    export const save = (entry: RoundTrip.Entry): void => {
-        const others = all().filter(({output, input, sampleRate}) =>
-            !(output === entry.output && input === entry.input && sampleRate === entry.sampleRate))
-        tryCatch(() => localStorage.setItem(Key, JSON.stringify([...others, entry])))
+    const store = (entries: ReadonlyArray<RoundTrip.Entry>): void => {
+        tryCatch(() => localStorage.setItem(Key, JSON.stringify(entries)))
+        notifier.notify()
     }
+
+    const others = (output: string, input: string, sampleRate: number): ReadonlyArray<RoundTrip.Entry> =>
+        all().filter(entry => !(entry.output === output && entry.input === input && entry.sampleRate === sampleRate))
+
+    export const save = (entry: RoundTrip.Entry): void =>
+        store([...others(entry.output, entry.input, entry.sampleRate), entry])
+
+    export const remove = (output: string, input: string, sampleRate: number): void => {
+        if (find(output, input, sampleRate).isEmpty()) {return}
+        store(others(output, input, sampleRate))
+    }
+
+    export const subscribe = (observer: Exec): Subscription => notifier.subscribe(observer)
 }

@@ -1,6 +1,7 @@
 import {afterEach, describe, expect, it, vi} from "vitest"
 import {BrowserContextClock} from "./BrowserContextClock"
 import {BrowserRecordingLatency} from "./BrowserRecordingLatency"
+import {BrowserRoundTrips} from "./BrowserRoundTrips"
 
 describe("BrowserContextClock", () => {
     afterEach(() => {vi.restoreAllMocks()})
@@ -16,6 +17,49 @@ describe("BrowserContextClock", () => {
             getOutputTimestamp: () => ({contextTime: 0.0, performanceTime: 0.0}), currentTime: 3.0, outputLatency: 0.04
         } as unknown as AudioContext
         expect(new BrowserContextClock(context).audibleTimeAt(990.0)).toBeCloseTo(3.0 - 0.04 - 0.01, 9)
+    })
+})
+
+describe("BrowserRoundTrips", () => {
+    const entry = (output: string, seconds: number) => ({output, input: "Mic", sampleRate: 48_000, seconds, measuredAt: 1})
+    const useMemoryStorage = () => {
+        const items = new Map<string, string>()
+        vi.stubGlobal("localStorage", {
+            getItem: (key: string) => items.get(key) ?? null,
+            setItem: (key: string, value: string) => {items.set(key, value)}
+        })
+    }
+
+    afterEach(() => {vi.unstubAllGlobals()})
+
+    it("replaces the entry of the same devices and keeps the others", () => {
+        useMemoryStorage()
+        BrowserRoundTrips.save(entry("Speakers", 0.1))
+        BrowserRoundTrips.save(entry("Headphones", 0.02))
+        BrowserRoundTrips.save(entry("Speakers", 0.115))
+        expect(BrowserRoundTrips.all().map(({output, seconds}) => [output, seconds]))
+            .toEqual([["Headphones", 0.02], ["Speakers", 0.115]])
+    })
+
+    it("removes only the entry of the given devices", () => {
+        useMemoryStorage()
+        BrowserRoundTrips.save(entry("Speakers", 0.1))
+        BrowserRoundTrips.save(entry("Headphones", 0.02))
+        BrowserRoundTrips.remove("Speakers", "Mic", 48_000)
+        expect(BrowserRoundTrips.find("Speakers", "Mic", 48_000).isEmpty()).toBe(true)
+        expect(BrowserRoundTrips.find("Headphones", "Mic", 48_000).unwrap().seconds).toBe(0.02)
+    })
+
+    it("notifies on save and on a real removal only", () => {
+        useMemoryStorage()
+        const observer = vi.fn()
+        const subscription = BrowserRoundTrips.subscribe(observer)
+        BrowserRoundTrips.save(entry("Speakers", 0.1))
+        BrowserRoundTrips.remove("Speakers", "Mic", 44_100)
+        BrowserRoundTrips.remove("Speakers", "Mic", 48_000)
+        subscription.terminate()
+        BrowserRoundTrips.save(entry("Speakers", 0.1))
+        expect(observer).toHaveBeenCalledTimes(2)
     })
 })
 

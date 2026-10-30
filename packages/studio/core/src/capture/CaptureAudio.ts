@@ -1,4 +1,4 @@
-import {Func, MutableObservableOption, Option, Provider, Terminable, VitalSigns} from "@opendaw/lib-std"
+import {Exec, Func, MutableObservableOption, Option, Provider, Subscription, Terminable, VitalSigns} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
 import {Capture} from "./Capture"
@@ -85,6 +85,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     // the measured round trip replaces both reported latencies, unless this track overrides its input latency
     get roundTrip(): Option<RoundTrip.Entry> {return this.#input.roundTrip}
+    forgetRoundTrip(): void {this.#input.forgetRoundTrip()}
+    subscribeRoundTrip(observer: Exec): Subscription {return this.#input.subscribeRoundTrip(observer)}
 
     async measureRoundTrip(): Promise<RoundTrip.Result> {
         const {engine} = this.manager.project

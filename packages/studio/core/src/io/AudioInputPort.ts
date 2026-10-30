@@ -1,4 +1,4 @@
-import {Func, MutableObservableOption, Option, Provider, Terminable} from "@opendaw/lib-std"
+import {Exec, Func, MutableObservableOption, Option, Provider, Subscription, Terminable} from "@opendaw/lib-std"
 import {MonitorPort} from "./MonitorPort"
 import {RecordingLatency} from "./RecordingLatency"
 import {RecordingSink} from "./RecordingSink"
@@ -38,4 +38,8 @@ export interface AudioInputPort extends Terminable {
     measureRoundTrip(): Promise<RoundTrip.Result>
     // the measured round trip of the devices in use, read when the input opened or a recording was prepared
     get roundTrip(): Option<RoundTrip.Entry>
+    // drops the measured round trip of the devices in use, recordings fall back to the reported latency
+    forgetRoundTrip(): void
+    // any measured round trip was stored or dropped
+    subscribeRoundTrip(observer: Exec): Subscription
 }

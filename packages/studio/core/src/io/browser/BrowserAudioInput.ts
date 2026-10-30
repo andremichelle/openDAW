@@ -209,6 +209,12 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         return BrowserRoundTrips.find(this.#outputName, this.label.unwrapOrElse(""), this.#project.env.audioContext.sampleRate)
     }
 
+    forgetRoundTrip(): void {
+        BrowserRoundTrips.remove(this.#outputName, this.label.unwrapOrElse(""), this.#project.env.audioContext.sampleRate)
+    }
+
+    subscribeRoundTrip(observer: Exec): Subscription {return BrowserRoundTrips.subscribe(observer)}
+
     readLatency(resolveInput: (outputLatency: number) => number, calibrated: boolean): Provider<RecordingLatency> {
         const {audioContext} = this.#project.env
         const roundTrip = calibrated ? this.roundTrip : Option.None

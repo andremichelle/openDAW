@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
-import {isDefined, Option, Provider, UUID} from "@opendaw/lib-std"
+import {isDefined, Option, Provider, Terminable, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "../project/ProjectEnv"
@@ -62,6 +62,8 @@ const createFakeInput = (request: Provider<Option<AudioInputRequest>>) => {
             return {verdict: "ok", seconds: 0.0186, spreadSeconds: 0.0, heard: 3, bursts: 3}
         },
         roundTrip: Option.None,
+        forgetRoundTrip: () => {calls.push("forget")},
+        subscribeRoundTrip: () => Terminable.Empty,
         terminate: () => {calls.push("terminate")}
     }
     return input
@@ -169,6 +171,12 @@ describe("CaptureAudio on its input port", () => {
         expect(capture.armed.getValue()).toBe(true)
         expect(input().calls.slice(-2)).toEqual(["open", "measure"])
         expect(result.seconds).toBe(0.0186)
+    })
+
+    it("forgets the round trip through the port", async () => {
+        const {capture, input} = await setup()
+        capture.forgetRoundTrip()
+        expect(input().calls.at(-1)).toBe("forget")
     })
 
     it("refuses to measure while the transport runs", async () => {
