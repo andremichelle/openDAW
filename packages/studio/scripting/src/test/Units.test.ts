@@ -135,6 +135,29 @@ describe("Audio units", () => {
         expect(unit.instrument.key).toBe("Tape")
     })
 
+    it("drops tracks the new instrument's capture cannot serve", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const automation = unit.addValueTrack(unit, "volume")
+        unit.setInstrument("Tape")
+        expect(unit.noteTracks.length).toBe(0)
+        expect(unit.audioTracks.length).toBe(1)
+        expect(unit.valueTracks).toEqual([automation])
+        unit.setInstrument("Nano")
+        expect(unit.audioTracks.length).toBe(0)
+        expect(unit.noteTracks.length).toBe(1)
+        expect(unit.valueTracks.length).toBe(1)
+        expect(unit.tracks.map(track => track.index)).toEqual(unit.tracks.map((_, index) => index))
+    })
+
+    it("keeps tracks when the capture stays the same", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const track = unit.noteTracks[0]
+        unit.setInstrument("Nano")
+        expect(unit.noteTracks).toEqual([track])
+    })
+
     it("clamps and validates channel strip values", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")

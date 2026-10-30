@@ -1747,7 +1747,8 @@ export interface InstrumentAudioUnit<K extends keyof Instruments = keyof Instrum
     /** The instrument */
     readonly instrument: Instruments[K]
     /**
-     * Replace the instrument with another type (keeps tracks and effects)
+     * Replace the instrument with another type (keeps effects and automation, and keeps note or audio tracks
+     * unless the new instrument takes the other input, which replaces them with one empty track)
      * @example
      * ```ts
      * const nano = synth.setInstrument("Nano", {release: 0.5})
