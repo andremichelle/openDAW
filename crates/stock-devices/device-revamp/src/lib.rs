@@ -20,6 +20,7 @@ use core::panic::PanicInfo;
 use abi::{bool_value, float_value, int_value, AudioEffect, Block, ParamValue, Ports};
 use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BiquadStack};
+use dsp::low_band_analyser::{LowBandAnalyser, LOW_NUM_BINS};
 use math::value_mapping::{Exponential, Linear, LinearInteger};
 
 #[cfg(target_family = "wasm")]
@@ -53,6 +54,7 @@ const Q_LP: [u16; 2] = [16, 12];
 const ORDER_HP: [u16; 2] = [10, 11];
 const ORDER_LP: [u16; 2] = [16, 11];
 const SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS RevampDeviceBoxAdapter.spectrum
+const SPECTRUM_LOW_FIELD: [u16; 1] = [0xFFE]; // TS RevampDeviceBoxAdapter.spectrumLow
 
 // Value mappings (uniform 0..1 -> real), mirroring the schema constraints. Static field values arrive as the
 // already-real value (used directly); these map an AUTOMATED unit value.
@@ -90,7 +92,10 @@ pub struct RevampState {
     // copied) only while the UI subscribes (`broadcast_active`), mirroring TS `#needsSpectrum`.
     analyser: AudioAnalyser,
     spectrum_id: u32,
-    spectrum_ptr: u32
+    spectrum_ptr: u32,
+    low_band: LowBandAnalyser,
+    spectrum_low_id: u32,
+    spectrum_low_ptr: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -163,6 +168,9 @@ impl AudioEffect for Revamp {
         state.analyser.init(0.0);
         state.spectrum_id = abi::bind_broadcast(&SPECTRUM_FIELD, NUM_BINS as u32);
         state.spectrum_ptr = 0;
+        state.low_band.init(sample_rate, 0.0);
+        state.spectrum_low_id = abi::bind_broadcast(&SPECTRUM_LOW_FIELD, LOW_NUM_BINS as u32);
+        state.spectrum_low_ptr = 0;
     }
 
     fn parameter_changed(state: &mut RevampState, id: u32, value: ParamValue) {
@@ -246,6 +254,17 @@ impl AudioEffect for Revamp {
                 let spectrum = unsafe { core::slice::from_raw_parts_mut(state.spectrum_ptr as *mut f32, NUM_BINS) };
                 spectrum.copy_from_slice(state.analyser.bins());
                 state.analyser.decay = true;
+            }
+        }
+        if abi::broadcast_active(state.spectrum_low_id) {
+            state.low_band.process(&out_left[s0..s1], &out_right[s0..s1]);
+            if state.spectrum_low_ptr == 0 {
+                state.spectrum_low_ptr = abi::broadcast_ptr(state.spectrum_low_id);
+            }
+            if state.spectrum_low_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.spectrum_low_ptr as *mut f32, LOW_NUM_BINS) };
+                spectrum.copy_from_slice(state.low_band.bins());
+                state.low_band.arm_decay();
             }
         }
     }

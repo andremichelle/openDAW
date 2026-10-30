@@ -8,6 +8,7 @@ if ((globalThis as any)[key]) {
 }
 
 export * from "./AudioAnalyser"
+export * from "./LowBandAnalyser"
 export * from "./AudioBuffer"
 export * from "./adsr"
 export * from "./audio-data"

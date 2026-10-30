@@ -9,4 +9,5 @@ export namespace EngineAddresses {
     export const GONIO = Address.compose(UUID.Lowest).append(4)
     export const LOUDNESS = Address.compose(UUID.Lowest).append(5)
     export const HEAP = Address.compose(UUID.Lowest).append(6)
+    export const SPECTRUM_LOW = Address.compose(UUID.Lowest).append(7)
 }

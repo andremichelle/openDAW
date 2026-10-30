@@ -1,6 +1,6 @@
 import {createElement} from "@opendaw/lib-jsx"
 import {clamp, isDefined, Lifecycle} from "@opendaw/lib-std"
-import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
+import {AudioAnalyser, gainToDb, LowBandAnalyser} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
@@ -11,7 +11,7 @@ import {clearBg, FREQ_TICKS, SPEC_X_LOG, unitLabel} from "./AnalysisCommon.ts"
 type SpectroBuffer = { canvas: HTMLCanvasElement, w: number, h: number }
 
 const pushSpectroColumn = (spectro: SpectroBuffer, width: number, height: number,
-                           spectrum: Float32Array, sampleRate: number): void => {
+                           spectrum: Float32Array, spectrumLow: Float32Array, sampleRate: number): void => {
     if (width <= 0 || height <= 0) {return}
     const ctx = spectro.canvas.getContext("2d")
     if (!isDefined(ctx)) {return}
@@ -27,10 +27,13 @@ const pushSpectroColumn = (spectro: SpectroBuffer, width: number, height: number
     ctx.drawImage(spectro.canvas, -1, 0)
     ctx.globalCompositeOperation = "source-over"
     const freqStep = sampleRate / (spectrum.length << 1)
+    const lowStep = LowBandAnalyser.binWidth(sampleRate)
     for (let y = 0; y < height; y++) {
         const freq = SPEC_X_LOG.normToUnit(1.0 - y / height)
-        const bin = Math.min(spectrum.length - 1, Math.max(1, Math.round(freq / freqStep)))
-        const t = clamp((gainToDb(Math.max(spectrum[bin], 1e-7)) + 96.0) / 96.0, 0.0, 1.0)
+        const gain = freq < LowBandAnalyser.CROSSOVER
+            ? spectrumLow[Math.round(freq / lowStep)]
+            : spectrum[Math.min(spectrum.length - 1, Math.round(freq / freqStep))]
+        const t = clamp((gainToDb(Math.max(gain, 1e-7)) + 96.0) / 96.0, 0.0, 1.0)
         if (t <= 0.02) {continue} // leave silence transparent so the panel shows through
         ctx.fillStyle = `hsla(${260 * (1 - t)}, 85%, 55%, ${t})`
         ctx.fillRect(width - 1, y, 1, 1)
@@ -60,18 +63,21 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 
 export const SpectrogramCard = ({lifecycle, service}: Construct): HTMLElement => {
     const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
     const spectro: SpectroBuffer = {canvas: document.createElement("canvas"), w: 0, h: 0}
     const sampleRate = {value: 48000}
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => drawSpectro(painter, spectro.canvas)))
     observeProject(lifecycle, service, (project, runtime) => {
         sampleRate.value = project.engine.sampleRate
-        runtime.own(project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, values => {
-            spectrum.set(values)
-            pushSpectroColumn(spectro, painter.actualWidth, Math.round(painter.actualHeight),
-                spectrum, sampleRate.value)
-            painter.requestUpdate()
-        }))
+        runtime.ownAll(
+            project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM_LOW, values => spectrumLow.set(values)),
+            project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, values => {
+                spectrum.set(values)
+                pushSpectroColumn(spectro, painter.actualWidth, Math.round(painter.actualHeight),
+                    spectrum, spectrumLow, sampleRate.value)
+                painter.requestUpdate()
+            }))
     })
     return card("Spectrogram", [], canvas)
 }

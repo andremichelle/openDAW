@@ -8,7 +8,7 @@
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AudioAnalyser, AudioData, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, LowBandAnalyser, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -72,6 +72,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
+    readonly #lowBand: LowBandAnalyser = new LowBandAnalyser(sampleRate)
     readonly #stereo: StereoAnalyser = new StereoAnalyser()
     readonly #gonio: GonioCapture = new GonioCapture(GONIO_PAIRS)
     readonly #loudness: LoudnessMeter = new LoudnessMeter(sampleRate)
@@ -79,6 +80,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #gonioValues: Float32Array = new Float32Array(GONIO_PAIRS * 2)
     readonly #loudnessValues: Float32Array = new Float32Array(5)
     #spectrumActive: boolean = false
+    #spectrumLowActive: boolean = false
     #waveformActive: boolean = false
     #stereoActive: boolean = false
     #gonioActive: boolean = false
@@ -181,6 +183,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#analyser = new AudioAnalyser()
         const spectrum = new Float32Array(this.#analyser.numBins())
         const waveform = new Float32Array(this.#analyser.numBins())
+        const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
         const heap = new Float32Array(3)
         this.#preferences = new PreferencesClient(messenger.channel("engine-preferences"), EngineSettingsSchema.parse({}))
         this.#terminator.ownAll(
@@ -189,6 +192,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 if (!hasSubscribers) {return}
                 spectrum.set(this.#analyser.bins())
                 this.#analyser.decay = true
+            }),
+            this.#broadcaster.broadcastFloats(EngineAddresses.SPECTRUM_LOW, spectrumLow, (hasSubscribers) => {
+                this.#spectrumLowActive = hasSubscribers
+                if (!hasSubscribers) {return}
+                spectrumLow.set(this.#lowBand.bins())
+                this.#lowBand.decay = true
             }),
             this.#broadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform, (hasSubscribers) => {
                 this.#waveformActive = hasSubscribers
@@ -444,6 +453,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (this.#spectrumActive || this.#waveformActive) {
             this.#analyser.process(chLeft, chRight, 0, RenderQuantum)
         }
+        if (this.#spectrumLowActive) {this.#lowBand.process(chLeft, chRight, 0, RenderQuantum)}
         if (this.#stereoActive) {this.#stereo.process(chLeft, chRight, this.#stereoValues)}
         if (this.#gonioActive) {this.#gonio.process(chLeft, chRight, this.#gonioValues)}
         if (this.#loudnessActive) {this.#loudness.process(chLeft, chRight)}

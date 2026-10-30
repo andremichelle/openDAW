@@ -27,6 +27,7 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Colors} from "@opendaw/studio-enums"
+import {LowBandAnalyser} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "RevampDeviceEditor")
 
@@ -43,10 +44,12 @@ export const RevampDeviceEditor = ({adapter, service, lifecycle, deviceHost}: Co
     const spectrum: HTMLCanvasElement = <canvas/>
     const spectrumContext = asDefined(spectrum.getContext("2d"))
     const spectrumScale = new LinearScale(-60.0, -3.0)
+    const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
     lifecycle.ownAll(
         createCurveRenderer(curves, xAxis, yAxis, adapter),
+        project.liveStreamReceiver.subscribeFloats(adapter.spectrumLow, values => spectrumLow.set(values)),
         project.liveStreamReceiver.subscribeFloats(adapter.spectrum,
-            values => plotSpectrum(spectrumContext, xAxis, spectrumScale, values, project.engine.sampleRate)))
+            values => plotSpectrum(spectrumContext, xAxis, spectrumScale, values, project.engine.sampleRate, spectrumLow)))
     const grid: SVGSVGElement = <svg/>
     lifecycle.own(createDisplay(xAxis, yAxis, grid))
     const {editing, midiLearning} = project
