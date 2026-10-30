@@ -9,6 +9,7 @@ if ((globalThis as any)[key]) {
 
 export * from "./Api"
 export * from "./impl/index"
+export * from "./ScriptConnection"
 export * from "./ScriptExecutionProtocol"
 export * from "./ScriptRunner"
 export * from "./ScriptHost"
