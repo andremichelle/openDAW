@@ -80,3 +80,6 @@ note input.
 openDAW automatically compensates for system latency when recording. The recorded audio and MIDI data is aligned to the
 correct timeline position regardless of your output device latency. However, lower latency still provides a better
 real-time playing experience.
+
+The browser does not report the delay of your input and often misreports Bluetooth outputs. To have audio takes land
+exactly in time, measure your setup once with [Latency Calibration](/manuals/latency-calibration).

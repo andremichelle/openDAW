@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
-import {isDefined, Option, Provider, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Option, Provider, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "../project/ProjectEnv"
@@ -47,10 +47,21 @@ const createFakeInput = (request: Provider<Option<AudioInputRequest>>) => {
         },
         takeRecording: () => {
             calls.push("take")
-            return Option.None
+            return Option.wrap({
+                uuid: UUID.generate(), firstQuantumTime: Option.None, numberOfFrames: 0,
+                limit: () => {}, setFillLength: () => {}, set onSaved(_: () => void) {},
+                disconnect: () => {}, terminate: () => {}
+            })
         },
-        readLatency: (resolveInput: (outputLatency: number) => number): Provider<RecordingLatency> =>
-            () => ({outputLatency: 0.02, inputLatency: resolveInput(0.02)}),
+        readLatency: (resolveInput: (outputLatency: number) => number, calibrated: boolean): Provider<RecordingLatency> => {
+            calls.push(`latency ${calibrated ? "calibrated" : "reported"}`)
+            return () => ({outputLatency: 0.02, inputLatency: resolveInput(0.02)})
+        },
+        measureRoundTrip: async () => {
+            calls.push("measure")
+            return {verdict: "ok", seconds: 0.0186, spreadSeconds: 0.0, heard: 3, bursts: 3}
+        },
+        roundTrip: Option.None,
         terminate: () => {calls.push("terminate")}
     }
     return input
@@ -61,7 +72,10 @@ const setup = async () => {
     const {CaptureAudio} = await import("./CaptureAudio")
     // the project's own capture devices build a browser input for the box as well
     const node = () => ({connect: () => {}, disconnect: () => {}, gain: {value: 0}, pan: {value: 0}})
-    const env = {audioContext: {createGain: node, createStereoPanner: node}} as unknown as ProjectEnv
+    const env = {
+        audioContext: {createGain: node, createStereoPanner: node, sampleRate: 48_000},
+        sampleManager: {record: () => {}, remove: () => {}}
+    } as unknown as ProjectEnv
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const project = Project.fromSkeleton(env, skeleton)
     const {primaryAudioUnitBox} = skeleton.mandatoryBoxes
@@ -140,12 +154,28 @@ describe("CaptureAudio on its input port", () => {
         expect(input().calls.slice(-2)).toEqual(["prepare", "open"])
     })
 
-    it("starts nothing when the port has no recording", async () => {
+    it("asks for the calibrated latency unless the track overrides its input latency", async () => {
+        const {project, capture, input} = await setup()
+        capture.startRecording().terminate()
+        expect(input().calls.at(-1)).toBe("latency calibrated")
+        project.editing.modify(() => capture.captureBox.inputLatency.setValue(0.01))
+        capture.startRecording().terminate()
+        expect(input().calls.at(-1)).toBe("latency reported")
+    })
+
+    it("arms the input before measuring the round trip", async () => {
         const {capture, input} = await setup()
-        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-        expect(capture.startRecording()).toBe(Terminable.Empty)
-        warn.mockRestore()
-        expect(input().calls.at(-1)).toBe("take")
+        const result = await capture.measureRoundTrip()
+        expect(capture.armed.getValue()).toBe(true)
+        expect(input().calls.slice(-2)).toEqual(["open", "measure"])
+        expect(result.seconds).toBe(0.0186)
+    })
+
+    it("refuses to measure while the transport runs", async () => {
+        const {capture, input} = await setup()
+        vi.spyOn(capture.manager.project.engine.isPlaying, "getValue").mockReturnValue(true)
+        await expect(capture.measureRoundTrip()).rejects.toBeDefined()
+        expect(input().calls).not.toContain("measure")
     })
 
     it("reads the device from the port", async () => {

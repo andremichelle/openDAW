@@ -2,6 +2,7 @@ import {Func, MutableObservableOption, Option, Provider, Terminable} from "@open
 import {MonitorPort} from "./MonitorPort"
 import {RecordingLatency} from "./RecordingLatency"
 import {RecordingSink} from "./RecordingSink"
+import {RoundTrip} from "./RoundTrip"
 
 // what a capture asks its input for, none while it wants no input (disarmed or gone)
 export type AudioInputRequest = { readonly deviceId: Option<string>, readonly channels: Option<1 | 2> }
@@ -31,5 +32,10 @@ export interface AudioInputPort extends Terminable {
     // `open` is the caller's sequenced open of the input the recording needs
     prepareRecording(open: Func<void, Promise<void>>): Promise<void>
     takeRecording(): Option<RecordingSink>
-    readLatency(resolveInput: (outputLatency: number) => number): Provider<RecordingLatency>
+    // with `calibrated`, a measured round trip of the current devices replaces both reported figures
+    readLatency(resolveInput: (outputLatency: number) => number, calibrated: boolean): Provider<RecordingLatency>
+    // plays noise bursts out, finds them in the input and keeps the result for these devices when it is steady
+    measureRoundTrip(): Promise<RoundTrip.Result>
+    // the measured round trip of the devices in use, read when the input opened or a recording was prepared
+    get roundTrip(): Option<RoundTrip.Entry>
 }

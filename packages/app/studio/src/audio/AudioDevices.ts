@@ -1,4 +1,5 @@
 import {Func, int, Option, panic} from "@opendaw/lib-std"
+import {AudioDevices as CoreAudioDevices} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Button} from "@/ui/components/Dialog"
@@ -91,6 +92,7 @@ export class AudioDevices {
         const {status} = await Promises.tryCatch(navigator.mediaDevices
             .getUserMedia({audio: this.#DefaultMediaTrackConstraints()})
             .then(stream => stream.getTracks().forEach(track => track.stop())))
+        CoreAudioDevices.notifyStreamsChanged()
         return status === "resolved"
     }
 

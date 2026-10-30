@@ -5,7 +5,7 @@ import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
 import {RecordAudio} from "./RecordAudio"
-import {AudioInputNodes, AudioInputPort, AudioInputRequest, BrowserAudioInput, MonitoringMode} from "../io"
+import {AudioInputNodes, AudioInputPort, AudioInputRequest, BrowserAudioInput, MonitoringMode, RoundTrip} from "../io"
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #vitalSigns: VitalSigns
@@ -83,6 +83,19 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     prepareRecording(): Promise<void> {return this.#input.prepareRecording(() => this.#streamGenerator())}
 
+    // the measured round trip replaces both reported latencies, unless this track overrides its input latency
+    get roundTrip(): Option<RoundTrip.Entry> {return this.#input.roundTrip}
+
+    async measureRoundTrip(): Promise<RoundTrip.Result> {
+        const {engine} = this.manager.project
+        if (engine.isPlaying.getValue() || engine.isRecording.getValue()) {
+            return Promise.reject("Stop the transport to measure the latency.")
+        }
+        this.armed.setValue(true)
+        await this.#streamGenerator()
+        return this.#input.measureRoundTrip()
+    }
+
     startRecording(): Terminable {
         const {project} = this.manager
         const {env: {sampleManager}, engine} = project
@@ -94,7 +107,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             some: sink => RecordAudio.start({
                 sink, sampleManager, project, capture: this,
                 readLatency: this.#input.readLatency(outputLatency => InputLatency.resolve(
-                    this.captureBox.inputLatency.getValue(), engine.preferences.settings.recording.inputLatency, outputLatency))
+                    this.captureBox.inputLatency.getValue(), engine.preferences.settings.recording.inputLatency, outputLatency),
+                    this.captureBox.inputLatency.getValue() <= InputLatency.Inherit)
             })
         })
     }

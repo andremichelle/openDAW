@@ -279,6 +279,17 @@ if (runAudio) {
     console.log("Audio: gap is where the clicks landed after the beat, round trip is the gap plus the applied latency")
     table(rows)
     console.log(`round trip ${Math.min(...trips).toFixed(2)} … ${Math.max(...trips).toFixed(2)} ms`)
+    const calibration = await evaluate(page, "calibrate.js")
+    const calibrated = []
+    for (const scenario of [{name: "calibrated, re-armed", inputLatency: -2.0}, {name: "calibrated, same arm", keepArmed: true, inputLatency: -2.0}]) {
+        const result = await evaluate(page, "audio.js", scenario)
+        // a calibrated take lands on the beat, within the render quantum a fresh stream may step by
+        const ok = calibration.verdict === "ok" && result.error === undefined && Math.abs(result.gapMs) <= 128 / 44.1 + 0.1
+        failed ||= !ok
+        calibrated.push({scenario: scenario.name, ok, gapMs: result.gapMs, spreadMs: result.spreadMs, appliedMs: result.appliedMs})
+    }
+    console.log(`Calibration: ${calibration.verdict}, ${format(calibration.ms)} ms, spread ${format(calibration.spreadMs)} ms, ${calibration.heard} of ${calibration.bursts} bursts`)
+    table(calibrated)
 }
 page.close()
 process.exit(failed ? 1 : 0)

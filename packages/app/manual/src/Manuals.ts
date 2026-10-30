@@ -47,6 +47,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Freeze AudioUnit", path: "/manuals/freeze-audiounit"},
             {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
             {type: "page", label: "Latency", path: "/manuals/latency"},
+            {type: "page", label: "Latency Calibration", path: "/manuals/latency-calibration"},
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
             {type: "page", label: "Modulation", path: "/manuals/modulation"},
