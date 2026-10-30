@@ -49,7 +49,10 @@ export namespace MenuCapture {
                     `Measure Latency... (${(seconds * 1000.0).toFixed(1)} ms)`, "Measure Latency..."),
                 selectable: !Recording.isRecording,
                 separatorBefore: true
-            }).setTriggerProcedure(() => LatencyMeasurement.start(capture)))
+            }).setTriggerProcedure(() => LatencyMeasurement.start(capture)), MenuItem.default({
+                label: "Forget Measured Latency",
+                selectable: !Recording.isRecording && capture.roundTrip.nonEmpty()
+            }).setTriggerProcedure(() => capture.forgetRoundTrip()))
         } else if (isInstanceOf(capture, CaptureMidi)) {
             const currentDeviceId = capture.deviceId
             const channelField = capture.captureBox.channel
