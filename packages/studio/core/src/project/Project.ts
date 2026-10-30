@@ -80,7 +80,7 @@ import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
 import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
-import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
+import {CaptureDevices, CaptureMidi, Recording, RecordingSession, ResolvedNote} from "../capture"
 import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
@@ -149,6 +149,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
+    readonly recordingSession: RecordingSession
     readonly editing: Editing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
@@ -239,6 +240,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.#terminator.own(new NestedHostExit(this.boxAdapters, this.userEditingManager.audioUnit))
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
+        this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
@@ -322,7 +324,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startRecording(countIn: boolean = true) {
         this.engine.assertWorklet()
-        if (Recording.isRecording) {return}
+        if (this.recordingSession.isRecording) {return}
         Recording.start(this, countIn).finally()
     }
 
@@ -330,10 +332,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.engine.stopRecording()
     }
 
-    isRecording(): boolean {return Recording.isRecording}
+    isRecording(): boolean {return this.recordingSession.isRecording}
 
     commitMidiCapture(): void {
-        if (Recording.isRecording) {return}
+        if (this.recordingSession.isRecording) {return}
         const armed = this.captureDevices.filterArmed()
             .filter((capture): capture is CaptureMidi => isInstanceOf(capture, CaptureMidi))
         if (armed.length === 0) {return}
@@ -484,7 +486,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     restartRecording(): void {
         if (this.engine.isRecording.getValue()) {
-            const countingIn = Recording.wasCountingIn()
+            const countingIn = this.recordingSession.wasCountingIn
             this.engine.stopRecording()
             this.editing.modify(() => this.captureDevices.filterArmed()
                 .forEach(capture => {
@@ -492,7 +494,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     capture.clearRecordedRegions()
                 }), false)
             this.engine.stop(true)
-            this.engine.setPosition(Recording.wasStartingAt())
+            this.engine.setPosition(this.recordingSession.startPosition)
             const subscription = this.engine.isRecording.catchupAndSubscribe(owner => {
                 if (!owner.getValue()) {
                     queueMicrotask(() => subscription.terminate())

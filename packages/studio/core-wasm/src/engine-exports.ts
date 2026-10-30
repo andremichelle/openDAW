@@ -110,6 +110,12 @@ export type EngineExports = {
     // `marker_changes_take` (reserve `marker_changes_count() * 24` input bytes first).
     marker_changes_count: () => number
     marker_changes_take: (outPtr: number) => number
+    // the last quantum's transport jumps (sample inside the quantum, position after the jump) and the
+    // sample `pauseOnLoopDisabled` paused at (-1 none)
+    transport_jump_count: () => number
+    transport_jump_sample: (index: number) => number
+    transport_jump_position: (index: number) => number
+    transport_pause_sample: () => number
     // MIDI-OUT drain (TS MIDISender feed): every MIDI-output unit's queued messages + the transport
     // clock, drained once per quantum into the studio's unchanged MIDISender SAB ring. 16-byte records
     // [device u32 LE][status u8][data1 u8][data2 u8][length u8][timeMs f64 LE] (reserve

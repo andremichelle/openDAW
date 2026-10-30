@@ -470,16 +470,30 @@ describe("CaptureAudio", () => {
         })
     })
 
-    describe("reusing the audio chain across recordings", () => {
-        it("keeps the chain of a capture whose box names no device", async () => {
-            const {capture, createdSourceNodes, getUserMediaCalls} = await setup()
+    // A stream stays open across recordings, but every recording reads it through a fresh source node: a node
+    // that went unpulled, or saw another stream open on the device, reads about 24 ms late from then on.
+    describe("reusing the stream across recordings", () => {
+        it("keeps the stream of a capture whose box names no device", async () => {
+            const {capture, getUserMediaCalls, openedTracks} = await setup()
             await armAndAwaitChain(capture)
-            const sourceNode = createdSourceNodes[0]
             const callsWhileArming = getUserMediaCalls()
             await capture.prepareRecording()
             await capture.prepareRecording()
             expect(getUserMediaCalls()).toBe(callsWhileArming)
-            expect(createdSourceNodes).toEqual([sourceNode])
+            expect(openedTracks().map(track => track.stopped)).toEqual([false])
+        })
+
+        it("reads the open stream through a fresh source node for every recording", async () => {
+            const {capture, createdSourceNodes, getUserMediaCalls} = await setup()
+            await armAndAwaitChain(capture)
+            const callsWhileArming = getUserMediaCalls()
+            await capture.prepareRecording()
+            expect(createdSourceNodes.length).toBe(2)
+            expect(createdSourceNodes[0].disconnected).toContain(undefined)
+            expect(capture.outputNode.nonEmpty()).toBe(true)
+            await capture.prepareRecording()
+            expect(createdSourceNodes.length).toBe(3)
+            expect(getUserMediaCalls()).toBe(callsWhileArming)
         })
 
         it("re-opens when the open track has ended, even though nothing else changed", async () => {
@@ -489,7 +503,8 @@ describe("CaptureAudio", () => {
             openedTracks()[0].readyState = "ended" // the device was unplugged
             await capture.prepareRecording()
             expect(getUserMediaCalls()).toBe(callsWhileArming + 1)
-            expect(createdSourceNodes.length).toBe(2)
+            expect(openedTracks().length).toBe(2)
+            expect(createdSourceNodes.length).toBe(3)
         })
 
         it("re-opens when the box names a device the open stream does not report", async () => {
@@ -502,18 +517,17 @@ describe("CaptureAudio", () => {
             const nodesBefore = createdSourceNodes.length
             await capture.prepareRecording()
             expect(getUserMediaCalls()).toBe(callsBefore + 1)
-            expect(createdSourceNodes.length).toBe(nodesBefore + 1)
+            expect(createdSourceNodes.length).toBe(nodesBefore + 2)
         })
 
-        it("keeps the chain when the box names the device the open stream reports", async () => {
-            const {capture, project, createdSourceNodes, getUserMediaCalls} = await setup({deviceId: "mic-a"})
+        it("keeps the stream when the box names the device the open stream reports", async () => {
+            const {capture, project, getUserMediaCalls, openedTracks} = await setup({deviceId: "mic-a"})
             project.editing.modify(() => capture.deviceId.setValue(Option.wrap("mic-a")))
             await armAndAwaitChain(capture)
-            const sourceNode = createdSourceNodes[0]
             const callsWhileArming = getUserMediaCalls()
             await capture.prepareRecording()
             expect(getUserMediaCalls()).toBe(callsWhileArming)
-            expect(createdSourceNodes).toEqual([sourceNode])
+            expect(openedTracks().map(track => track.stopped)).toEqual([false])
         })
 
         it("rebuilds the chain on the open stream when the channel count changes", async () => {

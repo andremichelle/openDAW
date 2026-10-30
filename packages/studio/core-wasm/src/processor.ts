@@ -26,6 +26,7 @@ import {
     NoteSignal,
     PreferencesClient,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapGuiInfo,
     WclapPanelInfo,
@@ -42,6 +43,7 @@ import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
 import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
+import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {ScriptBridges} from "./script-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
@@ -96,6 +98,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
+    readonly #anchorEdges: TransportAnchorEdges = new TransportAnchorEdges()
     readonly #quantumClock: QuantumClock = new QuantumClock()
     #quantumFrame: number = 0
     #recordingStopTime: number = Number.NaN
@@ -143,6 +146,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 recordingStarted(contextTime: number, position: ppqn, generation: int): void {
                     dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
+                }
+                transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void {
+                    dispatcher.dispatchAndForget(this.transportAnchors, anchors)
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
@@ -245,6 +251,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#transporting = false
                     engine.stop_recording()
                     this.#closeRecordingEdge()
+                    this.#closeTransportAnchors()
                 }),
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
@@ -411,6 +418,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         engine.render()
         this.#scriptBridges.afterRender()
         this.#announceRecordingEdges(engine)
+        this.#announceTransportAnchors(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
@@ -458,7 +466,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #announceRecordingEdges(engine: EngineExports): void {
         const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
         const isRecording = view.getUint8(18) === 1
-        if (this.#recordingStartEdge.wasRecording && !isRecording) {this.#recordingStopTime = this.#quantumEndTime()}
+        if (this.#recordingStartEdge.wasRecording && !isRecording) {
+            const pauseSample = engine.transport_pause_sample()
+            this.#recordingStopTime = pauseSample >= 0
+                ? (this.#quantumFrame + pauseSample) / sampleRate : this.#quantumEndTime()
+        }
         if (this.#recordingStartEdge.observe(isRecording)) {
             this.#engineToClient.recordingStarted(this.#quantumEndTime(), view.getFloat32(0),
                 this.#recordingGeneration)
@@ -472,6 +484,25 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     }
 
     #quantumEndTime(): number {return (this.#quantumFrame + RenderQuantum) / sampleRate}
+
+    #announceTransportAnchors(engine: EngineExports): void {
+        const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        const jumps: Array<TransportJump> = []
+        const count = engine.transport_jump_count()
+        for (let index = 0; index < count; index++) {
+            jumps.push({sample: engine.transport_jump_sample(index), position: engine.transport_jump_position(index)})
+        }
+        const anchors = this.#anchorEdges.observe({
+            frame: this.#quantumFrame, sampleRate, isPlaying: view.getUint8(16) === 1,
+            isRecording: view.getUint8(18) === 1, position: view.getFloat32(0), jumps,
+            pauseSample: engine.transport_pause_sample()
+        })
+        if (anchors.length > 0) {this.#engineToClient.transportAnchors(anchors)}
+    }
+
+    #closeTransportAnchors(): void {
+        this.#anchorEdges.close(this.#quantumEndTime()).ifSome(anchor => this.#engineToClient.transportAnchors([anchor]))
+    }
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
     // `notifyClipSequenceChanges`): 20-byte records [uuid 16][kind u32 LE].
@@ -547,6 +578,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#transporting = false
         this.#engine.pause()
         this.#closeRecordingEdge()
+        this.#closeTransportAnchors()
         if (wasRecording) {
             // TS `#stop`: leaving a recording returns the playhead to where playback started (or 0).
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)

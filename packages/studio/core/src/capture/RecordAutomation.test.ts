@@ -52,6 +52,7 @@ const createFakeWorklet = () => ({
     markerState: new DefaultObservableValue(null),
     cpuLoad: new DefaultObservableValue(0),
     recordingStart: new MutableObservableOption(),
+    subscribeTransportAnchors: () => Terminable.Empty,
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 

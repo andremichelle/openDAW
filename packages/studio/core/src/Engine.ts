@@ -11,7 +11,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal, SignalGraph, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal, SignalGraph, TransportAnchor, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
@@ -45,6 +45,8 @@ export interface Engine extends Terminable {
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
+    /** where the transport started, jumped and stopped, in audio context time, as the engine rendered it */
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void
     suspendAutomation(uuid: UUID.Bytes): void
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void

@@ -37,6 +37,7 @@ import {
     OfflineEngineRenderConfig,
     ProjectSkeleton,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapGuiInfo,
     WclapPanelInfo,
@@ -179,6 +180,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     }
                     recordingStarted(contextTime: number, position: ppqn, generation: int): void {
                         dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
+                    }
+                    transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void {
+                        dispatcher.dispatchAndForget(this.transportAnchors, anchors)
                     }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })

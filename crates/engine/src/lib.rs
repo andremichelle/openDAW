@@ -1410,6 +1410,10 @@ struct Engine {
     // Queued marker-state notifications for `marker_changes_take` (uuid + plays-so-far, or the null
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
+    // This quantum's transport jumps (sample inside the quantum, position after the jump) and the sample
+    // `pauseOnLoopDisabled` paused at (-1 none), read back by the worklet through `transport_jump_*`.
+    transport_jumps: Vec<(u32, f64)>,
+    transport_pause_sample: i32,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
     tempo_stamp: TempoStamp,   // the tempo state the seconds-based audio spans were last sized with
 
@@ -1500,6 +1504,8 @@ impl Engine {
             signature: None,
             marker_track: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
+            transport_jumps: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM),
+            transport_pause_sample: -1,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             tempo_stamp: TempoStamp {bpm: 120.0, enabled: true, version: 0},
             context: EngineContext::new(),
@@ -1759,7 +1765,9 @@ impl Engine {
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, metronome_delay, metronome_buffer, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
-            metronome_pref, audio_units, clip_sequencer, ..} = self;
+            metronome_pref, audio_units, clip_sequencer, transport_jumps, transport_pause_sample, ..} = self;
+        transport_jumps.clear();
+        *transport_pause_sample = -1;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
         // `output` above.
         metronome_staging.fill(0.0);
@@ -1791,6 +1799,9 @@ impl Engine {
                 // additionally be copied out as its own stem.
                 let (left, right) = metronome_staging.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, signature_slice, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
+                if block.discontinuous && transport_jumps.len() < transport_jumps.capacity() {
+                    transport_jumps.push((block.s0 as u32, block.p0));
+                }
                 blocks.push(Block {
                     index: blocks.len() as u32,
                     flags: BlockFlags::create(true, block.discontinuous, true, false),
@@ -1810,6 +1821,7 @@ impl Engine {
                 *is_counting_in = false;
                 metronome.set_enabled(*metronome_pref); // apply_metronome with the count-in force gone
                 let covered = blocks.last().map_or(0, |block| block.s1 as usize);
+                *transport_pause_sample = covered as i32;
                 if covered < RENDER_QUANTUM {
                     let paused = transport.render_paused_tail(RENDER_QUANTUM - covered);
                     blocks.push(Block {
@@ -3161,6 +3173,29 @@ pub extern "C" fn clip_changes_take(out_ptr: u32) -> u32 {
         });
         count
     }
+}
+
+/// TRANSPORT JUMPS of the last rendered quantum: every discontinuous block (loop wrap, seek, marker jump) as
+/// the sample inside the quantum and the position after the jump. The worklet stamps them in context time.
+#[no_mangle]
+pub extern "C" fn transport_jump_count() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.transport_jumps.len() as u32) }
+}
+
+#[no_mangle]
+pub extern "C" fn transport_jump_sample(index: u32) -> u32 {
+    unsafe { ENGINE.get().as_ref().and_then(|engine| engine.transport_jumps.get(index as usize)).map_or(0, |jump| jump.0) }
+}
+
+#[no_mangle]
+pub extern "C" fn transport_jump_position(index: u32) -> f64 {
+    unsafe { ENGINE.get().as_ref().and_then(|engine| engine.transport_jumps.get(index as usize)).map_or(0.0, |jump| jump.1) }
+}
+
+/// The sample inside the last rendered quantum at which `pauseOnLoopDisabled` paused the transport, else -1.
+#[no_mangle]
+pub extern "C" fn transport_pause_sample() -> i32 {
+    unsafe { ENGINE.get().as_ref().map_or(-1, |engine| engine.transport_pause_sample) }
 }
 
 /// MARKER-STATE notifications (TS `EngineToClient.switchMarkerState([uuid, count] | null)`): the

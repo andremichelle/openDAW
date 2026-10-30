@@ -82,6 +82,14 @@ export interface EngineCommands extends Terminable {
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
 }
 
+// a point on the transport timeline in audio context time: the transport started, jumped or stopped there
+export type TransportAnchor = {
+    readonly kind: "start" | "jump" | "stop"
+    readonly contextTime: number
+    readonly position: ppqn
+    readonly recording: boolean
+}
+
 export interface EngineToClient {
     log(message: string): void
     error(reason: unknown): void
@@ -109,5 +117,6 @@ export interface EngineToClient {
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
     recordingStarted(contextTime: number, position: ppqn, generation: int): void
+    transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void
     ready(): void
 }

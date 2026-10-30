@@ -38,6 +38,7 @@ import {
     PreferencesHost,
     ProcessorOptions,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
@@ -85,6 +86,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
+    readonly #notifyTransportAnchors: Notifier<ReadonlyArray<TransportAnchor>>
     readonly #playingClips: Array<UUID.Bytes>
     readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
     readonly #wclapStatusListeners: SetMultimap<string, Procedure<WclapStatus>> = new SetMultimap()
@@ -153,6 +155,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
+        this.#notifyTransportAnchors = this.#terminator.own(new Notifier<ReadonlyArray<TransportAnchor>>())
         this.#playingClips = []
         this.#controlFlags = new Int32Array(controlFlagsSAB)
         this.#commands = this.#terminator.own(
@@ -304,6 +307,13 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     // a report for an earlier recording, delivered after the next one was prepared
                     if (generation !== this.#recordingGeneration) {return}
                     this.#recordingStart.wrap({contextTime, position})
+                },
+                transportAnchors: (anchors: ReadonlyArray<TransportAnchor>): void => {
+                    // the stop arrives here before the engine state is read on the next animation frame
+                    anchors.forEach(({kind, recording, contextTime}) => {
+                        if (kind === "stop" && recording) {this.#recordingStop = Option.wrap({contextTime})}
+                    })
+                    this.#notifyTransportAnchors.notify(anchors)
                 }
             } satisfies EngineToClient
         )
@@ -382,6 +392,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}
     noteSignal(signal: NoteSignal): void {this.#commands.noteSignal(signal)}
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {return this.#notifyNoteSignals.subscribe(observer)}
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription {
+        return this.#notifyTransportAnchors.subscribe(observer)
+    }
     ignoreNoteRegion(uuid: UUID.Bytes): void {this.#commands.ignoreNoteRegion(uuid)}
     suspendAutomation(uuid: UUID.Bytes): void {this.#commands.suspendAutomation(uuid)}
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {

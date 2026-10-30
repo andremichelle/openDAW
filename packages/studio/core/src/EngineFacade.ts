@@ -2,6 +2,7 @@ import {
     DefaultObservableValue,
     int,
     MutableObservableOption,
+    Notifier,
     Nullable,
     ObservableOption,
     ObservableValue,
@@ -21,6 +22,7 @@ import {
     NoteSignal,
     PreferencesFacade,
     SignalGraph,
+    TransportAnchor,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
@@ -48,6 +50,7 @@ export class EngineFacade implements Engine {
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #transportAnchors: Notifier<ReadonlyArray<TransportAnchor>> = new Notifier()
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
@@ -74,7 +77,8 @@ export class EngineFacade implements Engine {
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
             worklet.isCountingIn.catchupAndSubscribe(owner => this.#isCountingIn.setValue(owner.getValue())),
             worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue())),
-            worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue()))
+            worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue())),
+            worklet.subscribeTransportAnchors(anchors => this.#transportAnchors.notify(anchors))
         )
     }
 
@@ -160,6 +164,9 @@ export class EngineFacade implements Engine {
     }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
+    }
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription {
+        return this.#transportAnchors.subscribe(observer)
     }
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeNotes").subscribeNotes(observer)
