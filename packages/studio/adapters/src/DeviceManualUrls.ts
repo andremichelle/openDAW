@@ -1,6 +1,7 @@
 export namespace DeviceManualUrls {
     // Audio Units
     export const AudioBus = "manuals/audio-bus"
+    export const Mastering = "manuals/mastering"
 
     // MIDI Effects
     export const Arpeggio = "manuals/devices/midi/arpeggio"
@@ -17,7 +18,6 @@ export namespace DeviceManualUrls {
     export const Convolver = "manuals/devices/audio/convolver"
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
     export const Maximizer = "manuals/devices/audio/maximizer"
-    export const Mastering = "manuals/devices/audio/mastering"
     export const Compressor = "manuals/devices/audio/compressor"
     export const Gate = "manuals/devices/audio/gate"
     export const Reverb = "manuals/devices/audio/reverb"

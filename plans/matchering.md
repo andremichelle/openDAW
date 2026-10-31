@@ -154,7 +154,7 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
    Built-in profiles are designed spectra (`crates/matchering/src/profiles.rs`) run through the reference analysis.
    Saving user profiles is not done yet.
 7. License notes in README and manual (done): README "Ported Plugins", manual `open-source.md` "Third-party code",
-   a Mastering manual page (`devices/audio/mastering.md`, in the index) and a pointer in `mixer.md`.
+   a Mastering manual page (`mastering.md`, in the index) and a pointer in `mixer.md`.
 
 ## Runtime device
 

@@ -1,16 +1,19 @@
 import css from "./MasteringPanel.sass?inline"
 import {
-    Arrays, asInstanceOf, clamp, DefaultObservableValue, EmptyExec, Errors, isDefined, Lifecycle, MutableObservableOption,
-    Option, Optional, panic, RuntimeNotifier, Subscription, Terminator, unitValue, UUID, ValueGuide
+    Arrays, asInstanceOf, clamp, DefaultObservableValue, DefaultParameter, EmptyExec, Errors, isDefined, Lifecycle,
+    MutableObservableOption, Option, Optional, panic, RuntimeNotifier, StringMapping, Subscription, Terminator, unitValue,
+    UUID, ValueGuide, ValueMapping
 } from "@opendaw/lib-std"
-import {createElement, Frag} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {Events, Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MasteringDeviceBox, SelectionBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {Update} from "@opendaw/lib-box"
-import {AudioUnitBoxAdapter, AutomatableParameterFieldAdapter, MasteringDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AudioUnitBoxAdapter, AutomatableParameterFieldAdapter, DeviceManualUrls, MasteringDeviceBoxAdapter
+} from "@opendaw/studio-adapters"
 import {MixdownSection, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
 import {Matchering} from "@opendaw/studio-matchering"
 import {StudioService} from "@/service/StudioService"
@@ -22,6 +25,8 @@ import {DropDown} from "@/ui/composite/DropDown"
 import {Column} from "@/ui/devices/Column"
 import {LKR} from "@/ui/devices/constants"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob"
+import {Knob} from "@/ui/components/Knob"
+import {openManual} from "@/ui/manuals"
 import {ValueDragging} from "@/ui/hooks/dragging"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {FlexSpacer} from "@/ui/components/FlexSpacer"
@@ -251,6 +256,15 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         })
         if (reference.getValue() !== name) {return analyse(false)}
     }
+    // stand-ins with the ranges and defaults of MasteringDeviceBoxAdapter, shown before the first analysis
+    const placeholders = {
+        gain: lifecycle.own(new DefaultParameter(ValueMapping.linear(-12.0, 12.0),
+            StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Gain", 0.0)),
+        ceiling: lifecycle.own(new DefaultParameter(ValueMapping.linear(-6.0, 0.0),
+            StringMapping.numeric({unit: "dB", fractionDigits: 2}), "Ceiling", -0.0162)),
+        width: lifecycle.own(new DefaultParameter(ValueMapping.linear(0.0, 2.0),
+            StringMapping.percent({fractionDigits: 0}), "Width", 1.0))
+    } as const
     const contentLifecycle = lifecycle.own(new Terminator())
     const render = (): void => {
         contentLifecycle.terminate()
@@ -287,12 +301,17 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
             </Button>
         )
     }
-    const renderPlaceholderKnob = (label: string) => (
-        <Column ems={LKR} color={Colors.shadow}>
-            <h5>{label}</h5>
-            <span className="value">–</span>
-        </Column>
-    )
+    // without a mastering the same knob is shown disabled with the default value, so the layout never changes
+    const renderPlaceholderKnob = (lifecycle: Lifecycle, parameter: DefaultParameter<number>, anchor: number) => {
+        const {value, unit} = parameter.getPrintValue()
+        return (
+            <Column ems={LKR} color={Colors.cream} style={{opacity: "0.3", pointerEvents: "none"}}>
+                <h5>{parameter.name}</h5>
+                <Knob lifecycle={lifecycle} value={parameter} anchor={anchor}/>
+                <span className="value">{`${value}${unit}`}</span>
+            </Column>
+        )
+    }
     const renderMeter = (label: string, scale: [string, string]) => {
         const bar: HTMLElement = <div className="bar"/>
         return {
@@ -377,24 +396,29 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                 }), slider, {trackLength, ratio: 1.0}))
             }))
         }
+        const absent = !isDefined(adapter)
+        const disabledClass = absent ? "disabled" : undefined
+        const unavailable = new DefaultObservableValue(absent)
         return (
             <div className="content">
                 <header>
-                    {isDefined(adapter)
-                        ? <Checkbox lifecycle={lifecycle} model={EditWrapper.forValue(editing, adapter.box.enabled)}
-                                    appearance={{color: Colors.blue, activeColor: Colors.blue, cursor: "pointer",
-                                        tooltip: "Mastering on (stored in the project)"}}>
-                            <Icon symbol={IconSymbol.Shutdown}/>
-                        </Checkbox>
-                        : <Icon symbol={IconSymbol.Shutdown} style={{color: Colors.blue.toString()}}/>}
+                    <Checkbox lifecycle={lifecycle} className={disabledClass}
+                              model={isDefined(adapter) ? EditWrapper.forValue(editing, adapter.box.enabled) : new DefaultObservableValue(true)}
+                              appearance={{color: Colors.blue, activeColor: Colors.blue, cursor: "pointer",
+                                  tooltip: "Mastering on (stored in the project)"}}>
+                        <Icon symbol={IconSymbol.Shutdown}/>
+                    </Checkbox>
                     <h1>Mastering</h1>
                     <div className="spacer"/>
-                    {isDefined(adapter)
-                        ? <Button lifecycle={lifecycle} onClick={() => editing.modify(() => adapter.box.delete())}
-                                  appearance={{color: Colors.shadow, tooltip: "Remove the mastering from the project"}}>
-                            <Icon symbol={IconSymbol.Delete}/>
-                        </Button>
-                        : <Frag/>}
+                    <Button lifecycle={lifecycle} disabled={unavailable}
+                            onClick={() => adapter?.box.isAttached() === true && editing.modify(() => adapter.box.delete())}
+                            appearance={{color: Colors.shadow, tooltip: "Remove the mastering from the project"}}>
+                        <Icon symbol={IconSymbol.Delete}/>
+                    </Button>
+                    <Button lifecycle={lifecycle} onClick={() => openManual(DeviceManualUrls.Mastering)}
+                            appearance={{color: Colors.shadow, tooltip: "Open the Mastering manual"}}>
+                        <Icon symbol={IconSymbol.Help}/>
+                    </Button>
                 </header>
                 <div className={Html.buildClassList("body", !isDefined(adapter) && "unanalysed")}>
                     <div className="eq">
@@ -461,17 +485,17 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                             <div className="row">
                                 {isDefined(adapter)
                                     ? renderKnob(lifecycle, adapter.namedParameter.gain, SnapCenter)
-                                    : renderPlaceholderKnob("Gain")}
+                                    : renderPlaceholderKnob(lifecycle, placeholders.gain, 0.5)}
                                 {isDefined(adapter)
-                                    ? renderKnob(lifecycle, adapter.namedParameter.ceiling) : renderPlaceholderKnob("Ceiling")}
+                                    ? renderKnob(lifecycle, adapter.namedParameter.ceiling)
+                                    : renderPlaceholderKnob(lifecycle, placeholders.ceiling, 1.0)}
                                 <Column ems={LKR} color={Colors.cream}>
                                     <h5>Limiter</h5>
-                                    {isDefined(adapter)
-                                        ? <Checkbox lifecycle={lifecycle} model={EditWrapper.forValue(editing, adapter.box.limiter)}
-                                                    appearance={{color: Colors.shadow, activeColor: Colors.blue, framed: true}}>
-                                            <span>ON</span>
-                                        </Checkbox>
-                                        : <span className="value">–</span>}
+                                    <Checkbox lifecycle={lifecycle} className={disabledClass}
+                                              model={isDefined(adapter) ? EditWrapper.forValue(editing, adapter.box.limiter) : new DefaultObservableValue(true)}
+                                              appearance={{color: Colors.shadow, activeColor: Colors.blue, framed: true}}>
+                                        <span>ON</span>
+                                    </Checkbox>
                                 </Column>
                             </div>
                         </section>
@@ -480,7 +504,7 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                             <div className="row">
                                 {isDefined(adapter)
                                     ? renderKnob(lifecycle, adapter.namedParameter.width, SnapCenter)
-                                    : renderPlaceholderKnob("Width")}
+                                    : renderPlaceholderKnob(lifecycle, placeholders.width, 0.5)}
                             </div>
                         </section>
                         <section className="meters">
@@ -508,15 +532,13 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                     <div className="spacer"/>
                     <span className="latency">{`Mastering's live preview adds ${latencyMillis(service.sampleRate)} ms latency`}</span>
                     <div className="spacer"/>
-                    {isDefined(adapter)
-                        ? <Checkbox lifecycle={lifecycle} model={compare}
-                                    appearance={{
-                                        color: Colors.shadow, activeColor: Colors.orange, framed: true,
-                                        tooltip: "Compare original and mastered at the same loudness (not stored)"
-                                    }}>
-                            <span>Compare</span>
-                        </Checkbox>
-                        : <Frag/>}
+                    <Checkbox lifecycle={lifecycle} model={compare} className={disabledClass}
+                              appearance={{
+                                  color: Colors.shadow, activeColor: Colors.orange, framed: true,
+                                  tooltip: "Compare original and mastered at the same loudness (not stored)"
+                              }}>
+                        <span>Compare</span>
+                    </Checkbox>
                 </footer>
             </div>
         )
