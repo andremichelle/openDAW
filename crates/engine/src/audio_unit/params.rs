@@ -400,8 +400,9 @@ impl Engine {
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
         let mut sample_hub_sub = None;
+        let mut sample_subs = Vec::new();
         if reg.sample_collection_field != 0 {
-            observe_subs.extend(self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field));
+            sample_subs = self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field);
             let hub_invalidate = invalidate.clone();
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
@@ -413,7 +414,7 @@ impl Engine {
             None
         };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, records, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -735,6 +736,9 @@ impl Engine {
             for sub in params.field_subs {
                 self.graph.unsubscribe(sub);
             }
+            for sub in params.sample_subs {
+                self.graph.unsubscribe(sub);
+            }
             for sub in params.observe_subs {
                 self.graph.unsubscribe(sub);
             }
@@ -917,6 +921,14 @@ impl Engine {
             field_subs.append(&mut script_subs);
             collections.append(&mut script_collections);
             armed |= script_armed;
+        }
+        // The sample slots too: a slot added to the hub (a WebCLAP plugin's, which has no script recompile to rebuild
+        // the device) is delivered now, the others again (a device takes the same handle twice without harm)
+        if params.reg.sample_collection_field != 0 {
+            for sub in core::mem::take(&mut params.sample_subs) {
+                self.graph.unsubscribe(sub);
+            }
+            params.sample_subs = self.observe_script_samples(params.device_uuid, params.reg, params.state_ptr, params.reg.sample_collection_field);
         }
         // carried over only for an unchanged id: a re-numbered script param must be pushed again under its new id
         for (handle, (id, last, last_modulation)) in handles.iter().zip(previous_last) {

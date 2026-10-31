@@ -33,6 +33,7 @@ import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
 import {WclapParameterBox} from "./audio-effects/WclapParameterBox"
 import {WclapMidiEffectBox} from "./midi-effects/WclapMidiEffectBox"
+import {WclapSampleBox} from "./audio-effects/WclapSampleBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -96,6 +97,7 @@ export const DeviceDefinitions = [
     WclapDeviceBox,
     WclapParameterBox,
     WclapMidiEffectBox,
+    WclapSampleBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,

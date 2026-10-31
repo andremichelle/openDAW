@@ -197,6 +197,7 @@ extern "C" {
     fn host_wclap_reset(handle: u32);
     fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
+    fn host_wclap_sample(handle: u32, key: u32, sample_handle: u32, present: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
     fn host_self_uuid(out16_ptr: u32);
@@ -1189,6 +1190,16 @@ pub fn wclap_latency(handle: u32) -> u32 {
     unsafe { host_wclap_latency(handle) }
     #[cfg(not(target_family = "wasm"))]
     { let _ = handle; 0 }
+}
+
+/// Deliver a sample slot's resolved handle (or unbind, `present` false) to the plugin by its key
+/// (`opendaw.samples/1`): the bridge copies the frames into the plugin once they are resident. Native stub no-op.
+#[inline]
+pub fn wclap_sample(handle: u32, key: u32, sample_handle: u32, present: bool) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_sample(handle, key, sample_handle, present as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, key, sample_handle, present); }
 }
 
 /// Transport stop: `clap_plugin.reset`. Native stub no-op.

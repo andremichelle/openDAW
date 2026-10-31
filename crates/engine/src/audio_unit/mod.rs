@@ -560,6 +560,9 @@ pub(crate) struct DeviceParams {
     // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
     pub(crate) param_hub_sub: Option<SubscriptionId>,
     pub(crate) sample_hub_sub: Option<SubscriptionId>,
+    // the per-child `file` / `index` subscriptions of the `samples` hub, re-made on every `rebind_one` (a slot added
+    // or removed re-binds): kept apart from `observe_subs`, which a re-bind leaves alone
+    pub(crate) sample_subs: Vec<SubscriptionId>,
     // SCRIPTABLE devices: the `@collection` records, flushed by the unit reconcile; `None` without a records hub
     pub(crate) records: Option<crate::script_device::RecordBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps

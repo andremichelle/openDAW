@@ -60,6 +60,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     const engine = new WebAssembly.Instance(modules.engineModule,
         {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
     engine.init(sampleRate)
+    wclapBridges.attachEngine(engine)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
         (uuid, message) => engineToClient.deviceMessage(uuid, message), broadcaster)
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)

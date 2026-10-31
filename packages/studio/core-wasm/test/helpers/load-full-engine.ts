@@ -69,6 +69,7 @@ export const loadFullEngine = async (sampleRate = 48000,
         sendStatus: () => {}, requestSave: () => {}, track: () => {},
         ...wclap
     })
+    wclapBridges.attachEngine(engine) // as instantiateWasmEngine does: the bridge resolves the slots' samples
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
 
     for (const {file, boxType} of [...DEVICES.map(({file, boxType}) => ({file: path.join(DIST, file), boxType})), ...extraDevices]) {

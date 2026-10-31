@@ -8,5 +8,7 @@ export const WclapMidiEffectBox: BoxSchema<Pointers> = DeviceFactory.createMidiE
     11: {type: "string", name: "clap-id"},
     12: {type: "string", name: "state"}, // never written, WclapLink observes it like on the other WebCLAP boxes
     13: {type: "field", name: "parameters", pointerRules: {accepts: [Pointers.Parameter], mandatory: false}},
-    14: {type: "bytes", name: "plugin-state"}
+    14: {type: "bytes", name: "plugin-state"},
+    // the plugin's samples by key (WclapSampleBox), the same key on every WebCLAP box: the engine observes one
+    16: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
 })

@@ -663,7 +663,7 @@ fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_de
         Wired::Leaf(chain) => chain.instrument.params = Some(DeviceParams {
             device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
             paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
-            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
+            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(), sample_subs: Vec::new(),
             param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
         }),
         _ => panic!("expected a leaf chain")
@@ -2539,7 +2539,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");

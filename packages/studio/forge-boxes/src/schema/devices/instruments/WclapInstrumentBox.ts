@@ -12,5 +12,7 @@ export const WclapInstrumentBox: BoxSchema<Pointers> = DeviceFactory.createInstr
     15: {
         type: "array", name: "audio-inputs", length: 8,
         element: {type: "pointer", pointerType: Pointers.SideChain, mandatory: false}
-    }
+    },
+    // the plugin's samples by key (WclapSampleBox), the same key on every WebCLAP box: the engine observes one
+    16: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
 })

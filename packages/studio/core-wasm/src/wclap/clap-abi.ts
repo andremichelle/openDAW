@@ -145,6 +145,7 @@ export namespace ClapAbi {
         export const HOST_PARAMS = "clap.params"
         export const LATENCY = "clap.latency"
         export const DEVICE_PANEL = "opendaw.device-panel/1"
+        export const SAMPLES = "opendaw.samples/1" // both a host and a plugin extension
     }
 
     export namespace Feature {
@@ -160,6 +161,20 @@ export namespace ClapAbi {
 
     export namespace PluginLatency {
         export const GET = 0
+    }
+
+    // opendaw_host_samples_t: available(host) — the host keeps the plugin's samples (in the project, by key)
+    export namespace HostSamples {
+        export const SIZE = 4
+        export const AVAILABLE = 0
+    }
+
+    // opendaw_plugin_samples_t: prepare(plugin, key, frames, channels, rate: f64) -> float* (planar, channels * frames,
+    // 0 refuses), commit(plugin, key) once the frames are written, clear(plugin, key) when the slot has none
+    export namespace PluginSamples {
+        export const PREPARE = 0
+        export const COMMIT = 4
+        export const CLEAR = 8
     }
 
     export namespace HostLatency {
