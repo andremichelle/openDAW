@@ -333,6 +333,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-mastering"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "matchering",
+ "math",
+]
+
+[[package]]
 name = "device-maximizer"
 version = "0.0.0"
 dependencies = [

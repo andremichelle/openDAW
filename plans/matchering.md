@@ -132,13 +132,20 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
    `Matchering.matchTarget` resample to 44.1 kHz and run in a worker that exists only per job. The analysis reads
    mid and side on demand from the f32 input and keeps only the convolved mid in f64, about 170 MB for 4 minutes
    instead of about 700 MB. `test/matchering.test.ts` runs the built wasm against the Matchering fixtures.
-5. Mastering box + runtime processor (TS and wasm engine), tests that it applies a stored result correctly.
+5. Mastering box + runtime device (done). The TS engine has no device processors any more, the device is a wasm
+   crate only. `MasteringDeviceBox` (schema, adapter) is shared data, `crates/device-mastering` (GPL-3.0, contains
+   the Hyrax port) is built by the private package into `dist/device_mastering.wasm`, never by core-wasm.
+   core-wasm gained an additive `extraDevices` option (realtime and offline) the studio uses to link it.
+   Tests: Hyrax against Matchering's limiter, the FIR against Matchering's FIR, and engine renders with the
+   device on the output (`packages/studio/matchering/test/mastering-device.test.ts`).
 6. Mixer button + panel: reference profiles, analyse, store, final touch, A/B.
 7. License notes in README and manual.
 
 ## Runtime device
 
-The engine part that applies the stored match live. Built from generic DSP, no Matchering code.
+The engine part that applies the stored match live. It contains Matchering's limiter (Hyrax, made streaming with
+16 attack lengths of lookahead for its backward smoothing), so it is GPL-3.0 and ships only with the studio.
+The points below were written before that decision, point 2 and 3 are superseded.
 
 1. The analysis stores the mid and side gains and the smoothed mid and side frequency curves in the project.
 2. The device applies gains, mid/side FIR and `Maximizer` in place of Hyrax, whose `filtfilt` needs future samples.

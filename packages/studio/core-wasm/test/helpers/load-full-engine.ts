@@ -33,12 +33,14 @@ export type FullEngine = {
     // decodes a file; here we write a fixed 0.5 s 220 Hz mono tone, which is enough to assert real signal. Call
     // it after building the project (and again after any edit that adds a sample).
     drainSamples(): number
+    drainSoundfonts(build: (uuid: string) => ArrayBuffer): number
 }
 
 export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {},
                                      broadcaster: () => LiveStreamBroadcaster | null = () => null,
-                                     wclap: Partial<WclapHostCallbacks> = {}): Promise<FullEngine> => {
+                                     wclap: Partial<WclapHostCallbacks> = {},
+                                     extraDevices: ReadonlyArray<{file: string, boxType: string}> = []): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(DIST, "wasm", "engine.wasm")))
@@ -69,8 +71,8 @@ export const loadFullEngine = async (sampleRate = 48000,
     })
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
 
-    for (const {file, boxType} of DEVICES) {
-        const module = await WebAssembly.compile(readFileSync(path.join(DIST, file)))
+    for (const {file, boxType} of [...DEVICES.map(({file, boxType}) => ({file: path.join(DIST, file), boxType})), ...extraDevices]) {
+        const module = await WebAssembly.compile(readFileSync(file))
         linkDevice(engine, memory, table, module, boxType, sampleRate, bridgeImports)
     }
     for (const composite of COMPOSITES) {

@@ -49,7 +49,7 @@ import {
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
 import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exports"
-import {createEngineMemory, loadEngineModules} from "./engine-modules"
+import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
@@ -140,8 +140,8 @@ Communicator.executor<OfflineEngineProtocol>(
             // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it
             // in this worker so the scriptable devices behave exactly as in the worklet.
             ;(globalThis as unknown as {sampleRate: number}).sampleRate = config.sampleRate
-            const variant = config.variant as {wasmUrl: string}
-            const modules = await loadEngineModules(variant.wasmUrl)
+            const variant = config.variant as {wasmUrl: string, extraDevices?: ReadonlyArray<ExtraDevice>}
+            const modules = await loadEngineModules(variant.wasmUrl, variant.extraDevices)
             const memory = createEngineMemory()
             const messenger = Messenger.for(enginePort)
             const engineToClient = Communicator.sender<EngineToClient>(

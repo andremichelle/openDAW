@@ -45,6 +45,7 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     MaximizerDeviceBox,
+    MasteringDeviceBox,
     MIDIOutputDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -167,6 +168,7 @@ import {UnknownMidiEffectDeviceBoxAdapter} from "./devices/midi-effects/UnknownM
 import {SoundfontDeviceBoxAdapter} from "./devices/instruments/SoundfontDeviceBoxAdapter"
 import {SoundfontFileBoxAdapter} from "./soundfont/SoundfontFileBoxAdapter"
 import {MaximizerDeviceBoxAdapter} from "./devices/audio-effects/MaximizerDeviceBoxAdapter"
+import {MasteringDeviceBoxAdapter} from "./devices/audio-effects/MasteringDeviceBoxAdapter"
 import {CompressorDeviceBoxAdapter} from "./devices/audio-effects/CompressorDeviceBoxAdapter"
 import {GateDeviceBoxAdapter} from "./devices/audio-effects/GateDeviceBoxAdapter"
 import {AutotuneDeviceBoxAdapter} from "./devices/audio-effects/AutotuneDeviceBoxAdapter"
@@ -261,6 +263,7 @@ export class BoxAdapters implements Terminable {
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
             visitMaximizerDeviceBox: (box: MaximizerDeviceBox) => new MaximizerDeviceBoxAdapter(this.#context, box),
+            visitMasteringDeviceBox: (box: MasteringDeviceBox) => new MasteringDeviceBoxAdapter(this.#context, box),
             visitCompressorDeviceBox: (box: CompressorDeviceBox) => new CompressorDeviceBoxAdapter(this.#context, box),
             visitGateDeviceBox: (box: GateDeviceBox) => new GateDeviceBoxAdapter(this.#context, box),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => new AutotuneDeviceBoxAdapter(this.#context, box),

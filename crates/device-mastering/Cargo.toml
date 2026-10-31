@@ -1,0 +1,18 @@
+[package]
+name = "device-mastering"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../abi"}
+math = {path = "../math"}
+dsp = {path = "../dsp"}
+libm = "0.2"
+
+[dev-dependencies]
+matchering = {path = "../matchering"}
