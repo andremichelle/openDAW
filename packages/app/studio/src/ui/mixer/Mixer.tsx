@@ -1,5 +1,5 @@
 import css from "./Mixer.sass?inline"
-import {clamp, isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -16,6 +16,7 @@ import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
+import {MasteringPanel} from "@/ui/mixer/MasteringPanel"
 
 const className = Html.adoptStyleSheet(css, "mixer")
 
@@ -69,12 +70,17 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     }
     const audioUnits = UUID.newSet<AudioUnitEntry>(entry => entry.adapter.uuid)
     const anchorLifecycle = lifecycle.own(new Terminator())
+    const mastering = new DefaultObservableValue(false)
+    const masteringPanel: HTMLElement = <MasteringPanel lifecycle={lifecycle} service={service}/>
     const updateDom = deferNextFrame(() => {
         Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
         const sorted = audioUnits.values()
             .toSorted((a, b) => a.adapter.indexField.getValue() - b.adapter.indexField.getValue())
-        sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
+        sorted.forEach(({adapter, editor}) => {
+            channelStripContainer.appendChild(editor)
+            if (adapter.isOutput && mastering.getValue()) {channelStripContainer.appendChild(masteringPanel)}
+        })
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
@@ -104,7 +110,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             onAdd: (adapter: AudioUnitBoxAdapter) => {
                 const terminator = lifecycle.spawn()
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
-                                                          compact={false}/>
+                                                          compact={false} mastering={mastering}/>
                 terminator.ownAll(
                     Events.subscribe(editor, "pointerdown", () => {
                         scrollIntoViewEnabled = false
@@ -138,6 +144,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 })
             }
         })),
+        mastering.subscribe(() => updateDom.request()),
         Html.watchResize(element, updateScroller),
         Events.subscribe(headers, "pointerdown", () => project.userEditingManager.audioUnit.clear()),
         Events.subscribe(element, "wheel", (event: WheelEvent) => {

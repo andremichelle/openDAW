@@ -1,0 +1,228 @@
+@use "@/colors"
+
+component
+  grid-row: span 7
+  display: flex
+  flex-direction: column
+  padding: 0 0.5em 0.5em 0.5em
+  background-color: colors.$BRIGHTENER
+  box-shadow: 0 2px 4px 0 rgba(black, 0.1)
+  border-radius: 1px
+  color: var(--color-cream)
+
+  // borrowed from DeviceEditor.sass
+  > header
+    display: flex
+    align-items: center
+    column-gap: 3px
+    line-height: 2rem
+    font-size: 11px
+    color: var(--color-blue)
+    border-bottom: 1px solid rgba(black, 0.2)
+    box-shadow: 0 1px 0 rgba(white, 0.03)
+
+    > h1
+      font-size: inherit
+      letter-spacing: 0.03em
+      white-space: nowrap
+
+    svg
+      font-size: 14px
+
+  // borrowed from DeviceEditor.sass
+  h5
+    height: 1.5em
+    line-height: 1.5em
+    font-size: 0.5em
+    letter-spacing: 0.08em
+    white-space: nowrap
+    color: var(--color-cream)
+
+  // borrowed from ConvolverDeviceEditor.sass
+  span.value
+    margin-top: 2px
+    background-color: rgba(white, 0.1)
+    border-radius: 2px
+    padding: 1px 2px
+    align-self: center
+    font-size: 0.5em
+    color: var(--color-gray)
+
+  [data-class="checkbox"], [data-class="button"]
+    font-size: 11px
+    align-self: center
+
+  div.drop-down
+    font-size: 11px
+
+    label
+      font-size: 1em
+
+  > div.body
+    flex: 1
+    min-height: 0
+    padding: 0.375em 0
+    display: flex
+    column-gap: 0.25em
+
+    > div.eq
+      width: 26em
+      display: flex
+      column-gap: 0.25em
+      padding: 0.5em 0.25em 0.25em 0.25em
+      border-radius: 0.125em
+      background-color: rgba(black, 0.12)
+
+      > div.amount
+        width: 3em
+        display: flex
+        flex-direction: column
+        align-items: center
+        row-gap: 0.25em
+
+        > div.slider
+          flex: 1
+          position: relative
+          width: 1em
+
+          > div.track
+            position: absolute
+            left: calc(50% - 1px)
+            top: 0
+            bottom: 0
+            width: 2px
+            border-radius: 1px
+            background-color: rgba(white, 0.08)
+
+          > div.thumb
+            position: absolute
+            top: 0
+            left: 0
+            width: 100%
+            height: 0.5em
+            border-radius: 2px
+            background-color: var(--color-blue)
+            cursor: ns-resize
+
+      > div.display
+        flex: 1
+        min-width: 0
+        position: relative
+        display: grid
+        grid-template: 1fr 1.25em / 1fr 1.5em
+
+        > svg
+          width: 100%
+          height: 100%
+
+          > line
+            stroke-width: 1
+            vector-effect: non-scaling-stroke
+
+            &.grid
+              stroke: rgba(white, 0.04)
+
+            &.zero
+              stroke: rgba(white, 0.16)
+              stroke-dasharray: 2 3
+
+          > path
+            vector-effect: non-scaling-stroke
+
+            &.fill
+              fill: var(--color-blue)
+              fill-opacity: 0.12
+              stroke: none
+
+            &.curve
+              fill: none
+              stroke: var(--color-blue)
+              stroke-width: 1.5
+
+        > div.gain-axis, > div.frequency-axis
+          position: relative
+          font-size: 0.5em
+          color: var(--color-shadow)
+
+          > span
+            position: absolute
+            white-space: nowrap
+
+        > div.gain-axis > span
+          right: 0
+          transform: translateY(-50%)
+
+        > div.frequency-axis > span
+          top: 0.25em
+          transform: translateX(-50%)
+
+    > div.sections
+      width: 13em
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+
+      > section
+        padding: 0.375em 0.5em
+        border-radius: 0.125em
+        display: flex
+        flex-direction: column
+        row-gap: 0.125em
+        background-color: rgba(black, 0.12)
+
+        &.reference
+          flex-direction: row
+          align-items: center
+          column-gap: 0.25em
+
+          > h3
+            flex: 1
+            margin-bottom: 0
+
+        &.meters
+          flex: 1
+          row-gap: 0.375em
+
+        > h3
+          margin-bottom: 0.5em
+          font-size: 0.625em
+          color: var(--color-green)
+
+        div.row
+          display: grid
+          grid-template-columns: repeat(auto-fill, 3.5em)
+          grid-auto-rows: 3.5em
+          align-items: center
+
+        div.meter
+          display: grid
+          grid-template-columns: 1fr 1fr
+          row-gap: 1px
+          font-size: 0.5em
+          color: var(--color-shadow)
+
+          > span.label
+            grid-column: 1 / -1
+
+          > div.track
+            grid-column: 1 / -1
+            height: 4px
+            border-radius: 1px
+            background-color: rgba(white, 0.06)
+            overflow: hidden
+
+            > div.bar
+              height: 100%
+              background-color: var(--color-green)
+
+          > span.end
+            justify-self: end
+
+  > footer
+    height: 3em
+    display: flex
+    align-items: center
+    column-gap: 0.25em
+
+    > div.spacer
+      flex: 1

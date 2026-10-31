@@ -1,5 +1,13 @@
 import css from "./AuxSendGroup.sass?inline"
-import {Lifecycle, SortedSet, StringComparator, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    isDefined,
+    Lifecycle,
+    MutableObservableValue,
+    SortedSet,
+    StringComparator,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
@@ -10,6 +18,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
 import {Html} from "@opendaw/lib-dom"
+import {Checkbox} from "@/ui/components/Checkbox"
 
 const className = Html.adoptStyleSheet(css, "AuxSendGroup")
 
@@ -23,12 +32,22 @@ type Construct = {
     lifecycle: Lifecycle
     project: Project
     audioUnitAdapter: AudioUnitBoxAdapter
+    mastering?: MutableObservableValue<boolean>
 }
 
-export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter}: Construct) => {
+export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: Construct) => {
     const canHaveAuxSends = !audioUnitAdapter.isOutput
     const groupElement: HTMLDivElement = <div className={className}/>
     if (!canHaveAuxSends) {
+        if (isDefined(mastering)) {
+            groupElement.classList.add("mastering")
+            groupElement.appendChild(
+                <Checkbox lifecycle={lifecycle} model={mastering}
+                          appearance={{color: Colors.shadow, activeColor: Colors.orange}}>
+                    <span>Mastering</span>
+                </Checkbox>
+            )
+        }
         return groupElement
     }
     groupElement.classList.add("enabled")
