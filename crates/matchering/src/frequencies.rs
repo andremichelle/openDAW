@@ -6,18 +6,21 @@ use std::f64::consts::PI;
 use crate::config::{BINS, FFT_SIZE, LIN_LOG_OVERSAMPLING, LOWESS_DELTA, LOWESS_FRAC, LOWESS_ITERATIONS, MIN_VALUE,
                     SAMPLE_RATE};
 use crate::fft::Fft;
+use crate::levels::Pieces;
 use crate::lowess::lowess;
 use crate::spline::CubicSpline;
 
-/// Mean magnitude spectrum over non-overlapping boxcar frames of all pieces (scipy `stft`, scaling "spectrum").
-pub fn average_spectrum(pieces: &[&[f64]]) -> Vec<f64> {
+/// Mean magnitude spectrum over non-overlapping boxcar frames of the given pieces (scipy `stft`, scaling "spectrum").
+pub fn average_spectrum(pieces: &Pieces, indices: &[usize], sample: impl Fn(usize) -> f64) -> Vec<f64> {
     let fft = Fft::new(FFT_SIZE);
     let mut sum = vec![0.0; BINS];
     let mut frames = 0;
     let (mut re, mut im) = (vec![0.0; FFT_SIZE], vec![0.0; FFT_SIZE]);
-    for piece in pieces {
-        for frame in piece.chunks_exact(FFT_SIZE) {
-            re.copy_from_slice(frame);
+    for piece in indices {
+        let start = piece * pieces.size;
+        for frame in 0..pieces.size / FFT_SIZE {
+            let offset = start + frame * FFT_SIZE;
+            re.iter_mut().enumerate().for_each(|(index, value)| *value = sample(offset + index));
             im.fill(0.0);
             fft.forward(&mut re, &mut im);
             for bin in 0..BINS {sum[bin] += re[bin].hypot(im[bin]) / FFT_SIZE as f64;}
@@ -73,21 +76,22 @@ pub fn fir(curve: &[f64]) -> Vec<f64> {
     }).collect()
 }
 
-/// scipy `fftconvolve(signal, kernel, "same")` by overlap-add.
-pub fn convolve_same(signal: &[f64], kernel: &[f64]) -> Vec<f64> {
+/// scipy `fftconvolve(signal, kernel, "same")` by overlap-add, reading the signal on demand.
+pub fn convolve_same(length: usize, sample: impl Fn(usize) -> f64, kernel: &[f64]) -> Vec<f64> {
     let block = kernel.len().next_power_of_two();
     let fft = Fft::new(block * 2);
     let size = fft.size();
     let (mut kernel_re, mut kernel_im) = (vec![0.0; size], vec![0.0; size]);
     kernel_re[..kernel.len()].copy_from_slice(kernel);
     fft.forward(&mut kernel_re, &mut kernel_im);
-    let offset = (kernel.len() - 1) / 2;
-    let mut full = vec![0.0; signal.len() + kernel.len() - 1];
+    let offset = (kernel.len() - 1) as isize / 2;
+    let mut output = vec![0.0; length];
     let (mut re, mut im) = (vec![0.0; size], vec![0.0; size]);
-    for (index, chunk) in signal.chunks(block).enumerate() {
+    for start in (0..length).step_by(block) {
+        let count = block.min(length - start);
         re.fill(0.0);
         im.fill(0.0);
-        re[..chunk.len()].copy_from_slice(chunk);
+        re[..count].iter_mut().enumerate().for_each(|(index, value)| *value = sample(start + index));
         fft.forward(&mut re, &mut im);
         for bin in 0..size {
             let product_re = re[bin] * kernel_re[bin] - im[bin] * kernel_im[bin];
@@ -95,9 +99,10 @@ pub fn convolve_same(signal: &[f64], kernel: &[f64]) -> Vec<f64> {
             re[bin] = product_re;
         }
         fft.inverse(&mut re, &mut im);
-        let start = index * block;
-        let end = (start + chunk.len() + kernel.len() - 1).min(full.len());
-        for position in start..end {full[position] += re[position - start] / size as f64;}
+        for index in 0..count + kernel.len() - 1 {
+            let position = (start + index) as isize - offset;
+            if position >= 0 && (position as usize) < length {output[position as usize] += re[index] / size as f64;}
+        }
     }
-    full[offset..offset + signal.len()].to_vec()
+    output
 }

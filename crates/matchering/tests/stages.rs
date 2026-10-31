@@ -60,7 +60,7 @@ fn matching_curves() {
     let (left, right) = reference();
     let profile = analyse_reference(&left, &right).unwrap();
     let (left, right) = target();
-    let result = match_target(&left, &right, &profile).unwrap();
+    let result = match_target(&left, &right, &profile, &mut |_| {}).unwrap();
     assert_close(&result.mid_curve[2..], &fixture("match_mid_curve")[2..], 1e-9);
     assert_close(&result.side_curve[2..], &fixture("match_side_curve")[2..], 1e-9);
 }
@@ -70,7 +70,7 @@ fn unlimited_result_matches_matchering() {
     let (left, right) = reference();
     let profile = analyse_reference(&left, &right).unwrap();
     let (left, right) = target();
-    let result = match_target(&left, &right, &profile).unwrap();
+    let result = match_target(&left, &right, &profile, &mut |_| {}).unwrap();
     let (out_left, out_right) = apply(&left, &right, &result);
     let decimated: Vec<f64> = (0..out_left.len()).step_by(997)
         .flat_map(|index| [out_left[index], out_right[index]]).collect();

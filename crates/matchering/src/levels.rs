@@ -4,20 +4,34 @@
 
 use crate::config::{MAX_PIECE_SIZE, MIN_VALUE, THRESHOLD};
 
-pub fn to_mid_side(left: &[f64], right: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let mid = left.iter().zip(right).map(|(left, right)| (left + right) * 0.5).collect();
-    let side = left.iter().zip(right).map(|(left, right)| (left + right) * 0.5 - right).collect();
-    (mid, side)
+/// Stereo input of any float precision, read as mid and side on demand instead of stored.
+pub struct Stereo<'a, S: Copy + Into<f64>> {
+    pub left: &'a [S],
+    pub right: &'a [S],
+    pub scale: f64
+}
+
+impl<'a, S: Copy + Into<f64>> Stereo<'a, S> {
+    pub fn new(left: &'a [S], right: &'a [S]) -> Self {Self {left, right, scale: 1.0}}
+
+    pub fn len(&self) -> usize {self.left.len()}
+
+    pub fn mid(&self, index: usize) -> f64 {
+        (self.left[index].into() * self.scale + self.right[index].into() * self.scale) * 0.5
+    }
+
+    pub fn side(&self, index: usize) -> f64 {self.mid(index) - self.right[index].into() * self.scale}
+
+    /// `normalize(..., normalize_clipped=False)`: the divisor raising the audio to the threshold, 1 if already there.
+    pub fn normalize_coefficient(&self) -> f64 {
+        let peak = self.left.iter().chain(self.right)
+            .fold(0.0f64, |peak, value| peak.max((*value).into().abs()));
+        if peak < THRESHOLD {MIN_VALUE.max(peak / THRESHOLD)} else {1.0}
+    }
 }
 
 pub fn rms(values: &[f64]) -> f64 {
     (values.iter().map(|value| value * value).sum::<f64>() / values.len() as f64).sqrt()
-}
-
-/// `normalize(..., normalize_clipped=False)`: the gain dividing the audio up to the threshold, 1 if already there.
-pub fn normalize_coefficient(left: &[f64], right: &[f64]) -> f64 {
-    let peak = left.iter().chain(right).fold(0.0f64, |peak, value| peak.max(value.abs()));
-    if peak < THRESHOLD {MIN_VALUE.max(peak / THRESHOLD)} else {1.0}
 }
 
 pub struct Pieces {
@@ -31,12 +45,12 @@ impl Pieces {
         Self {divisions, size: (length as f64 / divisions as f64) as usize}
     }
 
-    pub fn slice<'a>(&self, values: &'a [f64], index: usize) -> &'a [f64] {
-        &values[index * self.size..(index + 1) * self.size]
-    }
-
-    pub fn rmses(&self, values: &[f64]) -> Vec<f64> {
-        (0..self.divisions).map(|index| rms(self.slice(values, index))).collect()
+    pub fn rmses(&self, sample: impl Fn(usize) -> f64) -> Vec<f64> {
+        (0..self.divisions).map(|piece| {
+            let start = piece * self.size;
+            let sum: f64 = (start..start + self.size).map(|index| sample(index) * sample(index)).sum();
+            (sum / self.size as f64).sqrt()
+        }).collect()
     }
 }
 

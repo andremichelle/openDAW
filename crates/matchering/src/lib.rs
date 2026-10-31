@@ -10,6 +10,8 @@
 
 pub mod analysis;
 pub mod config;
+#[cfg(target_arch = "wasm32")]
+pub mod exports;
 pub mod fft;
 pub mod frequencies;
 pub mod levels;

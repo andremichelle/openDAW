@@ -4,7 +4,7 @@
 
 use crate::config::{FFT_SIZE, MAX_LENGTH, RMS_CORRECTION_STEPS};
 use crate::frequencies::{average_spectrum, convolve_same, fir, matching_curve};
-use crate::levels::{loudest, normalize_coefficient, rms_coefficient, to_mid_side, Pieces};
+use crate::levels::{loudest, rms_coefficient, Pieces, Stereo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -31,66 +31,64 @@ pub struct MatchResult {
     pub side_curve: Vec<f64>
 }
 
-fn validate(left: &[f64], right: &[f64]) -> Result<(), Error> {
-    if left.len() != right.len() {return Err(Error::LengthMismatch);}
-    if left.len() <= FFT_SIZE {return Err(Error::TooShort);}
-    if left.len() > MAX_LENGTH {return Err(Error::TooLong);}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Levels,
+    Frequencies,
+    Correction
+}
+
+fn validate<S: Copy + Into<f64>>(stereo: &Stereo<S>) -> Result<(), Error> {
+    if stereo.left.len() != stereo.right.len() {return Err(Error::LengthMismatch);}
+    if stereo.len() <= FFT_SIZE {return Err(Error::TooShort);}
+    if stereo.len() > MAX_LENGTH {return Err(Error::TooLong);}
     Ok(())
 }
 
-fn as_slices(values: &[Vec<f64>]) -> Vec<&[f64]> {values.iter().map(Vec::as_slice).collect()}
-
-fn loudest_pieces<'a>(pieces: &Pieces, indices: &[usize], values: &'a [f64]) -> Vec<&'a [f64]> {
-    indices.iter().map(|index| pieces.slice(values, *index)).collect()
-}
-
 /// 44.1 kHz stereo input, mono is passed as the same channel twice.
-pub fn analyse_reference(left: &[f64], right: &[f64]) -> Result<ReferenceProfile, Error> {
-    validate(left, right)?;
-    let final_amplitude = normalize_coefficient(left, right);
-    let left: Vec<f64> = left.iter().map(|value| value / final_amplitude).collect();
-    let right: Vec<f64> = right.iter().map(|value| value / final_amplitude).collect();
-    let (mid, side) = to_mid_side(&left, &right);
-    let pieces = Pieces::of(mid.len());
-    let (indices, match_rms) = loudest(&pieces.rmses(&mid));
+pub fn analyse_reference<S: Copy + Into<f64>>(left: &[S], right: &[S]) -> Result<ReferenceProfile, Error> {
+    let mut stereo = Stereo::new(left, right);
+    validate(&stereo)?;
+    let final_amplitude = stereo.normalize_coefficient();
+    stereo.scale = 1.0 / final_amplitude;
+    let pieces = Pieces::of(stereo.len());
+    let (indices, match_rms) = loudest(&pieces.rmses(|index| stereo.mid(index)));
     Ok(ReferenceProfile {
         match_rms,
         final_amplitude,
-        mid_spectrum: average_spectrum(&loudest_pieces(&pieces, &indices, &mid)),
-        side_spectrum: average_spectrum(&loudest_pieces(&pieces, &indices, &side))
+        mid_spectrum: average_spectrum(&pieces, &indices, |index| stereo.mid(index)),
+        side_spectrum: average_spectrum(&pieces, &indices, |index| stereo.side(index))
     })
 }
 
 /// 44.1 kHz stereo input, mono is passed as the same channel twice.
-pub fn match_target(left: &[f64], right: &[f64], profile: &ReferenceProfile) -> Result<MatchResult, Error> {
-    validate(left, right)?;
-    let (mid, side) = to_mid_side(left, right);
-    let pieces = Pieces::of(mid.len());
-    let (indices, match_rms) = loudest(&pieces.rmses(&mid));
+pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &ReferenceProfile,
+                                        progress: &mut dyn FnMut(Stage)) -> Result<MatchResult, Error> {
+    let stereo = Stereo::new(left, right);
+    validate(&stereo)?;
+    progress(Stage::Levels);
+    let pieces = Pieces::of(stereo.len());
+    let (indices, match_rms) = loudest(&pieces.rmses(|index| stereo.mid(index)));
     let mut gain = rms_coefficient(match_rms, profile.match_rms);
-    let scale = |values: Vec<&[f64]>| -> Vec<Vec<f64>> {
-        values.iter().map(|piece| piece.iter().map(|value| value * gain).collect()).collect()
-    };
-    let mid_loudest = scale(loudest_pieces(&pieces, &indices, &mid));
-    let side_loudest = scale(loudest_pieces(&pieces, &indices, &side));
-    let mid_curve = matching_curve(&average_spectrum(&as_slices(&mid_loudest)), &profile.mid_spectrum);
-    let side_curve = matching_curve(&average_spectrum(&as_slices(&side_loudest)), &profile.side_spectrum);
-    let mut result_mid: Vec<f64> = convolve_same(&mid, &fir(&mid_curve)).iter().map(|value| value * gain).collect();
+    progress(Stage::Frequencies);
+    let mid_spectrum = average_spectrum(&pieces, &indices, |index| stereo.mid(index) * gain);
+    let side_spectrum = average_spectrum(&pieces, &indices, |index| stereo.side(index) * gain);
+    let mid_curve = matching_curve(&mid_spectrum, &profile.mid_spectrum);
+    let side_curve = matching_curve(&side_spectrum, &profile.side_spectrum);
+    progress(Stage::Correction);
+    let convolved_mid = convolve_same(stereo.len(), |index| stereo.mid(index), &fir(&mid_curve));
     for _ in 0..RMS_CORRECTION_STEPS {
-        let clipped: Vec<f64> = result_mid.iter().map(|value| value.clamp(-1.0, 1.0)).collect();
-        let (_, clipped_match_rms) = loudest(&pieces.rmses(&clipped));
-        let correction = rms_coefficient(clipped_match_rms, profile.match_rms);
-        result_mid.iter_mut().for_each(|value| *value *= correction);
-        gain *= correction;
+        let (_, clipped_match_rms) = loudest(&pieces.rmses(|index| (convolved_mid[index] * gain).clamp(-1.0, 1.0)));
+        gain *= rms_coefficient(clipped_match_rms, profile.match_rms);
     }
     Ok(MatchResult {gain, final_amplitude: profile.final_amplitude, mid_curve, side_curve})
 }
 
 /// The matched audio without limiter (Matchering's `result_no_limiter`).
-pub fn apply(left: &[f64], right: &[f64], result: &MatchResult) -> (Vec<f64>, Vec<f64>) {
-    let (mid, side) = to_mid_side(left, right);
-    let mid = convolve_same(&mid, &fir(&result.mid_curve));
-    let side = convolve_same(&side, &fir(&result.side_curve));
+pub fn apply<S: Copy + Into<f64>>(left: &[S], right: &[S], result: &MatchResult) -> (Vec<f64>, Vec<f64>) {
+    let stereo = Stereo::new(left, right);
+    let mid = convolve_same(stereo.len(), |index| stereo.mid(index), &fir(&result.mid_curve));
+    let side = convolve_same(stereo.len(), |index| stereo.side(index), &fir(&result.side_curve));
     mid.iter().zip(&side)
         .map(|(mid, side)| ((mid + side) * result.gain, (mid - side) * result.gain))
         .unzip()

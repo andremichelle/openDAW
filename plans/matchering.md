@@ -52,8 +52,9 @@ New Rust pieces with no counterpart in `dsp`:
 
 The wasm exports plain functions over its own linear memory (no wasm-bindgen, like `stretch-wasm`):
 
-1. `alloc(frames)` for target and reference, the worker copies planar f32 in.
-2. `process(config)` runs the stages and reports progress through an imported callback per stage.
+1. `alloc_bytes` / `free_bytes`, the worker copies planar f32 in.
+2. `analyse_reference` and `match_target` run the stages, `match_target` reports each stage through the imported
+   `env.progress`.
 3. Result: mid and side gains, smoothed mid and side curves, plus the reference analysis for the spectrum display.
 
 The analysis is split in two steps, so a reference does not have to be an audio file:
@@ -126,7 +127,11 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
    `tests/fixtures/generate_stages.py`). The crate expects 44.1 kHz input, the TS side renders and decodes at that
    rate. Matchering ships no tests of its own, `LIMITER_TEST.md` is a visual limiter comparison and the limiter is
    not ported.
-4. Private package, worker, TS API, build script.
+4. Private package, worker, TS API, build script (done). `@opendaw/studio-matchering` builds the crate into
+   `dist/matchering.wasm` (turbo rebuilds it on crate changes), `Matchering.analyseReference` and
+   `Matchering.matchTarget` resample to 44.1 kHz and run in a worker that exists only per job. The analysis reads
+   mid and side on demand from the f32 input and keeps only the convolved mid in f64, about 170 MB for 4 minutes
+   instead of about 700 MB. `test/matchering.test.ts` runs the built wasm against the Matchering fixtures.
 5. Mastering box + runtime processor (TS and wasm engine), tests that it applies a stored result correctly.
 6. Mixer button + panel: reference profiles, analyse, store, final touch, A/B.
 7. License notes in README and manual.
