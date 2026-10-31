@@ -327,7 +327,8 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
     }
     const renderContent = (lifecycle: Lifecycle, adapter: Optional<MasteringDeviceBoxAdapter>) => {
         const curve: SVGPathElement = <path className="curve"/>
-        const fill: SVGPathElement = <path className="fill"/>
+        const fillGradientID = Html.nextID()
+        const fill: SVGPathElement = <path className="fill" fill={`url(#${fillGradientID})`}/>
         const sideCurve: SVGPathElement = <path className="side"/>
         const thumb: HTMLElement = <div className="thumb"/>
         const amountValue: HTMLElement = <span className="value">–</span>
@@ -429,6 +430,14 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                         </div>
                         <div className="display">
                             <svg viewBox="0 0 400 100" preserveAspectRatio="none">
+                                <defs>
+                                    <linearGradient id={fillGradientID} x1="0" x2="0" y1="0" y2="100"
+                                                    gradientUnits="userSpaceOnUse">
+                                        <stop offset="0" stop-color={Colors.blue.opacity(0.30)}/>
+                                        <stop offset="0.5" stop-color={Colors.blue.opacity(0.01)}/>
+                                        <stop offset="1" stop-color={Colors.blue.opacity(0.30)}/>
+                                    </linearGradient>
+                                </defs>
                                 {FrequencyTicks.map(({hz}) => (
                                     <line className="grid" x1={frequencyToX(hz) * 400} y1="0"
                                           x2={frequencyToX(hz) * 400} y2="100"/>
