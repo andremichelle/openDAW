@@ -29,6 +29,9 @@ component
       letter-spacing: 0.03em
       white-space: nowrap
 
+    > div.spacer
+      flex: 1
+
     svg
       font-size: 14px
 
@@ -193,7 +196,7 @@ component
             flex: 0 0 8em
             min-width: 0
 
-            > *, label
+            button, label
               width: 100%
               min-width: 0
 
@@ -211,6 +214,14 @@ component
           grid-template-columns: repeat(auto-fill, 3.5em)
           grid-auto-rows: 3.5em
           align-items: center
+
+          // black knob body, the value arc keeps the text color
+          svg > g
+            > circle:nth-of-type(2)
+              fill: var(--color-black)
+
+            > path:last-child
+              stroke: rgba(white, 0.6)
 
         div.meter
           display: grid
@@ -246,6 +257,10 @@ component
     align-items: center
     column-gap: 0.25em
 
-
     > div.spacer
       flex: 1
+
+    > span.latency
+      font-size: 9px
+      color: var(--color-orange)
+      white-space: nowrap

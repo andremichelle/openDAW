@@ -75,6 +75,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     const mastering = new DefaultObservableValue(false)
     const masteringLifecycle = lifecycle.own(new Terminator())
     const masteringPanel = new MutableObservableOption<HTMLElement>()
+    const revealMastering = new DefaultObservableValue(false)
     const toggleMastering = async (open: boolean): Promise<void> => {
         masteringLifecycle.terminate()
         masteringPanel.clear()
@@ -83,6 +84,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             const {MasteringPanel} = await loadMasteringPanel()
             if (!mastering.getValue()) {return}
             masteringPanel.wrap(MasteringPanel({lifecycle: masteringLifecycle, service, outputUnit: outputUnit.adapter}))
+            revealMastering.setValue(true)
         }
         updateDom.request()
     }
@@ -99,6 +101,10 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
+        if (revealMastering.getValue()) {
+            revealMastering.setValue(false)
+            masteringPanel.ifSome(panel => panel.scrollIntoView({behavior: "smooth", inline: "end", block: "nearest"}))
+        }
     })
     const removeEditingIndicator = () => channelStripContainer
         .querySelectorAll(".editing")

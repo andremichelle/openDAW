@@ -45,7 +45,7 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: 
             groupElement.classList.add("mastering")
             groupElement.appendChild(
                 <Checkbox lifecycle={lifecycle} model={mastering}
-                          appearance={{color: Colors.shadow, activeColor: Colors.orange}}>
+                          appearance={{color: Colors.orange, activeColor: Colors.blue}}>
                     <span>Mastering</span>
                 </Checkbox>
             )
