@@ -69,6 +69,19 @@ describe("WebCLAP state bytes and the undo history", () => {
         expect(device.url.getValue()).toBe("opfs:plugin")
     })
 
+    it("an undoable save (the plugin's own change) is a step of its own: an undo takes back that save only", async () => {
+        const {project, device, uuid} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, true)
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, true)
+        project.editing.undo()
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([1])
+        project.editing.undo()
+        expect(device.pluginState.getValue().length).toBe(0)
+        project.editing.redo()
+        project.editing.redo()
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([2])
+    })
+
     it("a redo restores the saved bytes", async () => {
         const {project, device, uuid} = await setup()
         WclapStates.store(project, uuid, new Uint8Array([4, 5]).buffer)

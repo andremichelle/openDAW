@@ -102,7 +102,8 @@ export interface EngineToClient {
     fetchWclapBundle(url: string): Promise<WclapBundle>
     wclapSend(uuid: string, bytes: ArrayBuffer): void
     // url and clapId of the plugin instance that saved
-    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void
+    // undoable: the plugin changed state that is not a parameter (clap.state mark_dirty), the save is an undo step
+    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, undoable: boolean): void
     // the loaded plugin's parameter list (once per load) and its own parameter changes
     wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void
     wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void
