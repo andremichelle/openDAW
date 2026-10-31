@@ -140,6 +140,7 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 #### Ported Plugins (Excluded in commercial license)
 
 * [Compressor](https://github.com/p-hlp/CTAGDRC) (CTAG Dynamic Range Compressor)
+* [Mastering](https://github.com/sergree/matchering) (Matchering by Sergree, GPL-3.0, studio only, not part of the SDK)
 
 ### WebCLAP
 

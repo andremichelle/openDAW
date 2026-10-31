@@ -39,6 +39,7 @@ Shows the name of the audio-unit. Click to select the channel.
 Route audio to effect buses or auxiliary channels.
 - Click {icon:Add} to add a new send
 - Each send has its own level control
+- The output strip has no sends. It shows **Mastering** there instead, see [Mastering](/manuals/devices/audio/mastering)
 
 ### 1.4 Output
 
