@@ -12,6 +12,10 @@ const load = async (wasmUrl: string, progress: Procedure<Matchering.Stage>): Pro
 
 Communicator.executor(Messenger.for(self as unknown as Parameters<typeof Messenger.for>[0]).channel("matchering"),
     new class implements MatcheringProtocol {
+        async builtinProfile(wasmUrl: string, index: number): Promise<Matchering.ReferenceProfile> {
+            return (await load(wasmUrl, EmptyProcedure)).builtinProfile(index)
+        }
+
         async analyseReference(wasmUrl: string, left: Float32Array, right: Float32Array): Promise<Matchering.ReferenceProfile> {
             return (await load(wasmUrl, EmptyProcedure)).analyseReference(left, right)
         }

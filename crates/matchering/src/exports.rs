@@ -5,7 +5,7 @@
 // WASM CONTRACT: packages/studio/matchering/src/MatcheringWasm.ts mirrors these exports and layouts.
 use crate::analysis::{analyse_reference as analyse, match_target as matching, Error, MatchResult, ReferenceProfile,
                       Stage};
-use crate::config::BINS;
+use crate::config::{BINS, CURVE_LIMIT_DB};
 
 pub const PROFILE_LENGTH: usize = 2 + 2 * BINS;
 pub const RESULT_LENGTH: usize = 2 + 2 * BINS;
@@ -39,17 +39,28 @@ pub extern "C" fn free_bytes(pointer: *mut u8, length: usize) {
 #[no_mangle]
 pub extern "C" fn bins() -> usize {BINS}
 
+fn write_profile(profile: &ReferenceProfile, output: *mut f64) {
+    let output = unsafe {core::slice::from_raw_parts_mut(output, PROFILE_LENGTH)};
+    output[0] = profile.match_rms;
+    output[1] = profile.final_amplitude;
+    output[2..2 + BINS].copy_from_slice(&profile.mid_spectrum);
+    output[2 + BINS..].copy_from_slice(&profile.side_spectrum);
+}
+
+#[no_mangle]
+pub extern "C" fn builtin_profile_count() -> usize {crate::profiles::COUNT}
+
+/// Writes the built-in profile `index` in the profile layout below.
+#[no_mangle]
+pub extern "C" fn builtin_profile(index: usize, output: *mut f64) {write_profile(&crate::profiles::builtin(index), output)}
+
 /// Writes PROFILE_LENGTH f64: match_rms, final_amplitude, mid spectrum, side spectrum. Returns 0 or an error status.
 #[no_mangle]
 pub extern "C" fn analyse_reference(left: *const f32, right: *const f32, frames: usize, output: *mut f64) -> i32 {
     let (left, right) = unsafe {(core::slice::from_raw_parts(left, frames), core::slice::from_raw_parts(right, frames))};
     match analyse(left, right) {
         Ok(profile) => {
-            let output = unsafe {core::slice::from_raw_parts_mut(output, PROFILE_LENGTH)};
-            output[0] = profile.match_rms;
-            output[1] = profile.final_amplitude;
-            output[2..2 + BINS].copy_from_slice(&profile.mid_spectrum);
-            output[2 + BINS..].copy_from_slice(&profile.side_spectrum);
+            write_profile(&profile, output);
             0
         }
         Err(error) => status(error)
@@ -69,7 +80,7 @@ pub extern "C" fn match_target(left: *const f32, right: *const f32, frames: usiz
         side_spectrum: profile[2 + BINS..].to_vec()
     };
     let mut report = |stage: Stage| unsafe {progress(stage as u32)};
-    match matching(left, right, &profile, &mut report) {
+    match matching(left, right, &profile, Some(CURVE_LIMIT_DB), &mut report) {
         Ok(MatchResult {gain, final_amplitude, mid_curve, side_curve}) => {
             let output = unsafe {core::slice::from_raw_parts_mut(output, RESULT_LENGTH)};
             output[0] = gain;

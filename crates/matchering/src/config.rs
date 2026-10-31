@@ -11,6 +11,8 @@ pub const FFT_SIZE: usize = 4096;
 pub const BINS: usize = FFT_SIZE / 2 + 1;
 pub const LIN_LOG_OVERSAMPLING: usize = 4;
 pub const RMS_CORRECTION_STEPS: usize = 4;
+// not in Matchering: the matching curves are clamped, a narrow mix otherwise gets its side boosted by 40 dB and more
+pub const CURVE_LIMIT_DB: f64 = 12.0;
 pub const LOWESS_FRAC: f64 = 0.0375;
 pub const LOWESS_ITERATIONS: usize = 0;
 pub const LOWESS_DELTA: f64 = 0.001;

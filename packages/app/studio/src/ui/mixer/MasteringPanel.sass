@@ -10,8 +10,11 @@ component
   border-radius: 1px
   color: var(--color-cream)
 
+  > div.content
+    display: contents
+
   // borrowed from DeviceEditor.sass
-  > header
+  > div.content > header
     display: flex
     align-items: center
     column-gap: 3px
@@ -58,7 +61,7 @@ component
     label
       font-size: 1em
 
-  > div.body
+  > div.content > div.body
     flex: 1
     min-height: 0
     padding: 0.375em 0
@@ -80,7 +83,7 @@ component
         align-items: center
         row-gap: 0.25em
 
-        > div.slider
+        div.slider
           flex: 1
           position: relative
           width: 1em
@@ -139,6 +142,13 @@ component
               stroke: var(--color-blue)
               stroke-width: 1.5
 
+            &.side
+              fill: none
+              stroke: var(--color-blue)
+              stroke-opacity: 0.35
+              stroke-width: 1
+              stroke-dasharray: 3 2
+
         > div.gain-axis, > div.frequency-axis
           position: relative
           font-size: 0.5em
@@ -179,6 +189,14 @@ component
             flex: 1
             margin-bottom: 0
 
+          > div.drop-down
+            flex: 0 0 8em
+            min-width: 0
+
+            > *, label
+              width: 100%
+              min-width: 0
+
         &.meters
           flex: 1
           row-gap: 0.375em
@@ -218,11 +236,16 @@ component
           > span.end
             justify-self: end
 
-  > footer
+  > div.content > div.body.unanalysed
+    div.slider, svg > path
+      opacity: 0.3
+
+  > div.content > footer
     height: 3em
     display: flex
     align-items: center
     column-gap: 0.25em
+
 
     > div.spacer
       flex: 1

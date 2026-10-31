@@ -17,6 +17,7 @@
 #![cfg_attr(target_family = "wasm", no_std)]
 
 pub mod hyrax;
+pub mod meters;
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
@@ -26,6 +27,7 @@ use dsp::db_to_gain;
 use dsp::rfft::FftTables;
 use math::value_mapping::Linear;
 use hyrax::Hyrax;
+use meters::{Correlation, Loudness};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -38,6 +40,9 @@ const GAIN_FIELD: [u16; 1] = [11];
 const WIDTH_FIELD: [u16; 1] = [12];
 const CEILING_FIELD: [u16; 1] = [13];
 const LIMITER_FIELD: [u16; 1] = [14];
+const COMPARE_FIELD: [u16; 1] = [15]; // no box field: a local value, delivered only by `override_device_field`
+const METERS_FIELD: [u16; 1] = [0]; // peak left, peak right, short-term LUFS, integrated LUFS, correlation
+const METER_COUNT: usize = 5;
 const MATCH_GAIN_FIELD: [u16; 1] = [20];
 const FINAL_AMPLITUDE_FIELD: [u16; 1] = [21];
 const MID_CURVE_FIELD: [u16; 1] = [22];
@@ -115,6 +120,15 @@ pub struct MasteringState {
     limiter: bool,
     match_gain: f32,
     final_amplitude: f32,
+    compare: bool,
+    compare_gain: f32,
+    output_loudness: Loudness,
+    dry_loudness: Loudness,
+    correlation: Correlation,
+    peaks: [f32; 2],
+    meters_id: u32,
+    meters_ptr: u32,
+    compare_id: u32,
     amount_id: u32,
     gain_id: u32,
     width_id: u32,
@@ -152,6 +166,7 @@ impl MasteringDevice {
     pub fn field_changed(state: &mut MasteringState, id: u32, value: FieldValue) {
         match value {
             FieldValue::Bool(flag) if id == state.limiter_id => state.limiter = flag,
+            FieldValue::Bool(flag) if id == state.compare_id => state.compare = flag,
             FieldValue::Float(real) if id == state.match_gain_id => state.match_gain = real,
             FieldValue::Float(real) if id == state.final_amplitude_id => state.final_amplitude = real,
             FieldValue::Bytes(bytes) if id == state.mid_curve_id => {
@@ -167,6 +182,28 @@ impl MasteringDevice {
     }
 
     pub fn latency(state: &MasteringState) -> usize {state.taps / 2 + state.hyrax.latency()}
+
+    fn meter(state: &mut MasteringState, left: &[f32], right: &[f32]) {
+        if !state.compare {
+            state.output_loudness.process(left, right);
+            let (output, dry) = (state.output_loudness.short_term_mean_square(), state.dry_loudness.short_term_mean_square());
+            if output > 1e-10 && dry > 1e-10 {state.compare_gain = libm::sqrt(output / dry).clamp(1e-3, 1e3) as f32;}
+        }
+        for (peak, channel) in state.peaks.iter_mut().zip([left, right]) {
+            *peak = channel.iter().fold(*peak, |peak, value| peak.max(value.abs()));
+        }
+        state.correlation.process(left, right);
+        if state.meters_ptr == 0 {state.meters_ptr = abi::broadcast_ptr(state.meters_id);}
+        if state.meters_ptr != 0 {
+            let values = unsafe {core::slice::from_raw_parts_mut(state.meters_ptr as *mut f32, METER_COUNT)};
+            values[0] = state.peaks[0];
+            values[1] = state.peaks[1];
+            values[2] = state.output_loudness.short_term();
+            values[3] = state.output_loudness.integrated();
+            values[4] = state.correlation.value();
+            state.peaks = [0.0; 2];
+        }
+    }
 }
 
 impl AudioEffect for MasteringDevice {
@@ -185,6 +222,15 @@ impl AudioEffect for MasteringDevice {
         state.limiter = true;
         state.match_gain = 1.0;
         state.final_amplitude = 1.0;
+        state.compare = false;
+        state.compare_gain = 1.0;
+        state.output_loudness.init(sample_rate);
+        state.dry_loudness.init(sample_rate);
+        state.correlation.init(sample_rate);
+        state.peaks = [0.0; 2];
+        state.meters_id = abi::bind_broadcast(&METERS_FIELD, METER_COUNT as u32);
+        state.meters_ptr = 0;
+        state.compare_id = abi::observe_field(&COMPARE_FIELD);
         state.amount_id = abi::bind_parameter(&AMOUNT_FIELD);
         state.gain_id = abi::bind_parameter(&GAIN_FIELD);
         state.width_id = abi::bind_parameter(&WIDTH_FIELD);
@@ -213,6 +259,10 @@ impl AudioEffect for MasteringDevice {
         state.convolver.clear_runtime();
         state.hyrax.clear();
         state.dry.iter_mut().for_each(|channel| channel.fill(0.0));
+        state.output_loudness.clear();
+        state.dry_loudness.clear();
+        state.correlation.clear();
+        state.peaks = [0.0; 2];
     }
 
     fn process_audio(state: &mut MasteringState, output: [&mut [f32]; 2], block: &Block) {
@@ -236,6 +286,8 @@ impl AudioEffect for MasteringDevice {
         let delay = state.taps / 2;
         let amount = if state.analysed {state.amount} else {0.0};
         let gain = state.gain * state.match_gain;
+        let mut dry_left = [0.0f32; dsp::convolution::BLOCK];
+        let mut dry_right = [0.0f32; dsp::convolution::BLOCK];
         for index in s0..s1 {
             let write = state.dry_position & (DRY_RING - 1);
             let read = state.dry_position.wrapping_sub(delay) & (DRY_RING - 1);
@@ -243,6 +295,8 @@ impl AudioEffect for MasteringDevice {
             state.dry[1][write] = side[index];
             state.dry_position = state.dry_position.wrapping_add(1);
             let (dry_mid, dry_side) = (state.dry[0][read], state.dry[1][read]);
+            dry_left[index] = dry_mid + dry_side;
+            dry_right[index] = dry_mid - dry_side;
             let wet_mid = if state.analysed {out_left[index]} else {0.0};
             let wet_side = if state.analysed {out_right[index]} else {0.0};
             let mid = amount * wet_mid + (1.0 - amount) * dry_mid;
@@ -250,13 +304,23 @@ impl AudioEffect for MasteringDevice {
             out_left[index] = (mid + side) * gain;
             out_right[index] = (mid - side) * gain;
         }
-        state.hyrax.process(&mut out_left[s0..s1], &mut out_right[s0..s1], state.limiter);
-        if state.limiter && state.final_amplitude != 1.0 {
+        if state.compare {
+            state.hyrax.process(&mut dry_left[s0..s1], &mut dry_right[s0..s1], false);
             for index in s0..s1 {
-                out_left[index] *= state.final_amplitude;
-                out_right[index] *= state.final_amplitude;
+                out_left[index] = dry_left[index] * state.compare_gain;
+                out_right[index] = dry_right[index] * state.compare_gain;
             }
+        } else {
+            state.hyrax.process(&mut out_left[s0..s1], &mut out_right[s0..s1], state.limiter);
+            if state.limiter && state.final_amplitude != 1.0 {
+                for index in s0..s1 {
+                    out_left[index] *= state.final_amplitude;
+                    out_right[index] *= state.final_amplitude;
+                }
+            }
+            state.dry_loudness.process(&dry_left[s0..s1], &dry_right[s0..s1]);
         }
+        Self::meter(state, &out_left[s0..s1], &out_right[s0..s1]);
     }
 }
 

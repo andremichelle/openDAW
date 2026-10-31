@@ -60,10 +60,28 @@ describe("matchering.wasm", async () => {
     it("matches the target like Matchering and reports the stages in order", () => {
         stages.length = 0
         const result = wasm.matchTarget(targetLeft, targetRight, wasm.analyseReference(referenceLeft, referenceRight))
-        expect(maxDeviation(result.midCurve, fixture("match_mid_curve"), 2)).toBeLessThan(1e-5)
-        expect(maxDeviation(result.sideCurve, fixture("match_side_curve"), 2)).toBeLessThan(1e-5)
+        // the export clamps the curves to ±12 dB (crates/matchering CURVE_LIMIT_DB), Matchering itself does not
+        const clamped = (curve: Float64Array) => curve.map(value => Math.min(10 ** (12 / 20), Math.max(10 ** (-12 / 20), value)))
+        expect(maxDeviation(result.midCurve, clamped(fixture("match_mid_curve")), 2)).toBeLessThan(1e-5)
+        expect(maxDeviation(result.sideCurve, clamped(fixture("match_side_curve")), 2)).toBeLessThan(1e-5)
         expect(Number.isFinite(result.gain) && result.gain > 0.0).toBe(true)
         expect(stages).toEqual(["levels", "frequencies", "correction"])
+    })
+    it("builds every built-in profile and the profile matches like an analysed one", () => {
+        expect(Matchering.BuiltinProfiles.length).toBe(4)
+        Matchering.BuiltinProfiles.forEach((_, index) => {
+            const profile = wasm.builtinProfile(index)
+            expect(profile.midSpectrum.length).toBe(2049)
+            expect(20 * Math.log10(profile.matchRms)).toBeCloseTo(index === 3 ? -9 : -11, 0)
+        })
+        const result = wasm.matchTarget(targetLeft, targetRight, wasm.builtinProfile(0))
+        expect(result.midCurve.every(Number.isFinite)).toBe(true)
+    })
+    it("round trips profiles and curves through the box bytes", () => {
+        const profile = wasm.analyseReference(referenceLeft, referenceRight)
+        expect(Matchering.profileFromBytes(Matchering.profileToBytes(profile))).toEqual(profile)
+        const curve = Float64Array.from({length: 2049}, (_, index) => 1.0 + index / 4096)
+        expect(maxDeviation(Matchering.curveFromBytes(Matchering.curveToBytes(curve)), curve)).toBeLessThan(1e-6)
     })
     it("rejects audio shorter than one FFT frame", () => {
         const short = new Float32Array(4096)

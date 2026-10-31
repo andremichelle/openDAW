@@ -1,8 +1,10 @@
 import css from "./AuxSendGroup.sass?inline"
 import {
+    asInstanceOf,
     isDefined,
     Lifecycle,
     MutableObservableValue,
+    Optional,
     SortedSet,
     StringComparator,
     Terminator,
@@ -13,7 +15,7 @@ import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/stud
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {MenuItem, Project} from "@opendaw/studio-core"
-import {AuxSendBox} from "@opendaw/studio-boxes"
+import {AuxSendBox, MasteringDeviceBox} from "@opendaw/studio-boxes"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
@@ -47,6 +49,22 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: 
                     <span>Mastering</span>
                 </Checkbox>
             )
+            const deviceLifecycle = lifecycle.own(new Terminator())
+            const showState = (state: Optional<"mastered" | "bypassed">) => {
+                groupElement.classList.toggle("mastered", state === "mastered")
+                groupElement.classList.toggle("bypassed", state === "bypassed")
+            }
+            lifecycle.own(audioUnitAdapter.box.mastering.pointerHub.catchupAndSubscribe({
+                onAdded: pointer => {
+                    deviceLifecycle.terminate()
+                    deviceLifecycle.own(asInstanceOf(pointer.box, MasteringDeviceBox).enabled
+                        .catchupAndSubscribe(owner => showState(owner.getValue() ? "mastered" : "bypassed")))
+                },
+                onRemoved: () => {
+                    deviceLifecycle.terminate()
+                    showState(undefined)
+                }
+            }))
         }
         return groupElement
     }

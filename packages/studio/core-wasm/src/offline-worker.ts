@@ -340,6 +340,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 wclapRetry: (_url: string): void => {},
                 scriptMessage: (_uuid: UUID.Bytes, _message: unknown): void => {},
+                overrideDeviceField: (_uuid: UUID.Bytes, _key: int, _value: boolean | number): void => {},
                 querySignalGraph: (): Promise<SignalGraph> =>
                     Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}),
                 terminate: (): void => {}

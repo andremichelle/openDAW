@@ -7,6 +7,8 @@ interface Exports {
     alloc_bytes(length: number): number
     free_bytes(pointer: number, length: number): void
     bins(): number
+    builtin_profile_count(): number
+    builtin_profile(index: number, output: number): void
     analyse_reference(left: number, right: number, frames: number, output: number): number
     match_target(left: number, right: number, frames: number, profile: number, output: number): number
 }
@@ -28,18 +30,24 @@ export class MatcheringWasm {
         this.#bins = exports.bins()
     }
 
+    builtinProfile(index: number): Matchering.ReferenceProfile {
+        const exports = this.#exports
+        const bytes = (2 + 2 * this.#bins) * Float64Array.BYTES_PER_ELEMENT
+        const pointer = exports.alloc_bytes(bytes)
+        exports.builtin_profile(index, pointer)
+        const output = new Float64Array(exports.memory.buffer, pointer, 2 + 2 * this.#bins).slice()
+        exports.free_bytes(pointer, bytes)
+        return Matchering.decodeProfile(output)
+    }
+
     analyseReference(left: Float32Array, right: Float32Array): Matchering.ReferenceProfile {
-        const output = this.#run(left, right, 2 + 2 * this.#bins, [], (leftPointer, rightPointer, outputPointer) =>
-            this.#exports.analyse_reference(leftPointer, rightPointer, left.length, outputPointer))
-        return {
-            matchRms: output[0], finalAmplitude: output[1],
-            midSpectrum: output.slice(2, 2 + this.#bins), sideSpectrum: output.slice(2 + this.#bins)
-        }
+        return Matchering.decodeProfile(this.#run(left, right, 2 + 2 * this.#bins, [],
+            (leftPointer, rightPointer, outputPointer) =>
+                this.#exports.analyse_reference(leftPointer, rightPointer, left.length, outputPointer)))
     }
 
     matchTarget(left: Float32Array, right: Float32Array, profile: Matchering.ReferenceProfile): Matchering.MatchResult {
-        const profileValues = [profile.matchRms, profile.finalAmplitude, ...profile.midSpectrum, ...profile.sideSpectrum]
-        const output = this.#run(left, right, 2 + 2 * this.#bins, profileValues,
+        const output = this.#run(left, right, 2 + 2 * this.#bins, Matchering.encodeProfile(profile),
             (leftPointer, rightPointer, outputPointer, profilePointer) =>
                 this.#exports.match_target(leftPointer, rightPointer, left.length, profilePointer, outputPointer))
         return {
@@ -48,7 +56,7 @@ export class MatcheringWasm {
         }
     }
 
-    #run(left: Float32Array, right: Float32Array, outputLength: number, input: ReadonlyArray<number>,
+    #run(left: Float32Array, right: Float32Array, outputLength: number, input: ArrayLike<number>,
          call: (left: number, right: number, output: number, input: number) => number): Float64Array {
         const exports = this.#exports
         const channelBytes = left.length * Float32Array.BYTES_PER_ELEMENT

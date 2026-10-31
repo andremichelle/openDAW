@@ -46,6 +46,7 @@ import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
+import {MasteringDeviceBoxType, MasteringDeviceUrl} from "@opendaw/studio-matchering/device-url"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
@@ -92,7 +93,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     WasmEngine.install({
         processorUrl: wasmProcessorUrl,
         offlineWorkerUrl: wasmOfflineWorkerUrl,
-        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
+        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`,
+        extraDevices: [{url: MasteringDeviceUrl, boxType: MasteringDeviceBoxType}]
     })
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()

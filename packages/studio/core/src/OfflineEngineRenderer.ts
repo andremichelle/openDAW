@@ -172,6 +172,9 @@ export class OfflineEngineRenderer {
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
                 wclapRetry(url: string): void { dispatcher.dispatchAndForget(this.wclapRetry, url) }
                 scriptMessage(uuid: UUID.Bytes, message: unknown): void { dispatcher.dispatchAndForget(this.scriptMessage, uuid, message) }
+                overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                    dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                }
                 querySignalGraph(): Promise<SignalGraph> { return dispatcher.dispatchAndReturn(this.querySignalGraph) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }

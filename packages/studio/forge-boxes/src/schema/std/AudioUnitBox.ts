@@ -60,6 +60,11 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 name: "capture",
                 pointerType: Pointers.Capture, mandatory: false
             },
+            27: {
+                type: "field",
+                name: "mastering",
+                pointerRules: {accepts: [Pointers.MasteringHost], mandatory: false, exclusive: true}
+            },
             30: {
                 type: "object", name: "user-interface", class: {
                     name: "AudioUnitUserInterface",

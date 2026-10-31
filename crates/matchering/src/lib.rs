@@ -16,4 +16,5 @@ pub mod fft;
 pub mod frequencies;
 pub mod levels;
 pub mod lowess;
+pub mod profiles;
 pub mod spline;

@@ -96,6 +96,7 @@ const UNIT_MIDI_KEY: u16 = 21;     // midi-effect chain host
 const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
 const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
 const UNIT_AUX_SENDS_KEY: u16 = 24; // the unit's `auxSends` collection (parallel post-FX / pre-fader sends)
+const UNIT_MASTERING_KEY: u16 = 27; // mastering host: one device after the audio chain, built only if its plugin is linked
 const UNIT_OUTPUT_KEY: u16 = 25;   // the unit's `output` pointer -> the AudioBusBox `input` it feeds (or the root)
 // RootBox.audio-units hub (unit membership) — a different box, same ordinal.
 const ROOT_AUDIO_UNITS_KEY: u16 = 20;
@@ -648,6 +649,7 @@ pub(crate) struct AudioUnitBinding {
     pub(crate) input: IndexedCollection,
     pub(crate) midi: IndexedCollection,
     pub(crate) audio: IndexedCollection,
+    pub(crate) mastering: IndexedCollection,
     // SEND/RETURN: the unit's `output` (25) pointer monitor (a re-point enqueues the unit so `resolve_outputs`
     // re-routes it) + the CURRENT output route (which bus sum the strip feeds), and the `auxSends` (24)
     // collection + its built parallel sends. `routed` persists across rewires so a route can be torn down even
@@ -688,6 +690,13 @@ pub(crate) fn advance_shared_clips(units: &[AudioUnitBinding], clips: &Rc<RefCel
 }
 
 impl AudioUnitBinding {
+    /// The audio-effect chain in processing order: the `audio-effects` members by index, then the mastering device.
+    pub(crate) fn audio_chain(&self) -> Vec<Uuid> {
+        let mut chain = self.audio.sorted();
+        chain.extend(self.mastering.sorted());
+        chain
+    }
+
     pub(crate) fn shares_clip_read(&self) -> bool {
         matches!(&self.wired, Some(Wired::Composite(composite)) if composite.binding.cell_based())
     }
@@ -995,7 +1004,7 @@ impl Engine {
         // mid-bind) raises the LIGHT flag through this cell instead of the heavy automation invalidate.
         set_params_signal(Some(params_invalidate(unit)));
         // `wiring_dirty` (a device `enabled` toggle) re-wires the chain edge-only without a membership change.
-        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.wiring_dirty.replace(false);
+        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.mastering.take_dirty() | unit.wiring_dirty.replace(false);
         if unit_dirty {
             // The unit's own chain changed (instrument swapped, or a unit-level fx joined / left): reconcile the
             // whole chain (a composite instrument is rebuilt; a leaf reconciles per member). Survivors untouched.
@@ -1085,6 +1094,7 @@ impl Engine {
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
         binding.audio.terminate(&mut self.graph);
+        binding.mastering.terminate(&mut self.graph);
         binding.aux_sends.terminate(&mut self.graph);
     }
 
@@ -1264,11 +1274,13 @@ impl Engine {
         let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_INPUT_KEY]), 0);
         let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_MIDI_KEY]), EFFECT_INDEX_KEY);
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUDIO_KEY]), EFFECT_INDEX_KEY);
+        let mastering = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_MASTERING_KEY]), 0);
         // A chain edit (add / remove / reorder a device) enqueues this unit for a targeted reconcile. Wired
         // after `observe` so the catch-up members do not fire it; the new unit enqueues itself once below.
         input.set_on_dirty(mark.signal());
         midi.set_on_dirty(mark.signal());
         audio.set_on_dirty(mark.signal());
+        mastering.set_on_dirty(mark.signal());
         // SEND/RETURN: the `auxSends` (24) collection (parallel sends, ordered by index but order is not audible)
         // + a monitor on `output` (25) so a re-point of the unit's destination bus enqueues it. Both wired AFTER
         // observe so the catch-up members / value do not fire (the new unit enqueues itself once below).
@@ -1315,7 +1327,7 @@ impl Engine {
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],
             strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
-            note_bits, input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
+            note_bits, input, midi, audio, mastering, output_sub, routed: None, aux_sends, sends: Vec::new(),
             wired: None, automation_dirty, params_dirty, wiring_dirty, mark
         }
     }

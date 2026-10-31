@@ -1440,6 +1440,9 @@ struct Engine {
     solo_dirty: Rc<Cell<bool>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
+    // Per built device: (field_changed index, state ptr, observed field paths), so `override_device_field` can
+    // deliver a local value (never written to the box, never synced). Entries live exactly as long as the device.
+    field_overrides: BTreeMap<Uuid, (u32, u32, Vec<Vec<u16>>)>,
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
@@ -1524,6 +1527,7 @@ impl Engine {
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
+            field_overrides: BTreeMap::new(),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
@@ -2101,6 +2105,14 @@ impl Engine {
                 staging[right * RENDER_QUANTUM..(right + 1) * RENDER_QUANTUM].copy_from_slice(&buffer.right);
             }
         }
+    }
+
+    fn override_device_field(&mut self, uuid: Uuid, key: u16, kind: u32, bits: u32) -> bool {
+        if !matches!(kind, abi::FIELD_KIND_INT | abi::FIELD_KIND_FLOAT | abi::FIELD_KIND_BOOL) {return false;}
+        let Some((field_changed_index, state_ptr, paths)) = self.field_overrides.get(&uuid) else {return false};
+        let Some(id) = paths.iter().position(|path| path.as_slice() == [key]) else {return false};
+        call_device_field_changed(*field_changed_index, *state_ptr, id as u32, kind, bits, 0);
+        true
     }
 
     fn set_metronome_enabled(&mut self, enabled: bool) {
@@ -3334,6 +3346,15 @@ pub extern "C" fn set_truncate_notes_at_region_end(enabled: i32) {
     }
 }
 
+/// Deliver a LOCAL value for a device's observed plain field (a numeric `FIELD_KIND_*`), without editing the box:
+/// not undoable, not synced, gone with the next box edit of that field or a rebuild. Returns 1 if delivered.
+#[no_mangle]
+pub extern "C" fn override_device_field(uuid_ptr: u32, key: u32, kind: u32, bits: u32) -> u32 {
+    let uuid: Uuid = unsafe { *(uuid_ptr as *const Uuid) };
+    unsafe { ENGINE.get().as_mut() }.map_or(0, |engine| engine.override_device_field(uuid, key as u16, kind, bits) as u32)
+}
+
+/// Enable the metronome click.
 #[no_mangle]
 pub extern "C" fn set_metronome_enabled(enabled: i32) {
     unsafe {

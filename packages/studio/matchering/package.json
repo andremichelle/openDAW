@@ -4,7 +4,8 @@
   "license": "GPL-3.0-or-later",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./device-url": "./src/device-url.ts"
   },
   "scripts": {
     "build": "sh ./build-wasm.sh",

@@ -23,12 +23,46 @@ export namespace Matchering {
         sideCurve: Float64Array
     }
 
+    // WASM CONTRACT: the order of `DESIGNS` in crates/matchering/src/profiles.rs
+    export const BuiltinProfiles: ReadonlyArray<string> = ["Balanced", "Warm", "Bright", "Punchy"]
+
+    export const encodeProfile = ({matchRms, finalAmplitude, midSpectrum, sideSpectrum}: ReferenceProfile): Float64Array => {
+        const values = new Float64Array(2 + midSpectrum.length + sideSpectrum.length)
+        values[0] = matchRms
+        values[1] = finalAmplitude
+        values.set(midSpectrum, 2)
+        values.set(sideSpectrum, 2 + midSpectrum.length)
+        return values
+    }
+
+    export const decodeProfile = (values: Float64Array): ReferenceProfile => {
+        const bins = (values.length - 2) / 2
+        return {
+            matchRms: values[0], finalAmplitude: values[1],
+            midSpectrum: values.slice(2, 2 + bins), sideSpectrum: values.slice(2 + bins)
+        }
+    }
+
+    // The bytes layout of the box fields: profiles as f64, curves as f32 (little endian, as the device reads them)
+    export const profileToBytes = (profile: ReferenceProfile): Int8Array => new Int8Array(encodeProfile(profile).buffer)
+
+    export const profileFromBytes = (bytes: Int8Array): ReferenceProfile =>
+        decodeProfile(new Float64Array(bytes.slice().buffer))
+
+    export const curveToBytes = (curve: Float64Array): Int8Array => new Int8Array(Float32Array.from(curve).buffer)
+
+    export const curveFromBytes = (bytes: Int8Array): Float32Array => new Float32Array(bytes.slice().buffer)
+
     const wasmUrl = (): string => new URL("../dist/matchering.wasm", import.meta.url).href
 
     const run = async <R>(job: (protocol: MatcheringProtocol) => Promise<R>): Promise<R> => {
         const worker = new Worker(new URL("./matchering-worker.ts", import.meta.url), {type: "module"})
         const protocol = Communicator.sender<MatcheringProtocol>(Messenger.for(worker).channel("matchering"),
             router => new class implements MatcheringProtocol {
+                builtinProfile(wasmUrl: string, index: number): Promise<ReferenceProfile> {
+                    return router.dispatchAndReturn(this.builtinProfile, wasmUrl, index)
+                }
+
                 analyseReference(wasmUrl: string, left: Float32Array, right: Float32Array): Promise<ReferenceProfile> {
                     return router.dispatchAndReturn(this.analyseReference, wasmUrl, left, right)
                 }
@@ -57,6 +91,9 @@ export namespace Matchering {
         const rendered = await context.startRendering()
         return [rendered.getChannelData(0), rendered.getChannelData(1)]
     }
+
+    export const builtinProfile = (index: number): Promise<ReferenceProfile> =>
+        run(protocol => protocol.builtinProfile(wasmUrl(), index))
 
     export const analyseReference = async (audio: AudioData): Promise<ReferenceProfile> => {
         const [left, right] = await stereoAt44100(audio)

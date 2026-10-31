@@ -80,6 +80,8 @@ export interface EngineCommands extends Terminable {
     querySignalGraph(): Promise<SignalGraph>
     // a script view's host.send(message): handed to the device's Processor.message() before its next process call
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
+    // a local value for a device's plain field: never written to the box, not undoable, not synced
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void
 }
 
 // a point on the transport timeline in audio context time: the transport started, jumped or stopped there

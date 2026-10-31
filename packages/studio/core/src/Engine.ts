@@ -43,6 +43,8 @@ export interface Engine extends Terminable {
     wclapRetry(url: string): void
     querySignalGraph(): Promise<SignalGraph>
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
+    // a local value for a device's plain field: never written to the box, not undoable, not synced
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     /** where the transport started, jumped and stopped, in audio context time, as the engine rendered it */

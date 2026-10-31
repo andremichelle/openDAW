@@ -17,3 +17,9 @@ component
     > [data-class="checkbox"] > label
       width: 100%
       height: 2em
+
+    &.mastered > [data-class="checkbox"] > input:not(:checked) + label
+      color: var(--color-blue)
+
+    &.bypassed > [data-class="checkbox"] > input:not(:checked) + label
+      text-decoration: line-through

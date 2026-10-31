@@ -62,7 +62,9 @@ pub fn analyse_reference<S: Copy + Into<f64>>(left: &[S], right: &[S]) -> Result
 }
 
 /// 44.1 kHz stereo input, mono is passed as the same channel twice.
-pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &ReferenceProfile,
+/// `curve_limit_db` clamps both curves (bin 0 stays 0) before the level correction measures them, `None` keeps
+/// Matchering's unlimited curves.
+pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &ReferenceProfile, curve_limit_db: Option<f64>,
                                         progress: &mut dyn FnMut(Stage)) -> Result<MatchResult, Error> {
     let stereo = Stereo::new(left, right);
     validate(&stereo)?;
@@ -73,8 +75,12 @@ pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &Refe
     progress(Stage::Frequencies);
     let mid_spectrum = average_spectrum(&pieces, &indices, |index| stereo.mid(index) * gain);
     let side_spectrum = average_spectrum(&pieces, &indices, |index| stereo.side(index) * gain);
-    let mid_curve = matching_curve(&mid_spectrum, &profile.mid_spectrum);
-    let side_curve = matching_curve(&side_spectrum, &profile.side_spectrum);
+    let mut mid_curve = matching_curve(&mid_spectrum, &profile.mid_spectrum);
+    let mut side_curve = matching_curve(&side_spectrum, &profile.side_spectrum);
+    if let Some(limit) = curve_limit_db {
+        let (low, high) = (10f64.powf(-limit / 20.0), 10f64.powf(limit / 20.0));
+        mid_curve[1..].iter_mut().chain(side_curve[1..].iter_mut()).for_each(|value| *value = value.clamp(low, high));
+    }
     progress(Stage::Correction);
     let convolved_mid = convolve_same(stereo.len(), |index| stereo.mid(index), &fir(&mid_curve));
     for _ in 0..RMS_CORRECTION_STEPS {

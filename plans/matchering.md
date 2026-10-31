@@ -86,19 +86,25 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
 1. The output strip has no sends, its sends row (`AuxSendGroup` in `ChannelStrip.tsx`) shows a "Mastering" button
    instead. It shows the state: off, analysed, bypassed.
 2. Clicking it opens the mastering panel right of the output strip in `Mixer.tsx`, styled like a device editor.
-   The panel UI and the analysis code are lazy loaded from `packages/studio/matchering`.
-3. Panel content, laid out like Logic's Mastering Assistant (draft in `ui/mixer/MasteringPanel.tsx`):
+   The panel (studio code, `ui/mixer/MasteringPanel.tsx`) is a lazy chunk with the analysis package, boot only
+   imports the device url (`@opendaw/studio-matchering/device-url`) to link the device.
+3. The device attaches to the audio unit's own `mastering` field (27), never to the effect chain. The engine
+   appends it after the chain only if its plugin is linked, so an SDK engine plays the project unmastered.
+4. Compare is a local value the device observes at key 15 (no box field) and the panel sets through
+   `EngineCommands.overrideDeviceField`, never
+   written to the box, not undoable, not synced. The device plays the dry signal at the mastered loudness
+   (K-weighted 3 s ratio) with the same delay.
+5. Panel content, laid out like Logic's Mastering Assistant (draft in `ui/mixer/MasteringPanel.tsx`):
     1. Left: large display with the correction curve (±12 dB, 20 Hz to 20 kHz), the EQ amount as a vertical slider
        at its left edge.
     2. Right, stacked sections with headers: "Reference" (profile dropdown in one line), "Dynamics" (gain, ceiling,
        limiter on/off), "Spread" (width), "Meters" (peak, LUFS short-term and integrated, correlation).
     3. Bottom bar: section to analyse (`MixdownSection`), Analyse with per-stage progress, Compare (A/B at
        matched loudness).
-4. Analyse renders the project mixdown with mastering bypassed (`OfflineEngineRenderer`, like `AutoEqAction`), runs
+6. Analyse renders the project mixdown with mastering bypassed (`OfflineEngineRenderer`, like `AutoEqAction`), runs
    the matching in the worker and writes the result into the project in one editing transaction (undoable).
-5. From then on the engine applies it live (see Runtime device), the full mixdown includes it, stem export does not.
-6. The existing `/mastering` page mockup is only the design draft for the panel, page and route are removed in
-   phase 6.
+7. From then on the engine applies it live (see Runtime device), the full mixdown includes it, stem export does not.
+8. Meters: the device broadcasts peak, BS.1770 short-term and integrated loudness and correlation (`meters.rs`).
 
 ## Decisions
 
@@ -111,6 +117,8 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
 5. Linear phase, matching Matchering's output, delay compensation covers playback.
 6. Full mixdown includes the mastering, stems do not.
 7. The stored analysis stays until the user analyses again, no outdated hint, no automatic re-analysis.
+8. Unlike Matchering, both curves are clamped to ±12 dB before the level correction (`CURVE_LIMIT_DB`). A narrow
+   mix otherwise gets its side boosted by 40 dB and more, which sounded harsh with a wide reference.
 
 ## Tests
 
@@ -138,7 +146,9 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
    core-wasm gained an additive `extraDevices` option (realtime and offline) the studio uses to link it.
    Tests: Hyrax against Matchering's limiter, the FIR against Matchering's FIR, and engine renders with the
    device on the output (`packages/studio/matchering/test/mastering-device.test.ts`).
-6. Mixer button + panel: reference profiles, analyse, store, final touch, A/B.
+6. Mixer button + panel: reference profiles, analyse, store, final touch, A/B (implemented, not browser-checked).
+   Built-in profiles are designed spectra (`crates/matchering/src/profiles.rs`) run through the reference analysis.
+   Saving user profiles is not done yet.
 7. License notes in README and manual.
 
 ## Runtime device

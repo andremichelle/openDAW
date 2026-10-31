@@ -5,6 +5,9 @@ import {SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-ada
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
 
+// WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
+export enum FieldKind {Int = 0, Float = 1, Bool = 2}
+
 export type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
@@ -178,6 +181,8 @@ export type EngineExports = {
     set_allow_takes: (enabled: number) => void
     set_pause_on_loop_disabled: (enabled: number) => void
     set_truncate_notes_at_region_end: (enabled: number) => void
+    // a LOCAL value for a device's observed plain field (not written to the box), 1 if delivered
+    override_device_field: (uuidPtr: number, key: number, kind: FieldKind, bits: number) => number
     // PANIC readout: the engine's panic handler (and a device's, via the shared host_panic deposit) formats
     // the panic message + location into a static buffer BEFORE trapping. After catching the RuntimeError the
     // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).

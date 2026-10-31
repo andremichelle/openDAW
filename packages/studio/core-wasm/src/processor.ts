@@ -40,7 +40,7 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-exports"
+import {EngineExports, FieldKind, readSignalGraph, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
@@ -277,6 +277,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 wclapRetry: (url: string): void => this.#wclap.retry(url),
                 scriptMessage: (uuid: UUID.Bytes, message: unknown): void => this.#scriptBridges.message(UUID.toString(uuid), message),
+                overrideDeviceField: (uuid: UUID.Bytes, key: int, value: boolean | number): void => this.#guarded(() => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    const [kind, bits] = typeof value === "boolean"
+                        ? [FieldKind.Bool, value ? 1 : 0]
+                        : [FieldKind.Float, new Uint32Array(Float32Array.of(value).buffer)[0]]
+                    engine.override_device_field(pointer, key, kind, bits)
+                }),
                 querySignalGraph: (): Promise<SignalGraph> => Promise.resolve(readSignalGraph(engine, this.#memory)),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).

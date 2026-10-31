@@ -127,7 +127,7 @@ impl Engine {
         // The bus's own audio-effect chain (host 23), ordered by index: one builder for every audio chain —
         // a plugin effect OR an effect composite (an FX stack / split), exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
-        for device_uuid in unit.audio.sorted() {
+        for device_uuid in unit.audio_chain() {
             if let Some(member) = self.take_or_build_audio_member(&mut pool, device_uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
             }
@@ -281,7 +281,7 @@ impl Engine {
         // Build the AUDIO-effects chain (reusing survivors, building joiners, terminating leavers) exactly like a
         // leaf unit. Without this an audio track's effects (EQ / compressor / gain) are silently dropped.
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -417,7 +417,7 @@ impl Engine {
         // The unit's AUDIO-effects chain over the silent output + the channel strip, exactly like the tape.
         let signal = unit.mark.signal();
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, &signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -685,7 +685,7 @@ impl Engine {
         // The unit's AUDIO-effects chain over the sum (reusing survivors, building joiners, terminating leavers)
         // exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -799,7 +799,7 @@ impl Engine {
             }
         }
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);

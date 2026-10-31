@@ -24,6 +24,7 @@
     "@opendaw/studio-boxes": "^0.0.118",
     "@opendaw/studio-core": "^0.2.14",
     "@opendaw/studio-core-wasm": "^0.0.25",
+    "@opendaw/studio-matchering": "0.0.0",
     "@opendaw/studio-enums": "^0.1.10",
     "@opendaw/studio-icons": "^0.0.9",
     "@opendaw/studio-markdown": "^0.0.9",

@@ -381,6 +381,8 @@ impl Engine {
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let (mut observe_subs, pointer_field_subs) = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
+        self.field_overrides.insert(device_uuid,
+            (reg.field_changed_index, state_ptr, field_paths.iter().map(|obs| obs.path.clone()).collect()));
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
         observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
@@ -726,6 +728,9 @@ impl Engine {
     /// JS-side instance).
     pub(crate) fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
         for params in device_params {
+            if self.field_overrides.get(&params.device_uuid).is_some_and(|(_, state_ptr, _)| *state_ptr == params.state_ptr) {
+                self.field_overrides.remove(&params.device_uuid);
+            }
             call_device_terminate(params.reg.terminate_index, params.state_ptr);
             for sub in params.field_subs {
                 self.graph.unsubscribe(sub);

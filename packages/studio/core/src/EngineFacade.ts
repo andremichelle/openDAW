@@ -159,6 +159,9 @@ export class EngineFacade implements Engine {
     }
     wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
     scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#worklet.ifSome(worklet => worklet.scriptMessage(uuid, message))}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#worklet.ifSome(worklet => worklet.overrideDeviceField(uuid, key, value))
+    }
     querySignalGraph(): Promise<SignalGraph> {
         return this.#worklet.mapOr(worklet => worklet.querySignalGraph(), Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}))
     }
