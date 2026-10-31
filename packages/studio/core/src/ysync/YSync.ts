@@ -7,9 +7,12 @@ import {
     isInstanceOf,
     isUndefined,
     JSONValue,
+    Notifier,
+    Observer,
     Option,
     panic,
     Provider,
+    SortedSet,
     Subscription,
     Terminable,
     Terminator,
@@ -17,11 +20,13 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {
+    Address,
     ArrayField,
     Box,
     BoxGraph,
     ByteArrayField,
     Field,
+    IndexedBox,
     ObjectField,
     optimizeUpdates,
     PointerField,
@@ -30,7 +35,9 @@ import {
 } from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
 import {YBytes} from "./YBytes"
-import {deterministicReconcile} from "./Reconcile"
+import {
+    deterministicReconcile, duplicateOrders, hasOverlappingRegions, repairOrder, repairOverlappingRegions
+} from "./Reconcile"
 import * as Y from "yjs"
 
 type EventHandler = (events: Array<Y.YEvent<any>>, transaction: Y.Transaction) => void
@@ -39,6 +46,27 @@ export type Construct<T> = {
     boxGraph: BoxGraph<T>,
     boxes: Y.Map<unknown>
     conflict?: Provider<boolean>
+}
+
+// edits that stay on this client until published: a preview is reverted when the room breaks it, a take survives
+export type LocalLayerKind = "preview" | "take"
+
+export interface LocalLayer extends Terminable {
+    get hasChanges(): boolean
+    run<R>(procedure: Provider<R>): R
+    revert(): void
+    publish(): void
+    boxes(): ReadonlyArray<Box>
+    owns(uuid: UUID.Bytes): boolean
+    subscribeInvalid(observer: Observer<void>): Subscription
+}
+
+type LayerState = {
+    readonly kind: LocalLayerKind
+    readonly boxes: SortedSet<UUID.Bytes, UUID.Bytes>
+    readonly hidden: SortedSet<UUID.Bytes, UUID.Bytes>
+    readonly fields: SortedSet<Address, Address>
+    readonly invalid: Notifier<void>
 }
 
 export class YSync<T> implements Terminable {
@@ -108,8 +136,11 @@ export class YSync<T> implements Terminable {
     readonly #generator: YBytes.Generator
     readonly #touchedBytes: Array<ByteArrayField> = []
 
+    readonly #layers: Array<LayerState> = []
+
     #ignoreUpdates: boolean = false
     #publishFrom: Option<int> = Option.None
+    #activeLayer: Option<LayerState> = Option.None
 
     constructor({boxGraph, boxes, conflict}: Construct<T>) {
         this.#boxGraph = boxGraph
@@ -121,7 +152,147 @@ export class YSync<T> implements Terminable {
         this.#terminator.ownAll(this.#setupYjs(), this.#setupOpenDAW())
     }
 
-    terminate(): void {this.#terminator.terminate()}
+    isLocal(uuid: UUID.Bytes): boolean {return this.#layers.some(layer => layer.boxes.hasKey(uuid))}
+
+    createLayer(kind: LocalLayerKind): LocalLayer {
+        const layer: LayerState = {
+            kind, boxes: UUID.newSet(uuid => uuid), hidden: UUID.newSet(uuid => uuid),
+            fields: Address.newSet(address => address), invalid: new Notifier<void>()
+        }
+        this.#layers.push(layer)
+        return {
+            get hasChanges(): boolean {return YSync.#hasChanges(layer)},
+            run: <R>(procedure: Provider<R>): R => this.#runInLayer(layer, procedure),
+            revert: () => {
+                this.#revertLayers([layer])
+                this.#repairOrder()
+            },
+            publish: () => {
+                this.#publishLayer(layer)
+                this.#repairOrder()
+            },
+            boxes: () => layer.boxes.values().flatMap(uuid => this.#boxGraph.findBox(uuid).mapOr(box => [box], [])),
+            owns: (uuid: UUID.Bytes) => layer.boxes.hasKey(uuid),
+            subscribeInvalid: (observer: Observer<void>) => layer.invalid.subscribe(observer),
+            terminate: () => {
+                const index = this.#layers.indexOf(layer)
+                if (index >= 0) {this.#layers.splice(index, 1)}
+            }
+        }
+    }
+
+    terminate(): void {
+        this.#layers.length = 0
+        this.#terminator.terminate()
+    }
+
+    static #hasChanges({boxes, hidden, fields}: LayerState): boolean {
+        return !boxes.isEmpty() || !hidden.isEmpty() || !fields.isEmpty()
+    }
+
+    get #previews(): ReadonlyArray<LayerState> {
+        return this.#layers.filter(layer => layer.kind === "preview" && YSync.#hasChanges(layer))
+    }
+
+    #runInLayer<R>(layer: LayerState, procedure: Provider<R>): R {
+        const outer = this.#activeLayer
+        this.#activeLayer = Option.wrap(layer)
+        const result = tryCatch(procedure)
+        this.#activeLayer = outer
+        if (result.status === "failure") {throw result.error}
+        return result.value
+    }
+
+    // the graph returns to what the document holds now, not to what it held before the local edits
+    #revertLayers(layers: ReadonlyArray<LayerState>): void {
+        if (!layers.some(YSync.#hasChanges)) {return}
+        assert(!this.#boxGraph.inTransaction(), "Cannot revert local edits inside a transaction")
+        const result = tryCatch(() => {
+            this.#boxGraph.beginTransaction()
+            layers.forEach(layer => this.#revertInTransaction(layer))
+            // a restored pointer can name what a peer deleted meanwhile, that repair belongs to the room
+            this.#publishFrom = Option.wrap(this.#updates.length)
+            this.#boxGraph.clearUnresolvablePointers()
+            this.#boxGraph.endTransaction()
+        })
+        if (result.status === "failure") {
+            this.#publishFrom = Option.None
+            if (this.#boxGraph.inTransaction()) {this.#boxGraph.abortTransaction()}
+            this.#boxGraph.beginTransaction()
+            layers.forEach(layer => this.#revertInTransaction(layer))
+            this.#publishFrom = Option.wrap(this.#updates.length)
+            deterministicReconcile(this.#boxGraph)
+            this.#boxGraph.endTransaction()
+        }
+        layers.forEach(YSync.#clearLayer)
+    }
+
+    #publishLayer(layer: LayerState): void {
+        if (!YSync.#hasChanges(layer)) {return}
+        assert(!this.#boxGraph.inTransaction(), "Cannot publish local edits inside a transaction")
+        this.#getDoc().transact(() => {
+            layer.boxes.values().forEach(uuid => {
+                const key = UUID.toString(uuid)
+                if (this.#boxes.has(key)) {return}
+                this.#boxGraph.findBox(uuid).ifSome(box => this.#boxes.set(key, YMapper.createBoxMap(box, this.#generator.next())))
+            })
+            layer.hidden.values().forEach(uuid => this.#boxes.delete(UUID.toString(uuid)))
+            layer.fields.values().forEach(address => this.#writeField(address))
+        }, "[openDAW] updates")
+        YSync.#clearLayer(layer)
+    }
+
+    #writeField(address: Address): void {
+        const key = UUID.toString(address.uuid)
+        const boxObject = this.#boxes.get(key)
+        if (!isInstanceOf(boxObject, Y.Map)) {return}
+        const parent = this.#resolveFieldMap(boxObject, key, address.fieldKeys)
+        if (parent === undefined) {return}
+        const fieldKey = String(address.fieldKeys[address.fieldKeys.length - 1])
+        this.#boxGraph.findVertex(address).ifSome(vertex => vertex.accept({
+            visitPointerField: (field: PointerField) =>
+                parent.set(fieldKey, field.targetAddress.mapOr(target => target.toString(), null)),
+            visitPrimitiveField: (field: PrimitiveField) => {
+                const value = field.getValue()
+                if (value instanceof Int8Array) {
+                    YBytes.write(parent, fieldKey, value, this.#generator.next())
+                } else {
+                    parent.set(fieldKey, YMapper.toY(value))
+                }
+            }
+        }))
+    }
+
+    // two peers can insert at one index, every peer computes the same order from the document
+    #repairOrder(): void {
+        if (this.#boxGraph.inTransaction()) {return}
+        const fields = Array.from(new Set(duplicateOrders(this.#boxGraph)))
+        // an order that holds a local box is only this client's view and is repaired without telling the room
+        const layerOf = (field: Field) => this.#layers.find(({boxes}) => IndexedBox.collectIndexedBoxes(field)
+            .some(box => boxes.hasKey(box.address.uuid)))
+        fields.forEach(field => {
+            const layer = layerOf(field)
+            if (layer === undefined) {return}
+            this.#runInLayer(layer, () => {
+                this.#boxGraph.beginTransaction()
+                repairOrder(field)
+                this.#boxGraph.endTransaction()
+            })
+        })
+        if (this.#layers.some(YSync.#hasChanges)) {return}
+        if (fields.length === 0 && !hasOverlappingRegions(this.#boxGraph)) {return}
+        this.#boxGraph.beginTransaction()
+        this.#publishFrom = Option.wrap(this.#updates.length)
+        fields.forEach(repairOrder)
+        repairOverlappingRegions(this.#boxGraph)
+        this.#boxGraph.endTransaction()
+    }
+
+    static #clearLayer({boxes, hidden, fields}: LayerState): void {
+        boxes.clear()
+        hidden.clear()
+        fields.clear()
+    }
 
     #setupYjs(): Subscription {
         const eventHandler: EventHandler = (events, {origin, local}) => {
@@ -130,6 +301,7 @@ export class YSync<T> implements Terminable {
             const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}, isOwnOrigin: ${isOwnOrigin}`)
             if (isOwnOrigin || (local && !isHistoryReplay)) {return}
+            const previews = this.#previews
             // First attempt: apply the remote batch verbatim.
             this.#boxGraph.beginTransaction()
             const result = tryCatch(() => {
@@ -156,6 +328,7 @@ export class YSync<T> implements Terminable {
                 // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
                 const reconciled = tryCatch(() => {
                     this.#boxGraph.beginTransaction()
+                    previews.forEach(layer => this.#revertInTransaction(layer))
                     this.#applyEvents(events)
                     this.#publishFrom = Option.wrap(this.#updates.length)
                     deterministicReconcile(this.#boxGraph)
@@ -165,24 +338,35 @@ export class YSync<T> implements Terminable {
                     this.#publishFrom = Option.None
                     this.#ignoreUpdates = false
                     if (this.#boxGraph.inTransaction()) {
-                        this.#boxGraph.abortTransaction()
+                        const aborted = tryCatch(() => this.#boxGraph.abortTransaction())
+                        if (aborted.status === "failure") {console.warn("[YSync] Abort failed:", aborted.error)}
                     }
                     // Still illegal after reconciliation: revert locally (last resort). No inverse ops are
                     // written back to Yjs (that would race the in-flight remote update into a retry loop).
                     console.warn(`[YSync] Transaction rejected even after reconcile, reverted locally:`,
                         result.error, reconciled.error)
+                    const reverted = tryCatch(() => this.#revertLayers(previews))
+                    if (reverted.status === "failure") {console.warn("[YSync] Could not revert local edits:", reverted.error)}
+                    YSync.#invalidate(previews)
                     return
                 }
                 console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
                 this.#repairTorn()
+                YSync.#invalidate(previews)
+                this.#repairOrder()
                 return
             }
-            const highLevelConflict = this.#conflict.mapOr(check => check(), false)
-            if (highLevelConflict) {
+            const hasConflict = (): boolean => this.#conflict.mapOr(check => check(), false)
+            if (hasConflict() && previews.length > 0) {
+                this.#revertLayers(previews)
+                YSync.#invalidate(previews)
+            }
+            if (hasConflict()) {
                 this.#rollbackTransaction(events)
             } else {
                 this.#repairTorn()
             }
+            this.#repairOrder()
         }
         this.#boxes.observeDeep(eventHandler)
         return {terminate: () => {this.#boxes.unobserveDeep(eventHandler)}}
@@ -209,15 +393,22 @@ export class YSync<T> implements Terminable {
                 if (YSync.debugging) {
                     console.debug(`${change.action} on ${path}:${key}`)
                 }
-                if (change.action === "add") {
-                    assert(path.length === 0, "'Add' cannot have a path")
-                    touched.push(this.#createBox(key))
-                } else if (change.action === "update") {
-                    if (path.length === 0) {continue}
+                // concurrent writes to one field arrive as any action, the document holds the winner
+                if (path.length > 0) {
                     assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
-                    touched.push(this.#updateValue(path, key))
+                    const uuid = String(path[0])
+                    if (this.#boxGraph.findBox(UUID.parse(uuid)).isEmpty()) {
+                        const hiding = this.#layers.find(layer => layer.hidden.hasKey(UUID.parse(uuid)))
+                        if (hiding?.kind === "preview") {return panic(`A peer edited ${uuid}, which a preview replaced.`)}
+                        // a repair dropped this box while a peer kept writing to it: the document decides
+                        if (hiding === undefined && this.#boxes.has(uuid)) {touched.push(this.#createBox(uuid))}
+                    } else if (change.action !== "delete") {
+                        touched.push(this.#updateValue(path, key))
+                    }
+                } else if (change.action === "add" || change.action === "update") {
+                    // an update here is a box recreated under its key: the map and all its values are new
+                    touched.push(this.#createBox(key))
                 } else if (change.action === "delete") {
-                    assert(path.length === 0, "'Delete' cannot have a path")
                     this.#deleteBox(key)
                 }
             }
@@ -337,6 +528,87 @@ export class YSync<T> implements Terminable {
         this.#boxGraph.unstageBox(box)
     }
 
+    #revertInTransaction({boxes, hidden, fields}: LayerState): void {
+        boxes.values().forEach(uuid => {
+            const key = UUID.toString(uuid)
+            const boxMap = this.#boxes.get(key)
+            if (isInstanceOf(boxMap, Y.Map)) {
+                this.#boxGraph.findBox(uuid).ifSome(box => YMapper.applyFromBoxMap(box, boxMap.get("fields") as Y.Map<unknown>))
+            } else {
+                this.#deleteBox(key)
+            }
+        })
+        hidden.values().forEach(uuid => {
+            const key = UUID.toString(uuid)
+            if (this.#boxes.has(key) && this.#boxGraph.findBox(uuid).isEmpty()) {this.#createBox(key)}
+        })
+        fields.values().forEach(address => this.#restoreField(address))
+    }
+
+    #restoreField(address: Address): void {
+        const key = UUID.toString(address.uuid)
+        const boxObject = this.#boxes.get(key)
+        if (!isInstanceOf(boxObject, Y.Map)) {return}
+        const parent = this.#resolveFieldMap(boxObject, key, address.fieldKeys)
+        const value = parent?.get(String(address.fieldKeys[address.fieldKeys.length - 1]))
+        if (isUndefined(value)) {return}
+        this.#boxGraph.findVertex(address).ifSome(vertex => vertex.accept({
+            visitPointerField: (field: PointerField) => field.fromJSON(value as JSONValue),
+            visitPrimitiveField: (field: PrimitiveField) => YMapper.fromY(field, value)
+        }))
+    }
+
+    static #invalidate(layers: ReadonlyArray<LayerState>): void {
+        layers.forEach(layer => {
+            YSync.#clearLayer(layer)
+            layer.invalid.notify()
+        })
+    }
+
+    #withoutLocal(updates: ReadonlyArray<Update>): ReadonlyArray<Update> {
+        if (this.#activeLayer.isEmpty() && !this.#layers.some(YSync.#hasChanges)) {return updates}
+        const open = new Set(updates)
+        let changed = true
+        while (changed) {
+            changed = false
+            for (const update of open) {
+                const layer = this.#activeLayer.unwrapOrNull() ?? this.#layers.find(layer => this.#dependsOn(layer, update))
+                if (layer === undefined) {continue}
+                YSync.#hold(layer, update)
+                open.delete(update)
+                changed = true
+            }
+        }
+        return updates.filter(update => open.has(update))
+    }
+
+    #dependsOn({boxes}: LayerState, update: Update): boolean {
+        switch (update.type) {
+            case "new":
+                return this.#boxGraph.findBox(update.uuid).mapOr(box => box.outgoingEdges()
+                    .some(([_, target]) => boxes.hasKey(target.uuid))
+                    || box.incomingEdges().some(pointer => boxes.hasKey(pointer.address.uuid)), false)
+            case "delete":
+                return boxes.hasKey(update.uuid)
+            case "primitive":
+                return boxes.hasKey(update.address.uuid)
+            case "pointer":
+                return boxes.hasKey(update.address.uuid)
+                    || update.newAddress.mapOr(address => boxes.hasKey(address.uuid), false)
+        }
+    }
+
+    static #hold({boxes, hidden, fields}: LayerState, update: Update): void {
+        if (update.type === "new") {
+            boxes.add(update.uuid)
+        } else if (update.type === "delete") {
+            if (!boxes.hasKey(update.uuid)) {hidden.add(update.uuid)}
+            boxes.removeByKeyIfExist(update.uuid)
+        } else if (!boxes.hasKey(update.address.uuid)) {
+            fields.add(update.address)
+        }
+    }
+
     #rollbackTransaction(events: ReadonlyArray<Y.YEvent<any>>): void {
         console.debug(`rollback ${events.length} events...`)
         this.#getDoc()
@@ -375,7 +647,7 @@ export class YSync<T> implements Terminable {
                     if (rolledBack) {return}
                     const publishing: ReadonlyArray<Update> = publishFrom
                         .mapOr(index => pending.slice(index), this.#ignoreUpdates ? [] : pending)
-                    const optimized = optimizeUpdates(publishing)
+                    const optimized = this.#withoutLocal(optimizeUpdates(publishing))
                     if (optimized.length === 0) {return}
                     const result = tryCatch(() => this.#getDoc()
                         .transact(() => optimized.forEach(update => this.#applyUpdate(update)),

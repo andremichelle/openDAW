@@ -27,11 +27,21 @@ component
     gap: 0.35em
     white-space: nowrap
 
-    > .dot
-      min-width: 6px
-      min-height: 6px
-      border-radius: 50%
-      flex-shrink: 0
+    > .marker
+      flex: 0 0 10px
+      height: 10px
+      display: flex
+      align-items: center
+      justify-content: center
+
+      > .dot
+        min-width: 6px
+        min-height: 6px
+        border-radius: 50%
+        flex-shrink: 0
 
     &.self
       color: var(--color-bright)
+
+    &.recording
+      color: var(--color-red)

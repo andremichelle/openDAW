@@ -50,6 +50,7 @@ export namespace YService {
                 conflict: () => project.invalid()
             })
             project.own(sync)
+            project.attachLiveSync(sync)
             return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
@@ -79,6 +80,7 @@ export namespace YService {
             boxGraph.endTransaction()
             project.follow(userInterfaceBox)
             project.own(sync)
+            project.attachLiveSync(sync)
             return {project, provider}
         }
     }

@@ -20,6 +20,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
+import type {YSync} from "../ysync/YSync"
 import {
     ApparatDeviceBox,
     AudioBusBox,
@@ -137,6 +138,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly #terminator = new Terminator()
     readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
     readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
+
+    #liveSync: Option<YSync<BoxIO.TypeMap>> = Option.None
 
     readonly #env: ProjectEnv
     readonly boxGraph: BoxGraph<BoxIO.TypeMap>
@@ -423,6 +426,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return terminator
     }
 
+    get liveSync(): Option<YSync<BoxIO.TypeMap>> {return this.#liveSync}
+    attachLiveSync(sync: YSync<BoxIO.TypeMap>): void {this.#liveSync = Option.wrap(sync)}
+
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
         this.midiLearning.followUser(box.midiControllers)
@@ -525,7 +531,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     invalid(): boolean {
         const now = performance.now()
-        const result = Validator.hasOverlappingRegions(this.boxGraph)
+        const result = Validator.hasOverlappingRegions(this.boxGraph,
+            region => this.#liveSync.mapOr(sync => sync.isLocal(region.address.uuid), false))
         if (performance.now() - now > 5) {
             console.warn("Evaluation of invalid project takes more than 5ms")
         }

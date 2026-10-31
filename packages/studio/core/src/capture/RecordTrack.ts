@@ -8,7 +8,8 @@ export namespace RecordTrack {
     export const findOrCreate = (editing: Editing,
                                  audioUnitBox: AudioUnitBox,
                                  type: TrackType,
-                                 excludeTrack: Nullable<TrackBox> = null): TrackBox => {
+                                 excludeTrack: Nullable<TrackBox> = null,
+                                 alwaysNew: boolean = false): TrackBox => {
         let index: int = 0 | 0
         const trackBoxes = audioUnitBox.tracks.pointerHub.incoming()
             .map(({box}) => asInstanceOf(box, TrackBox))
@@ -17,17 +18,23 @@ export namespace RecordTrack {
             if (trackBox !== excludeTrack) {
                 const hasNoRegions = trackBox.regions.pointerHub.isEmpty()
                 const matchesType = trackBox.type.getValue() === type
-                if (hasNoRegions && matchesType) {return trackBox}
+                if (hasNoRegions && matchesType && !alwaysNew) {return trackBox}
             }
             index = Math.max(index, trackBox.index.getValue())
         }
-        return editing.modify(() => TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
+        return editing.modify(() => createAt(audioUnitBox, type, index + 1)).unwrap("Could not create TrackBox")
+    }
+
+    export const nextIndex = (audioUnitBox: AudioUnitBox): int => audioUnitBox.tracks.pointerHub.incoming()
+        .reduce((index, {box}) => Math.max(index, asInstanceOf(box, TrackBox).index.getValue() + 1), 0)
+
+    const createAt = (audioUnitBox: AudioUnitBox, type: TrackType, index: int): TrackBox =>
+        TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
             box.type.setValue(type)
-            box.index.setValue(index + 1)
+            box.index.setValue(index)
             box.tracks.refer(audioUnitBox.tracks)
             box.target.refer(audioUnitBox)
-        })).unwrap("Could not create TrackBox")
-    }
+        })
 
     export const lastTakeNumber = (audioUnitBox: AudioUnitBox): int => {
         let highest: int = 0

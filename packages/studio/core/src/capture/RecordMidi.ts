@@ -8,6 +8,7 @@ import {
     Optional,
     quantizeCeil,
     quantizeFloor,
+    RuntimeNotifier,
     Terminable,
     Terminator,
     UUID
@@ -53,7 +54,8 @@ export namespace RecordMidi {
 
     export const start = ({notifier, project, capture, clock}: RecordMidiContext): Terminable => {
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
-        const {editing, boxGraph, engine, timelineBox, tempoMap} = project
+        const {boxGraph, engine, timelineBox, tempoMap} = project
+        const editing = project.recordingSession.editing
         const {isRecording, preferences: {settings: {recording}}} = engine
         const {loopArea} = timelineBox
         const terminator = new Terminator()
@@ -99,7 +101,7 @@ export namespace RecordMidi {
 
         const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeCount++
-            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
+            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack, project.liveSync.nonEmpty())
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const duration = takeDuration(position, writePosition)
             const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -244,6 +246,7 @@ export namespace RecordMidi {
                             }
                         }
                     } else {
+                        if (project.liveSync.nonEmpty()) {RuntimeNotifier.notify({message: "Another participant removed what you were recording.", icon: "Info"})}
                         terminator.terminate()
                     }
                 }, false))

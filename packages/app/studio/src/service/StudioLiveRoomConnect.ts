@@ -119,6 +119,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
             terminator.own(profile.subscribeCoverId(() => {fetchCover()}))
             fetchCover()
         })
+        terminator.own(project.engine.isRecording.catchupAndSubscribe(owner => roomAwareness.recording.setValue(owner.getValue())))
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
         service.setTrafficMeter(p2pSession.trafficMeter)

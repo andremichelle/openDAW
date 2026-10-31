@@ -195,9 +195,9 @@ export class BoxGraph<BoxMap = any> {
 
     unstageBox(box: Box): void {
         this.#assertTransaction()
+        this.#edges.unwatchVerticesOf(box)
         const deleted = this.#boxes.removeByKey(box.address.uuid)
         assert(deleted === box, `${box} could not be found to unstage`)
-        this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
         if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
         this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
@@ -351,16 +351,18 @@ export class BoxGraph<BoxMap = any> {
                 }
             })
         })
-        this.#pointerTransactionState.values()
+        // a listener that throws must not leave the graph in a transaction forever
+        const notified = tryCatch(() => this.#pointerTransactionState.values()
             .toSorted((a, b) => a.index - b.index)
             .forEach(({pointer, initial, final}) => {
                 if (!initial.equals(final)) {
                     initial.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onRemoved(pointer))
                     final.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onAdded(pointer))
                 }
-            })
+            }))
         this.#pointerTransactionState.clear()
         this.#inTransaction = false
+        if (notified.status === "failure") {throw notified.error}
         while (this.#finalizeTransactionObservers.length > 0) {
             this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
             if (this.#finalizeTransactionObservers.length > 0) {

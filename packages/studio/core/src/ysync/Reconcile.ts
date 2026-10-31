@@ -1,6 +1,8 @@
-import {BoxGraph, PointerField} from "@opendaw/lib-box"
+import {BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
-import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, TrackBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {RegionOverlap, Validator} from "@opendaw/studio-adapters"
+import {AudioUnitType} from "@opendaw/studio-enums"
 
 // Deterministic, constraint-aware reconciliation of a box graph.
 //
@@ -100,6 +102,20 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
                     break // graph mutated: restart the scan from a fresh, ordered snapshot
                 }
             }
+            // --- An instrument cannot exist without its capture: a merge can take the capture away. ---
+            if (box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Instrument && box.capture.isEmpty()) {
+                box.delete()
+                changed = true
+                repairedAny = true
+                break // graph mutated: restart the scan from a fresh, ordered snapshot
+            }
+            // --- A box that only exists through what points at it, and nothing does anymore. ---
+            if (box.pointerRules.mandatory && box.incomingEdges().length === 0) {
+                box.delete()
+                changed = true
+                repairedAny = true
+                break // graph mutated: restart the scan from a fresh, ordered snapshot
+            }
             // --- Duplicate value events: collapse the collection onto (position, index) uniqueness. ---
             if (box instanceof ValueEventCollectionBox) {
                 if (reconcileValueEventCollection(box)) {
@@ -112,3 +128,37 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
     }
     return repairedAny
 }
+
+// The collections two peers insert into at once: each picks the same free index, Yjs merges both.
+const orderedCollections = (boxGraph: BoxGraph): ReadonlyArray<Field> => boxGraph.boxes()
+    .filter((box): box is AudioUnitBox => box instanceof AudioUnitBox)
+    .flatMap(unit => [unit.tracks, unit.audioEffects, unit.midiEffects,
+        ...unit.collection.targetVertex.mapOr(vertex => [vertex as Field], [])])
+
+const byOrder = (field: Field) => IndexedBox.collectIndexedBoxes(field).slice()
+    .sort((a, b) => a.index.getValue() - b.index.getValue() || byUuid(a, b))
+
+const hasDuplicates = (field: Field): boolean => {
+    const boxes = byOrder(field)
+    return boxes.some((box, position) => position > 0 && boxes[position - 1].index.getValue() === box.index.getValue())
+}
+
+export const duplicateOrders = (boxGraph: BoxGraph): ReadonlyArray<Field> => orderedCollections(boxGraph).filter(hasDuplicates)
+
+// A rank is a pure function of the document and bounded: peers repairing at once cannot drive the numbers up.
+export const repairOrder = (field: Field): void => byOrder(field).forEach((box, rank) => {
+    if (box.index.getValue() !== rank) {box.index.setValue(rank)}
+})
+
+export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => Validator.hasOverlappingRegions(boxGraph)
+
+// Two peers can place a region at one spot. No take or edit is lost: the one later by position and uuid moves behind.
+export const repairOverlappingRegions = (boxGraph: BoxGraph): void => boxGraph.boxes().forEach(box => {
+    if (!(box instanceof TrackBox)) {return}
+    const regions = RegionOverlap.sortedRegions(box).sort((a, b) => a.position.getValue() - b.position.getValue() || byUuid(a, b))
+    regions.forEach((region, index) => {
+        if (index === 0 || RegionOverlap.endsAtSuccessor(regions[index - 1])) {return}
+        const end = regions[index - 1].position.getValue() + regions[index - 1].duration.getValue()
+        if (region.position.getValue() < end) {region.position.setValue(end)}
+    })
+})
