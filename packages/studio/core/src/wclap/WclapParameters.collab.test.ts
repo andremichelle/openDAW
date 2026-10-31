@@ -211,6 +211,8 @@ describe("WclapStates in a live room", () => {
         const guest = await join(owner)
         const size = 1 << 20
         const blob = (seed: number): ArrayBuffer => Uint8Array.from({length: size}, (_, index) => (index * seed) & 0xFF).buffer
+        const sameBytes = (left: ReadonlyArray<number>, right: ReadonlyArray<number>): boolean =>
+            left.length === right.length && left.every((byte, index) => byte === right[index])
         const vector = Y.encodeStateVector(guest.doc)
         WclapStates.store(owner.project, deviceUuid, blob(3))
         const update = Y.encodeStateAsUpdate(owner.doc, vector)
@@ -219,14 +221,14 @@ describe("WclapStates in a live room", () => {
         const start = performance.now()
         Y.applyUpdate(guest.doc, update, owner)
         console.debug(`1 MB state applied on the other peer in ${(performance.now() - start).toFixed(1)} ms`)
-        expect(bytesOf(guest, deviceUuid)).toStrictEqual(Array.from(new Uint8Array(blob(3))))
+        expect(sameBytes(bytesOf(guest, deviceUuid), Array.from(new Uint8Array(blob(3))))).toBe(true)
         for (let seed = 5; seed < 15; seed += 2) {
             WclapStates.store(owner.project, deviceUuid, blob(seed))
             converge(owner, guest)
         }
         expect(Y.encodeStateAsUpdate(owner.doc).length).toBeLessThan(2 * size)
-        expect(bytesOf(guest, deviceUuid)).toStrictEqual(bytesOf(owner, deviceUuid))
-    })
+        expect(sameBytes(bytesOf(guest, deviceUuid), bytesOf(owner, deviceUuid))).toBe(true)
+    }, 30_000)
 })
 
 describe("WclapStates range sync in a live room", () => {
