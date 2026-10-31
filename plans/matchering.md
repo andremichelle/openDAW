@@ -32,8 +32,8 @@ What to port from `matchering/`:
 3. `stage_helpers/match_frequencies.py`: averaged STFT magnitude of target and reference (`fft_size` 4096), ratio,
    LOWESS smoothing on a log axis (`lowess_frac` 0.0375, `lin_log_oversampling` 4), FIR from the smoothed curve,
    convolution on mid and side.
-4. `limiter/hyrax.py`: the brickwall limiter (attack 1 ms, hold 1 ms, release 3000 ms, Butterworth gain smoothing
-   with filtfilt).
+4. `limiter/hyrax.py`: not ported, the runtime uses `Maximizer`. Its Butterworth and `filtfilt` gain smoothing are
+   the only users of those filters, so the analysis needs neither.
 5. `dsp.py`: helpers (mid/side, normalize, amplify, clipping).
 6. `checker.py`: only the validation rules (length limits, mono to stereo, clipping warnings), as Rust results with
    codes the page turns into messages.
@@ -43,8 +43,9 @@ Not ported: `loader.py`, `saver.py`, `log/`, temp folders, mp3 handling. Decodin
 
 New Rust pieces with no counterpart in `dsp`:
 
-1. LOWESS (statsmodels semantics: `frac`, `it`, `delta`).
-2. Butterworth design + zero-phase `filtfilt` (scipy semantics, including edge padding).
+1. LOWESS (statsmodels semantics: `frac`, `it`, `delta`), done in `crates/matchering/src/lowess.rs`.
+2. Cubic interpolation (scipy `interp1d(..., "cubic")`, a not-a-knot spline with extrapolation), done in
+   `crates/matchering/src/spline.rs`.
 3. Resampling to the internal 44100 Hz if the input differs (or reuse `dsp/resampler.rs` if quality is close enough).
 
 ## Interface
@@ -112,14 +113,15 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
 
 ## Tests
 
-1. Rust unit tests per helper: LOWESS and filtfilt against reference vectors generated with statsmodels and scipy.
+1. Rust tests per helper: LOWESS and the cubic spline against reference vectors generated with statsmodels and
+   scipy (`crates/matchering/tests/fixtures/generate.py`).
 2. Rust stage tests on fixture pairs against the original Python output, tolerance based (float FFT order differs).
 3. A node test loading the built wasm and running a short pair end to end.
 
 ## Phases
 
 1. Page mockup without functionality (done, design draft for the panel).
-2. Crate skeleton + LOWESS + filtfilt with reference tests.
+2. Crate skeleton + LOWESS + cubic spline with reference tests (done).
 3. Analysis stages, end-to-end against Python output (gains + curves, the Hyrax limiter only as reference).
 4. Private package, worker, TS API, build script.
 5. Mastering box + runtime processor (TS and wasm engine), tests that it applies a stored result correctly.
