@@ -156,13 +156,21 @@ import your own `.wclap` bundle.
 #### Available in the openDAW cloud
 
 * [Basics] Analyser, Chorus, Crunch, Frequency Shifter, Limiter, Reverb (Signalsmith Audio)
+* coopiano (Peter Cooper)
+* Droplets (aquanode)
 * MNO (Charlie Culbert)
 * OB-Xf (Surge Synth Team)
+* Odin2 (TheWaveWarden)
+* OpenSpatialDelay (Spatial Media Lab)
+* oXygen (Wamphyre)
+* Polarity-SC-Dark (Polarity-Music)
 * Pro54 (Cmajor)
 * RipplerX (Tilr)
 * Six Sines (BaconPaul)
 * Slide (Charlie Culbert)
+* Surge XT (Surge Synth Team)
 * Tapa (Charlie Culbert)
+* TapElectric (aquanode)
 
 ### Repositories
 
