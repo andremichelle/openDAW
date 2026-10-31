@@ -13,7 +13,7 @@ interface Exports {
     match_target(left: number, right: number, frames: number, profile: number, output: number): number
 }
 
-const Statuses: Record<number, string> = {1: "too short", 2: "too long", 3: "channel lengths differ"}
+const Statuses: Record<number, string> = {1: "too short", 2: "longer than 10 minutes", 3: "channel lengths differ"}
 const Stages: ReadonlyArray<Matchering.Stage> = ["levels", "frequencies", "correction"]
 
 export class MatcheringWasm {

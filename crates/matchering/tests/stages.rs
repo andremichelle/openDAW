@@ -82,6 +82,10 @@ fn rejects_invalid_lengths() {
     let short = vec![0.1; 4096];
     assert_eq!(analyse_reference(&short, &short), Err(Error::TooShort));
     assert_eq!(analyse_reference(&short, &short[..100]), Err(Error::LengthMismatch));
+    let ten_minutes = vec![0i8; 10 * 60 * SAMPLE_RATE as usize];
+    let longer = vec![0i8; 10 * 60 * SAMPLE_RATE as usize + 1];
+    assert_ne!(analyse_reference(&ten_minutes, &ten_minutes), Err(Error::TooLong));
+    assert_eq!(analyse_reference(&longer, &longer), Err(Error::TooLong));
 }
 
 #[test]

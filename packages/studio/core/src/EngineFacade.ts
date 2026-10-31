@@ -51,6 +51,7 @@ export class EngineFacade implements Engine {
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #transportAnchors: Notifier<ReadonlyArray<TransportAnchor>> = new Notifier()
+    readonly #workletChanged: Notifier<void> = new Notifier()
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
@@ -80,7 +81,11 @@ export class EngineFacade implements Engine {
             worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue())),
             worklet.subscribeTransportAnchors(anchors => this.#transportAnchors.notify(anchors))
         )
+        this.#workletChanged.notify()
     }
+
+    // a new engine (first boot or a restart): local state sent to the old one, like `overrideDeviceField`, is gone
+    subscribeWorkletChanged(observer: Observer<void>): Subscription {return this.#workletChanged.subscribe(observer)}
 
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 

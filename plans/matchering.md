@@ -119,6 +119,10 @@ The TS API in `packages/studio/matchering` wraps both in a worker:
 7. The stored analysis stays until the user analyses again, no outdated hint, no automatic re-analysis.
 8. Unlike Matchering, both curves are clamped to ±12 dB before the level correction (`CURVE_LIMIT_DB`). A narrow
    mix otherwise gets its side boosted by 40 dB and more, which sounded harsh with a wide reference.
+9. The analysis takes at most 10 minutes (Matchering allows 15), the panel checks the section length before rendering.
+10. User profiles hold only the analysed reference data, saved in OPFS `mastering-profiles/` (not in the cloud
+    backup yet). The last mixdown is kept per project until the project changes (the mastering, selection and
+    editing focus excluded), so switching references only matches again.
 
 ## Tests
 

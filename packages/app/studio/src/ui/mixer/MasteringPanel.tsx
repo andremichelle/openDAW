@@ -1,7 +1,7 @@
 import css from "./MasteringPanel.sass?inline"
 import {
-    asInstanceOf, clamp, DefaultObservableValue, EmptyExec, isDefined, Lifecycle, MutableObservableOption, Option, Optional,
-    panic, RuntimeNotifier, Subscription, Terminator, unitValue, UUID, ValueGuide
+    Arrays, asInstanceOf, clamp, DefaultObservableValue, EmptyExec, Errors, isDefined, Lifecycle, MutableObservableOption,
+    Option, Optional, panic, RuntimeNotifier, Subscription, Terminator, unitValue, UUID, ValueGuide
 } from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {Events, Files, Html} from "@opendaw/lib-dom"
@@ -40,6 +40,9 @@ const COMPARE_KEY = 15
 const CURVE_POINTS = 240
 const THUMB_HEIGHT = "0.5em" // MasteringPanel.sass div.thumb
 const SnapCenter: ValueGuide.Options = {snap: {threshold: 0.5}}
+const MAX_MASTERING_SECONDS = 10 * 60 // crates/matchering MAX_LENGTH
+
+const reasonOf = (error: unknown): string => error instanceof Error ? error.message.replace(/^Matchering: /, "") : String(error)
 // the last rendered mixdown per project, so another reference matches without rendering again. Any project edit
 // drops it, except edits of the mastering itself and of selection or editing focus. Analyse always renders anew.
 const MixdownCache = new WeakMap<Project, { sectionKey: string, audio: AudioData, subscription: Subscription }>()
@@ -137,7 +140,16 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         if (files.status === "rejected" || files.value.length === 0) {return}
         return loadReferenceFile(files.value[0])
     }
+    // a file never takes the name of a built-in or saved profile, those are found first
+    const uniqueName = (base: string): string => {
+        const taken = (name: string) => Matchering.BuiltinProfiles.includes(name)
+            || userProfiles.some(entry => entry.name === name) || fileReferences.some(entry => entry.name === name)
+        if (!taken(base)) {return base}
+        const candidates = [`${base} (file)`, ...Arrays.create(index => `${base} (file ${index + 2})`, 98)]
+        return candidates.find(candidate => !taken(candidate)) ?? `${base} (${Date.now()})`
+    }
     const loadReferenceFile = async (file: File): Promise<void> => {
+        if (busy.getValue()) {return}
         busy.setValue(true)
         const handler = RuntimeNotifier.progress({headline: "Reference", message: `Analysing '${file.name}'...`})
         const result = await Promises.tryCatch((async () => {
@@ -149,9 +161,9 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         handler.terminate()
         busy.setValue(false)
         if (result.status === "rejected") {
-            return RuntimeNotifier.info({headline: "Reference", message: `Could not analyse '${file.name}'.`})
+            return RuntimeNotifier.info({headline: "Reference", message: `Could not analyse '${file.name}': ${reasonOf(result.error)}`})
         }
-        const name = file.name.replace(/\.[^.]+$/, "")
+        const name = uniqueName(file.name.replace(/\.[^.]+$/, ""))
         fileReferences.push({name, profile: Option.wrap(result.value)})
         reference.setValue(name)
     }
@@ -177,32 +189,42 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         }
         updateProfileAction()
     }
-    const renderTarget = async (sectionKey: string, progress: DefaultObservableValue<number>,
+    const renderTarget = async (target: MixdownSection, progress: DefaultObservableValue<number>,
                                 abortSignal: AbortSignal): Promise<AudioData> => {
         const source = project.copy()
         device.ifSome(adapter => source.boxGraph.findBox(adapter.uuid).ifSome(vertex =>
             source.editing.modify(() => asInstanceOf(vertex.box, MasteringDeviceBox).enabled.setValue(false))))
         const audio = await OfflineEngineRenderer.renderSection(
-            source, Option.None, section.getValue(), progress, abortSignal, Matchering.SampleRate)
-        storeMixdown(project, sectionKey, audio)
+            source, Option.None, target, progress, abortSignal, Matchering.SampleRate)
+        storeMixdown(project, target.key, audio)
         return audio
     }
-    // `render` false reuses the last mixdown of the same section (a reference change), Analyse always renders
+    // `render` false reuses the last mixdown of the same section (a reference change), Analyse always renders.
+    // Reference and section are taken when it starts, a reference picked meanwhile is matched right after.
     const analyse = async (render: boolean): Promise<void> => {
+        if (busy.getValue()) {return}
+        const name = reference.getValue()
+        const target = section.getValue()
+        const seconds = project.tempoMap.intervalToSeconds(target.start, target.end) * target.passes
+        if (seconds > MAX_MASTERING_SECONDS) {
+            return RuntimeNotifier.info({
+                headline: "Mastering",
+                message: `Mastering analyses up to ${MAX_MASTERING_SECONDS / 60} minutes. '${target.label}' is ${Math.ceil(seconds / 60)} minutes long, choose a shorter section.`
+            })
+        }
         busy.setValue(true)
         const abortController = new AbortController()
         const progress = new DefaultObservableValue(0.0)
-        const sectionKey = section.getValue().key
         const cached = Option.wrap(MixdownCache.get(project))
-            .flatMap(entry => !render && entry.sectionKey === sectionKey ? Option.wrap(entry.audio) : Option.None)
+            .flatMap(entry => !render && entry.sectionKey === target.key ? Option.wrap(entry.audio) : Option.None)
         const handler = RuntimeNotifier.progress({
             headline: "Mastering", message: cached.isEmpty() ? "Rendering mixdown..." : "Matching...",
             progress, cancel: () => abortController.abort()
         })
         const result = await Promises.tryCatch((async () => {
-            const profile = await resolveProfile(reference.getValue())
+            const profile = await resolveProfile(name)
             const audio = await cached.match({
-                none: () => renderTarget(sectionKey, progress, abortController.signal),
+                none: () => renderTarget(target, progress, abortController.signal),
                 some: audio => Promise.resolve(audio)
             })
             return {profile, match: await Matchering.matchTarget(audio, profile, value => handler.message = StageLabels[value])}
@@ -210,7 +232,8 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         handler.terminate()
         busy.setValue(false)
         if (result.status === "rejected") {
-            return RuntimeNotifier.info({headline: "Mastering", message: "The analysis was cancelled or failed."})
+            if (Errors.isAbort(result.error) || abortController.signal.aborted) {return}
+            return RuntimeNotifier.info({headline: "Mastering", message: `The analysis failed: ${reasonOf(result.error)}`})
         }
         const {profile, match} = result.value
         editing.modify(() => {
@@ -222,10 +245,11 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
             box.finalAmplitude.setValue(match.finalAmplitude)
             box.midCurve.setValue(Matchering.curveToBytes(match.midCurve))
             box.sideCurve.setValue(Matchering.curveToBytes(match.sideCurve))
-            box.referenceName.setValue(reference.getValue())
+            box.referenceName.setValue(name)
             box.referenceProfile.setValue(Matchering.profileToBytes(profile))
-            box.section.setValue(section.getValue().key)
+            box.section.setValue(target.key)
         })
+        if (reference.getValue() !== name) {return analyse(false)}
     }
     const contentLifecycle = lifecycle.own(new Terminator())
     const render = (): void => {
@@ -520,6 +544,7 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                 render()
             }
         }),
+        engine.subscribeWorkletChanged(() => compare.setValue(false)),
         {terminate: () => compare.setValue(false)}
     )
     if (device.isEmpty()) {render()}

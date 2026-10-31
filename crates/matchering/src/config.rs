@@ -3,7 +3,7 @@
 // Licensed under the GNU General Public License v3.0 or later, see lib.rs.
 
 pub const SAMPLE_RATE: usize = 44100;
-pub const MAX_LENGTH: usize = 15 * 60 * SAMPLE_RATE;
+pub const MAX_LENGTH: usize = 10 * 60 * SAMPLE_RATE; // Matchering allows 15 minutes, openDAW limits the analysis to 10
 pub const MAX_PIECE_SIZE: usize = 15 * SAMPLE_RATE;
 pub const THRESHOLD: f64 = (32768.0 - 61.0) / 32768.0;
 pub const MIN_VALUE: f64 = 1e-6;
