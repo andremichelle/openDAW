@@ -321,6 +321,11 @@ export class WclapBridges {
         const loaded = plugin.loaded
         this.#contain(plugin, undefined, () => {
             if (plugin.receivedSinceProcess || plugin.flushRequested) {this.#flush(plugin, loaded)}
+            // the plugin's GUI still drags a parameter: the save waits for the drag's end (#afterProcess)
+            if (loaded.gestures.size > 0) {
+                plugin.dirtyCountdown = 1
+                return
+            }
             this.#saveState(plugin, loaded, false)
         })
     }

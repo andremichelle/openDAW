@@ -136,6 +136,26 @@ describe("WebCLAP edits in the plugin's window and the undo history", () => {
         expect(param()).toBe(0.75)
     })
 
+    it("a save in the middle of a drag (the studio saves 250 ms after a page message) keeps the drag one step", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapParameters.apply(project, uuid, 1, 0, 1)
+        WclapParameters.apply(project, uuid, 1, 0.625, 0)
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "params")
+        WclapParameters.apply(project, uuid, 1, 0.75, 0)
+        WclapParameters.apply(project, uuid, 1, 0, 2)
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([4]).buffer, "own")
+        project.editing.undo()
+        expect(blob()).toStrictEqual([3])
+        expect(param()).toBe(0.75)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([1])
+        expect(param()).toBe(0.5)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([])
+    })
+
     it("a change without a gesture is a step of its own", async () => {
         const {project, uuid, param, blob} = await setup()
         WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")

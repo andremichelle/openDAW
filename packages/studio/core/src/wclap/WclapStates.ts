@@ -3,6 +3,7 @@ import {WclapInstrumentBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, ProjectQueries, WclapSaveCause} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {WclapBoxes} from "./WclapBoxes"
+import {WclapParameters} from "./WclapParameters"
 
 // The plugin's own state blob, pushed by the bridge after it changed, kept on the device box as bytes
 export namespace WclapStates {
@@ -18,7 +19,9 @@ export namespace WclapStates {
                 box.pluginState.setValue(next)
                 box.state.setValue("")
             }
-            if (cause === "params") {
+            if (cause === "params" && WclapParameters.isDragging(uuid)) {
+                project.editing.modify(write, false) // joins the drag's step at its end
+            } else if (cause === "params") {
                 project.editing.append(write)
             } else {
                 project.editing.modify(write, cause === "own")

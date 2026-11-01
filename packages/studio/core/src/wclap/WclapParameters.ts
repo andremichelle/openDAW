@@ -12,6 +12,11 @@ export namespace WclapParameters {
     // one step of its own. The plugin's save that follows joins it (WclapStates.store, cause "params").
     const dragging = new Set<string>()
 
+    export const isDragging = (uuid: string): boolean => {
+        for (const key of dragging) {if (key.startsWith(`${uuid}:`)) {return true}}
+        return false
+    }
+
     export const reconcile = (project: Project, uuid: string, params: ReadonlyArray<WclapParamInfo>): void => {
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
