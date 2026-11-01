@@ -1,11 +1,11 @@
 import css from "./Footer.sass?inline"
 import {createElement, Frag, LocalLink, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, isNotNull, Lifecycle, Nullable, Terminator, TimeSpan} from "@opendaw/lib-std"
+import {Exec, isDefined, isNotNull, Lifecycle, Nullable, Terminator, TimeSpan} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {Runtime} from "@opendaw/lib-runtime"
-import {FooterLabel} from "@/service/FooterLabel"
+import {FooterLabel, FooterPlacement} from "@/service/FooterLabel"
 import {ProjectMeta, StudioPreferences} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {AudioData} from "@opendaw/lib-dsp"
@@ -19,6 +19,7 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 
 export const Footer = ({lifecycle, service}: Construct) => {
     const {audioContext, buildInfo, engine, projectProfileService} = service
+    const center: HTMLElement = <div style={{flex: "1", display: "flex", justifyContent: "center"}}/>
     return (
         <footer className={className}>
             <FooterItem title="Online" onInit={({value}) => {
@@ -186,21 +187,27 @@ export const Footer = ({lifecycle, service}: Construct) => {
                      }, "debug", "footer-show-build-infos"))
                  }}/>
             <div style={{display: "contents"}}
-                 onInit={element => service.registerFooter((): FooterLabel => {
+                 onInit={element => service.registerFooter((placement: FooterPlacement = "start"): FooterLabel => {
                      let titleRef!: HTMLElement
                      let valueRef!: HTMLElement
                      const item: HTMLElement = <FooterItem title="" onInit={({title, value}) => {
                          titleRef = title
                          valueRef = value
                      }}/>
-                     element.appendChild(item)
+                     const parent = placement === "center" ? center : element
+                     parent.appendChild(item)
                      return {
                          setTitle: (text: string) => titleRef.textContent = text,
                          setValue: (text: string) => valueRef.textContent = text,
+                         setColor: (color: string) => valueRef.style.color = color,
+                         onClick: (exec: Exec) => {
+                             item.style.cursor = "pointer"
+                             return Events.subscribe(item, "click", () => exec())
+                         },
                          terminate: () => {if (item.isConnected) {item.remove()}}
                      } satisfies FooterLabel
                  })}/>
-            <div style={{flex: "1"}}/>
+            {center}
             <div style={{color: Colors.cream.toString()}}>
                 <LocalLink href="/privacy">Privacy</LocalLink> · <LocalLink href="/imprint">Imprint</LocalLink>
             </div>
