@@ -464,7 +464,8 @@ export class WclapBridges {
         loaded.writeChunks = []
         const cause: WclapSaveCause = plugin.paramsEdited ? "params" : plugin.stateEdited ? "own" : "other"
         plugin.stateEdited = plugin.paramsEdited = false
-        if (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes)) {return}
+        // an own change a save in between already caught still tells the host, which ends its undo step there
+        if (cause !== "own" && isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes)) {return}
         plugin.knownState = bytes
         if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer, plugin.url, plugin.clapId, cause)}
     }

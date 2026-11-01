@@ -14,7 +14,11 @@ export namespace WclapStates {
         project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
             if (!WclapBoxes.is(box)) {return}
             const next = new Int8Array(bytes.slice(0))
-            if (equals(box.pluginState.getValue(), next) && box.state.getValue() === "") {return}
+            if (equals(box.pluginState.getValue(), next) && box.state.getValue() === "") {
+                // a save in between (the studio's, 250 ms after a page message) already wrote the edit unmarked
+                if (cause === "own") {project.editing.mark()}
+                return
+            }
             const write = () => {
                 box.pluginState.setValue(next)
                 box.state.setValue("")

@@ -156,6 +156,25 @@ describe("WebCLAP edits in the plugin's window and the undo history", () => {
         expect(blob()).toStrictEqual([])
     })
 
+    it("an edit the studio's save already caught (no change at its end) is still a step of its own", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "other") // 250 ms into a drawing drag
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "own") // the drawing's end, same bytes
+        WclapParameters.apply(project, uuid, 1, 0, 1)
+        WclapParameters.apply(project, uuid, 1, 0.75, 0)
+        WclapParameters.apply(project, uuid, 1, 0, 2)
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([4]).buffer, "own")
+        project.editing.undo()
+        expect(blob()).toStrictEqual([3])
+        project.editing.undo()
+        expect(param()).toBe(0.5)
+        expect(blob()).toStrictEqual([2])
+        project.editing.undo()
+        expect(blob()).toStrictEqual([1])
+    })
+
     it("a change without a gesture is a step of its own", async () => {
         const {project, uuid, param, blob} = await setup()
         WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
