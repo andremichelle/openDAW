@@ -27,6 +27,8 @@ export class MasteringDeviceBoxAdapter implements BoxAdapter {
     get box(): MasteringDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
+    get spectrum(): Address {return this.#box.address.append(0xFFF)}
+    get spectrumLow(): Address {return this.#box.address.append(0xFFE)}
     get enabledField(): BooleanField {return this.#box.enabled}
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {

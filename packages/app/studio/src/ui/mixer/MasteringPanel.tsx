@@ -1,20 +1,20 @@
 import css from "./MasteringPanel.sass?inline"
 import {
-    Arrays, asInstanceOf, clamp, DefaultObservableValue, DefaultParameter, EmptyExec, Errors, isDefined, Lifecycle,
+    Arrays, asDefined, asInstanceOf, clamp, DefaultObservableValue, DefaultParameter, EmptyExec, Errors, isDefined, Lifecycle,
     MutableObservableOption, Option, Optional, panic, RuntimeNotifier, StringMapping, Subscription, Terminator, unitValue,
     UUID, ValueGuide, ValueMapping
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData, LowBandAnalyser} from "@opendaw/lib-dsp"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MasteringDeviceBox, SelectionBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {Update} from "@opendaw/lib-box"
 import {
     AudioUnitBoxAdapter, AutomatableParameterFieldAdapter, DeviceManualUrls, MasteringDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
-import {MixdownSection, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
+import {LinearScale, MixdownSection, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
 import {Matchering} from "@opendaw/studio-matchering"
 import {StudioService} from "@/service/StudioService"
 import {Button} from "@/ui/components/Button"
@@ -31,6 +31,10 @@ import {ValueDragging} from "@/ui/hooks/dragging"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {FlexSpacer} from "@/ui/components/FlexSpacer"
 import {MasteringProfiles} from "@/ui/mixer/MasteringProfiles"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
+import {Surface} from "@/ui/surface/Surface"
+import {plotSpectrum} from "@/ui/devices/audio-effects/Revamp/Renderer"
+import {xAxis} from "@/ui/devices/audio-effects/Revamp/constants"
 
 const className = Html.adoptStyleSheet(css, "MasteringPanel")
 
@@ -39,6 +43,7 @@ const FrequencyTicks = [
     {hz: 3000, label: "3k"}, {hz: 10000, label: "10k"}
 ]
 const GainTicks = [12, 6, 0, -6, -12]
+const SpectrumScale = new LinearScale(-60.0, -3.0)
 
 const CURVE_BIN_HZ = 44100 / 4096
 const COMPARE_KEY = 15
@@ -332,6 +337,7 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         const sideCurve: SVGPathElement = <path className="side"/>
         const thumb: HTMLElement = <div className="thumb"/>
         const amountValue: HTMLElement = <span className="value">–</span>
+        const spectrum: HTMLCanvasElement = <canvas/>
         const meters = [
             renderMeter("Peak", ["-60", "0"]), renderMeter("LUFS Short-Term", ["-60", "0"]),
             renderMeter("LUFS Integrated", ["-60", "0"]), renderMeter("Correlation", ["-1", "+1"])
@@ -349,7 +355,27 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
         drawCurves()
         if (isDefined(adapter)) {
             const {amount} = adapter.namedParameter
+            const spectrumContext = asDefined(spectrum.getContext("2d"))
+            const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
+            const editAmount = (): void => {
+                const rect = amountValue.getBoundingClientRect()
+                const {value, unit} = amount.getPrintValue()
+                const resolvers = Promise.withResolvers<string>()
+                resolvers.promise.then(text => {
+                    editing.modify(() => amount.setPrintValue(text))
+                    editing.mark()
+                }, EmptyExec)
+                Surface.get(amountValue).flyout.appendChild(
+                    <FloatingTextInput position={{x: rect.left, y: rect.top + (rect.height >> 1)}}
+                                       value={value} unit={unit} numeric resolvers={resolvers}/>
+                )
+            }
             lifecycle.ownAll(
+                Events.subscribeDblDwn(thumb, editAmount),
+                Events.subscribeDblDwn(amountValue, editAmount),
+                liveStreamReceiver.subscribeFloats(adapter.spectrumLow, values => spectrumLow.set(values)),
+                liveStreamReceiver.subscribeFloats(adapter.spectrum, values =>
+                    plotSpectrum(spectrumContext, xAxis, SpectrumScale, values, engine.sampleRate, spectrumLow)),
                 amount.catchupAndSubscribe(() => {
                     thumb.style.top = `calc(${1.0 - amount.getUnitValue()} * (100% - ${THUMB_HEIGHT}))`
                     const {value, unit} = amount.getPrintValue()
@@ -421,7 +447,9 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                         <Icon symbol={IconSymbol.Help}/>
                     </Button>
                 </header>
-                <div className={Html.buildClassList("body", !isDefined(adapter) && "unanalysed")}>
+                <div className={Html.buildClassList("body", !isDefined(adapter) && "unanalysed")}
+                     onInit={(element: HTMLElement) => lifecycle.own(compare.catchupAndSubscribe(owner =>
+                         element.classList.toggle("comparing", owner.getValue())))}>
                     <div className="eq">
                         <div className="amount">
                             {slider}
@@ -429,6 +457,7 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                             {amountValue}
                         </div>
                         <div className="display">
+                            {spectrum}
                             <svg viewBox="0 0 400 100" preserveAspectRatio="none">
                                 <defs>
                                     <linearGradient id={fillGradientID} x1="0" x2="0" y1="0" y2="100"

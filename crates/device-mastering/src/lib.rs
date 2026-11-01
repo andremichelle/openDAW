@@ -22,8 +22,10 @@ pub mod meters;
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use dsp::convolution::Convolver;
 use dsp::db_to_gain;
+use dsp::low_band_analyser::{LowBandAnalyser, LOW_NUM_BINS};
 use dsp::rfft::FftTables;
 use math::value_mapping::Linear;
 use hyrax::Hyrax;
@@ -43,6 +45,8 @@ const LIMITER_FIELD: [u16; 1] = [14];
 const COMPARE_FIELD: [u16; 1] = [15]; // no box field: a local value, delivered only by `override_device_field`
 const METERS_FIELD: [u16; 1] = [0]; // peak left, peak right, short-term LUFS, integrated LUFS, correlation
 const METER_COUNT: usize = 5;
+const SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS MasteringDeviceBoxAdapter.spectrum
+const SPECTRUM_LOW_FIELD: [u16; 1] = [0xFFE]; // TS MasteringDeviceBoxAdapter.spectrumLow
 const MATCH_GAIN_FIELD: [u16; 1] = [20];
 const FINAL_AMPLITUDE_FIELD: [u16; 1] = [21];
 const MID_CURVE_FIELD: [u16; 1] = [22];
@@ -128,6 +132,12 @@ pub struct MasteringState {
     peaks: [f32; 2],
     meters_id: u32,
     meters_ptr: u32,
+    analyser: AudioAnalyser,
+    spectrum_id: u32,
+    spectrum_ptr: u32,
+    low_band: LowBandAnalyser,
+    spectrum_low_id: u32,
+    spectrum_low_ptr: u32,
     compare_id: u32,
     amount_id: u32,
     gain_id: u32,
@@ -204,6 +214,27 @@ impl MasteringDevice {
             state.peaks = [0.0; 2];
         }
     }
+
+    fn spectrum(state: &mut MasteringState, left: &[f32], right: &[f32]) {
+        if abi::broadcast_active(state.spectrum_id) {
+            state.analyser.process(left, right);
+            if state.spectrum_ptr == 0 {state.spectrum_ptr = abi::broadcast_ptr(state.spectrum_id);}
+            if state.spectrum_ptr != 0 {
+                let spectrum = unsafe {core::slice::from_raw_parts_mut(state.spectrum_ptr as *mut f32, NUM_BINS)};
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
+            }
+        }
+        if abi::broadcast_active(state.spectrum_low_id) {
+            state.low_band.process(left, right);
+            if state.spectrum_low_ptr == 0 {state.spectrum_low_ptr = abi::broadcast_ptr(state.spectrum_low_id);}
+            if state.spectrum_low_ptr != 0 {
+                let spectrum = unsafe {core::slice::from_raw_parts_mut(state.spectrum_low_ptr as *mut f32, LOW_NUM_BINS)};
+                spectrum.copy_from_slice(state.low_band.bins());
+                state.low_band.arm_decay();
+            }
+        }
+    }
 }
 
 impl AudioEffect for MasteringDevice {
@@ -230,6 +261,12 @@ impl AudioEffect for MasteringDevice {
         state.peaks = [0.0; 2];
         state.meters_id = abi::bind_broadcast(&METERS_FIELD, METER_COUNT as u32);
         state.meters_ptr = 0;
+        state.analyser.init(0.0);
+        state.spectrum_id = abi::bind_broadcast(&SPECTRUM_FIELD, NUM_BINS as u32);
+        state.spectrum_ptr = 0;
+        state.low_band.init(sample_rate, 0.0);
+        state.spectrum_low_id = abi::bind_broadcast(&SPECTRUM_LOW_FIELD, LOW_NUM_BINS as u32);
+        state.spectrum_low_ptr = 0;
         state.compare_id = abi::observe_field(&COMPARE_FIELD);
         state.amount_id = abi::bind_parameter(&AMOUNT_FIELD);
         state.gain_id = abi::bind_parameter(&GAIN_FIELD);
@@ -321,6 +358,7 @@ impl AudioEffect for MasteringDevice {
             state.dry_loudness.process(&dry_left[s0..s1], &dry_right[s0..s1]);
         }
         Self::meter(state, &out_left[s0..s1], &out_right[s0..s1]);
+        Self::spectrum(state, &out_left[s0..s1], &out_right[s0..s1]);
     }
 }
 
