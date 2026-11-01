@@ -8,10 +8,15 @@ import {WclapBoxes} from "./WclapBoxes"
 
 // existing boxes keep their value and links, the host is the source of truth
 export namespace WclapParameters {
+    // A change in the plugin's GUI is an undo step: a drag (gesture begin to end) one step, a change without a gesture
+    // one step of its own. The plugin's save that follows joins it (WclapStates.store, cause "params").
+    const dragging = new Set<string>()
+
     export const reconcile = (project: Project, uuid: string, params: ReadonlyArray<WclapParamInfo>): void => {
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
         const wanted = new Map(params.filter(isAutomatable).map(param => [param.id, param]))
+        dragging.forEach(key => {if (key.startsWith(`${uuid}:`)) {dragging.delete(key)}}) // a drag the reload ended
         outsideHistory(project, () => {
             const existing = new Map<number, WclapParameterBox>()
             for (const {box} of hub.pointerHub.incoming()) {
@@ -73,7 +78,15 @@ export namespace WclapParameters {
     }
 
     export const apply = (project: Project, uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void => {
-        if (gesture !== 0) {return}
+        const key = `${uuid}:${paramId}`
+        if (gesture === 1) {
+            dragging.add(key)
+            return
+        }
+        if (gesture === 2) {
+            if (dragging.delete(key)) {project.editing.mark()}
+            return
+        }
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
         const paramBox = hub.pointerHub.incoming()
@@ -85,7 +98,7 @@ export namespace WclapParameters {
         project.editing.modify(() => adapter.match({
             none: () => paramBox.value.setValue(value),
             some: adapter => adapter.setValue(value)
-        }), false)
+        }), !dragging.has(key))
     }
 
     const IS_HIDDEN = 1 << 2

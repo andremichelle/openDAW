@@ -42,6 +42,7 @@ import {
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
@@ -277,8 +278,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
                 wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
-                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, undoable: boolean): void =>
-                    WclapStates.storeFrom(project, uuid, bytes, url, clapId, undoable),
+                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void =>
+                    WclapStates.storeFrom(project, uuid, bytes, url, clapId, cause),
                 wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
                     WclapParameters.reconcile(project, uuid, params),
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>

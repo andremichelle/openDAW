@@ -1,32 +1,38 @@
 import {Optional, Strings, UUID} from "@opendaw/lib-std"
 import {WclapInstrumentBox} from "@opendaw/studio-boxes"
-import {InstrumentFactories, ProjectQueries} from "@opendaw/studio-adapters"
+import {InstrumentFactories, ProjectQueries, WclapSaveCause} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {WclapBoxes} from "./WclapBoxes"
 
 // The plugin's own state blob, pushed by the bridge after it changed, kept on the device box as bytes
 export namespace WclapStates {
-    // undoable: a change the plugin made outside its parameters, an undo step of its own; otherwise the save joins the
-    // step of what caused it (a parameter edit, a load)
-    export const store = (project: Project, uuid: string, bytes: ArrayBuffer, undoable: boolean = false): void => {
+    // cause "own": a change the plugin made outside its parameters, an undo step of its own; "params": the save
+    // after the plugin's parameter edits joins their step (its bytes hold the values, so an undo of a later step must
+    // not hand the plugin the values from before); "other": the save joins the next step (a load, an Update)
+    export const store = (project: Project, uuid: string, bytes: ArrayBuffer, cause: WclapSaveCause = "other"): void => {
         project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
             if (!WclapBoxes.is(box)) {return}
             const next = new Int8Array(bytes.slice(0))
             if (equals(box.pluginState.getValue(), next) && box.state.getValue() === "") {return}
-            project.editing.modify(() => {
+            const write = () => {
                 box.pluginState.setValue(next)
                 box.state.setValue("")
-            }, undoable)
+            }
+            if (cause === "params") {
+                project.editing.append(write)
+            } else {
+                project.editing.modify(write, cause === "own")
+            }
         })
     }
 
     // a save the engine posted before it saw a new url or clapId belongs to the plugin the device no longer names
     export const storeFrom = (project: Project, uuid: string, bytes: ArrayBuffer, url: string, clapId: string,
-                              undoable: boolean = false): void => {
+                              cause: WclapSaveCause = "other"): void => {
         project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
             if (!WclapBoxes.is(box)) {return}
             if (box.url.getValue() !== url || box.clapId.getValue() !== clapId) {return}
-            store(project, uuid, bytes, undoable)
+            store(project, uuid, bytes, cause)
         })
     }
 

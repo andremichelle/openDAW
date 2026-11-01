@@ -2,7 +2,7 @@
 import {isDefined, isNotNull, isNull, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
 import {
     WclapAudioPort, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapParamGesture, WclapParamInfo, WclapPluginInfo,
-    WclapStatus
+    WclapSaveCause, WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
 import {ClapAbi} from "./clap-abi"
@@ -14,8 +14,8 @@ export type WclapBundleLoader = (url: string) => Promise<WclapBundle>
 export type WclapHostCallbacks = {
     loadBundle: WclapBundleLoader
     sendGui: (uuid: string, bytes: ArrayBuffer) => void
-    // undoable: the save carries a change the plugin made outside its parameters (see Plugin.stateEdited)
-    sendState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, undoable: boolean) => void
+    // cause: what the save carries (see Plugin.stateEdited)
+    sendState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause) => void
     sendParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>) => void
     sendParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture) => void
     sendHovered: (uuid: string, paramId: number) => void
@@ -135,7 +135,7 @@ class Plugin {
     dirtyCountdown: number = -1
     // since the last save: the plugin marked its state dirty (clap.state), the plugin reported a parameter value. A
     // save after the first without the second is a change of the plugin's own (a pattern drawn, a sample loaded):
-    // an undo step of its own. A parameter edit is one already (its parameter box), its save follows unmarked.
+    // an undo step of its own. A save after parameter edits joins their step (the plugin's state holds the values).
     stateEdited: boolean = false
     paramsEdited: boolean = false
     receivedSinceProcess: boolean = false
@@ -457,11 +457,11 @@ export class WclapBridges {
             return offset + chunk.length
         }, 0)
         loaded.writeChunks = []
-        const undoable = plugin.stateEdited && !plugin.paramsEdited
+        const cause: WclapSaveCause = plugin.paramsEdited ? "params" : plugin.stateEdited ? "own" : "other"
         plugin.stateEdited = plugin.paramsEdited = false
         if (isNotNull(plugin.knownState) && bytesEqual(plugin.knownState, bytes)) {return}
         plugin.knownState = bytes
-        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer, plugin.url, plugin.clapId, undoable)}
+        if (!silent) {this.#host.sendState(plugin.uuid, bytes.buffer, plugin.url, plugin.clapId, cause)}
     }
 
     #module(url: string): Promise<{ module: WebAssembly.Module, bundle: WclapBundle }> {
@@ -997,8 +997,13 @@ export class WclapBridges {
         this.#runCallback(plugin, loaded)
         if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
         if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
-            plugin.dirtyCountdown = -1
-            this.#host.requestSave(plugin.uuid)
+            // no save while the plugin's GUI drags a parameter: the save joins the step the drag ends in
+            if (loaded.gestures.size > 0) {
+                plugin.dirtyCountdown = 1
+            } else {
+                plugin.dirtyCountdown = -1
+                this.#host.requestSave(plugin.uuid)
+            }
         }
     }
 
