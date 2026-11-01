@@ -489,6 +489,28 @@ describe("wclap bridge", () => {
         expect(right).toEqual(new Array(128).fill(Math.fround(0.25)))
     })
 
+    // out1x1 writes 0.5 whatever happens, like a plugin whose reset leaves its voices ringing (Cmajor's Pro54)
+    it("mutes a plugin still sounding after its reset for a block and restarts it", async () => {
+        const [host, handle] = loadAudioPorts("out1x1")
+        new Float32Array(host.memory.buffer, IN0, 128).fill(0)
+        new Float32Array(host.memory.buffer, IN1, 128).fill(0)
+        await ready(host, handle)
+        host.imports.host_wclap_reset(handle)
+        expect(process(host, handle)).toBe(1)
+        expect(played(host)).toEqual([new Array(128).fill(0), new Array(128).fill(0)])
+        expect(process(host, handle)).toBe(1)
+        expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
+        expect(host.statuses.at(-1)?.state).toBe("ready")
+    })
+
+    it("does not mute a plugin after its reset while input reaches it", async () => {
+        const [host, handle] = loadAudioPorts("out1x1")
+        await ready(host, handle)
+        host.imports.host_wclap_reset(handle)
+        process(host, handle)
+        expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
+    })
+
     it("refuses a plugin that declares more channels than the limit", async () => {
         const [host] = loadAudioPorts("out1x1025")
         await Promise.all(host.loads)

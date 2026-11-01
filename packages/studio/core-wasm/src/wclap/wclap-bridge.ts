@@ -39,6 +39,12 @@ const MAX_PARAM_EVENTS = 128
 const MAX_NOTE_EVENTS = 128
 const POLL_PER_CHUNK = 16 // get_value calls per quantum, a plugin's get_value may cost tens of µs
 const EVENT_SLOT_SIZE = 48 // the largest record written (clap_event_param_value / param_mod)
+const SILENCE = 1.0e-4 // below this a reset plugin counts as quiet
+
+const isSilent = (samples: Float32Array, frames: number): boolean => {
+    for (let index = 0; index < frames; index++) {if (Math.abs(samples[index]) > SILENCE) {return false}}
+    return true
+}
 const EVENT_SLOTS = MAX_PARAM_EVENTS * 2 + MAX_NOTE_EVENTS
 const NOTE_EVENT_SIZE = 40
 const MAX_PULLED_NOTES = 256 // WASM CONTRACT: device-wclap-midi's pull scratch, the notes one span hands in
@@ -142,6 +148,9 @@ class Plugin {
     flushRequested: boolean = false
     callbackRequested: boolean = false
     restartRequested: boolean = false
+    // the first block after a reset: a plugin still sounding without input ignored the reset (Cmajor's Pro54 keeps
+    // its voices ringing), it is muted and restarts (deactivate, activate), which rebuilds its DSP
+    resetCheck: boolean = false
     references: number = 1 // every composite cell holds its own replica of a unit-level MIDI effect, one plugin for all
     collected: Nullable<Array<NoteOut>> = null // the notes the plugin sends during a note effect's process call
     lastSpan: Nullable<NoteSpan> = null
@@ -990,6 +999,16 @@ export class WclapBridges {
             this.#afterProcess(plugin, loaded)
             if (status === ClapAbi.ProcessStatus.ERROR) {return 0}
             const [, , afterLeft, afterRight] = this.#audio(loaded)
+            if (plugin.resetCheck) {
+                plugin.resetCheck = false
+                if (isSilent(sourceLeft, frames) && isSilent(sourceRight, frames)
+                    && !(isSilent(afterLeft, frames) && isSilent(afterRight, frames))) {
+                    plugin.restartRequested = true
+                    new Float32Array(engine, out0, frames).fill(0.0)
+                    new Float32Array(engine, out1, frames).fill(0.0)
+                    return 1
+                }
+            }
             new Float32Array(engine, out0, frames).set(afterLeft.subarray(0, frames))
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
             return 1
@@ -1263,6 +1282,7 @@ export class WclapBridges {
         plugin.lastSpan = null
         this.#contain(plugin, undefined, () =>
             this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.RESET, loaded.plugin)))
+        plugin.resetCheck = true
     }
 
     #release(handle: number): void {
