@@ -137,9 +137,10 @@ export namespace DeviceSlot {
         if (slot.type === "insert" || slot.type === "replace-effect") {return DeviceHost.chainFieldOf(slot.host, slot.accepts)}
         if (slot.type !== "new-entry") {return Option.None}
         const {entries} = slot.composite.box
+        const index = IndexedBox.collectIndexedBoxes(entries).length
         return Option.wrap(AudioEffectCompositeCellBox.create(entries.graph, UUID.generate(), box => {
             box.composite.refer(entries)
-            box.index.setValue(IndexedBox.collectIndexedBoxes(entries).length)
+            box.index.setValue(index)
         }).audioEffects)
     }
 
