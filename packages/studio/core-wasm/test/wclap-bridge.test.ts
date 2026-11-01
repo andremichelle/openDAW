@@ -490,15 +490,18 @@ describe("wclap bridge", () => {
     })
 
     // out1x1 writes 0.5 whatever happens, like a plugin whose reset leaves its voices ringing (Cmajor's Pro54)
+    const stopped = (host: Host, handle: number): number =>
+        host.imports.host_wclap_process(handle, IN0, IN1, OUT0, OUT1, 128, 120, 0, 0) as number
+
     it("mutes a plugin still sounding after its reset for a block and restarts it", async () => {
         const [host, handle] = loadAudioPorts("out1x1")
         new Float32Array(host.memory.buffer, IN0, 128).fill(0)
         new Float32Array(host.memory.buffer, IN1, 128).fill(0)
         await ready(host, handle)
         host.imports.host_wclap_reset(handle)
-        expect(process(host, handle)).toBe(1)
+        expect(stopped(host, handle)).toBe(1)
         expect(played(host)).toEqual([new Array(128).fill(0), new Array(128).fill(0)])
-        expect(process(host, handle)).toBe(1)
+        expect(stopped(host, handle)).toBe(1)
         expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
         expect(host.statuses.at(-1)?.state).toBe("ready")
     })
@@ -507,7 +510,24 @@ describe("wclap bridge", () => {
         const [host, handle] = loadAudioPorts("out1x1")
         await ready(host, handle)
         host.imports.host_wclap_reset(handle)
+        stopped(host, handle)
+        expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
+    })
+
+    // play pressed right after a stop: the first block after the reset sounds of its own, a restart would swallow it
+    it("does not judge the reset in a first block that plays or brings notes", async () => {
+        const [host, handle] = loadAudioPorts("out1x1")
+        new Float32Array(host.memory.buffer, IN0, 128).fill(0)
+        new Float32Array(host.memory.buffer, IN1, 128).fill(0)
+        await ready(host, handle)
+        host.imports.host_wclap_reset(handle)
         process(host, handle)
+        expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
+        host.imports.host_wclap_reset(handle)
+        host.imports.host_wclap_note(handle, 1, 60, 1)
+        stopped(host, handle)
+        expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
+        stopped(host, handle)
         expect(played(host)[0]).toEqual(new Array(128).fill(0.5))
     })
 

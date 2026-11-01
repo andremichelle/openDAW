@@ -148,8 +148,10 @@ class Plugin {
     flushRequested: boolean = false
     callbackRequested: boolean = false
     restartRequested: boolean = false
-    // the first block after a reset: a plugin still sounding without input ignored the reset (Cmajor's Pro54 keeps
-    // its voices ringing), it is muted and restarts (deactivate, activate), which rebuilds its DSP
+    // the first block after a reset: a plugin still sounding without input, events or transport ignored the reset
+    // (Cmajor's Pro54 keeps its voices ringing), it is muted and restarts (deactivate, activate), which rebuilds its
+    // DSP. A first block that plays (the user pressed play at once) or brings notes drops the check, else the
+    // restart would swallow the new notes
     resetCheck: boolean = false
     references: number = 1 // every composite cell holds its own replica of a unit-level MIDI effect, one plugin for all
     collected: Nullable<Array<NoteOut>> = null // the notes the plugin sends during a note effect's process call
@@ -993,6 +995,9 @@ export class WclapBridges {
             loaded.steadyTime += frames
             this.#writeTransport(loaded, view, bpm, position, flags)
             this.#writeEvents(plugin, loaded, view)
+            // a block that plays or carries events (a note on) makes sound of its own: no verdict on the reset
+            const quiet = loaded.eventCount === 0 && (flags & BLOCK_FLAG_PLAYING) === 0
+                && isSilent(sourceLeft, frames) && isSilent(sourceRight, frames)
             this.#silenceUnfedInputs(loaded)
             const status = this.#onAudioThread(() =>
                 this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
@@ -1001,8 +1006,7 @@ export class WclapBridges {
             const [, , afterLeft, afterRight] = this.#audio(loaded)
             if (plugin.resetCheck) {
                 plugin.resetCheck = false
-                if (isSilent(sourceLeft, frames) && isSilent(sourceRight, frames)
-                    && !(isSilent(afterLeft, frames) && isSilent(afterRight, frames))) {
+                if (quiet && !(isSilent(afterLeft, frames) && isSilent(afterRight, frames))) {
                     plugin.restartRequested = true
                     new Float32Array(engine, out0, frames).fill(0.0)
                     new Float32Array(engine, out1, frames).fill(0.0)
