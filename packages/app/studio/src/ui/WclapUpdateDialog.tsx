@@ -48,12 +48,21 @@ export namespace WclapUpdateDialog {
             await RuntimeNotifier.info({headline: "Update Failed", message: String(result.error)})
             return false
         }
-        const {projects, devices, deleted} = result.value
+        const {projects, presets, devices, deleted, kept} = result.value
+        const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`
         RuntimeNotifier.notify({
-            message: `Updated ${devices} device${devices === 1 ? "" : "s"} in ${projects} project${projects === 1 ? "" : "s"}`
-                + (deleteOld.getValue() ? `, deleted ${deleted} old build${deleted === 1 ? "" : "s"}` : "") + ".",
+            message: `Updated ${plural(devices, "device")} in ${plural(projects, "project")}`
+                + (presets > 0 ? ` and ${plural(presets, "preset")}` : "")
+                + (deleteOld.getValue() ? `, deleted ${plural(deleted, "old build")}` : "")
+                + ".",
             icon: "Info"
         })
+        if (kept.length > 0) {
+            await RuntimeNotifier.info({
+                headline: "Old Builds Still In Use",
+                message: kept.map(({name, users}) => `${name}: ${users.join(", ")}`).join("\n")
+            })
+        }
         return (await WclapUpdates.find()).length === 0
     }
 

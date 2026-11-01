@@ -1,6 +1,7 @@
-import {EmptyProcedure, isDefined, Optional, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, EmptyProcedure, isDefined, Optional, Option, Progress, tryCatch, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {PresetHeader, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {BoxIO} from "@opendaw/studio-boxes"
 import {ProjectMeta, ProjectPaths, TemplatePaths, WclapBoxes, WclapStates, WclapStorage, Workers} from "@opendaw/studio-core"
 import {BoxGraph} from "@opendaw/lib-box"
 import {WclapCatalog} from "@/opendaw-api/WclapCatalog"
@@ -15,7 +16,13 @@ import {StudioService} from "@/service/StudioService"
 export namespace WclapUpdates {
     export type Outdated = { readonly id: string, readonly successor: WclapIndexEntry }
 
-    export type Result = { readonly projects: number, readonly devices: number, readonly deleted: number }
+    // kept: old builds still in use after the update, with what uses them
+    export type Kept = { readonly name: string, readonly users: ReadonlyArray<string> }
+
+    export type Result = {
+        readonly projects: number, readonly presets: number, readonly devices: number,
+        readonly deleted: number, readonly kept: ReadonlyArray<Kept>
+    }
 
     // a replaced build leaves the index, the newer entry keeps its id (and every older one) in supersedes
     export const find = async (): Promise<ReadonlyArray<Outdated>> => {
@@ -31,7 +38,8 @@ export namespace WclapUpdates {
     export const run = async (service: StudioService, outdated: ReadonlyArray<Outdated>,
                               {update, deleteOld}: { update: boolean, deleteOld: boolean },
                               progress: Progress.Handler = EmptyProcedure): Promise<Result> => {
-        const result = {projects: 0, devices: 0, deleted: 0}
+        const result: { -readonly [K in keyof Result]: Result[K] } =
+            {projects: 0, presets: 0, devices: 0, deleted: 0, kept: []}
         if (update) {
             const urls = await download(outdated, value => progress(value * 0.5))
             const open: Array<string> = []
@@ -60,9 +68,20 @@ export namespace WclapUpdates {
                     progress(0.5 + 0.4 * (index + (position + 1) / uuids.length) / folders.length)
                 }
             }
+            // a user preset holding a WebCLAP device keeps its old build in use as much as a project does
+            const presets = await Workers.Opfs.list(PresetFolder).catch(() => [])
+            for (const {name} of presets.filter(entry => entry.kind === "file" && entry.name.endsWith(".odp"))) {
+                const devices = await rewritePreset(`${PresetFolder}${name}`, urls)
+                if (devices > 0) {
+                    result.presets++
+                    result.devices += devices
+                }
+            }
         }
         if (deleteOld) {
-            result.deleted = await removeUnused(service, outdated)
+            const {deleted, kept} = await removeUnused(service, outdated)
+            result.deleted = deleted
+            result.kept = kept
         }
         progress(1.0)
         return result
@@ -120,22 +139,61 @@ export namespace WclapUpdates {
         return boxes.length
     }
 
+    const PresetFolder = "presets/user/"
+
+    // a preset is its 8-byte header (magic, version) and the box graph
+    const rewritePreset = async (path: string, urls: ReadonlyMap<string, Next>): Promise<number> => {
+        const bytes = await Promises.tryCatch(Workers.Opfs.read(path))
+        if (bytes.status === "rejected") {return 0}
+        const buffer = exact(bytes.value)
+        const header = new ByteArrayInput(buffer)
+        if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN || header.readInt() !== PresetHeader.FORMAT_VERSION) {return 0}
+        const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        const decoded = tryCatch(() => graph.fromArrayBuffer(buffer.slice(8), false))
+        if (decoded.status === "failure") {
+            console.warn(`WclapUpdates: could not decode ${path}`, decoded.error)
+            return 0
+        }
+        const boxes = graph.boxes().filter(WclapBoxes.is).filter(box => isDefined(next(urls, box)))
+        if (boxes.length === 0) {return 0}
+        graph.beginTransaction()
+        boxes.forEach(box => WclapStates.select(box, next(urls, box)!, box.clapId.getValue()))
+        graph.endTransaction()
+        const body = new Uint8Array(graph.toArrayBuffer())
+        const out = new Uint8Array(8 + body.length)
+        out.set(new Uint8Array(buffer, 0, 8))
+        out.set(body, 8)
+        await Workers.Opfs.write(path, out)
+        return boxes.length
+    }
+
     // an old build still used somewhere (a project not updated, a preset, the open project's saved file) stays
-    const removeUnused = async (service: StudioService, outdated: ReadonlyArray<Outdated>): Promise<number> => {
+    const removeUnused = async (service: StudioService, outdated: ReadonlyArray<Outdated>)
+        : Promise<{ deleted: number, kept: ReadonlyArray<Kept> }> => {
         const scanned = await StorageInspector.scan(EmptyProcedure, EmptyProcedure)
         const report = service.projectProfileService.getValue().match({
             none: () => scanned,
             some: profile => StorageReport.withOpenProject(scanned, UUID.toString(profile.uuid),
                 StorageScan.referencesOf(profile.project.boxGraph).refs)
         })
+        const openId: Optional<string> = service.projectProfileService.getValue()
+            .map(profile => UUID.toString(profile.uuid)).unwrapOrUndefined()
         let deleted = 0
-        for (const {id} of outdated) {
+        const kept: Array<Kept> = []
+        for (const {id, successor} of outdated) {
             const usedBy = report.assets.find(asset => StorageReport.isSame(asset, {kind: "wclap", id}))?.usedBy ?? []
-            if (usedBy.length > 0) {continue}
+            if (usedBy.length > 0) {
+                kept.push({
+                    name: successor.name,
+                    users: usedBy.map(ref => ref.kind === "project" && ref.id === openId ? "the open project"
+                        : `${report.items.find(item => StorageReport.isSame(item, ref))?.name ?? ref.id} (${ref.kind})`)
+                })
+                continue
+            }
             await WclapStorage.remove(id)
             deleted++
         }
-        return deleted
+        return {deleted, kept}
     }
 
     const exact = (bytes: Uint8Array): ArrayBuffer =>
