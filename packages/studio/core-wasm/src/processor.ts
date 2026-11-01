@@ -603,7 +603,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)
         }
         if (reset || !wasTransporting) {
-            this.#engine.stop() // rewinds to 0 + resets every plugin (voices, tails, detectors)
+            this.#engine.stop_faded() // rewinds to 0, resets every plugin (voices, tails, detectors) after a faded quantum
             this.#playbackTimestamp = 0.0
             this.#peaks.clear()
         }

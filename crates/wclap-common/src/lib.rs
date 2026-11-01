@@ -25,8 +25,7 @@ pub struct WclapLink {
     clap_id_len: usize,
     scratch_in: [[f32; RENDER_QUANTUM]; 2],
     scratch_out: [[f32; RENDER_QUANTUM]; 2],
-    latency: u32,
-    resetting: bool
+    latency: u32
 }
 
 impl WclapLink {
@@ -69,8 +68,7 @@ impl WclapLink {
         abi::wclap_load(self.bridge, url, clap_id);
     }
 
-    /// A stop: the next chunk fades the plugin's output out (its tails would end in a click), then the plugin clears.
-    pub fn reset(&mut self) {self.resetting = true}
+    pub fn reset(&self) {abi::wclap_reset(self.bridge)}
     pub fn release(&self) {abi::wclap_release(self.bridge)}
 
     /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough when it has no output.
@@ -117,22 +115,7 @@ impl WclapLink {
             self.latency = latency;
             abi::set_latency(latency);
         }
-        if self.resetting {
-            self.resetting = false;
-            if processed {self.fade_out(frames)}
-            abi::wclap_reset(self.bridge);
-        }
         processed
-    }
-
-    /// The reset's fade: the chunk falls from full to silence
-    fn fade_out(&mut self, frames: usize) {
-        let step = 1.0 / frames as f32;
-        for index in 0..frames {
-            let gain = 1.0 - (index + 1) as f32 * step;
-            self.scratch_out[0][index] *= gain;
-            self.scratch_out[1][index] *= gain;
-        }
     }
 }
 
@@ -141,21 +124,4 @@ fn copy_into(target: &mut [u8], text: &str) -> usize {
     let len = bytes.len().min(target.len());
     target[..len].copy_from_slice(&bytes[..len]);
     len
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_reset_fades_the_next_chunk_out_and_ends_silent() {
-        let mut link: WclapLink = unsafe { core::mem::zeroed() };
-        link.scratch_out[0].fill(1.0);
-        link.scratch_out[1].fill(1.0);
-        link.fade_out(RENDER_QUANTUM);
-        let gains = &link.scratch_out[0];
-        assert!(gains[0] < 1.0 && gains[0] > 0.99);
-        assert!(gains.windows(2).all(|pair| pair[1] < pair[0]), "the gain only falls");
-        assert_eq!(gains[RENDER_QUANTUM - 1], 0.0, "silent at the chunk's end");
-    }
 }

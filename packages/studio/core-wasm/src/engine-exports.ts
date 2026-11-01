@@ -60,10 +60,12 @@ export type EngineExports = {
     broadcast_entry: (index: number, outPtr: number) => number
     broadcast_set_active: (index: number, active: number) => void
     // Transport: `play` starts advancing, `pause` freezes (state kept), `stop` rewinds to 0 + resets all
-    // plugins, `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
+    // plugins, `stop_faded` the same after the next quantum faded the mix out (the user's stop, no click),
+    // `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
     play: () => void
     pause: () => void
     stop: () => void
+    stop_faded: () => void
     set_position: (position: number) => void
     // RECORDING (TS EngineCommands.prepareRecordingState/stopRecording/ignoreNoteRegion): count_in_bars
     // comes from the caller's preferences; the ignored region uuid is written into the input scratch first.

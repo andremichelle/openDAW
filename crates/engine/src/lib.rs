@@ -1372,6 +1372,8 @@ struct Engine {
     is_recording: bool,
     is_counting_in: bool,
     paused_locate: bool,
+    // a faded STOP (`stop_faded`): the next quantum fades the mix out, then every plugin resets
+    stop_fading: bool,
     recording_start: f64,
     recording_denominator: i32, // the signature denominator at the recording start (the count-in remaining unit)
     metronome_pref: bool,
@@ -1490,6 +1492,7 @@ impl Engine {
             is_recording: false,
             is_counting_in: false,
             paused_locate: false,
+            stop_fading: false,
             recording_start: 0.0,
             recording_denominator: 4,
             metronome_pref: false,
@@ -1769,7 +1772,7 @@ impl Engine {
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, metronome_delay, metronome_buffer, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
-            metronome_pref, audio_units, clip_sequencer, transport_jumps, transport_pause_sample, ..} = self;
+            metronome_pref, audio_units, clip_sequencer, transport_jumps, transport_pause_sample, stop_fading, ..} = self;
         transport_jumps.clear();
         *transport_pause_sample = -1;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
@@ -1879,6 +1882,14 @@ impl Engine {
                 output[RENDER_QUANTUM + index] += buffer.right[index];
             }
         }
+        // a faded STOP: the tails still ringing fall to silence over this quantum (a cut clicks)
+        if *stop_fading {
+            for index in 0..RENDER_QUANTUM {
+                let gain = 1.0 - (index + 1) as f32 / RENDER_QUANTUM as f32;
+                output[index] *= gain;
+                output[RENDER_QUANTUM + index] *= gain;
+            }
+        }
         // the master analysis taps read the mix without the metronome (summing order is bit-identical: 0 + a + b)
         analysis.copy_from_slice(output);
         if let Some(delay) = metronome_delay.as_mut() {
@@ -1899,6 +1910,11 @@ impl Engine {
         write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
     }
 
+    /// After the quantum a faded STOP faded out (`render`): every plugin resets now.
+    fn end_faded_stop(&mut self) {
+        if core::mem::take(&mut self.stop_fading) {self.reset_plugins()}
+    }
+
     fn begin_quantum_position(&mut self) -> bool {
         let located = core::mem::take(&mut self.paused_locate) && !self.transport.is_playing();
         unsafe {
@@ -1911,6 +1927,8 @@ impl Engine {
     }
 
     fn play(&mut self) {
+        // a faded STOP not rendered yet: playback starts from cleared plugins, not inside the fade
+        if core::mem::take(&mut self.stop_fading) {self.reset_plugins()}
         // TS `#play` schedules MidiData.Start (the timestamp SongPosition is scheduled by `set_position`,
         // which the worklet's play command issues first when timestamp playback is enabled).
         self.schedule_midi_transport(midi_output::start_message());
@@ -1990,6 +2008,19 @@ impl Engine {
     /// filter + detector state) and the bus / strip buffers, so PLAY starts clean. The output bus is zeroed so
     /// no residual leaks into the final mix while stopped.
     fn stop(&mut self) {
+        self.stop_fading = false;
+        self.halt();
+        self.reset_plugins();
+    }
+
+    /// STOP from the user (realtime): the next quantum fades the mix out, then every plugin resets (`end_faded_stop`).
+    /// A reset cuts the tails still ringing, which clicks; an offline render keeps the immediate `stop`.
+    fn stop_faded(&mut self) {
+        self.halt();
+        self.stop_fading = true;
+    }
+
+    fn halt(&mut self) {
         self.is_recording = false;
         self.is_counting_in = false;
         self.apply_metronome();
@@ -1999,6 +2030,9 @@ impl Engine {
         self.transport.stop(true);
         self.transport.reset_marker_state(); // TS `#reset` -> `renderer.reset()` forgets the active marker (silently)
         self.clip_sequencer.borrow_mut().reset();
+    }
+
+    fn reset_plugins(&mut self) {
         self.context.reset_all();
         for unit in &self.audio_units {
             unit.clear_note_bits(); // TS `NoteEventInstrument.clear` on reset: no stuck note indicators
@@ -2905,6 +2939,7 @@ pub extern "C" fn render() {
             engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
             engine.copy_stem_outputs();
+            engine.end_faded_stop();
         }
     }
 }
@@ -3062,6 +3097,15 @@ pub extern "C" fn stop() {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.stop()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn stop_faded() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.stop_faded()
         }
     }
 }
