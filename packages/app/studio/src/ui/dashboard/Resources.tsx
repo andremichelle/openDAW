@@ -38,7 +38,10 @@ export const Resources = ({lifecycle, service}: Construct) => {
                             {value: Scope.Demos, element: (<h3>Demos</h3>)},
                             {value: Scope.Samples, element: (<h3>Samples</h3>)},
                             {value: Scope.Soundfonts, element: (<h3>Soundfonts</h3>)},
-                            {value: Scope.WebClap, element: (<h3 className="webclap">WebCLAP<WclapUpdateNotice service={service}/></h3>)}
+                            {value: Scope.WebClap, element: (
+                                <h3 className="webclap">WebCLAP<WclapUpdateNotice
+                                    lifecycle={lifecycle} service={service}/></h3>
+                                )}
                         ]}/>
             <div className="content" onInit={element => {
                 const scopeLifeCycle = lifecycle.own(new Terminator())
