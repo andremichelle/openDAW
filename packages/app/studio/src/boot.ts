@@ -27,7 +27,6 @@ import {
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, WclapCatalog} from "@/opendaw-api"
-import {WclapUpdateDialog} from "@/ui/WclapUpdateDialog"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -185,7 +184,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     SampleGarbage.purge().catch(console.warn)
-    WclapUpdateDialog.install(service)
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")

@@ -8,28 +8,10 @@ import {Dialogs} from "@/ui/components/dialogs"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 
-// After boot: stored WebCLAP builds the catalogue has replaced put an orange label in the footer, which offers to move
-// every project to the newer builds and to delete the old ones no project uses anymore
+// Moves every project to the newer builds of its WebCLAP plugins and deletes the old builds no project uses anymore
 export namespace WclapUpdateDialog {
-    export const install = (service: StudioService): void => {
-        WclapUpdates.find().then(outdated => {
-            if (outdated.length === 0) {return}
-            service.factoryFooterLabel().ifSome(factory => {
-                const label = factory("center")
-                label.setTitle("")
-                label.setValue("Update WebCLAP plugins")
-                label.setColor(Colors.orange.toString())
-                const click = label.onClick(() => open(service).then(done => {
-                    if (!done) {return}
-                    click.terminate()
-                    label.terminate()
-                }))
-            })
-        }, error => console.warn("WclapUpdates: the check failed", error))
-    }
-
     // resolves true when nothing is left to update
-    const open = async (service: StudioService): Promise<boolean> => {
+    export const open = async (service: StudioService): Promise<boolean> => {
         const outdated = await WclapUpdates.find()
         if (outdated.length === 0) {return true}
         const update = new DefaultObservableValue(true)

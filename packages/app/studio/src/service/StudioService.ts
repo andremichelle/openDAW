@@ -11,6 +11,7 @@ import {
     Nullable,
     Observer,
     Option,
+    Provider,
     RuntimeNotifier,
     RuntimeSignal,
     safeRead,
@@ -38,7 +39,7 @@ import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {FooterLabelFactory} from "@/service/FooterLabel"
+import {FooterLabel} from "@/service/FooterLabel"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -143,7 +144,7 @@ export class StudioService implements ProjectEnv {
     readonly #chatService = new MutableObservableOption<ChatService>()
 
     #shadertoyState: Option<ShadertoyState> = Option.None
-    #factoryFooterLabel: Option<FooterLabelFactory> = Option.None
+    #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
     regionModifierInProgress: boolean = false
 
     constructor(readonly audioContext: AudioContext,
@@ -383,11 +384,11 @@ export class StudioService implements ProjectEnv {
 
     switchScreen(key: Nullable<Workspace.ScreenKeys>): void {this.#navigation.switchScreen(key)}
 
-    registerFooter(factory: FooterLabelFactory): void {
+    registerFooter(factory: Provider<FooterLabel>): void {
         this.#factoryFooterLabel = Option.wrap(factory)
     }
 
-    factoryFooterLabel(): Option<FooterLabelFactory> {return this.#factoryFooterLabel}
+    factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
 
     get roomAwareness(): DefaultObservableValue<Nullable<RoomAwareness>> {return this.#roomAwareness}
     setRoomAwareness(value: Nullable<RoomAwareness>): void {this.#roomAwareness.setValue(value)}
