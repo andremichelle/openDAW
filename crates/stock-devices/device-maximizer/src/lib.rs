@@ -42,6 +42,77 @@ const LOOKAHEAD_CROSSFADE_SECONDS: f32 = 0.015;
 // The largest look-ahead window we ever need: 5 ms at 192 kHz. The actual frame count (from the real rate) is
 // stored and used for the ring; the array is fixed so the device allocates nothing.
 const MAX_LOOK_AHEAD_FRAMES: usize = 960;
+const SMOOTHING_PASSES: usize = 3; // together they span the look-ahead, so the gain arrives before the peak
+const MAX_SMOOTHING_FRAMES: usize = MAX_LOOK_AHEAD_FRAMES / SMOOTHING_PASSES;
+
+/// The largest of the last `size` values, in constant time per value on average (a monotonic queue).
+struct PeakWindow {
+    peaks: [f32; MAX_LOOK_AHEAD_FRAMES + 1],
+    ages: [u32; MAX_LOOK_AHEAD_FRAMES + 1],
+    head: usize,
+    length: usize,
+    now: u32,
+    size: usize
+}
+
+impl PeakWindow {
+    fn init(&mut self, size: usize) {
+        self.size = size.clamp(1, MAX_LOOK_AHEAD_FRAMES + 1);
+        self.reset();
+    }
+
+    fn reset(&mut self) {
+        self.head = 0;
+        self.length = 0;
+        self.now = 0;
+    }
+
+    fn process(&mut self, peak: f32) -> f32 {
+        let capacity = self.peaks.len();
+        if self.length > 0 && self.now.wrapping_sub(self.ages[self.head]) >= self.size as u32 {
+            self.head = (self.head + 1) % capacity;
+            self.length -= 1;
+        }
+        while self.length > 0 && self.peaks[(self.head + self.length - 1) % capacity] <= peak {
+            self.length -= 1;
+        }
+        let tail = (self.head + self.length) % capacity;
+        self.peaks[tail] = peak;
+        self.ages[tail] = self.now;
+        self.length += 1;
+        self.now = self.now.wrapping_add(1);
+        self.peaks[self.head]
+    }
+}
+
+/// A moving average of the last `size` values, zero before any input (no reduction).
+struct MovingAverage {
+    values: [f32; MAX_SMOOTHING_FRAMES],
+    sum: f64,
+    position: usize,
+    size: usize
+}
+
+impl MovingAverage {
+    fn init(&mut self, size: usize) {
+        self.size = size.clamp(1, MAX_SMOOTHING_FRAMES);
+        self.reset();
+    }
+
+    fn reset(&mut self) {
+        self.values = [0.0; MAX_SMOOTHING_FRAMES];
+        self.sum = 0.0;
+        self.position = 0;
+    }
+
+    fn process(&mut self, value: f32) -> f32 {
+        self.sum += value as f64 - self.values[self.position] as f64;
+        self.values[self.position] = value;
+        self.position += 1;
+        if self.position == self.size {self.position = 0;}
+        (self.sum / self.size as f64) as f32
+    }
+}
 
 /// The limiter's per-instance state (engine-allocated, zeroed): the look-ahead delay ring, the smoothed
 /// threshold, the peak-hold / release envelope trackers, the makeup gain, and the parameter / field ids. Built
@@ -53,10 +124,10 @@ pub struct MaximizerState {
     lookahead_mix: LinearRamp, // crossfade 0 (off) .. 1 (on) so a look-ahead toggle ramps across the latency change
     release_coeff: f32,
     look_ahead_frames: usize,
+    smoothing: [MovingAverage; SMOOTHING_PASSES],
     position: usize,
     envelope: f32,
-    peak_hold: f32,
-    peak_hold_counter: i32,
+    peak_window: PeakWindow,
     lookahead: bool,
     processed: bool,
     headroom_gain: f32,
@@ -84,10 +155,13 @@ impl AudioEffect for Maximizer {
         state.lookahead_mix = LinearRamp::linear(sample_rate, LOOKAHEAD_CROSSFADE_SECONDS);
         state.lookahead_mix.set(1.0, false); // lookahead defaults on; the field catch-up re-sets the real value
         state.look_ahead_frames = (libm::ceilf(LOOK_AHEAD_SECONDS * sample_rate) as usize).clamp(1, MAX_LOOK_AHEAD_FRAMES);
+        let smoothing_frames = (state.look_ahead_frames / SMOOTHING_PASSES).max(1);
+        for average in &mut state.smoothing {
+            average.init(smoothing_frames);
+        }
         state.position = 0;
         state.envelope = 0.0;
-        state.peak_hold = 0.0;
-        state.peak_hold_counter = 0;
+        state.peak_window.init(state.look_ahead_frames + 1);
         state.lookahead = true; // the box default
         state.processed = false;
         state.headroom_gain = 1.0;
@@ -114,8 +188,10 @@ impl AudioEffect for Maximizer {
         state.processed = false;
         state.position = 0;
         state.envelope = 0.0;
-        state.peak_hold = 0.0;
-        state.peak_hold_counter = 0;
+        state.peak_window.reset();
+        for average in &mut state.smoothing {
+            average.reset();
+        }
         state.buffer_left = [0.0; MAX_LOOK_AHEAD_FRAMES];
         state.buffer_right = [0.0; MAX_LOOK_AHEAD_FRAMES];
         state.lookahead_mix.set(if state.lookahead {1.0} else {0.0}, false);
@@ -133,21 +209,17 @@ impl AudioEffect for Maximizer {
             let inp0 = in_left[i];
             let inp1 = in_right[i];
             let peak = libm::fabsf(inp0).max(libm::fabsf(inp1));
-            if peak > state.peak_hold {
-                state.peak_hold = peak;
-                state.peak_hold_counter = frames as i32;
-            } else if state.peak_hold_counter > 0 {
-                state.peak_hold_counter -= 1;
+            let peak_hold = state.peak_window.process(peak);
+            state.envelope = if state.envelope < peak_hold {
+                peak_hold
             } else {
-                state.peak_hold = peak;
-            }
-            if state.envelope < state.peak_hold {
-                state.envelope = state.peak_hold.min(state.envelope + state.peak_hold / frames as f32);
-            } else {
-                state.envelope = state.peak_hold + state.release_coeff * (state.envelope - state.peak_hold);
-            }
+                peak_hold + state.release_coeff * (state.envelope - peak_hold)
+            };
             let threshold = state.threshold.move_and_get();
-            let reduction_db = 0.0f32.min(threshold - gain_to_db(state.envelope));
+            let mut reduction_db = 0.0f32.min(threshold - gain_to_db(state.envelope));
+            for average in &mut state.smoothing {
+                reduction_db = average.process(reduction_db);
+            }
             if reduction_db < state.reduction_min {
                 state.reduction_min = reduction_db;
             }
@@ -246,10 +318,64 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
 
 #[cfg(test)]
 mod tests {
-    use super::{Maximizer, MaximizerState};
+    use super::{Maximizer, MaximizerState, MovingAverage, PeakWindow};
     use abi::{AudioEffect, Block, BlockFlags};
 
     const SR: f32 = 48_000.0;
+
+    #[test]
+    fn smoothing_fits_the_look_ahead_at_every_rate() {
+        for sample_rate in [22_050.0f32, 44_100.0, 48_000.0, 88_200.0, 96_000.0, 192_000.0] {
+            let mut state: MaximizerState = unsafe { core::mem::zeroed() };
+            Maximizer::init(&mut state, sample_rate);
+            let total: usize = state.smoothing.iter().map(|average| average.size).sum();
+            assert!(total <= state.look_ahead_frames, "{sample_rate} Hz");
+            assert!(total + 3 > state.look_ahead_frames, "{sample_rate} Hz");
+        }
+    }
+
+    #[test]
+    fn peak_window_matches_a_brute_force_maximum() {
+        for size in [1usize, 2, 7, 241, 961] {
+            let mut window: PeakWindow = unsafe { core::mem::zeroed() };
+            window.init(size);
+            let mut seed = 12345u32;
+            let values: Vec<f32> = (0..20_000).map(|index| {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                match index / 5000 {
+                    0 => (seed >> 16) as f32 / 65536.0,
+                    1 => 1.0 - index as f32 * 1e-5,
+                    2 => index as f32 * 1e-5,
+                    _ => 0.5
+                }
+            }).collect();
+            for (index, value) in values.iter().enumerate() {
+                let expected = values[(index + 1).saturating_sub(size)..=index].iter().fold(0.0f32, |max, entry| max.max(*entry));
+                assert_eq!(window.process(*value), expected, "size {size} index {index}");
+            }
+        }
+    }
+
+    #[test]
+    fn peak_window_reset_forgets() {
+        let mut window: PeakWindow = unsafe { core::mem::zeroed() };
+        window.init(10);
+        window.process(1.0);
+        window.reset();
+        assert_eq!(window.process(0.25), 0.25);
+    }
+
+    #[test]
+    fn moving_average_settles_and_does_not_drift() {
+        let mut average: MovingAverage = unsafe { core::mem::zeroed() };
+        average.init(24);
+        assert_eq!(average.process(-24.0), -1.0);
+        for index in 0..10_000_000 {
+            average.process(-(index % 97) as f32 * 0.137);
+        }
+        let settled = (0..24).fold(0.0, |_, _| average.process(-6.0));
+        assert!((settled + 6.0).abs() < 1e-6, "settled at {settled}");
+    }
 
     fn state(threshold_db: f32, lookahead: bool) -> MaximizerState {
         let mut state: MaximizerState = unsafe { core::mem::zeroed() };
@@ -276,13 +402,13 @@ mod tests {
             let inp0 = input[i];
             let inp1 = input[i];
             let peak = inp0.abs().max(inp1.abs());
-            if peak > state.peak_hold {state.peak_hold = peak; state.peak_hold_counter = frames as i32;}
-            else if state.peak_hold_counter > 0 {state.peak_hold_counter -= 1;}
-            else {state.peak_hold = peak;}
-            if state.envelope < state.peak_hold {state.envelope = state.peak_hold.min(state.envelope + state.peak_hold / frames as f32);}
-            else {state.envelope = state.peak_hold + state.release_coeff * (state.envelope - state.peak_hold);}
+            let peak_hold = state.peak_window.process(peak);
+            state.envelope = if state.envelope < peak_hold {peak_hold} else {peak_hold + state.release_coeff * (state.envelope - peak_hold)};
             let threshold = state.threshold.move_and_get();
-            let reduction_db = 0.0f32.min(threshold - dsp::gain_to_db(state.envelope));
+            let mut reduction_db = 0.0f32.min(threshold - dsp::gain_to_db(state.envelope));
+            for average in &mut state.smoothing {
+                reduction_db = average.process(reduction_db);
+            }
             let headroom = if threshold_ramping {dsp::db_to_gain(super::MAGIC_HEADROOM - threshold)} else {steady};
             let gain = dsp::db_to_gain(reduction_db) * headroom;
             if state.lookahead {
