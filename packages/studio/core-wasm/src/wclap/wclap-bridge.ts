@@ -153,9 +153,6 @@ class Plugin {
     // DSP. A first block that plays (the user pressed play at once) or brings notes drops the check, else the
     // restart would swallow the new notes
     resetCheck: boolean = false
-    // notes played while the plugin still loads (a project opened, play pressed at once): kept for its first block,
-    // else a held note stays silent until the transport plays it again
-    readonly earlyNotes: Array<PendingNote> = []
     references: number = 1 // every composite cell holds its own replica of a unit-level MIDI effect, one plugin for all
     collected: Nullable<Array<NoteOut>> = null // the notes the plugin sends during a note effect's process call
     lastSpan: Nullable<NoteSpan> = null
@@ -418,7 +415,6 @@ export class WclapBridges {
                 if (plugin.generation !== generation) {return}
                 plugin.loaded = loaded
                 plugin.loading = false
-                loaded.pendingNotes.push(...plugin.earlyNotes.splice(0))
                 this.#publishParams(plugin, loaded)
                 this.#host.sendStatus(plugin.uuid,
                     {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0, panel: this.#hasPanel(loaded)})
@@ -1195,11 +1191,7 @@ export class WclapBridges {
 
     #note(handle: number, on: boolean, key: number, velocity: number): void {
         const plugin = this.#plugins.get(handle)
-        if (!isDefined(plugin)) {return}
-        if (isNull(plugin.loaded)) {
-            if (plugin.loading && plugin.earlyNotes.length < MAX_NOTE_EVENTS) {plugin.earlyNotes.push({on, key, velocity})}
-            return
-        }
+        if (!isDefined(plugin) || isNull(plugin.loaded)) {return}
         const notes = plugin.loaded.pendingNotes
         if (notes.length < MAX_NOTE_EVENTS) {notes.push({on, key, velocity})}
     }
@@ -1287,9 +1279,7 @@ export class WclapBridges {
 
     #reset(handle: number): void {
         const plugin = this.#plugins.get(handle)
-        if (!isDefined(plugin)) {return}
-        plugin.earlyNotes.length = 0
-        if (isNull(plugin.loaded)) {return}
+        if (!isDefined(plugin) || isNull(plugin.loaded)) {return}
         const loaded = plugin.loaded
         loaded.steadyTime = 0
         loaded.pendingNotes.length = 0
@@ -1311,7 +1301,6 @@ export class WclapBridges {
     #destroy(plugin: Plugin): void {
         plugin.generation++
         plugin.loading = false
-        plugin.earlyNotes.length = 0
         const loaded = plugin.loaded
         if (isNull(loaded)) {return}
         plugin.loaded = null
