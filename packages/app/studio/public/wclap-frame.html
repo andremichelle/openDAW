@@ -20,7 +20,10 @@
     const files = new Map()
     // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
     const channel = new MessageChannel()
-    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, hovered: false, transparent: false, dragging: false}
+    const state = {
+        uuid: "", pageDirectory: "", inner: null, pointer: false, hovered: false, transparent: false, dragging: false,
+        reportsWheel: false
+    }
 
     const post = message => channel.port1.postMessage(message)
     const fail = message => {
@@ -102,6 +105,11 @@
         }
         // never the browser's own menu, the page's handlers still see the event
         target.addEventListener("contextmenu", event => event.preventDefault(), {capture: true})
+        // a wheel the page did not prevent scrolls the window, unless the page reports its unused wheels itself
+        target.addEventListener("wheel", event => {
+            if (!event.isTrusted || event.defaultPrevented || state.reportsWheel) {return}
+            post({type: "wclap-wheel", deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode})
+        })
     }
 
     // Chrome may lose the release outside the frame, the next buttonless move delivers it to the page
@@ -195,6 +203,7 @@
         const wheel = data?.webclapWheel
         if (bytes === null && typeof wheel === "object" && wheel !== null
             && Number.isFinite(wheel.deltaX) && Number.isFinite(wheel.deltaY) && Number.isFinite(wheel.deltaMode)) {
+            state.reportsWheel = true
             post({type: "wclap-wheel", deltaX: wheel.deltaX, deltaY: wheel.deltaY, deltaMode: wheel.deltaMode})
         }
     })
