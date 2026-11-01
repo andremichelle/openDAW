@@ -896,6 +896,31 @@ describe("wclap bridge", () => {
             expect(status(host)).toMatchObject({grains: 0, voices: 0})
         })
 
+        // a project opened and played at once: the note arrives while the plugin still loads
+        it("keeps a note played while it loads for its first block", async () => {
+            const host = createHost(xenonBundle)
+            const handle = load(host, XENON, "xenon")
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            await ready(host, handle)
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone(), "tone.wav")
+            peaks(host)
+            expect(rms(host, handle, 100)).toBeGreaterThan(0.05)
+            expect(status(host).voices).toBe(1)
+        })
+
+        it("drops the notes played while it loads when the host resets it", async () => {
+            const host = createHost(xenonBundle)
+            const handle = load(host, XENON, "xenon")
+            host.imports.host_wclap_note(handle, 1, 60, 1)
+            host.imports.host_wclap_reset(handle)
+            await ready(host, handle)
+            host.bridges.openPanel(uuid, 176)
+            upload(host, tone(), "tone.wav")
+            peaks(host)
+            expect(rms(host, handle, 100)).toBe(0)
+        })
+
         it("plays a held note on and on, the countdown carries grains across blocks", async () => {
             const [host, handle] = await loadXenon()
             host.bridges.openPanel(uuid, 176)
