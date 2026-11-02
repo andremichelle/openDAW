@@ -3,7 +3,7 @@ import {AssetSignaling} from "./AssetSignaling"
 
 export const RTC_CONFIG: RTCConfiguration = {
     iceServers: [
-        {urls: "stun:stun.l.google.com:19302"},
+        {urls: "stun:live.opendaw.studio:3478"},
         {urls: "turn:live.opendaw.studio:3478", username: "opendaw", credential: "opendaw"}
     ]
 }
