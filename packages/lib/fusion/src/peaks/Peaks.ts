@@ -66,9 +66,6 @@ export class SamplePeaks implements Peaks {
 
     static readonly findBestFit = (numFrames: int, width: int = 1200): Uint8Array => {
         const ratio = numFrames / width
-        if (ratio <= 1.0) {
-            return new Uint8Array(0)
-        }
         const ShiftPadding = 3
         const maxShift = Math.floor(Math.log(ratio) / Math.LN2)
         const numStages = Math.max(1, Math.floor(maxShift / ShiftPadding))
