@@ -33,5 +33,19 @@ component
       border-radius: 50%
       flex-shrink: 0
 
+    > .call
+      display: flex
+      color: var(--color-green)
+
+      > svg
+        width: 9px
+        height: 9px
+
+      &.muted
+        color: var(--color-red)
+
+      &.hand
+        color: var(--color-yellow)
+
     &.self
       color: var(--color-bright)

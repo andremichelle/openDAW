@@ -895,6 +895,30 @@ export const IconLibrary = () => (
                 <path
                     d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallMic)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a3.5 3.5 0 0 1 3.5 3.5v5.5a3.5 3.5 0 0 1-7 0V5.5A3.5 3.5 0 0 1 12 2Z"/><path d="M5 10h2v1a5 5 0 0 0 10 0v-1h2v1a7 7 0 0 1-6 6.93V21h3v2H8v-2h3v-3.07A7 7 0 0 1 5 11Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallMicOff)} viewBox="0 0 24 24" fill="currentColor">
+                <mask id="call-mic-off-mask"><rect width="24" height="24" fill="white"/><path d="M2 .6 23.4 22 22 23.4.6 2Z" fill="black"/></mask><g mask="url(#call-mic-off-mask)"><path d="M12 2a3.5 3.5 0 0 1 3.5 3.5v5.5a3.5 3.5 0 0 1-7 0V5.5A3.5 3.5 0 0 1 12 2Z"/><path d="M5 10h2v1a5 5 0 0 0 10 0v-1h2v1a7 7 0 0 1-6 6.93V21h3v2H8v-2h3v-3.07A7 7 0 0 1 5 11Z"/></g><path d="M3.4 2 22 20.6 20.6 22 2 3.4Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallCamera)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 6h12a1 1 0 0 1 1 1v3.2l5-3.2v10l-5-3.2V17a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallCameraOff)} viewBox="0 0 24 24" fill="currentColor">
+                <mask id="call-camera-off-mask"><rect width="24" height="24" fill="white"/><path d="M2 .6 23.4 22 22 23.4.6 2Z" fill="black"/></mask><g mask="url(#call-camera-off-mask)"><path d="M3 6h12a1 1 0 0 1 1 1v3.2l5-3.2v10l-5-3.2V17a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/></g><path d="M3.4 2 22 20.6 20.6 22 2 3.4Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallScreen)} viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" d="M2 4h20v13H2Zm2 2v9h16V6Z"/><path d="M8 19h8v2H8Z"/><path d="M12 6.5 16 10.5h-3V14h-2v-3.5H8Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallHand)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 4.5a1.25 1.25 0 0 1 2.5 0V11h1V3.25a1.25 1.25 0 0 1 2.5 0V11h1V4.75a1.25 1.25 0 0 1 2.5 0V12h1V8.25a1.25 1.25 0 0 1 2.5 0V14a8 8 0 0 1-8 8h-.6a6.5 6.5 0 0 1-5.4-2.9L3.3 14.8a1.3 1.3 0 0 1 2.1-1.5L8 16Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallPhone)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 15.5v3.6a1 1 0 0 1-.9 1A16 16 0 0 1 3.9 4.9 1 1 0 0 1 4.9 4h3.6a.6.6 0 0 1 .6.5c.1.9.3 1.7.6 2.5a1 1 0 0 1-.2 1L7.9 9.6a13 13 0 0 0 6.5 6.5L16 14.5a1 1 0 0 1 1-.2c.8.3 1.6.5 2.5.6a.6.6 0 0 1 .5.6Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.CallHangup)} viewBox="0 0 24 24" fill="currentColor">
+                <path transform="rotate(135 12 12)" d="M20 15.5v3.6a1 1 0 0 1-.9 1A16 16 0 0 1 3.9 4.9 1 1 0 0 1 4.9 4h3.6a.6.6 0 0 1 .6.5c.1.9.3 1.7.6 2.5a1 1 0 0 1-.2 1L7.9 9.6a13 13 0 0 0 6.5 6.5L16 14.5a1 1 0 0 1 1-.2c.8.3 1.6.5 2.5.6a.6.6 0 0 1 .5.6Z"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.ChatEmpty)} viewBox="0 0 24 24" fill="currentColor">
                 <path
                     d="M10 3H14C18.4183 3 22 6.58172 22 11C22 15.4183 18.4183 19 14 19V22.5C9 20.5 2 17.5 2 11C2 6.58172 5.58172 3 10 3ZM12 17H14C17.3137 17 20 14.3137 20 11C20 7.68629 17.3137 5 14 5H10C6.68629 5 4 7.68629 4 11C4 14.61 6.46208 16.9656 12 19.4798V17Z"/>

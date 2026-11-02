@@ -84,6 +84,7 @@ import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 import {ChatService} from "@/chat/ChatService"
+import {CallService} from "@/call/CallService"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -142,6 +143,7 @@ export class StudioService implements ProjectEnv {
     readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
     readonly #trafficMeter = new DefaultObservableValue<Nullable<TrafficMeter>>(null)
     readonly #chatService = new MutableObservableOption<ChatService>()
+    readonly #callService = new MutableObservableOption<CallService>()
 
     #shadertoyState: Option<ShadertoyState> = Option.None
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
@@ -395,6 +397,7 @@ export class StudioService implements ProjectEnv {
     get trafficMeter(): DefaultObservableValue<Nullable<TrafficMeter>> {return this.#trafficMeter}
     setTrafficMeter(value: Nullable<TrafficMeter>): void {this.#trafficMeter.setValue(value)}
     get chatService(): MutableObservableOption<ChatService> {return this.#chatService}
+    get callService(): MutableObservableOption<CallService> {return this.#callService}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}

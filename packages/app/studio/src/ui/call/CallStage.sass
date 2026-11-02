@@ -1,0 +1,499 @@
+@use "@/colors"
+
+@keyframes call-pulse
+  0%, 100%
+    opacity: 1
+  50%
+    opacity: 0.35
+
+@keyframes call-wave
+  0%, 60%, 100%
+    transform: rotate(0deg)
+  20%
+    transform: rotate(-14deg)
+  40%
+    transform: rotate(10deg)
+
+component
+  flex: 0 1 auto
+  min-height: 0
+  max-height: 60%
+  display: flex
+  flex-direction: column
+  margin: 0 0.5em 0.25em 0.5em
+  border-bottom: 1px solid rgba(white, 0.06)
+  font-size: 0.6875rem
+  color: var(--color-gray)
+
+  > header
+    flex: 0 0 2.25em
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+    white-space: nowrap
+
+    > .title
+      color: var(--color-bright)
+      font-weight: bold
+
+    > .spacer
+      flex: 1
+
+    > .settings
+      display: flex
+      --color: var(--color-gray)
+
+      svg
+        width: 1.1em
+        height: 1.1em
+
+    > .expand
+      appearance: none
+      outline: none
+      border: none
+      background: none
+      padding: 0
+      color: var(--color-gray)
+      cursor: pointer
+      display: flex
+
+      > svg
+        width: 1.2em
+        height: 1.2em
+
+      &:hover
+        color: var(--color-bright)
+
+  > header > .attendees
+    display: flex
+    align-items: center
+    column-gap: 4px
+
+    > .dot
+      width: 8px
+      height: 8px
+      border-radius: 50%
+      background-color: var(--user-color)
+
+      &.muted
+        opacity: 0.45
+
+  > .bar
+    position: relative
+    flex: 0 0 2.75em
+    margin-bottom: 0.5em
+    display: flex
+    align-items: center
+    justify-content: center
+
+    > .controls
+      display: none
+      align-items: center
+      column-gap: 0.5em
+
+    > .lobby-controls
+      display: flex
+
+      > .music-row
+        display: flex
+        margin-left: 0.25em
+
+  &.joined > .bar
+    > .lobby-controls
+      display: none
+
+    > .joined
+      display: flex
+
+  > .body
+    display: none
+    flex: 0 1 auto
+    min-height: 0
+    position: relative
+    overflow-y: auto
+    margin-bottom: 0.25em
+    border-radius: 4px
+    background-color: rgba(black, 0.2)
+
+    > .grid
+      display: grid
+      grid-template-columns: repeat(2, minmax(0, 1fr))
+      gap: 4px
+      padding: 4px
+
+      &.has-pinned
+        grid-template-columns: repeat(4, minmax(0, 1fr))
+
+      &:not(.has-video) > .tile
+        aspect-ratio: 3 / 1
+
+        > .avatar
+          > .ring
+            width: 30px
+            height: 30px
+
+          > .initial
+            width: 22px
+            height: 22px
+            font-size: 1em
+
+  &.joined > .body
+    display: block
+
+  button.join
+    appearance: none
+    outline: none
+    height: 2em
+    padding: 0 1em
+    border: none
+    border-radius: 1.125em
+    display: flex
+    align-items: center
+    column-gap: 0.4em
+    font: inherit
+    font-weight: bold
+    cursor: pointer
+    color: rgba(black, 0.85)
+    background-color: var(--color-green)
+
+    > svg
+      width: 1.1em
+      height: 1.1em
+
+    &.video
+      color: var(--color-bright)
+      background-color: rgba(white, 0.1)
+
+    &:hover
+      filter: brightness(1.15)
+
+    &:disabled
+      opacity: 0.4
+      pointer-events: none
+
+    &.full
+      opacity: 0.4
+
+  button.control
+    appearance: none
+    outline: none
+    position: relative
+    width: 2.25em
+    height: 2.25em
+    padding: 0
+    border: none
+    border-radius: 50%
+    display: flex
+    align-items: center
+    justify-content: center
+    cursor: pointer
+    color: var(--color-bright)
+    background-color: rgba(white, 0.08)
+    transition: background-color 0.12s
+
+    svg
+      width: 1.15em
+      height: 1.15em
+      pointer-events: none
+
+    &:hover
+      background-color: rgba(white, 0.16)
+
+    &.off
+      color: white
+      background-color: color-mix(in srgb, var(--color-red) 75%, black)
+
+    &.active
+      color: rgba(black, 0.85)
+      background-color: var(--color-blue)
+
+    &.hand.active
+      background-color: var(--color-yellow)
+
+    &.leave
+      color: white
+      background-color: var(--color-red)
+
+      &:hover
+        filter: brightness(1.15)
+
+    &.unsupported
+      opacity: 0.3
+      pointer-events: none
+
+    &.mic
+      > .meter
+        position: absolute
+        inset: 0
+        border-radius: 50%
+        pointer-events: none
+        box-shadow: 0 0 0 calc(var(--level, 0) * 4px) color-mix(in srgb, var(--color-green) 70%, transparent)
+
+      &.off > .meter
+        box-shadow: none
+
+      &.push-to-talk
+        color: rgba(black, 0.85)
+        background-color: var(--color-green)
+
+      &::after
+        content: "You are muted"
+        position: absolute
+        bottom: calc(100% + 6px)
+        left: 50%
+        transform: translateX(-50%)
+        padding: 2px 6px
+        border-radius: 3px
+        white-space: nowrap
+        font-size: 0.9em
+        color: rgba(black, 0.85)
+        background-color: var(--color-yellow)
+        opacity: 0
+        pointer-events: none
+        transition: opacity 0.2s
+
+      &.talking-muted::after
+        opacity: 1
+
+  .tile
+    position: relative
+    aspect-ratio: 16 / 9
+    min-width: 0
+    border-radius: 4px
+    overflow: hidden
+    background-color: color-mix(in srgb, var(--user-color) 10%, var(--color-panel-background-dark))
+    box-shadow: inset 0 0 0 1px rgba(white, 0.06)
+    transition: box-shadow 0.15s
+
+    &.pinned
+      grid-column: 1 / -1
+
+    &.speaking
+      box-shadow: inset 0 0 0 2px var(--user-color), 0 0 calc(var(--level, 0) * 10px) var(--user-color)
+
+    > video
+      position: absolute
+      inset: 0
+      width: 100%
+      height: 100%
+      object-fit: cover
+      display: none
+      background-color: black
+
+    &.video > video
+      display: block
+
+    &.video > .avatar
+      display: none
+
+    &.screen > video
+      object-fit: contain
+
+    &.mirror > video
+      transform: scaleX(-1)
+
+    > .avatar
+      position: absolute
+      inset: 0
+      display: flex
+      align-items: center
+      justify-content: center
+
+      > .ring
+        position: absolute
+        width: 42px
+        height: 42px
+        border-radius: 50%
+        background-color: var(--user-color)
+        opacity: calc(0.12 + var(--level, 0) * 0.4)
+        transform: scale(calc(1 + var(--level, 0) * 0.7))
+
+      > .initial
+        position: relative
+        width: 32px
+        height: 32px
+        border-radius: 50%
+        display: flex
+        align-items: center
+        justify-content: center
+        font-weight: bold
+        font-size: 1.15em
+        color: rgba(black, 0.85)
+        background-color: var(--user-color)
+
+    &.screen > .avatar > .ring
+      display: none
+
+    > .badges
+      position: absolute
+      top: 4px
+      left: 4px
+      display: flex
+      column-gap: 3px
+
+      > span
+        display: none
+        align-items: center
+        height: 14px
+        padding: 0 3px
+        border-radius: 3px
+        font-size: 0.8em
+        font-weight: bold
+
+      > .hand
+        color: rgba(black, 0.85)
+        background-color: var(--color-yellow)
+
+        > svg
+          width: 10px
+          height: 10px
+          animation: call-wave 1.4s ease-in-out infinite
+          transform-origin: 50% 90%
+
+      > .hifi
+        letter-spacing: 0.05em
+        color: var(--color-green)
+        background-color: rgba(black, 0.55)
+
+    &.hand-up > .badges > .hand, &.hifi > .badges > .hifi
+      display: flex
+
+    > .quality
+      position: absolute
+      top: 5px
+      right: 5px
+      height: 8px
+      display: flex
+      align-items: flex-end
+      column-gap: 1px
+
+      > i
+        width: 2px
+        border-radius: 1px
+        background-color: rgba(white, 0.2)
+
+        &:nth-child(1)
+          height: 3px
+
+        &:nth-child(2)
+          height: 5px
+
+        &:nth-child(3)
+          height: 8px
+
+      &[data-bars="1"] > i:nth-child(-n+1)
+        background-color: var(--color-red)
+
+      &[data-bars="2"] > i:nth-child(-n+2)
+        background-color: var(--color-yellow)
+
+      &[data-bars="3"] > i
+        background-color: var(--color-green)
+
+    &.screen > .quality
+      display: none
+
+    > .label
+      position: absolute
+      left: 4px
+      right: 4px
+      bottom: 3px
+      display: flex
+      align-items: center
+      column-gap: 0.3em
+      color: var(--color-bright)
+      text-shadow: 0 0 3px black
+
+      > span
+        display: none
+
+        > svg
+          width: 10px
+          height: 10px
+
+      > .name
+        display: block
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+
+      > .muted
+        display: none
+        color: var(--color-red)
+
+    &.mic-off > .label > .muted
+      display: flex
+
+    &.screen > .label > .sharing
+      display: flex
+      color: var(--color-blue)
+
+    > .tools
+      position: absolute
+      top: 3px
+      right: 16px
+      display: flex
+      align-items: center
+      column-gap: 3px
+      opacity: 0
+      transition: opacity 0.12s
+
+      > button.tool, > .volume
+        appearance: none
+        outline: none
+        height: 18px
+        padding: 0 3px
+        border: none
+        border-radius: 3px
+        display: flex
+        align-items: center
+        column-gap: 3px
+        color: var(--color-bright)
+        background-color: rgba(black, 0.6)
+        cursor: pointer
+
+        > svg
+          width: 11px
+          height: 11px
+
+      > .volume > input
+        width: 56px
+        outline: none
+        height: 10px
+        margin: 0
+        accent-color: var(--user-color)
+
+    &:hover > .tools
+      opacity: 1
+
+    &.locally-muted > .tools
+      opacity: 1
+
+      > .volume
+        color: var(--color-red)
+
+    > .state
+      position: absolute
+      inset: auto 0 45% 0
+      display: none
+
+    &.connecting:not(.self) > .state
+      display: block
+      text-align: center
+      color: var(--color-gray)
+
+      &::after
+        content: "Connecting..."
+        animation: call-pulse 1.2s ease-in-out infinite
+
+    &.failed:not(.self) > .state::after
+      content: "Reconnecting..."
+
+    &.connecting:not(.self) > .avatar
+      opacity: 0.35
+
+.wide component > .body > .grid:not(.has-pinned):not([data-count="1"]):not([data-count="2"]):not([data-count="3"]):not([data-count="4"])
+  grid-template-columns: repeat(3, minmax(0, 1fr))
+
+.wide component > .body > .grid.has-pinned
+  grid-template-columns: repeat(6, minmax(0, 1fr))

@@ -191,6 +191,14 @@ export enum IconSymbol {
     WebClap,
     ZoomFit,
     CodeClose,
+    CallMic,
+    CallMicOff,
+    CallCamera,
+    CallCameraOff,
+    CallScreen,
+    CallHand,
+    CallPhone,
+    CallHangup,
 }
 
 export namespace IconSymbol {

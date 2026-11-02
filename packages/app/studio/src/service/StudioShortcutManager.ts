@@ -196,7 +196,10 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-tap"].shortcut, () => service.runIfProject(() => service.switchScreen("tap"))),
             gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences")),
             gc.register(gs["open-spotlight"].shortcut, () => service.spotlight.toggle()),
-            gc.register(gs["open-spotlight-alt"].shortcut, () => service.spotlight.toggle())
+            gc.register(gs["open-spotlight-alt"].shortcut, () => service.spotlight.toggle()),
+            gc.register(gs["call-toggle-mic"].shortcut, () => service.callService.ifSome(call => call.toggleMic())),
+            gc.register(gs["call-toggle-camera"].shortcut, () => service.callService.ifSome(call => call.toggleCamera())),
+            gc.register(gs["call-toggle-hand"].shortcut, () => service.callService.ifSome(call => call.toggleHand()))
         )
     }
 }
