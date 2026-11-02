@@ -284,11 +284,10 @@ const renderCall = (lifecycle: Terminator, call: CallService, element: HTMLEleme
             const rank = (tile: CallTile) => tile.key === pinned.getValue() ? 0 : tile.kind === "screen" ? 1 : 2
             return rank(first) - rank(second)
         })
-        ordered.forEach(tile => {
+        ordered.forEach((tile, index) => {
             tile.element.classList.toggle("pinned", tile.key === pinned.getValue())
-            if (grid.lastElementChild !== tile.element || tile.element.parentElement !== grid) {
-                grid.appendChild(tile.element)
-            }
+            const current = grid.children.item(index)
+            if (current !== tile.element) {grid.insertBefore(tile.element, current)}
         })
         grid.dataset.count = String(Math.min(tiles.size, 9))
         grid.classList.toggle("has-video", ordered.some(tile => tile.element.classList.contains("video")))

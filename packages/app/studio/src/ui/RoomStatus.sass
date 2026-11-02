@@ -1,5 +1,11 @@
 @use "@/colors"
 
+@keyframes room-hand-flash
+  0%, 100%
+    opacity: 1
+  50%
+    opacity: 0.2
+
 component
   flex: 0 0 20px
   display: flex
@@ -46,6 +52,7 @@ component
 
       &.hand
         color: var(--color-yellow)
+        animation: room-hand-flash 2s ease-in-out infinite
 
     &.self
       color: var(--color-bright)

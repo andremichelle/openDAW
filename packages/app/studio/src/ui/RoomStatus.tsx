@@ -66,7 +66,9 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                             <span className="call"><Icon symbol={IconSymbol.CallCamera}/></span>
                         )}
                         {isDefined(user.call) && user.call.hand && (
-                            <span className="call hand"><Icon symbol={IconSymbol.CallHand}/></span>
+                            <span className="call hand" style={{animationDelay: `-${Math.round(performance.now() % 2000)}ms`}}>
+                                <Icon symbol={IconSymbol.CallHand}/>
+                            </span>
                         )}
                     </div>
                 )), trafficWatch)
