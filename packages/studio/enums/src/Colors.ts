@@ -25,9 +25,9 @@ const Neutrals: Record<ColorScheme, Record<NeutralName, Neutral>> = {
         headerBackground: [0, 18], footerBackground: [0, 11]
     },
     contrast: {
-        bright: [10, 100], gray: [10, 94], dark: [10, 88], shadow: [10, 73], black: [10, 50],
-        background: [10, 19], panelBackground: [10, 21], panelBackgroundBright: [10, 29], panelBackgroundDark: [10, 19],
-        headerBackground: [10, 10], footerBackground: [10, 10]
+        bright: [10, 100], gray: [10, 96], dark: [10, 90], shadow: [10, 76], black: [10, 58],
+        background: [10, 4], panelBackground: [10, 9], panelBackgroundBright: [10, 16], panelBackgroundDark: [10, 6],
+        headerBackground: [10, 3], footerBackground: [10, 5]
     }
 }
 
