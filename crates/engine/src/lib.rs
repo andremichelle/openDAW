@@ -81,7 +81,8 @@ struct DeviceReg {
     record_collection_field: u16,
     // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
     buffer_collection_field: u16,
-    data_changed_index: u32
+    data_changed_index: u32,
+    release_all_index: u32 // slot of a MIDI effect's `release_all` export; 0 if none
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -200,6 +201,20 @@ fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32
 }
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
+
+// WASM CONTRACT: a MIDI effect's optional `release_all(state_ptr, position, out_ptr, max) -> count` ends every note it started.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_release_all(release_all_index: u32, state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    if release_all_index == 0 {
+        return 0;
+    }
+    calling_device(state_ptr);
+    let release_all: extern "C" fn(u32, f64, u32, u32) -> u32 = unsafe { core::mem::transmute(release_all_index as usize) };
+    release_all(state_ptr, position, out_ptr, max)
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_release_all(_release_all_index: u32, _state_ptr: u32, _position: f64, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
 // Call a device's `init(state_ptr, sample_rate)` export (it binds its parameters via `host_bind_parameter`
 // and learns the engine's sample rate, stable for its life). Same table-index-is-fn-pointer trick. Called
@@ -778,6 +793,21 @@ impl PullLink {
             _ => false
         }
     }
+
+    fn holds(&self, effect: &Rc<PluginMidiEffect>) -> bool {
+        match self {
+            PullLink::MidiFx {effect: own, upstream} => Rc::ptr_eq(own, effect) || upstream.holds(effect),
+            _ => false
+        }
+    }
+
+    /// Every effect of this chain missing from `next` ends the notes it started, into `out`.
+    pub(crate) fn release_leavers(&self, next: &PullLink, out: &mut Vec<EventRecord>) {
+        if let PullLink::MidiFx {effect, upstream} = self {
+            if !next.holds(effect) {effect.release_all(out)}
+            upstream.release_leavers(next, out);
+        }
+    }
 }
 
 /// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
@@ -801,14 +831,16 @@ struct PullContext {
     // The CURRENT CONSUMER's unit note-bits slot (TS `NoteEventInstrument`'s 128-bit `NoteBroadcaster`):
     // resolved note starts/completes set/clear pitch bits. Set by `PluginInstrument` around its device call;
     // cleared during a MidiFx descent so nested pulls mark only their own producers.
-    note_bits: Option<engine_env::telemetry::BroadcastSlot>
+    note_bits: Option<engine_env::telemetry::BroadcastSlot>,
+    // note-offs of effects that left the consumer's chain, handed out first by its next pull
+    released: Vec<EventRecord>
 }
 
 impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0
+            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0, released: Vec::new()
         }
     }
 }
@@ -859,6 +891,15 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
 /// a native (test) build. `out_ptr` is the wasm address of `out`, forwarded only to a MIDI-fx device call
 /// (wasm-to-wasm; a native build's device stub never dereferences it).
 pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventRecord], out_ptr: u32) -> u32 {
+    let released = {
+        let pull = unsafe { PULL.get() };
+        let count = pull.released.len().min(out.len());
+        for (slot, record) in out.iter_mut().zip(pull.released.iter()) {*slot = EventRecord {position: from, ..*record}}
+        pull.released.clear();
+        count
+    };
+    let (released_records, out) = out.split_at_mut(released);
+    let out_ptr = out_ptr + (released * core::mem::size_of::<EventRecord>()) as u32;
     let max = out.len() as u32;
     let link = { unsafe { PULL.get() }.current.clone() };
     // The CONSUMER's note-bits slot, taken before any descent below swaps it out.
@@ -893,10 +934,10 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
         }
         None => 0
     };
-    if count > 0 {
+    if count > 0 || released > 0 {
         if let Some(slot) = consumer_bits {
             // Mark the UNIT's held notes (TS `NoteEventInstrument.#showEvent` per resolved lifecycle event).
-            for record in &out[..count as usize] {
+            for record in released_records.iter().chain(out[..count as usize].iter()) {
                 if record.kind == EVENT_NOTE_ON {
                     engine_env::telemetry::set_note_bit(&slot, record.pitch as i32, true);
                 } else if record.kind == EVENT_NOTE_OFF {
@@ -905,7 +946,7 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
             }
         }
     }
-    count
+    released as u32 + count
 }
 
 /// True when the CURRENT quantum's blocks are TRANSPORTING. The update clock only ticks while the transport
@@ -1569,8 +1610,14 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0});
         id
+    }
+
+    fn set_device_release_all(&mut self, device_id: u32, release_all_index: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.release_all_index = release_all_index;
+        }
     }
 
     fn set_device_record_collection(&mut self, device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
@@ -3534,6 +3581,16 @@ pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.set_device_record_collection(device_id, record_field, buffer_field, data_changed_index);
+        }
+    }
+}
+
+/// Set the table slot of a registered MIDI effect's `release_all` export. Call after `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_release_all(device_id: u32, release_all_index: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_release_all(device_id, release_all_index);
         }
     }
 }

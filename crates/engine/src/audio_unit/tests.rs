@@ -157,7 +157,7 @@ fn stub_device(kind: u32) -> DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
         midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0,
-        sidechain_collection_field: 0
+        sidechain_collection_field: 0, release_all_index: 0
     }
 }
 

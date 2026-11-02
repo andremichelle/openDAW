@@ -15,7 +15,8 @@
 //! absolute grid `index * rate` (mirroring `Fragmentor.iterateWithIndex`). On a transport jump (DISCONTINUOUS)
 //! it releases everything it holds, mirroring the TS `releaseAll`.
 //!
-//! Exports: `kind()` (midi effect), `state_size()`, `init(...)`, `parameter_changed(...)`, `process_events(...)`.
+//! Exports: `kind()` (midi effect), `state_size()`, `init(...)`, `parameter_changed(...)`, `process_events(...)`,
+//! `release_all(...)`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -232,6 +233,18 @@ fn release_completed(state: &mut ArpState, to: f64, events: &mut [EventRecord], 
     }
 }
 
+/// End every emitted note at `position` and forget the source notes (TS `releaseAll`), returning the count written.
+pub fn release_all_into(state: &mut ArpState, position: f64, out: &mut [EventRecord]) -> usize {
+    let written = (state.retained_count as usize).min(out.len());
+    for index in 0..written {
+        let retained = state.retained[index];
+        out[index] = note_off(retained.id, retained.pitch, position);
+    }
+    state.retained_count = 0;
+    state.source_count = 0;
+    written
+}
+
 /// Produce one block's events for `[from, to)`. Sequence mirrors `ArpeggioDeviceProcessor.processNotes`: release
 /// due note-offs (all of them on a DISCONTINUOUS jump), ingest the upstream, walk the rate grid emitting a
 /// note-on per step through the active-note stack, then release the note-offs that come due within the block.
@@ -243,14 +256,7 @@ pub fn process(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &[Ev
     let mut count = 0;
     let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
     if discontinuous {
-        let mut index = 0;
-        while index < state.retained_count as usize {
-            let retained = state.retained[index];
-            emit(&mut events, &mut count, note_off(retained.id, retained.pitch, from));
-            index += 1;
-        }
-        state.retained_count = 0;
-        state.source_count = 0;
+        count = release_all_into(state, from, &mut events);
     } else {
         release_completed(state, to, &mut events, &mut count);
     }
@@ -415,6 +421,14 @@ pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32,
         boundary = abi::next_update_position(boundary);
     }
     written as u32
+}
+
+/// The host disabled or removed this effect: end every note it started.
+#[no_mangle]
+pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    let state = unsafe { &mut *(state_ptr as *mut ArpState) };
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    release_all_into(state, position, out) as u32
 }
 
 #[cfg(test)]

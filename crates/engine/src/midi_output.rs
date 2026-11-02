@@ -366,6 +366,7 @@ impl MidiOutProcessor {
     /// A layer's node survives a chain edit: a removed or bypassed MIDI effect started notes the new chain never ends.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
+        if let Some(previous) = self.pull_chain.as_ref() {previous.release_leavers(&chain, &mut Vec::new())}
         self.pull_chain = Some(chain);
         if changed { self.end_held_notes(); }
     }
@@ -373,6 +374,7 @@ impl MidiOutProcessor {
     /// A unit's node is rebuilt on a chain edit: the next one holds the notes on when the chain stayed, else they end.
     pub(crate) fn hand_over(&self, next: &MidiOutProcessor) {
         let same = matches!((&self.pull_chain, &next.pull_chain), (Some(previous), Some(chain)) if previous.same(chain));
+        if let (Some(previous), Some(chain)) = (&self.pull_chain, &next.pull_chain) {previous.release_leavers(chain, &mut Vec::new())}
         if same {
             next.controls.active_notes.borrow_mut().extend(self.controls.active_notes.borrow().iter().copied());
         } else {

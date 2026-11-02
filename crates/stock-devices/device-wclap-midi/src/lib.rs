@@ -210,6 +210,17 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
     unsafe { abi::with_state(state_ptr, |state: &mut WclapMidiState| state.field_changed(id, FieldValue::from_wire(kind, bits, len))) }
 }
 
+/// The host disabled or removed this effect: end every note it started and let the plugin forget its held notes.
+#[no_mangle]
+pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    let state = unsafe { &mut *(state_ptr as *mut WclapMidiState) };
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    let mut count = 0;
+    state.release_all(out, &mut count, position);
+    state.link.reset();
+    count as u32
+}
+
 #[no_mangle]
 pub extern "C" fn terminate(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, |state: &mut WclapMidiState| state.link.release()) }

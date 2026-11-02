@@ -211,6 +211,7 @@ extern "C" {
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
+    fn host_script_release_notes(handle: u32, out_ptr: u32, out_max: u32, position: f64) -> u32;
     // Release the bridge (its Processor instance + limiter + runtime) when THIS device's instance dies (a
     // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
     // dedup on create either — see the JS side).
@@ -980,6 +981,15 @@ pub fn script_notes(handle: u32, input: &[EventRecord], out: &mut [EventRecord],
     { unsafe { host_script_notes(handle, input.as_ptr() as u32, input.len() as u32, out.as_mut_ptr() as u32, out.len() as u32, from, to, bpm, flags, s0, s1) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, input, out.len(), from, to, bpm, flags, s0, s1); 0 }
+}
+
+/// End every note the Spielwerk script started at `position` and forget its held and scheduled notes. Native stub returns 0.
+#[inline]
+pub fn script_release_notes(handle: u32, out: &mut [EventRecord], position: f64) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_release_notes(handle, out.as_mut_ptr() as u32, out.len() as u32, position) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, out.len(), position); 0 }
 }
 
 // ---- NAM BRIDGE wrappers ----------------------------------------------------------------------------------
