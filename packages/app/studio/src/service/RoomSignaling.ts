@@ -1,13 +1,14 @@
-import {isDefined, Nullable, Procedure, Terminable, tryCatch} from "@opendaw/lib-std"
-import {asCallSignal, CallSignal, isObject} from "@/call/CallTypes"
+import {Func, isDefined, Nullable, Procedure, Terminable, tryCatch} from "@opendaw/lib-std"
+import {isObject} from "@/call/CallTypes"
 
 const KeepAliveMs = 20_000
 const ReconnectMs = 2_000
 
-export class CallSignaling implements Terminable {
+export class RoomSignaling<T> implements Terminable {
     readonly #url: string
     readonly #topic: string
-    readonly #onSignal: Procedure<CallSignal>
+    readonly #parse: Func<unknown, Nullable<T>>
+    readonly #onSignal: Procedure<T>
     readonly #onReconnect: Procedure<void>
     readonly #pending: Array<string> = []
     readonly #ready: PromiseWithResolvers<void> = Promise.withResolvers<void>()
@@ -18,9 +19,11 @@ export class CallSignaling implements Terminable {
     #everConnected: boolean = false
     #terminated: boolean = false
 
-    constructor(url: string, topic: string, onSignal: Procedure<CallSignal>, onReconnect: Procedure<void>) {
+    constructor(url: string, topic: string, parse: Func<unknown, Nullable<T>>, onSignal: Procedure<T>,
+                onReconnect: Procedure<void>) {
         this.#url = url
         this.#topic = topic
+        this.#parse = parse
         this.#onSignal = onSignal
         this.#onReconnect = onReconnect
         this.#connect()
@@ -28,7 +31,7 @@ export class CallSignaling implements Terminable {
 
     ready(): Promise<void> {return this.#ready.promise}
 
-    publish(signal: CallSignal): void {
+    publish(signal: T): void {
         if (this.#terminated) {return}
         const raw = JSON.stringify({type: "publish", topic: this.#topic, data: signal})
         if (isDefined(this.#socket) && this.#socket.readyState === WebSocket.OPEN) {
@@ -70,7 +73,7 @@ export class CallSignaling implements Terminable {
             if (result.status === "failure") {return}
             const envelope: Partial<Record<string, unknown>> = isObject(result.value) ? result.value : {}
             if (envelope.topic !== this.#topic) {return}
-            const signal = asCallSignal(envelope.data)
+            const signal = this.#parse(envelope.data)
             if (isDefined(signal)) {this.#onSignal(signal)}
         }
         socket.onclose = () => {

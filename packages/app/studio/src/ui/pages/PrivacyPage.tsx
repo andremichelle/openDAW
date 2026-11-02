@@ -34,6 +34,8 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             server, which cannot read it. Nothing is recorded or stored. To connect, the browsers of the participants
             exchange their IP addresses through our server. Everyone in a room sees and hears what you share there, so
             only share a room link with people you trust.</p>
+        <p>When someone follows your playback, whether you play and your position in the project are sent to them
+            through our server. Nothing is sent while nobody follows you.</p>
         <h3>Data usage</h3>
         <p>openDAW does not process, analyze, or share any personal data. Files remain under your control in your chosen
             storage location.</p>

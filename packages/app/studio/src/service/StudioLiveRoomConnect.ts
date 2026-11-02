@@ -8,7 +8,12 @@ import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
 import {CallService} from "@/call/CallService"
+import {FollowService} from "@/follow/FollowService"
+import {StudioFollowHost} from "@/follow/StudioFollowHost"
+import {asFollowMessage, FollowMessage} from "@/follow/FollowTypes"
+import {RoomSignaling} from "@/service/RoomSignaling"
 import {Events} from "@opendaw/lib-dom"
+import {removeAwarenessStates} from "y-protocols/awareness"
 
 const LiveServerUrl = "wss://live.opendaw.studio"
 
@@ -43,9 +48,13 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
     if (status === "resolved") {
         reportRoomResult(sessionId, "success")
         const heartbeat = startRoomDurationHeartbeat(sessionId)
-        const pagehideHandler = () => heartbeat.finalize()
-        window.addEventListener("pagehide", pagehideHandler)
         const {project, provider} = roomResult
+        // y-websocket only leaves on a node process exit: tell the room right away instead of after its 30 s timeout
+        const pagehideHandler = () => {
+            heartbeat.finalize()
+            removeAwarenessStates(provider.awareness, [provider.awareness.clientID], "pagehide")
+        }
+        window.addEventListener("pagehide", pagehideHandler)
         const p2pSession = new P2PSession({
             chainedSampleProvider: service.chainedSampleProvider,
             chainedSoundfontProvider: service.chainedSoundfontProvider,
@@ -134,6 +143,13 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own(callService)
         service.callService.wrap(callService)
         terminator.own({terminate: () => service.callService.clear()})
+        const followHost = terminator.own(new StudioFollowHost(service.audioContext, service.engine, project))
+        const followService = new FollowService(provider.awareness, followHost, onMessage =>
+            new RoomSignaling<FollowMessage>(`${LiveServerUrl}/signaling`, `follow:${roomName}`,
+                asFollowMessage, onMessage, () => {}))
+        terminator.own(followService)
+        service.followService.wrap(followService)
+        terminator.own({terminate: () => service.followService.clear()})
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))

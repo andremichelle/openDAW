@@ -60,6 +60,15 @@ The settings button in the call header offers:
 
 Shortcuts: ⌥⇧M (Alt+Shift+M) mutes or unmutes, ⌥⇧V (Alt+Shift+V) turns the camera on or off, ⌥⇧H (Alt+Shift+H) raises or lowers your hand. The call audio plays outside the project and is never part of a recording or an export.
 
+## Follow Playback
+
+Click a name in the room status bar and choose **Follow Playback** to listen along with that person. When they play, stop or jump, your playback does the same. If they are already playing, you start right at their current position. The person you follow shows a broadcast icon, followers show a headphone icon.
+
+- While following, your own play, stop and record controls are disabled.
+- Following someone who follows another person makes you follow the person at the end of that chain.
+- Following ends when you choose **Stop Following** from your own name, when the person you follow leaves the room or starts following someone else, or when you leave the room. Your controls come back right away.
+- Everyone plays the same project, so tempo changes and the loop area match automatically. Playback is close, not sample exact.
+
 ## User Presence
 
 A status bar shows all connected users with their name and color dot. Your pointer movement is tracked to indicate which panel you are currently working in, so other users can see where your focus is.

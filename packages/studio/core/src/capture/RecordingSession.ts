@@ -25,7 +25,7 @@ export class RecordingSession {
     get startPosition(): ppqn {return this.#startPosition}
 
     async start(countIn: boolean): Promise<Terminable> {
-        if (this.#isRecording) {return Terminable.Empty}
+        if (this.#isRecording || this.#project.engine.transportLocked.getValue()) {return Terminable.Empty}
         this.#setRecording(true)
         const project = this.#project
         const {captureDevices, engine, editing} = project
