@@ -106,7 +106,7 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
         throw describeEngineTrap(engine, memory, rendered.error)
     }
     takeReportMessage(engine, memory).ifSome(message => {throw new Error(`engine: ${message}`)})
-    midi.drain(engine, memory)
+    midi.drain(engine, memory, 0)
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
         const stagingPtr = engine.stem_output_ptr()

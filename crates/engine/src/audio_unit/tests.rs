@@ -422,12 +422,12 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     let mut unit = engine.build_unit(UNIT);
     engine.reconcile_one(&mut unit);
     assert!(matches!(unit.wired, Some(Wired::MidiOut(_))), "an unregistered box type no longer tears the unit down");
-    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at 0 ms.
+    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at the delay of 10 ms.
     {
         let midi = engine.midi_out.borrow();
         assert_eq!(midi.queued().len(), 1);
         let cc = &midi.queued()[0];
-        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 0.0));
+        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 10.0));
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // A live note-on becomes a timed note-on record AND sets the unit's note-indicator bit.
@@ -484,7 +484,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
         assert_eq!((flushed.status, flushed.data1, flushed.time_ms), (0x82, 64, 10.0), "note-off on the OLD channel at the delay");
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
-    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at 0 ms (TS default time).
+    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at the block start plus the delay.
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(MIDI_PARAM, vec![super::MIDI_OUT_PARAM_VALUE_KEY]),
         old: FieldValue::Float32(0.5), new: FieldValue::Float32(1.0)
@@ -493,7 +493,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     let midi = engine.midi_out.borrow();
     assert_eq!(midi.queued().len(), 1);
     let cc = &midi.queued()[0];
-    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 0.0));
+    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 10.0));
 }
 
 #[test]

@@ -478,7 +478,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#stateSender.tryWrite()
         this.#drainClipChanges()
         this.#drainMarkerChanges()
-        this.#midi.drain(engine, this.#memory)
+        this.#midi.drain(engine, this.#memory, this.#quantumFrame / sampleRate * 1000)
     }
 
     // the quantum frame is the quantum start, the state position is post-render: report the quantum end

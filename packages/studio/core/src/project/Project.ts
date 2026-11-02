@@ -467,8 +467,12 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     receivedMIDIFromEngine(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
+        this.sendMIDIFromEngine(midiDeviceId, data, performance.now() + relativeTimeInMs)
+    }
+
+    /// timestamp is in performance.now() time, like MIDIOutput.send
+    sendMIDIFromEngine(midiDeviceId: string, data: Uint8Array, timestamp: number): void {
         this.#midiOutNotifier.notify({deviceId: midiDeviceId, data})
-        const timestamp = performance.now() + relativeTimeInMs
         MidiDevices.findOutputDeviceById(midiDeviceId).ifSome(midiOutputDevice => {
             try {
                 midiOutputDevice?.send(data, timestamp)

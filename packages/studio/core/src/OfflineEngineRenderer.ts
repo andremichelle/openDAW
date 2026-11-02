@@ -184,8 +184,8 @@ export class OfflineEngineRenderer {
 
         terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
 
-        const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
-            (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+        const {port, sab} = terminator.own(MIDIReceiver.create(MIDIReceiver.immediateClock,
+            (deviceId, data, timestamp) => source.sendMIDIFromEngine(deviceId, data, timestamp)))
 
         // The SAME wrapper as the live worklet path (`ScriptCompiler.wrap`): the registry entry must carry
         // `params`/`samples` too — the WASM script bridge reads them (the TS worker ignores the extras).
