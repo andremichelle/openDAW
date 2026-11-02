@@ -250,6 +250,25 @@ export interface PitchEffect extends MIDIEffect {
 }
 
 /**
+ * Passes a key range and transposes the passing notes or sets them to one key
+ * @group MIDI Effects
+ */
+export interface NoteFilterEffect extends MIDIEffect {
+    /** Always "NoteFilter" */
+    readonly key: "NoteFilter"
+    /** Lowest passing key, included (0 to 127, default 0) */
+    min: int
+    /** Highest passing key, included (0 to 127, default 127) */
+    max: int
+    /** false adds {@link transpose}, true plays every passing note as {@link targetKey} (default false) */
+    set: boolean
+    /** Semitones added when {@link set} is false, a result outside 0 to 127 is ignored (-127 to 127, default 0) */
+    transpose: int
+    /** Key every passing note plays as when {@link set} is true (0 to 127, default 60) */
+    targetKey: int
+}
+
+/**
  * Reshapes note velocities
  * @group MIDI Effects
  */
@@ -299,6 +318,8 @@ export interface MIDIEffects {
     "Arpeggio": ArpeggioEffect
     /** {@link PitchEffect} */
     "Pitch": PitchEffect
+    /** {@link NoteFilterEffect} */
+    "NoteFilter": NoteFilterEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */

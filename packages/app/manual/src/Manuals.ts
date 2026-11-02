@@ -120,6 +120,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 label: "MIDI FX",
                 files: [
                     {type: "page", label: "Arpeggio", path: "/manuals/devices/midi/arpeggio", icon: IconSymbol.Stack},
+                    {type: "page", label: "Note Filter", path: "/manuals/devices/midi/note-filter", icon: IconSymbol.Piano},
                     {type: "page", label: "Pitch", path: "/manuals/devices/midi/pitch", icon: IconSymbol.Note},
                     {type: "page", label: "Spielwerk", path: "/manuals/devices/midi/spielwerk", icon: IconSymbol.Code},
                     {type: "page", label: "Velocity", path: "/manuals/devices/midi/velocity", icon: IconSymbol.Velocity},

@@ -6,6 +6,7 @@ import {TapeDeviceBox} from "./instruments/TapeDeviceBox"
 import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
+import {NoteFilterDeviceBox} from "./midi-effects/NoteFilterDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
@@ -92,6 +93,7 @@ export const DeviceDefinitions = [
     TapeDeviceBox,
     ArpeggioDeviceBox,
     PitchDeviceBox,
+    NoteFilterDeviceBox,
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,

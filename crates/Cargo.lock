@@ -384,6 +384,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-note-filter"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "math",
+]
+
+[[package]]
 name = "device-pitch"
 version = "0.0.0"
 dependencies = [
