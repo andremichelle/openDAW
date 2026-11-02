@@ -364,13 +364,18 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     declare loopFade: float
     declare loopStart: unitValue
     declare loopEnd: unitValue
+    declare panning: bipolar
+    declare polyphone: boolean
+    declare oneShot: boolean
+    declare fixedPitch: boolean
 
     constructor(context: Context, box: NanoDeviceBox) {
         super(context, box)
         this.bind({
             volume: box.volume, octave: box.octave, tune: box.tune, rootKey: box.rootKey, attack: box.attack, release: box.release,
             sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, loop: box.loop, loopFade: box.loopFade,
-            loopStart: box.loopStart, loopEnd: box.loopEnd
+            loopStart: box.loopStart, loopEnd: box.loopEnd, panning: box.panning, polyphone: box.polyphone,
+            oneShot: box.oneShot, fixedPitch: box.fixedPitch
         })
     }
 

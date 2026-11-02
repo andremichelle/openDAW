@@ -1254,6 +1254,14 @@ export interface Nano extends Instrument {
     loopStart: unitValue
     /** Loop end as a fraction of the sample, clamped inside the region (default 1) */
     loopEnd: unitValue
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Several notes at once (default true). Mono fades the sounding note out in 5 ms on each new note. */
+    polyphone: boolean
+    /** Ignore the note-off and play to the region end (default false). A loop still ends on the note-off. */
+    oneShot: boolean
+    /** Every note plays at the root key, ignoring the played key (default false). */
+    fixedPitch: boolean
 }
 
 /**

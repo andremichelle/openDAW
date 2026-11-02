@@ -6,6 +6,10 @@ import {MIDILearning} from "@opendaw/studio-core"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
+import {Checkbox} from "@/ui/components/Checkbox"
+import {Icon} from "@/ui/components/Icon"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 export type ControlContext = {
     lifecycle: Lifecycle
@@ -28,6 +32,22 @@ export const createParameterInput = ({lifecycle, editing, midiLearning, deviceHo
                             parameter={parameter}
                             framed/>
         </RelativeUnitValueDragging>
+    </AutomationControl>
+)
+
+export const createParameterToggle = ({lifecycle, editing, midiLearning, deviceHost}: ControlContext,
+                                      parameter: AutomatableParameterFieldAdapter<boolean>): JsxValue => (
+    <AutomationControl lifecycle={lifecycle}
+                       editing={editing}
+                       midiLearning={midiLearning}
+                       tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                       parameter={parameter}>
+        <Checkbox lifecycle={lifecycle}
+                  model={EditWrapper.forAutomatableParameter(editing, parameter)}
+                  className="toggle"
+                  appearance={{color: Colors.shadow, activeColor: Colors.green}}>
+            <Icon symbol={IconSymbol.Checkbox}/>
+        </Checkbox>
     </AutomationControl>
 )
 

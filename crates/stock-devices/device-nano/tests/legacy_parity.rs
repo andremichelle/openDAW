@@ -509,14 +509,15 @@ fn the_sample_end_frees_the_voice() {
 }
 
 #[test]
-fn the_pool_caps_at_sixty_four_voices() {
+fn a_full_pool_of_sixty_four_voices_matches() {
+    // past 64 voices Nano steals the oldest where the legacy dropped the note (see play_modes.rs)
     let sample = register(15, &[tone(48_000, SR, 15)], SR);
     let mut rig = Rig::new(sample, SR);
-    for id in 0..70u32 {
+    for id in 0..64u32 {
         rig.event(note_on(id, 0, 40 + id, 0.0, 0.2));
     }
     rig.render_blocks(10, BLOCK);
-    for id in 0..70u32 {
+    for id in 0..64u32 {
         rig.event(note_off(id, id % BLOCK as u32));
     }
     let tail = rig.render_blocks(60, BLOCK);

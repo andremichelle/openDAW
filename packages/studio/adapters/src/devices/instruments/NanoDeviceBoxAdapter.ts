@@ -117,7 +117,23 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             loopEnd: this.#parametric.createParameter(
                 box.loopEnd,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "Loop End", 1.0)
+                StringMapping.percent(), "Loop End", 1.0),
+            panning: this.#parametric.createParameter(
+                box.panning,
+                ValueMapping.bipolar(),
+                StringMapping.panning, "Pan", 0.5),
+            polyphone: this.#parametric.createParameter(
+                box.polyphone,
+                ValueMapping.bool,
+                StringMapping.values("", [false, true], ["Mono", "Poly"]), "Mode"),
+            oneShot: this.#parametric.createParameter(
+                box.oneShot,
+                ValueMapping.bool,
+                StringMapping.bool, "One-Shot"),
+            fixedPitch: this.#parametric.createParameter(
+                box.fixedPitch,
+                ValueMapping.bool,
+                StringMapping.bool, "Fixed Pitch")
         } as const
     }
 }

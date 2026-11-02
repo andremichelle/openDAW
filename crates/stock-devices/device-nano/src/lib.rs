@@ -1,8 +1,8 @@
 //! Nano, a polyphonic one-sample instrument, as a runtime-loadable device. It plays ONE loaded sample (its
 //! `file` pointer) per note, each voice a pitch-rate read head with linear interpolation and a squared
 //! attack/release envelope, transposed against a root key / octave, confined to a start/end region (start
-//! past end plays backwards) and optionally cycling a crossfaded loop (see `voice.rs`). Voices are a plain
-//! fixed pool: pushed on note-on, freed when they finish.
+//! past end plays backwards) and optionally cycling a crossfaded loop (see `voice.rs`). Voices are a fixed
+//! pool, the oldest is stolen when full. Mono, choke, one-shot, fixed pitch and the pan law match the Playfield slot.
 //!
 //! The sample is resolved through the engine: the device observes its `file` pointer; the engine resolves it
 //! to the AudioFileBox, requests the frames (Route F), and pushes the handle through `sample_changed`. Each
@@ -16,12 +16,13 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{bool_value, float_value, int_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
+use abi::{bool_value, float_value, int_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use dsp::ramp::LinearRamp;
 use math::db_to_gain;
 use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger};
 
 mod voice;
-use voice::{NanoVoice, Playback};
+use voice::{releases_on_note_off, NanoVoice, Playback};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -32,6 +33,8 @@ fn panic(info: &PanicInfo) -> ! {
 const MAX_VOICES: usize = 64;
 const POSITION_SLOTS: u32 = 16; // the editor paints up to 16 playheads; the slot after the last holds -1
 const LEGACY_ATTACK_SECONDS: f32 = 0.003; // the original Nano's fixed attack, the schema default
+const FAST_RELEASE_SECONDS: f32 = 0.005; // mono retrigger and choke, as the Playfield slot
+const PAN_RAMP_SECONDS: f32 = 0.005; // the channel strip's de-click
 
 // The Nano box's field-key paths (the stable schema keys). `[10]`, `[15]` and `[20]` are the original fields.
 const VOLUME_FIELD: [u16; 1] = [10];
@@ -47,6 +50,10 @@ const LOOP_FIELD: [u16; 1] = [24];
 const LOOP_FADE_FIELD: [u16; 1] = [25];
 const LOOP_START_FIELD: [u16; 1] = [26];
 const LOOP_END_FIELD: [u16; 1] = [27];
+const PANNING_FIELD: [u16; 1] = [28];
+const POLYPHONE_FIELD: [u16; 1] = [29];
+const ONE_SHOT_FIELD: [u16; 1] = [30];
+const FIXED_PITCH_FIELD: [u16; 1] = [31];
 const POSITIONS_PATH: [u16; 1] = [1001];
 
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
@@ -57,6 +64,7 @@ const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 8.0}; // seco
 const ATTACK_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seconds
 const REGION_MAPPING: Linear = Linear::unipolar();
 const LOOP_FADE_MAPPING: Exponential = Exponential {min: 0.001, max: 1.0}; // seconds
+const PANNING_MAPPING: Linear = Linear::bipolar();
 
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block: a fixed voice pool,
 /// the resolved parameter values, the sample rate, the bound sample handle, and the parameter / sample /
@@ -75,6 +83,13 @@ pub struct NanoState {
     loop_fade_seconds: f32,
     loop_start: f32,
     loop_end: f32,
+    polyphone: bool,
+    one_shot: bool,
+    fixed_pitch: bool,
+    pan_left: LinearRamp,
+    pan_right: LinearRamp,
+    processing: bool, // false until the first rendered chunk, so the initial pan jumps instead of gliding
+    seq: u64,
     sample_rate: f32,
     sample: Option<u32>, // the resolved sample handle while the `file` pointer is bound; `None` when unbound
     gain_id: u32,
@@ -89,6 +104,10 @@ pub struct NanoState {
     loop_start_id: u32,
     loop_end_id: u32,
     tune_id: u32,
+    panning_id: u32,
+    polyphone_id: u32,
+    one_shot_id: u32,
+    fixed_pitch_id: u32,
     sample_id: u32,
     positions_id: u32,
     positions_ptr: u32
@@ -114,6 +133,14 @@ impl Instrument for Nano {
         state.loop_fade_seconds = 0.05;
         state.loop_start = 0.0;
         state.loop_end = 1.0;
+        state.polyphone = true;
+        state.one_shot = false;
+        state.fixed_pitch = false;
+        state.pan_left = LinearRamp::linear(sample_rate, PAN_RAMP_SECONDS);
+        state.pan_right = LinearRamp::linear(sample_rate, PAN_RAMP_SECONDS);
+        state.pan_left.set(1.0, false);
+        state.pan_right.set(1.0, false);
+        state.processing = false;
         state.sample = None;
         state.gain_id = abi::bind_parameter(&VOLUME_FIELD);
         state.octave_id = abi::bind_parameter(&OCTAVE_FIELD);
@@ -127,17 +154,33 @@ impl Instrument for Nano {
         state.loop_start_id = abi::bind_parameter(&LOOP_START_FIELD);
         state.loop_end_id = abi::bind_parameter(&LOOP_END_FIELD);
         state.tune_id = abi::bind_parameter(&TUNE_FIELD);
+        state.panning_id = abi::bind_parameter(&PANNING_FIELD);
+        state.polyphone_id = abi::bind_parameter(&POLYPHONE_FIELD);
+        state.one_shot_id = abi::bind_parameter(&ONE_SHOT_FIELD);
+        state.fixed_pitch_id = abi::bind_parameter(&FIXED_PITCH_FIELD);
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
         state.positions_id = abi::bind_broadcast(&POSITIONS_PATH, POSITION_SLOTS);
     }
 
     fn handle_event(state: &mut NanoState, event: &EventRecord) {
         if event.kind == EVENT_NOTE_ON {
-            if let Some(slot) = state.voices.iter_mut().find(|voice| !voice.is_active()) {
-                slot.start(event.id, event.pitch, event.cent, event.velocity);
+            if !state.polyphone {
+                force_release_all(state);
             }
-        } else if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_active() && voice.id() == event.id) {
-            voice.stop(state.attack);
+            let seq = state.seq;
+            state.seq += 1;
+            let index = match state.voices.iter().position(|voice| !voice.is_active()) {
+                Some(free) => free,
+                None => oldest_voice(&state.voices)
+            };
+            state.voices[index].start(event.id, event.pitch, event.cent, event.velocity, seq);
+        } else if event.kind == EVENT_NOTE_OFF {
+            let release = releases_on_note_off(state.one_shot, state.loop_enabled);
+            if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_active() && voice.id() == event.id) {
+                voice.note_off(state.attack, release);
+            }
+        } else if event.kind == EVENT_CHOKE {
+            force_release_all(state);
         }
     }
 
@@ -171,13 +214,16 @@ impl Instrument for Nano {
             loop_enabled: state.loop_enabled,
             loop_fade_frames,
             loop_start: state.loop_start,
-            loop_end: state.loop_end
+            loop_end: state.loop_end,
+            one_shot: state.one_shot,
+            fixed_pitch: state.fixed_pitch
         };
         for voice in state.voices.iter_mut() {
             if voice.is_active() && voice.process(out_left, out_right, left, right, &playback) {
                 voice.force_stop();
             }
         }
+        apply_panning(state, out_left, out_right);
         publish_positions(state);
     }
 
@@ -206,6 +252,16 @@ impl Instrument for Nano {
             state.loop_end = float_value(value, &REGION_MAPPING);
         } else if id == state.tune_id {
             state.tune_cents = float_value(value, &TUNE_MAPPING);
+        } else if id == state.panning_id {
+            let panning = float_value(value, &PANNING_MAPPING);
+            state.pan_left.set(1.0 - panning.max(0.0), state.processing);
+            state.pan_right.set(1.0 + panning.min(0.0), state.processing);
+        } else if id == state.polyphone_id {
+            state.polyphone = bool_value(value);
+        } else if id == state.one_shot_id {
+            state.one_shot = bool_value(value);
+        } else if id == state.fixed_pitch_id {
+            state.fixed_pitch = bool_value(value);
         }
     }
 
@@ -219,6 +275,44 @@ impl Instrument for Nano {
     fn reset(state: &mut NanoState) {
         for voice in state.voices.iter_mut() {
             voice.force_stop();
+        }
+    }
+}
+
+fn force_release_all(state: &mut NanoState) {
+    let fast_release = (FAST_RELEASE_SECONDS * state.sample_rate) as u32;
+    for voice in state.voices.iter_mut().filter(|voice| voice.is_active()) {
+        voice.force_release(fast_release);
+    }
+}
+
+fn oldest_voice(voices: &[NanoVoice; MAX_VOICES]) -> usize {
+    let mut oldest = 0;
+    for (index, voice) in voices.iter().enumerate() {
+        if voice.seq() < voices[oldest].seq() {
+            oldest = index;
+        }
+    }
+    oldest
+}
+
+/// The channel strip's pan law (Playfield slot, audio unit), de-clicked over 5 ms. Centred, both gains are
+/// exactly 1.0 and the chunk is left untouched.
+fn apply_panning(state: &mut NanoState, out_left: &mut [f32], out_right: &mut [f32]) {
+    state.processing = true;
+    if state.pan_left.is_interpolating() || state.pan_right.is_interpolating() {
+        for index in 0..out_left.len() {
+            out_left[index] *= state.pan_left.move_and_get();
+            out_right[index] *= state.pan_right.move_and_get();
+        }
+    } else {
+        let (gain_left, gain_right) = (state.pan_left.get(), state.pan_right.get());
+        if gain_left == 1.0 && gain_right == 1.0 {
+            return;
+        }
+        for index in 0..out_left.len() {
+            out_left[index] *= gain_left;
+            out_right[index] *= gain_right;
         }
     }
 }
@@ -308,6 +402,8 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         7 => if bool_value(value) {1.0} else {0.0},
         8 => float_value(value, &LOOP_FADE_MAPPING),
         11 => float_value(value, &TUNE_MAPPING),
+        12 => float_value(value, &PANNING_MAPPING),
+        13 | 14 | 15 => if bool_value(value) {1.0} else {0.0},
         _ => f32::NAN
     }
 }
