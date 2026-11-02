@@ -254,7 +254,7 @@ export namespace DeviceDialog {
             )
             entry.bundle.ifSome(kind => lifecycle.own(TextTooltip.default(bundle, () => bundleOf[kind].text)))
             const element: HTMLElement = (
-                <div className="entry" onclick={() => pick(entry)}>
+                <div className="entry" onclick={() => pick(entry)} ondblclick={() => approve().catch(console.warn)}>
                     {entry.iconUrl.match({
                         none: () => <div className="icon"><Icon symbol={entry.icon}/></div>,
                         some: url => <div className="icon external"><img src={url} alt=""/></div>
