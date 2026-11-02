@@ -1,11 +1,16 @@
 import {Exec, Func, MutableObservableOption, Option, Provider, Subscription, Terminable} from "@opendaw/lib-std"
+import {ChannelMapping} from "./ChannelMapping"
 import {MonitorPort} from "./MonitorPort"
 import {RecordingLatency} from "./RecordingLatency"
 import {RecordingSink} from "./RecordingSink"
 import {RoundTrip} from "./RoundTrip"
 
-// what a capture asks its input for, none while it wants no input (disarmed or gone)
-export type AudioInputRequest = { readonly deviceId: Option<string>, readonly channels: Option<1 | 2> }
+// what a capture asks its input for (a mapping overrides channels), none while it wants no input (disarmed or gone)
+export type AudioInputRequest = {
+    readonly deviceId: Option<string>
+    readonly channels: Option<1 | 2>
+    readonly mapping: Option<ChannelMapping>
+}
 
 // the Web Audio side of an open input, for the getters CaptureAudio keeps for SDK users
 export interface AudioInputNodes {

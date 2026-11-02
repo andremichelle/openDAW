@@ -5,7 +5,15 @@ import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
 import {RecordAudio} from "./RecordAudio"
-import {AudioInputNodes, AudioInputPort, AudioInputRequest, BrowserAudioInput, MonitoringMode, RoundTrip} from "../io"
+import {
+    AudioInputNodes,
+    AudioInputPort,
+    AudioInputRequest,
+    BrowserAudioInput,
+    ChannelMapping,
+    MonitoringMode,
+    RoundTrip
+} from "../io"
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #vitalSigns: VitalSigns
@@ -13,6 +21,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #streamGenerator: Func<void, Promise<void>>
 
     #requestChannels: Option<1 | 2> = Option.None
+    #mapping: Option<ChannelMapping> = Option.None
     #gainDb: number = 0.0
 
     constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureAudioBox: CaptureAudioBox,
@@ -22,6 +31,15 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#vitalSigns = this.own(new VitalSigns())
         this.#input = createInput(() => this.#request())
         this.#streamGenerator = Promises.sequentialize(() => this.#input.open())
+        const remap = async () => {
+            const left = captureAudioBox.leftInputs.getValue()
+            const right = captureAudioBox.rightInputs.getValue()
+            this.#mapping = left === 0 && right === 0 ? Option.None : Option.wrap({left, right})
+            this.#input.rechannel()
+            if (this.armed.getValue()) {
+                await this.#streamGenerator()
+            }
+        }
         this.ownAll(
             this.#input,
             captureAudioBox.requestChannels.catchupAndSubscribe(owner => {
@@ -29,6 +47,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 this.#requestChannels = channels === 1 || channels === 2 ? Option.wrap(channels) : Option.None
                 this.#input.rechannel()
             }),
+            captureAudioBox.leftInputs.catchupAndSubscribe(remap),
+            captureAudioBox.rightInputs.subscribe(remap),
             captureAudioBox.gainDb.catchupAndSubscribe(owner => {
                 this.#gainDb = owner.getValue()
                 this.#input.gainDb = this.#gainDb
@@ -61,7 +81,23 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
     get gainDb(): number {return this.#gainDb}
     get requestChannels(): Option<1 | 2> {return this.#requestChannels}
-    set requestChannels(value: 1 | 2) {this.captureBox.requestChannels.setValue(value)}
+    set requestChannels(value: 1 | 2) {
+        this.captureBox.requestChannels.setValue(value)
+        this.captureBox.leftInputs.setValue(0)
+        this.captureBox.rightInputs.setValue(0)
+    }
+    get channelMapping(): ChannelMapping {
+        return this.#mapping.unwrapOrElse(() => this.#requestChannels
+            .mapOr(channels => channels === 1 ? ChannelMapping.MonoMixed : ChannelMapping.Stereo, ChannelMapping.Stereo))
+    }
+    // the two mappings a channel count stands for are kept as that count
+    set channelMapping(mapping: ChannelMapping) {
+        const counted = ChannelMapping.equals(mapping, ChannelMapping.Stereo)
+            || ChannelMapping.equals(mapping, ChannelMapping.MonoMixed)
+        this.captureBox.requestChannels.setValue(ChannelMapping.outputCount(mapping))
+        this.captureBox.leftInputs.setValue(counted ? 0 : mapping.left)
+        this.captureBox.rightInputs.setValue(counted ? 0 : mapping.right)
+    }
     get stream(): MutableObservableOption<MediaStream> {return this.#nodes().stream}
     get streamDeviceId(): Option<string> {return this.#input.deviceId}
     get label(): string {return this.#input.label.unwrapOrElse("Default")}
@@ -117,7 +153,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #request(): Option<AudioInputRequest> {
         if (!this.armed.getValue() || this.#vitalSigns.isTerminated) {return Option.None}
-        return Option.wrap({deviceId: this.deviceId.getValue(), channels: this.#requestChannels})
+        return Option.wrap({deviceId: this.deviceId.getValue(), channels: this.#requestChannels, mapping: this.#mapping})
     }
 
     #nodes(): AudioInputNodes {return this.#input.nodes.unwrap("The audio input has no Web Audio nodes")}

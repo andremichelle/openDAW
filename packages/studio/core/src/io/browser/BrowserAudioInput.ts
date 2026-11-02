@@ -23,6 +23,7 @@ import {AudioContexts} from "../../AudioContexts"
 import {AudioDevices} from "../../AudioDevices"
 import {RecordingWorklet} from "../../RecordingWorklet"
 import {AudioInputNodes, AudioInputPort, AudioInputRequest} from "../AudioInputPort"
+import {ChannelMapping} from "../ChannelMapping"
 import {RecordingLatency} from "../RecordingLatency"
 import {RecordingSink} from "../RecordingSink"
 import {RoundTrip} from "../RoundTrip"
@@ -44,6 +45,7 @@ type AudioChain = {
     recordGainNode: GainNode
     monitorMixdown: GainNode
     keepAliveSink: GainNode
+    mappingNodes: ReadonlyArray<AudioNode>
     channelCount: 1 | 2
 }
 
@@ -62,6 +64,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
     #audioChain: Nullable<AudioChain> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
     #streamNamedDeviceId: Optional<string> = undefined
+    #streamRequestedInputs: int = 0
     #outputName: string = ""
 
     // the request is read when an open starts and again when it resolves, because getUserMedia cannot be cancelled
@@ -109,7 +112,8 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         const request = this.#request()
         if (request.isEmpty()) {return}
         const namedDeviceId = request.unwrap().deviceId.unwrapOrUndefined()
-        if (this.#stream.nonEmpty()) {
+        const mappedInputs = this.#mappedInputs()
+        if (this.#stream.nonEmpty() && mappedInputs <= this.#streamRequestedInputs) {
             const openTrack = this.#stream.unwrap().getAudioTracks().at(0)
             const settings = openTrack?.getSettings()
             if (isDefined(openTrack) && openTrack.readyState === "live" && isDefined(settings)) {
@@ -124,7 +128,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         }
         this.close()
         const deviceId = namedDeviceId ?? AudioDevices.defaultInput?.deviceId
-        const channelCount = this.#channels().unwrapOrElse(2)
+        const channelCount = mappedInputs > 0 ? mappedInputs : this.#channels().unwrapOrElse(2)
         this.#changingStreams = true
         const stream = await this.#requestStream(deviceId, channelCount).finally(() => this.#changingStreams = false)
         if (!isDefined(stream)) {return}
@@ -138,6 +142,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${settings?.deviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
         this.#rebuildAudioChain(stream)
         this.#streamNamedDeviceId = namedDeviceId
+        this.#streamRequestedInputs = channelCount
         this.#stream.wrap(stream)
         await this.#resolveOutputName()
     }
@@ -294,8 +299,13 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
 
     #channels(): Option<1 | 2> {return this.#request().flatMap(({channels}) => channels)}
 
+    #mapping(): Option<ChannelMapping> {return this.#request().flatMap(({mapping}) => mapping)}
+
+    // a single picked input still opens stereo, or the browser may hand over a mixdown
+    #mappedInputs(): int {return this.#mapping().mapOr(mapping => Math.max(2, ChannelMapping.inputCount(mapping)), 0)}
+
     // a gone device (unplugged, swapped by the OS) falls back to the default input instead of failing
-    async #requestStream(deviceId: Optional<string>, channelCount: 1 | 2): Promise<Nullable<MediaStream>> {
+    async #requestStream(deviceId: Optional<string>, channelCount: int): Promise<Nullable<MediaStream>> {
         const baseConstraints: MediaTrackConstraints = {
             echoCancellation: false,
             noiseSuppression: false,
@@ -356,25 +366,51 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         const sourceNode = audioContext.createMediaStreamSource(stream)
         const recordGainNode = audioContext.createGain()
         recordGainNode.gain.value = dbToGain(this.#gainDb)
-        const streamChannelCount: 1 | 2 = Math.min(stream.getAudioTracks().at(0)?.getSettings().channelCount ?? 2, 2) as 1 | 2
-        const channelCount = this.#channels().unwrapOrElse(streamChannelCount)
+        const deliveredChannels = stream.getAudioTracks().at(0)?.getSettings().channelCount ?? 2
+        const streamChannelCount: 1 | 2 = Math.min(deliveredChannels, 2) as 1 | 2
+        const mapped = this.#mapping()
+            .map(mapping => this.#createMapping(sourceNode, ChannelMapping.fit(mapping, deliveredChannels)))
+        const mappedNode: AudioNode = mapped.mapOr(({output}) => output, sourceNode)
+        const mappingNodes = mapped.mapOr(({nodes}) => nodes, [])
+        const channelCount = mapped.mapOr(({channelCount}) => channelCount, this.#channels().unwrapOrElse(streamChannelCount))
         recordGainNode.channelCount = channelCount
         recordGainNode.channelCountMode = "explicit"
-        sourceNode.connect(recordGainNode)
+        mappedNode.connect(recordGainNode)
         // the engine splits its monitoring input discretely, so a forced mono must arrive already mixed down
         const monitorMixdown = audioContext.createGain()
         monitorMixdown.gain.value = 1.0
         monitorMixdown.channelCount = channelCount
         monitorMixdown.channelCountMode = "explicit"
         monitorMixdown.channelInterpretation = "speakers"
-        sourceNode.connect(monitorMixdown)
+        mappedNode.connect(monitorMixdown)
         // a silent sink on the destination keeps the source pulled, so its input delay stays settled
         const keepAliveSink = audioContext.createGain()
         keepAliveSink.gain.value = 0.0
         sourceNode.connect(keepAliveSink)
         keepAliveSink.connect(audioContext.destination)
-        this.#audioChain = {sourceNode, recordGainNode, monitorMixdown, keepAliveSink, channelCount}
-        this.#monitor.bind({sourceNode, monitorMixdown, channelCount})
+        this.#audioChain = {sourceNode, recordGainNode, monitorMixdown, keepAliveSink, mappingNodes, channelCount}
+        this.#monitor.bind({sourceNode: mappedNode, monitorMixdown, channelCount})
+    }
+
+    // each side averages its inputs, like the speakers downmix of a forced mono
+    #createMapping(sourceNode: AudioNode, mapping: ChannelMapping)
+        : { nodes: ReadonlyArray<AudioNode>, output: AudioNode, channelCount: 1 | 2 } {
+        const {audioContext} = this.#project.env
+        const splitter = audioContext.createChannelSplitter(ChannelMapping.inputCount(mapping))
+        sourceNode.connect(splitter)
+        const sides = [mapping.left, mapping.right].filter(mask => mask !== 0).map(mask => {
+            const inputs = ChannelMapping.indices(mask)
+            const side = audioContext.createGain()
+            side.channelCount = 1
+            side.channelCountMode = "explicit"
+            side.gain.value = 1.0 / inputs.length
+            inputs.forEach(index => splitter.connect(side, index))
+            return side
+        })
+        if (sides.length === 1) {return {nodes: [splitter, ...sides], output: sides[0], channelCount: 1}}
+        const merger = audioContext.createChannelMerger(2)
+        sides.forEach((side, index) => side.connect(merger, 0, index))
+        return {nodes: [splitter, ...sides, merger], output: merger, channelCount: 2}
     }
 
     #discardPreparedWorklet(): void {
@@ -389,8 +425,9 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
 
     #destroyAudioChain(): void {
         if (isDefined(this.#audioChain)) {
-            const {sourceNode, recordGainNode, monitorMixdown, keepAliveSink} = this.#audioChain
+            const {sourceNode, recordGainNode, monitorMixdown, keepAliveSink, mappingNodes} = this.#audioChain
             sourceNode.disconnect()
+            mappingNodes.forEach(node => node.disconnect())
             recordGainNode.disconnect()
             monitorMixdown.disconnect()
             keepAliveSink.disconnect()

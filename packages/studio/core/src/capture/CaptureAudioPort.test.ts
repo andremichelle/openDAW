@@ -116,6 +116,18 @@ describe("CaptureAudio on its input port", () => {
         expect(request?.channels.unwrap()).toBe(1)
     })
 
+    it("asks for the channel mapping of the box, none for a channel count", async () => {
+        const {project, capture, input, settle} = await setup()
+        capture.armed.setValue(true)
+        await settle()
+        expect(input().opened.at(-1)?.unwrap().mapping.isEmpty()).toBe(true)
+        project.editing.modify(() => {capture.channelMapping = {left: 0b10, right: 0}})
+        await settle()
+        // a mapping may need more inputs than the open stream has, so the input is asked to open again
+        expect(input().calls.slice(-2)).toEqual(["rechannel 1", "open"])
+        expect(input().opened.at(-1)?.unwrap().mapping.unwrap()).toEqual({left: 0b10, right: 0})
+    })
+
     it("asks for nothing while disarmed or once terminated", async () => {
         const {capture, input, settle} = await setup()
         capture.armed.setValue(true)
