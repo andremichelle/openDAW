@@ -68,7 +68,9 @@ A status bar shows all connected users with their name and color dot. Your point
 
 Picking devices in the device browser only changes your own copy of the project. The others hear and see nothing until you press Ok, and then they get just the device you chose. If someone removes what you are previewing or edits the device you are replacing, the browser closes and tells you.
 
-A recording also stays with you until it has finished and its audio is saved. Everyone else then gets the complete take, on a new track of its own. While you record, your name turns red with a record icon in the list of users.
+A recording also stays with you until it has finished and its audio is saved. Everyone else then gets the complete take. It lands on the instrument's empty track, or on a new track below when someone placed a region there while you were recording. While you record, your name turns red with a record icon in the list of users.
+
+Regions never overlap. If two people place or move a region onto the same spot at the same moment, one of them gives way: that change is taken back, or a recording moves to a track of its own, and a message tells them so.
 
 ## Asset Sharing (Technical Details)
 
