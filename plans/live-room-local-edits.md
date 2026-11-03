@@ -12,10 +12,11 @@ In a live room, the device dialog preview and a recording stay on the own client
 4. Two audio units may share an index for a while. Ok resolves it for the preview, and the timeline shows both rows.
 5. `unstageBox` checks pointers before it removes a box, so a failed delete or undo leaves the graph and the engine in step.
 6. Recording is local until the take ends. The recording user's name turns red with a record icon.
+7. Staging a uuid that is already staged no longer cuts the edges of the staged box (undo of a delete after a peer brought the box back).
+8. Two regions on one spot: the participant whose concurrent change has the higher client id takes it back, a new region leaves, a moved one returns, with a toast. Only the tracks a received batch touched are checked. The room no longer runs `project.invalid()` on every batch.
+9. A batch that deletes an instrument's capture but not the instrument goes through reconcile, which removes the instrument.
 
 ## Later
 
-1. Do not reconcile everything on every received batch. Today each remote batch runs the conflict check (`project.invalid()`, a scan of every track) and, on a failure, `deterministicReconcile` over every box. Both should look only at the boxes the batch touched and what points at them.
-2. Two peers placing a region at the same spot leave overlapping regions. This already happens on `main`. The fuzz excludes its `region` action by default until this is solved.
-3. With 4 peers, fuzz seed 1274963 (`FUZZ_SEEDS=162 FUZZ_EXCLUDE=region`) diverges: an instrument unit without its capture sits in the graph untouched, and a later batch attaches it, so `AudioUnitBoxAdapter` panics and the batch is rejected even after reconcile ("Could not remove"). The rank repair hid it by chance.
-4. `conflict` is passed to `YSync.joinRoom` but dropped by `YSync.populateRoom`, so the client that opened the room never checks it.
+1. `deterministicReconcile` still scans every box when a batch fails validation. It should look only at the boxes the batch touched and what points at them.
+2. Taking back a region only reverts that region. A change that touched several regions (a move that clipped a neighbour, an undo that restored one) should be taken back as a whole, otherwise the rest of it stays, and after an undo it can overlap again with nobody resolving it.

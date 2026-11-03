@@ -21,6 +21,7 @@ import {
 } from "@opendaw/lib-std"
 import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate, PrimitiveUpdate} from "@opendaw/lib-box"
 import type {YSync} from "../ysync/YSync"
+import {RoomOverlaps} from "../ysync/RoomOverlaps"
 import {
     ApparatDeviceBox,
     AudioBusBox,
@@ -251,7 +252,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
-        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
+        this.mixer = this.#terminator.own(new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters))
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
@@ -462,7 +463,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     get liveSync(): Option<YSync<BoxIO.TypeMap>> {return this.#liveSync}
-    attachLiveSync(sync: YSync<BoxIO.TypeMap>): void {this.#liveSync = Option.wrap(sync)}
+    attachLiveSync(sync: YSync<BoxIO.TypeMap>): void {
+        this.#liveSync = Option.wrap(sync)
+        this.own(RoomOverlaps.watch(this.boxGraph, sync))
+    }
 
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)

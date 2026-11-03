@@ -5,7 +5,8 @@ import {
     applyUpdateTasks, ArrayField, BoxGraph, Field, ObjectField, PointerField, UpdateTask, UpdateTasks
 } from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
-import {BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton, TransportAnchor} from "@opendaw/studio-adapters"
 import * as Y from "yjs"
 import type {EngineWorklet} from "../../EngineWorklet"
@@ -236,7 +237,17 @@ export class LiveRoom {
             }
             peer.engineErrors.forEach(error => problems.push(`${peer.name} engine could not apply: ${error}`))
             lostEdges(peer.graph).forEach(pointer => problems.push(`${peer.name} lost the edge of ${pointer}`))
-            if (hex(peer.engine) !== hex(peer.graph)) {problems.push(`${peer.name} engine mirror diverged from its graph`)}
+            peer.graph.boxes().forEach(box => {
+                if (box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Instrument && box.capture.isEmpty()) {
+                    problems.push(`${peer.name} holds an instrument without a capture`)
+                }
+            })
+            if (hex(peer.engine) !== hex(peer.graph)) {
+                const differs = peer.graph.boxes().flatMap(box => peer.engine.findBox(box.address.uuid).mapOr(mirrored =>
+                    JSON.stringify(mirrored.toJSON()) === JSON.stringify(box.toJSON()) ? [] : [`${box.name} differs`], [`${box.name} missing`]))
+                const extra = peer.engine.boxes().filter(box => peer.graph.findBox(box.address.uuid).isEmpty()).map(box => `${box.name} extra`)
+                problems.push(`${peer.name} engine mirror diverged from its graph: ${[...differs, ...extra].join(", ")}`)
+            }
             if (peer.graph.boxes().length !== peer.boxes.size) {
                 problems.push(`${peer.name} graph holds ${peer.graph.boxes().length} boxes, its document ${peer.boxes.size}`)
             }

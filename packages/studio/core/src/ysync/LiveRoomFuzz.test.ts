@@ -2,7 +2,7 @@ import {beforeEach, describe, expect, it} from "vitest"
 import {asInstanceOf, Option, tryCatch} from "@opendaw/lib-std"
 import {BoxEditing, EditingCheckpoint, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {DeviceHost, Devices, InstrumentFactories} from "@opendaw/studio-adapters"
+import {DeviceHost, Devices, InstrumentFactories, RegionOverlap} from "@opendaw/studio-adapters"
 import {EffectFactories} from "../EffectFactories"
 import {RoomTake} from "../capture/RoomTake"
 import type {LocalLayer} from "./YSync"
@@ -70,6 +70,17 @@ const run = async (seed: number, peerCount: number): Promise<void> => {
             if (candidates.length > 0) {
                 peer.project.editing.modify(() => peer.project.api.createTrackRegion(pick(candidates), 0, 960))
             }
+        }],
+        ["move region", peer => {
+            const regions = units(peer).flatMap(tracks).flatMap(track => RegionOverlap.sortedRegions(track))
+            if (regions.length === 0) {return}
+            const region = pick(regions)
+            const position = Math.floor(random() * 4) * 960
+            const track = asInstanceOf(region.regions.targetVertex.unwrap().box, TrackBox)
+            const others = RegionOverlap.sortedRegions(track).filter(other => other !== region)
+            const end = position + region.duration.getValue()
+            if (others.some(other => other.position.getValue() < end && other.position.getValue() + other.duration.getValue() > position)) {return}
+            peer.project.editing.modify(() => region.position.setValue(position))
         }],
         ["volume", peer => {
             const candidates = units(peer)
@@ -146,8 +157,7 @@ const run = async (seed: number, peerCount: number): Promise<void> => {
             for (let index = 0; index < count; index++) {room.deliverRandom(random)}
         }]
     ]
-    // concurrent regions on one spot overlap, as on main (plans/live-room-local-edits.md)
-    const excluded = (process.env.FUZZ_EXCLUDE ?? "region").split(",").filter(word => word.length > 0)
+    const excluded = (process.env.FUZZ_EXCLUDE ?? "").split(",").filter(word => word.length > 0)
     const enabled = operations.filter(([name]) => !excluded.some(word => name.includes(word)))
     for (let step = 0; step < Steps; step++) {
         const peer = pick(room.peers)

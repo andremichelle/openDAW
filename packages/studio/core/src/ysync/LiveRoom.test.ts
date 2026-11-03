@@ -1,5 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
-import {asInstanceOf, Notifier, Option, UUID} from "@opendaw/lib-std"
+import * as Y from "yjs"
+import {setFlagsFromString} from "node:v8"
+import {runInNewContext} from "node:vm"
+import {asInstanceOf, Notifier, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentFactories, NoteSignal} from "@opendaw/studio-adapters"
@@ -520,6 +523,79 @@ describe("LiveRoom repairs", () => {
         expect(await room.lateJoinerDiffers()).toBe(false)
     })
 
+    // concurrent undo, redo and delete can leave a unit in the document whose capture is gone
+    it("a batch that takes an instrument's capture away removes the instrument everywhere", async () => {
+        const unit = addInstrument(A)
+        room.flush()
+        const capture = UUID.toString(unit.capture.targetAddress.unwrap().uuid)
+        const stranger = new Y.Doc()
+        Y.applyUpdate(stranger, Y.encodeStateAsUpdate(A.doc))
+        const before = Y.encodeStateVector(stranger)
+        stranger.getMap("boxes").delete(capture)
+        const update = Y.encodeStateAsUpdate(stranger, before)
+        room.peers.forEach(peer => peer.inbox.push(update))
+        room.flush()
+        expect(room.violations()).toEqual([])
+        expect(A.graph.findBox(unit.address.uuid).isEmpty()).toBe(true)
+        expect(await room.lateJoinerDiffers()).toBe(false)
+    })
+
+    describe("two regions on one spot", () => {
+        let track: TrackBox
+        const regionsOn = (peer: RoomPeer) => peer.graph.findBox<TrackBox>(track.address.uuid).unwrap()
+            .regions.pointerHub.incoming().map(({box}) => box as NoteRegionBox)
+        const place = (peer: RoomPeer, position: number) => peer.project.editing.modify(() => peer.project.api
+            .createTrackRegion(peer.graph.findBox<TrackBox>(track.address.uuid).unwrap(), position, 960).unwrap()).unwrap() as NoteRegionBox
+        const toasts = () => vi.mocked(RuntimeNotifier.notify).mock.calls.map(([{message}]) => message)
+        beforeEach(() => {
+            vi.spyOn(RuntimeNotifier, "notify").mockImplementation(() => {})
+            const unit = addInstrument(A)
+            track = tracksOf(unit)[0]
+            room.flush()
+        })
+
+        it("both placed at once: one stays, the other client's leaves with a toast", () => {
+            const first = place(A, 0)
+            place(B, 0)
+            expect(room.violations()).toEqual([])
+            expect(regionsOn(A).map(region => region.address.toString())).toEqual([first.address.toString()])
+            expect(regionsOn(B).length).toBe(1)
+            expect(toasts().length).toBe(1)
+        })
+
+        it("a region moved onto a peer's new region goes back to where it was", () => {
+            const moved = place(B, 3840)
+            room.flush()
+            B.project.editing.modify(() => moved.position.setValue(0))
+            const placed = place(A, 0)
+            expect(room.violations()).toEqual([])
+            expect(moved.position.getValue()).toBe(3840)
+            expect(regionsOn(B).map(region => region.address.toString()).sort())
+                .toEqual([moved.address.toString(), placed.address.toString()].sort())
+            expect(toasts().length).toBe(1)
+        })
+
+        it("a client back from a disconnect gives way for what it placed meanwhile", () => {
+            room.disconnect(B)
+            const first = place(A, 0)
+            place(B, 480)
+            room.reconnect(B)
+            expect(room.violations()).toEqual([])
+            expect(regionsOn(B).map(region => region.address.toString())).toEqual([first.address.toString()])
+            expect(toasts().length).toBe(1)
+        })
+
+        it("a region placed long ago is never the one that gives way", () => {
+            const old = place(B, 0)
+            room.flush()
+            A.project.editing.modify(() => A.graph.findBox<NoteRegionBox>(old.address.uuid).unwrap().position.setValue(1920))
+            place(B, 1920)
+            expect(room.violations()).toEqual([])
+            expect(regionsOn(A).length).toBe(1)
+            expect(toasts().length).toBe(1)
+        })
+    })
+
     it("concurrent writes to one field converge on one winner", () => {
         const unit = addInstrument(A)
         room.flush()
@@ -548,6 +624,27 @@ describe("LiveRoom repairs", () => {
         A.project.editing.undo()
         expect(room.violations()).toEqual([])
         expect(A.graph.findBox(track.address.uuid).nonEmpty() === B.graph.findBox(track.address.uuid).nonEmpty()).toBe(true)
+    })
+})
+
+// a closed project must not wait for an animation frame to be freed, a hidden tab never renders one
+describe("LiveRoom memory", () => {
+    it("a finished room can be collected", async () => {
+        vi.spyOn(console, "debug").mockImplementation(() => {})
+        setFlagsFromString("--expose_gc")
+        const collect = runInNewContext("gc") as () => void
+        const projects = await (async () => {
+            const room = await LiveRoom.create(["A", "B"])
+            room.peers.forEach(peer => addInstrument(peer))
+            room.flush()
+            const references = room.peers.map(({project}) => new WeakRef(project))
+            room.terminate()
+            return references
+        })()
+        await new Promise(resolve => setTimeout(resolve, 0))
+        collect()
+        expect(projects.filter(reference => reference.deref() !== undefined).length).toBe(0)
+        vi.restoreAllMocks()
     })
 })
 

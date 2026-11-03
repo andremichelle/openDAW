@@ -1,4 +1,4 @@
-import {Address, BoxGraph, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
@@ -19,6 +19,10 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 // collab tests show diverging), and duplicate value events.
 
 const byAddress = (a: PointerField, b: PointerField): number => Address.Comparator(a.address, b.address)
+
+// the graph accepts it, but the studio cannot load it
+export const isInstrumentWithoutCapture = (box: Box): boolean =>
+    box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Instrument && box.capture.isEmpty()
 
 // Collapse a value-event collection onto its (position, index) uniqueness invariant: per position keep the
 // earliest event at index 0 and the latest at index 1, deleting any in between. Two clients concurrently adding
@@ -98,7 +102,7 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
                 }
             }
             // --- An instrument cannot exist without its capture: a merge can take the capture away. ---
-            if (box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Instrument && box.capture.isEmpty()) {
+            if (isInstrumentWithoutCapture(box)) {
                 box.delete()
                 changed = true
                 repairedAny = true

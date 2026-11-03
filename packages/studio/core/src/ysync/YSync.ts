@@ -4,6 +4,7 @@ import {
     assert,
     EmptyExec,
     int,
+    isDefined,
     isInstanceOf,
     isUndefined,
     JSONValue,
@@ -34,7 +35,7 @@ import {
 } from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
 import {YBytes} from "./YBytes"
-import {deterministicReconcile} from "./Reconcile"
+import {deterministicReconcile, isInstrumentWithoutCapture} from "./Reconcile"
 import * as Y from "yjs"
 
 type EventHandler = (events: Array<Y.YEvent<any>>, transaction: Y.Transaction) => void
@@ -132,9 +133,12 @@ export class YSync<T> implements Terminable {
     readonly #pathPrefix: ReadonlyArray<string | number>
     readonly #generator: YBytes.Generator
     readonly #touchedBytes: Array<ByteArrayField> = []
+    readonly #cutPointers: Array<PointerField> = []
 
     readonly #layers: Array<LayerState> = []
+    readonly #remote: Notifier<ReadonlyArray<Box>> = new Notifier<ReadonlyArray<Box>>()
 
+    #applyingRemote: boolean = false
     #ignoreUpdates: boolean = false
     #publishFrom: Option<int> = Option.None
     #activeLayer: Option<LayerState> = Option.None
@@ -150,6 +154,25 @@ export class YSync<T> implements Terminable {
     }
 
     isLocal(uuid: UUID.Bytes): boolean {return this.#layers.some(layer => layer.boxes.hasKey(uuid))}
+
+    get clientID(): int {return this.#getDoc().clientID}
+    // true while a peer's batch is written into the graph, the edits seen then are not this client's
+    get applyingRemote(): boolean {return this.#applyingRemote}
+    // what this client has received from every other client so far
+    knownClocks(): Map<number, number> {return Y.decodeStateVector(Y.encodeStateVector(this.#getDoc()))}
+
+    // who wrote the box (no field keys) or the field the document holds now
+    writerOf(address: Address): Option<Y.ID> {
+        const key = UUID.toString(address.uuid)
+        if (address.fieldKeys.length === 0) {return Option.wrap(this.#boxes._map.get(key)?.id)}
+        const boxObject = this.#boxes.get(key)
+        if (!isInstanceOf(boxObject, Y.Map)) {return Option.None}
+        const parent = this.#resolveFieldMap(boxObject, key, address.fieldKeys)
+        return Option.wrap(parent?._map.get(String(address.fieldKeys[address.fieldKeys.length - 1]))?.id)
+    }
+
+    // a peer's batch arrived and stands, with the boxes it touched
+    subscribeRemote(observer: Observer<ReadonlyArray<Box>>): Subscription {return this.#remote.subscribe(observer)}
 
     createLayer(kind: LocalLayerKind): LocalLayer {
         const layer: LayerState = {
@@ -267,73 +290,87 @@ export class YSync<T> implements Terminable {
             const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}, isOwnOrigin: ${isOwnOrigin}`)
             if (isOwnOrigin || (local && !isHistoryReplay)) {return}
-            const previews = this.#previews
-            // First attempt: apply the remote batch verbatim.
-            this.#boxGraph.beginTransaction()
-            const result = tryCatch(() => {
-                this.#assertResolvable(this.#applyEvents(events))
-                this.#ignoreUpdates = true
-                this.#boxGraph.endTransaction()
-                this.#ignoreUpdates = false
-            })
-            if (result.status === "failure") {
-                this.#ignoreUpdates = false
-                if (this.#boxGraph.inTransaction()) {
-                    this.#boxGraph.abortTransaction()
-                }
-                // The merged document is legal for Yjs but violates a box-graph invariant (e.g. two clients
-                // concurrently attached pointers to an exclusive target). Rather than revert locally — which
-                // forks the room, because each client reverts to its own different state — RE-APPLY the batch
-                // and repair the violation with a function that is deterministic in the converged document
-                // (see deterministicReconcile). Every client computes the same repair, so the graphs converge.
-                //
-                // The repair itself MUST be written back to the document (everything before `#publishFrom`
-                // mirrors the incoming batch and stays suppressed). Kept local-only, it silently breaks the
-                // 'graph equals document' invariant: the graph never re-derives an edge it dropped, so once the
-                // document's violation clears by other means (a later write wins the field by LWW) the healed
-                // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
-                const reconciled = tryCatch(() => {
-                    this.#boxGraph.beginTransaction()
-                    previews.forEach(layer => this.#revertInTransaction(layer))
-                    this.#applyEvents(events)
-                    this.#publishFrom = Option.wrap(this.#updates.length)
-                    deterministicReconcile(this.#boxGraph)
-                    this.#boxGraph.endTransaction()
-                })
-                if (reconciled.status === "failure") {
-                    this.#publishFrom = Option.None
-                    this.#ignoreUpdates = false
-                    if (this.#boxGraph.inTransaction()) {
-                        const aborted = tryCatch(() => this.#boxGraph.abortTransaction())
-                        if (aborted.status === "failure") {console.warn("[YSync] Abort failed:", aborted.error)}
-                    }
-                    // Still illegal after reconciliation: revert locally (last resort). No inverse ops are
-                    // written back to Yjs (that would race the in-flight remote update into a retry loop).
-                    console.warn(`[YSync] Transaction rejected even after reconcile, reverted locally:`,
-                        result.error, reconciled.error)
-                    const reverted = tryCatch(() => this.#revertLayers(previews))
-                    if (reverted.status === "failure") {console.warn("[YSync] Could not revert local edits:", reverted.error)}
-                    YSync.#invalidate(previews)
-                    return
-                }
-                console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
-                this.#repairTorn()
-                YSync.#invalidate(previews)
-                return
-            }
-            const hasConflict = (): boolean => this.#conflict.mapOr(check => check(), false)
-            if (hasConflict() && previews.length > 0) {
-                this.#revertLayers(previews)
-                YSync.#invalidate(previews)
-            }
-            if (hasConflict()) {
-                this.#rollbackTransaction(events)
-            } else {
-                this.#repairTorn()
-            }
+            this.#applyingRemote = true
+            const applied = tryCatch(() => this.#applyRemote(events))
+            this.#applyingRemote = false
+            if (applied.status === "failure") {throw applied.error}
+            applied.value.ifSome(touched => this.#remote.notify(touched))
         }
         this.#boxes.observeDeep(eventHandler)
         return {terminate: () => {this.#boxes.unobserveDeep(eventHandler)}}
+    }
+
+    #applyRemote(events: Array<Y.YEvent<any>>): Option<ReadonlyArray<Box>> {
+        const previews = this.#previews
+        // First attempt: apply the remote batch verbatim.
+        this.#boxGraph.beginTransaction()
+        const touched: Array<Box> = []
+        const result = tryCatch(() => {
+            touched.push(...this.#applyEvents(events))
+            this.#assertResolvable(touched)
+            // an optional pointer cut by a delete passes validation, the box left behind may still be unusable
+            const broken = this.#cutPointers.find(({box}) => box.isAttached() && isInstrumentWithoutCapture(box))
+            if (isDefined(broken)) {return panic(`${broken.box} lost its capture.`)}
+            this.#ignoreUpdates = true
+            this.#boxGraph.endTransaction()
+            this.#ignoreUpdates = false
+        })
+        if (result.status === "failure") {
+            this.#ignoreUpdates = false
+            if (this.#boxGraph.inTransaction()) {
+                this.#boxGraph.abortTransaction()
+            }
+            // The merged document is legal for Yjs but violates a box-graph invariant (e.g. two clients
+            // concurrently attached pointers to an exclusive target). Rather than revert locally — which
+            // forks the room, because each client reverts to its own different state — RE-APPLY the batch
+            // and repair the violation with a function that is deterministic in the converged document
+            // (see deterministicReconcile). Every client computes the same repair, so the graphs converge.
+            //
+            // The repair itself MUST be written back to the document (everything before `#publishFrom`
+            // mirrors the incoming batch and stays suppressed). Kept local-only, it silently breaks the
+            // 'graph equals document' invariant: the graph never re-derives an edge it dropped, so once the
+            // document's violation clears by other means (a later write wins the field by LWW) the healed
+            // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
+            const reconciled = tryCatch(() => {
+                this.#boxGraph.beginTransaction()
+                previews.forEach(layer => this.#revertInTransaction(layer))
+                touched.splice(0, touched.length, ...this.#applyEvents(events))
+                this.#publishFrom = Option.wrap(this.#updates.length)
+                deterministicReconcile(this.#boxGraph)
+                this.#boxGraph.endTransaction()
+            })
+            if (reconciled.status === "failure") {
+                this.#publishFrom = Option.None
+                this.#ignoreUpdates = false
+                if (this.#boxGraph.inTransaction()) {
+                    const aborted = tryCatch(() => this.#boxGraph.abortTransaction())
+                    if (aborted.status === "failure") {console.warn("[YSync] Abort failed:", aborted.error)}
+                }
+                // Still illegal after reconciliation: revert locally (last resort). No inverse ops are
+                // written back to Yjs (that would race the in-flight remote update into a retry loop).
+                console.warn(`[YSync] Transaction rejected even after reconcile, reverted locally:`,
+                    result.error, reconciled.error)
+                const reverted = tryCatch(() => this.#revertLayers(previews))
+                if (reverted.status === "failure") {console.warn("[YSync] Could not revert local edits:", reverted.error)}
+                YSync.#invalidate(previews)
+                return Option.None
+            }
+            console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
+            this.#repairTorn()
+            YSync.#invalidate(previews)
+            return Option.wrap(touched)
+        }
+        const hasConflict = (): boolean => this.#conflict.mapOr(check => check(), false)
+        if (hasConflict() && previews.length > 0) {
+            this.#revertLayers(previews)
+            YSync.#invalidate(previews)
+        }
+        if (hasConflict()) {
+            this.#rollbackTransaction(events)
+            return Option.None
+        }
+        this.#repairTorn()
+        return Option.wrap(touched)
     }
 
     // Replay one remote Yjs event batch into the (already open) box-graph transaction. Idempotent enough to
@@ -342,6 +379,7 @@ export class YSync<T> implements Terminable {
     #applyEvents(events: Array<Y.YEvent<any>>): ReadonlyArray<Box> {
         const touched: Array<Box> = []
         this.#touchedBytes.length = 0
+        this.#cutPointers.length = 0
         for (const event of events) {
             const path = this.#normalizePath(event.path)
             // an event inside a chunked bytes field: its keys are chunks, not fields, the field is read whole
@@ -488,7 +526,10 @@ export class YSync<T> implements Terminable {
         }
         const box = optBox.unwrap()
         box.outgoingEdges().forEach(([pointer]) => pointer.defer())
-        box.incomingEdges().forEach(pointer => pointer.defer())
+        box.incomingEdges().forEach(pointer => {
+            this.#cutPointers.push(pointer)
+            pointer.defer()
+        })
         this.#boxGraph.unstageBox(box)
     }
 
