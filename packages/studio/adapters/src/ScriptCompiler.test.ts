@@ -120,7 +120,7 @@ describe("ScriptCompiler applies the top-level rule to scripts with a view", () 
 
     it("leaves scripts without a view byte-identical", () => {
         const wrapped = ScriptCompiler.wrap(CONFIG, "uuid", 1, CODE_A)
-        expect(wrapped).toContain(`create: (function werkstatt() {\n            ${CODE_A}\n            return Processor\n        })(),`)
+        expect(wrapped).toContain(`return (function werkstatt() {\n            ${CODE_A}\n            return Processor\n        })()\n`)
         expect(wrapped).not.toContain("use strict")
     })
 
@@ -229,5 +229,35 @@ describe("ScriptCompiler resets a @label name when the script drops @label", () 
         await compiler.compile(context, editing, device, CODE_B)
         editing.undo()
         expect(device.label.getValue()).toBe("Dot")
+    })
+})
+
+describe("ScriptCompiler registers a script that throws while loading", () => {
+    type Entry = { update: number, create: new () => unknown }
+    const evaluateEntry = (code: string, uuid: string, update: number): Entry => {
+        new Function(ScriptCompiler.wrap(CONFIG, uuid, update, code, true))()
+        return (globalThis as unknown as Record<string, Record<string, Record<string, Entry>>>)
+            .openDAW.werkstattProcessors[uuid]
+    }
+    it("a misnamed class replaces the previous entry and throws on construction", () => {
+        evaluateEntry(CODE_A, "misnamed-uuid", 1)
+        const entry = evaluateEntry("class Prozessor { process() {} }", "misnamed-uuid", 2)
+        expect(entry.update).toBe(2)
+        expect(() => new entry.create()).toThrow("Processor is not defined")
+    })
+    it("a top-level throw replaces the previous entry and rethrows its error", () => {
+        evaluateEntry(CODE_A, "throwing-uuid", 1)
+        const entry = evaluateEntry(`throw new Error("boom at load")\n${CODE_A}`, "throwing-uuid", 2)
+        expect(entry.update).toBe(2)
+        expect(() => new entry.create()).toThrow("boom at load")
+    })
+    it("a view script that throws while loading is caught too", () => {
+        const entry = evaluateEntry("// @view 1 1 4 3\nclass Prozessor {}\nclass View {}", "view-throw-uuid", 1)
+        expect(entry.update).toBe(1)
+        expect(() => new entry.create()).toThrow("Processor is not defined")
+    })
+    it("a working script still constructs", () => {
+        const entry = evaluateEntry(CODE_A, "working-uuid", 1)
+        expect(new entry.create()).toBeDefined()
     })
 })
