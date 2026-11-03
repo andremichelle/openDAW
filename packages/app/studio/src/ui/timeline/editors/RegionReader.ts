@@ -76,6 +76,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT> & Any
         return Terminable.many(this.region.subscribeChange(observer), this.context.subscribeUpdate(observer))
     }
     subscribeTrackChange(observer: Observer<void>): Subscription {return this.region.box.regions.subscribe(() => observer())}
+    subscribeContentChange(observer: Observer<void>): Subscription {return this.region.box.events.subscribe(() => observer())}
     keeoOverlapping(range: TimelineRange): Subscription {
         const region = this.region
         const run = deferNextFrame(() => {
