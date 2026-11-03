@@ -333,6 +333,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-mastering"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "matchering",
+ "math",
+]
+
+[[package]]
 name = "device-maximizer"
 version = "0.0.0"
 dependencies = [
@@ -347,6 +358,7 @@ name = "device-nano"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "dsp",
  "libm",
  "math",
 ]
@@ -368,6 +380,14 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "dsp",
+ "math",
+]
+
+[[package]]
+name = "device-note-filter"
+version = "0.0.0"
+dependencies = [
+ "abi",
  "math",
 ]
 
@@ -642,6 +662,10 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+
+[[package]]
+name = "matchering"
+version = "0.0.0"
 
 [[package]]
 name = "math"

@@ -39,6 +39,9 @@ export type WclapStatus = {
 }
 // a parameter change the plugin reports (its GUI, a preset): 0 = value, 1 = gesture begin, 2 = gesture end
 export type WclapParamGesture = 0 | 1 | 2
+// what a plugin's state save carries: "own" a change outside its parameters (clap.state mark_dirty), an undo step of
+// its own; "params" its parameter edits, it joins their step; "other" anything else (a load), it joins the next step
+export type WclapSaveCause = "own" | "params" | "other"
 
 export interface EngineCommands extends Terminable {
     play(): void
@@ -80,6 +83,8 @@ export interface EngineCommands extends Terminable {
     querySignalGraph(): Promise<SignalGraph>
     // a script view's host.send(message): handed to the device's Processor.message() before its next process call
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
+    // a local value for a device's plain field: never written to the box, not undoable, not synced
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void
 }
 
 // a point on the transport timeline in audio context time: the transport started, jumped or stopped there
@@ -100,7 +105,7 @@ export interface EngineToClient {
     fetchWclapBundle(url: string): Promise<WclapBundle>
     wclapSend(uuid: string, bytes: ArrayBuffer): void
     // url and clapId of the plugin instance that saved
-    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void
+    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void
     // the loaded plugin's parameter list (once per load) and its own parameter changes
     wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void
     wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void

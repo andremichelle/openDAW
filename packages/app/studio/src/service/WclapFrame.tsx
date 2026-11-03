@@ -6,13 +6,14 @@ import {
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
 import {WavFile} from "@opendaw/lib-dsp"
-import {WclapParameterBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, WclapParameterBox, WclapSampleBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, MenuItem, WclapGuis} from "@opendaw/studio-core"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
 import {DragAndDrop} from "@/ui/DragAndDrop"
+import {SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {StudioService} from "@/service/StudioService"
 import type {WclapAdapter} from "@/service/WclapWindows"
 
@@ -33,6 +34,8 @@ type FrameMessage =
     | { type: "wclap-key", kind: "keydown" | "keyup", init: KeyboardEventInit }
     | { type: "wclap-error", message: string }
     | { type: "wclap-wheel", deltaX: number, deltaY: number, deltaMode: number }
+    // the page puts a file into one of the plugin's sample slots (opendaw.samples/1), or empties it (no file)
+    | { type: "wclap-sample", key: number, file?: File }
 
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
@@ -131,6 +134,11 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
             globalThis.dispatchEvent(new KeyboardEvent(message.kind, message.init))
         } else if (message.type === "wclap-error") {
             RuntimeNotifier.notify({message: message.message, icon: "Warning"})
+        } else if (message.type === "wclap-sample") {
+            if (!Number.isInteger(message.key) || message.key < 0 || message.key > 0x7fffffff) {return}
+            if (isDefined(message.file) && !(message.file instanceof File)) {return}
+            assignSample(message.key, message.file).catch(reason =>
+                RuntimeNotifier.notify({message: `Could not load ${message.file?.name ?? "the sample"}: ${reason}`, icon: "Warning"}))
         } else if (message.type === "wclap-wheel") {
             scroll(message.deltaX, message.deltaY, message.deltaMode)
         }
@@ -181,13 +189,52 @@ export const WclapFrame = ({service, adapter, bundle, uri, reload, reloaded, rel
         const x = event.clientX - rect.left, y = event.clientY - rect.top
         return x >= 0 && y >= 0 && x < rect.width && y < rect.height ? Option.wrap({x, y}) : Option.None
     }
+    // the last sample dropped from the studio's browser: the page sends it back as a file, it is linked, not imported
+    const dropped: { sample: Option<{ sample: Sample, name: string, size: number }> } = {sample: Option.None}
+    // A slot of the plugin's (a WclapSampleBox under the device's samples, by key) takes the file: the sample it was
+    // dropped as, else the file imported into the studio's samples. Emptied, the slot stays: the engine tells the
+    // plugin about a cleared file, not about a removed box.
+    const assignSample = async (key: number, file: Optional<File>): Promise<void> => {
+        const {boxGraph, editing} = project
+        const deviceBox = adapter.box
+        const slotOf = (): Optional<WclapSampleBox> => deviceBox.samples.pointerHub.incoming()
+            .map(({box}) => box).filter(box => box instanceof WclapSampleBox)
+            .find(box => box.index.getValue() === key)
+        if (!isDefined(file)) {
+            editing.modify(() => {
+                const slot = slotOf()
+                if (isDefined(slot)) {SampleSelectStrategy.clearPointer(slot.file)}
+            })
+            return
+        }
+        const known = dropped.sample.unwrapOrNull()
+        const sample: Sample = isDefined(known) && known.name === file.name && known.size === file.size
+            ? known.sample
+            : await file.arrayBuffer().then(arrayBuffer => service.sampleService.importFile({name: file.name, arrayBuffer}))
+        if (sample !== known?.sample) {project.trackUserCreatedSample(UUID.parse(sample.uuid))}
+        if (!deviceBox.isAttached()) {return}
+        editing.modify(() => {
+            const uuid = UUID.parse(sample.uuid)
+            const audioFile = boxGraph.findBox<AudioFileBox>(uuid).unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
+                box.fileName.setValue(sample.name)
+                box.endInSeconds.setValue(sample.duration)
+            }))
+            const slot = slotOf() ?? WclapSampleBox.create(boxGraph, UUID.generate(), box => {
+                box.owner.refer(deviceBox.samples)
+                box.index.setValue(key)
+            })
+            SampleSelectStrategy.changePointer(slot.file, Option.wrap(audioFile))
+        })
+    }
     const dropSample = (sample: Sample, x: number, y: number): void => {
         service.sampleManager.getAudioData(UUID.parse(sample.uuid)).then(audio => {
             const bytes = WavFile.encodeFloats({
                 frames: audio.frames.slice(), sampleRate: audio.sampleRate,
                 numberOfFrames: audio.numberOfFrames, numberOfChannels: audio.numberOfChannels
             })
-            post({type: "wclap-drop", x, y, file: new File([bytes], `${sample.name}.wav`, {type: "audio/wav"})})
+            const file = new File([bytes], `${sample.name}.wav`, {type: "audio/wav"})
+            dropped.sample = Option.wrap({sample, name: file.name, size: file.size})
+            post({type: "wclap-drop", x, y, file})
         }, reason => RuntimeNotifier.notify({message: `Could not load ${sample.name}: ${reason}`, icon: "Warning"}))
     }
     const dragSample = (sample: Sample): void => {

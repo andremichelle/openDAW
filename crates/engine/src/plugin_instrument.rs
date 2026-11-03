@@ -41,6 +41,7 @@ pub(crate) struct PluginInstrument {
     // a source has nothing to pass through, so it renders silence and drops its voices.
     enabled: bool,
     pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
+    released: Vec<EventRecord>, // note-offs of effects that left the chain, handed to the device's next pull
     // This device's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
     // resolves + diffs them; `clock_armed` is true iff one is automated (so the clock injects update ticks).
     params: Vec<ParamHandle>,
@@ -109,6 +110,7 @@ impl PluginInstrument {
             sample_rate,
             enabled: true,
             pull_chain: None,
+            released: Vec::new(),
             params: Vec::new(),
             clock_armed: false,
             events: EventBuffer::new(),
@@ -132,6 +134,7 @@ impl PluginInstrument {
     /// TS `setNoteEventSource` resets its receiver: a note a removed or bypassed MIDI effect started never gets its end.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
+        if let Some(previous) = self.pull_chain.as_ref() {previous.release_leavers(&chain, &mut self.released)}
         self.pull_chain = Some(chain);
         if changed { self.reset(); }
     }
@@ -235,6 +238,7 @@ impl Processor for PluginInstrument {
             pull.clock_armed = self.clock_armed;
             pull.note_bits = self.note_bits.clone(); // pulled notes mark THIS unit's note indicator
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
+            core::mem::swap(&mut self.released, &mut pull.released);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
         crate::calling_device(self.device_state.as_ptr() as u32);
@@ -247,6 +251,7 @@ impl Processor for PluginInstrument {
             pull.clock_armed = false;
             pull.note_bits = None;
             core::mem::swap(&mut self.params, &mut pull.params); // and take them back
+            core::mem::swap(&mut self.released, &mut pull.released);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
         {

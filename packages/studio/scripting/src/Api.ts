@@ -250,6 +250,25 @@ export interface PitchEffect extends MIDIEffect {
 }
 
 /**
+ * Passes a key range and transposes the passing notes or sets them to one key
+ * @group MIDI Effects
+ */
+export interface NoteFilterEffect extends MIDIEffect {
+    /** Always "NoteFilter" */
+    readonly key: "NoteFilter"
+    /** Lowest passing key, included (0 to 127, default 0) */
+    min: int
+    /** Highest passing key, included (0 to 127, default 127) */
+    max: int
+    /** false adds {@link transpose}, true plays every passing note as {@link targetKey} (default false) */
+    set: boolean
+    /** Semitones added when {@link set} is false, a result outside 0 to 127 is ignored (-127 to 127, default 0) */
+    transpose: int
+    /** Key every passing note plays as when {@link set} is true (0 to 127, default 60) */
+    targetKey: int
+}
+
+/**
  * Reshapes note velocities
  * @group MIDI Effects
  */
@@ -299,6 +318,8 @@ export interface MIDIEffects {
     "Arpeggio": ArpeggioEffect
     /** {@link PitchEffect} */
     "Pitch": PitchEffect
+    /** {@link NoteFilterEffect} */
+    "NoteFilter": NoteFilterEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */
@@ -1254,6 +1275,14 @@ export interface Nano extends Instrument {
     loopStart: unitValue
     /** Loop end as a fraction of the sample, clamped inside the region (default 1) */
     loopEnd: unitValue
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Several notes at once (default true). Mono fades the sounding note out in 5 ms on each new note. */
+    polyphone: boolean
+    /** Ignore the note-off and play to the region end (default false). A loop still ends on the note-off. */
+    oneShot: boolean
+    /** Every note plays at the root key, ignoring the played key (default false). */
+    fixedPitch: boolean
 }
 
 /**

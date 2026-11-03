@@ -3,6 +3,7 @@ import {
     asDefined,
     asInstanceOf,
     assert,
+    clamp,
     Color,
     ifDefined,
     int,
@@ -79,6 +80,7 @@ import {
     InstrumentFactories,
     InterpolationFieldAdapter,
     ProjectSkeleton,
+    TempoRange,
     TrackType
 } from "@opendaw/studio-adapters"
 import {DawProject} from "./DawProject"
@@ -480,8 +482,6 @@ export namespace DawProjectImport {
             const readTempoAutomation = (tempoAutomation: PointsSchema): void => {
                 const points = tempoAutomation.points
                 if (!isDefined(points) || points.length === 0) {return}
-                const minBpm = timelineBox.tempoTrack.minBpm.getValue()
-                const maxBpm = timelineBox.tempoTrack.maxBpm.getValue()
                 const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                 timelineBox.tempoTrack.events.refer(collectionBox.owners)
                 timelineBox.tempoTrack.enabled.setValue(true)
@@ -491,7 +491,7 @@ export namespace DawProjectImport {
                         const eventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
                             box.position.setValue(point.time * PPQN.Quarter)
                             box.index.setValue(0)
-                            box.value.setValue(TempoAutomationConverter.bpmToNormalized(point.value, minBpm, maxBpm))
+                            box.value.setValue(clamp(point.value, TempoRange.min, TempoRange.max))
                             box.events.refer(collectionBox.events)
                         })
                         const interpolation = TempoAutomationConverter.fromDawProjectInterpolation(point.interpolation)

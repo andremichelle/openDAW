@@ -77,15 +77,15 @@ component
       &:hover
         color: var(--color-red)
 
+    > div:hover > div.labels
+      color: var(--color-white)
+
     div.labels
       display: grid
       grid-template-columns: subgrid
       grid-column: span 2
       padding-left: 6px
       cursor: pointer
-
-      &:hover
-        color: var(--color-gray)
 
       > div
         white-space: nowrap

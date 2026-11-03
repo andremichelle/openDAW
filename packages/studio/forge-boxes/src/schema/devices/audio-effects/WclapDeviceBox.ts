@@ -7,5 +7,7 @@ export const WclapDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffe
     11: {type: "string", name: "clap-id"},
     12: {type: "string", name: "state"}, // legacy clap_plugin_state as base64, read only while plugin-state is empty
     13: {type: "field", name: "parameters", pointerRules: {accepts: [Pointers.Parameter], mandatory: false}},
-    14: {type: "bytes", name: "plugin-state"}
+    14: {type: "bytes", name: "plugin-state"},
+    // the plugin's samples by key (WclapSampleBox), the same key on every WebCLAP box: the engine observes one
+    16: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
 })

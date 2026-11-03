@@ -226,6 +226,8 @@ describe("DeviceSlot", () => {
         project.editing.modify(() => DeviceSlot.placeEffect(slot, (field, index) =>
             project.api.insertEffect(field, EffectFactories.AudioNamed.Delay, index)))
         expect(entryNames()).toEqual([["CompressorDeviceBox"], ["DelayDeviceBox"]])
+        expect(IndexedBox.collectIndexedBoxes(slot.composite.box.entries).map(cell => cell.index.getValue()),
+            "entries are numbered without a gap").toEqual([0, 1])
         expect(effectNames(), "the outer chain is untouched").toEqual(["DelayDeviceBox", "ReverbDeviceBox", "AudioEffectCompositeBox"])
     })
 

@@ -21,6 +21,7 @@ import {
     ModularDeviceBox,
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
+    NoteFilterDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -60,6 +61,24 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index) =>
             ArpeggioDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Arpeggio")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const NoteFilter: EffectFactory = {
+        defaultName: "Note Filter",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Note Filter",
+        description: "Passes a key range and transposes or sets the keys",
+        manualPage: DeviceManualUrls.NoteFilter,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "NoteFilterDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Note Filter")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -644,6 +663,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {
         Arpeggio,
+        NoteFilter,
         Pitch,
         Spielwerk,
         Velocity,

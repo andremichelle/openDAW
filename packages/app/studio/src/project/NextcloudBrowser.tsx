@@ -94,8 +94,8 @@ export const NextcloudBrowser = ({lifecycle, handler, username, select, reopen}:
                                                    event.stopPropagation()
                                                    Dialogs.approve({
                                                        headline: "Delete Project?",
-                                                       message: "Deletes it from Nextcloud, including assets no other"
-                                                           + " project uses. This cannot be undone."
+                                                       message: `Deletes "${entry.meta.name}" from Nextcloud, including assets`
+                                                           + " no other project uses. This cannot be undone."
                                                    }).then(async approved => {
                                                        if (!approved) {return}
                                                        const progressValue = new DefaultObservableValue<unitValue>(0.0)

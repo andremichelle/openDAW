@@ -3,6 +3,7 @@ import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 
 const shift = true
 const ctrl = true
+const alt = true
 
 export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "project-undo": {
@@ -165,6 +166,18 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "open-spotlight-alt": {
         shortcut: Shortcut.of(Key.KeyF, {ctrl}),
         description: "Open or close the spotlight"
+    },
+    "call-toggle-mic": {
+        shortcut: Shortcut.of(Key.KeyM, {shift, alt}),
+        description: "Mute or unmute the microphone in a room call"
+    },
+    "call-toggle-camera": {
+        shortcut: Shortcut.of(Key.KeyV, {shift, alt}),
+        description: "Turn the camera on or off in a room call"
+    },
+    "call-toggle-hand": {
+        shortcut: Shortcut.of(Key.KeyH, {shift, alt}),
+        description: "Raise or lower your hand in a room call"
     }
 })
 

@@ -1,6 +1,7 @@
 import {
     ArpeggioDeviceBox,
     GrooveShuffleBox,
+    NoteFilterDeviceBox,
     PitchDeviceBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
@@ -12,6 +13,7 @@ import {
     AnyAudioUnit,
     ArpeggioEffect,
     MIDIEffects,
+    NoteFilterEffect,
     PitchEffect,
     ScriptParameter,
     ScriptSample,
@@ -31,7 +33,8 @@ export abstract class MIDIEffectFacade<B extends EffectDeviceBox = EffectDeviceB
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
-export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
+export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | VelocityEffectImpl
+    | ZeitgeistEffectImpl | SpielwerkEffectImpl
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
     readonly key = "Arpeggio" as const
@@ -60,6 +63,20 @@ export class PitchEffectImpl extends MIDIEffectFacade<PitchDeviceBox> implements
     constructor(context: Context, box: PitchDeviceBox) {
         super(context, box)
         this.bind({octaves: box.octaves, semiTones: box.semiTones, cents: box.cents})
+    }
+}
+
+export class NoteFilterEffectImpl extends MIDIEffectFacade<NoteFilterDeviceBox> implements NoteFilterEffect {
+    readonly key = "NoteFilter" as const
+    declare min: int
+    declare max: int
+    declare set: boolean
+    declare transpose: int
+    declare targetKey: int
+
+    constructor(context: Context, box: NoteFilterDeviceBox) {
+        super(context, box)
+        this.bind({min: box.min, max: box.max, set: box.set, transpose: box.transpose, targetKey: box.key})
     }
 }
 
@@ -113,6 +130,7 @@ export namespace MIDIEffectImpls {
     export const wrap = (context: Context, box: Box): AnyMIDIEffectImpl => context.facade(box, () => {
         if (box instanceof ArpeggioDeviceBox) {return new ArpeggioEffectImpl(context, box)}
         if (box instanceof PitchDeviceBox) {return new PitchEffectImpl(context, box)}
+        if (box instanceof NoteFilterDeviceBox) {return new NoteFilterEffectImpl(context, box)}
         if (box instanceof VelocityDeviceBox) {return new VelocityEffectImpl(context, box)}
         if (box instanceof ZeitgeistDeviceBox) {return new ZeitgeistEffectImpl(context, box)}
         if (box instanceof SpielwerkDeviceBox) {return new SpielwerkEffectImpl(context, box)}
@@ -121,5 +139,5 @@ export namespace MIDIEffectImpls {
 
     export const isBox = (box: Box): box is MIDIEffectBox =>
         box instanceof ArpeggioDeviceBox || box instanceof PitchDeviceBox || box instanceof VelocityDeviceBox
-        || box instanceof ZeitgeistDeviceBox || box instanceof SpielwerkDeviceBox
+        || box instanceof NoteFilterDeviceBox || box instanceof ZeitgeistDeviceBox || box instanceof SpielwerkDeviceBox
 }

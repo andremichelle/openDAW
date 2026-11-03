@@ -6,6 +6,7 @@ import {TapeDeviceBox} from "./instruments/TapeDeviceBox"
 import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
+import {NoteFilterDeviceBox} from "./midi-effects/NoteFilterDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
@@ -17,6 +18,7 @@ import {UnknownAudioEffectDevice} from "./audio-effects/UnknownAudioEffectDevice
 import {UnknownMidiEffectDevice} from "./midi-effects/UnknownMidiEffectDevice"
 import {SoundfontDeviceBox} from "./instruments/SoundfontDeviceBox"
 import {MaximizerDeviceBox} from "./audio-effects/MaximizerDeviceBox"
+import {MasteringDeviceBox} from "./audio-effects/MasteringDeviceBox"
 import {CompressorDeviceBox} from "./audio-effects/CompressorDeviceBox"
 import {AutotuneDeviceBox} from "./audio-effects/AutotuneDeviceBox"
 import {CrusherDeviceBox} from "./audio-effects/CrusherDeviceBox"
@@ -32,6 +34,7 @@ import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
 import {WclapParameterBox} from "./audio-effects/WclapParameterBox"
 import {WclapMidiEffectBox} from "./midi-effects/WclapMidiEffectBox"
+import {WclapSampleBox} from "./audio-effects/WclapSampleBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -63,6 +66,7 @@ export const DeviceDefinitions = [
     ModularDeviceBox,
     StereoToolDeviceBox,
     MaximizerDeviceBox,
+    MasteringDeviceBox,
     CompressorDeviceBox,
     GateDeviceBox,
     DelayDeviceBox,
@@ -89,11 +93,13 @@ export const DeviceDefinitions = [
     TapeDeviceBox,
     ArpeggioDeviceBox,
     PitchDeviceBox,
+    NoteFilterDeviceBox,
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapParameterBox,
     WclapMidiEffectBox,
+    WclapSampleBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,

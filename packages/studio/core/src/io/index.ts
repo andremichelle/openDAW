@@ -1,4 +1,5 @@
 export * from "./AudioInputPort"
+export * from "./ChannelMapping"
 export * from "./ContextClock"
 export * from "./MidiInputPort"
 export * from "./MonitorPort"

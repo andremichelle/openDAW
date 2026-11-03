@@ -172,7 +172,11 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY))
                 if (complete <= position) {return}
                 editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, complete - position)
-                    .ifSome(region => selection.select(region)))
+                    .ifSome(region => {
+                        selection.select(region)
+                        userEditingManager.timeline.edit(region)
+                        service.panelLayout.showIfAvailable(PanelType.ContentEditor)
+                    }))
             }
         }),
         Dragging.attach(element, (event: PointerEvent) => {

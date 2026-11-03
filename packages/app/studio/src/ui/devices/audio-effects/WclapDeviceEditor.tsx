@@ -513,7 +513,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             reloaded: () => Promise.resolve(),
             release,
             lost: dropPanel,
-            scroll: EmptyExec,
+            scroll: (deltaX, deltaY, deltaMode) => frame.iframe.dispatchEvent(new WheelEvent("wheel", {
+                bubbles: true, cancelable: true, deltaX, deltaY, deltaMode
+            })),
             transparent: true
         }))
         panelArea.style.width = `${opened.width > 0 ? opened.width : PANEL_HEIGHT}px`

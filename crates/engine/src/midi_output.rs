@@ -366,6 +366,7 @@ impl MidiOutProcessor {
     /// A layer's node survives a chain edit: a removed or bypassed MIDI effect started notes the new chain never ends.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
+        if let Some(previous) = self.pull_chain.as_ref() {previous.release_leavers(&chain, &mut Vec::new())}
         self.pull_chain = Some(chain);
         if changed { self.end_held_notes(); }
     }
@@ -373,6 +374,7 @@ impl MidiOutProcessor {
     /// A unit's node is rebuilt on a chain edit: the next one holds the notes on when the chain stayed, else they end.
     pub(crate) fn hand_over(&self, next: &MidiOutProcessor) {
         let same = matches!((&self.pull_chain, &next.pull_chain), (Some(previous), Some(chain)) if previous.same(chain));
+        if let (Some(previous), Some(chain)) = (&self.pull_chain, &next.pull_chain) {previous.release_leavers(chain, &mut Vec::new())}
         if same {
             next.controls.active_notes.borrow_mut().extend(self.controls.active_notes.borrow().iter().copied());
         } else {
@@ -409,8 +411,7 @@ impl MidiOutProcessor {
     }
 
     fn emit_cc(&self, controller: i32, value: f32, relative_block_time: f64) {
-        // TS `parameterChanged`: skipped without a device pointer or while disabled. QUIRK mirrored: TS
-        // computes `relativeBlockTime * 1000.0 * delayInMs` (a MULTIPLY where the notes path ADDS the delay).
+        // TS `parameterChanged`: skipped without a device pointer or while disabled.
         if !self.controls.enabled.get() {
             return;
         }
@@ -418,7 +419,7 @@ impl MidiOutProcessor {
         if device_num < 0 {
             return;
         }
-        let time_ms = relative_block_time * 1000.0 * delay;
+        let time_ms = relative_block_time * 1000.0 + delay;
         let status = CONTROLLER | (self.controls.channel.get() as u8 & 0x0F);
         let data1 = (controller & 0x7F) as u8;
         let data2 = ((value * 127.0 + 0.5) as i32 & 0x7F) as u8; // Math.round(value * 127) & 0x7F
@@ -716,5 +717,41 @@ mod tests {
         assert!(controls.active_notes.borrow().is_empty());
         assert_eq!(controls.channel.get(), 5);
         assert_eq!(controls.last_channel.get(), 5);
+    }
+
+    #[test]
+    fn a_cc_is_timed_like_a_note_its_offset_plus_the_device_delay() {
+        let shared = shared_midi_out();
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 10.0), Vec::new());
+        let processor = MidiOutProcessor::new(48000.0, MidiOutControls::new(3, Some([1; 16])), shared.clone(), None);
+        processor.emit_cc(74, 0.5, 0.0);
+        processor.emit_cc(74, 1.0, 0.0025);
+        processor.emit_cc(1, 0.0, 1.5);
+        let midi = shared.borrow();
+        let times: Vec<f64> = midi.queued().iter().map(|msg| msg.time_ms).collect();
+        assert_eq!(times, vec![10.0, 12.5, 1510.0]);
+        assert_eq!((midi.queued()[1].status, midi.queued()[1].data1, midi.queued()[1].data2), (0xB3, 74, 127));
+    }
+
+    #[test]
+    fn a_cc_with_zero_delay_keeps_its_offset() {
+        let shared = shared_midi_out();
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 0.0), Vec::new());
+        let processor = MidiOutProcessor::new(48000.0, MidiOutControls::new(0, Some([1; 16])), shared.clone(), None);
+        processor.emit_cc(74, 0.5, 0.002);
+        assert_eq!(shared.borrow().queued()[0].time_ms, 2.0);
+    }
+
+    #[test]
+    fn a_cc_is_dropped_without_a_device_or_while_disabled() {
+        let shared = shared_midi_out();
+        let unresolved = MidiOutProcessor::new(48000.0, MidiOutControls::new(0, Some([9; 16])), shared.clone(), None);
+        unresolved.emit_cc(74, 0.5, 0.0);
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 10.0), Vec::new());
+        let controls = MidiOutControls::new(0, Some([1; 16]));
+        controls.enabled.set(false);
+        let disabled = MidiOutProcessor::new(48000.0, controls, shared.clone(), None);
+        disabled.emit_cc(74, 0.5, 0.0);
+        assert_eq!(shared.borrow().queue_len(), 0);
     }
 }

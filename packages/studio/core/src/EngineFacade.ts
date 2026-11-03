@@ -51,6 +51,7 @@ export class EngineFacade implements Engine {
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #transportAnchors: Notifier<ReadonlyArray<TransportAnchor>> = new Notifier()
+    readonly #workletChanged: Notifier<void> = new Notifier()
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
@@ -80,7 +81,11 @@ export class EngineFacade implements Engine {
             worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue())),
             worklet.subscribeTransportAnchors(anchors => this.#transportAnchors.notify(anchors))
         )
+        this.#workletChanged.notify()
     }
+
+    // a new engine (first boot or a restart): local state sent to the old one, like `overrideDeviceField`, is gone
+    subscribeWorkletChanged(observer: Observer<void>): Subscription {return this.#workletChanged.subscribe(observer)}
 
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 
@@ -159,6 +164,9 @@ export class EngineFacade implements Engine {
     }
     wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
     scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#worklet.ifSome(worklet => worklet.scriptMessage(uuid, message))}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#worklet.ifSome(worklet => worklet.overrideDeviceField(uuid, key, value))
+    }
     querySignalGraph(): Promise<SignalGraph> {
         return this.#worklet.mapOr(worklet => worklet.querySignalGraph(), Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}))
     }

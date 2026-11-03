@@ -197,6 +197,7 @@ extern "C" {
     fn host_wclap_reset(handle: u32);
     fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
+    fn host_wclap_sample(handle: u32, key: u32, sample_handle: u32, present: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
     fn host_self_uuid(out16_ptr: u32);
@@ -210,6 +211,7 @@ extern "C" {
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
+    fn host_script_release_notes(handle: u32, out_ptr: u32, out_max: u32, position: f64) -> u32;
     // Release the bridge (its Processor instance + limiter + runtime) when THIS device's instance dies (a
     // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
     // dedup on create either — see the JS side).
@@ -981,6 +983,15 @@ pub fn script_notes(handle: u32, input: &[EventRecord], out: &mut [EventRecord],
     { let _ = (handle, input, out.len(), from, to, bpm, flags, s0, s1); 0 }
 }
 
+/// End every note the Spielwerk script started at `position` and forget its held and scheduled notes. Native stub returns 0.
+#[inline]
+pub fn script_release_notes(handle: u32, out: &mut [EventRecord], position: f64) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_release_notes(handle, out.as_mut_ptr() as u32, out.len() as u32, position) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, out.len(), position); 0 }
+}
+
 // ---- NAM BRIDGE wrappers ----------------------------------------------------------------------------------
 // The NeuralAmp device's DSP is the `@opendaw/nam-wasm` module (NeuralAmpModelerCore, the exact module the TS
 // engine runs), instantiated as its OWN wasm instance in the worklet — an Emscripten build cannot join the
@@ -1189,6 +1200,16 @@ pub fn wclap_latency(handle: u32) -> u32 {
     unsafe { host_wclap_latency(handle) }
     #[cfg(not(target_family = "wasm"))]
     { let _ = handle; 0 }
+}
+
+/// Deliver a sample slot's resolved handle (or unbind, `present` false) to the plugin by its key
+/// (`opendaw.samples/1`): the bridge copies the frames into the plugin once they are resident. Native stub no-op.
+#[inline]
+pub fn wclap_sample(handle: u32, key: u32, sample_handle: u32, present: bool) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_sample(handle, key, sample_handle, present as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, key, sample_handle, present); }
 }
 
 /// Transport stop: `clap_plugin.reset`. Native stub no-op.

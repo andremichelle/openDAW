@@ -172,6 +172,9 @@ export class OfflineEngineRenderer {
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
                 wclapRetry(url: string): void { dispatcher.dispatchAndForget(this.wclapRetry, url) }
                 scriptMessage(uuid: UUID.Bytes, message: unknown): void { dispatcher.dispatchAndForget(this.scriptMessage, uuid, message) }
+                overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                    dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                }
                 querySignalGraph(): Promise<SignalGraph> { return dispatcher.dispatchAndReturn(this.querySignalGraph) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
@@ -181,8 +184,8 @@ export class OfflineEngineRenderer {
 
         terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
 
-        const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
-            (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+        const {port, sab} = terminator.own(MIDIReceiver.create(MIDIReceiver.immediateClock,
+            (deviceId, data, timestamp) => source.sendMIDIFromEngine(deviceId, data, timestamp)))
 
         // The SAME wrapper as the live worklet path (`ScriptCompiler.wrap`): the registry entry must carry
         // `params`/`samples` too — the WASM script bridge reads them (the TS worker ignores the extras).

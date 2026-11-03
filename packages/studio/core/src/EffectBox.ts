@@ -14,6 +14,7 @@ import {
     GateDeviceBox,
     ModularDeviceBox,
     NeuralAmpDeviceBox,
+    NoteFilterDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -33,7 +34,7 @@ import {
 
 export type EffectBox =
     | ArpeggioDeviceBox | PitchDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | UnknownMidiEffectDeviceBox
-    | SpielwerkDeviceBox | WclapMidiEffectBox
+    | SpielwerkDeviceBox | WclapMidiEffectBox | NoteFilterDeviceBox
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
     | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | VocoderDeviceBox

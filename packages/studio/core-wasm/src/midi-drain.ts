@@ -20,7 +20,8 @@ export class WasmMidiDrain {
         this.#sender = new MIDISender(port, sab)
     }
 
-    drain(engine: EngineExports, memory: WebAssembly.Memory): void {
+    // quantumStartMs: the context time of the rendered quantum, the records carry their time relative to it
+    drain(engine: EngineExports, memory: WebAssembly.Memory, quantumStartMs: number): void {
         const count = engine.midi_out_count()
         if (count === 0) {return}
         const pointer = engine.input_reserve(count * RECORD_BYTES)
@@ -40,7 +41,7 @@ export class WasmMidiDrain {
             data[0] = view.getUint8(offset + 4)
             if (length > 1) {data[1] = view.getUint8(offset + 5)}
             if (length > 2) {data[2] = view.getUint8(offset + 6)}
-            sender.send(this.#deviceId(engine, memory, device), data, timeMs)
+            sender.send(this.#deviceId(engine, memory, device), data, quantumStartMs + timeMs)
         }
     }
 

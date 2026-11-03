@@ -50,6 +50,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Latency Calibration", path: "/manuals/latency-calibration"},
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Mastering", path: "/manuals/mastering"},
             {type: "page", label: "Modulation", path: "/manuals/modulation"},
             {type: "page", label: "Nextcloud", path: "/manuals/nextcloud"},
             {type: "page", label: "Open Source", path: "/manuals/open-source"},
@@ -119,6 +120,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 label: "MIDI FX",
                 files: [
                     {type: "page", label: "Arpeggio", path: "/manuals/devices/midi/arpeggio", icon: IconSymbol.Stack},
+                    {type: "page", label: "Note Filter", path: "/manuals/devices/midi/note-filter", icon: IconSymbol.Piano},
                     {type: "page", label: "Pitch", path: "/manuals/devices/midi/pitch", icon: IconSymbol.Note},
                     {type: "page", label: "Spielwerk", path: "/manuals/devices/midi/spielwerk", icon: IconSymbol.Code},
                     {type: "page", label: "Velocity", path: "/manuals/devices/midi/velocity", icon: IconSymbol.Velocity},

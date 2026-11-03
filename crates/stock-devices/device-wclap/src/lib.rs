@@ -59,6 +59,18 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
     13
 }
 
+/// WASM CONTRACT: `samples` hub key 16 (WclapSampleBox children, `index` 3 the plugin's key, `file` 4).
+#[no_mangle]
+pub extern "C" fn observe_sample_collection_field() -> u32 {
+    16
+}
+
+/// A slot's sample, resolved by the engine: the bridge hands it to the plugin (`opendaw.samples/1`).
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    unsafe { abi::with_state(state_ptr, |state: &mut WclapState| abi::wclap_sample(state.link.bridge, id, handle, present != 0)) }
+}
+
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<WclapState>::from_descriptor(desc_ptr) };

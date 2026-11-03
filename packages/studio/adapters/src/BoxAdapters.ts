@@ -45,6 +45,7 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     MaximizerDeviceBox,
+    MasteringDeviceBox,
     MIDIOutputDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -64,6 +65,7 @@ import {
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    NoteFilterDeviceBox,
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
@@ -136,6 +138,7 @@ import {TapeDeviceBoxAdapter} from "./devices/instruments/TapeDeviceBoxAdapter"
 import {VaporisateurDeviceBoxAdapter} from "./devices/instruments/VaporisateurDeviceBoxAdapter"
 import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBoxAdapter"
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
+import {NoteFilterDeviceBoxAdapter} from "./devices/midi-effects/NoteFilterDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
@@ -167,6 +170,7 @@ import {UnknownMidiEffectDeviceBoxAdapter} from "./devices/midi-effects/UnknownM
 import {SoundfontDeviceBoxAdapter} from "./devices/instruments/SoundfontDeviceBoxAdapter"
 import {SoundfontFileBoxAdapter} from "./soundfont/SoundfontFileBoxAdapter"
 import {MaximizerDeviceBoxAdapter} from "./devices/audio-effects/MaximizerDeviceBoxAdapter"
+import {MasteringDeviceBoxAdapter} from "./devices/audio-effects/MasteringDeviceBoxAdapter"
 import {CompressorDeviceBoxAdapter} from "./devices/audio-effects/CompressorDeviceBoxAdapter"
 import {GateDeviceBoxAdapter} from "./devices/audio-effects/GateDeviceBoxAdapter"
 import {AutotuneDeviceBoxAdapter} from "./devices/audio-effects/AutotuneDeviceBoxAdapter"
@@ -261,6 +265,7 @@ export class BoxAdapters implements Terminable {
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
             visitMaximizerDeviceBox: (box: MaximizerDeviceBox) => new MaximizerDeviceBoxAdapter(this.#context, box),
+            visitMasteringDeviceBox: (box: MasteringDeviceBox) => new MasteringDeviceBoxAdapter(this.#context, box),
             visitCompressorDeviceBox: (box: CompressorDeviceBox) => new CompressorDeviceBoxAdapter(this.#context, box),
             visitGateDeviceBox: (box: GateDeviceBox) => new GateDeviceBoxAdapter(this.#context, box),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => new AutotuneDeviceBoxAdapter(this.#context, box),
@@ -301,6 +306,7 @@ export class BoxAdapters implements Terminable {
             visitNoteEventCollectionBox: (box: NoteEventCollectionBox): BoxAdapter => new NoteEventCollectionBoxAdapter(this.#context, box),
             visitNoteRegionBox: (box: NoteRegionBox) => new NoteRegionBoxAdapter(this.#context, box),
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
+            visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => new NoteFilterDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
             visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),

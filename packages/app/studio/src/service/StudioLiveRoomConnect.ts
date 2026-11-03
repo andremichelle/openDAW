@@ -7,7 +7,10 @@ import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
+import {CallService} from "@/call/CallService"
 import {Events} from "@opendaw/lib-dom"
+
+const LiveServerUrl = "wss://live.opendaw.studio"
 
 const classifyConnectError = (error: unknown): RoomResultStatus => {
     if (Errors.isAbort(error)) {return "abort"}
@@ -76,7 +79,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
                     .flatMap(profile => profile.coverId === UUID.toString(uuid) ? profile.cover : Option.None)
                     .unwrapOrElse(() => panic(`No cover for ${UUID.toString(uuid)}`))
             }
-        }, roomName, "wss://live.opendaw.studio")
+        }, roomName, LiveServerUrl)
         project.own(p2pSession)
         const terminator = new Terminator()
         project.own(terminator)
@@ -128,6 +131,10 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own(chatService)
         service.chatService.wrap(chatService)
         terminator.own({terminate: () => service.chatService.clear()})
+        const callService = new CallService(service, provider.awareness, roomName, LiveServerUrl)
+        terminator.own(callService)
+        service.callService.wrap(callService)
+        terminator.own({terminate: () => service.callService.clear()})
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))

@@ -8,7 +8,7 @@
 //! device without a working script is transparent, never a mute). The bridge's tracking state persists across
 //! pulls JS-side; this crate keeps only the bridge handle.
 //!
-//! Exports: `kind()` (midi effect), `state_size()`, `process_events(...)`, `init(...)`,
+//! Exports: `kind()` (midi effect), `state_size()`, `process_events(...)`, `release_all(...)`, `init(...)`,
 //! `parameter_changed(...)`, `observe_param_collection_field() -> 11`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
@@ -101,6 +101,14 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
 #[no_mangle]
 pub extern "C" fn terminate(state_ptr: u32) {
     unsafe { abi::with_state::<SpielwerkState>(state_ptr, |state| abi::script_release(state.handle)) }
+}
+
+/// The host disabled or removed this effect: end every note the script started.
+#[no_mangle]
+pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    let state = unsafe { &mut *(state_ptr as *mut SpielwerkState) };
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    abi::script_release_notes(state.handle, out, position) as u32
 }
 
 /// Pull-responder: pull the upstream notes for `[from, to)` ONCE into the stack scratch, then run the user

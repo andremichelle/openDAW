@@ -255,7 +255,7 @@ export namespace DeviceDialog {
             )
             entry.bundle.ifSome(kind => lifecycle.own(TextTooltip.default(bundle, () => bundleOf[kind].text)))
             const element: HTMLElement = (
-                <div className="entry" onclick={() => pick(entry)}>
+                <div className="entry" onclick={() => pick(entry)} ondblclick={() => approve().catch(console.warn)}>
                     {entry.iconUrl.match({
                         none: () => <div className="icon"><Icon symbol={entry.icon}/></div>,
                         some: url => <div className="icon external"><img src={url} alt=""/></div>
@@ -346,6 +346,10 @@ export namespace DeviceDialog {
                 // every step applies its device, a held key would create them faster than they are freed
                 if (!event.repeat) {step(event.code === "ArrowDown" ? 1 : -1)}
             } else if (event.code === "Enter" || event.code === "NumpadEnter") {
+                if (searchText.getValue().trim().length > 0 && visible.length > 0
+                    && !audition.applied.mapOr(entry => visible.some(({key}) => key === entry.key), false)) {
+                    pick(visible[0])
+                }
                 approve().catch(console.warn)
             } else if (event.code === "Space" && !typing) {
                 togglePlayback()

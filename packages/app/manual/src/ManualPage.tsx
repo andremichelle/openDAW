@@ -8,6 +8,7 @@ import {Icon} from "@opendaw/studio-icons"
 import {installScrollbars} from "@opendaw/studio-scrollbars"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {toast} from "./Toast"
+import {SearchField} from "./SearchField"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -90,8 +91,9 @@ const loadMarkdown = (path: string): Promise<string> => {
 
 export const ManualPage: PageFactory<null> = ({lifecycle, path}: PageContext<null>) => (
     <div className={className}>
-        <aside onConnect={host => lifecycle.own(installScrollbars(host))}>
-            <nav>{...addManuals(lifecycle, Manuals)}</nav>
+        <aside>
+            <SearchField lifecycle={lifecycle}/>
+            <nav onConnect={host => lifecycle.own(installScrollbars(host))}>{...addManuals(lifecycle, Manuals)}</nav>
         </aside>
         <div className="manual" onConnect={host => lifecycle.own(installScrollbars(host))}>
             <Await

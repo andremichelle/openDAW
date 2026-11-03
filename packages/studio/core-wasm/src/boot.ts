@@ -37,7 +37,7 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
     new WclapBridges(memory, sampleRate, {
         loadBundle: url => engineToClient.fetchWclapBundle(url),
         sendGui: (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
-        sendState: (uuid, bytes, url, clapId) => engineToClient.wclapState(uuid, bytes, url, clapId),
+        sendState: (uuid, bytes, url, clapId, cause) => engineToClient.wclapState(uuid, bytes, url, clapId, cause),
         sendParams: (uuid, params) => engineToClient.wclapParams(uuid, params),
         sendParam: (uuid, paramId, value, gesture) => engineToClient.wclapParam(uuid, paramId, value, gesture),
         sendHovered: (uuid, paramId) => engineToClient.wclapHovered(uuid, paramId),
@@ -60,6 +60,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     const engine = new WebAssembly.Instance(modules.engineModule,
         {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
     engine.init(sampleRate)
+    wclapBridges.attachEngine(engine)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
         (uuid, message) => engineToClient.deviceMessage(uuid, message), broadcaster)
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)

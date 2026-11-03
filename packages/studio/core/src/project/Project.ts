@@ -19,7 +19,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
+import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate, PrimitiveUpdate} from "@opendaw/lib-box"
 import type {YSync} from "../ysync/YSync"
 import {
     ApparatDeviceBox,
@@ -102,6 +102,11 @@ export type ProjectCreateOptions = {
 
 export type MIDIOutMessage = { readonly deviceId: string, readonly data: Uint8Array }
 
+type LoadedScript = { readonly uuid: UUID.Bytes, code: string }
+
+const ScriptDeviceBoxNames: ReadonlyArray<string> =
+    [ApparatDeviceBox.ClassName, WerkstattDeviceBox.ClassName, SpielwerkDeviceBox.ClassName]
+
 // Main Entry Point for a Project
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
     static new(env: ProjectEnv, options?: ProjectCreateOptions): Project {
@@ -175,9 +180,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly #rootBoxAdapter: RootBoxAdapter
     readonly #timelineBoxAdapter: TimelineBoxAdapter
-    readonly #loadedScriptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+    readonly #loadedScriptCodes = UUID.newSet<LoadedScript>(({uuid}) => uuid)
 
     #terminated: boolean = false
+    #workletStarted: boolean = false
 
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
@@ -275,13 +281,41 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 }
             }
         }))
+        const scriptChange = {pending: false}
+        this.#terminator.own(this.boxGraph.subscribeToAllUpdates({
+            onUpdate: (update) => {
+                if (update instanceof NewUpdate) {
+                    if (ScriptDeviceBoxNames.includes(update.name)) {scriptChange.pending = true}
+                } else if (update instanceof PrimitiveUpdate) {
+                    const box = this.boxGraph.findBox(update.address.uuid).unwrapOrNull()
+                    if ((box instanceof ApparatDeviceBox || box instanceof WerkstattDeviceBox
+                        || box instanceof SpielwerkDeviceBox) && update.address.equals(box.code.address)) {
+                        scriptChange.pending = true
+                    }
+                }
+            }
+        }))
+        this.#terminator.own(this.boxGraph.subscribeTransaction({
+            onBeginTransaction: () => {},
+            onEndTransaction: (rolledBack: boolean) => {
+                if (!scriptChange.pending) {return}
+                scriptChange.pending = false
+                if (!rolledBack && this.#workletStarted) {this.loadScriptDevices()}
+            }
+        }))
     }
 
     loadScriptDevices(): void {
         const audioContext = this.#env.audioWorklets.context
         const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) => {
-            if (this.#loadedScriptUuids.opt(deviceBox.address.uuid).nonEmpty()) {return}
-            this.#loadedScriptUuids.add(deviceBox.address.uuid)
+            const code = deviceBox.code.getValue()
+            const loaded = this.#loadedScriptCodes.opt(deviceBox.address.uuid)
+            if (loaded.nonEmpty() && loaded.unwrap().code === code) {return}
+            if (loaded.nonEmpty()) {
+                loaded.unwrap().code = code
+            } else {
+                this.#loadedScriptCodes.add({uuid: deviceBox.address.uuid, code})
+            }
             ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
                 console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
         }
@@ -298,6 +332,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
+        this.#workletStarted = true
         this.loadScriptDevices()
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
@@ -473,8 +508,12 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     receivedMIDIFromEngine(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
+        this.sendMIDIFromEngine(midiDeviceId, data, performance.now() + relativeTimeInMs)
+    }
+
+    /// timestamp is in performance.now() time, like MIDIOutput.send
+    sendMIDIFromEngine(midiDeviceId: string, data: Uint8Array, timestamp: number): void {
         this.#midiOutNotifier.notify({deviceId: midiDeviceId, data})
-        const timestamp = performance.now() + relativeTimeInMs
         MidiDevices.findOutputDeviceById(midiDeviceId).ifSome(midiOutputDevice => {
             try {
                 midiOutputDevice?.send(data, timestamp)

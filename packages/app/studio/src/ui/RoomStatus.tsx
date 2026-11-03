@@ -9,6 +9,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {TrafficWatch} from "@/ui/TrafficWatch"
+import {asCallPresence, CallPresence} from "@/call/CallTypes"
 
 const className = Html.adoptStyleSheet(css, "room-status")
 
@@ -39,11 +40,14 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const render = () => {
                 const states = awareness.awareness.getStates()
                 const localId = awareness.clientID
-                const users: Array<{ name: string, color: string, self: boolean, recording: boolean }> = []
+                const users: Array<{ name: string, color: string, self: boolean, recording: boolean, call: Nullable<CallPresence> }> = []
                 states.forEach((state, clientId) => {
                     const user: Optional<AwarenessUserState> = state.user
                     if (isDefined(user)) {
-                        users.push({name: user.name, color: user.color, self: clientId === localId, recording: user.recording === true})
+                        users.push({
+                            name: user.name, color: user.color, self: clientId === localId,
+                            recording: user.recording === true, call: asCallPresence(state.call)
+                        })
                     }
                 })
                 users.sort((first, second) => first.self === second.self ? 0 : first.self ? -1 : 1)
@@ -57,6 +61,19 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                                 : <span className="dot" style={{backgroundColor: user.color}}/>}
                         </span>
                         <span>{user.name}</span>
+                        {isDefined(user.call) && (
+                            <span className={user.call.mic ? "call" : "call muted"}>
+                                <Icon symbol={user.call.mic ? IconSymbol.CallMic : IconSymbol.CallMicOff}/>
+                            </span>
+                        )}
+                        {isDefined(user.call) && user.call.camera && (
+                            <span className="call"><Icon symbol={IconSymbol.CallCamera}/></span>
+                        )}
+                        {isDefined(user.call) && user.call.hand && (
+                            <span className="call hand" style={{animationDelay: `-${Math.round(performance.now() % 2000)}ms`}}>
+                                <Icon symbol={IconSymbol.CallHand}/>
+                            </span>
+                        )}
                     </div>
                 )), trafficWatch)
             }

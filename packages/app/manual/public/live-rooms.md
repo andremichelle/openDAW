@@ -39,6 +39,27 @@ While in a room, a chat tab appears on the right edge of the screen. Click it to
 - Messages are synchronized through the room, so late joiners can see the conversation history from the current session.
 - Like the room itself, the chat history is transient and disappears when the room closes.
 
+## Audio and Video Call
+
+The chat overlay starts with a call area. Anyone in the room can start a call with **Join** (microphone only) or **Join with Video**. A green dot on the chat tab shows that a call is running. A call allows up to 6 people. Audio and video go directly between the participants and never through the server.
+
+- **Microphone, camera and screen.** Mute, turn the camera on or off, or present a screen or browser tab. Presenting a tab can include its audio.
+- **Hold to talk.** While muted, hold the microphone button to talk.
+- **Raise hand.** Raise a hand to ask for the floor.
+- **Tiles.** Each participant gets a tile that lights up while they speak. Hover a tile to change that person's volume for you, pin it or show it fullscreen. Double click pins a tile. A presented screen is pinned automatically.
+- **Widen.** The arrow button in the call header makes the panel wider for bigger video.
+- **Closed panel.** While you are in a call and the chat is closed, a small dock above the chat tab keeps the mute and leave buttons and shows who is speaking.
+
+The settings button in the call header offers:
+
+- **Microphone, Camera and Speaker** to pick the devices for the call.
+- **Direct Audio** sends your microphone in stereo at a high bitrate without echo cancellation, noise suppression or automatic gain. Use it for instruments and listening sessions, with headphones.
+- **Lower Call Volume During Playback** turns the call down while the project plays.
+- **Silence Call While Recording** mutes incoming call audio during a recording so it does not bleed into your take.
+- **Mirror My Camera** flips your own preview.
+
+Shortcuts: ⌥⇧M (Alt+Shift+M) mutes or unmutes, ⌥⇧V (Alt+Shift+V) turns the camera on or off, ⌥⇧H (Alt+Shift+H) raises or lowers your hand. The call audio plays outside the project and is never part of a recording or an export.
+
 ## User Presence
 
 A status bar shows all connected users with their name and color dot. Your pointer movement is tracked to indicate which panel you are currently working in, so other users can see where your focus is.

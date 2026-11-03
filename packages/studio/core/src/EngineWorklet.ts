@@ -42,6 +42,7 @@ import {
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
@@ -216,6 +217,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     wclapRetry(url: string): void {dispatcher.dispatchAndForget(this.wclapRetry, url)}
                     scriptMessage(uuid: UUID.Bytes, message: unknown): void {dispatcher.dispatchAndForget(this.scriptMessage, uuid, message)}
+                    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                        dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                    }
                     querySignalGraph(): Promise<SignalGraph> {return dispatcher.dispatchAndReturn(this.querySignalGraph)}
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
@@ -225,10 +229,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
 
         const {port, sab} =
             this.#terminator.own(MIDIReceiver.create(
-                () => (context instanceof AudioContext ? context.outputLatency * 1000 : 20)
-                    + this.#compensationLatency.getValue() * 1000,
-                (deviceId, data, relativeTimeInMs) =>
-                    this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+                MIDIReceiver.outputClock(context, () => this.#compensationLatency.getValue() * 1000),
+                (deviceId, data, timestamp) => this.#project.sendMIDIFromEngine(deviceId, data, timestamp)))
         this.#commands.setupMIDI(port, sab)
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
@@ -274,8 +276,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
                 wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
-                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void =>
-                    WclapStates.storeFrom(project, uuid, bytes, url, clapId),
+                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void =>
+                    WclapStates.storeFrom(project, uuid, bytes, url, clapId, cause),
                 wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
                     WclapParameters.reconcile(project, uuid, params),
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
@@ -362,6 +364,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     wclapRetry(url: string): void {this.#commands.wclapRetry(url)}
     scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#commands.scriptMessage(uuid, message)}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#commands.overrideDeviceField(uuid, key, value)
+    }
     querySignalGraph(): Promise<SignalGraph> {return this.#commands.querySignalGraph()}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {

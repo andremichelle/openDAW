@@ -381,6 +381,8 @@ impl Engine {
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let (mut observe_subs, pointer_field_subs) = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
+        self.field_overrides.insert(device_uuid,
+            (reg.field_changed_index, state_ptr, field_paths.iter().map(|obs| obs.path.clone()).collect()));
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
         observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
@@ -398,8 +400,9 @@ impl Engine {
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
         let mut sample_hub_sub = None;
+        let mut sample_subs = Vec::new();
         if reg.sample_collection_field != 0 {
-            observe_subs.extend(self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field));
+            sample_subs = self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field);
             let hub_invalidate = invalidate.clone();
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
@@ -411,7 +414,7 @@ impl Engine {
             None
         };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, records, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -726,8 +729,14 @@ impl Engine {
     /// JS-side instance).
     pub(crate) fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
         for params in device_params {
+            if self.field_overrides.get(&params.device_uuid).is_some_and(|(_, state_ptr, _)| *state_ptr == params.state_ptr) {
+                self.field_overrides.remove(&params.device_uuid);
+            }
             call_device_terminate(params.reg.terminate_index, params.state_ptr);
             for sub in params.field_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for sub in params.sample_subs {
                 self.graph.unsubscribe(sub);
             }
             for sub in params.observe_subs {
@@ -912,6 +921,14 @@ impl Engine {
             field_subs.append(&mut script_subs);
             collections.append(&mut script_collections);
             armed |= script_armed;
+        }
+        // The sample slots too: a slot added to the hub (a WebCLAP plugin's, which has no script recompile to rebuild
+        // the device) is delivered now, the others again (a device takes the same handle twice without harm)
+        if params.reg.sample_collection_field != 0 {
+            for sub in core::mem::take(&mut params.sample_subs) {
+                self.graph.unsubscribe(sub);
+            }
+            params.sample_subs = self.observe_script_samples(params.device_uuid, params.reg, params.state_ptr, params.reg.sample_collection_field);
         }
         // carried over only for an unchanged id: a re-numbered script param must be pushed again under its new id
         for (handle, (id, last, last_modulation)) in handles.iter().zip(previous_last) {

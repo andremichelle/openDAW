@@ -21,7 +21,7 @@ component
     grid-template-rows: auto 18px 18px
     column-gap: 0.125em
     row-gap: 0.25em
-    align-items: baseline
+    align-items: center
     align-content: start
     padding: 0 0 2px 0
     background-color: color-mix(in srgb, var(--color) 3%, transparent)
@@ -45,8 +45,11 @@ component
         margin-right: -1px
         border-radius: 0 3px 0 0
 
-    &.main
+    &.play
       --color: var(--color-orange)
+
+    &.mix
+      --color: var(--color-cream)
 
     &.pitch
       --color: var(--color-yellow)
@@ -78,7 +81,23 @@ component
       margin-right: 0.375em
 
     &.wide
-      grid-template-columns: 2.625em 40px 0.25em 2.625em 40px
+      grid-template-columns: 1.625em 40px 0 1.625em 40px
+
+      .mode
+        grid-column: 4 / -1
+        justify-self: center
+        margin-right: 4px
+        column-gap: 2px
+
+        > label
+          height: 16px
+          min-width: 0
+          margin: 0
+          padding: 0 0.375em
+          font-size: 0.5625em
+
+        > input:not(:checked) + label
+          border: 0.5px solid transparent
 
       > div.name.second
         grid-column: 4
@@ -91,7 +110,7 @@ component
           width: 18px
           height: 18px
           min-width: 0
-          font-size: 10px
+          font-size: 13px
           border-radius: 0.25em
           display: flex
           align-items: center

@@ -15,7 +15,7 @@ import {clamp, isDefined, Nullable, Provider, Terminable, tryCatch, UUID, ValueM
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
-import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
+import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -211,6 +211,7 @@ export class ScriptBridges {
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
                 this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
+            host_script_release_notes: (handle, outPtr, outMax, position) => this.#releaseNotes(handle, outPtr, outMax, position),
             host_script_release: (handle) => this.#release(handle),
             host_script_latency: (handle) => this.#latency(handle),
             host_script_data: (handle, collection, ptr, records, fields) => this.#data(handle, collection, ptr, records, fields)
@@ -416,6 +417,15 @@ export class ScriptBridges {
             this.#silence(bridge, `Runtime error: ${error}`)
             return forward()
         }
+    }
+
+    #releaseNotes(handle: number, outPtr: number, outMax: number, position: number): number {
+        const bridge = this.#bridges.get(handle)
+        if (bridge === undefined || bridge.spielwerk === null) {return 0}
+        const count = releaseSpielwerk(bridge.spielwerk, this.#memory.buffer, outPtr, outMax, position)
+        const reset = tryCatch(() => bridge.proc?.reset?.())
+        if (reset.status === "failure") {this.#silence(bridge, `Runtime error: ${reset.error}`)}
+        return count
     }
 
     #data(handle: number, signedCollection: number, ptr: number, records: number, fields: number): void {

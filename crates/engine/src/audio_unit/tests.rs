@@ -157,7 +157,7 @@ fn stub_device(kind: u32) -> DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
         midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0,
-        sidechain_collection_field: 0
+        sidechain_collection_field: 0, release_all_index: 0
     }
 }
 
@@ -422,12 +422,12 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     let mut unit = engine.build_unit(UNIT);
     engine.reconcile_one(&mut unit);
     assert!(matches!(unit.wired, Some(Wired::MidiOut(_))), "an unregistered box type no longer tears the unit down");
-    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at 0 ms.
+    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at the delay of 10 ms.
     {
         let midi = engine.midi_out.borrow();
         assert_eq!(midi.queued().len(), 1);
         let cc = &midi.queued()[0];
-        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 0.0));
+        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 10.0));
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // A live note-on becomes a timed note-on record AND sets the unit's note-indicator bit.
@@ -484,7 +484,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
         assert_eq!((flushed.status, flushed.data1, flushed.time_ms), (0x82, 64, 10.0), "note-off on the OLD channel at the delay");
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
-    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at 0 ms (TS default time).
+    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at the block start plus the delay.
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(MIDI_PARAM, vec![super::MIDI_OUT_PARAM_VALUE_KEY]),
         old: FieldValue::Float32(0.5), new: FieldValue::Float32(1.0)
@@ -493,7 +493,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     let midi = engine.midi_out.borrow();
     assert_eq!(midi.queued().len(), 1);
     let cc = &midi.queued()[0];
-    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 0.0));
+    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 10.0));
 }
 
 #[test]
@@ -663,7 +663,7 @@ fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_de
         Wired::Leaf(chain) => chain.instrument.params = Some(DeviceParams {
             device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
             paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
-            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
+            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(), sample_subs: Vec::new(),
             param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
         }),
         _ => panic!("expected a leaf chain")
@@ -2539,7 +2539,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");

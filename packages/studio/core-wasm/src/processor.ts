@@ -33,6 +33,7 @@ import {
     WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
@@ -40,7 +41,7 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-exports"
+import {EngineExports, FieldKind, readSignalGraph, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
@@ -123,8 +124,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                 wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
-                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void {
-                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId)
+                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void {
+                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId, cause)
                 }
                 wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
                     dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
@@ -277,6 +278,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 wclapRetry: (url: string): void => this.#wclap.retry(url),
                 scriptMessage: (uuid: UUID.Bytes, message: unknown): void => this.#scriptBridges.message(UUID.toString(uuid), message),
+                overrideDeviceField: (uuid: UUID.Bytes, key: int, value: boolean | number): void => this.#guarded(() => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    const [kind, bits] = typeof value === "boolean"
+                        ? [FieldKind.Bool, value ? 1 : 0]
+                        : [FieldKind.Float, new Uint32Array(Float32Array.of(value).buffer)[0]]
+                    engine.override_device_field(pointer, key, kind, bits)
+                }),
                 querySignalGraph: (): Promise<SignalGraph> => Promise.resolve(readSignalGraph(engine, this.#memory)),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
@@ -469,7 +478,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#stateSender.tryWrite()
         this.#drainClipChanges()
         this.#drainMarkerChanges()
-        this.#midi.drain(engine, this.#memory)
+        this.#midi.drain(engine, this.#memory, this.#quantumFrame / sampleRate * 1000)
     }
 
     // the quantum frame is the quantum start, the state position is post-render: report the quantum end
@@ -594,7 +603,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)
         }
         if (reset || !wasTransporting) {
-            this.#engine.stop() // rewinds to 0 + resets every plugin (voices, tails, detectors)
+            this.#engine.stop_faded() // rewinds to 0, resets every plugin (voices, tails, detectors) after a faded quantum
             this.#playbackTimestamp = 0.0
             this.#peaks.clear()
         }

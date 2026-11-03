@@ -1,0 +1,28 @@
+@use "tokens" as *
+
+// a bubble above the WebCLAP tab, its tail pointing down at it
+component
+  position: absolute
+  left: 50%
+  bottom: calc(100% + 8px)
+  transform: translateX(-50%)
+  padding: 0.25em 0.625em
+  border-radius: 0.75em
+  font-size: $fs-s
+  font-weight: normal
+  white-space: nowrap
+  color: #141414
+  background: var(--color-orange)
+  cursor: pointer
+
+  &::after
+    content: ""
+    position: absolute
+    left: 50%
+    top: 100%
+    transform: translateX(-50%)
+    border: 4px solid transparent
+    border-top-color: var(--color-orange)
+
+  &.hidden
+    display: none
