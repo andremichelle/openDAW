@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-matchering",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "GPL-3.0-or-later",
   "private": true,
   "exports": {
@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-adapters": "^0.3.12",
-    "@opendaw/studio-boxes": "^0.0.118",
+    "@opendaw/studio-adapters": "^0.3.13",
+    "@opendaw/studio-boxes": "^0.0.119",
     "@opendaw/typescript-config": "^0.0.32",
     "vitest": "^3.1.3"
   }
