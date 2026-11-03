@@ -8,8 +8,7 @@ export namespace RecordTrack {
     export const findOrCreate = (editing: Editing,
                                  audioUnitBox: AudioUnitBox,
                                  type: TrackType,
-                                 excludeTrack: Nullable<TrackBox> = null,
-                                 alwaysNew: boolean = false): TrackBox => {
+                                 excludeTrack: Nullable<TrackBox> = null): TrackBox => {
         let index: int = 0 | 0
         const trackBoxes = audioUnitBox.tracks.pointerHub.incoming()
             .map(({box}) => asInstanceOf(box, TrackBox))
@@ -18,7 +17,7 @@ export namespace RecordTrack {
             if (trackBox !== excludeTrack) {
                 const hasNoRegions = trackBox.regions.pointerHub.isEmpty()
                 const matchesType = trackBox.type.getValue() === type
-                if (hasNoRegions && matchesType && !alwaysNew) {return trackBox}
+                if (hasNoRegions && matchesType) {return trackBox}
             }
             index = Math.max(index, trackBox.index.getValue())
         }
@@ -27,6 +26,10 @@ export namespace RecordTrack {
 
     export const nextIndex = (audioUnitBox: AudioUnitBox): int => audioUnitBox.tracks.pointerHub.incoming()
         .reduce((index, {box}) => Math.max(index, asInstanceOf(box, TrackBox).index.getValue() + 1), 0)
+
+    // a new track below every other track of the unit
+    export const createBelow = (audioUnitBox: AudioUnitBox, type: TrackType): TrackBox =>
+        createAt(audioUnitBox, type, nextIndex(audioUnitBox))
 
     const createAt = (audioUnitBox: AudioUnitBox, type: TrackType, index: int): TrackBox =>
         TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {

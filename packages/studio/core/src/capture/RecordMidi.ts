@@ -101,7 +101,7 @@ export namespace RecordMidi {
 
         const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeCount++
-            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack, project.liveSync.nonEmpty())
+            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const duration = takeDuration(position, writePosition)
             const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {

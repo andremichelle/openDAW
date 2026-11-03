@@ -275,6 +275,22 @@ describe("LiveRoom", () => {
             room.flush()
         })
 
+        // found in Chrome: the first take left the unit's empty track behind and opened a new one
+        it("a take uses the unit's empty track like outside a room", async () => {
+            const empty = tracksOf(unit)
+            expect(empty.map(track => track.regions.pointerHub.isEmpty())).toEqual([true])
+            const take = await armMidi(A, unit, clock)
+            await take.start()
+            take.advance(0.1)
+            take.note(60)
+            take.advance(1.0)
+            take.stop()
+            await healthy()
+            const remote = unitAt(B, unit.address.uuid)
+            expect(tracksOf(remote).length).toBe(1)
+            expect(regionsOf(remote).length).toBe(1)
+        })
+
         it("sends nothing until the take stops", async () => {
             const take = await armMidi(A, unit, clock)
             const before = A.sent
@@ -346,9 +362,8 @@ describe("LiveRoom", () => {
             expect(tracks.filter(track => track.regions.pointerHub.nonEmpty()).length).toBe(2)
         })
 
-        it("a take lands on its own track, a peer's region on the empty one cannot overlap it", async () => {
-            const track = A.project.editing.modify(() => A.project.api.createNoteTrack(unit)).unwrap()
-            room.flush()
+        it("a take moves out of the way of a region a peer placed on its track meanwhile", async () => {
+            const [track] = tracksOf(unit)
             const tracks = tracksOf(unit).length
             const take = await armMidi(A, unit, clock)
             await take.start()

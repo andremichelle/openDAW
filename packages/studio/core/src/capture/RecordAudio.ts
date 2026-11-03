@@ -73,7 +73,7 @@ export namespace RecordAudio {
         const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeNumber++
             console.debug("[RecordAudio] createTakeRegion", {takeNumber, position, waveformOffset})
-            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack, project.liveSync.nonEmpty())
+            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
                 box.file.refer(fileBox.unwrap("fileBox"))

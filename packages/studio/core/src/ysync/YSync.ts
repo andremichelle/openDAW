@@ -155,6 +155,9 @@ export class YSync<T> implements Terminable {
 
     isLocal(uuid: UUID.Bytes): boolean {return this.#layers.some(layer => layer.boxes.hasKey(uuid))}
 
+    // the kind of local layer the current edit runs in
+    get activeLayerKind(): Option<LocalLayerKind> {return this.#activeLayer.map(({kind}) => kind)}
+
     get clientID(): int {return this.#getDoc().clientID}
     // true while a peer's batch is written into the graph, the edits seen then are not this client's
     get applyingRemote(): boolean {return this.#applyingRemote}

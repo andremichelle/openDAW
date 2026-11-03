@@ -1,4 +1,4 @@
-import {asDefined, isInstanceOf, Option, RuntimeNotifier, SortedSet, Terminable, tryCatch, UUID} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, isInstanceOf, Option, RuntimeNotifier, SortedSet, Terminable, tryCatch, UUID} from "@opendaw/lib-std"
 import {Address, Box, BoxGraph, Update} from "@opendaw/lib-box"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {AnyRegionBox, RegionOverlap, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -13,6 +13,7 @@ export namespace RoomOverlaps {
         readonly updates: ReadonlyArray<Update>
         readonly regions: ReadonlyArray<UUID.Bytes>
         readonly known: Map<number, number>
+        readonly take: boolean
     }
 
     const RegionNames: ReadonlySet<string> = new Set(["NoteRegionBox", "AudioRegionBox", "ValueRegionBox"])
@@ -36,12 +37,14 @@ export namespace RoomOverlaps {
         const pending: Array<Update> = []
         const touchedRegions: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
         let known: Option<Map<number, number>> = Option.None
+        let take = false
         let recording = false
         let reverting = false
         const writers = (region: AnyRegionBox) => [region.address, region.position.address, region.duration.address, region.regions.address]
             .flatMap(address => sync.writerOf(address).mapOr(id => [id], []))
         const begin = (): void => {
             recording = !sync.applyingRemote && !reverting
+            take = sync.activeLayerKind.mapOr(kind => kind === "take", false)
             pending.length = 0
             touchedRegions.clear()
             known = Option.None
@@ -56,7 +59,7 @@ export namespace RoomOverlaps {
         }
         const end = (rolledBack: boolean): void => {
             if (recording && !rolledBack && touchedRegions.size() > 0) {
-                const change: Change = {updates: pending.slice(), regions: touchedRegions.values(), known: known.unwrap()}
+                const change: Change = {updates: pending.slice(), regions: touchedRegions.values(), known: known.unwrap(), take}
                 change.regions.forEach(uuid => {
                     latest.removeByKeyIfExist(uuid)
                     latest.add({uuid, change})
@@ -90,8 +93,14 @@ export namespace RoomOverlaps {
                 }))
             })
             if (losers.size === 0) {return}
+            // a recording is never taken back, it moves to a track of its own
+            const takes = Array.from(losers.values()).filter(region => latest.get(region.address.uuid).change.take)
             const changes = new Set<Change>()
-            losers.forEach(region => changes.add(latest.get(region.address.uuid).change))
+            losers.forEach(region => {
+                const {change} = latest.get(region.address.uuid)
+                if (!change.take) {changes.add(change)}
+            })
+            takes.forEach(region => latest.removeByKey(region.address.uuid))
             changes.forEach(change => change.regions.forEach(uuid => {
                 if (latest.opt(uuid).mapOr(entry => entry.change === change, false)) {latest.removeByKey(uuid)}
             }))
@@ -99,6 +108,7 @@ export namespace RoomOverlaps {
             graph.beginTransaction()
             const result = tryCatch(() => {
                 changes.forEach(change => takeBack(change))
+                losers.forEach(region => {if (takes.includes(region) || stillOverlaps(region)) {moveBelow(region)}})
                 graph.endTransaction()
             })
             if (result.status === "failure") {
@@ -110,10 +120,29 @@ export namespace RoomOverlaps {
             }
             reverting = false
             RuntimeNotifier.notify({
-                message: "Another participant used the same spot at the same time. Your change was taken back.",
+                message: changes.size === 0
+                    ? "Another participant used the same spot at the same time. Your recording moved to a track of its own."
+                    : "Another participant used the same spot at the same time. Your change was taken back.",
                 icon: "Info"
             })
         }
+        const stillOverlaps = (region: AnyRegionBox): boolean => region.isAttached() && region.regions.targetVertex
+            .mapOr(({box}) => isInstanceOf(box, TrackBox) && RegionOverlap.sortedRegions(box)
+                .some(other => other !== region && (other.position.getValue() <= region.position.getValue()
+                    ? overlaps(other, region) : overlaps(region, other))), false)
+        // a new track of the same kind right below every track of the owner
+        const moveBelow = (region: AnyRegionBox): void => region.regions.targetVertex.ifSome(({box}) => {
+            const track = asInstanceOf(box, TrackBox)
+            const owner = track.tracks.targetVertex.unwrap("track without owner")
+            const index = owner.pointerHub.incoming().reduce((max, {box}) => Math.max(max, asInstanceOf(box, TrackBox).index.getValue() + 1), 0)
+            const below = TrackBox.create(graph, UUID.generate(), created => {
+                created.type.setValue(track.type.getValue())
+                created.index.setValue(index)
+                created.tracks.refer(owner)
+                track.target.targetVertex.ifSome(target => created.target.refer(target))
+            })
+            region.regions.refer(below.regions)
+        })
         const mine = (address: Address): boolean => sync.writerOf(address).mapOr(({client}) => client === sync.clientID, false)
         // like an undo, but what a peer wrote since stays, and so does a new box a peer already points at
         const takeBack = (change: Change): void => {

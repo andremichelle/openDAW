@@ -1,6 +1,6 @@
 import {asInstanceOf, isInstanceOf} from "@opendaw/lib-std"
 import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
-import {AnyRegionBox, RegionOverlap, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AnyRegionBox, RegionOverlap, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import type {LocalLayer} from "../ysync"
 import type {Project} from "../project"
 import {RecordTrack} from "./RecordTrack"
@@ -34,7 +34,21 @@ export namespace RoomTake {
         if (RegionOverlap.find(RegionOverlap.sortedRegions(track)).isEmpty()) {return}
         const regions = RegionOverlap.sortedRegions(track)
         const others = regions.filter(region => !layer.owns(region.address.uuid))
-        regions.filter(region => layer.owns(region.address.uuid)).forEach(take => others.forEach(other => clip(other, take)))
+        const takes = regions.filter(region => layer.owns(region.address.uuid))
+        if (track.type.getValue() === TrackType.Value) {
+            takes.forEach(take => others.forEach(other => clip(other, take)))
+            return
+        }
+        // a peer placed a region on the track the take was recorded on, the take moves out of its way
+        const covering = takes.filter(take => others.some(other => covers(other, take) || covers(take, other)))
+        if (covering.length === 0) {return}
+        const below = RecordTrack.createBelow(unitOf(track), track.type.getValue())
+        covering.forEach(take => take.regions.refer(below.regions))
+    }
+
+    const covers = (before: AnyRegionBox, after: AnyRegionBox): boolean => {
+        if (before.position.getValue() > after.position.getValue()) {return false}
+        return before.position.getValue() + before.duration.getValue() > after.position.getValue()
     }
 
     // automation overwrites what it was recorded over, like it does on one client
