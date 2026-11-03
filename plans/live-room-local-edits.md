@@ -13,10 +13,10 @@ In a live room, the device dialog preview and a recording stay on the own client
 5. `unstageBox` checks pointers before it removes a box, so a failed delete or undo leaves the graph and the engine in step.
 6. Recording is local until the take ends. The recording user's name turns red with a record icon.
 7. Staging a uuid that is already staged no longer cuts the edges of the staged box (undo of a delete after a peer brought the box back).
-8. Two regions on one spot: the participant whose concurrent change has the higher client id takes it back, a new region leaves, a moved one returns, with a toast. Only the tracks a received batch touched are checked. The room no longer runs `project.invalid()` on every batch.
+8. Two regions on one spot: the participant whose concurrent change has the higher client id takes that whole change back like an undo (what a peer wrote since and new boxes a peer already uses stay), with a toast. Only the tracks a received batch touched are checked. The room no longer runs `project.invalid()` on every batch.
 9. A batch that deletes an instrument's capture but not the instrument goes through reconcile, which removes the instrument.
+10. A closed project is freed right away: the mixer is shut down with it and a terminated `DeferExec` leaves no callback waiting for a frame.
 
 ## Later
 
 1. `deterministicReconcile` still scans every box when a batch fails validation. It should look only at the boxes the batch touched and what points at them.
-2. Taking back a region only reverts that region. A change that touched several regions (a move that clipped a neighbour, an undo that restored one) should be taken back as a whole, otherwise the rest of it stays, and after an undo it can overlap again with nobody resolving it.

@@ -82,6 +82,20 @@ const run = async (seed: number, peerCount: number): Promise<void> => {
             if (others.some(other => other.position.getValue() < end && other.position.getValue() + other.duration.getValue() > position)) {return}
             peer.project.editing.modify(() => region.position.setValue(position))
         }],
+        ["move over", peer => {
+            const regions = units(peer).flatMap(tracks).flatMap(track => RegionOverlap.sortedRegions(track))
+            if (regions.length === 0) {return}
+            const region = pick(regions)
+            const position = Math.floor(random() * 4) * 960
+            const track = asInstanceOf(region.regions.targetVertex.unwrap().box, TrackBox)
+            const end = position + region.duration.getValue()
+            const covered = RegionOverlap.sortedRegions(track).filter(other => other !== region
+                && other.position.getValue() < end && other.position.getValue() + other.duration.getValue() > position)
+            peer.project.editing.modify(() => {
+                covered.forEach(other => other.delete())
+                region.position.setValue(position)
+            })
+        }],
         ["volume", peer => {
             const candidates = units(peer)
             if (candidates.length > 0) {peer.project.editing.modify(() => pick(candidates).volume.setValue(random() * -24))}
@@ -184,7 +198,11 @@ const run = async (seed: number, peerCount: number): Promise<void> => {
 describe("LiveRoom fuzz", () => {
     beforeEach(() => {
         console.debug = () => {}
-        console.warn = (...args: Array<unknown>) => {if (process.env.FUZZ_VERBOSE === "1" && String(args[0]).includes("rejected")) {console.log("REJECT", String(args[1]).slice(0, 130), "| after reconcile:", String(args[2]).slice(0, 300))}}
+        console.warn = (...args: Array<unknown>) => {
+            if (process.env.FUZZ_VERBOSE !== "1") {return}
+            if (String(args[0]).includes("rejected")) {console.log("REJECT", String(args[1]).slice(0, 130), "| after reconcile:", String(args[2]).slice(0, 300))}
+            if (String(args[0]).includes("[RoomOverlaps]")) {console.log("TAKEBACK", String(args[1]).slice(0, 200))}
+        }
     })
     it.each([2, 3, 4])(`%i peers stay healthy over ${Seeds} seeds`, async peerCount => {
         const failures: Array<string> = []

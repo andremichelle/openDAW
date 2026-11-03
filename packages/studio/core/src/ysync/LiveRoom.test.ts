@@ -594,6 +594,42 @@ describe("LiveRoom repairs", () => {
             expect(regionsOn(A).length).toBe(1)
             expect(toasts().length).toBe(1)
         })
+
+        // a move clips its neighbour in the same change, giving way must restore the neighbour as well
+        it("a change that also shortened a neighbour is taken back whole", () => {
+            const moved = place(B, 3840)
+            const neighbour = place(B, 480)
+            room.flush()
+            B.project.editing.modify(() => {
+                moved.position.setValue(0)
+                neighbour.position.setValue(960)
+                neighbour.duration.setValue(480)
+            })
+            A.project.editing.modify(() => A.project.api.createTrackRegion(
+                A.graph.findBox<TrackBox>(track.address.uuid).unwrap(), 0, 480))
+            expect(room.violations()).toEqual([])
+            expect(moved.position.getValue()).toBe(3840)
+            expect([neighbour.position.getValue(), neighbour.duration.getValue()]).toEqual([480, 960])
+            expect(toasts().length).toBe(1)
+        })
+
+        it("an undo that restored a neighbour is taken back whole", () => {
+            const moved = place(B, 0)
+            const covered = place(B, 1920)
+            room.flush()
+            B.project.editing.modify(() => {
+                moved.position.setValue(1920)
+                covered.delete()
+            })
+            room.flush()
+            B.project.editing.undo()
+            A.project.editing.modify(() => A.project.api.createTrackRegion(
+                A.graph.findBox<TrackBox>(track.address.uuid).unwrap(), 0, 480))
+            expect(room.violations()).toEqual([])
+            expect(moved.position.getValue()).toBe(1920)
+            expect(B.graph.findBox(covered.address.uuid).isEmpty()).toBe(true)
+            expect(toasts().length).toBe(1)
+        })
     })
 
     it("concurrent writes to one field converge on one winner", () => {
