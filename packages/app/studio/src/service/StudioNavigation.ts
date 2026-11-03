@@ -1,5 +1,6 @@
 import {DefaultObservableValue, EmptyExec, isDefined, Nullable, Option} from "@opendaw/lib-std"
 import {RouteLocation} from "@opendaw/lib-jsx"
+import {Promises} from "@opendaw/lib-runtime"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {ProjectProfileService} from "@/service/ProjectProfileService"
 
@@ -49,9 +50,10 @@ export class StudioNavigation {
         }
         if (this.#confirming) {return}
         this.#confirming = true
-        const approved = await this.#profiles.approveLosingChanges()
+        const result = await Promises.tryCatch(this.#profiles.approveLosingChanges())
         this.#confirming = false
-        if (approved) {
+        if (result.status === "rejected") {throw result.error}
+        if (result.value) {
             this.#profiles.setValue(Option.None)
         } else {
             RouteLocation.get().navigateTo("/create")
