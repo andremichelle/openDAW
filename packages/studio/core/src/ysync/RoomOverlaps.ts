@@ -92,8 +92,6 @@ export namespace RoomOverlaps {
             if (losers.size === 0) {return}
             const changes = new Set<Change>()
             losers.forEach(region => changes.add(latest.get(region.address.uuid).change))
-            const removed = Array.from(losers.values()).some(region => latest.get(region.address.uuid).change.updates
-                .some(update => update.type === "new" && UUID.equals(update.uuid, region.address.uuid)))
             changes.forEach(change => change.regions.forEach(uuid => {
                 if (latest.opt(uuid).mapOr(entry => entry.change === change, false)) {latest.removeByKey(uuid)}
             }))
@@ -112,9 +110,7 @@ export namespace RoomOverlaps {
             }
             reverting = false
             RuntimeNotifier.notify({
-                message: removed
-                    ? "Another participant placed a region on the same spot at the same time. Yours was removed."
-                    : "Another participant used the same spot at the same time. Your change was taken back.",
+                message: "Another participant used the same spot at the same time. Your change was taken back.",
                 icon: "Info"
             })
         }

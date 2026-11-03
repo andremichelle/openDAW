@@ -648,7 +648,7 @@ describe("LiveRoom repairs", () => {
                 A.graph.findBox<TrackBox>(track.address.uuid).unwrap(), 0, 480))
             expect(room.violations()).toEqual([])
             expect(regionsOn(A).length).toBe(1)
-            expect(toasts().length).toBe(1)
+            expect(toasts()).toEqual(["Another participant used the same spot at the same time. Your change was taken back."])
         })
     })
 
