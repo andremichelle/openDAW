@@ -24,7 +24,7 @@ import {
     TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
 import {Pointers} from "@opendaw/studio-enums"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {Project, StudioPreferences} from "@opendaw/studio-core"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
@@ -36,6 +36,7 @@ import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx"
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
+import {UnitOrder} from "@/ui/timeline/tracks/audio-unit/UnitOrder"
 
 export interface TrackFactory {
     create(manager: TracksManager,
@@ -51,6 +52,7 @@ export interface TrackFactory {
 
 export class TracksManager implements Terminable {
     readonly #service: StudioService
+    readonly #project: Project
     readonly #scrollContainer: Element
     readonly #scrollModel: ScrollModel
     readonly #factory: TrackFactory
@@ -71,6 +73,7 @@ export class TracksManager implements Terminable {
 
     constructor(service: StudioService, scrollContainer: Element, scrollModel: ScrollModel, factory: TrackFactory) {
         this.#service = service
+        this.#project = service.project
         this.#scrollContainer = scrollContainer
         this.#scrollModel = scrollModel
         this.#factory = factory
@@ -190,7 +193,7 @@ export class TracksManager implements Terminable {
     }
 
     #subscribe(): Terminable {
-        const {project} = this.#service
+        const project = this.#project
         const {rootBoxAdapter} = project
         return Terminable.many(
             rootBoxAdapter.audioUnits.catchupAndSubscribe({
@@ -424,7 +427,18 @@ export class TracksManager implements Terminable {
         }))
     }
 
+    #placeUnits(): void {
+        const moved = UnitOrder.rows(this.#project.rootBoxAdapter.audioUnits.adapters())
+            .reduce((changed, {uuid}, row) => this.#audioUnits.opt(uuid).mapOr(({unitTracks}) => {
+                if (unitTracks.style.gridRow === `${row + 1}`) {return changed}
+                unitTracks.style.gridRow = `${row + 1}`
+                return true
+            }, changed), false)
+        if (moved) {this.#restackModulatorLanes()}
+    }
+
     #invalidateOrder(): void {
+        this.#placeUnits()
         this.#orderedByIndex = Option.None
         // The sorted order drives the hit-test index and the DOM order (grid auto-placement), so display,
         // DOM and interaction always agree. The DOM is only touched when a container's order actually
@@ -528,15 +542,13 @@ export class TracksManager implements Terminable {
             .toSorted((a: TrackContext, b: TrackContext) => {
                 // Modulator lanes sit after every audio unit, so the two collections never interleave.
                 if (a.owner.type !== b.owner.type) {return a.owner.type === "modulator" ? 1 : -1}
-                const unitDiff = IndexComparator(
-                    a.owner.adapter.indexField.getValue(),
-                    b.owner.adapter.indexField.getValue())
+                const unitDiff = UnitOrder.compare(a.owner.adapter, b.owner.adapter)
                 if (unitDiff !== 0) {return unitDiff}
                 if (a.owner.type === "modulator") {
                     return IndexComparator(a.trackBoxAdapter.indexField.getValue(),
                         b.trackBoxAdapter.indexField.getValue())
                 }
-                const boxAdapters = this.#service.project.boxAdapters
+                const boxAdapters = this.#project.boxAdapters
                 const orderDiff = TrackOrder.compare(
                     TrackOrder.keyOf(boxAdapters, a.trackBoxAdapter), TrackOrder.keyOf(boxAdapters, b.trackBoxAdapter))
                 if (orderDiff !== 0) {return orderDiff}

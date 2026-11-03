@@ -7,6 +7,7 @@ import {
     MutableObservableOption,
     Nullable,
     Option,
+    RuntimeNotifier,
     Terminable,
     Terminator
 } from "@opendaw/lib-std"
@@ -409,7 +410,11 @@ export namespace DeviceDialog {
             }),
             audition.applied.subscribe(() => {if (isDefined(piano)) {armEditing()}}),
             audition.loading.subscribe(renderCard),
-            service.projectProfileService.subscribe(() => dialog.close())
+            service.projectProfileService.subscribe(() => dialog.close()),
+            audition.subscribeInvalidated(() => {
+                RuntimeNotifier.notify({message: "Another participant changed what you were previewing.", icon: "Info"})
+                dialog.close()
+            })
         )
         render()
         renderCard()

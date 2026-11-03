@@ -1,9 +1,73 @@
-import {Errors, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {Editing, EmptyExec, Errors, Exec, int, Maybe, Observer, Option, Subscription, SyncProvider, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Promises, Runtime} from "@opendaw/lib-runtime"
 import {ppqn} from "@opendaw/lib-dsp"
 import {TransportAnchor} from "@opendaw/studio-adapters"
 import {Project} from "../project"
+import type {LocalLayer} from "../ysync/YSync"
 import {RecordAutomation} from "./RecordAutomation"
+import {RoomTake} from "./RoomTake"
+
+const PublishTimeout = TimeSpan.seconds(60)
+
+// in a live room everything a recording writes stays on this client until the take is finished and its audio saved
+class TakeScope implements Editing {
+    readonly #editing: Editing
+
+    #layer: Option<LocalLayer>
+    #holds: int = 0
+    #finished: boolean = false
+
+    constructor(editing: Editing, layer: Option<LocalLayer>, readonly settle: Exec) {
+        this.#editing = editing
+        this.#layer = layer
+    }
+
+    #run<R>(procedure: SyncProvider<R>): R {return this.#layer.mapOr(layer => layer.run(procedure), procedure)}
+
+    modify<R>(modifier: SyncProvider<Maybe<R>>, mark?: boolean): Option<R> {
+        return this.#run(() => this.#editing.modify(modifier, mark))
+    }
+    append<R>(modifier: SyncProvider<Maybe<R>>): Option<R> {return this.#run(() => this.#editing.append(modifier))}
+    mark(): void {this.#editing.mark()}
+    canUndo(): boolean {return this.#editing.canUndo()}
+    canRedo(): boolean {return this.#editing.canRedo()}
+    undo(): boolean {return this.#editing.undo()}
+    redo(): boolean {return this.#editing.redo()}
+    markSaved(): void {this.#editing.markSaved()}
+    hasUnsavedChanges(): boolean {return this.#editing.hasUnsavedChanges()}
+    hasNoChanges(): boolean {return this.#editing.hasNoChanges()}
+    revertPending(): void {this.#editing.revertPending()}
+    subscribe(observer: Observer<void>): Subscription {return this.#editing.subscribe(observer)}
+
+    hold(): Exec {
+        if (this.#layer.isEmpty()) {return EmptyExec}
+        this.#holds++
+        let released = false
+        return () => {
+            if (released) {return}
+            released = true
+            this.#holds--
+            this.#publishIfReady()
+        }
+    }
+
+    finish(): void {
+        this.#finished = true
+        this.#publishIfReady()
+        if (this.#layer.nonEmpty()) {Runtime.scheduleTimeout(() => this.#publish(), PublishTimeout.millis())}
+    }
+
+    #publishIfReady(): void {if (this.#finished && this.#holds === 0) {this.#publish()}}
+
+    #publish(): void {
+        this.#layer.ifSome(layer => {
+            this.settle()
+            layer.publish()
+            layer.terminate()
+        })
+        this.#layer = Option.None
+    }
+}
 
 // one recording at a time per project: arms the captures, drives the engine, finalizes on the engine's stop
 export class RecordingSession {
@@ -14,6 +78,7 @@ export class RecordingSession {
 
     readonly #project: Project
 
+    #take: Option<TakeScope> = Option.None
     #isRecording: boolean = false
     #countIn: boolean = false
     #startPosition: ppqn = 0.0
@@ -24,17 +89,28 @@ export class RecordingSession {
     get wasCountingIn(): boolean {return this.#countIn}
     get startPosition(): ppqn {return this.#startPosition}
 
+    // what recorders write through, outside a live room this is the project's editing
+    get editing(): Editing {return this.#take.mapOr<Editing>(take => take, this.#project.editing)}
+
+    // the take reaches the room only after every hold is released
+    holdPublish(): Exec {return this.#take.match({none: () => EmptyExec, some: take => take.hold()})}
+
     async start(countIn: boolean): Promise<Terminable> {
         if (this.#isRecording || this.#project.engine.transportLocked.getValue()) {return Terminable.Empty}
         this.#setRecording(true)
         const project = this.#project
-        const {captureDevices, engine, editing} = project
+        const {captureDevices, engine} = project
         const terminator = new Terminator()
         const captures = captureDevices.filterArmed()
+        const layer = project.liveSync.map(sync => sync.createLayer("take"))
+        const take = new TakeScope(project.editing, layer, () => layer.ifSome(layer => RoomTake.settle(project, layer)))
+        this.#take = Option.wrap(take)
         if (captures.length > 0) {
             const {status, error} =
                 await Promises.tryCatch(Promise.all(captures.map(capture => capture.prepareRecording())))
             if (status === "rejected") {
+                layer.ifSome(layer => layer.terminate())
+                this.#take = Option.None
                 this.#setRecording(false)
                 return Errors.warn(String(error))
             }
@@ -56,8 +132,10 @@ export class RecordingSession {
         const finish = (): void => {
             if (finished) {return}
             finished = true
-            editing.modify(() => terminator.terminate(), false) // finalizes recording
+            take.modify(() => terminator.terminate(), false) // finalizes recording
+            if (layer.nonEmpty()) {take.mark()} // in a room every take is its own undo step
             this.#setRecording(false)
+            take.finish()
         }
         const stop = (): void => {
             if (isRecording.getValue() || isCountingIn.getValue()) {return}

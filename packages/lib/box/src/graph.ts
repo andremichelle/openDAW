@@ -141,6 +141,8 @@ export class BoxGraph<BoxMap = any> {
         // Nested construction: the outer box is not staged yet, so pointers into it would refer to a vertex
         // the graph does not have. Create the boxes in sequence and wire them after.
         assert(!this.#constructingBox, "Cannot construct box while other box is constructing")
+        // edges are keyed by address, wiring a second box under a staged uuid would cut the first one's edges
+        if (this.#boxes.hasKey(box.address.uuid)) {return panic(`${box.name} ${box.address.toString()} already staged`)}
         if (isDefined(constructor)) {
             this.#constructingBox = true
             const result = tryCatch(() => constructor(box))
@@ -195,9 +197,9 @@ export class BoxGraph<BoxMap = any> {
 
     unstageBox(box: Box): void {
         this.#assertTransaction()
+        this.#edges.unwatchVerticesOf(box)
         const deleted = this.#boxes.removeByKey(box.address.uuid)
         assert(deleted === box, `${box} could not be found to unstage`)
-        this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
         if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
         this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
@@ -351,16 +353,18 @@ export class BoxGraph<BoxMap = any> {
                 }
             })
         })
-        this.#pointerTransactionState.values()
+        // a listener that throws must not leave the graph in a transaction forever
+        const notified = tryCatch(() => this.#pointerTransactionState.values()
             .toSorted((a, b) => a.index - b.index)
             .forEach(({pointer, initial, final}) => {
                 if (!initial.equals(final)) {
                     initial.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onRemoved(pointer))
                     final.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onAdded(pointer))
                 }
-            })
+            }))
         this.#pointerTransactionState.clear()
         this.#inTransaction = false
+        if (notified.status === "failure") {throw notified.error}
         while (this.#finalizeTransactionObservers.length > 0) {
             this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
             if (this.#finalizeTransactionObservers.length > 0) {

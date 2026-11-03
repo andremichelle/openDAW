@@ -4,6 +4,7 @@ import {
     Nullable,
     Option,
     Provider,
+    RuntimeNotifier,
     Terminable,
     Terminator,
     UUID
@@ -40,7 +41,9 @@ export namespace RecordAudio {
         {sink, sampleManager, project, capture, readLatency}: RecordAudioContext)
         : Terminable => {
         const terminator = new Terminator()
-        const {editing, engine, boxGraph, timelineBox, tempoMap} = project
+        const {engine, boxGraph, timelineBox, tempoMap} = project
+        const editing = project.recordingSession.editing
+        const releasePublish = project.recordingSession.holdPublish()
         const fileUuid = sink.uuid
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
@@ -198,6 +201,7 @@ export namespace RecordAudio {
             sink.disconnect()
             project.trackUserCreatedSample(fileUuid)
             editing.mark()
+            releasePublish()
         }
         terminator.ownAll(
             Terminable.create(() => {
@@ -215,6 +219,7 @@ export namespace RecordAudio {
                     fileBox.ifSome(box => {
                         if (box.isAttached()) {editing.modify(() => box.delete(), false)}
                     })
+                    releasePublish()
                 } else {
                     console.debug("[RecordAudio] stop", {takeNumber, totalSeconds, numberOfFrames, deliveredFrames})
                     const setEnd = (seconds: number) => fileBox.ifSome(box => {
@@ -257,6 +262,7 @@ export namespace RecordAudio {
                         sink.setFillLength(sink.numberOfFrames)
                         fileBox.ifSome(box => box.endInSeconds.setValue(totalSeconds))
                     } else {
+                        if (project.liveSync.nonEmpty()) {RuntimeNotifier.notify({message: "Another participant removed what you were recording.", icon: "Info"})}
                         terminator.terminate()
                         currentTake = Option.None
                     }

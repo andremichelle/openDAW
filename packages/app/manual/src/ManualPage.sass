@@ -10,13 +10,18 @@ component
   background-color: var(--color-panel-background)
 
   > aside
+    position: relative
     display: flex
     flex-direction: column
     row-gap: 0.75em
-    overflow: hidden auto
-    padding-right: 2em
+    min-height: 0
+    overflow: hidden
 
     > nav
+      flex: 1 1 auto
+      min-height: 0
+      overflow: hidden auto
+      padding-right: 2em
       display: flex
       flex-direction: column
       row-gap: 0.375em
@@ -144,7 +149,9 @@ component
 
     > aside
       max-height: 40vh
-      padding-right: 0
+
+      > nav
+        padding-right: 0
 
     > div.manual
       padding-left: 0

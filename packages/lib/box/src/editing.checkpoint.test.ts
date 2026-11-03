@@ -141,4 +141,20 @@ describe("editing checkpoint", () => {
         checkpoint.rollback()
         expect(scene.graph.boxes().length).toBe(1)
     })
+
+    it("discard drops the history without touching the graph", (scene: Scene) => {
+        const checkpoint = scene.editing.checkpoint()
+        create(scene, false)
+        checkpoint.discard()
+        expect(scene.graph.boxes().length).toBe(1)
+        expect(scene.editing.canUndo()).false
+    })
+
+    it("discard settles the checkpoint", (scene: Scene) => {
+        const checkpoint = scene.editing.checkpoint()
+        create(scene, false)
+        checkpoint.discard()
+        checkpoint.rollback()
+        expect(scene.graph.boxes().length).toBe(1)
+    })
 })

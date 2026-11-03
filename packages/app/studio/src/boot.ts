@@ -155,6 +155,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
                 const menu = Menu.create(menuItem)
                 menu.moveTo(x, y)
                 menu.attach(target instanceof Element ? Layers.get(target).flyout : surface.flyout)
+                if (target instanceof Element) {
+                    menu.own(AnimationFrame.add(() => {if (!target.isConnected) {menu.terminate()}}))
+                }
             }),
             TouchContextMenu.install(surface.owner))
     }, errorHandler)

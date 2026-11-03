@@ -31,6 +31,7 @@ import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
 import {DevicePreviewRoute} from "@/service/StudioNavigation"
 import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
 import {SampleEditorRoute} from "@/service/SampleEditorService"
+import {ContestPage} from "@/ui/pages/contest/ContestPage"
 
 const StandaloneRoutes: ReadonlySet<string> = new Set([SampleEditorRoute])
 
@@ -92,6 +93,7 @@ export const App = (service: StudioService) => {
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},
                     {path: "/join/*", factory: JoinRoomPage},
+                    {path: "/contests/*", factory: ContestPage},
                     {path: DevicePreviewRoute, factory: DevicePreviewPage}
                 ]}
             />

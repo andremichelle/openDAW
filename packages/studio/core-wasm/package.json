@@ -27,7 +27,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.ts\"",
     "test:rust": ". ./cargo-env.sh && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
-    "test:vitest": "vitest run",
+    "test:vitest": "vitest run --exclude \"**/*-bench.test.ts\"",
+    "test:bench": "vitest run bench.test",
     "test": "npm run test:rust && npm run test:vitest",
     "clean": "rm -rf dist"
   },

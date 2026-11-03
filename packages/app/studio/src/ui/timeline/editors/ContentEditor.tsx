@@ -68,6 +68,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         editMenu: MenuItem.root()
     }
     let owner: Option<EventOwnerReader<unknown>> = Option.None
+    let keepRange = false
     const zoomToLoopDuration = () => owner.ifSome(reader =>
         range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
     const attachGenericViewMenu = () => runtime.own(menu.viewMenu.attach(collector => {
@@ -216,7 +217,17 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 }
             }) ?? (() => fallback(vertex.box))())
             attachGenericViewMenu()
+            owner.ifSome(reader => runtime.own(reader.subscribeContentChange(() => {
+                if (!reader.hasContent) {return}
+                runtime.terminate()
+                keepRange = true
+                updateEditor.request()
+            })))
             range.width = contentEditor.clientWidth
+            if (keepRange) {
+                keepRange = false
+                return
+            }
             owner.ifSome(reader =>
                 range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
         },
@@ -240,6 +251,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         updateEditor,
         editingSubject.catchupAndSubscribe(() => {
             element.classList.remove("disabled")
+            keepRange = false
             runtime.terminate()
             updateEditor.request()
         }),

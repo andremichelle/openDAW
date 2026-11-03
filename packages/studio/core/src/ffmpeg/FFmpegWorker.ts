@@ -2,6 +2,7 @@ import {EmptyExec, Lazy, Notifier, Nullable, Progress, unitValue} from "@opendaw
 import type {FFmpeg, LogEvent} from "@ffmpeg/ffmpeg"
 import {Mp3Converter} from "./mp3"
 import {FlacConverter} from "./flac"
+import {OpusConverter} from "./opus"
 
 export type AcceptedSource = File | Blob
 
@@ -29,6 +30,9 @@ export class FFmpegWorker {
 
     @Lazy
     flacConverter(): FlacConverter {return new FlacConverter(this)}
+
+    @Lazy
+    opusConverter(): OpusConverter {return new OpusConverter(this)}
 
     async fetchFileData(source: string): Promise<Uint8Array> {
         const response = await fetch(source)

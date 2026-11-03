@@ -35,6 +35,8 @@ type Construct = {
 
 export interface FloatingWindowHandle {
     readonly size: ObservableValue<Size>
+    // 1 = width x height
+    readonly zoom: ObservableValue<number>
     // the browser window the content lives in, listeners bound to a window must follow it
     readonly owner: ObservableValue<Window>
     togglePopout(): void
@@ -341,5 +343,5 @@ export const FloatingWindow = ({
     toFront()
     move(origin.x, origin.y)
     if (isDefined(adjust)) {request(size.getValue())}
-    return {size, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
+    return {size, zoom, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
 }

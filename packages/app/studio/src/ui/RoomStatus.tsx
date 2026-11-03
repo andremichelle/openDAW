@@ -23,6 +23,7 @@ type RoomUser = {
     readonly name: string
     readonly color: string
     readonly self: boolean
+    readonly recording: boolean
     readonly call: Nullable<CallPresence>
     readonly following: boolean
     readonly leading: boolean
@@ -80,8 +81,8 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                     if (isDefined(user)) {
                         users.push({
                             clientId, name: user.name, color: user.color, self: clientId === localId,
-                            call: asCallPresence(state.call), following: isDefined(links.get(clientId)),
-                            leading: followersOf(links, clientId).length > 0
+                            recording: user.recording === true, call: asCallPresence(state.call),
+                            following: isDefined(links.get(clientId)), leading: followersOf(links, clientId).length > 0
                         })
                     }
                 })
@@ -89,8 +90,12 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                 const trafficWatch = <TrafficWatch lifecycle={roomLifecycle}
                                                    trafficMeter={service.trafficMeter.getValue()}/>
                 replaceChildren(element, roomLabel, ...users.map(user => (
-                    <div className={user.self ? "user self" : "user"}>
-                        <span className="dot" style={{backgroundColor: user.color}}/>
+                    <div className={Html.buildClassList("user", user.self && "self", user.recording && "recording")}>
+                        <span className="marker">
+                            {user.recording
+                                ? <Icon symbol={IconSymbol.Record}/>
+                                : <span className="dot" style={{backgroundColor: user.color}}/>}
+                        </span>
                         {service.followService.match({
                             none: () => <span>{user.name}</span>,
                             some: followService => user.self && !user.following ? <span>{user.name}</span> : (
