@@ -133,7 +133,7 @@ export class RecordingSession {
             if (finished) {return}
             finished = true
             take.modify(() => terminator.terminate(), false) // finalizes recording
-            take.mark() // every take is its own undo step
+            if (layer.nonEmpty()) {take.mark()} // in a room every take is its own undo step
             this.#setRecording(false)
             take.finish()
         }

@@ -57,6 +57,15 @@ export const createFakeWorklet = () => ({
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 
+// a project outside any room, recording and editing behave as without live sync
+export const createSoloProject = async (): Promise<{project: Project, worklet: ReturnType<typeof createFakeWorklet>}> => {
+    const {Project} = await import("../../project/Project")
+    const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+    const worklet = createFakeWorklet()
+    project.engine.setWorklet(worklet as unknown as EngineWorklet)
+    return {project, worklet}
+}
+
 export interface RoomPeer {
     readonly name: string
     readonly doc: Y.Doc

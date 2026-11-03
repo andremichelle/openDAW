@@ -8,7 +8,7 @@ import {AudioUnitBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentFactories, NoteSignal} from "@opendaw/studio-adapters"
 import type {Capture} from "../capture/Capture"
 import type {RecordingSink} from "../io"
-import {LiveRoom, RoomPeer} from "./testing/LiveRoom"
+import {createSoloProject, LiveRoom, RoomPeer} from "./testing/LiveRoom"
 
 const unitsOf = ({project}: RoomPeer): ReadonlyArray<AudioUnitBox> =>
     IndexedBox.collectIndexedBoxes(project.rootBox.audioUnits, AudioUnitBox)
@@ -24,7 +24,7 @@ const uniqueUnitIndices = (peer: RoomPeer): boolean => {
 }
 
 // the real RecordingSession and RecordMidi, a fake capture only stands in for the MIDI device
-const armMidi = async (peer: RoomPeer, unit: AudioUnitBox, clock: {now: number}) => {
+const armMidi = async (peer: Pick<RoomPeer, "project" | "worklet">, unit: AudioUnitBox, clock: {now: number}) => {
     const {RecordMidi} = await import("../capture/RecordMidi")
     const notifier = new Notifier<NoteSignal>()
     const recorded: Array<NoteRegionBox> = []
@@ -680,6 +680,32 @@ describe("LiveRoom repairs", () => {
         A.project.editing.undo()
         expect(room.violations()).toEqual([])
         expect(A.graph.findBox(track.address.uuid).nonEmpty() === B.graph.findBox(track.address.uuid).nonEmpty()).toBe(true)
+    })
+})
+
+// the take undo steps are a room matter, a single client keeps undoing consecutive takes together as on main
+describe("recording outside a room", () => {
+    it("consecutive takes stay one undo step", async () => {
+        vi.spyOn(console, "debug").mockImplementation(() => {})
+        const clock = {now: 0}
+        vi.spyOn(performance, "now").mockImplementation(() => clock.now)
+        const solo = await createSoloProject()
+        const unit = solo.project.editing.modify(() =>
+            solo.project.api.createInstrument(InstrumentFactories.Vaporisateur).audioUnitBox).unwrap() as AudioUnitBox
+        for (let index = 0; index < 2; index++) {
+            const take = await armMidi(solo, unit, clock)
+            await take.start()
+            take.advance(0.1)
+            take.note(60)
+            take.advance(1.0)
+            take.stop()
+            solo.worklet.recordingStart.clear()
+        }
+        expect(regionsOf(unit).length).toBe(2)
+        solo.project.editing.undo()
+        expect(regionsOf(unit).length).toBe(0)
+        solo.project.terminate()
+        vi.restoreAllMocks()
     })
 })
 
