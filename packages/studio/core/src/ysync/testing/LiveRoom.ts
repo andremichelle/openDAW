@@ -1,7 +1,9 @@
 import {
     DefaultObservableValue, isDefined, MutableObservableOption, Notifier, Observer, Option, panic, Terminable, tryCatch, UUID
 } from "@opendaw/lib-std"
-import {applyUpdateTasks, BoxGraph, UpdateTask, UpdateTasks} from "@opendaw/lib-box"
+import {
+    applyUpdateTasks, ArrayField, BoxGraph, Field, ObjectField, PointerField, UpdateTask, UpdateTasks
+} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton, TransportAnchor} from "@opendaw/studio-adapters"
@@ -72,6 +74,18 @@ export interface RoomPeer {
 
 const hex = (graph: BoxGraph): string =>
     Array.from(graph.checksum(), byte => (byte & 0xff).toString(16).padStart(2, "0")).join("")
+
+// a pointer that names a target in the graph must also be an edge, the checksum only sees the address
+export const lostEdges = (graph: BoxGraph): ReadonlyArray<string> => graph.boxes().flatMap(box => {
+    const connected = new Set(box.outgoingEdges().map(([pointer]) => pointer))
+    const walk = (fields: ReadonlyArray<Field>): ReadonlyArray<string> => fields.flatMap(field => field.accept<ReadonlyArray<string>>({
+        visitPointerField: (pointer: PointerField) => pointer.targetAddress
+            .mapOr(target => graph.findVertex(target).nonEmpty() && !connected.has(pointer) ? [pointer.toString()] : [], []),
+        visitArrayField: (array: ArrayField) => walk(array.fields()),
+        visitObjectField: (object: ObjectField<any>) => walk(object.fields())
+    }) ?? [])
+    return walk(box.fields())
+})
 
 // the engine's copy of the graph, fed like SyncSource: committed transactions only, nothing from a rollback
 const mirrorEngine = (graph: BoxGraph<BoxIO.TypeMap>, errors: Array<string>): BoxGraph<BoxIO.TypeMap> => {
@@ -221,6 +235,7 @@ export class LiveRoom {
                 problems.push(`${peer.name} differs from ${first.name}${isDefined(field) ? ` at ${field}` : ""}`)
             }
             peer.engineErrors.forEach(error => problems.push(`${peer.name} engine could not apply: ${error}`))
+            lostEdges(peer.graph).forEach(pointer => problems.push(`${peer.name} lost the edge of ${pointer}`))
             if (hex(peer.engine) !== hex(peer.graph)) {problems.push(`${peer.name} engine mirror diverged from its graph`)}
             if (peer.graph.boxes().length !== peer.boxes.size) {
                 problems.push(`${peer.name} graph holds ${peer.graph.boxes().length} boxes, its document ${peer.boxes.size}`)

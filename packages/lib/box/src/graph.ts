@@ -141,6 +141,8 @@ export class BoxGraph<BoxMap = any> {
         // Nested construction: the outer box is not staged yet, so pointers into it would refer to a vertex
         // the graph does not have. Create the boxes in sequence and wire them after.
         assert(!this.#constructingBox, "Cannot construct box while other box is constructing")
+        // edges are keyed by address, wiring a second box under a staged uuid would cut the first one's edges
+        if (this.#boxes.hasKey(box.address.uuid)) {return panic(`${box.name} ${box.address.toString()} already staged`)}
         if (isDefined(constructor)) {
             this.#constructingBox = true
             const result = tryCatch(() => constructor(box))

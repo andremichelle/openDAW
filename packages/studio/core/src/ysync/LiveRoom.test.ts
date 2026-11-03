@@ -505,6 +505,21 @@ describe("LiveRoom repairs", () => {
         expect(await room.lateJoinerDiffers()).toBe(false)
     })
 
+    it("undo of a delete after a peer brought the box back keeps every edge", async () => {
+        const unit = addInstrument(A)
+        room.flush()
+        room.disconnect(B)
+        A.project.editing.undo()
+        A.project.editing.redo()
+        B.project.editing.modify(() => B.project.api.deleteAudioUnit(unitAt(B, unit.address.uuid)))
+        room.reconnect(B)
+        room.flush()
+        expect(B.graph.findBox(unit.address.uuid).nonEmpty()).toBe(true)
+        B.project.editing.undo()
+        expect(room.violations()).toEqual([])
+        expect(await room.lateJoinerDiffers()).toBe(false)
+    })
+
     it("concurrent writes to one field converge on one winner", () => {
         const unit = addInstrument(A)
         room.flush()
