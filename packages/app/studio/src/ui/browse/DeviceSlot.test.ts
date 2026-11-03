@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
+import * as Y from "yjs"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {BoxEditing, IndexedBox} from "@opendaw/lib-box"
 import {
@@ -10,6 +11,9 @@ import type {StudioService} from "@/service/StudioService"
 import {DeviceSlot} from "./DeviceSlot"
 import {DeviceAudition} from "./DeviceAudition"
 import type {DeviceCandidate, DeviceEntry} from "./DeviceCatalog"
+import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
+
+vi.mock("@/ui/timeline/NewInstrumentRegion", () => ({NewInstrumentRegion: {create: vi.fn()}}))
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -256,7 +260,7 @@ describe("DeviceAudition", () => {
             DeviceSlot.placeEffect(slot, (field, index) => project.api.insertEffect(field, factory, index)).nonEmpty()
         const compressor = entryOf("Compressor", effect(EffectFactories.AudioNamed.Compressor))
         const gate = entryOf("Gate", effect(EffectFactories.AudioNamed.Gate))
-        const service = {project} as unknown as StudioService
+        const service = {project, timeline: {snapping: undefined}} as unknown as StudioService
         return {...context, compressor, gate, service}
     }
 
@@ -310,5 +314,146 @@ describe("DeviceAudition", () => {
         await new Promise(resolve => setTimeout(resolve, 40))
         expect(effectNames()).toEqual(["GateDeviceBox", "DelayDeviceBox", "ReverbDeviceBox"])
         audition.cancel()
+    })
+
+    it("creates the new instrument's region on approve, not on a pick", async () => {
+        const {service, project, InstrumentEntry} = await instrumentSetup()
+        const create = vi.mocked(NewInstrumentRegion.create)
+        create.mockClear()
+        const audition = new DeviceAudition(service, {type: "new-instrument", anchor: Option.None})
+        audition.pick(InstrumentEntry)
+        await settled()
+        audition.pick({...InstrumentEntry, key: "again"})
+        await settled()
+        expect(create).not.toHaveBeenCalled()
+        await audition.approve()
+        expect(create).toHaveBeenCalledTimes(1)
+        expect(project.editing.canUndo()).true
+    })
+
+    const instrumentSetup = async () => {
+        const context = await auditionSetup()
+        const InstrumentEntry = entryOf("Nano", (project, slot) =>
+            DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Nano).nonEmpty())
+        return {...context, InstrumentEntry}
+    }
+
+    const roomSetup = async () => {
+        const context = await instrumentSetup()
+        const {YSync} = await import("@opendaw/studio-core")
+        const doc = new Y.Doc()
+        const boxes = doc.getMap("boxes")
+        const sync = await YSync.populateRoom<any>({boxGraph: context.project.boxGraph, boxes})
+        context.project.attachLiveSync(sync)
+        const peer = new Y.Doc()
+        const deliver = () => Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc, Y.encodeStateVector(peer)), "room")
+        const receive = () => Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer, Y.encodeStateVector(doc)), "room")
+        const state = () => Y.encodeStateVector(doc)
+        deliver()
+        return {...context, doc, boxes, peer, deliver, receive, state}
+    }
+
+    it("sends nothing in a room for any number of picks", async () => {
+        const {service, host, compressor, gate, effectNames, state} = await roomSetup()
+        const before = state()
+        const audition = new DeviceAudition(service, {type: "insert", host, accepts: "audio", index: 0})
+        for (let pick = 0; pick < 20; pick++) {
+            audition.pick(pick % 2 === 0 ? compressor : gate)
+            await settled()
+        }
+        expect(effectNames()).toEqual(["GateDeviceBox", "DelayDeviceBox", "ReverbDeviceBox"])
+        expect(state()).toEqual(before)
+        expect(audition.hasLocalChanges).true
+        audition.cancel()
+        expect(effectNames()).toEqual(["DelayDeviceBox", "ReverbDeviceBox"])
+        expect(state()).toEqual(before)
+        expect(audition.hasLocalChanges).false
+    })
+
+    it("sends the last pick in a room once on approve, as one undo step", async () => {
+        const {service, host, compressor, gate, effectNames, boxes, editing, project} = await roomSetup()
+        const count = boxes.size
+        const audition = new DeviceAudition(service, {type: "insert", host, accepts: "audio", index: 2})
+        audition.pick(compressor)
+        await settled()
+        audition.pick(gate)
+        await audition.approve()
+        expect(effectNames()).toEqual(["DelayDeviceBox", "ReverbDeviceBox", "GateDeviceBox"])
+        expect(audition.hasLocalChanges).false
+        expect(boxes.size).toBeGreaterThan(count)
+        expect(boxes.size).toBe(project.boxGraph.boxes().length)
+        editing.undo()
+        expect(effectNames()).toEqual(["DelayDeviceBox", "ReverbDeviceBox"])
+        expect(boxes.size).toBe(count)
+        audition.terminate()
+    })
+
+    it("sends one message on approve even with a settle and a region", async () => {
+        const {service, InstrumentEntry, doc, project} = await roomSetup()
+        const updates = vi.fn()
+        doc.on("update", updates)
+        const settling: DeviceEntry = {
+            ...InstrumentEntry, prepare: async () => {
+                const candidate = await InstrumentEntry.prepare()
+                return {...candidate, settle: async () => {
+                    await Promise.resolve()
+                    project.editing.modify(() => project.userEditingManager.audioUnit.get()
+                        .ifSome(({box}) => (box as AudioUnitBox).volume.setValue(-3)), false)
+                }}
+            }
+        }
+        vi.mocked(NewInstrumentRegion.create).mockImplementation((_project, _snapping, box) => box.volume.setValue(-6))
+        const audition = new DeviceAudition(service, {type: "new-instrument", anchor: Option.None})
+        audition.pick(settling)
+        await settled()
+        expect(updates).not.toHaveBeenCalled()
+        await audition.approve()
+        vi.mocked(NewInstrumentRegion.create).mockReset()
+        expect(updates).toHaveBeenCalledTimes(1)
+        expect(audition.hasLocalChanges).false
+    })
+
+    it("restores a replaced effect on cancel", async () => {
+        const {service, host, compressor, effectNames, audioField, boxes} = await roomSetup()
+        const delay = IndexedBox.collectIndexedBoxes(audioField)[0]
+        const audition = new DeviceAudition(service, {type: "replace-effect", host, accepts: "audio", index: 0})
+        audition.pick(compressor)
+        await settled()
+        expect(effectNames()).toEqual(["CompressorDeviceBox", "ReverbDeviceBox"])
+        audition.cancel()
+        expect(effectNames()).toEqual(["DelayDeviceBox", "ReverbDeviceBox"])
+        expect(boxes.has(UUID.toString(delay.address.uuid))).true
+    })
+
+    it("reports an invalid preview when a peer deletes the whole audio unit", async () => {
+        const {service, host, compressor, peer, receive, project, effectNames} = await roomSetup()
+        const invalid = vi.fn()
+        const unit = host.audioUnitBoxAdapter().box
+        const removed = [unit, ...project.boxGraph.dependenciesOf(unit).boxes]
+        const audition = new DeviceAudition(service, {type: "insert", host, accepts: "audio", index: 0})
+        audition.subscribeInvalidated(invalid)
+        audition.pick(compressor)
+        await settled()
+        expect(effectNames().length).toBe(3)
+        peer.transact(() => removed.forEach(box => peer.getMap("boxes").delete(UUID.toString(box.address.uuid))))
+        receive()
+        expect(invalid).toHaveBeenCalledTimes(1)
+        expect(audition.hasLocalChanges).false
+        expect(project.boxGraph.findBox(unit.address.uuid).isEmpty()).true
+        audition.terminate()
+    })
+
+    it("reports an invalid preview when a remote batch is rejected", async () => {
+        const {service, host, compressor, peer, receive} = await roomSetup()
+        const invalid = vi.fn()
+        const audition = new DeviceAudition(service, {type: "insert", host, accepts: "audio", index: 0})
+        audition.subscribeInvalidated(invalid)
+        audition.pick(compressor)
+        await settled()
+        peer.getMap("boxes").delete(UUID.toString(host.audioUnitBoxAdapter().address.uuid))
+        receive()
+        expect(invalid).toHaveBeenCalledTimes(1)
+        expect(audition.hasLocalChanges).false
+        audition.terminate()
     })
 })

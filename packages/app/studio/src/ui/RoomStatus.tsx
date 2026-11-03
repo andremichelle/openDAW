@@ -40,13 +40,13 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const render = () => {
                 const states = awareness.awareness.getStates()
                 const localId = awareness.clientID
-                const users: Array<{ name: string, color: string, self: boolean, call: Nullable<CallPresence> }> = []
+                const users: Array<{ name: string, color: string, self: boolean, recording: boolean, call: Nullable<CallPresence> }> = []
                 states.forEach((state, clientId) => {
                     const user: Optional<AwarenessUserState> = state.user
                     if (isDefined(user)) {
                         users.push({
                             name: user.name, color: user.color, self: clientId === localId,
-                            call: asCallPresence(state.call)
+                            recording: user.recording === true, call: asCallPresence(state.call)
                         })
                     }
                 })
@@ -54,8 +54,12 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                 const trafficWatch = <TrafficWatch lifecycle={roomLifecycle}
                                                    trafficMeter={service.trafficMeter.getValue()}/>
                 replaceChildren(element, roomLabel, ...users.map(user => (
-                    <div className={user.self ? "user self" : "user"}>
-                        <span className="dot" style={{backgroundColor: user.color}}/>
+                    <div className={Html.buildClassList("user", user.self && "self", user.recording && "recording")}>
+                        <span className="marker">
+                            {user.recording
+                                ? <Icon symbol={IconSymbol.Record}/>
+                                : <span className="dot" style={{backgroundColor: user.color}}/>}
+                        </span>
                         <span>{user.name}</span>
                         {isDefined(user.call) && (
                             <span className={user.call.mic ? "call" : "call muted"}>

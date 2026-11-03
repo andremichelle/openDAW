@@ -18,6 +18,9 @@ export namespace AnimationFrame {
 
     export const once = (exec: Exec): void => {nonrecurring.add(exec)}
 
+    // a queued exec keeps what it captures alive until the next frame, which a hidden tab never renders
+    export const dismiss = (exec: Exec): void => {nonrecurring.delete(exec)}
+
     export const start = (owner: WindowProxy): void => {
         if (driver === owner) {return}
         driver?.cancelAnimationFrame(id)
@@ -74,8 +77,15 @@ export class DeferExec implements Terminable {
         this.#fire()
     }
 
-    cancel(): void {this.#requested = false}
-    terminate(): void {this.#disabled = true }
+    cancel(): void {
+        this.#requested = false
+        AnimationFrame.dismiss(this.#fire)
+    }
+
+    terminate(): void {
+        this.#disabled = true
+        AnimationFrame.dismiss(this.#fire)
+    }
 
     readonly #fire = (): void => {
         if (this.#disabled || !this.#requested) {return}

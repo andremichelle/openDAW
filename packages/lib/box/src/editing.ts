@@ -57,6 +57,7 @@ export interface ModificationProcess {
 export interface EditingCheckpoint {
     rollback(): void
     commit(): void
+    discard(): void
 }
 
 export class BoxEditing implements Editing {
@@ -154,6 +155,11 @@ export class BoxEditing implements Editing {
                     this.#notifier.notify()
                     throw result.error
                 }
+                this.#notifier.notify()
+            },
+            discard: () => {
+                if (!settle()) {return}
+                extract()
                 this.#notifier.notify()
             },
             commit: () => {

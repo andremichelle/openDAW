@@ -21,13 +21,23 @@ export namespace RecordTrack {
             }
             index = Math.max(index, trackBox.index.getValue())
         }
-        return editing.modify(() => TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
+        return editing.modify(() => createAt(audioUnitBox, type, index + 1)).unwrap("Could not create TrackBox")
+    }
+
+    export const nextIndex = (audioUnitBox: AudioUnitBox): int => audioUnitBox.tracks.pointerHub.incoming()
+        .reduce((index, {box}) => Math.max(index, asInstanceOf(box, TrackBox).index.getValue() + 1), 0)
+
+    // a new track below every other track of the unit
+    export const createBelow = (audioUnitBox: AudioUnitBox, type: TrackType): TrackBox =>
+        createAt(audioUnitBox, type, nextIndex(audioUnitBox))
+
+    const createAt = (audioUnitBox: AudioUnitBox, type: TrackType, index: int): TrackBox =>
+        TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
             box.type.setValue(type)
-            box.index.setValue(index + 1)
+            box.index.setValue(index)
             box.tracks.refer(audioUnitBox.tracks)
             box.target.refer(audioUnitBox)
-        })).unwrap("Could not create TrackBox")
-    }
+        })
 
     export const lastTakeNumber = (audioUnitBox: AudioUnitBox): int => {
         let highest: int = 0
