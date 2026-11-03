@@ -17,6 +17,12 @@ import {Project} from "./project"
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
 export type RecordingStop = {readonly contextTime: number}
 
+export interface TransportLock extends Terminable {
+    play(): void
+    stop(reset?: boolean): void
+    setPosition(position: ppqn): void
+}
+
 export interface Engine extends Terminable {
     play(): void
     stop(): void

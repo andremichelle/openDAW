@@ -10,8 +10,41 @@ import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {TrafficWatch} from "@/ui/TrafficWatch"
 import {asCallPresence, CallPresence} from "@/call/CallTypes"
+import {MenuItem} from "@opendaw/studio-core"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {FollowAwarenessField, FollowService} from "@/follow/FollowService"
+import {followersOf} from "@/follow/FollowMath"
+import {asFollowTarget} from "@/follow/FollowTypes"
 
 const className = Html.adoptStyleSheet(css, "room-status")
+
+type RoomUser = {
+    readonly clientId: number
+    readonly name: string
+    readonly color: string
+    readonly self: boolean
+    readonly recording: boolean
+    readonly call: Nullable<CallPresence>
+    readonly following: boolean
+    readonly leading: boolean
+}
+
+const followMenu = (follow: FollowService, user: RoomUser): MenuItem => MenuItem.root()
+    .setRuntimeChildrenProcedure(parent => {
+        const target = follow.target.getValue()
+        if (user.self) {
+            parent.addMenuItem(MenuItem.default({label: "Stop Following"})
+                .setTriggerProcedure(() => follow.unfollow()))
+        } else if (target === user.clientId) {
+            parent.addMenuItem(MenuItem.default({label: "Stop Following"})
+                .setTriggerProcedure(() => follow.unfollow()))
+        } else {
+            parent.addMenuItem(MenuItem.default({
+                label: `Follow ${user.name}'s Playback`,
+                selectable: follow.canFollow(user.clientId)
+            }).setTriggerProcedure(() => follow.follow(user.clientId)))
+        }
+    })
 
 type Construct = { lifecycle: Lifecycle, service: StudioService }
 
@@ -40,13 +73,16 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const render = () => {
                 const states = awareness.awareness.getStates()
                 const localId = awareness.clientID
-                const users: Array<{ name: string, color: string, self: boolean, recording: boolean, call: Nullable<CallPresence> }> = []
+                const links = new Map<number, Nullable<number>>()
+                states.forEach((state, clientId) => links.set(clientId, asFollowTarget(state[FollowAwarenessField])))
+                const users: Array<RoomUser> = []
                 states.forEach((state, clientId) => {
                     const user: Optional<AwarenessUserState> = state.user
                     if (isDefined(user)) {
                         users.push({
-                            name: user.name, color: user.color, self: clientId === localId,
-                            recording: user.recording === true, call: asCallPresence(state.call)
+                            clientId, name: user.name, color: user.color, self: clientId === localId,
+                            recording: user.recording === true, call: asCallPresence(state.call),
+                            following: isDefined(links.get(clientId)), leading: followersOf(links, clientId).length > 0
                         })
                     }
                 })
@@ -60,7 +96,20 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                                 ? <Icon symbol={IconSymbol.Record}/>
                                 : <span className="dot" style={{backgroundColor: user.color}}/>}
                         </span>
-                        <span>{user.name}</span>
+                        {service.followService.match({
+                            none: () => <span>{user.name}</span>,
+                            some: followService => user.self && !user.following ? <span>{user.name}</span> : (
+                                <MenuButton root={followMenu(followService, user)} style={{color: "inherit"}}>
+                                    <span>{user.name}</span>
+                                </MenuButton>
+                            )
+                        })}
+                        {user.leading && (
+                            <span className="follow leading"><Icon symbol={IconSymbol.Broadcast}/></span>
+                        )}
+                        {user.following && (
+                            <span className="follow"><Icon symbol={IconSymbol.Headphone}/></span>
+                        )}
                         {isDefined(user.call) && (
                             <span className={user.call.mic ? "call" : "call muted"}>
                                 <Icon symbol={user.call.mic ? IconSymbol.CallMic : IconSymbol.CallMicOff}/>
@@ -80,6 +129,7 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const awarenessApi = awareness.awareness
             awarenessApi.on("change", render)
             roomLifecycle.own({terminate: () => awarenessApi.off("change", render)})
+            roomLifecycle.own(service.followService.subscribe(() => render()))
             render()
         } else {
             element.style.display = "none"

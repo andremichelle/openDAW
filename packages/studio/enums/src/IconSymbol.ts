@@ -199,6 +199,7 @@ export enum IconSymbol {
     CallHand,
     CallPhone,
     CallHangup,
+    Broadcast,
 }
 
 export namespace IconSymbol {

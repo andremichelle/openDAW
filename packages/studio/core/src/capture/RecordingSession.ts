@@ -96,7 +96,7 @@ export class RecordingSession {
     holdPublish(): Exec {return this.#take.match({none: () => EmptyExec, some: take => take.hold()})}
 
     async start(countIn: boolean): Promise<Terminable> {
-        if (this.#isRecording) {return Terminable.Empty}
+        if (this.#isRecording || this.#project.engine.transportLocked.getValue()) {return Terminable.Empty}
         this.#setRecording(true)
         const project = this.#project
         const {captureDevices, engine} = project

@@ -18,10 +18,11 @@ import type {Awareness} from "y-protocols/awareness"
 import {AwarenessUserState} from "@/service/RoomAwareness"
 import {StudioService} from "@/service/StudioService"
 import {CallPeer} from "@/call/CallPeer"
-import {CallSignaling} from "@/call/CallSignaling"
+import {RoomSignaling} from "@/service/RoomSignaling"
 import {CallMeter} from "@/call/CallMeter"
 import {
     asCallPresence,
+    asCallSignal,
     CallParticipant,
     CallPresence,
     CallQuality,
@@ -115,7 +116,7 @@ export class CallService implements Terminable {
     readonly speakerId: DefaultObservableValue<string>
 
     #session: Nullable<Terminator> = null
-    #signaling: Nullable<CallSignaling> = null
+    #signaling: Nullable<RoomSignaling<CallSignal>> = null
     #meter: Nullable<CallMeter> = null
     #peerId: string = ""
     #joinedAt: number = 0
@@ -292,8 +293,8 @@ export class CallService implements Terminable {
         session.own({terminate: () => {this.#meter?.terminate()}})
         const micStarted = await this.#startMic()
         this.mic.setValue(micStarted)
-        const signaling = session.own(new CallSignaling(`${this.#serverUrl}/signaling`, this.#topic,
-            signal => this.#onSignal(signal), () => this.#onSignalingReconnect()))
+        const signaling = session.own(new RoomSignaling<CallSignal>(`${this.#serverUrl}/signaling`, this.#topic,
+            asCallSignal, signal => this.#onSignal(signal), () => this.#onSignalingReconnect()))
         this.#signaling = signaling
         await Promise.race([signaling.ready(), Wait.timeSpan(TimeSpan.seconds(SignalingTimeoutSeconds))])
         if (this.#session !== session) {return}
