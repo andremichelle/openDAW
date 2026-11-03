@@ -630,6 +630,26 @@ describe("LiveRoom repairs", () => {
             expect(B.graph.findBox(covered.address.uuid).isEmpty()).toBe(true)
             expect(toasts().length).toBe(1)
         })
+
+        // found in Chrome: the undo also points a participant's editor back at the region, that is no dependency
+        it("an undo that restored regions a participant was editing is taken back whole", () => {
+            const first = place(B, 0)
+            const second = place(B, 1920)
+            room.flush()
+            A.project.editing.modify(() => A.project.userEditingManager.timeline.edit(A.graph.findBox<NoteRegionBox>(second.address.uuid).unwrap()))
+            room.flush()
+            B.project.editing.modify(() => {
+                first.delete()
+                second.delete()
+            })
+            room.flush()
+            B.project.editing.undo()
+            A.project.editing.modify(() => A.project.api.createTrackRegion(
+                A.graph.findBox<TrackBox>(track.address.uuid).unwrap(), 0, 480))
+            expect(room.violations()).toEqual([])
+            expect(regionsOn(A).length).toBe(1)
+            expect(toasts().length).toBe(1)
+        })
     })
 
     it("concurrent writes to one field converge on one winner", () => {

@@ -126,7 +126,8 @@ export namespace RoomOverlaps {
             const kept: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
             const keep: Array<Box> = []
             created.forEach(uuid => graph.findBox(uuid).ifSome(box => {
-                if (box.incomingEdges().some(pointer => !created.hasKey(pointer.box.address.uuid))) {keep.push(box)}
+                // a pointer this client wrote is part of the change, only a peer's pointer is a dependency
+                if (box.incomingEdges().some(pointer => !created.hasKey(pointer.box.address.uuid) && !mine(pointer.address))) {keep.push(box)}
             }))
             // what a kept box is connected to within the change stays with it
             while (keep.length > 0) {
