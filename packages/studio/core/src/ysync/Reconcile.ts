@@ -1,7 +1,6 @@
-import {BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Address, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, TrackBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import {RegionOverlap, Validator} from "@opendaw/studio-adapters"
+import {AudioUnitBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 
 // Deterministic, constraint-aware reconciliation of a box graph.
@@ -19,11 +18,7 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 // SCOPE: unresolvable pointers, unsatisfied mandatory pointers, exclusive-target overflow (the case the
 // collab tests show diverging), and duplicate value events.
 
-const byUuid = (a: {address: {uuid: UUID.Bytes}}, b: {address: {uuid: UUID.Bytes}}): number =>
-    UUID.toString(a.address.uuid).localeCompare(UUID.toString(b.address.uuid))
-
-const byAddress = (a: PointerField, b: PointerField): number =>
-    a.address.toString().localeCompare(b.address.toString())
+const byAddress = (a: PointerField, b: PointerField): number => Address.Comparator(a.address, b.address)
 
 // Collapse a value-event collection onto its (position, index) uniqueness invariant: per position keep the
 // earliest event at index 0 and the latest at index 1, deleting any in between. Two clients concurrently adding
@@ -40,7 +35,7 @@ const reconcileValueEventCollection = (collectionBox: ValueEventCollectionBox): 
             const positionDiff = a.position.getValue() - b.position.getValue()
             if (positionDiff !== 0) {return positionDiff}
             const indexDiff = a.index.getValue() - b.index.getValue()
-            return indexDiff !== 0 ? indexDiff : byUuid(a, b)
+            return indexDiff !== 0 ? indexDiff : UUID.Comparator(a.address.uuid, b.address.uuid)
         })
     let changed = false
     let groupStart = 0
@@ -79,15 +74,15 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
         }
         // --- Unsatisfied mandatory pointer: its owner cannot exist. Drop the lowest-addressed one; the
         // fixpoint loop picks up whatever that exposes. ---
-        const unsatisfied = boxGraph.edges().unsatisfiedMandatoryPointers().slice().sort(byAddress)
+        const unsatisfied = boxGraph.edges().unsatisfiedMandatoryPointers()
         if (unsatisfied.length > 0) {
             unsatisfied[0].box.delete()
             changed = true
             repairedAny = true
             continue
         }
-        // Stable, client-independent iteration order.
-        const boxes = boxGraph.boxes().slice().sort(byUuid)
+        // Stable, client-independent iteration order: the graph keeps its boxes sorted by uuid.
+        const boxes = boxGraph.boxes().slice()
         for (const box of boxes) {
             if (!box.isAttached()) {continue}
             // --- Exclusive target overflow: keep the lowest-addressed incoming pointer, drop the rest. ---
@@ -128,37 +123,3 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
     }
     return repairedAny
 }
-
-// The collections two peers insert into at once: each picks the same free index, Yjs merges both.
-const orderedCollections = (boxGraph: BoxGraph): ReadonlyArray<Field> => boxGraph.boxes()
-    .filter((box): box is AudioUnitBox => box instanceof AudioUnitBox)
-    .flatMap(unit => [unit.tracks, unit.audioEffects, unit.midiEffects,
-        ...unit.collection.targetVertex.mapOr(vertex => [vertex as Field], [])])
-
-const byOrder = (field: Field) => IndexedBox.collectIndexedBoxes(field).slice()
-    .sort((a, b) => a.index.getValue() - b.index.getValue() || byUuid(a, b))
-
-const hasDuplicates = (field: Field): boolean => {
-    const boxes = byOrder(field)
-    return boxes.some((box, position) => position > 0 && boxes[position - 1].index.getValue() === box.index.getValue())
-}
-
-export const duplicateOrders = (boxGraph: BoxGraph): ReadonlyArray<Field> => orderedCollections(boxGraph).filter(hasDuplicates)
-
-// A rank is a pure function of the document and bounded: peers repairing at once cannot drive the numbers up.
-export const repairOrder = (field: Field): void => byOrder(field).forEach((box, rank) => {
-    if (box.index.getValue() !== rank) {box.index.setValue(rank)}
-})
-
-export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => Validator.hasOverlappingRegions(boxGraph)
-
-// Two peers can place a region at one spot. No take or edit is lost: the one later by position and uuid moves behind.
-export const repairOverlappingRegions = (boxGraph: BoxGraph): void => boxGraph.boxes().forEach(box => {
-    if (!(box instanceof TrackBox)) {return}
-    const regions = RegionOverlap.sortedRegions(box).sort((a, b) => a.position.getValue() - b.position.getValue() || byUuid(a, b))
-    regions.forEach((region, index) => {
-        if (index === 0 || RegionOverlap.endsAtSuccessor(regions[index - 1])) {return}
-        const end = regions[index - 1].position.getValue() + regions[index - 1].duration.getValue()
-        if (region.position.getValue() < end) {region.position.setValue(end)}
-    })
-})

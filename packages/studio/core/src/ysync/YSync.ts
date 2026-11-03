@@ -26,7 +26,6 @@ import {
     BoxGraph,
     ByteArrayField,
     Field,
-    IndexedBox,
     ObjectField,
     optimizeUpdates,
     PointerField,
@@ -35,9 +34,7 @@ import {
 } from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
 import {YBytes} from "./YBytes"
-import {
-    deterministicReconcile, duplicateOrders, hasOverlappingRegions, repairOrder, repairOverlappingRegions
-} from "./Reconcile"
+import {deterministicReconcile} from "./Reconcile"
 import * as Y from "yjs"
 
 type EventHandler = (events: Array<Y.YEvent<any>>, transaction: Y.Transaction) => void
@@ -163,14 +160,8 @@ export class YSync<T> implements Terminable {
         return {
             get hasChanges(): boolean {return YSync.#hasChanges(layer)},
             run: <R>(procedure: Provider<R>): R => this.#runInLayer(layer, procedure),
-            revert: () => {
-                this.#revertLayers([layer])
-                this.#repairOrder()
-            },
-            publish: () => {
-                this.#publishLayer(layer)
-                this.#repairOrder()
-            },
+            revert: () => this.#revertLayers([layer]),
+            publish: () => this.#publishLayer(layer),
             boxes: () => layer.boxes.values().flatMap(uuid => this.#boxGraph.findBox(uuid).mapOr(box => [box], [])),
             owns: (uuid: UUID.Bytes) => layer.boxes.hasKey(uuid),
             subscribeInvalid: (observer: Observer<void>) => layer.invalid.subscribe(observer),
@@ -263,31 +254,6 @@ export class YSync<T> implements Terminable {
         }))
     }
 
-    // two peers can insert at one index, every peer computes the same order from the document
-    #repairOrder(): void {
-        if (this.#boxGraph.inTransaction()) {return}
-        const fields = Array.from(new Set(duplicateOrders(this.#boxGraph)))
-        // an order that holds a local box is only this client's view and is repaired without telling the room
-        const layerOf = (field: Field) => this.#layers.find(({boxes}) => IndexedBox.collectIndexedBoxes(field)
-            .some(box => boxes.hasKey(box.address.uuid)))
-        fields.forEach(field => {
-            const layer = layerOf(field)
-            if (layer === undefined) {return}
-            this.#runInLayer(layer, () => {
-                this.#boxGraph.beginTransaction()
-                repairOrder(field)
-                this.#boxGraph.endTransaction()
-            })
-        })
-        if (this.#layers.some(YSync.#hasChanges)) {return}
-        if (fields.length === 0 && !hasOverlappingRegions(this.#boxGraph)) {return}
-        this.#boxGraph.beginTransaction()
-        this.#publishFrom = Option.wrap(this.#updates.length)
-        fields.forEach(repairOrder)
-        repairOverlappingRegions(this.#boxGraph)
-        this.#boxGraph.endTransaction()
-    }
-
     static #clearLayer({boxes, hidden, fields}: LayerState): void {
         boxes.clear()
         hidden.clear()
@@ -353,7 +319,6 @@ export class YSync<T> implements Terminable {
                 console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
                 this.#repairTorn()
                 YSync.#invalidate(previews)
-                this.#repairOrder()
                 return
             }
             const hasConflict = (): boolean => this.#conflict.mapOr(check => check(), false)
@@ -366,7 +331,6 @@ export class YSync<T> implements Terminable {
             } else {
                 this.#repairTorn()
             }
-            this.#repairOrder()
         }
         this.#boxes.observeDeep(eventHandler)
         return {terminate: () => {this.#boxes.unobserveDeep(eventHandler)}}

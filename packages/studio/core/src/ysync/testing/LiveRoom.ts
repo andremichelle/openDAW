@@ -1,5 +1,7 @@
-import {DefaultObservableValue, isDefined, MutableObservableOption, Notifier, Observer, Option, panic, Terminable, UUID} from "@opendaw/lib-std"
-import {BoxGraph} from "@opendaw/lib-box"
+import {
+    DefaultObservableValue, isDefined, MutableObservableOption, Notifier, Observer, Option, panic, Terminable, tryCatch, UUID
+} from "@opendaw/lib-std"
+import {applyUpdateTasks, BoxGraph, UpdateTask, UpdateTasks} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton, TransportAnchor} from "@opendaw/studio-adapters"
@@ -62,12 +64,47 @@ export interface RoomPeer {
     readonly worklet: ReturnType<typeof createFakeWorklet>
     readonly inbox: Array<Uint8Array>
     readonly outbox: Array<Uint8Array>
+    readonly engine: BoxGraph<BoxIO.TypeMap>
+    readonly engineErrors: Array<string>
     online: boolean
     sent: number
 }
 
 const hex = (graph: BoxGraph): string =>
     Array.from(graph.checksum(), byte => (byte & 0xff).toString(16).padStart(2, "0")).join("")
+
+// the engine's copy of the graph, fed like SyncSource: committed transactions only, nothing from a rollback
+const mirrorEngine = (graph: BoxGraph<BoxIO.TypeMap>, errors: Array<string>): BoxGraph<BoxIO.TypeMap> => {
+    const engine = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+    const apply = (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void => {
+        const result = tryCatch(() => {
+            engine.beginTransaction()
+            tasks.forEach(task => {
+                if (task.type !== "delete") {return applyUpdateTasks(engine, [task])}
+                // the wasm engine drops a box with its own pointers, the box graph insists they are cleared first
+                const box = engine.findBox(task.uuid).unwrap(() => `Could not find box ${UUID.toString(task.uuid)}`)
+                box.outgoingEdges().forEach(([pointer]) => pointer.targetAddress = Option.None)
+                engine.unstageBox(box)
+            })
+            engine.endTransaction()
+        })
+        if (result.status === "failure") {
+            if (engine.inTransaction()) {engine.abortTransaction()}
+            errors.push(String(result.error))
+        }
+    }
+    apply(graph.boxes().map(box => ({type: "new", name: box.name as keyof BoxIO.TypeMap, uuid: box.address.uuid, buffer: box.toArrayBuffer()})))
+    const tasks: Array<UpdateTask<BoxIO.TypeMap>> = []
+    graph.subscribeToAllUpdatesImmediate({onUpdate: update => {tasks.push(UpdateTasks.of<BoxIO.TypeMap>(update))}})
+    graph.subscribeTransaction({
+        onBeginTransaction: () => {},
+        onEndTransaction: rolledBack => {
+            const batch = tasks.splice(0)
+            if (!rolledBack && batch.length > 0) {apply(batch)}
+        }
+    })
+    return engine
+}
 
 export class LiveRoom {
     static async create(names: ReadonlyArray<string>): Promise<LiveRoom> {
@@ -111,7 +148,9 @@ export class LiveRoom {
         const worklet = createFakeWorklet()
         peer.project.engine.setWorklet(worklet as unknown as EngineWorklet)
         const inbox = this.peers.map(other => Y.encodeStateAsUpdate(other.doc))
-        const roomPeer: RoomPeer = {name, doc, boxes, worklet, inbox, outbox: [], online: true, sent: 0, ...peer}
+        const engineErrors: Array<string> = []
+        const engine = mirrorEngine(peer.graph, engineErrors)
+        const roomPeer: RoomPeer = {name, doc, boxes, worklet, inbox, outbox: [], engine, engineErrors, online: true, sent: 0, ...peer}
         this.peers.forEach(other => other.inbox.push(Y.encodeStateAsUpdate(doc)))
         doc.on("update", (update: Uint8Array, origin: unknown) => {
             if (origin === Network) {return}
@@ -181,6 +220,8 @@ export class LiveRoom {
                 }, [`${box.name} only here`])).at(0)
                 problems.push(`${peer.name} differs from ${first.name}${isDefined(field) ? ` at ${field}` : ""}`)
             }
+            peer.engineErrors.forEach(error => problems.push(`${peer.name} engine could not apply: ${error}`))
+            if (hex(peer.engine) !== hex(peer.graph)) {problems.push(`${peer.name} engine mirror diverged from its graph`)}
             if (peer.graph.boxes().length !== peer.boxes.size) {
                 problems.push(`${peer.name} graph holds ${peer.graph.boxes().length} boxes, its document ${peer.boxes.size}`)
             }

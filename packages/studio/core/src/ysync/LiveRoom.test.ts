@@ -191,19 +191,23 @@ describe("LiveRoom", () => {
             expect(uniqueUnitIndices(A)).toBe(true)
         })
 
-        it("a peer's new unit moves the local preview to a free index without telling the room", () => {
+        it("a preview may share its index with a peer's new unit, the room hears nothing until apply", async () => {
             const layer = A.sync.createLayer("preview")
-            layer.run(() => A.project.editing.modify(() => A.project.api.createInstrument(InstrumentFactories.Nano), false))
+            const create = () => A.project.editing.modify(() => A.project.api.createInstrument(InstrumentFactories.Nano), false)
+            layer.run(create)
             const before = A.sent
             addInstrument(B)
             room.flush()
-            expect(uniqueUnitIndices(A)).toBe(true)
+            expect(uniqueUnitIndices(A)).toBe(false)
             expect(A.sent).toBe(before)
+            expect(unitsOf(B).length).toBe(unitsOf(A).length - 1)
             layer.revert()
+            create()
+            await healthy()
             expect(uniqueUnitIndices(A)).toBe(true)
         })
 
-        it("a peer moving units keeps the local preview on a free index", () => {
+        it("a peer moving units while a unit is previewed leaves the room healthy", () => {
             const second = addInstrument(A)
             room.flush()
             const layer = A.sync.createLayer("preview")
@@ -211,9 +215,38 @@ describe("LiveRoom", () => {
             const remote = unitAt(B, second.address.uuid)
             B.project.editing.modify(() => remote.index.setValue(unitsOf(B).length))
             room.flush()
-            expect(uniqueUnitIndices(A)).toBe(true)
             layer.revert()
             expect(room.violations()).toEqual([])
+        })
+
+        // reported: a peer clicks a unit while the dialog swaps the previewed instrument, the engine diverged
+        it("a peer clicking units while another previews keeps every engine in step", async () => {
+            const layer = A.sync.createLayer("preview")
+            const pick = (nano: boolean) => {
+                layer.revert()
+                layer.run(() => A.project.editing.modify(() => nano
+                    ? A.project.api.createInstrument(InstrumentFactories.Nano)
+                    : A.project.api.createInstrument(InstrumentFactories.Vaporisateur), false))
+            }
+            pick(true)
+            unitsOf(B).forEach(remote => B.project.userEditingManager.audioUnit.edit(remote.editing))
+            room.flush()
+            pick(false)
+            unitsOf(B).forEach(remote => B.project.userEditingManager.audioUnit.edit(remote.editing))
+            room.flush()
+            pick(true)
+            layer.revert()
+            A.project.editing.modify(() => A.project.api.createInstrument(InstrumentFactories.Nano))
+            await healthy()
+        })
+
+        it("undo of a unit a peer is editing keeps every engine in step", async () => {
+            const created = addInstrument(A)
+            room.flush()
+            B.project.userEditingManager.audioUnit.edit(unitAt(B, created.address.uuid).editing)
+            room.flush()
+            A.project.editing.undo()
+            await healthy()
         })
 
         it("a preview and a running take do not revert each other", async () => {
@@ -306,8 +339,8 @@ describe("LiveRoom", () => {
             takeB.stop()
             await healthy()
             expect(regionsOf(unitAt(C, unit.address.uuid)).length).toBe(2)
-            const indices = tracksOf(unitAt(C, unit.address.uuid)).map(track => track.index.getValue())
-            expect(new Set(indices).size).toBe(indices.length)
+            const tracks = tracksOf(unitAt(C, unit.address.uuid))
+            expect(tracks.filter(track => track.regions.pointerHub.nonEmpty()).length).toBe(2)
         })
 
         it("a take lands on its own track, a peer's region on the empty one cannot overlap it", async () => {
@@ -463,32 +496,13 @@ describe("LiveRoom repairs", () => {
         vi.restoreAllMocks()
     })
 
-    it("two peers adding an instrument at once get distinct indices", async () => {
+    it("two peers adding an instrument at once share an index without a rejection", async () => {
         addInstrument(A)
         addInstrument(B)
         room.flush()
         expect(room.violations()).toEqual([])
-        expect(uniqueUnitIndices(A)).toBe(true)
+        expect(uniqueUnitIndices(A)).toBe(false)
         expect(await room.lateJoinerDiffers()).toBe(false)
-    })
-
-    it("many concurrent inserts settle without peers answering forever", () => {
-        for (let index = 0; index < 8; index++) {
-            addInstrument(A)
-            addInstrument(B)
-        }
-        expect(room.violations()).toEqual([])
-        expect(uniqueUnitIndices(A)).toBe(true)
-    })
-
-    it("two peers placing a region on one spot keep both, the later moves behind", () => {
-        const unit = addInstrument(A)
-        const track = A.project.editing.modify(() => A.project.api.createNoteTrack(unit)).unwrap()
-        room.flush()
-        A.project.editing.modify(() => A.project.api.createTrackRegion(track, 0, 960))
-        B.project.editing.modify(() => B.project.api.createTrackRegion(B.graph.findBox<TrackBox>(track.address.uuid).unwrap(), 0, 960))
-        expect(room.violations()).toEqual([])
-        expect(track.regions.pointerHub.incoming().length).toBe(2)
     })
 
     it("concurrent writes to one field converge on one winner", () => {
