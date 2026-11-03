@@ -55,6 +55,9 @@ export class StudioNavigation {
         if (result.status === "rejected") {throw result.error}
         if (result.value) {
             this.#profiles.setValue(Option.None)
+            // closing from a page with its own route (a contest) must still reach the dashboard
+            const route = RouteLocation.get()
+            if (route.path !== "/") {route.navigateTo("/")}
         } else {
             RouteLocation.get().navigateTo("/create")
         }

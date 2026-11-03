@@ -48,4 +48,15 @@ describe("StudioNavigation.closeProject", () => {
         await navigation.closeProject()
         expect(isOpen()).toBe(false)
     })
+    // a page like a contest keeps its own route, closing the project from there must still reach the dashboard
+    it("goes to the dashboard when the project is closed from another page", async () => {
+        const {StudioNavigation} = await import("@/service/StudioNavigation")
+        const {RouteLocation} = await import("@opendaw/lib-jsx")
+        RouteLocation.get().navigateTo("/contests/spring")
+        const {profiles, isOpen} = fakeProfiles([() => Promise.resolve(true)])
+        const navigation = new StudioNavigation(new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>(null), profiles)
+        await navigation.closeProject()
+        expect(isOpen()).toBe(false)
+        expect(RouteLocation.get().path).toBe("/")
+    })
 })
