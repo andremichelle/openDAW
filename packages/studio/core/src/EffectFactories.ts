@@ -63,6 +63,7 @@ export namespace EffectFactories {
                 box.label.setValue("Arpeggio")
                 box.index.setValue(index)
                 box.host.refer(hostField)
+                box.version.setValue(1)
             })
     }
 

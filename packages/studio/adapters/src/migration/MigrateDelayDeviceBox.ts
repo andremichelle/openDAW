@@ -1,6 +1,7 @@
 import {BoxGraph} from "@opendaw/lib-box"
-import {clamp, isDefined} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, DelayDeviceBox, ValueEventBox} from "@opendaw/studio-boxes"
+import {clamp} from "@opendaw/lib-std"
+import {BoxIO, DelayDeviceBox} from "@opendaw/studio-boxes"
+import {migrateAutomation} from "./MigrateAutomation"
 
 export const migrateDelayDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: DelayDeviceBox): void => {
     if (box.version.getValue() !== 0) {return}
@@ -20,18 +21,7 @@ export const migrateDelayDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: De
     box.preSyncTimeRight.setValue(0)
     box.preMillisTimeRight.setValue(0)
     box.version.setValue(1)
-    box.delayMusical.pointerHub.incoming().forEach(pointer => {
-        const eventBox = pointer.box.accept<BoxVisitor<ValueEventBox>>({
-            visitValueEventBox: (event) => event
-        })
-        if (isDefined(eventBox)) {
-            const oldNormalized = eventBox.value.getValue()
-            const oldEventIndex = Math.round(oldNormalized * oldMaxIndex)
-            const newEventIndex = oldToNewIndex[clamp(oldEventIndex, 0, oldMaxIndex)]
-            const newNormalized = newEventIndex / newMaxIndex
-            console.debug(`  Migrate automation: ${oldNormalized.toFixed(4)} (idx ${oldEventIndex}) -> ${newNormalized.toFixed(4)} (idx ${newEventIndex})`)
-            eventBox.value.setValue(newNormalized)
-        }
-    })
+    migrateAutomation(boxGraph, box.delayMusical,
+        unit => oldToNewIndex[clamp(Math.round(unit * oldMaxIndex), 0, oldMaxIndex)] / newMaxIndex)
     boxGraph.endTransaction()
 }

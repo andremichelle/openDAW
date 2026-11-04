@@ -400,7 +400,7 @@ mod monitor;
 mod frozen;
 use metronome::Metronome;
 mod signature_track;
-use signature_track::{SignatureEvent, SignatureTrack};
+use signature_track::{SignatureEvent, SignatureEvents, SignatureTrack};
 mod marker_track;
 use marker_track::MarkerTrack;
 mod plugin_instrument;
@@ -633,6 +633,10 @@ shared_static! {
 // the `&mut Engine` the render path holds. Mirrors `SAMPLES`. 440 before bind / when no RootBox exists.
 shared_static! {
     static BASE_FREQUENCY: f32 = 440.0;
+}
+// The signature track for `host_bar_at`, its OWN cell like `BASE_FREQUENCY`. 4/4 before bind.
+shared_static! {
+    static SIGNATURES: Option<SignatureEvents> = None;
 }
 // The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
 // range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
@@ -1158,6 +1162,21 @@ pub extern "C" fn host_resolve_input(id: u32, out_ptr: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn host_base_frequency() -> f32 {
     unsafe { *BASE_FREQUENCY.get() }
+}
+
+/// Host import a device calls for the bar holding `pulse`: writes its start, length and beat length (3 x f64).
+#[no_mangle]
+pub extern "C" fn host_bar_at(pulse: f64, out_ptr: u32) {
+    let bar = match unsafe { SIGNATURES.get() }.as_ref() {
+        Some(signatures) => signatures.bar_at(pulse),
+        None => signature_track::bar_at(&[SignatureEvent {index: -1, accumulated_ppqn: 0.0, nominator: 4, denominator: 4}], pulse)
+    };
+    let out = out_ptr as usize as *mut f64;
+    unsafe {
+        *out = bar.0;
+        *out.add(1) = bar.1;
+        *out.add(2) = bar.2;
+    }
 }
 
 // The state block of the device the engine is calling, and the latency cell of every live plugin node by its
@@ -2278,7 +2297,9 @@ impl Engine {
         }
         // signature track: TimelineBox.signatureTrack (23) = {events (1, hub), enabled (20)} + the storage
         // signature (10) — the accumulated event list the metronome and the count-in read.
-        self.signature = Some(SignatureTrack::observe(&mut self.graph, uuid));
+        let signature = SignatureTrack::observe(&mut self.graph, uuid);
+        unsafe { *SIGNATURES.get() = Some(signature.handle()); }
+        self.signature = Some(signature);
         // marker track: TimelineBox.markerTrack (21) = {markers (1, hub), enabled (20)} — the sorted
         // markers the transport's block loop follows and the switchMarkerState notifications feed from.
         self.marker_track = Some(MarkerTrack::observe(&mut self.graph, uuid));
@@ -2939,6 +2960,7 @@ pub extern "C" fn reset() {
         }
         CHECKSUM.get().fill(0);
         *BASE_FREQUENCY.get() = 440.0; // back to the default until the next session's `bind` catches up
+        *SIGNATURES.get() = None;
     }
 }
 

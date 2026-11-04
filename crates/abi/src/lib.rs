@@ -169,6 +169,7 @@ extern "C" {
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
+    fn host_bar_at(pulse: f64, out_ptr: u32);
     fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
@@ -301,6 +302,29 @@ pub fn base_frequency() -> f32 {
     { unsafe { host_base_frequency() } }
     #[cfg(not(target_family = "wasm"))]
     { f32::from_bits(NATIVE_BASE_FREQUENCY.load(core::sync::atomic::Ordering::Relaxed)) }
+}
+
+/// A bar of the project's signature track: its start, length and beat length in pulses.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bar {
+    pub start: f64,
+    pub length: f64,
+    pub beat: f64
+}
+
+/// The bar holding `pulse` on the project's signature track. Native builds assume 4/4.
+#[inline]
+pub fn bar_at(pulse: f64) -> Bar {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0.0f64; 3];
+        unsafe { host_bar_at(pulse, out.as_mut_ptr() as u32) };
+        Bar {start: out[0], length: out[1], beat: out[2]}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        Bar {start: math::floor(pulse / 3840.0) * 3840.0, length: 3840.0, beat: 960.0}
+    }
 }
 
 /// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
@@ -1746,26 +1770,39 @@ const MIDI_PULL_SCRATCH: usize = 256;
 pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut M::State) };
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    render_sub_ranges(state, from, to, flags, out, first_update_position(from),
+        &mut |sub_from, sub_to, flags, scratch| pull_events(sub_from, sub_to, flags, scratch),
+        &mut |state, boundary| {
+            apply_param_changes::<M::State>(state, boundary, M::parameter_changed);
+            next_update_position(boundary)
+        },
+        &mut |state, _sub_from, _sub_to, _flags, input, output| M::transform(state, input, output)) as u32
+}
+
+/// Split `[from, to)` at the update boundaries (the first is INCLUSIVE, `advance` applies the parameter changes and
+/// returns the next), pull each sub-range and `transform` it. The one-shot flags reach only the first sub-range.
+pub fn render_sub_ranges<S>(state: &mut S, from: f64, to: f64, flags: u32, out: &mut [EventRecord], first_boundary: f64,
+                            pull: &mut dyn FnMut(f64, f64, u32, &mut [EventRecord]) -> usize,
+                            advance: &mut dyn FnMut(&mut S, f64) -> f64,
+                            transform: &mut dyn FnMut(&mut S, f64, f64, u32, &[EventRecord], &mut [EventRecord]) -> usize) -> usize {
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut count = 0;
     let mut sub_from = from;
-    // The seed is INCLUSIVE (a boundary exactly on `from` fires); the loop then advances STRICTLY. When the fx
-    // has no automation, `boundary` is INFINITY, so this is ONE pull over `[from, to)` — the previous behaviour.
-    let mut boundary = first_update_position(from);
+    let mut flags = BlockFlags(flags);
+    let mut boundary = first_boundary;
     loop {
         let sub_to = if boundary < to {boundary} else {to};
         let mut scratch = [blank; MIDI_PULL_SCRATCH];
-        let pulled = pull_events(sub_from, sub_to, flags, &mut scratch);
-        count += M::transform(state, &scratch[..pulled], &mut out[count..]);
+        let pulled = pull(sub_from, sub_to, flags.0, &mut scratch);
+        count += transform(state, sub_from, sub_to, flags.0, &scratch[..pulled], &mut out[count..]);
+        flags.clear_event_flags();
         if sub_to >= to {
             break;
         }
-        // refresh this fx's parameters at the update boundary, before the next sub-range transforms.
-        apply_param_changes::<M::State>(state, boundary, M::parameter_changed);
+        boundary = advance(state, boundary);
         sub_from = sub_to;
-        boundary = next_update_position(boundary);
     }
-    count as u32
+    count
 }
 
 #[cfg(test)]

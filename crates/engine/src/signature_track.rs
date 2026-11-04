@@ -39,6 +39,34 @@ pub struct SignatureEvent {
     pub denominator: i32
 }
 
+/// The bar holding `position` in the accumulated `events` (non-empty): its start, length and beat length in pulses.
+pub fn bar_at(events: &[SignatureEvent], position: f64) -> (f64, f64, f64) {
+    let mut current = events[0];
+    for event in events {
+        if event.accumulated_ppqn > position {
+            break;
+        }
+        current = *event;
+    }
+    let length = from_signature(current.nominator, current.denominator);
+    let beat = from_signature(1, current.denominator);
+    if length <= 0.0 || beat <= 0.0 {
+        return (0.0, from_signature(4, 4), from_signature(1, 4));
+    }
+    let start = current.accumulated_ppqn + math::floor((position - current.accumulated_ppqn) / length) * length;
+    (start, length, beat)
+}
+
+/// A read-only handle on the accumulated signature list for the `host_bar_at` device import.
+#[derive(Clone)]
+pub struct SignatureEvents(Rc<RefCell<State>>);
+
+impl SignatureEvents {
+    pub fn bar_at(&self, position: f64) -> (f64, f64, f64) {
+        bar_at(&self.0.borrow().events, position)
+    }
+}
+
 /// A member `SignatureEventBox`'s raw fields; the accumulation happens in `rebuild`.
 struct Member {
     index: i32,
@@ -173,6 +201,10 @@ impl SignatureTrack {
     /// storage signature at pulse 0.
     pub fn events(&self) -> Ref<'_, Vec<SignatureEvent>> {
         Ref::map(self.state.borrow(), |state| &state.events)
+    }
+
+    pub fn handle(&self) -> SignatureEvents {
+        SignatureEvents(self.state.clone())
     }
 
     /// The signature in effect at `position` (TS `signatureAt`): the last event at or before it —
@@ -326,5 +358,16 @@ mod tests {
             new: FieldValue::Boolean(false)
         }], &registry).unwrap();
         assert_eq!(track.events().len(), 1, "disabling the track drops the events live");
+    }
+    #[test]
+    fn bar_at_follows_signature_changes() {
+        let event = |accumulated_ppqn: f64, nominator: i32, denominator: i32| SignatureEvent {index: 0, accumulated_ppqn, nominator, denominator};
+        let events = [event(0.0, 4, 4), event(7680.0, 3, 4), event(7680.0 + 2880.0 * 2.0, 7, 8)];
+        assert_eq!(bar_at(&events, 0.0), (0.0, 3840.0, 960.0));
+        assert_eq!(bar_at(&events, 5000.0), (3840.0, 3840.0, 960.0));
+        assert_eq!(bar_at(&events, 7680.0), (7680.0, 2880.0, 960.0), "3/4 starts its own bar");
+        assert_eq!(bar_at(&events, 7680.0 + 2880.0 + 10.0), (7680.0 + 2880.0, 2880.0, 960.0));
+        assert_eq!(bar_at(&events, 13440.0 + 3400.0), (13440.0 + 3360.0, 3360.0, 480.0), "7/8 bars of 3360, eighth beats");
+        assert_eq!(bar_at(&events[..1], -100.0), (-3840.0, 3840.0, 960.0), "count-in before zero");
     }
 }

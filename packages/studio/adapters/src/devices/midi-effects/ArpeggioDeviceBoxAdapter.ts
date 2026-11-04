@@ -20,6 +20,14 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
 
     static RateStringMapping = StringMapping.indices("", this.RateFractions.map(([n, d]) => `${n}/${d}`))
 
+    static readonly Modes: ReadonlyArray<string> = [
+        "Up", "Down", "UpDown", "DownUp", "Up & Down", "Down & Up", "Converge", "Diverge", "Con & Diverge",
+        "Pinky Up", "Pinky UpDown", "Thumb Up", "Thumb UpDown", "Random", "Random Other", "Shuffle", "Random Once", "Walk"]
+    static readonly Orders: ReadonlyArray<string> = ["Played", "Pitch"]
+    static readonly Retriggers: ReadonlyArray<string> = ["Off", "Note", "Bar", "Beat"]
+    static readonly StepCount = 64
+    static readonly MaxSeed = 999999
+
     readonly type = "midi-effect"
     readonly accepts = "midi"
     readonly manualUrl = DeviceManualUrls.Arpeggio
@@ -58,8 +66,8 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
         return {
             modeIndex: this.#parametric.createParameter(
                 box.modeIndex,
-                ValueMapping.linearInteger(0, 2),
-                StringMapping.indices("", ["Up", "Down", "UpDown"]), "Mode"),
+                ValueMapping.linearInteger(0, ArpeggioDeviceBoxAdapter.Modes.length - 1),
+                StringMapping.indices("", ArpeggioDeviceBoxAdapter.Modes), "Mode"),
             numOctaves: this.#parametric.createParameter(
                 box.numOctaves,
                 ValueMapping.linearInteger(1, 5),
@@ -79,7 +87,23 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
             velocity: this.#parametric.createParameter(
                 box.velocity,
                 ValueMapping.bipolar(),
-                StringMapping.percent({fractionDigits: 0, bipolar: false}), "Velocity")
+                StringMapping.percent({fractionDigits: 0, bipolar: false}), "Velocity"),
+            order: this.#parametric.createParameter(
+                box.order,
+                ValueMapping.linearInteger(0, ArpeggioDeviceBoxAdapter.Orders.length - 1),
+                StringMapping.indices("", ArpeggioDeviceBoxAdapter.Orders), "Order"),
+            hold: this.#parametric.createParameter(
+                box.hold,
+                ValueMapping.bool,
+                StringMapping.bool, "Hold"),
+            retrigger: this.#parametric.createParameter(
+                box.retrigger,
+                ValueMapping.linearInteger(0, ArpeggioDeviceBoxAdapter.Retriggers.length - 1),
+                StringMapping.indices("", ArpeggioDeviceBoxAdapter.Retriggers), "Retrigger"),
+            offset: this.#parametric.createParameter(
+                box.offset,
+                ValueMapping.linearInteger(0, 15),
+                StringMapping.numeric({fractionDigits: 0}), "Offset")
         } as const
     }
 }

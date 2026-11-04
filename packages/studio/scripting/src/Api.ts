@@ -220,8 +220,12 @@ export interface SideChainable {
 export interface ArpeggioEffect extends MIDIEffect {
     /** Always "Arpeggio" */
     readonly key: "Arpeggio"
-    /** Playback direction: 0 = Up, 1 = Down, 2 = UpDown (default 0) */
-    mode: 0 | 1 | 2
+    /**
+     * Walk through the held notes (default 0): 0 Up, 1 Down, 2 UpDown, 3 DownUp, 4 Up & Down, 5 Down & Up,
+     * 6 Converge, 7 Diverge, 8 Con & Diverge, 9 Pinky Up, 10 Pinky UpDown, 11 Thumb Up, 12 Thumb UpDown,
+     * 13 Random, 14 Random Other, 15 Shuffle, 16 Random Once, 17 Walk
+     */
+    mode: int
     /** Octave range (1 to 5, default 1) */
     octaves: int
     /** Step rate index (0-16): 1/1, 1/2, 1/3, 1/4, 3/16, 1/6, 1/8, 3/32, 1/12, 1/16, 3/64, 1/24, 1/32, 1/48, 1/64, 1/96, 1/128 (default 9 = 1/16) */
@@ -232,6 +236,41 @@ export interface ArpeggioEffect extends MIDIEffect {
     repeat: int
     /** Velocity change per repeat (-1.0 to 1.0, default 0.0) */
     velocity: bipolar
+    /** Note order: 0 = as played, 1 = by pitch (default 0) */
+    order: int
+    /** Keep playing the last notes after they are released (default false) */
+    hold: boolean
+    /** Restart the pattern: 0 = never, 1 = on the first note, 2 = every bar, 3 = every beat (default 0) */
+    retrigger: int
+    /** Steps the walk starts later (0 to 15, default 0) */
+    offset: int
+    /** Seed of the random walks and the step chance (0 to 999999, default 0) */
+    seed: int
+    /** Number of steps the sequencer plays (1 to 64, default 16) */
+    patternLength: int
+    /** The 64 sequencer steps */
+    readonly steps: ReadonlyArray<ArpeggioStep>
+}
+
+/**
+ * One step of the Arpeggio sequencer
+ * @group Effect Parts
+ */
+export interface ArpeggioStep {
+    /** 0 = note, 1 = rest, 2 = tie (extends the previous note), 3 = chord (plays every held note) (default 0) */
+    kind: int
+    /** Velocity in percent (0 to 100, default 100) */
+    velocity: int
+    /** Gate in percent, multiplies the device gate (0 to 200, default 100) */
+    gate: int
+    /** Semitones (-12 to 12, default 0) */
+    transpose: int
+    /** Octaves (-2 to 2, default 0) */
+    octave: int
+    /** Chance to play in percent (0 to 100, default 100) */
+    chance: int
+    /** Equal hits within the step (1 to 7, default 1) */
+    ratchet: int
 }
 
 /**

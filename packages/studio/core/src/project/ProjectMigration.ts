@@ -6,7 +6,6 @@ import {
     AudioTimeStretchBox,
     AudioUnitBox,
     BoxVisitor,
-    DelayDeviceBox,
     GrooveShuffleBox,
     MIDIOutputDeviceBox,
     NeuralAmpDeviceBox,
@@ -21,7 +20,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {asInstanceOf, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectEnv} from "./ProjectEnv"
 import {
@@ -32,7 +31,6 @@ import {
     migrateAudioUnitBox,
     migrateCaptureTrackMismatch,
     migrateDefaultLabels,
-    migrateDelayDeviceBox,
     migrateMIDIOutputDeviceBox,
     migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
@@ -130,10 +128,12 @@ export class ProjectMigration {
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
-            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => migrateWclapState(boxGraph, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => migrateWclapState(boxGraph, box)
         }))
+        // Must run after migrateValueEventBox.
+        const deviceMigration = DeviceMigration.visitor(boxGraph)
+        boxGraph.boxes().slice().forEach(box => perBox(box, deviceMigration))
         // 3rd pass. Drop content tracks whose type no longer matches their unit's capture device (a MIDI
         // instrument swapped for a Tape leaves note tracks on an audio-capture unit, and vice versa) — they
         // are unusable and crash editors. Runs after per-unit migration, which ensures each unit has a

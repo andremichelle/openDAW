@@ -12,6 +12,7 @@ import {asInstanceOf, bipolar, float, int, panic, unitValue} from "@opendaw/lib-
 import {
     AnyAudioUnit,
     ArpeggioEffect,
+    ArpeggioStep,
     MIDIEffects,
     NoteFilterEffect,
     PitchEffect,
@@ -38,18 +39,32 @@ export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilte
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
     readonly key = "Arpeggio" as const
-    declare mode: 0 | 1 | 2
+    declare mode: int
     declare octaves: int
     declare rate: int
     declare gate: float
     declare repeat: int
     declare velocity: bipolar
+    declare order: int
+    declare hold: boolean
+    declare retrigger: int
+    declare offset: int
+    declare seed: int
+    declare patternLength: int
+    declare readonly steps: ReadonlyArray<ArpeggioStep>
 
     constructor(context: Context, box: ArpeggioDeviceBox) {
         super(context, box)
         this.bind({
             mode: box.modeIndex, octaves: box.numOctaves, rate: box.rateIndex,
-            gate: box.gate, repeat: box.repeat, velocity: box.velocity
+            gate: box.gate, repeat: box.repeat, velocity: box.velocity,
+            order: box.order, hold: box.hold, retrigger: box.retrigger, offset: box.offset,
+            seed: box.seed, patternLength: box.patternLength,
+            steps: box.stepKinds.fields().map((kind, index) => ({
+                kind, velocity: box.stepVelocities.getField(index), gate: box.stepGates.getField(index),
+                transpose: box.stepTransposes.getField(index), octave: box.stepOctaves.getField(index),
+                chance: box.stepChances.getField(index), ratchet: box.stepRatchets.getField(index)
+            }))
         })
     }
 }
