@@ -154,6 +154,7 @@ export namespace DeviceBoxes {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)
+                    box.version.setValue(1)
                 })
             case "Pitch":
                 return PitchDeviceBox.create(boxGraph, UUID.generate(), box => {

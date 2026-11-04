@@ -31,6 +31,7 @@ import {
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
+import {DeviceMigration} from "../migration/DeviceMigration"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 import {InstrumentFactories} from "../factories/InstrumentFactories"
@@ -58,6 +59,7 @@ export namespace PresetDecoder {
             RuntimeNotifier.notify({message: "Could not import preset.", icon: "Warning"})
             return []
         }
+        DeviceMigration.migrate(sourceBoxGraph)
         const summary: Record<string, number> = {}
         for (const box of sourceBoxGraph.boxes()) {
             summary[box.name] = (summary[box.name] ?? 0) + 1
@@ -256,6 +258,7 @@ export namespace PresetDecoder {
         if (loaded.status === "failure") {
             return Attempts.err(`Failed to decode preset: ${String(loaded.error)}`)
         }
+        DeviceMigration.migrate(sourceGraph)
         const sourceAudioUnit = sourceGraph.boxes()
             .filter(box => isInstanceOf(box, AudioUnitBox))
             .map(box => asInstanceOf(box, AudioUnitBox))
