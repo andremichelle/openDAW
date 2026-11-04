@@ -18,6 +18,7 @@ import {
     GrooveShuffleBox,
     MaximizerDeviceBox,
     NeuralAmpDeviceBox,
+    NoteFilterDeviceBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -35,7 +36,7 @@ import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {AudioEffects, Instruments, MIDIEffects} from "../../Api"
 
 export type MIDIEffectBox =
-    | ArpeggioDeviceBox | PitchDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | SpielwerkDeviceBox
+    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | SpielwerkDeviceBox
 
 export type AudioEffectBox =
     | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
@@ -48,7 +49,8 @@ export namespace DeviceBoxes {
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
-        Arpeggio: "Arpeggio", Pitch: "Pitch", Velocity: "Velocity", Zeitgeist: "Zeitgeist", Spielwerk: "Spielwerk"
+        Arpeggio: "Arpeggio", Pitch: "Pitch", NoteFilter: "Note Filter", Velocity: "Velocity", Zeitgeist: "Zeitgeist",
+        Spielwerk: "Spielwerk"
     }
 
     export const AudioEffectLabels: Record<keyof AudioEffects, string> = {
@@ -63,6 +65,7 @@ export namespace DeviceBoxes {
         switch (boxName) {
             case "ArpeggioDeviceBox": return "Arpeggio"
             case "PitchDeviceBox": return "Pitch"
+            case "NoteFilterDeviceBox": return "NoteFilter"
             case "VelocityDeviceBox": return "Velocity"
             case "ZeitgeistDeviceBox": return "Zeitgeist"
             case "SpielwerkDeviceBox": return "Spielwerk"
@@ -115,7 +118,8 @@ export namespace DeviceBoxes {
     }
 
     export const isMIDIEffectBox = (boxName: string): boolean =>
-        ["ArpeggioDeviceBox", "PitchDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox", "SpielwerkDeviceBox"]
+        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
+            "SpielwerkDeviceBox"]
             .includes(boxName)
 
     export const isAudioEffectBox = (boxName: string): boolean =>
@@ -153,6 +157,12 @@ export namespace DeviceBoxes {
                 })
             case "Pitch":
                 return PitchDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "NoteFilter":
+                return NoteFilterDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

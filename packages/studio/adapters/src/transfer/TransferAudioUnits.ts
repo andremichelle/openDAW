@@ -9,6 +9,7 @@ import {TransferUtils} from "./TransferUtils"
 export namespace TransferAudioUnits {
     export type TransferOptions = {
         insertIndex?: int,
+        layoutOrder?: boolean,
         includeGroupDescendants?: boolean,
         /** Same-project duplication only: initialize external output references to the originals. */
         preserveExternalConnections?: boolean,
@@ -17,7 +18,6 @@ export namespace TransferAudioUnits {
         includeBus?: boolean,
         excludeTimeline?: boolean,
     }
-    /** Copy full group subtrees and dependencies, sharing resources already present in the target graph. */
     export const transfer = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                              {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
                              options: TransferOptions = {}): ReadonlyArray<AudioUnitBox> => {
@@ -48,7 +48,7 @@ export namespace TransferAudioUnits {
             })
         }
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, sources, dependencies)
-        TransferUtils.reorderAudioUnits(uuidMap, sources, rootBox, options.insertIndex)
+        TransferUtils.reorderAudioUnits(uuidMap, sources, rootBox, options.insertIndex, options.layoutOrder)
         const result = sources.map(source => asInstanceOf(rootBox.graph
             .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
             .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))

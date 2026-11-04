@@ -1,3 +1,4 @@
+import {ppqn} from "@opendaw/lib-dsp"
 import {
     Arrays,
     asInstanceOf,
@@ -13,15 +14,14 @@ import {
     SortedSet,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, ModulationBox, RootBox, TrackBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
-import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
-import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
+import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
+import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -157,27 +157,31 @@ export namespace TransferUtils {
     export const reorderAudioUnits = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
                                       audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                       rootBox: RootBox,
-                                      insertIndex?: int): void => {
+                                      insertIndex?: int, layoutOrder: boolean = false): void => {
         const targets = audioUnitBoxes
             .toSorted(compareIndex)
             .map(source => asInstanceOf(rootBox.graph
                 .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         const targetSet = new Set<AudioUnitBox>(targets)
-        const existing = AudioUnitGroups.ordered(rootBox).filter(box => !targetSet.has(box))
+        const allAudioUnits = layoutOrder ? AudioUnitGroups.ordered(rootBox) : IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
+        const existing = allAudioUnits.filter(box => !targetSet.has(box))
         let ordered: ReadonlyArray<AudioUnitBox>
         if (isDefined(insertIndex)) {
             const position = clamp(insertIndex, 0, existing.length)
             ordered = [...existing.slice(0, position), ...targets, ...existing.slice(position)]
         } else {
-            const stable = existing.toSorted((left, right) =>
-                Number(left.type.getValue() === "output") - Number(right.type.getValue() === "output"))
+            // Place by AudioUnitOrdering, not by current index: the primary Output unit (highest order)
+            // can sit at a low index, so findIndex over the index-sorted list would insert the copy
+            // before it. Sort existing by order first so the copy lands among its own kind (e.g. an
+            // instrument after the other instruments but before the Output unit).
+            const byOrder = layoutOrder ? existing : existing.toSorted((a, b) =>
+                (AudioUnitOrdering[a.type.getValue()] ?? 0) - (AudioUnitOrdering[b.type.getValue()] ?? 0))
             const maxOrder = targets.reduce((max, box) =>
                 Math.max(max, AudioUnitOrdering[box.type.getValue()] ?? 0), 0)
-            let position = stable.findIndex(box => !isDefined(AudioUnitGroups.parent(box).unwrapOrUndefined())
-                && !box.isGroup.getValue() && (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
-            if (position === -1) {position = stable.length}
-            ordered = [...stable.slice(0, position), ...targets, ...stable.slice(position)]
+            let position = byOrder.findIndex(box => (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
+            if (position === -1) {position = byOrder.length}
+            ordered = [...byOrder.slice(0, position), ...targets, ...byOrder.slice(position)]
         }
         ordered.forEach((box, index) => box.index.setValue(index))
     }

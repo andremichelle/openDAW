@@ -5,6 +5,7 @@ import {StudioPreferences, WclapBundles, WclapGuis, WclapZoomOptions} from "@ope
 import {FloatingWindow, FloatingWindowHandle} from "@/ui/components/FloatingWindow.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapFrame} from "@/service/WclapFrame"
+import {WclapZoomMemory} from "@/service/WclapZoomMemory"
 
 export type WclapAdapter = WclapDeviceBoxAdapter | WclapInstrumentBoxAdapter | WclapMidiEffectBoxAdapter
 
@@ -102,13 +103,17 @@ export namespace WclapWindows {
             },
             transparent
         }))
+        const clapId = adapter.clapIdField.getValue()
         const handle = FloatingWindow({
             title, icon: IconSymbol.WebClap, width, height,
-            // a plugin of a fixed size draws at that size, the default zoom only reaches one that resizes
-            scale: gui.resizable ? StudioPreferences.settings.webclap["default-zoom"] / 100 : 1, resizable: false,
+            // a plugin of a fixed size draws at that size, the zoom only reaches one that resizes
+            scale: gui.resizable
+                ? WclapZoomMemory.get(clapId).unwrapOrElse(StudioPreferences.settings.webclap["default-zoom"] / 100) : 1,
+            resizable: false,
             zoomLevels: gui.resizable ? WclapZoomOptions.map(value => value / 100) : undefined,
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, frame.iframe)
+        if (gui.resizable) {session.own(handle.zoom.subscribe(owner => WclapZoomMemory.set(clapId, owner.getValue())))}
         session.ownAll(
             WclapGuis.subscribeResize(uuidString, ({width, height}) => handle.requestSize(width, height)),
             WclapGuis.subscribeShow(uuidString, visible => {if (!visible) {close(uuidString)}})

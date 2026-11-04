@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core-wasm",
-  "version": "0.0.24",
+  "version": "0.0.26",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -27,26 +27,27 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.ts\"",
     "test:rust": ". ./cargo-env.sh && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
-    "test:vitest": "vitest run",
+    "test:vitest": "vitest run --exclude \"**/*-bench.test.ts\"",
+    "test:bench": "vitest run bench.test",
     "test": "npm run test:rust && npm run test:vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.101",
-    "@opendaw/lib-dsp": "^0.0.99",
-    "@opendaw/lib-fusion": "^0.0.110",
+    "@opendaw/lib-box": "^0.0.103",
+    "@opendaw/lib-dsp": "^0.0.100",
+    "@opendaw/lib-fusion": "^0.0.112",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
     "@opendaw/nam-wasm": "^1.2.0",
-    "@opendaw/studio-adapters": "^0.3.11",
-    "@opendaw/studio-boxes": "^0.0.117",
-    "@opendaw/studio-core": "^0.2.13",
+    "@opendaw/studio-adapters": "^0.3.13",
+    "@opendaw/studio-boxes": "^0.0.119",
+    "@opendaw/studio-core": "^0.2.15",
     "soundfont2": "^0.5.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-core-processors": "^0.0.146",
-    "@opendaw/studio-enums": "^0.1.10",
+    "@opendaw/studio-core-processors": "^0.0.148",
+    "@opendaw/studio-enums": "^0.1.11",
     "@opendaw/typescript-config": "^0.0.32",
     "@types/audioworklet": "^0.0.77",
     "esbuild": "^0.25.0",

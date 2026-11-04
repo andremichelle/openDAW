@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from "vitest"
 import {asDefined, asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitGroups, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, DeviceHost, TransferAudioUnits} from "@opendaw/studio-adapters"
-import {AudioUnitBox, AuxSendBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, TrackBox} from "@opendaw/studio-boxes"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
 import {EffectFactories} from "../EffectFactories"
@@ -52,6 +52,50 @@ const expectOrder = (actual: ReadonlyArray<AudioUnitBox>, expected: ReadonlyArra
 }
 
 describe("track folders", () => {
+    it("resolves a newly created unit's rerouted output through undo, redo and reload", async () => {
+        const {project, units: [first]} = await setup()
+        const group = project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap()
+        const bus = AudioUnitGroups.bus(group).unwrap()
+        const added = project.editing.modify(() => {
+            const unit = project.api.createAnyInstrument(InstrumentFactories.Neon).audioUnitBox
+            unit.output.refer(bus.input)
+            return unit
+        }).unwrap()
+        const uuid = added.address.uuid
+        const check = (unit: AudioUnitBox) => {
+            expect(unit.output.targetVertex.unwrap().address.equals(unit.output.targetAddress.unwrap())).true
+            expect(AudioUnitGroups.parent(unit).unwrap().address.equals(group.address)).true
+        }
+        check(added)
+        expect(project.editing.undo()).true
+        expect(project.boxGraph.findBox(uuid).isEmpty()).true
+        expect(project.editing.redo()).true
+        check(project.boxGraph.findBox(uuid).unwrap() as AudioUnitBox)
+        const restored = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
+        check(restored.boxGraph.findBox(uuid).unwrap() as AudioUnitBox)
+        project.terminate()
+    })
+    it("extracts a nested group with its tracks, clips and processing into a new project", async () => {
+        const {project, units: [first, second]} = await setup()
+        const group = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
+        project.editing.modify(() => {
+            project.grouping.create([second])
+            project.api.insertEffect(group.audioEffects, EffectFactories.AudioNamed.StereoTool)
+            project.api.createNoteClip(asInstanceOf(first.tracks.pointerHub.incoming()[0].box, TrackBox), 0)
+        })
+        const target = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        target.boxGraph.beginTransaction()
+        const copies = TransferAudioUnits.transfer([group], target, {includeGroupDescendants: true, layoutOrder: true})
+        target.boxGraph.endTransaction()
+        expect(copies).toHaveLength(4)
+        expect(AudioUnitGroups.subtree(target.mandatoryBoxes.rootBox, copies[0])).toHaveLength(4)
+        expect(copies[0].audioEffects.pointerHub.size()).toBe(1)
+        expect(copies.flatMap(unit => unit.tracks.pointerHub.incoming())
+            .reduce((count, pointer) => count + asInstanceOf(pointer.box, TrackBox).clips.pointerHub.size(), 0)).toBe(1)
+        expect(AudioUnitGroups.bus(copies[0]).unwrap().output.targetVertex.unwrap().box).toBe(copies[0])
+        expect(copies.slice(1).every(unit => AudioUnitGroups.parent(unit).nonEmpty())).true
+        project.terminate()
+    })
     it("inserts browser instruments after the selected track and advances selection for repeated additions", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         project.trackSelection.set([second])

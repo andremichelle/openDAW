@@ -42,6 +42,20 @@ Links
 • openDAW: https://opendaw.studio
 • Nextcloud manual: https://opendaw.studio/manuals/nextcloud
 
+What goes into an update post
+• Only the major features of a deploy. Fixes and small improvements stay out (2026-11-03: the live
+  room update is the call and Follow Playback, not previews, recording details or a zoom memory).
+
+Feature framing (Live Room calls and Follow Playback)
+• Calls: joined from the chat overlay, microphone or video, up to six people, audio and video go
+  directly between participants and never through the server. Screen or tab sharing with its audio.
+  Direct Audio sends the microphone in stereo without processing, for instruments, with headphones.
+• Follow Playback: click a name in the room status bar, playback follows that person's play, stop
+  and jumps.
+• Education angle: the teacher plays, the class follows along. The call holds six people, so talk of
+  small groups, never of a whole class in the call.
+• Manual: https://opendaw.studio/manuals/live-rooms
+
 Feature framing (Nextcloud)
 • Audience: schools and music classes first.
 • Each student has their own Nextcloud account and own space, isolated from other students.

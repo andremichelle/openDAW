@@ -2,13 +2,16 @@ import {
     DefaultObservableValue,
     int,
     MutableObservableOption,
+    Notifier,
     Nullable,
     ObservableOption,
     ObservableValue,
     Observer,
     Option,
     Procedure,
+    panic,
     Subscription,
+    Terminable,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
@@ -21,6 +24,7 @@ import {
     NoteSignal,
     PreferencesFacade,
     SignalGraph,
+    TransportAnchor,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
@@ -28,7 +32,7 @@ import {
     WclapStatus
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
-import {Engine, RecordingStart, RecordingStop} from "./Engine"
+import {Engine, RecordingStart, RecordingStop, TransportLock} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
 import {Preferences} from "@opendaw/lib-fusion"
@@ -48,6 +52,9 @@ export class EngineFacade implements Engine {
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #transportAnchors: Notifier<ReadonlyArray<TransportAnchor>> = new Notifier()
+    readonly #workletChanged: Notifier<void> = new Notifier()
+    readonly #transportLocked: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
@@ -74,9 +81,14 @@ export class EngineFacade implements Engine {
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
             worklet.isCountingIn.catchupAndSubscribe(owner => this.#isCountingIn.setValue(owner.getValue())),
             worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue())),
-            worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue()))
+            worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue())),
+            worklet.subscribeTransportAnchors(anchors => this.#transportAnchors.notify(anchors))
         )
+        this.#workletChanged.notify()
     }
+
+    // a new engine (first boot or a restart): local state sent to the old one, like `overrideDeviceField`, is gone
+    subscribeWorkletChanged(observer: Observer<void>): Subscription {return this.#workletChanged.subscribe(observer)}
 
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 
@@ -87,7 +99,36 @@ export class EngineFacade implements Engine {
         this.#worklet = Option.None
     }
 
-    play(): void {
+    // while locked only the lock drives the transport, every other caller is ignored
+    lockTransport(): TransportLock {
+        if (this.#transportLocked.getValue()) {return panic("Transport is already locked")}
+        this.#transportLocked.setValue(true)
+        const state = {active: true}
+        const release = Terminable.create(() => {
+            if (!state.active) {return}
+            state.active = false
+            this.#transportLocked.setValue(false)
+        })
+        return {
+            play: () => {if (state.active) {this.#play()}},
+            stop: (reset: boolean = false) => {if (state.active) {this.#stop(reset)}},
+            setPosition: (position: ppqn) => {if (state.active) {this.#setPosition(position)}},
+            terminate: () => release.terminate()
+        }
+    }
+
+    get transportLocked(): ObservableValue<boolean> {return this.#transportLocked}
+
+    play(): void {if (!this.#transportLocked.getValue()) {this.#play()}}
+    stop(reset: boolean = false): void {if (!this.#transportLocked.getValue()) {this.#stop(reset)}}
+    setPosition(position: ppqn): void {if (!this.#transportLocked.getValue()) {this.#setPosition(position)}}
+    prepareRecordingState(countIn: boolean): void {
+        if (this.#transportLocked.getValue()) {return}
+        this.#worklet.ifSome(worklet => worklet.prepareRecordingState(countIn))
+    }
+    stopRecording(): void {this.#worklet.ifSome(worklet => worklet.stopRecording())}
+
+    #play(): void {
         this.#worklet.ifSome(worklet => {
             const context = worklet.context as AudioContext
             if (context.state === "suspended") {
@@ -97,10 +138,8 @@ export class EngineFacade implements Engine {
             }
         })
     }
-    stop(reset: boolean = false): void {this.#worklet.ifSome(worklet => worklet.stop(reset))}
-    setPosition(position: ppqn): void {this.#worklet.ifSome(worklet => worklet.setPosition(position))}
-    prepareRecordingState(countIn: boolean): void {this.#worklet.ifSome(worklet => worklet.prepareRecordingState(countIn))}
-    stopRecording(): void {this.#worklet.ifSome(worklet => worklet.stopRecording())}
+    #stop(reset: boolean): void {this.#worklet.ifSome(worklet => worklet.stop(reset))}
+    #setPosition(position: ppqn): void {this.#worklet.ifSome(worklet => worklet.setPosition(position))}
 
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
@@ -155,11 +194,17 @@ export class EngineFacade implements Engine {
     }
     wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
     scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#worklet.ifSome(worklet => worklet.scriptMessage(uuid, message))}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#worklet.ifSome(worklet => worklet.overrideDeviceField(uuid, key, value))
+    }
     querySignalGraph(): Promise<SignalGraph> {
         return this.#worklet.mapOr(worklet => worklet.querySignalGraph(), Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}))
     }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
+    }
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription {
+        return this.#transportAnchors.subscribe(observer)
     }
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeNotes").subscribeNotes(observer)
@@ -174,9 +219,11 @@ export class EngineFacade implements Engine {
         this.#worklet.unwrap("No worklet to noteOn").noteSignal(signal)
     }
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {
+        if (this.#transportLocked.getValue()) {return}
         this.#worklet.unwrap("No worklet to scheduleClipPlay").scheduleClipPlay(clipIds)
     }
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void {
+        if (this.#transportLocked.getValue()) {return}
         this.#worklet.unwrap("No worklet to scheduleClipStop").scheduleClipStop(trackIds)
     }
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {

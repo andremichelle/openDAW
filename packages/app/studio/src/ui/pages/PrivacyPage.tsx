@@ -24,6 +24,18 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             password. SoundCloud requires an app secret to issue the access token, so this one step runs through our
             server, which passes the token on to your browser without storing it. The rendered audio, the project name,
             tags, description and cover are sent directly from your browser to SoundCloud.</p>
+        <h3>Live rooms</h3>
+        <p>When you join a live room, the project, the name and color you choose, chat messages and your pointer
+            position are shared through our server with everyone in the room. Nothing is kept: the room and its data
+            are deleted about a minute after the last person leaves. Samples and other files are sent directly between
+            the participants' browsers.</p>
+        <p>If you join a call, your microphone, camera or shared screen go directly and encrypted to the other
+            participants. When a direct connection is not possible, the encrypted stream passes through our relay
+            server, which cannot read it. Nothing is recorded or stored. To connect, the browsers of the participants
+            exchange their IP addresses through our server. Everyone in a room sees and hears what you share there, so
+            only share a room link with people you trust.</p>
+        <p>When someone follows your playback, whether you play and your position in the project are sent to them
+            through our server. Nothing is sent while nobody follows you.</p>
         <h3>Data usage</h3>
         <p>openDAW does not process, analyze, or share any personal data. Files remain under your control in your chosen
             storage location.</p>

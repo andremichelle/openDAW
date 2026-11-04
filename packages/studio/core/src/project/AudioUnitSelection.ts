@@ -4,7 +4,6 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import type {Project} from "./Project"
 
-/** Track selection is local UI state, separate from clip/device selection and the active editor. */
 export class AudioUnitSelection {
     readonly value: DefaultObservableValue<ReadonlyArray<AudioUnitBox>>
     readonly #subscriptions: Terminator

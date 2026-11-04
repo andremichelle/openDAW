@@ -19,8 +19,29 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {
+    AudioClipBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    AudioRegionBox,
+    AudioUnitBox,
+    CaptureAudioBox,
+    CaptureMidiBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
+    NoteClipBox,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    NoteRegionBox,
+    TrackBox,
+    ValueClipBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
+    ValueRegionBox
+} from "@opendaw/studio-boxes"
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
@@ -53,38 +74,17 @@ import {
     TrackType,
     TransferUtils
 } from "@opendaw/studio-adapters"
-import {
-    AudioClipBox,
-    AudioEffectCompositeBox,
-    AudioEffectCompositeCellBox,
-    AudioRegionBox,
-    AudioUnitBox,
-    CaptureAudioBox,
-    CaptureMidiBox,
-    InstrumentCompositeBox,
-    InstrumentCompositeCellBox,
-    NoteClipBox,
-    NoteEventBox,
-    NoteEventCollectionBox,
-    NoteRegionBox,
-    TrackBox,
-    ValueClipBox,
-    ValueEventBox,
-    ValueEventCollectionBox,
-    ValueRegionBox
-} from "@opendaw/studio-boxes"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {BoxGraphCopy} from "../BoxGraphCopy"
-import {EffectBox} from "../EffectBox"
-import {EffectFactory} from "../EffectFactory"
-import {EffectFactories} from "../EffectFactories"
-import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
-import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
-import {AudioWavExport} from "./AudioWavExport"
-import {NoteMidiExport} from "./NoteMidiExport"
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
+import {EffectFactory} from "../EffectFactory"
+import {EffectFactories} from "../EffectFactories"
+import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
+import {NoteMidiExport} from "./NoteMidiExport"
+import {AudioWavExport} from "./AudioWavExport"
+import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {BoxGraphCopy} from "../BoxGraphCopy"
+import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
 
 export type AudioUnitInsertion = {
     readonly before: Option<UUID.Bytes>

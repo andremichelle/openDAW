@@ -4,7 +4,6 @@ import {AudioBusBox, AuxSendBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import type {Project} from "./Project"
 
-/** Call mutations inside one editing.modify transaction. */
 export class AudioUnitGrouping {
     constructor(readonly project: Project) {}
 
@@ -17,7 +16,6 @@ export class AudioUnitGrouping {
         return !isDefined(parent) || this.canRoute(roots, parent)
     }
 
-    /** Output menus and folder moves share primary-route/send feedback validation. */
     canRoute(units: ReadonlyArray<AudioUnitBox>, destination: AudioUnitBox): boolean {
         const roots = AudioUnitGroups.roots(units)
         if (roots.length === 0 || !destination.isAttached()) {return false}
@@ -39,7 +37,6 @@ export class AudioUnitGrouping {
         return !reachesSource(destination)
     }
 
-    /** Boundary drops must retain their exact sibling slot. */
     canDrop(units: ReadonlyArray<AudioUnitBox>, parent?: AudioUnitBox, before?: AudioUnitBox): boolean {
         if (!this.canMove(units, parent, before)) {return false}
         const roots = AudioUnitGroups.roots(units)
@@ -101,20 +98,18 @@ export class AudioUnitGrouping {
         return true
     }
 
-    /** Duplicate each sibling selection as one block after its last source, preserving folder membership. */
     duplicate(units: ReadonlyArray<AudioUnitBox>): AudioUnitBox[] {
         const {rootBox, skeleton} = this.project
         const ordered = AudioUnitGroups.ordered(rootBox)
         const selected = new Set(AudioUnitGroups.roots(units))
         const roots = ordered.filter(unit => selected.has(unit) && unit.type.getValue() !== AudioUnitType.Output)
         if (roots.length === 0) {return []}
-        // New-box pointers settle at transaction end; placement uses the original tree.
         const children = new Map<Optional<AudioUnitBox>, AudioUnitBox[]>([
             [undefined, AudioUnitGroups.children(rootBox)],
             ...ordered.map(unit => [unit, AudioUnitGroups.children(rootBox, unit)] as [AudioUnitBox, AudioUnitBox[]])
         ])
         const expanded = roots.flatMap(unit => AudioUnitGroups.subtree(rootBox, unit))
-        const copies = TransferAudioUnits.transfer(roots, skeleton, {preserveExternalConnections: true, includeGroupDescendants: true})
+        const copies = TransferAudioUnits.transfer(roots, skeleton, {preserveExternalConnections: true, includeGroupDescendants: true, layoutOrder: true})
         const mapping = new Map(expanded.map((source, index) => [source, copies[index]]))
         expanded.forEach(source => children.set(asDefined(mapping.get(source)), asDefined(children.get(source)).map(child => asDefined(mapping.get(child)))))
         const parents = new Set(roots.map(unit => AudioUnitGroups.parent(unit).unwrapOrUndefined()))

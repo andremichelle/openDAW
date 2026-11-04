@@ -37,18 +37,20 @@ import {
     OfflineEngineRenderConfig,
     ProjectSkeleton,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
 import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exports"
-import {createEngineMemory, loadEngineModules} from "./engine-modules"
+import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
@@ -104,7 +106,7 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
         throw describeEngineTrap(engine, memory, rendered.error)
     }
     takeReportMessage(engine, memory).ifSome(message => {throw new Error(`engine: ${message}`)})
-    midi.drain(engine, memory)
+    midi.drain(engine, memory, 0)
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
         const stagingPtr = engine.stem_output_ptr()
@@ -139,8 +141,8 @@ Communicator.executor<OfflineEngineProtocol>(
             // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it
             // in this worker so the scriptable devices behave exactly as in the worklet.
             ;(globalThis as unknown as {sampleRate: number}).sampleRate = config.sampleRate
-            const variant = config.variant as {wasmUrl: string}
-            const modules = await loadEngineModules(variant.wasmUrl)
+            const variant = config.variant as {wasmUrl: string, extraDevices?: ReadonlyArray<ExtraDevice>}
+            const modules = await loadEngineModules(variant.wasmUrl, variant.extraDevices)
             const memory = createEngineMemory()
             const messenger = Messenger.for(enginePort)
             const engineToClient = Communicator.sender<EngineToClient>(
@@ -154,8 +156,8 @@ Communicator.executor<OfflineEngineProtocol>(
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                     fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                     wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
-                    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void {
-                        dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId)
+                    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void {
+                        dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId, cause)
                     }
                     wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
                         dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
@@ -179,6 +181,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     }
                     recordingStarted(contextTime: number, position: ppqn, generation: int): void {
                         dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
+                    }
+                    transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void {
+                        dispatcher.dispatchAndForget(this.transportAnchors, anchors)
                     }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
@@ -336,6 +341,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 wclapRetry: (_url: string): void => {},
                 scriptMessage: (_uuid: UUID.Bytes, _message: unknown): void => {},
+                overrideDeviceField: (_uuid: UUID.Bytes, _key: int, _value: boolean | number): void => {},
                 querySignalGraph: (): Promise<SignalGraph> =>
                     Promise.resolve({sampleRate: 0, maxCompensation: 0, nodes: [], edges: []}),
                 terminate: (): void => {}

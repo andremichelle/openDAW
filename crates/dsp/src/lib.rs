@@ -16,6 +16,7 @@ pub mod ctagdrc;
 pub mod freeverb;
 pub mod glide;
 pub mod lfo;
+pub mod low_band_analyser;
 pub mod meter;
 pub mod osc;
 pub mod panning;

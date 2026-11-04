@@ -98,6 +98,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     setFillLength(value: int): void {this.#peakWriter.numFrames = value}
 
     get numberOfFrames(): int {return this.#output.length * RenderQuantum}
+    get capturedFrames(): ReadonlyArray<Float32Array> {return mergeChunkPlanes(this.#output, RenderQuantum)}
     get firstQuantumTime(): Option<number> {return this.#firstQuantumTime}
     get meta(): Option<SampleMetaData> {return this.#meta}
     get data(): Option<AudioData> {return this.#data}

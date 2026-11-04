@@ -988,3 +988,21 @@ describe("dependenciesOf with stopAtResources", () => {
         expect([...boxes]).not.toContain(child)
     })
 })
+
+// undo or redo can restore a box a peer already re-created under the same uuid
+describe("staging a uuid twice", () => {
+    it("leaves the staged box and its edges alone", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const target = NodeBox.create(graph, UUID.generate())
+        const node = NodeBox.create(graph, UUID.generate())
+        node.ref.refer(target)
+        graph.endTransaction()
+        graph.beginTransaction()
+        expect(() => NodeBox.create(graph, node.address.uuid)).toThrow()
+        graph.abortTransaction()
+        expect(graph.findBox(node.address.uuid).unwrap()).toBe(node)
+        expect(node.outgoingEdges().map(([pointer]) => pointer)).toEqual([node.ref])
+        expect(target.incomingEdges()).toEqual([node.ref])
+    })
+})

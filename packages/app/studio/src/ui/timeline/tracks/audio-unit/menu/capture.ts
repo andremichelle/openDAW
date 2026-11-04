@@ -4,6 +4,7 @@ import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
+import {LatencyMeasurement} from "@/ui/LatencyMeasurement"
 
 export namespace MenuCapture {
     export const createItem = (service: StudioService,
@@ -43,6 +44,15 @@ export namespace MenuCapture {
                         capture.armed.setValue(true)
                     })))
             }
+            parent.addMenuItem(MenuItem.default({
+                label: capture.roundTrip.mapOr(({seconds}) =>
+                    `Measure Latency... (${(seconds * 1000.0).toFixed(1)} ms)`, "Measure Latency..."),
+                selectable: !Recording.isRecording,
+                separatorBefore: true
+            }).setTriggerProcedure(() => LatencyMeasurement.start(capture)), MenuItem.default({
+                label: "Forget Measured Latency",
+                selectable: !Recording.isRecording && capture.roundTrip.nonEmpty()
+            }).setTriggerProcedure(() => capture.forgetRoundTrip()))
         } else if (isInstanceOf(capture, CaptureMidi)) {
             const currentDeviceId = capture.deviceId
             const channelField = capture.captureBox.channel

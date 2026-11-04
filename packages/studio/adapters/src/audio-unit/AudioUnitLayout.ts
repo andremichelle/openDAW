@@ -2,7 +2,6 @@ import {asDefined, Optional, Option} from "@opendaw/lib-std"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "./AudioUnitGroups"
 
-/** Immutable channel order and visibility, independent of either view. */
 export class AudioUnitLayout {
     readonly rows: ReadonlyArray<AudioUnitLayout.Row>
     readonly visibleRows: ReadonlyArray<AudioUnitLayout.Row>

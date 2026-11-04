@@ -3,6 +3,7 @@ import {DefaultObservableValue, Notifier, Option, Terminable, UUID} from "@opend
 import {ClipNotification, InstrumentFactories, MetaData, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {NoteClipBox, NoteEventCollectionBox} from "@opendaw/studio-boxes"
 import {PPQN} from "@opendaw/lib-dsp"
+import {GroupClipColumnMoves} from "./GroupClipColumnMoves"
 import {GroupClipAppearance} from "./GroupClipAppearance"
 import {GroupClipLauncher} from "./GroupClipLauncher"
 import {GroupClipSelection} from "./GroupClipSelection"
@@ -48,6 +49,41 @@ const setup = async () => {
 const ids = (values: ReadonlyArray<UUID.Bytes>) => values.map(UUID.toString)
 
 describe("group clip launcher", () => {
+    it("moves complete column names with nested clips in one undo step, but keeps names for partial moves", async () => {
+        const {project, group, nested, clips, launcher} = await setup()
+        launcher.rename(0, "Verse")
+        project.editing.modify(() => GroupClipAppearance.store(nested, 0, {label: "Drums"}))
+        const adapters = launcher.clips(0)
+        const moves = adapters.map(clip => ({clip, index: 2, track: clip.trackBoxAdapter.unwrap()}))
+        const applyNames = GroupClipColumnMoves.prepare(project, moves, false)
+        project.editing.modify(() => {
+            applyNames()
+            moves.forEach(({clip, index}) => clip.box.index.setValue(index))
+        })
+        expect(GroupClipAppearance.read(group, 0).label).toBe("")
+        expect(GroupClipAppearance.read(group, 2).label).toBe("Verse")
+        expect(GroupClipAppearance.read(nested, 2).label).toBe("Drums")
+        expect(project.editing.undo()).true
+        expect(GroupClipAppearance.read(group, 0).label).toBe("Verse")
+        expect(clips[0].index.getValue()).toBe(0)
+        const partial = GroupClipColumnMoves.prepare(project, moves.slice(0, 1), false)
+        project.editing.modify(() => {partial(); clips[0].index.setValue(1)})
+        expect(GroupClipAppearance.read(group, 0).label).toBe("Verse")
+        expect(GroupClipAppearance.read(group, 2).label).toBe("")
+        launcher.terminate()
+        project.terminate()
+    })
+    it("clears stale playing and waiting clips when transport stops", async () => {
+        const {project, clips, notifications, playing, launcher} = await setup()
+        notifications.notify({type: "sequencing", changes: {started: [clips[0].address.uuid], stopped: [], obsolete: []}})
+        expect(launcher.state(0)).toBe("playing")
+        notifications.notify({type: "waiting", clips: [clips[1].address.uuid]})
+        playing.setValue(false)
+        playing.setValue(true)
+        expect(launcher.state(0)).toBe("idle")
+        launcher.terminate()
+        project.terminate()
+    })
     it("selects just the group tile without launching, stopping or selecting its children", async () => {
         const {project, group, nested, clips, products, play, stop, launcher} = await setup()
         const selection = new GroupClipSelection(project)

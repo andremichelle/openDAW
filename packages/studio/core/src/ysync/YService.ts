@@ -44,12 +44,9 @@ export namespace YService {
                 none: () => Project.new(env),
                 some: project => project.copy()
             })
-            const sync = await YSync.populateRoom({
-                boxGraph: project.boxGraph,
-                boxes,
-                conflict: () => project.invalid()
-            })
+            const sync = await YSync.populateRoom({boxGraph: project.boxGraph, boxes})
             project.own(sync)
+            project.attachLiveSync(sync)
             return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
@@ -67,7 +64,7 @@ export namespace YService {
                 }
             }
             const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-            const sync = await YSync.joinRoom({boxGraph, boxes, conflict: () => project.invalid()})
+            const sync = await YSync.joinRoom({boxGraph, boxes})
             const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
             const skeleton: ProjectSkeleton = {boxGraph, mandatoryBoxes}
             await ProjectMigration.migrate(env, skeleton)
@@ -79,6 +76,7 @@ export namespace YService {
             boxGraph.endTransaction()
             project.follow(userInterfaceBox)
             project.own(sync)
+            project.attachLiveSync(sync)
             return {project, provider}
         }
     }

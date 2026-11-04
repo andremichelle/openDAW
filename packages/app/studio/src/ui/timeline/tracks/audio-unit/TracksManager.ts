@@ -24,7 +24,7 @@ import {
     TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {Project, StudioPreferences} from "@opendaw/studio-core"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackListLayout} from "./TrackListLayout"
 import {GroupClipSelection} from "./clips/GroupClipSelection"
@@ -66,6 +66,7 @@ export interface TrackFactory {
 export class TracksManager implements Terminable {
     readonly groupClipSelection: GroupClipSelection
     readonly #service: StudioService
+    readonly #project: Project
     readonly #scrollContainer: Element
     readonly #scrollModel: ScrollModel
     readonly #factory: TrackFactory
@@ -93,6 +94,7 @@ export class TracksManager implements Terminable {
 
     constructor(service: StudioService, scrollContainer: Element, scrollModel: ScrollModel, factory: TrackFactory) {
         this.#service = service
+        this.#project = service.project
         this.#scrollContainer = scrollContainer
         this.#scrollModel = scrollModel
         this.#factory = factory
@@ -221,7 +223,7 @@ export class TracksManager implements Terminable {
     }
 
     #subscribe(): Terminable {
-        const {project} = this.#service
+        const project = this.#project
         const {rootBoxAdapter} = project
         return Terminable.many(
             project.audioUnitLayout.value.subscribe(() => this.#invalidateOrder()),
@@ -500,7 +502,12 @@ export class TracksManager implements Terminable {
         this.#visibleTracks = Option.None
         const layout = this.#flatLayout()
         const visible = new Set<Element>(layout.rows.map(row => this.#element(row.content)))
-        this.#tracks.values().forEach(track => track.element.classList.toggle("collapsed-away", !visible.has(track.element)))
+        this.#tracks.values().forEach(track => {
+            const wasHidden = track.element.classList.contains("collapsed-away")
+            const hidden = !visible.has(track.element)
+            track.element.classList.toggle("collapsed-away", hidden)
+            if (wasHidden && !hidden) {track.trackBoxAdapter.regions.dispatchChange()}
+        })
         this.#audioUnits.values().forEach(entry => entry.synthetic.ifSome(element =>
             element.classList.toggle("collapsed-away", !visible.has(element))))
         this.#modulatorsHeader.classList.toggle("collapsed-away", !visible.has(this.#modulatorsHeader))
@@ -614,7 +621,7 @@ export class TracksManager implements Terminable {
                     return IndexComparator(a.trackBoxAdapter.indexField.getValue(),
                         b.trackBoxAdapter.indexField.getValue())
                 }
-                const boxAdapters = this.#service.project.boxAdapters
+                const boxAdapters = this.#project.boxAdapters
                 const orderDiff = TrackOrder.compare(
                     TrackOrder.keyOf(boxAdapters, a.trackBoxAdapter), TrackOrder.keyOf(boxAdapters, b.trackBoxAdapter))
                 if (orderDiff !== 0) {return orderDiff}

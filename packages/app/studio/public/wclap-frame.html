@@ -20,7 +20,10 @@
     const files = new Map()
     // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
     const channel = new MessageChannel()
-    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false, transparent: false, dragging: false}
+    const state = {
+        uuid: "", pageDirectory: "", inner: null, pointer: false, hovered: false, transparent: false, dragging: false,
+        reportsWheel: false
+    }
 
     const post = message => channel.port1.postMessage(message)
     const fail = message => {
@@ -62,17 +65,19 @@
         worker.postMessage({type: "wclap-host"})
     }
 
-    // only once the plugin reported clap.param-hovered, otherwise the page keeps its own behaviour
+    // only while the plugin reports a hovered parameter, otherwise the page keeps its own behaviour
     const forwardPointer = () => {
         const target = state.inner?.contentWindow
         if (!state.pointer || !target || target.__wclapPointer) {return}
         target.__wclapPointer = true
         target.addEventListener("contextmenu", event => {
+            if (!state.hovered) {return}
             event.preventDefault()
             event.stopPropagation()
             post({type: "wclap-contextmenu", x: event.clientX, y: event.clientY})
         }, {capture: true})
         target.addEventListener("dblclick", event => {
+            if (!state.hovered) {return}
             event.preventDefault()
             event.stopPropagation()
             post({type: "wclap-dblclick", x: event.clientX, y: event.clientY})
@@ -100,6 +105,11 @@
         }
         // never the browser's own menu, the page's handlers still see the event
         target.addEventListener("contextmenu", event => event.preventDefault(), {capture: true})
+        // a wheel the page did not prevent scrolls the window, unless the page reports its unused wheels itself
+        target.addEventListener("wheel", event => {
+            if (!event.isTrusted || event.defaultPrevented || state.reportsWheel) {return}
+            post({type: "wclap-wheel", deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode})
+        })
     }
 
     // Chrome may lose the release outside the frame, the next buttonless move delivers it to the page
@@ -184,10 +194,16 @@
         const bytes = data instanceof ArrayBuffer ? data
             : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
         if (bytes !== null) {post({type: "wclap-message", bytes})}
+        // a file for one of the plugin's sample slots (opendaw.samples/1), or none to empty it: the studio keeps it
+        const sample = data?.webclapSample
+        if (bytes === null && typeof sample === "object" && sample !== null && Number.isInteger(sample.key)) {
+            post({type: "wclap-sample", key: sample.key, ...(sample.file instanceof File ? {file: sample.file} : {})})
+        }
         // a wheel event the page did not use (juce-webclap-plugins pages send them): the window may scroll
         const wheel = data?.webclapWheel
         if (bytes === null && typeof wheel === "object" && wheel !== null
             && Number.isFinite(wheel.deltaX) && Number.isFinite(wheel.deltaY) && Number.isFinite(wheel.deltaMode)) {
+            state.reportsWheel = true
             post({type: "wclap-wheel", deltaX: wheel.deltaX, deltaY: wheel.deltaY, deltaMode: wheel.deltaMode})
         }
     })
@@ -198,8 +214,9 @@
             open(data).catch(error => fail(`The plugin page could not start: ${error.message ?? error}`))
         } else if (data?.type === "wclap-message" && inner !== null && inner.contentWindow !== null) {
             inner.contentWindow.postMessage(data.bytes, "*")
-        } else if (data?.type === "wclap-pointer-enable") {
-            state.pointer = true
+        } else if (data?.type === "wclap-hovered") {
+            state.hovered = data.hovered === true
+            state.pointer = state.pointer || state.hovered
             forwardPointer()
         } else if (data?.type === "wclap-drag" && inner !== null) {
             dragOver(data, new File([], `${data.name}.wav`, {type: "audio/wav"}))

@@ -38,9 +38,11 @@ import {
     PreferencesHost,
     ProcessorOptions,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
@@ -85,6 +87,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
+    readonly #notifyTransportAnchors: Notifier<ReadonlyArray<TransportAnchor>>
     readonly #playingClips: Array<UUID.Bytes>
     readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
     readonly #wclapStatusListeners: SetMultimap<string, Procedure<WclapStatus>> = new SetMultimap()
@@ -153,6 +156,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
+        this.#notifyTransportAnchors = this.#terminator.own(new Notifier<ReadonlyArray<TransportAnchor>>())
         this.#playingClips = []
         this.#controlFlags = new Int32Array(controlFlagsSAB)
         this.#commands = this.#terminator.own(
@@ -213,6 +217,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     wclapRetry(url: string): void {dispatcher.dispatchAndForget(this.wclapRetry, url)}
                     scriptMessage(uuid: UUID.Bytes, message: unknown): void {dispatcher.dispatchAndForget(this.scriptMessage, uuid, message)}
+                    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                        dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                    }
                     querySignalGraph(): Promise<SignalGraph> {return dispatcher.dispatchAndReturn(this.querySignalGraph)}
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
@@ -222,10 +229,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
 
         const {port, sab} =
             this.#terminator.own(MIDIReceiver.create(
-                () => (context instanceof AudioContext ? context.outputLatency * 1000 : 20)
-                    + this.#compensationLatency.getValue() * 1000,
-                (deviceId, data, relativeTimeInMs) =>
-                    this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+                MIDIReceiver.outputClock(context, () => this.#compensationLatency.getValue() * 1000),
+                (deviceId, data, timestamp) => this.#project.sendMIDIFromEngine(deviceId, data, timestamp)))
         this.#commands.setupMIDI(port, sab)
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
@@ -271,8 +276,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
                 wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
-                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void =>
-                    WclapStates.storeFrom(project, uuid, bytes, url, clapId),
+                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void =>
+                    WclapStates.storeFrom(project, uuid, bytes, url, clapId, cause),
                 wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
                     WclapParameters.reconcile(project, uuid, params),
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
@@ -304,6 +309,13 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     // a report for an earlier recording, delivered after the next one was prepared
                     if (generation !== this.#recordingGeneration) {return}
                     this.#recordingStart.wrap({contextTime, position})
+                },
+                transportAnchors: (anchors: ReadonlyArray<TransportAnchor>): void => {
+                    // the stop arrives here before the engine state is read on the next animation frame
+                    anchors.forEach(({kind, recording, contextTime}) => {
+                        if (kind === "stop" && recording) {this.#recordingStop = Option.wrap({contextTime})}
+                    })
+                    this.#notifyTransportAnchors.notify(anchors)
                 }
             } satisfies EngineToClient
         )
@@ -352,6 +364,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     wclapRetry(url: string): void {this.#commands.wclapRetry(url)}
     scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#commands.scriptMessage(uuid, message)}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#commands.overrideDeviceField(uuid, key, value)
+    }
     querySignalGraph(): Promise<SignalGraph> {return this.#commands.querySignalGraph()}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {
@@ -382,6 +397,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}
     noteSignal(signal: NoteSignal): void {this.#commands.noteSignal(signal)}
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {return this.#notifyNoteSignals.subscribe(observer)}
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription {
+        return this.#notifyTransportAnchors.subscribe(observer)
+    }
     ignoreNoteRegion(uuid: UUID.Bytes): void {this.#commands.ignoreNoteRegion(uuid)}
     suspendAutomation(uuid: UUID.Bytes): void {this.#commands.suspendAutomation(uuid)}
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {

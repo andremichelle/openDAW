@@ -20,7 +20,9 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
+import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate, PrimitiveUpdate} from "@opendaw/lib-box"
+import type {YSync} from "../ysync/YSync"
+import {RoomOverlaps} from "../ysync/RoomOverlaps"
 import {
     ApparatDeviceBox,
     AudioBusBox,
@@ -83,7 +85,7 @@ import {AudioUnitGrouping} from "./AudioUnitGrouping"
 import {AudioUnitSelection} from "./AudioUnitSelection"
 import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
-import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
+import {CaptureDevices, CaptureMidi, Recording, RecordingSession, ResolvedNote} from "../capture"
 import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
@@ -103,6 +105,11 @@ export type ProjectCreateOptions = {
 }
 
 export type MIDIOutMessage = { readonly deviceId: string, readonly data: Uint8Array }
+
+type LoadedScript = { readonly uuid: UUID.Bytes, code: string }
+
+const ScriptDeviceBoxNames: ReadonlyArray<string> =
+    [ApparatDeviceBox.ClassName, WerkstattDeviceBox.ClassName, SpielwerkDeviceBox.ClassName]
 
 // Main Entry Point for a Project
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
@@ -141,6 +148,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
     readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
 
+    #liveSync: Option<YSync<BoxIO.TypeMap>> = Option.None
+
     readonly #env: ProjectEnv
     readonly boxGraph: BoxGraph<BoxIO.TypeMap>
 
@@ -155,6 +164,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly trackSelection: AudioUnitSelection
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
+    readonly recordingSession: RecordingSession
     readonly editing: Editing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
@@ -177,9 +187,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly #rootBoxAdapter: RootBoxAdapter
     readonly #timelineBoxAdapter: TimelineBoxAdapter
-    readonly #loadedScriptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+    readonly #loadedScriptCodes = UUID.newSet<LoadedScript>(({uuid}) => uuid)
 
     #terminated: boolean = false
+    #workletStarted: boolean = false
 
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
@@ -247,9 +258,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.#terminator.own(new NestedHostExit(this.boxAdapters, this.userEditingManager.audioUnit))
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
+        this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
         this.audioUnitLayout = this.#terminator.own(new AudioUnitLayoutState(this))
-        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
+        this.mixer = this.#terminator.own(new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters))
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
@@ -279,13 +291,41 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 }
             }
         }))
+        const scriptChange = {pending: false}
+        this.#terminator.own(this.boxGraph.subscribeToAllUpdates({
+            onUpdate: (update) => {
+                if (update instanceof NewUpdate) {
+                    if (ScriptDeviceBoxNames.includes(update.name)) {scriptChange.pending = true}
+                } else if (update instanceof PrimitiveUpdate) {
+                    const box = this.boxGraph.findBox(update.address.uuid).unwrapOrNull()
+                    if ((box instanceof ApparatDeviceBox || box instanceof WerkstattDeviceBox
+                        || box instanceof SpielwerkDeviceBox) && update.address.equals(box.code.address)) {
+                        scriptChange.pending = true
+                    }
+                }
+            }
+        }))
+        this.#terminator.own(this.boxGraph.subscribeTransaction({
+            onBeginTransaction: () => {},
+            onEndTransaction: (rolledBack: boolean) => {
+                if (!scriptChange.pending) {return}
+                scriptChange.pending = false
+                if (!rolledBack && this.#workletStarted) {this.loadScriptDevices()}
+            }
+        }))
     }
 
     loadScriptDevices(): void {
         const audioContext = this.#env.audioWorklets.context
         const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) => {
-            if (this.#loadedScriptUuids.opt(deviceBox.address.uuid).nonEmpty()) {return}
-            this.#loadedScriptUuids.add(deviceBox.address.uuid)
+            const code = deviceBox.code.getValue()
+            const loaded = this.#loadedScriptCodes.opt(deviceBox.address.uuid)
+            if (loaded.nonEmpty() && loaded.unwrap().code === code) {return}
+            if (loaded.nonEmpty()) {
+                loaded.unwrap().code = code
+            } else {
+                this.#loadedScriptCodes.add({uuid: deviceBox.address.uuid, code})
+            }
             ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
                 console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
         }
@@ -302,6 +342,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
+        this.#workletStarted = true
         this.loadScriptDevices()
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
@@ -331,7 +372,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startRecording(countIn: boolean = true) {
         this.engine.assertWorklet()
-        if (Recording.isRecording) {return}
+        if (this.recordingSession.isRecording) {return}
         Recording.start(this, countIn).finally()
     }
 
@@ -339,10 +380,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.engine.stopRecording()
     }
 
-    isRecording(): boolean {return Recording.isRecording}
+    isRecording(): boolean {return this.recordingSession.isRecording}
 
     commitMidiCapture(): void {
-        if (Recording.isRecording) {return}
+        if (this.recordingSession.isRecording) {return}
         const armed = this.captureDevices.filterArmed()
             .filter((capture): capture is CaptureMidi => isInstanceOf(capture, CaptureMidi))
         if (armed.length === 0) {return}
@@ -430,6 +471,12 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return terminator
     }
 
+    get liveSync(): Option<YSync<BoxIO.TypeMap>> {return this.#liveSync}
+    attachLiveSync(sync: YSync<BoxIO.TypeMap>): void {
+        this.#liveSync = Option.wrap(sync)
+        this.own(RoomOverlaps.watch(this.boxGraph, sync))
+    }
+
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
         this.midiLearning.followUser(box.midiControllers)
@@ -474,8 +521,12 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     receivedMIDIFromEngine(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
+        this.sendMIDIFromEngine(midiDeviceId, data, performance.now() + relativeTimeInMs)
+    }
+
+    /// timestamp is in performance.now() time, like MIDIOutput.send
+    sendMIDIFromEngine(midiDeviceId: string, data: Uint8Array, timestamp: number): void {
         this.#midiOutNotifier.notify({deviceId: midiDeviceId, data})
-        const timestamp = performance.now() + relativeTimeInMs
         MidiDevices.findOutputDeviceById(midiDeviceId).ifSome(midiOutputDevice => {
             try {
                 midiOutputDevice?.send(data, timestamp)
@@ -493,7 +544,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     restartRecording(): void {
         if (this.engine.isRecording.getValue()) {
-            const countingIn = Recording.wasCountingIn()
+            const countingIn = this.recordingSession.wasCountingIn
             this.engine.stopRecording()
             this.editing.modify(() => this.captureDevices.filterArmed()
                 .forEach(capture => {
@@ -501,7 +552,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     capture.clearRecordedRegions()
                 }), false)
             this.engine.stop(true)
-            this.engine.setPosition(Recording.wasStartingAt())
+            this.engine.setPosition(this.recordingSession.startPosition)
             const subscription = this.engine.isRecording.catchupAndSubscribe(owner => {
                 if (!owner.getValue()) {
                     queueMicrotask(() => subscription.terminate())
@@ -532,7 +583,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     invalid(): boolean {
         const now = performance.now()
-        const result = Validator.hasOverlappingRegions(this.boxGraph)
+        const result = Validator.hasOverlappingRegions(this.boxGraph,
+            region => this.#liveSync.mapOr(sync => sync.isLocal(region.address.uuid), false))
         if (performance.now() - now > 5) {
             console.warn("Evaluation of invalid project takes more than 5ms")
         }

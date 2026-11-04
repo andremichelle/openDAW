@@ -7,7 +7,7 @@ describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach((key, index) => {
             const effect = unit.addMIDIEffect(key)
             expect(effect.key).toBe(key)

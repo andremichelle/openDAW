@@ -1,9 +1,9 @@
 import {Nullable, Terminable} from "@opendaw/lib-std"
 import {AssetSignaling} from "./AssetSignaling"
 
-const RTC_CONFIG: RTCConfiguration = {
+export const RTC_CONFIG: RTCConfiguration = {
     iceServers: [
-        {urls: "stun:stun.l.google.com:19302"},
+        {urls: "stun:live.opendaw.studio:3478"},
         {urls: "turn:live.opendaw.studio:3478", username: "opendaw", credential: "opendaw"}
     ]
 }

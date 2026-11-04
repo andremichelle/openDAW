@@ -39,9 +39,47 @@ While in a room, a chat tab appears on the right edge of the screen. Click it to
 - Messages are synchronized through the room, so late joiners can see the conversation history from the current session.
 - Like the room itself, the chat history is transient and disappears when the room closes.
 
+## Audio and Video Call
+
+The chat overlay starts with a call area. Anyone in the room can start a call with **Join** (microphone only) or **Join with Video**. A green dot on the chat tab shows that a call is running. A call allows up to 6 people. Audio and video go directly between the participants and never through the server.
+
+- **Microphone, camera and screen.** Mute, turn the camera on or off, or present a screen or browser tab. Presenting a tab can include its audio.
+- **Hold to talk.** While muted, hold the microphone button to talk.
+- **Raise hand.** Raise a hand to ask for the floor.
+- **Tiles.** Each participant gets a tile that lights up while they speak. Hover a tile to change that person's volume for you, pin it or show it fullscreen. Double click pins a tile. A presented screen is pinned automatically.
+- **Widen.** The arrow button in the call header makes the panel wider for bigger video.
+- **Closed panel.** While you are in a call and the chat is closed, a small dock above the chat tab keeps the mute and leave buttons and shows who is speaking.
+
+The settings button in the call header offers:
+
+- **Microphone, Camera and Speaker** to pick the devices for the call.
+- **Direct Audio** sends your microphone in stereo at a high bitrate without echo cancellation, noise suppression or automatic gain. Use it for instruments and listening sessions, with headphones.
+- **Lower Call Volume During Playback** turns the call down while the project plays.
+- **Silence Call While Recording** mutes incoming call audio during a recording so it does not bleed into your take.
+- **Mirror My Camera** flips your own preview.
+
+Shortcuts: ⌥⇧M (Alt+Shift+M) mutes or unmutes, ⌥⇧V (Alt+Shift+V) turns the camera on or off, ⌥⇧H (Alt+Shift+H) raises or lowers your hand. The call audio plays outside the project and is never part of a recording or an export.
+
+## Follow Playback
+
+Click a name in the room status bar and choose **Follow Playback** to listen along with that person. When they play, stop or jump, your playback does the same. If they are already playing, you start right at their current position. The person you follow shows a broadcast icon, followers show a headphone icon.
+
+- While following, your own play, stop and record controls are disabled.
+- Following someone who follows another person makes you follow the person at the end of that chain.
+- Following ends when you choose **Stop Following** from your own name, when the person you follow leaves the room or starts following someone else, or when you leave the room. Your controls come back right away.
+- Everyone plays the same project, so tempo changes and the loop area match automatically. Playback is close, not sample exact.
+
 ## User Presence
 
 A status bar shows all connected users with their name and color dot. Your pointer movement is tracked to indicate which panel you are currently working in, so other users can see where your focus is.
+
+## Previewing and Recording in a Room
+
+Picking devices in the device browser only changes your own copy of the project. The others hear and see nothing until you press Ok, and then they get just the device you chose. If someone removes what you are previewing or edits the device you are replacing, the browser closes and tells you.
+
+A recording also stays with you until it has finished and its audio is saved. Everyone else then gets the complete take. It lands on the instrument's empty track, or on a new track below when someone placed a region there while you were recording. While you record, your name turns red with a record icon in the list of users.
+
+Regions never overlap. If two people place or move a region onto the same spot at the same moment, one of them gives way: that change is taken back, or a recording moves to a track of its own, and a message tells them so.
 
 ## Asset Sharing (Technical Details)
 

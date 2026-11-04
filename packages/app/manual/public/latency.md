@@ -17,6 +17,8 @@ As a rule of thumb:
 - **Above 25 ms** — noticeably delayed; playing live instruments feels "rubbery", and openDAW shows a warning
 - **Above 100 ms** — almost always a wireless output device
 
+Recorded takes are placed correctly regardless of this number. To correct for an input delay the browser does not report, or a misreported Bluetooth output, see [Latency Calibration](/manuals/latency-calibration).
+
 Latency does **not** affect the quality of your mixdown or export. It only affects how immediate live playing and monitoring feel: an export renders faster than real time and is sample-accurate regardless of this number.
 
 ## The single biggest cause: Bluetooth

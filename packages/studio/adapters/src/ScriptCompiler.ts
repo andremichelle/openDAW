@@ -281,7 +281,13 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
     globalThis.openDAW.${config.registryName}["${uuid}"] = {
         update: ${update},
-        create: ${wrapProcessor(config, userCode, enforce)},
+        create: (() => {
+            try {
+                return ${wrapProcessor(config, userCode, enforce)}
+            } catch (error) {
+                return class { constructor() { throw error } }
+            }
+        })(),
         params: ${JSON.stringify(params)},
         samples: ${JSON.stringify(samples)},
         sidechains: ${JSON.stringify(sidechains)},

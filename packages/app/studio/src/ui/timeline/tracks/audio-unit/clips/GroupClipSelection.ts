@@ -3,12 +3,14 @@ import {UnionBoxTypes} from "@opendaw/studio-adapters"
 import type {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 
-/** A group column is a UI selection, not a clip box or a selection of its descendant clips. */
 export class GroupClipSelection implements Terminable {
-    readonly value = new MutableObservableOption<{unit: AudioUnitBox, index: int}>()
-    readonly #lifecycle = new Terminator()
-    readonly #selectedUnit = this.#lifecycle.own(new Terminator())
+    readonly value: MutableObservableOption<{unit: AudioUnitBox, index: int}>
+    readonly #lifecycle: Terminator
+    readonly #selectedUnit: Terminator
     constructor(readonly project: Project) {
+        this.value = new MutableObservableOption()
+        this.#lifecycle = new Terminator()
+        this.#selectedUnit = this.#lifecycle.own(new Terminator())
         this.#lifecycle.ownAll(this.value, project.selection.subscribe({
             onSelected: vertex => {if (UnionBoxTypes.isClipBox(vertex.box)) {this.clear()}},
             onDeselected: EmptyExec

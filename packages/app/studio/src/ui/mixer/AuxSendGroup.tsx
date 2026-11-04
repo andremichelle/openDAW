@@ -1,15 +1,26 @@
 import css from "./AuxSendGroup.sass?inline"
-import {Lifecycle, SortedSet, StringComparator, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    isDefined,
+    Lifecycle,
+    MutableObservableValue,
+    Optional,
+    SortedSet,
+    StringComparator,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {MenuItem, Project} from "@opendaw/studio-core"
-import {AuxSendBox} from "@opendaw/studio-boxes"
+import {AuxSendBox, MasteringDeviceBox} from "@opendaw/studio-boxes"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
 import {Html} from "@opendaw/lib-dom"
+import {Checkbox} from "@/ui/components/Checkbox"
 
 const className = Html.adoptStyleSheet(css, "AuxSendGroup")
 
@@ -23,12 +34,38 @@ type Construct = {
     lifecycle: Lifecycle
     project: Project
     audioUnitAdapter: AudioUnitBoxAdapter
+    mastering?: MutableObservableValue<boolean>
 }
 
-export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter}: Construct) => {
+export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: Construct) => {
     const canHaveAuxSends = !audioUnitAdapter.isOutput
     const groupElement: HTMLDivElement = <div className={className}/>
     if (!canHaveAuxSends) {
+        if (isDefined(mastering)) {
+            groupElement.classList.add("mastering")
+            groupElement.appendChild(
+                <Checkbox lifecycle={lifecycle} model={mastering}
+                          appearance={{color: Colors.orange, activeColor: Colors.blue}}>
+                    <span>Mastering</span>
+                </Checkbox>
+            )
+            const deviceLifecycle = lifecycle.own(new Terminator())
+            const showState = (state: Optional<"mastered" | "bypassed">) => {
+                groupElement.classList.toggle("mastered", state === "mastered")
+                groupElement.classList.toggle("bypassed", state === "bypassed")
+            }
+            lifecycle.own(audioUnitAdapter.box.mastering.pointerHub.catchupAndSubscribe({
+                onAdded: pointer => {
+                    deviceLifecycle.terminate()
+                    deviceLifecycle.own(asInstanceOf(pointer.box, MasteringDeviceBox).enabled
+                        .catchupAndSubscribe(owner => showState(owner.getValue() ? "mastered" : "bypassed")))
+                },
+                onRemoved: () => {
+                    deviceLifecycle.terminate()
+                    showState(undefined)
+                }
+            }))
+        }
         return groupElement
     }
     groupElement.classList.add("enabled")

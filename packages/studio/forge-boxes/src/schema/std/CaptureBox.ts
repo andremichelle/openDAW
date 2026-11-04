@@ -24,7 +24,10 @@ export const CaptureAudioBox: BoxSchema<Pointers> = {
             12: {
                 type: "float32", name: "input-latency",
                 value: -2.0, constraints: "any", unit: "s"
-            }
+            },
+            // bit n = input channel n feeds that side, 0 on both = follow request-channels
+            13: {type: "int32", name: "left-inputs", value: 0, constraints: "any", unit: ""},
+            14: {type: "int32", name: "right-inputs", value: 0, constraints: "any", unit: ""}
         })
     }, pointerRules: {accepts: [Pointers.Capture], mandatory: true}
 }

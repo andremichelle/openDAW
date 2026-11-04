@@ -1,5 +1,6 @@
 import {
-    DefaultObservableValue, Errors, isDefined, isInstanceOf, MutableObservableOption, Option, RuntimeNotifier, Terminable, tryCatch
+    DefaultObservableValue, Errors, isDefined, isInstanceOf, MutableObservableOption, Notifier, Observer, Option,
+    RuntimeNotifier, Subscription, Terminable, Terminator, tryCatch
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {BoxEditing, EditingCheckpoint} from "@opendaw/lib-box"
@@ -7,15 +8,20 @@ import type {StudioService} from "@/service/StudioService"
 import {DeviceCandidate, DeviceEntry} from "@/ui/browse/DeviceCatalog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import type {LocalLayer} from "@opendaw/studio-core"
 import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 // every pick is applied right away from the state before opening, approve keeps the last one as ONE undo step
+// in a live room picks stay on this client, approve runs the last one again and sends it to the room as one edit
 export class DeviceAudition implements Terminable {
     readonly #service: StudioService
     readonly #slot: DeviceSlot
     readonly #candidates = new Map<string, Promise<DeviceCandidate>>()
     readonly #applied = new MutableObservableOption<DeviceEntry>()
     readonly #loading = new DefaultObservableValue(false)
+    readonly #terminator = new Terminator()
+    readonly #invalidated = new Notifier<void>()
+    readonly #layer: Option<LocalLayer>
 
     #checkpoint: Option<EditingCheckpoint> = Option.None
     #current: Option<DeviceCandidate> = Option.None
@@ -25,10 +31,16 @@ export class DeviceAudition implements Terminable {
     constructor(service: StudioService, slot: DeviceSlot) {
         this.#service = service
         this.#slot = slot
+        const {editing, liveSync} = service.project
+        this.#layer = isInstanceOf(editing, BoxEditing) ? liveSync.map(sync => sync.createLayer("preview")) : Option.None
+        this.#layer.ifSome(layer => this.#terminator.ownAll(layer, layer.subscribeInvalid(() => this.#invalidated.notify())))
     }
 
     get applied(): MutableObservableOption<DeviceEntry> {return this.#applied}
     get loading(): DefaultObservableValue<boolean> {return this.#loading}
+    get hasLocalChanges(): boolean {return this.#layer.mapOr(layer => layer.hasChanges, false)}
+
+    subscribeInvalidated(observer: Observer<void>): Subscription {return this.#invalidated.subscribe(observer)}
 
     // resolves true when the download was cancelled, the previous pick then stays
     pick(entry: DeviceEntry): Promise<boolean> {
@@ -38,7 +50,7 @@ export class DeviceAudition implements Terminable {
         this.#pending = this.#candidateOf(entry).then(async candidate => {
             if (generation !== this.#generation) {return}
             this.#rollback()
-            if (!this.#apply(candidate, true)) {
+            if (!this.#apply(candidate, true, this.#layer.nonEmpty())) {
                 this.#applied.clear()
                 return
             }
@@ -59,6 +71,7 @@ export class DeviceAudition implements Terminable {
     async approve(): Promise<void> {
         await this.#pending
         const candidate = this.#current
+        const keepTimeline = {value: true}
         if (candidate.mapOr(({offersTimeline}) => offersTimeline, false)) {
             const choice = await Promises.tryCatch(RuntimeNotifier.approve({
                 headline: "Replace Timeline?",
@@ -67,11 +80,18 @@ export class DeviceAudition implements Terminable {
                 approveText: "Replace",
                 cancelText: "Keep"
             }))
-            if (choice.status === "resolved" && choice.value) {
-                this.#rollback()
-                if (this.#apply(candidate.unwrap(), false)) {await this.#settle(candidate.unwrap(), "the preset")}
-            }
+            keepTimeline.value = !(choice.status === "resolved" && choice.value)
         }
+        if (candidate.nonEmpty() && (!keepTimeline.value || this.#layer.nonEmpty())) {
+            const name = this.#applied.mapOr(({name}) => name, "the preset")
+            this.#rollback()
+            if (this.#apply(candidate.unwrap(), keepTimeline.value, this.#layer.nonEmpty())) {await this.#settle(candidate.unwrap(), name)}
+        }
+        if (this.#current.nonEmpty()) {this.#layer.match({
+            none: () => this.#createRegion(),
+            some: layer => layer.run(() => this.#createRegion())
+        })}
+        this.#layer.ifSome(layer => layer.publish())
         this.#generation++
         this.#checkpoint.ifSome(checkpoint => checkpoint.commit())
         this.#checkpoint = Option.None
@@ -83,7 +103,10 @@ export class DeviceAudition implements Terminable {
         this.#applied.clear()
     }
 
-    terminate(): void {this.cancel()}
+    terminate(): void {
+        this.cancel()
+        this.#terminator.terminate()
+    }
 
     #candidateOf(entry: DeviceEntry): Promise<DeviceCandidate> {
         const cached = this.#candidates.get(entry.key)
@@ -94,25 +117,25 @@ export class DeviceAudition implements Terminable {
         return loading
     }
 
-    #apply(candidate: DeviceCandidate, keepTimeline: boolean): boolean {
+    #createRegion(): void {
+        if (this.#slot.type !== "new-instrument") {return}
+        const {project} = this.#service
+        project.editing.modify(() => project.userEditingManager.audioUnit.get().ifSome(({box}) => {
+            if (isInstanceOf(box, AudioUnitBox)) {NewInstrumentRegion.create(project, this.#service.timeline.snapping, box)}
+        }), false)
+    }
+
+    #apply(candidate: DeviceCandidate, keepTimeline: boolean, local: boolean): boolean {
         const {project} = this.#service
         const {editing} = project
         this.#checkpoint = Option.wrap(isInstanceOf(editing, BoxEditing) ? editing.checkpoint() : {
             rollback: () => editing.revertPending(),
+            discard: () => editing.revertPending(),
             commit: () => editing.mark()
         })
         this.#current = Option.wrap(candidate)
-        const result = tryCatch(() => editing.modify(() => {
-            const applied = candidate.apply(project, this.#slot, keepTimeline)
-            if (applied && this.#slot.type === "new-instrument") {
-                project.userEditingManager.audioUnit.get().ifSome(({box}) => {
-                    if (isInstanceOf(box, AudioUnitBox)) {
-                        NewInstrumentRegion.create(project, this.#service.timeline.snapping, box)
-                    }
-                })
-            }
-            return applied
-        }, false))
+        const modify = () => editing.modify(() => candidate.apply(project, this.#slot, keepTimeline), false)
+        const result = tryCatch(() => local ? this.#layer.unwrap().run(modify) : modify())
         if (result.status === "success" && result.value.unwrapOrElse(false)) {return true}
         if (result.status === "failure") {console.warn(result.error)}
         this.#rollback()
@@ -130,7 +153,13 @@ export class DeviceAudition implements Terminable {
 
     #rollback(): void {
         this.#checkpoint.ifSome(checkpoint => {
-            const result = tryCatch(() => checkpoint.rollback())
+            const result = tryCatch(() => this.#layer.match({
+                none: () => checkpoint.rollback(),
+                some: layer => {
+                    layer.revert()
+                    checkpoint.discard()
+                }
+            }))
             if (result.status === "failure") {
                 console.warn(result.error)
                 RuntimeNotifier.notify({message: "Could not revert, the project changed meanwhile.", icon: "Warning"})

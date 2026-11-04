@@ -1,12 +1,15 @@
 # Capture and recording pipeline: clean rewrite with abstracted IO
 
-Status: plan, 2026-10-20. Nothing implemented. Triggered by issue #479 (fixed in 8280789a4).
+Status: plan 2026-10-20, dry run and corrections 2026-10-30 (section 7), implemented on branch
+`capture-recording` (section 8). Triggered by issue #479 (fixed in 8280789a4).
 
 ## 1. What the pipeline is today
 
 Audio and MIDI capture live in `packages/studio/core/src/capture` (about 2.2k lines, 2.3k lines of tests) plus
 `RecordingWorklet.ts`, `MonitoringRouter.ts`, `AudioDevices.ts` and `midi/*` in core, `RecordingProcessor.ts` in
-core-processors, and a second `AudioDevices.ts` in `app/studio/src/audio`.
+core-processors, and a second `AudioDevices.ts` in `packages/app/studio/src/audio`. The engine is the wasm engine
+only: its recording reports come from `packages/studio/core-wasm/src/processor.ts` (`recordingStarted` on the
+engine to client channel, `recordingStopTime` in `EngineStateSchema`) over `crates/engine/src/lib.rs`.
 
 1. `CaptureDevices` builds one `Capture` per audio unit (`CaptureAudio` or `CaptureMidi`) from the `CaptureBox`.
 2. `Recording.start` (static singleton) prepares every armed capture, calls `engine.prepareRecordingState` and
@@ -109,6 +112,8 @@ implementation. The take writing stays in core under `capture/`, because it writ
 
 ## 4. Phases
 
+Superseded by the corrected phases in section 7.3.
+
 Each phase ships on its own, with tests first and bit-identical behaviour where it is not the bug being fixed.
 
 1. Characterization tests. Pin today's results for audio takes (start offset, loop takes, count-in, stop tail),
@@ -128,6 +133,8 @@ Each phase ships on its own, with tests first and bit-identical behaviour where 
 7. Desktop port implementation (`cpal`, `midir`), together with the native engine phase in `plans/tauri.md`.
 
 ## 5. Decisions for you
+
+Settled in the dry run, see section 7.2. Revisit any of them on review.
 
 1. Package name and split: `studio-io` for ports plus browser implementation, take writing stays in core.
    Alternative: `core-capture` holding both, which needs the box graph and `Project` and so drags core along.
@@ -183,3 +190,130 @@ Every entry below belongs in `studio-io/browser`, never in the domain code.
 ### Desktop port
 14. None of these apply to the `cpal` / `midir` implementation. It reports real input and output latency and stamps
     in driver frames, which is the reason the domain must not know any of the above.
+
+## 7. Dry run 2026-10-30
+
+Walked every phase against the code. Issues found, then the corrected target and phases.
+
+### 7.1 Issues in sections 3 and 4
+1. The second `AudioDevices.ts` lives in `packages/app/studio/src/audio`, not `app/studio/src/audio`. It is app UI
+   (dialogs, manuals), so it stays in the app and is not merged with the core one.
+2. `RecordingWorklet` cannot move to a package below core. It is a `SampleLoader` and imports `SampleService`,
+   `SampleStorage` and `PeaksWriter` from core, so `studio-io/browser` would import core and core would import
+   `studio-io`: a cycle. `RecordingProcessor` cannot move either, it is part of the core-processors worklet bundle.
+3. A new published package costs a build, lerna and SDK entry for code that still needs core. The ports go to a
+   folder `packages/studio/core/src/io` first (decision 1). Extracting a package later is a move once nothing in
+   `io/` imports core.
+4. There is no TS engine any more. "Engine side" means two places: the Rust engine
+   (`crates/engine/src/lib.rs`) and the worklet glue (`packages/studio/core-wasm/src/processor.ts`). Every new
+   report needs both plus a rebuilt `core-wasm` bundle (a schema change without a rebuild freezes the tab, see
+   `EngineStateSchema` history).
+5. A loop wrap is not visible in the engine state: it only carries the latest position, read on animation frames.
+   Two wraps between two reads (hidden tab, slow frame, a loop shorter than a frame) look like one or none. The
+   wraps need an ordered channel (decision 2), and the Rust transport already flags them: the first block after a
+   jump is `discontinuous`, its `s0` is the sample inside the quantum.
+6. "Stamped live notes in the engine (closes #356 for input)" is wrong. A live note always arrives after its stamp,
+   so stamping can only delay it to a constant offset. That trades jitter for added latency on every key press.
+   Live notes keep reaching the engine immediately. The stamp is used for the recorded position only.
+7. Finding 3 (MIDI latency sign) resolves itself once MIDI is stamped on the audible clock:
+   `AudioContext.getOutputTimestamp()` maps a `MIDIMessageEvent.timeStamp` to the context time that was audible at
+   the key press, and the note lands at the transport position rendered at that context time minus the plugin
+   delay compensation. No output latency term is added or subtracted by hand. Today's `+ outputLatency` places a
+   note about two output latencies late. This changes where recorded MIDI notes land and needs an ear check.
+8. `RecordAutomation` records a parameter at the rendered position of the write, without any latency term, and its
+   `performance.now()` hold detection measures the gesture, not the transport. Moving it onto stamps would move
+   every recorded automation point. It stays as it is (section 7.3 phase 6).
+9. The retroactive MIDI capture places notes at the last animation frame position in "playing" mode (up to one
+   frame of jitter, no latency). Merging it onto the stamped notes and the transport log fixes that. The result
+   shape `CaptureResult` and `Project.commitMidiCapture` stay unchanged.
+10. Phase 7 (desktop ports) depends on the native engine phase of `plans/tauri.md` and is not part of this run.
+11. `Recording.wasCountingIn()` is used by `RecordAudio`'s wallclock fallback and by `Project.restartRecording`, and
+    `Recording.isRecording` by the capture menu. The statics stay as a facade over the per project session.
+
+### 7.2 Decisions taken
+1. Ports in `packages/studio/core/src/io` with the browser implementation in `io/browser`, no new package.
+2. Transport anchors on the engine to client channel (ordered, no loss), not in `EngineState`.
+3. Live take growth keeps writing boxes per frame (collaboration sees it). Not measured, not changed.
+4. `InputLatency` stays as the browser override. It is the only input latency source in a browser.
+5. The 8 channel effects monitoring cap stays.
+
+### 7.3 Corrected phases
+1. Characterization. The 114 capture tests are the baseline. Add tests for the new pieces (transport log,
+   audible clock, wrap anchors) and for the cases the old code gets wrong (two wraps between two frames).
+2. Ports. `io/AudioInputPort`, `io/MidiInputPort`, `io/ContextClock` with `io/browser` implementations over the
+   existing `AudioDevices`, `MidiDevices` and `AudioContext`. The vendor workarounds that are browser facts move
+   there: the `outputLatency` approval dialog, the device fallback of `getUserMedia`, the `outputLatency` re-read.
+   Old exports stay.
+3. Engine anchors. Rust collects every discontinuous block (`s0`, position) and the mid quantum pause of
+   `pauseOnLoopDisabled`. The processor adds play and stop edges, converts samples to context time and sends
+   `transportAnchors` once per quantum that has any. Every recorder keeps its own `TransportLog` from them. The stop
+   time becomes exact inside the quantum for `pauseOnLoopDisabled`.
+4. Audio takes on anchors. A take ends at the wrap anchor's context time, so its length is what the engine
+   rendered. Every wrap creates its take even if no animation frame ran in between. The anchor wait and the
+   wallclock fallback go: the take is created once `recordingStart` and `firstQuantumTime` both exist.
+5. MIDI on the audible clock. Notes are stamped through `ContextClock`, placed through the `TransportLog`, and land
+   in the take that was playing when they were heard. The retroactive capture uses the same stamps and log.
+6. `RecordingSession` per project behind the `Recording` statics. One `TakePolicy` for the older take action and
+   scope. `RecordAutomation` unchanged (7.1.8).
+7. Desktop ports: later, with `plans/tauri.md`.
+
+## 8. Implementation 2026-10-30 (branch `capture-recording`, uncommitted)
+
+### Done
+1. Engine anchors. Rust `transport_jump_count/sample/position` and `transport_pause_sample`
+   (`crates/engine/src/lib.rs`), `TransportAnchorEdges` in core-wasm, `EngineToClient.transportAnchors`,
+   `Engine.subscribeTransportAnchors`. A stop anchor also sets `recordingStop`, so a recording ends without an
+   animation frame. Tests: `transport-jumps.test.ts` (real engine: wrap at sample 88200, laps in whole samples,
+   pause at quantum 689 sample 8), `transport-anchor-edges.test.ts`.
+2. `capture/TransportLog` (position and musical advance at a context time), `capture/TakePolicy` (the older take
+   action, was duplicated), `capture/RecordingSession` per project, `Recording` statics as its facade.
+3. `RecordAudio` splits takes at the wrap anchors, the anchor wait and the wallclock fallback are gone. A take is
+   placed as soon as `recordingStart` and `firstQuantumTime` exist. Jumps at or before the start are ignored (the
+   seek flags the first block of the start quantum).
+4. `RecordMidi` and the retroactive capture in `CaptureMidi` use stamped notes on the audible clock and the log.
+   Notes heard past the loop end wait for the wrap anchor and land in the next take. Note fields are rounded.
+5. Ports in `core/src/io`: `ContextClock`, `MidiInputPort`, `RecordingLatency` with `io/browser`
+   (`BrowserContextClock`, `BrowserMidiInput`, `BrowserRecordingLatency`, `BrowserAudioInput`). `CaptureMidi`
+   takes the port and clock as optional constructor arguments.
+
+### Behaviour that changed on purpose
+1. Recorded MIDI notes land where the transport was heard, about two output latencies plus twice the delay
+   compensation earlier than before (7.1.7). Needs an ear check with a real keyboard.
+2. A note stamped before the last playhead update lands at its stamp, not at that update.
+3. Every loop wrap makes its take even when no animation frame runs (hidden tab, two wraps in one frame).
+4. `pauseOnLoopDisabled` ends the audio take at the exact loop end sample, not at the quantum end.
+5. A recording finishes when the engine reports its stop, also in a hidden tab.
+
+### Verified in Chrome (separate headless Chrome, fake microphone, software keyboard)
+1. MIDI: three laps, notes within 1 ms of their audible targets, a key held over the wrap keeps its length.
+2. Audio: takes of 1.9974 s (from position 5), 2.0 s and the rest, offsets chained exactly.
+3. Hidden tab (animation frames stopped): the takes split while hidden, the recording finishes on the stop.
+4. Count-in: the count-in jumps are ignored, the take starts at the punch in.
+5. `pauseOnLoopDisabled`: the recording ends by itself at the loop end, take length to the sample.
+6. Retroactive capture while looping: phrase across the wrap keeps its order and lengths.
+
+6. Audio behind ports (finding 14). `io/AudioInputPort` (open, reuse or reopen per request, rechannel, close,
+   gain, prepare and take a recording, latency reader), `io/RecordingSink` (what `RecordAudio` records into),
+   `io/MonitorPort` (mode, volume, pan, mute, output device). `io/browser/BrowserAudioInput` and `BrowserMonitor`
+   hold the former `CaptureAudio` graph code unchanged. `CaptureAudio` keeps arm state, box settings and the old
+   getters as a facade, and takes an input factory (`CaptureAudio.InputFactory`) so a desktop input plugs in.
+   The existing `CaptureAudio.test.ts` passes unedited through the port, `CaptureAudioPort.test.ts` drives the
+   domain against a fake port. Chrome: recording, off/direct/effects monitoring levels (-12 dB reads 0.28),
+   mute, output device fallback.
+
+7. Automated audit `scripts/capture-audit/audit.mjs` (macOS): MIDI over a virtual CoreMIDI cable
+   (`midi-loopback.swift`), audio through BlackHole 2ch, an off screen Chrome on the dev server. MIDI is judged
+   against the receipt stamps: every scenario within 0.25 ms (tempi, a 150 ms main thread block, loop wraps,
+   count-in). Covers #491 and #492. Diagnostics `--bare`, `--bisect`, `--takes`, `--ratchet`, `--steps`.
+8. The 24 ms input step. A `MediaStreamAudioSourceNode` reads about 24 ms later, permanently, after it went
+   unpulled (a suspended context, exports) or after another `getUserMedia` stream opened and closed on the
+   device (arming a second capture, a permission request, the first output device query). A fresh source node on
+   the same stream resets it, so `BrowserAudioInput.prepareRecording` builds one before every recording. On
+   BlackHole every take then lands at a 18.5 to 21.6 ms round trip instead of 18 to 45 ms. A step that happens
+   during a take is not caught.
+
+### Not done
+1. `RecordAutomation` unchanged (7.1.8). Phase 7 (desktop ports) later.
+2. Round trip calibration per output and input device (the input part is unreported, Chrome's output figure is
+   wrong on Bluetooth). Placement should not read `outputLatency` at a single instant, it scatters.
+3. #493 count-in pickups (needs a decision), #494 takes of 1200 frames or fewer fail to import.

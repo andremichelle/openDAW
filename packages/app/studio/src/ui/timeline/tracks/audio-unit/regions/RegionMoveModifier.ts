@@ -16,7 +16,9 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position + this.#tool.deltaPosition}
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopDuration(this.readPosition(region))}
-    readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && region.isMirrowed !== this.#tool.mirroredCopy}
+    readMirror(region: AnyRegionBoxAdapter): boolean {
+        return region.canMirror && (this.#tool.copy ? this.#tool.mirroredCopy : region.isMirrowed)
+    }
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {
         return regions.iterateRange(from - this.#tool.deltaPosition, to - this.#tool.deltaPosition)
@@ -55,6 +57,10 @@ type Construct = Readonly<{
 
 export class RegionMoveModifier implements RegionModifier {
     static create(trackManager: TracksManager, selection: Selection<AnyRegionBoxAdapter>, construct: Construct): Option<RegionMoveModifier> {
+        if (selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving regions.", icon: "Info"})
+            return Option.None
+        }
         return selection.isEmpty()
             ? Option.None
             : Option.wrap(new RegionMoveModifier(trackManager, selection, construct))
@@ -141,6 +147,11 @@ export class RegionMoveModifier implements RegionModifier {
     }
 
     approve(): void {
+        if (this.#selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            this.cancel()
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving regions.", icon: "Info"})
+            return
+        }
         if (this.#deltaIndex === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
@@ -169,7 +180,7 @@ export class RegionMoveModifier implements RegionModifier {
                     return original.copyTo({
                         position: original.position + this.#deltaPosition,
                         target: targetTrack.box.regions,
-                        consolidate: original.isMirrowed === this.#mirroredCopy
+                        consolidate: !this.#mirroredCopy
                     })
                 })
                 this.#selection.deselectAll()

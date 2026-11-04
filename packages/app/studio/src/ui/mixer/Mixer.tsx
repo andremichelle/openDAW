@@ -1,5 +1,5 @@
 import css from "./Mixer.sass?inline"
-import {isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, MutableObservableOption, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -15,6 +15,9 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {installTrackSelection} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
+import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
+
+const loadMasteringPanel = dynamicImportWithRetry(() => import("@/ui/mixer/MasteringPanel"))
 
 const className = Html.adoptStyleSheet(css, "mixer")
 
@@ -73,6 +76,24 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             scrollModel.position += editor.getBoundingClientRect().left - channelStripWrapper.getBoundingClientRect().left
         })
     }))
+    const mastering = new DefaultObservableValue(false)
+    const masteringLifecycle = lifecycle.own(new Terminator())
+    const masteringPanel = new MutableObservableOption<HTMLElement>()
+    const revealMastering = new DefaultObservableValue(false)
+    const toggleMastering = async (open: boolean): Promise<void> => {
+        masteringLifecycle.terminate()
+        masteringPanel.ifSome(panel => panel.remove())
+        masteringPanel.clear()
+        const outputUnit = audioUnits.values().find(({adapter}) => adapter.isOutput)
+        if (open && isDefined(outputUnit)) {
+            const {MasteringPanel} = await loadMasteringPanel()
+            if (!mastering.getValue()) {return}
+            masteringPanel.wrap(MasteringPanel({lifecycle: masteringLifecycle, service, outputUnit: outputUnit.adapter}))
+            revealMastering.setValue(true)
+        }
+        updateDom.request()
+    }
+
     const updateDom = deferNextFrame(() => {
         channelStripContainer.appendChild(headers)
         const layout = project.audioUnitLayout.snapshot
@@ -83,11 +104,21 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             if (editor instanceof HTMLElement) {editor.style.gridColumn = String(index + 2)}
             channelStripContainer.appendChild(editor)
         })
+        masteringPanel.ifSome(panel => {
+            const outputIndex = sorted.findIndex(({adapter}) => adapter.isOutput)
+            panel.style.gridColumn = String(outputIndex + 3)
+            panel.style.gridRow = "2 / 9"
+            channelStripContainer.appendChild(panel)
+        })
         groupRails.update(layout.boundaries)
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
+        if (revealMastering.getValue()) {
+            revealMastering.setValue(false)
+            masteringPanel.ifSome(panel => panel.scrollIntoView({behavior: "smooth", inline: "end", block: "nearest"}))
+        }
     })
     const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) => {
         editor.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
@@ -113,7 +144,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             onAdd: (adapter: AudioUnitBoxAdapter) => {
                 const terminator = lifecycle.spawn()
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
-                                                          compact={false}/>
+                                                          compact={false} mastering={mastering}/>
                 editor.dataset.unit = UUID.toString(adapter.uuid)
                 installTrackSelection(terminator, project, editor, adapter.box, () => {})
                 terminator.ownAll(
@@ -153,6 +184,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 })
             }
         })),
+        mastering.subscribe(owner => toggleMastering(owner.getValue()).finally()),
         Html.watchResize(element, updateScroller),
         Events.subscribe(headers, "pointerdown", () => project.userEditingManager.audioUnit.clear()),
         Events.subscribe(element, "wheel", (event: WheelEvent) => {

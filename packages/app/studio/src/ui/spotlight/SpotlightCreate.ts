@@ -146,14 +146,18 @@ export namespace SpotlightCreate {
             }))
         })
         const cloudIds = new Set(published.map(({uuid}) => uuid))
+        // a stored build of a published plugin (an older one, kept for the projects using it) is not offered
+        const cloudClapIds = new Set(published.flatMap(({plugins}) => plugins.map(({clapId}) => clapId)))
         const local = Array.from(new Set(stored.map(({url}) => url)))
             .filter(url => !cloudIds.has(WclapStorage.idOf(url)))
             .flatMap(url => {
                 const bundle = stored.filter(plugin => plugin.url === url)
                 const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
-                return bundle.map(({info}, index) => ({
-                    id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0
-                }))
+                return bundle
+                    .map(({info}, index) => ({
+                        id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0
+                    }))
+                    .filter(({info}) => !cloudClapIds.has(info.clapId))
             })
         return [...cloud, ...local]
     }

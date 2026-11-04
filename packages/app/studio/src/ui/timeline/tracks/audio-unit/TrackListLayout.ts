@@ -2,7 +2,6 @@ import {AudioUnitLayout} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {isDefined, Optional} from "@opendaw/lib-std"
 
-/** Project channels onto flat lane rows without inspecting DOM containers. */
 export class TrackListLayout<CONTENT> {
     readonly rows: ReadonlyArray<TrackListLayout.Row<CONTENT>>
     readonly units: ReadonlyArray<TrackListLayout.Unit>

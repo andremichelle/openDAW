@@ -1,32 +1,41 @@
 import {CanvasUnitPainter, Scale} from "@opendaw/studio-core"
-import {int, linear, Nullable, Terminable} from "@opendaw/lib-std"
+import {int, isDefined, linear, Nullable, Optional, Terminable} from "@opendaw/lib-std"
 import {RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Bell, CurveRenderer, HighPass, HighShelf, LowPass, LowShelf} from "@/ui/devices/audio-effects/Revamp/Curves.ts"
 import {ColorSets, curveSampleRate} from "./constants.ts"
-import {gainToDb} from "@opendaw/lib-dsp"
+import {gainToDb, LowBandAnalyser} from "@opendaw/lib-dsp"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const plotSpectrum = (context: CanvasRenderingContext2D,
                              xAxis: Scale,
                              yAxis: Scale,
                              spectrum: Float32Array,
-                             sampleRate: number) => {
+                             sampleRate: number,
+                             low?: Optional<Float32Array>) => {
     const {canvas} = context
-    const numBins = spectrum.length
-    const freqStep = sampleRate / (numBins << 1)
+    const freqStep = sampleRate / (spectrum.length << 1)
+    const lowStep = LowBandAnalyser.binWidth(sampleRate)
+    const firstLowBin = isDefined(low) ? Math.ceil(20.0 / lowStep) : 0
+    const numLowBins = isDefined(low) ? Math.ceil(LowBandAnalyser.CROSSOVER / lowStep) - firstLowBin : 0
+    const firstBin = isDefined(low) ? Math.ceil(LowBandAnalyser.CROSSOVER / freqStep) : 0
+    const numBins = numLowBins + spectrum.length - firstBin
+    const energyAt = (index: int): number => isDefined(low) && index < numLowBins
+        ? low[firstLowBin + index] : spectrum[firstBin + index - numLowBins]
+    const frequencyAt = (index: int): number => index < numLowBins
+        ? (firstLowBin + index) * lowStep : (firstBin + index - numLowBins) * freqStep
     const width = canvas.width = canvas.clientWidth * devicePixelRatio
     const height = canvas.height = canvas.clientHeight * devicePixelRatio
     let x0: int = 0 | 0
-    let lastEnergy = spectrum[0]
+    let lastEnergy = energyAt(0)
     let currentEnergy = lastEnergy
     const path2D = new Path2D()
     path2D.moveTo(0, (1.0 - yAxis.unitToNorm(gainToDb(lastEnergy))) * height)
     for (let i = 1; i < numBins; ++i) {
-        const energy = spectrum[i]
+        const energy = energyAt(i)
         if (currentEnergy < energy) {
             currentEnergy = energy
         }
-        let x1 = (xAxis.unitToNorm(i * freqStep) * width) | 0
+        let x1 = (xAxis.unitToNorm(frequencyAt(i)) * width) | 0
         if (x1 > width) {
             i = numBins
             x1 = width

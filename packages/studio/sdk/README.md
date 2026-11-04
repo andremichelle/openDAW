@@ -44,6 +44,53 @@ package: `import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor
 enabled by default; `WasmEngine.setEnabled(false)` persists an opt-out to the TypeScript engine. Offline
 renders (mixdown, stems, freeze) follow automatically via `OfflineEngineRenderer`.
 
+## Latency calibration
+
+A recorded audio take is shifted by the time the sound needs from the engine to the speakers and back into the
+input. Browsers report only the output part, often wrongly (Bluetooth), and never the input part. A measurement
+replaces both with the real round trip of the user's setup.
+
+The measurement plays three short noise bursts and listens for them on the track's input, so the input must hear
+the output while it runs: laptop speakers and the built-in microphone work as they are, headphones must be held to
+the microphone, an interface needs a cable from an output to the input. The transport must be stopped.
+
+```ts
+import {CaptureAudio, RoundTrip} from "@opendaw/studio-core"
+
+// the capture of an audio track, keyed by its audio unit
+const capture: CaptureAudio = project.captureDevices.audio(audioUnitBox.address.uuid).unwrap()
+
+// arms the input, plays the bursts and stores the result when it is steady
+const result: RoundTrip.Result = await capture.measureRoundTrip()
+switch (result.verdict) {
+    case "ok": // result.seconds is the round trip, every later take of these devices uses it
+        break
+    case "unsteady": // the bursts disagreed by result.spreadSeconds, nothing was stored
+        break
+    case "no-signal": // the input did not hear the output, nothing was stored
+        break
+}
+
+// the stored round trip of the output and input device in use
+capture.roundTrip.ifSome(({seconds, measuredAt}) => console.log(`${seconds * 1000} ms`))
+
+// drop it, takes fall back to the latency the browser reports
+capture.forgetRoundTrip()
+
+// a round trip was stored or dropped, for any devices
+const subscription = capture.subscribeRoundTrip(() => updateLabel(capture.roundTrip))
+```
+
+1. A result belongs to this browser and to the pair of output and input device at the current sample rate. It is
+   kept in `localStorage`, not in the project. Measure again after a device or sample rate change.
+2. `measureRoundTrip()` rejects while the transport plays or records.
+3. A track's own input latency (`CaptureAudioBox.inputLatency`) takes priority over a measurement. Leave it on
+   inherit to use the measurement.
+4. MIDI recording is not affected.
+
+The end-user explanation is the manual page
+[Latency Calibration](https://opendaw.studio/manuals/latency-calibration).
+
 ## Dual-Licensing Model
 
 openDAW is available **under two alternative license terms**:

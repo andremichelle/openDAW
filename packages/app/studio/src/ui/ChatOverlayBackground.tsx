@@ -14,9 +14,9 @@ const BumpHalfHeight = 16
 const Padding = 8
 const InnerRadius = 4
 
-const buildOuterPath = (height: number): string => {
+const buildOuterPath = (width: number, height: number): string => {
     const midY = height / 2
-    const right = TabWidth + WindowWidth
+    const right = width
     const cr = CornerRadius
     const fr = FilletRadius
     const br = BumpCornerRadius
@@ -42,10 +42,10 @@ const buildOuterPath = (height: number): string => {
     ].join(" ")
 }
 
-const buildInnerPath = (height: number): string => {
+const buildInnerPath = (width: number, height: number): string => {
     const left = TabWidth + Padding
     const top = Padding
-    const right = TabWidth + WindowWidth
+    const right = width
     const bottom = height - Padding
     const r = InnerRadius
     return [
@@ -75,10 +75,10 @@ export const ChatOverlayBackground = ({lifecycle, element}: Construct) => {
         </svg>
     )
     lifecycle.own(Html.watchResize(element, entry => {
-        const {height} = entry.contentRect
-        svgElement.setAttribute("viewBox", `0 0 ${TabWidth + WindowWidth} ${height}`)
-        outerPath.setAttribute("d", buildOuterPath(height))
-        innerPath.setAttribute("d", buildInnerPath(height))
+        const {width, height} = entry.contentRect
+        svgElement.setAttribute("viewBox", `0 0 ${width} ${height}`)
+        outerPath.setAttribute("d", buildOuterPath(width, height))
+        innerPath.setAttribute("d", buildInnerPath(width, height))
     }))
     return svg
 }

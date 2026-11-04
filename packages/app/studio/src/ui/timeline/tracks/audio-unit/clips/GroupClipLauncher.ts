@@ -23,7 +23,10 @@ export class GroupClipLauncher implements Terminable {
         this.#lifecycle.ownAll(
             project.audioUnitLayout.value.catchupAndSubscribe(() => this.#refresh()),
             project.engine.subscribeClipNotification(notification => this.#notifyPlayback(notification)),
-            project.engine.isPlaying.subscribe(() => this.#changes.notify())
+            project.engine.isPlaying.subscribe(owner => {
+                if (!owner.getValue()) {this.#playing.clear(); this.#waiting.clear()}
+                this.#changes.notify()
+            })
         )
     }
     clips(index: int): ReadonlyArray<AnyClipBoxAdapter> {

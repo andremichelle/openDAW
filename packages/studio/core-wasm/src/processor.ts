@@ -8,7 +8,7 @@
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AudioAnalyser, AudioData, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, LowBandAnalyser, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -26,12 +26,14 @@ import {
     NoteSignal,
     PreferencesClient,
     SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapGuiInfo,
     WclapPanelInfo,
     WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
@@ -39,9 +41,10 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, readSignalGraph, takeReportMessage} from "./engine-exports"
+import {EngineExports, FieldKind, readSignalGraph, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
+import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {ScriptBridges} from "./script-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
@@ -70,6 +73,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
+    readonly #lowBand: LowBandAnalyser = new LowBandAnalyser(sampleRate)
     readonly #stereo: StereoAnalyser = new StereoAnalyser()
     readonly #gonio: GonioCapture = new GonioCapture(GONIO_PAIRS)
     readonly #loudness: LoudnessMeter = new LoudnessMeter(sampleRate)
@@ -77,6 +81,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #gonioValues: Float32Array = new Float32Array(GONIO_PAIRS * 2)
     readonly #loudnessValues: Float32Array = new Float32Array(5)
     #spectrumActive: boolean = false
+    #spectrumLowActive: boolean = false
     #waveformActive: boolean = false
     #stereoActive: boolean = false
     #gonioActive: boolean = false
@@ -96,6 +101,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
+    readonly #anchorEdges: TransportAnchorEdges = new TransportAnchorEdges()
     readonly #quantumClock: QuantumClock = new QuantumClock()
     #quantumFrame: number = 0
     #recordingStopTime: number = Number.NaN
@@ -118,8 +124,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                 wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
-                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string): void {
-                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId)
+                wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void {
+                    dispatcher.dispatchAndForget(this.wclapState, uuid, bytes, url, clapId, cause)
                 }
                 wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
                     dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
@@ -143,6 +149,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 recordingStarted(contextTime: number, position: ppqn, generation: int): void {
                     dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
+                }
+                transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void {
+                    dispatcher.dispatchAndForget(this.transportAnchors, anchors)
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
@@ -175,6 +184,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#analyser = new AudioAnalyser()
         const spectrum = new Float32Array(this.#analyser.numBins())
         const waveform = new Float32Array(this.#analyser.numBins())
+        const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
         const heap = new Float32Array(3)
         this.#preferences = new PreferencesClient(messenger.channel("engine-preferences"), EngineSettingsSchema.parse({}))
         this.#terminator.ownAll(
@@ -183,6 +193,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 if (!hasSubscribers) {return}
                 spectrum.set(this.#analyser.bins())
                 this.#analyser.decay = true
+            }),
+            this.#broadcaster.broadcastFloats(EngineAddresses.SPECTRUM_LOW, spectrumLow, (hasSubscribers) => {
+                this.#spectrumLowActive = hasSubscribers
+                if (!hasSubscribers) {return}
+                spectrumLow.set(this.#lowBand.bins())
+                this.#lowBand.decay = true
             }),
             this.#broadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform, (hasSubscribers) => {
                 this.#waveformActive = hasSubscribers
@@ -245,6 +261,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#transporting = false
                     engine.stop_recording()
                     this.#closeRecordingEdge()
+                    this.#closeTransportAnchors()
                 }),
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
@@ -261,6 +278,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 wclapRetry: (url: string): void => this.#wclap.retry(url),
                 scriptMessage: (uuid: UUID.Bytes, message: unknown): void => this.#scriptBridges.message(UUID.toString(uuid), message),
+                overrideDeviceField: (uuid: UUID.Bytes, key: int, value: boolean | number): void => this.#guarded(() => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    const [kind, bits] = typeof value === "boolean"
+                        ? [FieldKind.Bool, value ? 1 : 0]
+                        : [FieldKind.Float, new Uint32Array(Float32Array.of(value).buffer)[0]]
+                    engine.override_device_field(pointer, key, kind, bits)
+                }),
                 querySignalGraph: (): Promise<SignalGraph> => Promise.resolve(readSignalGraph(engine, this.#memory)),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
@@ -411,6 +436,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         engine.render()
         this.#scriptBridges.afterRender()
         this.#announceRecordingEdges(engine)
+        this.#announceTransportAnchors(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
@@ -436,6 +462,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (this.#spectrumActive || this.#waveformActive) {
             this.#analyser.process(chLeft, chRight, 0, RenderQuantum)
         }
+        if (this.#spectrumLowActive) {this.#lowBand.process(chLeft, chRight, 0, RenderQuantum)}
         if (this.#stereoActive) {this.#stereo.process(chLeft, chRight, this.#stereoValues)}
         if (this.#gonioActive) {this.#gonio.process(chLeft, chRight, this.#gonioValues)}
         if (this.#loudnessActive) {this.#loudness.process(chLeft, chRight)}
@@ -451,14 +478,18 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#stateSender.tryWrite()
         this.#drainClipChanges()
         this.#drainMarkerChanges()
-        this.#midi.drain(engine, this.#memory)
+        this.#midi.drain(engine, this.#memory, this.#quantumFrame / sampleRate * 1000)
     }
 
     // the quantum frame is the quantum start, the state position is post-render: report the quantum end
     #announceRecordingEdges(engine: EngineExports): void {
         const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
         const isRecording = view.getUint8(18) === 1
-        if (this.#recordingStartEdge.wasRecording && !isRecording) {this.#recordingStopTime = this.#quantumEndTime()}
+        if (this.#recordingStartEdge.wasRecording && !isRecording) {
+            const pauseSample = engine.transport_pause_sample()
+            this.#recordingStopTime = pauseSample >= 0
+                ? (this.#quantumFrame + pauseSample) / sampleRate : this.#quantumEndTime()
+        }
         if (this.#recordingStartEdge.observe(isRecording)) {
             this.#engineToClient.recordingStarted(this.#quantumEndTime(), view.getFloat32(0),
                 this.#recordingGeneration)
@@ -472,6 +503,25 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     }
 
     #quantumEndTime(): number {return (this.#quantumFrame + RenderQuantum) / sampleRate}
+
+    #announceTransportAnchors(engine: EngineExports): void {
+        const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        const jumps: Array<TransportJump> = []
+        const count = engine.transport_jump_count()
+        for (let index = 0; index < count; index++) {
+            jumps.push({sample: engine.transport_jump_sample(index), position: engine.transport_jump_position(index)})
+        }
+        const anchors = this.#anchorEdges.observe({
+            frame: this.#quantumFrame, sampleRate, isPlaying: view.getUint8(16) === 1,
+            isRecording: view.getUint8(18) === 1, position: view.getFloat32(0), jumps,
+            pauseSample: engine.transport_pause_sample()
+        })
+        if (anchors.length > 0) {this.#engineToClient.transportAnchors(anchors)}
+    }
+
+    #closeTransportAnchors(): void {
+        this.#anchorEdges.close(this.#quantumEndTime()).ifSome(anchor => this.#engineToClient.transportAnchors([anchor]))
+    }
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
     // `notifyClipSequenceChanges`): 20-byte records [uuid 16][kind u32 LE].
@@ -547,12 +597,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#transporting = false
         this.#engine.pause()
         this.#closeRecordingEdge()
+        this.#closeTransportAnchors()
         if (wasRecording) {
             // TS `#stop`: leaving a recording returns the playhead to where playback started (or 0).
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)
         }
         if (reset || !wasTransporting) {
-            this.#engine.stop() // rewinds to 0 + resets every plugin (voices, tails, detectors)
+            this.#engine.stop_faded() // rewinds to 0, resets every plugin (voices, tails, detectors) after a faded quantum
             this.#playbackTimestamp = 0.0
             this.#peaks.clear()
         }

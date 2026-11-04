@@ -3,6 +3,7 @@ import {Dragging} from "@opendaw/lib-dom"
 import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {GroupClipColumnMoves} from "./GroupClipColumnMoves"
 import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 
@@ -24,7 +25,9 @@ class SelectedModifyStrategy implements ClipModifyStrategy {
     constructor(tool: ClipMoveModifier) {this.#tool = tool}
 
     readClipIndex(clip: AnyClipBoxAdapter): number {return clip.indexField.getValue() + this.#tool.clipDelta}
-    readMirror(clip: AnyClipBoxAdapter): boolean {return clip.canMirror && clip.isMirrowed !== this.#tool.mirroredCopy}
+    readMirror(clip: AnyClipBoxAdapter): boolean {
+        return clip.canMirror && (this.#tool.copy ? this.#tool.mirroredCopy : clip.isMirrowed)
+    }
     translateTrackIndex(index: number): number {return index - this.#tool.trackDelta}
 }
 
@@ -40,6 +43,10 @@ export type Creation = {
 
 export class ClipMoveModifier implements ClipModifier {
     static start(creation: Creation): Option<ClipMoveModifier> {
+        if (creation.selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving clips.", icon: "Info"})
+            return Option.None
+        }
         return Option.wrap(new ClipMoveModifier(creation))
     }
 
@@ -116,6 +123,11 @@ export class ClipMoveModifier implements ClipModifier {
     }
 
     approve(): void {
+        if (this.#selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            this.cancel()
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving clips.", icon: "Info"})
+            return
+        }
         if (this.#trackDelta === 0 && this.#clipDelta === 0) {return}
         const tracks = this.#manager.tracks()
         const maxTrackIndex = tracks.length - 1
@@ -143,7 +155,7 @@ export class ClipMoveModifier implements ClipModifier {
                 const newTrackIndex = trackIndex + trackDelta
                 const newTrack = asDefined(tracks[newTrackIndex], "moved outside valid area")
                 occupied[newTrackIndex][newClipIndex] = true
-                return {adapter, newClipIndex, newTrack, isMirrowed: adapter.isMirrowed}
+                return {adapter, newClipIndex, newTrack}
             })
         const toDelete: Array<AnyClipBox> = []
         moveTasks.forEach(({adapter: {box}, newClipIndex, newTrack}) => {
@@ -158,7 +170,11 @@ export class ClipMoveModifier implements ClipModifier {
         console.debug("#copy", this.#copy, "#mirroredCopy", this.#mirroredCopy)
         const userEditingManager = this.#project.userEditingManager
         const editedAdapter = adapters.find(adapter => userEditingManager.timeline.isEditing(adapter.box))
+        const moveNames = GroupClipColumnMoves.prepare(this.#project, moveTasks.map(({adapter, newClipIndex, newTrack}) => ({
+            clip: adapter, index: newClipIndex, track: newTrack.trackBoxAdapter
+        })), this.#copy)
         this.#project.editing.modify(() => {
+            moveNames()
             if (this.#copy) {
                 adapters.forEach((adapter) => {
                     const track = adapter.trackBoxAdapter.unwrap("trackBoxAdapter")
@@ -171,10 +187,10 @@ export class ClipMoveModifier implements ClipModifier {
                 })
             }
             toDelete.forEach(box => box.delete())
-            moveTasks.forEach(({adapter, newClipIndex, newTrack, isMirrowed}) => {
+            moveTasks.forEach(({adapter, newClipIndex, newTrack}) => {
                 adapter.box.index.setValue(newClipIndex)
                 adapter.box.clips.refer(newTrack.trackBoxAdapter.box.clips)
-                if (this.#copy && (isMirrowed === this.#mirroredCopy)) {
+                if (this.#copy && !this.#mirroredCopy) {
                     adapter.consolidate()
                 }
             })

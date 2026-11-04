@@ -1,6 +1,7 @@
-import {BoxGraph, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
-import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {AudioUnitType} from "@opendaw/studio-enums"
 
 // Deterministic, constraint-aware reconciliation of a box graph.
 //
@@ -17,11 +18,11 @@ import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 // SCOPE: unresolvable pointers, unsatisfied mandatory pointers, exclusive-target overflow (the case the
 // collab tests show diverging), and duplicate value events.
 
-const byUuid = (a: {address: {uuid: UUID.Bytes}}, b: {address: {uuid: UUID.Bytes}}): number =>
-    UUID.toString(a.address.uuid).localeCompare(UUID.toString(b.address.uuid))
+const byAddress = (a: PointerField, b: PointerField): number => Address.Comparator(a.address, b.address)
 
-const byAddress = (a: PointerField, b: PointerField): number =>
-    a.address.toString().localeCompare(b.address.toString())
+// the graph accepts it, but the studio cannot load it
+export const isInstrumentWithoutCapture = (box: Box): boolean =>
+    box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Instrument && box.capture.isEmpty()
 
 // Collapse a value-event collection onto its (position, index) uniqueness invariant: per position keep the
 // earliest event at index 0 and the latest at index 1, deleting any in between. Two clients concurrently adding
@@ -38,7 +39,7 @@ const reconcileValueEventCollection = (collectionBox: ValueEventCollectionBox): 
             const positionDiff = a.position.getValue() - b.position.getValue()
             if (positionDiff !== 0) {return positionDiff}
             const indexDiff = a.index.getValue() - b.index.getValue()
-            return indexDiff !== 0 ? indexDiff : byUuid(a, b)
+            return indexDiff !== 0 ? indexDiff : UUID.Comparator(a.address.uuid, b.address.uuid)
         })
     let changed = false
     let groupStart = 0
@@ -77,15 +78,15 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
         }
         // --- Unsatisfied mandatory pointer: its owner cannot exist. Drop the lowest-addressed one; the
         // fixpoint loop picks up whatever that exposes. ---
-        const unsatisfied = boxGraph.edges().unsatisfiedMandatoryPointers().slice().sort(byAddress)
+        const unsatisfied = boxGraph.edges().unsatisfiedMandatoryPointers()
         if (unsatisfied.length > 0) {
             unsatisfied[0].box.delete()
             changed = true
             repairedAny = true
             continue
         }
-        // Stable, client-independent iteration order.
-        const boxes = boxGraph.boxes().slice().sort(byUuid)
+        // Stable, client-independent iteration order: the graph keeps its boxes sorted by uuid.
+        const boxes = boxGraph.boxes().slice()
         for (const box of boxes) {
             if (!box.isAttached()) {continue}
             // --- Exclusive target overflow: keep the lowest-addressed incoming pointer, drop the rest. ---
@@ -99,6 +100,20 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
                     repairedAny = true
                     break // graph mutated: restart the scan from a fresh, ordered snapshot
                 }
+            }
+            // --- An instrument cannot exist without its capture: a merge can take the capture away. ---
+            if (isInstrumentWithoutCapture(box)) {
+                box.delete()
+                changed = true
+                repairedAny = true
+                break // graph mutated: restart the scan from a fresh, ordered snapshot
+            }
+            // --- A box that only exists through what points at it, and nothing does anymore. ---
+            if (box.pointerRules.mandatory && box.incomingEdges().length === 0) {
+                box.delete()
+                changed = true
+                repairedAny = true
+                break // graph mutated: restart the scan from a fresh, ordered snapshot
             }
             // --- Duplicate value events: collapse the collection onto (position, index) uniqueness. ---
             if (box instanceof ValueEventCollectionBox) {

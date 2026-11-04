@@ -16,7 +16,7 @@ const sampleManager = () => ({
     }), record: () => {}, invalidate: () => {}, remove: () => {}, register: () => Terminable.Empty
 })
 describe("region moves with folded selections", () => {
-    it.each([false, true])("moves only visible selected regions (copy=%s)", async copy => {
+    it.each([false, true])("refuses a gesture with hidden selected regions (copy=%s)", async copy => {
         const {Project} = await import("@opendaw/studio-core")
         const project = Project.fromSkeleton({
             audioContext: undefined, audioWorklets: undefined, sampleManager: sampleManager(),
@@ -49,18 +49,13 @@ describe("region moves with folded selections", () => {
             element: {getBoundingClientRect: () => ({left: 0})} as Element,
             snapping: {computeDelta: () => 240} as unknown as Snapping,
             pointerPulse: 0, pointerIndex: 0, reference: regions[0]
-        }).unwrap()
-        modifier.update({clientX: 10, clientY: 10, altKey: false, shiftKey: false, ctrlKey: copy})
-        expect(modifier.deltaIndex).toBe(1)
-        modifier.approve()
-        expect(regions[1].trackBoxAdapter.unwrap()).toBe(tracks[1])
+        })
+        expect(modifier.isEmpty()).true
+        expect(regions[0].position).toBe(0)
         expect(regions[1].position).toBe(0)
+        expect(tracks[0].regions.collection.asArray()).toEqual([regions[0]])
         expect(tracks[1].regions.collection.asArray()).toEqual([regions[1]])
-        expect(tracks[2].regions.collection.asArray()).toHaveLength(1)
-        expect(tracks[2].regions.collection.asArray()[0].position).toBe(240)
-        expect(project.editing.undo()).toBe(true)
         expect(tracks[2].regions.collection.asArray()).toHaveLength(0)
-        expect(regions[1].position).toBe(0)
         project.terminate()
     })
 })

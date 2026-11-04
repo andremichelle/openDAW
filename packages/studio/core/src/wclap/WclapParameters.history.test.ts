@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
-import {WclapDeviceBox} from "@opendaw/studio-boxes"
+import {WclapDeviceBox, WclapParameterBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import {EffectFactories} from "../EffectFactories"
@@ -69,6 +69,19 @@ describe("WebCLAP state bytes and the undo history", () => {
         expect(device.url.getValue()).toBe("opfs:plugin")
     })
 
+    it("an undoable save (the plugin's own change) is a step of its own: an undo takes back that save only", async () => {
+        const {project, device, uuid} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "own")
+        project.editing.undo()
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([1])
+        project.editing.undo()
+        expect(device.pluginState.getValue().length).toBe(0)
+        project.editing.redo()
+        project.editing.redo()
+        expect(Array.from(device.pluginState.getValue())).toStrictEqual([2])
+    })
+
     it("a redo restores the saved bytes", async () => {
         const {project, device, uuid} = await setup()
         WclapStates.store(project, uuid, new Uint8Array([4, 5]).buffer)
@@ -76,6 +89,104 @@ describe("WebCLAP state bytes and the undo history", () => {
         project.editing.redo()
         expect(Array.from(device.pluginState.getValue())).toStrictEqual([4, 5])
         expect(device.state.getValue()).toBe("")
+    })
+})
+
+// A pattern drawn, a knob turned in the plugin's window, another pattern drawn: three undo steps. The save after the
+// knob joins the knob's step, else an undo of the second pattern would hand the plugin the knob's old value.
+describe("WebCLAP edits in the plugin's window and the undo history", () => {
+    const setup = async () => {
+        const {Project} = await import("../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const device = project.editing.modify(() => EffectFactories.AudioNamed.Wclap
+            .create(project, skeleton.mandatoryBoxes.primaryAudioUnitBox.audioEffects, 0) as WclapDeviceBox).unwrap()
+        project.editing.modify(() => {
+            device.url.setValue("opfs:plugin")
+            device.clapId.setValue("com.example.plugin")
+        })
+        const uuid = UUID.toString(device.address.uuid)
+        WclapParameters.reconcile(project, uuid,
+            [{id: 1, name: "Grain", module: "", min: 0, max: 1, defaultValue: 0, value: 0.5, flags: 1}])
+        const param = () => (device.parameters.pointerHub.incoming()[0].box as WclapParameterBox).value.getValue()
+        const blob = () => Array.from(device.pluginState.getValue())
+        return {project, uuid, param, blob}
+    }
+
+    it("a drag is one step, the save after it joins that step", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapParameters.apply(project, uuid, 1, 0, 1)
+        WclapParameters.apply(project, uuid, 1, 0.625, 0)
+        WclapParameters.apply(project, uuid, 1, 0.75, 0)
+        WclapParameters.apply(project, uuid, 1, 0, 2)
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "own")
+        project.editing.undo()
+        expect(blob()).toStrictEqual([2])
+        expect(param()).toBe(0.75)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([1])
+        expect(param()).toBe(0.5)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([])
+        project.editing.redo()
+        project.editing.redo()
+        expect(blob()).toStrictEqual([2])
+        expect(param()).toBe(0.75)
+    })
+
+    it("a save in the middle of a drag (the studio saves 250 ms after a page message) keeps the drag one step", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapParameters.apply(project, uuid, 1, 0, 1)
+        WclapParameters.apply(project, uuid, 1, 0.625, 0)
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "params")
+        WclapParameters.apply(project, uuid, 1, 0.75, 0)
+        WclapParameters.apply(project, uuid, 1, 0, 2)
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([4]).buffer, "own")
+        project.editing.undo()
+        expect(blob()).toStrictEqual([3])
+        expect(param()).toBe(0.75)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([1])
+        expect(param()).toBe(0.5)
+        project.editing.undo()
+        expect(blob()).toStrictEqual([])
+    })
+
+    it("an edit the studio's save already caught (no change at its end) is still a step of its own", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "other") // 250 ms into a drawing drag
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "own") // the drawing's end, same bytes
+        WclapParameters.apply(project, uuid, 1, 0, 1)
+        WclapParameters.apply(project, uuid, 1, 0.75, 0)
+        WclapParameters.apply(project, uuid, 1, 0, 2)
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([4]).buffer, "own")
+        project.editing.undo()
+        expect(blob()).toStrictEqual([3])
+        project.editing.undo()
+        expect(param()).toBe(0.5)
+        expect(blob()).toStrictEqual([2])
+        project.editing.undo()
+        expect(blob()).toStrictEqual([1])
+    })
+
+    it("a change without a gesture is a step of its own", async () => {
+        const {project, uuid, param, blob} = await setup()
+        WclapStates.store(project, uuid, new Uint8Array([1]).buffer, "own")
+        WclapParameters.apply(project, uuid, 1, 0.25, 0)
+        WclapStates.store(project, uuid, new Uint8Array([2]).buffer, "params")
+        WclapStates.store(project, uuid, new Uint8Array([3]).buffer, "own")
+        project.editing.undo()
+        expect(param()).toBe(0.25)
+        expect(blob()).toStrictEqual([2])
+        project.editing.undo()
+        expect(param()).toBe(0.5)
+        expect(blob()).toStrictEqual([1])
     })
 })
 

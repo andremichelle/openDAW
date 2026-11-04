@@ -60,9 +60,11 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 name: "capture",
                 pointerType: Pointers.Capture, mandatory: false
             },
-            // 31/32 were experimental folder pointers; keep their keys reserved for old project files.
-            33: {type: "boolean", name: "is-group"},
-            34: {type: "boolean", name: "group-collapsed"},
+            27: {
+                type: "field",
+                name: "mastering",
+                pointerRules: {accepts: [Pointers.MasteringHost], mandatory: false, exclusive: true}
+            },
             30: {
                 type: "object", name: "user-interface", class: {
                     name: "AudioUnitUserInterface",
@@ -71,7 +73,10 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                         2: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: MaxTrackHeight}, unit: "px"}
                     }
                 }
-            }
+            },
+            // 31/32 are reserved for obsolete folder pointers.
+            33: {type: "boolean", name: "is-group"},
+            34: {type: "boolean", name: "group-collapsed"}
         } as const
     },
     pointerRules: {

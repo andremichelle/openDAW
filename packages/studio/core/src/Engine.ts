@@ -11,11 +11,17 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal, SignalGraph, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal, SignalGraph, TransportAnchor, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
 export type RecordingStop = {readonly contextTime: number}
+
+export interface TransportLock extends Terminable {
+    play(): void
+    stop(reset?: boolean): void
+    setPosition(position: ppqn): void
+}
 
 export interface Engine extends Terminable {
     play(): void
@@ -43,8 +49,12 @@ export interface Engine extends Terminable {
     wclapRetry(url: string): void
     querySignalGraph(): Promise<SignalGraph>
     scriptMessage(uuid: UUID.Bytes, message: unknown): void
+    // a local value for a device's plain field: never written to the box, not undoable, not synced
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
+    /** where the transport started, jumped and stopped, in audio context time, as the engine rendered it */
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void
     suspendAutomation(uuid: UUID.Bytes): void
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void

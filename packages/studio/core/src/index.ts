@@ -1,6 +1,7 @@
 export * from "./capture"
 export * from "./cloud"
 export * from "./dawproject"
+export * from "./io"
 export type * from "./ffmpeg"
 export * from "./midi"
 export * from "./presets"

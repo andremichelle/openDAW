@@ -15,6 +15,7 @@ import {MidiImport} from "@/ui/timeline/MidiImport.ts"
 import {CaptureMidiBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
+import {MenuChannelMapping} from "@/ui/timeline/tracks/audio-unit/menu/channel-mapping"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {MenuItems} from "@/ui/devices/menu-items"
 
@@ -67,21 +68,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             capture.armed.setValue(true)
             MonitoringDialog.open(service, capture).finally()
         })),
-        MenuItem.default({
-            label: "Force Mono",
-            checked: captureDevices.get(audioUnitBoxAdapter.uuid)
-                .mapOr(capture => isInstanceOf(capture, CaptureAudio)
-                    ? capture.requestChannels.mapOr(channels => channels === 1, false)
-                    : false, false),
-            hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
-                .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
-        }).setTriggerProcedure(guarded(() => captureDevices.get(audioUnitBoxAdapter.uuid)
-            .ifSome(capture => {
-                if (isInstanceOf(capture, CaptureAudio)) {
-                    const currentMono = capture.requestChannels.mapOr(channels => channels === 1, false)
-                    editing.modify(() => capture.requestChannels = currentMono ? 2 : 1)
-                }
-            }))),
+        MenuChannelMapping.createItem(captureDevices.get(audioUnitBoxAdapter.uuid), editing, guarded),
         MenuItem.default({
             label: "Duplicate AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
@@ -109,7 +96,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             editing.modify(() => {
                 const {boxGraph, skeleton} = newProject
                 boxGraph.beginTransaction()
-                TransferAudioUnits.transfer([audioUnitBoxAdapter.box], skeleton)
+                TransferAudioUnits.transfer([audioUnitBoxAdapter.box], skeleton, {includeGroupDescendants: true, layoutOrder: true})
                 boxGraph.endTransaction()
             })
             service.projectProfileService.setProject(newProject, "NEW")

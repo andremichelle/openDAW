@@ -5,6 +5,9 @@ import {SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-ada
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
 
+// WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
+export enum FieldKind {Int = 0, Float = 1, Bool = 2}
+
 export type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
@@ -16,6 +19,7 @@ export type EngineExports = {
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
     device_set_sidechain_collection_field: (deviceId: number, field: number) => void
+    device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
     device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
@@ -57,10 +61,12 @@ export type EngineExports = {
     broadcast_entry: (index: number, outPtr: number) => number
     broadcast_set_active: (index: number, active: number) => void
     // Transport: `play` starts advancing, `pause` freezes (state kept), `stop` rewinds to 0 + resets all
-    // plugins, `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
+    // plugins, `stop_faded` the same after the next quantum faded the mix out (the user's stop, no click),
+    // `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
     play: () => void
     pause: () => void
     stop: () => void
+    stop_faded: () => void
     set_position: (position: number) => void
     // RECORDING (TS EngineCommands.prepareRecordingState/stopRecording/ignoreNoteRegion): count_in_bars
     // comes from the caller's preferences; the ignored region uuid is written into the input scratch first.
@@ -110,6 +116,12 @@ export type EngineExports = {
     // `marker_changes_take` (reserve `marker_changes_count() * 24` input bytes first).
     marker_changes_count: () => number
     marker_changes_take: (outPtr: number) => number
+    // the last quantum's transport jumps (sample inside the quantum, position after the jump) and the
+    // sample `pauseOnLoopDisabled` paused at (-1 none)
+    transport_jump_count: () => number
+    transport_jump_sample: (index: number) => number
+    transport_jump_position: (index: number) => number
+    transport_pause_sample: () => number
     // MIDI-OUT drain (TS MIDISender feed): every MIDI-output unit's queued messages + the transport
     // clock, drained once per quantum into the studio's unchanged MIDISender SAB ring. 16-byte records
     // [device u32 LE][status u8][data1 u8][data2 u8][length u8][timeMs f64 LE] (reserve
@@ -172,6 +184,8 @@ export type EngineExports = {
     set_allow_takes: (enabled: number) => void
     set_pause_on_loop_disabled: (enabled: number) => void
     set_truncate_notes_at_region_end: (enabled: number) => void
+    // a LOCAL value for a device's observed plain field (not written to the box), 1 if delivered
+    override_device_field: (uuidPtr: number, key: number, kind: FieldKind, bits: number) => number
     // PANIC readout: the engine's panic handler (and a device's, via the shared host_panic deposit) formats
     // the panic message + location into a static buffer BEFORE trapping. After catching the RuntimeError the
     // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).

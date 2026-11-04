@@ -97,6 +97,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 uuid, name: files[0].name, arrayBuffer: readResult.value, progressHandler: Progress.Empty
             }))
             if (importResult.status === "rejected") {
+                if (Errors.isAbort(importResult.error)) {continue}
                 await RuntimeNotifier.info({
                     headline: `${this.nameSingular} Import Failed`,
                     message: `'${files[0].name}' could not be imported: ${String(importResult.error)}`
@@ -141,7 +142,11 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 arrayBuffer: readResult.value,
                 progressHandler: progressHandler[index]
             }))
-            if (status === "rejected") {rejected.push(String(error))} else {imported.push(value)}
+            if (status === "resolved") {
+                imported.push(value)
+            } else if (!Errors.isAbort(error)) {
+                rejected.push(String(error))
+            }
         }
         dialog.terminate()
         if (rejected.length > 0) {

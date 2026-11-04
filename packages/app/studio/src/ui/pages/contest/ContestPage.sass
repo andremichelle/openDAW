@@ -1,0 +1,387 @@
+@use "@/colors"
+
+component
+  flex: 1
+  display: flex
+  flex-direction: column
+  overflow: hidden auto
+  color: var(--color-gray)
+  @include colors.panel-background
+
+  > .message
+    padding: 2em
+    display: flex
+    flex-direction: column
+    align-items: flex-start
+    row-gap: 1em
+
+  button.retry, button.submit
+    font: inherit
+    cursor: pointer
+    border-radius: 999px
+    border: 1px solid var(--color-blue)
+    background: none
+    color: var(--color-blue)
+
+  button.retry
+    padding: 0.5em 1.75em
+
+  .contest
+    display: flex
+    flex-direction: column
+
+  .hero
+    position: relative
+    overflow: hidden
+    flex: 0 0 auto
+    background-color: var(--color-header-background)
+    border-bottom: 1px solid rgba(white, 0.08)
+
+    > svg.art
+      position: absolute
+      top: 0
+      left: 0
+      width: 100%
+      height: 100%
+
+    > .hero-content
+      position: relative
+      max-width: 72em
+      margin: 0 auto
+      padding: 2.5em 1.5em 4em
+      display: flex
+      flex-wrap: wrap
+      align-items: flex-end
+      gap: 2em 3em
+
+    .hero-text
+      flex: 999 1 26em
+      display: flex
+      flex-direction: column
+      row-gap: 0.875em
+
+      > .eyebrow
+        color: var(--color-cream)
+        font-size: 1.0625em
+
+      > h1
+        color: white
+        font-size: 3.5em
+        line-height: 1.05em
+
+        > .year
+          color: var(--color-blue)
+
+      > p
+        margin: 0
+        max-width: 30em
+        font-size: 1.0625em
+        color: var(--color-gray)
+
+    .countdown
+      flex: 1 1 24em
+      display: flex
+      flex-direction: column
+      row-gap: 0.625em
+      padding: 1.125em
+      border-radius: 12px
+      background: rgba(black, 0.5)
+      border: 1px solid rgba(white, 0.08)
+
+      > h3
+        color: var(--color-orange)
+
+      > .cells
+        display: grid
+        grid-template-columns: repeat(4, minmax(0, 1fr))
+        gap: 0.5em
+
+        > div
+          display: flex
+          flex-direction: column
+          align-items: center
+          padding: 0.75em 0.25em
+          border-radius: 8px
+          background: rgba(white, 0.06)
+
+          > span
+            font-size: 2.125em
+            line-height: 1em
+            color: var(--color-blue)
+
+          > label
+            margin-top: 0.5em
+            font-size: 0.75em
+            color: var(--color-shadow)
+
+      > .deadline
+        font-size: 0.75em
+        color: var(--color-shadow)
+
+  .columns
+    width: 100%
+    max-width: 72em
+    margin: 0 auto
+    padding: 3em 1.5em 6em
+    display: flex
+    flex-wrap: wrap
+    align-items: flex-start
+    gap: 2.5em 3em
+    line-height: 1.5em
+
+    > .column
+      flex: 1 1 26em
+      min-width: 0
+      display: flex
+      flex-direction: column
+      row-gap: 2.25em
+
+    section
+      display: flex
+      flex-direction: column
+      row-gap: 0.75em
+
+    h2
+      color: var(--color-green)
+      font-size: 1.25em
+
+    p
+      margin: 0
+
+    a
+      white-space: nowrap
+
+  .bonus
+    display: flex
+    column-gap: 0.75em
+    align-items: flex-start
+    padding: 0.75em 1em
+    border-radius: 8px
+    background: rgba(white, 0.04)
+
+    > svg
+      flex: 0 0 1em
+      width: 1em
+      height: 1em
+      margin-top: 0.25em
+      fill: none
+      stroke: var(--color-yellow)
+      stroke-width: 2
+      stroke-linejoin: round
+
+  .prizes
+    display: flex
+    flex-direction: column
+    row-gap: 0.5em
+
+    > .prize
+      display: flex
+      align-items: baseline
+      column-gap: 1em
+      padding: 1.25em 1em
+      border-radius: 8px
+      background: rgba(white, 0.04)
+      border-top: 2px solid var(--prize-color)
+      --prize-color: var(--color-orange)
+
+      &:nth-child(2)
+        --prize-color: var(--color-dark)
+
+      &:nth-child(3)
+        --prize-color: var(--color-shadow)
+
+      > .place
+        font-size: 0.75em
+        color: var(--prize-color)
+
+      > .label
+        flex: 1
+        font-size: 1.25em
+        font-weight: 400
+        white-space: nowrap
+        color: var(--prize-color)
+
+      > .detail, > a
+        font-size: 0.75em
+        white-space: nowrap
+
+      > .detail
+        color: var(--color-shadow)
+
+  .note
+    font-size: 0.75em
+    color: var(--color-shadow)
+
+  ol
+    margin: 0
+    padding-left: 1.25em
+    display: flex
+    flex-direction: column
+    row-gap: 0.375em
+
+  .terms
+    position: relative
+    border-radius: 8px
+    background: rgba(black, 0.08)
+    border: 1px solid rgba(white, 0.08)
+    overflow: hidden
+
+    > .scroller
+      height: 12.5em
+      overflow-y: auto
+      padding: 1em 1.25em
+      font-size: 0.8125em
+      display: flex
+      flex-direction: column
+      row-gap: 0.75em
+      --fade-top: 0px
+      --fade-bottom: 0px
+      mask-image: linear-gradient(to bottom, transparent, black var(--fade-top), black calc(100% - var(--fade-bottom)), transparent)
+
+      &.fade-top
+        --fade-top: 16px
+
+      &.fade-bottom
+        --fade-bottom: 16px
+
+      h4
+        color: var(--color-orange)
+        font-weight: 400
+
+  .submit-section
+    padding: 1.5em
+    border-radius: 8px
+    background: rgba(white, 0.01)
+    border: 1px solid rgba(white, 0.08)
+
+    > .fields.disabled, > .consents.disabled
+      opacity: 0.4
+      pointer-events: none
+
+    > .fields
+      display: grid
+      grid-template-columns: repeat(auto-fit, minmax(12em, 1fr))
+      gap: 0.75em
+
+      > label
+        display: flex
+        flex-direction: column
+        row-gap: 0.5em
+        font-size: 0.75em
+        color: var(--color-shadow)
+
+        > input
+          font-size: 1.25em
+          height: 2em
+          top: 0
+
+    > .consents
+      display: flex
+      flex-direction: column
+      row-gap: 0.5em
+      font-size: 0.8125em
+
+      > .consent
+        display: flex
+        align-items: flex-start
+        column-gap: 0.625em
+
+        > span
+          cursor: pointer
+
+    > button.submit
+      position: relative
+      overflow: hidden
+      height: 44px
+      display: flex
+      align-items: center
+      justify-content: center
+      column-gap: 0.5em
+      font-size: 0.9375em
+      white-space: nowrap
+      box-shadow: 0 0 16px 0 rgba(white, 0.08)
+      transition: box-shadow 0.2s ease-in-out
+
+      > svg
+        width: 1em
+        height: 1em
+        flex: 0 0 auto
+        fill: none
+        stroke: currentColor
+        stroke-width: 2
+        stroke-linecap: round
+        stroke-linejoin: round
+
+      > span
+        position: relative
+        overflow: hidden
+        text-overflow: ellipsis
+
+      &.ready:hover
+        border-color: white
+        color: white
+        box-shadow: 0 0 16px 0 rgba(white, 0.15)
+
+      &.disabled, &.closed
+        cursor: default
+        box-shadow: none
+        border-color: var(--color-black)
+        background: rgba(white, 0.04)
+        color: var(--color-shadow)
+
+        > svg
+          display: none
+
+      &.no-project
+        color: var(--color-orange)
+
+      &.closed
+        border-style: dashed
+        background: none
+        color: var(--color-orange)
+
+      &.busy
+        cursor: default
+        background: rgba(black, 0.5)
+
+        > svg
+          display: none
+
+        &::before
+          content: ""
+          position: absolute
+          top: 0
+          left: 0
+          bottom: 0
+          width: calc(var(--progress, 0) * 100%)
+          background: var(--color-blue)
+          opacity: 0.22
+
+      &.done
+        cursor: default
+        border-color: var(--color-green)
+        color: var(--color-green)
+        background: rgba(white, 0.02)
+
+        > svg
+          display: none
+
+      &.failed
+        border-color: var(--color-red)
+        color: var(--color-red)
+
+        > svg
+          display: none
+
+    > .hint
+      min-height: 3em
+      font-size: 0.75em
+      color: var(--color-shadow)
+
+    > .footnote
+      display: flex
+      justify-content: space-between
+      flex-wrap: wrap
+      gap: 0.5em
+      font-size: 0.75em
+      color: var(--color-shadow)

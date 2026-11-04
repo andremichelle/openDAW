@@ -4,7 +4,7 @@ import {Lifecycle, Nullable, ObservableValue, Observer, Subscription, Terminator
 import {TransportGroup} from "@/ui/header/TransportGroup.tsx"
 import {TimeStateDisplay} from "@/ui/header/TimeStateDisplay.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
-import {createElement, Group} from "@opendaw/lib-jsx"
+import {createElement, Group, LocalLink} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
@@ -119,6 +119,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             {
                 location.origin.includes("dev.opendaw.studio")
                 && (<h5 style={{color: Colors.cream.toString()}}>DEV VERSION (UNSTABLE)</h5>)}
+            {location.hostname === "localhost" && <LocalLink href="/contests/2026" className="contest">Contest 2026</LocalLink>}
             <div style={{flex: "2 0 0"}}/>
             <HorizontalPeakMeter lifecycle={lifecycle} peaksInDb={peaksInDb} width="4em"/>
             <hr/>

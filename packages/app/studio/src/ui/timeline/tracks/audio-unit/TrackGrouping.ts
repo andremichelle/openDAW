@@ -90,7 +90,6 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
 
 export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number, headerHeight: number}
 
-/** Header centre means add to folder; row edges mean insert. Pointer indentation chooses the parent at edges. */
 export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Option<GroupDrop> => {
     const elements = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
         .map(row => [row.dataset.unit, row]))
@@ -120,12 +119,13 @@ export const markGroupDrop = (container: HTMLElement, target?: GroupDrop): void 
     target.row.classList.add(target.inside ? "group-drop-inside" : target.after ? "group-drop-after" : "group-drop-before")
 }
 
-/** Pointer capture gives track moves the same Escape/cancel behavior as other timeline gestures. */
-export const installGroupTrackDrag = (handle: HTMLElement, project: Project, unit: AudioUnitBox): Terminable => {
+export const installGroupTrackDrag = (handle: HTMLElement, project: Project, unit: AudioUnitBox,
+                                      laneDrag: (target: EventTarget | null) => boolean = () => false): Terminable => {
     handle.dataset.groupHeader = UUID.toString(unit.address.uuid)
     handle.draggable = false
     handle.title = "Drag to move track; drop on a group or between tracks. Drag left to move out."
     const dragging = Dragging.attach(handle, start => {
+        if (laneDrag(start.target)) {return Option.None}
         if (start.target instanceof Element && start.target.closest("button,input,select,textarea,a,[contenteditable],.track-resizer,[data-track-controls],svg.collapse-automation")) {return Option.None}
         if (!unit.isAttached() || unit.type.getValue() === AudioUnitType.Output) {return Option.None}
         const units = project.trackSelection.has(unit) ? [...project.trackSelection.selected] : [unit]

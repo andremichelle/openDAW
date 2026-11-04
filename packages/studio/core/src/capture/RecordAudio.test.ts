@@ -1,19 +1,30 @@
 import {afterEach, describe, expect, it, vi} from "vitest"
-import {asInstanceOf, DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    DefaultObservableValue,
+    isDefined,
+    MutableObservableOption,
+    Notifier,
+    Observer,
+    Option,
+    Terminable,
+    UUID
+} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {AudioFileBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton, TrackType, TransportAnchor} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
 import type {RecordingStart, RecordingStop} from "../Engine"
-import type {RecordingWorklet} from "../RecordingWorklet"
+import type {RecordingSink} from "../io"
 import {InputLatency} from "./InputLatency"
 import type {Capture} from "./Capture"
 import {RegionClipResolver} from "../ui/timeline/RegionClipResolver"
 
 // An audio take is placed from two audio-thread reports: the engine's `recordingStart` (context time and
 // playhead position at the end of the quantum recording began in) and the recording processor's
-// `firstQuantumTime` (context time of the buffer's first frame). The tests drive both by hand.
+// `firstQuantumTime` (context time of the buffer's first frame). A loop wrap arrives as a transport anchor
+// stamped in context time. The tests drive all of them by hand.
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
@@ -41,6 +52,8 @@ const createFakeWorklet = () => ({
     cpuLoad: new DefaultObservableValue(0),
     recordingStart: new MutableObservableOption<RecordingStart>(),
     recordingStop: Option.None as Option<RecordingStop>,
+    anchors: new Notifier<ReadonlyArray<TransportAnchor>>(),
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>) {return this.anchors.subscribe(observer)},
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 
@@ -105,8 +118,7 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010, existingTake}
         addRecordedRegion: () => {}
     } as unknown as Capture
     const recorder = RecordAudio.start({
-        recordingWorklet: recordingWorklet as unknown as RecordingWorklet,
-        sourceNode: sourceNode as unknown as AudioNode,
+        sink: Object.assign(recordingWorklet, {disconnect: () => sourceNode.disconnect()}) as unknown as RecordingSink,
         sampleManager: project.env.sampleManager,
         project,
         capture,
@@ -135,9 +147,11 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010, existingTake}
     const reportOutputLatency = (seconds: number) => reportedOutputLatency = seconds
     const terminate = () => project.editing.modify(() => recorder.terminate(), false)
     const reportStop = (stopTime: number) => worklet.recordingStop = Option.wrap({contextTime: stopTime})
+    const wrapAt = (contextTime: number, position: ppqn, recording: boolean = true) =>
+        worklet.anchors.notify([{kind: "jump", contextTime, position, recording}])
     return {
         project, audioContext, recordingWorklet, sourceNode, terminate, reportStop, regions, validate, tick, record, startAt, firstQuantumAt, deliver,
-        stop, loop, reportOutputLatency
+        stop, loop, reportOutputLatency, wrapAt
     }
 }
 
@@ -234,13 +248,13 @@ describe("RecordAudio", () => {
                 tick(PPQN.Bar + 40)
                 expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.5 + 0.023 + 0.010, 6)
                 expect(lines.filter(line => line.includes("outputLatency=")))
-                    .toEqual(["[RecordAudio] outputLatency=0.023 inputLatency=0.01 source=placement"])
+                    .toEqual(["[RecordAudio] outputLatency=0.023 inputLatency=0.01"])
             } finally {
                 restore()
             }
         })
 
-        it("keeps the output latency read at start when the read at placement is still zero", async () => {
+        it("places with a zero output latency when the browser reports nothing better", async () => {
             const {lines, restore} = captureDebugLines()
             try {
                 const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup({outputLatency: 0})
@@ -251,7 +265,7 @@ describe("RecordAudio", () => {
                 tick(PPQN.Bar + 40)
                 expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.5 + 0.010, 6)
                 expect(lines.filter(line => line.includes("outputLatency=")))
-                    .toEqual(["[RecordAudio] outputLatency=0 inputLatency=0.01 source=start"])
+                    .toEqual(["[RecordAudio] outputLatency=0 inputLatency=0.01"])
             } finally {
                 restore()
             }
@@ -271,7 +285,7 @@ describe("RecordAudio", () => {
         })
 
         it("carries the output latency read at placement into the takes a loop wrap opens", async () => {
-            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, reportOutputLatency} =
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, reportOutputLatency, wrapAt} =
                 await setup({outputLatency: 0})
             loop(0, PPQN.Bar) // 2 s at 120 bpm
             reportOutputLatency(0.023)
@@ -282,38 +296,135 @@ describe("RecordAudio", () => {
             tick(40)
             deliver(2.4)
             tick(PPQN.Bar - 40)
-            tick(20) // the wrap closes take 1 at the loop end and opens take 2
+            wrapAt(3.5, 0) // the wrap closes take 1 at the loop end and opens take 2
+            tick(20)
             expect(regions().length).toBe(2)
             expect(regions().map(region => region.box.waveformOffset.getValue()))
                 .toEqual([expect.closeTo(0.533, 6), expect.closeTo(2.533, 6)])
         })
 
-        it("falls back to the main-thread observations once the wait for the anchors expires", async () => {
-            const {audioContext, regions, tick, record, deliver} = await setup()
-            audioContext.currentTime = 10.0
+        it("never places a take without the engine's start report and drops the file at the stop", async () => {
+            const {project, regions, recordingWorklet, tick, record, firstQuantumAt, deliver, stop} = await setup()
+            firstQuantumAt(1.0)
             deliver(0.6)
             record()
             tick(PPQN.Bar + 40)
+            deliver(1.6)
+            tick(PPQN.Bar * 2)
             expect(regions().length).toBe(0)
-            audioContext.currentTime = 10.3
-            tick(PPQN.Bar + 80)
-            expect(regions().length).toBe(1)
-            const region = regions()[0]
-            expect(region.position).toBe(PPQN.Bar + 80)
-            expect(region.box.waveformOffset.getValue()).toBeCloseTo(0.6 + 0.020 + 0.010, 6)
+            stop()
+            expect(recordingWorklet.limits).toEqual([])
+            expect(project.boxGraph.findBox(recordingWorklet.uuid).isEmpty()).toBe(true)
         })
 
-        it("compensates the fallback take with the latency read at start", async () => {
-            const {audioContext, regions, tick, record, deliver, reportOutputLatency} = await setup()
-            audioContext.currentTime = 10.0
+        it("places the take as soon as the start report arrives, without waiting for a position update", async () => {
+            const {regions, record, startAt, firstQuantumAt, deliver} = await setup()
+            firstQuantumAt(1.0)
+            deliver(0.6)
+            record()
+            startAt(1.5, PPQN.Bar)
+            expect(regions().map(region => region.position)).toEqual([PPQN.Bar])
+        })
+    })
+
+    describe("loop takes", () => {
+        it("ends every take at the engine's wrap even when no position update runs in between", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(0, PPQN.Bar) // 2 s at 120 bpm
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            // a hidden tab runs no animation frame: three wraps arrive back to back
+            wrapAt(3.5, 0)
+            wrapAt(5.5, 0)
+            wrapAt(7.5, 0)
+            expect(regions().map(region => region.box.label.getValue())).toEqual(["Take 1", "Take 2", "Take 3", "Take 4"])
+            expect(regions().map(region => region.box.waveformOffset.getValue()))
+                .toEqual([0.53, 2.53, 4.53, 6.53].map(value => expect.closeTo(value, 6)))
+            expect(regions().slice(0, 3).map(region => region.box.duration.getValue()))
+                .toEqual([2.0, 2.0, 2.0].map(value => expect.closeTo(value, 6)))
+        })
+
+        it("takes the length a wrap stamps even if it differs from the tempo map", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(0, PPQN.Bar)
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            wrapAt(3.5 + 45 / SAMPLE_RATE, 0) // the engine rendered the lap in whole samples
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(2.0 + 45 / SAMPLE_RATE, 6)
+        })
+
+        it("starts the next take where the engine jumped to", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(PPQN.Bar, PPQN.Bar * 2)
+            firstQuantumAt(1.0)
+            startAt(1.5, PPQN.Bar)
             deliver(0.6)
             record()
             tick(PPQN.Bar + 40)
-            // a later read cannot reach a take the anchors never placed
-            reportOutputLatency(0.999)
-            audioContext.currentTime = 10.3
-            tick(PPQN.Bar + 80)
-            expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.6 + 0.020 + 0.010, 6)
+            wrapAt(3.5, PPQN.Bar)
+            expect(regions().map(region => region.position)).toEqual([PPQN.Bar, PPQN.Bar])
+        })
+
+        it("keeps one take when the loop takes are off", async () => {
+            const {project, regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            project.engine.preferences.settings.recording.allowTakes = false
+            loop(0, PPQN.Bar)
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            wrapAt(3.5, 0)
+            expect(regions().length).toBe(1)
+            project.engine.preferences.settings.recording.allowTakes = true
+        })
+
+        it("ignores the seek in the quantum the recording started in", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(0, PPQN.Bar)
+            firstQuantumAt(1.0)
+            record()
+            // the engine flags the quantum's first block discontinuous after a seek, the start is its end
+            wrapAt(1.5 - 128 / SAMPLE_RATE, 0)
+            startAt(1.5, 5)
+            deliver(0.6)
+            tick(40)
+            expect(regions().map(region => region.position)).toEqual([5])
+            wrapAt(3.5, 0)
+            expect(regions().length).toBe(2)
+        })
+
+        it("ignores a jump the engine did not record", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(0, PPQN.Bar)
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            wrapAt(3.5, 0, false)
+            expect(regions().length).toBe(1)
+        })
+
+        it("splits at a wrap that arrived before the buffer's first frame was known", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, wrapAt} = await setup()
+            loop(0, PPQN.Bar)
+            startAt(1.5, 0)
+            record()
+            tick(40)
+            wrapAt(3.5, 0)
+            expect(regions().length).toBe(0)
+            firstQuantumAt(1.0)
+            deliver(2.6)
+            tick(60)
+            expect(regions().map(region => region.box.waveformOffset.getValue()))
+                .toEqual([0.53, 2.53].map(value => expect.closeTo(value, 6)))
         })
     })
 
@@ -363,6 +474,21 @@ describe("RecordAudio", () => {
             expect(sourceNode.disconnects).toBe(0)
             recordingWorklet.saved.unwrap()()
             expect(sourceNode.disconnects).toBe(1)
+        })
+
+        it("keeps the input in flight at a stop that arrived before the main thread read the flag", async () => {
+            const {regions, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, terminate, reportStop} =
+                await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            reportStop(5.5) // the engine's stop anchor, the flag still reads recording
+            terminate()
+            expect(recordingWorklet.limits).toEqual([Math.round((5.5 - 1.0 + 0.030) * SAMPLE_RATE)])
+            expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.0, 5)
         })
 
         it("cuts a take the ring delivered past the stop at the stop", async () => {
@@ -470,7 +596,7 @@ describe("RecordAudio", () => {
         })
 
         it("finalizes the earlier takes when the stop drops a take that never grew past zero", async () => {
-            const {regions, validate, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop, loop} =
+            const {regions, validate, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop, loop, wrapAt} =
                 await setup()
             loop(0, PPQN.Bar) // 2 s at 120 bpm
             firstQuantumAt(1.0)
@@ -483,6 +609,7 @@ describe("RecordAudio", () => {
             // the wrap closes take 1 at the loop end and opens take 2, whose window starts 0.53 + 2 s
             // into the buffer, ahead of what the ring has delivered so far. The live take still holds a
             // positive placeholder duration (#1129: a zero-duration region trips validateTrack on any edit)
+            wrapAt(3.5, 0)
             tick(20)
             expect(regions().length).toBe(2)
             expect(regions().map(region => region.box.duration.getValue() > 0)).toEqual([true, true])

@@ -1,6 +1,11 @@
 //! The Wclap MIDI-effect device: a CLAP note effect hosted through the `host_wclap_*` JS bridge. It pulls its
 //! upstream per pulse range, hands the notes to the plugin at their sample offsets and returns the plugin's
 //! notes at the pulse positions of their samples.
+//!
+//! A range outside the current block (a groove after this device, Zeitgeist, pulls its un-warped range, behind or
+//! ahead of the block by up to its cell) runs the plugin along that range itself: frames from the range's pulse
+//! length at the last known tempo, in chunks of at most the plugin's maximum frame count. A CLAP plugin needs
+//! contiguous forward time, not real time, and the un-warped ranges are contiguous.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -18,6 +23,8 @@ fn panic(info: &PanicInfo) -> ! {
 
 const SCRATCH: usize = 256; // WASM CONTRACT: the SDK's MIDI pull scratch, the bridge's MAX_PULLED_NOTES
 const KEYS: usize = 128;
+const MAX_FRAMES: usize = 128; // WASM CONTRACT: the bridge activates plugins with RENDER_QUANTUM frames at most
+const DEFAULT_BPM: f32 = 120.0;
 const BLANK: EventRecord = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
 
 pub struct WclapMidiState {
@@ -25,7 +32,18 @@ pub struct WclapMidiState {
     sample_rate: f32,
     next_id: u32,
     sounding: [u32; KEYS], // the id of the note this device holds per key, 0 for none
-    release_due: bool
+    release_due: bool,
+    bpm: f32,    // the last block's tempo, for ranges outside the block
+    serial: u32, // the last block's quantum serial, likewise
+    carry: f64   // the fraction of a frame the last range outside the block left, so frames do not drift
+}
+
+/// The frames of a range of `pulses` outside the block, with the fraction the last such range left: the whole
+/// frames and the new fraction. Contiguous ranges add up to the frames of their union.
+fn span_frames(pulses: f64, bpm: f32, sample_rate: f32, carry: f64) -> (usize, f64) {
+    let exact = pulses_to_samples(pulses.max(0.0), bpm, sample_rate) + carry;
+    let frames = exact as usize; // truncation is floor for the non-negative
+    (frames, exact - frames as f64)
 }
 
 /// The engine's `sample_offset`: the sample of `position` in `block`, clamped to the block.
@@ -46,6 +64,7 @@ impl WclapMidiState {
         self.link.init();
         self.sample_rate = sample_rate;
         self.next_id = 1;
+        self.bpm = DEFAULT_BPM;
     }
 
     fn emit(out: &mut [EventRecord], count: &mut usize, record: EventRecord) {
@@ -102,10 +121,16 @@ impl WclapMidiState {
         let mut pulled = [BLANK; SCRATCH];
         let pulled_count = abi::pull_events(from, to, flags, &mut pulled);
         let mut count = 0;
-        let Some((block, serial)) = abi::block_at(from) else {
-            for record in &pulled[..pulled_count] {Self::emit(out, &mut count, *record)}
-            return count;
+        let found = abi::block_at(from);
+        if let Some((block, serial)) = found {
+            self.bpm = block.bpm;
+            self.serial = serial;
+        }
+        let block = match found {
+            Some((block, _)) if to <= block.p1 => block,
+            _ => return self.render_span(from, to, flags, &pulled[..pulled_count], out)
         };
+        let serial = self.serial;
         let start = sample_of(from, &block, self.sample_rate);
         let end = if to >= block.p1 {block.s1} else {sample_of(to, &block, self.sample_rate)};
         let frames = end.saturating_sub(start);
@@ -134,6 +159,57 @@ impl WclapMidiState {
                 self.release_all(out, &mut count, from);
                 for record in &notes[..note_count] {Self::emit(out, &mut count, EventRecord {offset: 0, ..*record})}
             }
+        }
+        sort_by_position(&mut out[..count]);
+        count
+    }
+
+    /// A range outside the current block: the plugin runs along it, its notes come back at their positions in it.
+    fn render_span(&mut self, from: f64, to: f64, flags: u32, pulled: &[EventRecord], out: &mut [EventRecord]) -> usize {
+        let mut count = 0;
+        let bpm = if self.bpm > 0.0 {self.bpm} else {DEFAULT_BPM};
+        let (mut frames, carry) = span_frames(to - from, bpm, self.sample_rate, self.carry);
+        self.carry = carry;
+        let has_notes = pulled.iter().any(|record| record.kind == EVENT_NOTE_ON || record.kind == EVENT_NOTE_OFF);
+        for record in pulled {
+            if record.kind != EVENT_NOTE_ON && record.kind != EVENT_NOTE_OFF {Self::emit(out, &mut count, *record)}
+        }
+        if frames == 0 {
+            if !has_notes {return count}
+            frames = 1; // the notes in a range shorter than a frame still reach the plugin
+        }
+        let per_frame = (to - from) / frames as f64;
+        let mut start = 0;
+        while start < frames {
+            let length = (frames - start).min(MAX_FRAMES);
+            let chunk_from = from + start as f64 * per_frame;
+            let chunk_to = if start + length >= frames {to} else {from + (start + length) as f64 * per_frame};
+            let mut notes = [BLANK; SCRATCH];
+            let mut note_count = 0;
+            for record in pulled {
+                let note = record.kind == EVENT_NOTE_ON || record.kind == EVENT_NOTE_OFF;
+                let inside = record.position >= chunk_from && (record.position < chunk_to || (chunk_to >= to && record.position <= to));
+                if !note || !inside || note_count >= SCRATCH {continue}
+                let offset = ((record.position - chunk_from) / per_frame) as u32;
+                notes[note_count] = EventRecord {offset: offset.min(length as u32 - 1), ..*record};
+                note_count += 1;
+            }
+            let mut produced = [BLANK; SCRATCH];
+            match abi::wclap_process_notes(self.link.bridge, self.serial, &notes[..note_count], &mut produced, length,
+                                           bpm, chunk_from, BlockFlags(flags)) {
+                Some(produced_count) => {
+                    for record in &produced[..produced_count] {
+                        let offset = record.offset.min(length as u32 - 1) as f64;
+                        let position = (chunk_from + (offset + 0.5) * per_frame).min(to - (to - from) * 1.0e-6).max(from);
+                        self.note(out, &mut count, record.kind == EVENT_NOTE_ON, record.pitch, record.velocity, position);
+                    }
+                }
+                None => {
+                    self.release_all(out, &mut count, chunk_from);
+                    for record in &notes[..note_count] {Self::emit(out, &mut count, EventRecord {offset: 0, ..*record})}
+                }
+            }
+            start += length;
         }
         sort_by_position(&mut out[..count]);
         count
@@ -176,6 +252,18 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
     13
 }
 
+/// WASM CONTRACT: `samples` hub key 16 (WclapSampleBox children, `index` 3 the plugin's key, `file` 4).
+#[no_mangle]
+pub extern "C" fn observe_sample_collection_field() -> u32 {
+    16
+}
+
+/// A slot's sample, resolved by the engine: the bridge hands it to the plugin (`opendaw.samples/1`).
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    unsafe { abi::with_state(state_ptr, |state: &mut WclapMidiState| abi::wclap_sample(state.link.bridge, id, handle, present != 0)) }
+}
+
 #[no_mangle]
 pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut WclapMidiState) };
@@ -198,6 +286,17 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
     unsafe { abi::with_state(state_ptr, |state: &mut WclapMidiState| state.field_changed(id, FieldValue::from_wire(kind, bits, len))) }
 }
 
+/// The host disabled or removed this effect: end every note it started and let the plugin forget its held notes.
+#[no_mangle]
+pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    let state = unsafe { &mut *(state_ptr as *mut WclapMidiState) };
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    let mut count = 0;
+    state.release_all(out, &mut count, position);
+    state.link.reset();
+    count as u32
+}
+
 #[no_mangle]
 pub extern "C" fn terminate(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, |state: &mut WclapMidiState| state.link.release()) }
@@ -205,7 +304,7 @@ pub extern "C" fn terminate(state_ptr: u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{position_of, sample_of, sort_by_position, WclapMidiState, BLANK};
+    use super::{position_of, sample_of, sort_by_position, span_frames, WclapMidiState, BLANK};
     use abi::{Block, BlockFlags, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 
     const RATE: f32 = 48_000.0;
@@ -254,6 +353,29 @@ mod tests {
         let mut count = 0;
         state.note(&mut out, &mut count, false, 60, 0.0, 10.0);
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn ranges_outside_the_block_add_up_to_the_frames_of_their_union_without_drift() {
+        // a bar at 120 bpm in uneven pieces, as a groove's un-warped ranges come: 96000 frames at 48 kHz
+        let pieces = [7.3, 130.9, 0.4, 511.1, 1200.0, 33.33, 1957.0];
+        let total: f64 = pieces.iter().sum();
+        let mut carry = 0.0;
+        let mut frames = 0;
+        let mut position = 0.0;
+        while position < 3840.0 {
+            for piece in pieces {
+                let pulses = piece.min(3840.0 - position);
+                if pulses <= 0.0 {break}
+                let (whole, rest) = span_frames(pulses, 120.0, RATE, carry);
+                frames += whole;
+                carry = rest;
+                position += pulses;
+            }
+        }
+        assert!(total > 0.0);
+        assert!(carry >= 0.0 && carry < 1.0);
+        assert_eq!(frames, 96_000);
     }
 
     #[test]

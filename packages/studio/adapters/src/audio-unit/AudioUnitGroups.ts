@@ -3,7 +3,6 @@ import {IndexedBox} from "@opendaw/lib-box"
 import {AudioBusBox, AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 
-/** Folder membership follows the primary output into a group bus. */
 export namespace AudioUnitGroups {
     export const all = (root: RootBox): ReadonlyArray<AudioUnitBox> => IndexedBox.collectIndexedBoxes(root.audioUnits, AudioUnitBox)
     export const parent = (unit: AudioUnitBox): Option<AudioUnitBox> => {

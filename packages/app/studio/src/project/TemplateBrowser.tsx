@@ -78,7 +78,7 @@ export const TemplateBrowser = ({service, lifecycle, select}: Construct) => {
                                                event.stopPropagation()
                                                Dialogs.approve({
                                                    headline: "Delete Template?",
-                                                   message: "Are you sure? This cannot be undone."
+                                                   message: `Delete "${meta.name}"? This cannot be undone.`
                                                }).then(approved => {
                                                    if (approved) {
                                                        service.deleteTemplate(uuid).then(() => row.remove())

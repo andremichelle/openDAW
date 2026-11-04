@@ -1,5 +1,5 @@
 import css from "./ChannelStrip.sass?inline"
-import {EmptyExec, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Lifecycle, MutableObservableValue, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {createElement, DomElement, Frag, Inject} from "@opendaw/lib-jsx"
@@ -33,9 +33,10 @@ type Construct = {
     service: StudioService
     adapter: AudioUnitBoxAdapter
     compact: boolean
+    mastering?: MutableObservableValue<boolean>
 }
 
-export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) => {
+export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: Construct) => {
     const {mute, panning, solo, volume} = adapter.namedParameter
     const {project} = service
     const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning} = project
@@ -122,7 +123,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             editing.modify(() => adapter.box.groupCollapsed.toggle())
         }}/>
         lifecycle.own(adapter.box.groupCollapsed.catchupAndSubscribe(field => {
-            folderToggle.textContent = field.getValue() ? "▾" : "▸"
+            folderToggle.textContent = field.getValue() ? "▸" : "▾"
             folderToggle.setAttribute("aria-expanded", String(!field.getValue()))
             folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
             folderToggle.title = field.getValue() ? "Expand group" : "Collapse group"
@@ -146,7 +147,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                     } provider={() => ({value: adapter.input.label.unwrap("input.label"), unit: ""})}>
                         <h5 className="input">{inputLabel}</h5>
                     </DblClckTextInput>
-                    <AuxSendGroup lifecycle={lifecycle} project={project} audioUnitAdapter={adapter}/>
+                    <AuxSendGroup lifecycle={lifecycle} project={project} audioUnitAdapter={adapter}
+                                  mastering={mastering}/>
                     {isOutput
                         ? <AudioOutputSelector lifecycle={lifecycle} output={service.audioDevices}/>
                         : <ChannelOutputSelector lifecycle={lifecycle} project={project} adapter={adapter}/>

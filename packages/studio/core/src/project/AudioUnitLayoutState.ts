@@ -3,7 +3,6 @@ import {AudioBusBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {DefaultObservableValue, Terminable, Terminator} from "@opendaw/lib-std"
 import type {Project} from "./Project"
 
-/** Rebuild only after a transaction changes channel layout. */
 export class AudioUnitLayoutState implements Terminable {
     readonly value: DefaultObservableValue<AudioUnitLayout>
     readonly #lifecycle: Terminator

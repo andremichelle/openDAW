@@ -60,7 +60,20 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
     const countInLifecycle = lifecycle.own(new Terminator())
     const recordingObserver = () => recordButton.classList.toggle("active",
         engine.isCountingIn.getValue() || engine.isRecording.getValue())
+    const stopButton: HTMLElement = (
+        <Button lifecycle={lifecycle}
+                onClick={() => {engine.stop(true)}}
+                appearance={{
+                    color: Colors.shadow,
+                    activeColor: Colors.bright,
+                    tooltip: ShortcutTooltip.create("Stop", GlobalShortcuts["stop-playback"].shortcut)
+                }}>
+            <Icon symbol={IconSymbol.Stop}/>
+        </Button>
+    )
     lifecycle.ownAll(
+        engine.transportLocked.catchupAndSubscribe(owner => [recordButton, playButton, stopButton]
+            .forEach(button => button.classList.toggle("locked", owner.getValue()))),
         engine.isPlaying.subscribe(owner => playButton.classList.toggle("active", owner.getValue())),
         engine.isCountingIn.subscribe(recordingObserver),
         engine.isRecording.subscribe(recordingObserver),
@@ -103,15 +116,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
         <div className={className}>
             {recordButton}
             {playButton}
-            <Button lifecycle={lifecycle}
-                    onClick={() => {engine.stop(true)}}
-                    appearance={{
-                        color: Colors.shadow,
-                        activeColor: Colors.bright,
-                        tooltip: ShortcutTooltip.create("Stop", GlobalShortcuts["stop-playback"].shortcut)
-                    }}>
-                <Icon symbol={IconSymbol.Stop}/>
-            </Button>
+            {stopButton}
             <Checkbox lifecycle={lifecycle}
                       model={loop}
                       appearance={{

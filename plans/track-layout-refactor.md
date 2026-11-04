@@ -349,3 +349,36 @@ At the founder's request, merge official upstream/main at 3d28358bfcd7310b9d18bf
 The only conflict is SpotlightCreate imports. Keep AudioUnitInsertion for group-aware placement and accept upstream WclapBoxes/WclapMidiEffectBox for MIDI effects. Upstream Korpus, WebCLAP MIDI effects and selection rollback repairs remain intact. Regenerated TypeScript/Rust boxes and rebuilt the matching WASM engine. No grouping behavior or DSP changes are introduced by the conflict resolution itself.
 
 Verification of the combined source: all 25 production Studio/dependency build tasks pass; 896 core tests / 87 files, 360 adapter tests / 31 files, 265 Studio tests / 42 files and 204 box-graph tests / 7 files pass. Real WASM integration passes 42 tests / 5 files covering nested group routing/effects/live sync, MIDI Output, WebCLAP MIDI effects and Korpus. The core/Studio suites use two workers. Preview hosting changes remain separate from public PR source; the original baseline demo is preserved. These automated checks do not claim subjective listening or hardware MIDI verification.
+
+## Review response and current-main integration (2026-11-03)
+
+Merged upstream/main at d92f5622145cb01f3d73ccbc3933e1173068147a without rewriting the grouping history. The pre-review tip bd69499923d6c98ba104e7778669e55d204c185d is retained on codex/track-groups-before-review-2026-11-03. Schema field 27 (Mastering) and fields 33/34 (group identity/collapse) coexist; field 30 precedes 33/34. Regenerated both box registries and rebuilt matching WASM. Project owns both its shared layout and the newly terminable Mixer.
+
+Review fixes:
+
+- Mastering occupies a column immediately after Output, spans rows 2 / 9 below the group rails, and removes its panel from the DOM before clearing/terminating it. Flat timeline conflicts retain shared layout ordering and coalesced updates alongside upstream changes.
+- Scripting parity explicitly lists userInterface.height, isGroup and groupCollapsed as unmirrored UI/folder state, alongside automationCollapsed. No scripting field is silently omitted from the parity check.
+- The generic transfer path retains the original index-based insertion and default type ordering. TransferAudioUnits.test.ts is identical to upstream/main. Explicit layoutOrder transfers opt into the grouping layout; duplicate/extract opt in. The string comparison with output is gone with restoration of the original ordering implementation.
+- Multi-lane head labels can drag the first lane again. Channel pointer dragging yields on a multi-lane label; the rest of the primary header still moves the channel. Single-lane labels keep their existing channel gesture.
+- Group extraction explicitly includes all nested descendants and preserves their internal routes. An integration regression checks the nested units, child clip and group effect in a fresh project.
+- RegionLane.tsx is identical to upstream/main: the separate generic viewport-reentry change from #502 is removed. TracksManager invalidates region paint specifically when a hidden lane unfolds, preserving group repaint without adding a repaint to every ordinary scroll re-entry.
+- A selection containing hidden clips/regions refuses a move with an explanatory message. It cannot silently move only the visible portion; approval also rechecks if visibility changes during the drag.
+- Complete group-column names follow a horizontal move/copy of all its child clips within that group, including nested group names, in the same undo transaction. A partial child move retains the source column name. Empty named columns remain supported.
+- GroupClipLauncher clears playing/waiting IDs on transport stop; a restart cannot revive stale state. Mixer and timeline arrows both point right when collapsed and down when expanded.
+- GroupClipSelection initializes owned state in its constructor. Restored the base import order in ProjectApi, TransferUtils and AudioUnitsClipboardHandler and removed redundant added comments.
+
+### Route inconsistency traced
+
+A pointer assignment inside createBox was deferred until transaction end. Repointing that field after construction resolved the newer route immediately; the older deferred assignment then overwrote its cached target and transaction ordering. The saved address could therefore disagree with targetVertex. Current main already fixes this in the pointer-resolution changes included by fbd4848f5: onPointerAddressUpdated flushes that field's construction updates before resolving/notifying the later change. This merge retains that underlying fix and its lib-box constructor/repoint/listener/undo regressions. A new audio-unit regression constructs a channel on its normal output, reroutes it to a group in the same transaction and checks the resolved address, group membership, Undo/Redo and encode/decode. Passing a destination at construction remains a valid creation API, but it is no longer the only path that works.
+
+### Product decisions retained for maintainer review
+
+The founder explicitly reconfirmed selection-based duplication with retained routing/placement, freely positioned ordinary buses/FX buses, and saved/shared/undoable collapse. These are deliberate requested changes, including in ungrouped projects; André's approval is still requested. Group height remains saved. The founder approved making the collapse arrows consistent, superseding the earlier mixer-only direction. Border-radius and opacity polish remain with André as he offered.
+
+### Verification and limits
+
+26 production/dependency build tasks pass. Core: 1062 tests / 102 files; adapters: 364 / 31; Studio: 396 / 52; scripting: 78 / 11; lib-box: 207 / 7. The final strengthened grouping extraction/route run passes all 46 grouping tests. Rust: 1115 pass with installed nightly 1.101; local stable 1.90 cannot compile the new upstream Mastering tests' Box::new_zeroed calls. No Rust source workaround was added.
+
+Full real-WASM run: 704 pass, 3 skipped. One additional upstream probe fails because hit-od-render.test.ts opens an absent absolute /Users/am/.../test-files/probe/synthlib/hit.od fixture. Its assertion/path was not weakened or changed. This is an explicit remaining test-environment limit, not a fully green aggregate test claim.
+
+The old comparison CloudFront distribution E1ZOAEXA9WIQHZ no longer exists and its domain does not resolve. No replacement infrastructure or public deployment was created. The original baseline still reports build 1efc199a-bc44-4479-bcb4-dfdfe771f00d. The compiled local build boots in Chrome and reaches a new empty project; browser automation failed and native browser control was later interrupted before the Mastering/lane-drag/fold-paint interactions could be completed. Those manual checks, subjective listening and live-room UX acceptance remain for review. No browser persistence or updated hosted-demo claim is made for this revision.

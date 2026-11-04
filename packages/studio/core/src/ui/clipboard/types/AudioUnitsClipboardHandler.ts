@@ -1,14 +1,6 @@
 import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
-import {
-    AudioUnitBoxAdapter,
-    AudioUnitGroups,
-    AudioUnitOrdering,
-    isModulatorBox,
-    RootBoxAdapter,
-    TransferUtils,
-    UserEditing
-} from "@opendaw/studio-adapters"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioBusBox,
     AudioUnitBox,
@@ -19,10 +11,18 @@ import {
     RootBox,
     TrackBox
 } from "@opendaw/studio-boxes"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {BoxGraphCopy} from "../../../BoxGraphCopy"
+import {
+    AudioUnitBoxAdapter,
+    AudioUnitGroups,
+    AudioUnitOrdering,
+    isModulatorBox,
+    RootBoxAdapter,
+    TransferUtils,
+    UserEditing
+} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
+import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 export type ClipboardAudioUnits = ClipboardEntry<"audio-units">

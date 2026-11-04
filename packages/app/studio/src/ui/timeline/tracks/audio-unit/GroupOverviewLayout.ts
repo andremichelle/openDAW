@@ -1,7 +1,6 @@
 export type OverviewRegion = {position: number, complete: number, hue: number, mute: boolean}
 export type OverviewLine = {x: number, y: number, width: number, height: number, hue: number, muted: boolean}
 
-/** One stripe per content lane; clip times are clipped to the visible timeline, never merged across colors. */
 export const groupOverviewLayout = (lanes: ReadonlyArray<ReadonlyArray<OverviewRegion>>, height: number,
                                     width: number, unitToX: (unit: number) => number): OverviewLine[] => {
     if (lanes.length === 0 || height <= 0 || width <= 0) {return []}

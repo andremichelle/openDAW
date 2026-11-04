@@ -181,7 +181,7 @@ describe("MIDI output instrument (wasm engine)", () => {
         // The build's initial CC push (TS constructor readAllParameters): controller 74,
         // Math.round(0.25 * 127) = 32, at 0 ms — before any transport movement.
         const initial = drainMIDI(engine, memory)
-        expect(initial).toEqual([{device: 0, status: 0xB0 | CHANNEL, data1: 74, data2: 32, length: 3, timeMs: 0.0}])
+        expect(initial).toEqual([{device: 0, status: 0xB0 | CHANNEL, data1: 74, data2: 32, length: 3, timeMs: DELAY_MS}])
         expect(readDeviceId(engine, memory, 0)).toBe("test-midi-device")
         const bits = noteBitsEntry(engine, memory, unitUuid)
         expect(anyBit(bits)).toBe(0)
@@ -284,6 +284,9 @@ describe("MIDI output instrument (wasm engine)", () => {
         const changed = drainMIDI(engine, memory)
         expect(changed.map(({status, data1, data2}) => ({status, data1, data2})))
             .toEqual([{status: 0xB0 | CHANNEL, data1: 7, data2: 127}])
+        // an automated CC lands on the update grid inside its quantum: offset + delay, like a note
+        expect(changed[0].timeMs).toBeGreaterThanOrEqual(DELAY_MS)
+        expect(changed[0].timeMs).toBeLessThan(DELAY_MS + 128 / SAMPLE_RATE * 1000)
         source.beginTransaction()
         unit.tracks.pointerHub.incoming().forEach(({box}) => box.delete())
         device.delete()

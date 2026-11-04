@@ -36,6 +36,7 @@ export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get spectrum(): Address {return this.#box.address.append(0xFFF)}
+    get spectrumLow(): Address {return this.#box.address.append(0xFFE)}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

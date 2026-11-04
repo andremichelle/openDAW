@@ -17,15 +17,18 @@ type Construct = {
 }
 
 export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct) => {
+    let updated = false
     let visible = false
     const canvas: HTMLCanvasElement = <canvas/>
     const element: Element = (<div className={className}>{canvas}</div>)
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         if (visible) {
             RegionRenderer.render(context, trackManager, range, adapter.listIndex)
+            updated = true
         }
     }))
     const requestUpdate = () => {
+        updated = false
         painter.requestUpdate()
     }
     const {timelineFocus} = trackManager.service.project
@@ -39,8 +42,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         Html.watchIntersection(element, entries => entries
                 .forEach(({isIntersecting}) => {
                     visible = isIntersecting
-                    // Hiding a lane resets its canvas. Always repaint on re-entry, even if its data is unchanged.
-                    if (visible) {
+                    if (!updated) {
                         painter.requestUpdate()
                     }
                 }),

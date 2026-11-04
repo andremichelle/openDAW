@@ -1,6 +1,6 @@
 import {createElement} from "@opendaw/lib-jsx"
 import {Lifecycle} from "@opendaw/lib-std"
-import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
+import {AudioAnalyser, gainToDb, LowBandAnalyser} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
@@ -11,7 +11,7 @@ import {clearBg, FREQ_TICKS, SPEC_X_LIN, SPEC_X_LOG, SPEC_Y, unitLabel} from "./
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 const SPEC_TOP_MARGIN = 11.0
 
-const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate: number,
+const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, spectrumLow: Float32Array, sampleRate: number,
                       log: boolean, slopeDbOct: number): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
@@ -27,14 +27,21 @@ const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate
     const yOf = (gain: number, freq: number): number => plotTop + (1.0 - SPEC_Y.unitToNorm(
         gainToDb(Math.max(gain, 1e-7)) + slopeDbOct * Math.log2(Math.max(freq, 20.0) / 1000.0))) * plotH
     const yAt = (db: number): number => plotTop + (1.0 - SPEC_Y.unitToNorm(db)) * plotH
-    const firstBin = Math.max(1, Math.ceil(20.0 / freqStep))
+    const lowStep = LowBandAnalyser.binWidth(sampleRate)
+    const firstLowBin = Math.ceil(20.0 / lowStep)
+    const lastLowBin = Math.ceil(LowBandAnalyser.CROSSOVER / lowStep) - 1
+    const firstBin = Math.ceil(LowBandAnalyser.CROSSOVER / freqStep)
     const lastBin = Math.min(numBins - 1, Math.floor(Math.min(20_000.0, nyquist) / freqStep))
     const lastX = xOf(lastBin * freqStep)
-    const y0 = yOf(spectrum[firstBin], firstBin * freqStep)
+    const y0 = yOf(spectrumLow[firstLowBin], firstLowBin * lowStep)
+    const traceCurve = (): void => {
+        for (let i = firstLowBin; i <= lastLowBin; i++) {context.lineTo(xOf(i * lowStep), yOf(spectrumLow[i], i * lowStep))}
+        for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
+    }
     context.beginPath()
     context.moveTo(0, h)
     context.lineTo(0, y0)
-    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
+    traceCurve()
     context.lineTo(lastX, h)
     context.closePath()
     context.fillStyle = DisplayPaint.strokeStyle(0.06)
@@ -43,7 +50,7 @@ const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate
     context.lineWidth = 1.5
     context.beginPath()
     context.moveTo(0, y0)
-    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
+    traceCurve()
     context.stroke()
     for (const db of [-20, -40, -60, -80]) {
         unitLabel(context, `${db}`, w - pad, yAt(db), "right", "middle")
@@ -65,33 +72,45 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 export const SpectrumCard = ({lifecycle, service}: Construct): HTMLElement => {
     const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
     const specHold = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const spectrumLow = new Float32Array(LowBandAnalyser.NUM_BINS)
+    const specLowHold = new Float32Array(LowBandAnalyser.NUM_BINS)
     const sampleRate = {value: 48000}
     const {spectrumLog: log, spectrumSlope: slope, spectrumHold: hold, spectrumAvg: avg} = AnalysisSettings
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter =>
-        drawSpectrum(painter, spectrum, sampleRate.value, log.getValue(), parseFloat(slope.getValue()))))
+        drawSpectrum(painter, spectrum, spectrumLow, sampleRate.value, log.getValue(), parseFloat(slope.getValue()))))
+    const applyValues = (values: Float32Array, target: Float32Array, held: Float32Array): void => {
+        if (hold.getValue()) {
+            for (let i = 0; i < values.length; i++) {
+                if (values[i] > held[i]) {held[i] = values[i]}
+                target[i] = held[i]
+            }
+        } else if (avg.getValue()) {
+            for (let i = 0; i < values.length; i++) {target[i] += (values[i] - target[i]) * 0.2}
+        } else {
+            target.set(values)
+        }
+        painter.requestUpdate()
+    }
     lifecycle.ownAll(
         log.subscribe(painter.requestUpdate),
         slope.subscribe(painter.requestUpdate),
         hold.subscribe(painter.requestUpdate),
         avg.subscribe(painter.requestUpdate)
     )
-    lifecycle.own(hold.catchupAndSubscribe(owner => {if (owner.getValue()) {specHold.set(spectrum)}}))
+    lifecycle.own(hold.catchupAndSubscribe(owner => {
+        if (owner.getValue()) {
+            specHold.set(spectrum)
+            specLowHold.set(spectrumLow)
+        }
+    }))
     observeProject(lifecycle, service, (project, runtime) => {
         sampleRate.value = project.engine.sampleRate
-        runtime.own(project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, values => {
-            if (hold.getValue()) {
-                for (let i = 0; i < values.length; i++) {
-                    if (values[i] > specHold[i]) {specHold[i] = values[i]}
-                    spectrum[i] = specHold[i]
-                }
-            } else if (avg.getValue()) {
-                for (let i = 0; i < values.length; i++) {spectrum[i] += (values[i] - spectrum[i]) * 0.2}
-            } else {
-                spectrum.set(values)
-            }
-            painter.requestUpdate()
-        }))
+        runtime.ownAll(
+            project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM,
+                values => applyValues(values, spectrum, specHold)),
+            project.liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM_LOW,
+                values => applyValues(values, spectrumLow, specLowHold)))
     })
     return card("Spectrum", [toggle(lifecycle, log, "Log"),
         dropdown(lifecycle, slope, "90px", "0 dB/oct", "3 dB/oct", "4.5 dB/oct", "6 dB/oct"),

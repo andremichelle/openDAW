@@ -85,6 +85,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_arpeggio.wasm", boxType: "ArpeggioDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_pitch.wasm", boxType: "PitchDeviceBox"},     // midi effect
+    {url: "/wasm/plugins/device_note_filter.wasm", boxType: "NoteFilterDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {url: "/wasm/plugins/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
     {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
@@ -159,14 +160,19 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     }
 ]
 
-export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
-    const urls = [`${base}/wasm/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
+// A device module the host serves itself (absolute url), linked after the stock devices.
+export type ExtraDevice = { url: string, boxType: string }
+
+export const loadEngineModules = async (base: string = "",
+                                        extraDevices: ReadonlyArray<ExtraDevice> = []): Promise<EngineModules> => {
+    const devices = [...DEVICES.map(device => ({url: `${base}${device.url}`, boxType: device.boxType})), ...extraDevices]
+    const urls = [`${base}/wasm/engine.wasm`, ...devices.map(device => device.url)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.ok
         ? response.arrayBuffer()
         : Promise.reject(new Error(`Could not load wasm module '${url}' (${response.status} ${response.statusText})`)))))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
     return {
-        engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType),
+        engineModule, deviceModules, deviceBoxTypes: devices.map(device => device.boxType),
         composites: COMPOSITES, effectComposites: EFFECT_COMPOSITES
     }
 }

@@ -9,7 +9,7 @@ import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {EngineModules, loadEngineModules} from "./engine-modules"
+import {EngineModules, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createSyncLoopback} from "./sync/loopback"
 import {
@@ -25,6 +25,8 @@ export type WasmEngineUrls = {
     offlineWorkerUrl: string
     // Base URL serving the binaries (dist/wasm/*): `${wasmUrl}/wasm/engine.wasm` + `${wasmUrl}/wasm/plugins/*.wasm`.
     wasmUrl: string
+    // Device modules the host ships itself (not part of this package), for the realtime and the offline engine.
+    extraDevices?: ReadonlyArray<ExtraDevice>
 }
 
 export namespace WasmEngine {
@@ -39,10 +41,10 @@ export namespace WasmEngine {
     // caller that gets false has no working engine and must say so rather than carry on.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {
         if (modules.nonEmpty()) {return true}
-        const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before ensureReady")
+        const {processorUrl, wasmUrl, extraDevices} = config.unwrap("WasmEngine.install must run before ensureReady")
         const {status, value, error} = await Promises.tryCatch((async () => {
             await context.audioWorklet.addModule(processorUrl)
-            return loadEngineModules(wasmUrl)
+            return loadEngineModules(wasmUrl, extraDevices)
         })())
         if (status === "rejected") {
             console.warn("WASM engine unavailable:", error)
@@ -56,7 +58,7 @@ export namespace WasmEngine {
         config.wrap(urls)
         // The OFFLINE render path (mixdown/stems/freeze/benchmarks): the worker self-loads the wasm
         // artifacts from `wasmUrl`, so no preloading is needed here.
-        OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
+        OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl, extraDevices: urls.extraDevices ?? []})
         EngineVariant.install((): EngineWorkletVariant => {
             const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} =
                 modules.unwrap("WasmEngine.ensureReady must succeed before an engine boots")

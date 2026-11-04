@@ -66,7 +66,7 @@ describe("Schema parity", () => {
     it("mirrors every automatable midi effect parameter", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach(key => expect(assertMirrored(unit.addMIDIEffect(key)), key).toEqual([]))
     })
 
@@ -99,7 +99,7 @@ describe("Schema parity", () => {
         expect(assertMirrored(layer)).toEqual([])
         const send = unit.addSend(project.addAuxUnit())
         expect(assertMirrored(send)).toEqual(["routing"])
-        expect(assertMirrored(unit)).toEqual(["type", "userInterface.automationCollapsed"])
+        expect(assertMirrored(unit)).toEqual(["type", "userInterface.automationCollapsed", "userInterface.height", "isGroup", "groupCollapsed"])
         expect(assertMirrored(project.addModulator("LFO"))).toEqual([])
         expect(assertMirrored(project.addModulator("Steps"))).toEqual([])
         expect(assertMirrored(project.addModulator("Random"))).toEqual([])

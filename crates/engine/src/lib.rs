@@ -81,7 +81,8 @@ struct DeviceReg {
     record_collection_field: u16,
     // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
     buffer_collection_field: u16,
-    data_changed_index: u32
+    data_changed_index: u32,
+    release_all_index: u32 // slot of a MIDI effect's `release_all` export; 0 if none
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -200,6 +201,20 @@ fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32
 }
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
+
+// WASM CONTRACT: a MIDI effect's optional `release_all(state_ptr, position, out_ptr, max) -> count` ends every note it started.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_release_all(release_all_index: u32, state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
+    if release_all_index == 0 {
+        return 0;
+    }
+    calling_device(state_ptr);
+    let release_all: extern "C" fn(u32, f64, u32, u32) -> u32 = unsafe { core::mem::transmute(release_all_index as usize) };
+    release_all(state_ptr, position, out_ptr, max)
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_release_all(_release_all_index: u32, _state_ptr: u32, _position: f64, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
 // Call a device's `init(state_ptr, sample_rate)` export (it binds its parameters via `host_bind_parameter`
 // and learns the engine's sample rate, stable for its life). Same table-index-is-fn-pointer trick. Called
@@ -778,6 +793,21 @@ impl PullLink {
             _ => false
         }
     }
+
+    fn holds(&self, effect: &Rc<PluginMidiEffect>) -> bool {
+        match self {
+            PullLink::MidiFx {effect: own, upstream} => Rc::ptr_eq(own, effect) || upstream.holds(effect),
+            _ => false
+        }
+    }
+
+    /// Every effect of this chain missing from `next` ends the notes it started, into `out`.
+    pub(crate) fn release_leavers(&self, next: &PullLink, out: &mut Vec<EventRecord>) {
+        if let PullLink::MidiFx {effect, upstream} = self {
+            if !next.holds(effect) {effect.release_all(out)}
+            upstream.release_leavers(next, out);
+        }
+    }
 }
 
 /// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
@@ -801,14 +831,16 @@ struct PullContext {
     // The CURRENT CONSUMER's unit note-bits slot (TS `NoteEventInstrument`'s 128-bit `NoteBroadcaster`):
     // resolved note starts/completes set/clear pitch bits. Set by `PluginInstrument` around its device call;
     // cleared during a MidiFx descent so nested pulls mark only their own producers.
-    note_bits: Option<engine_env::telemetry::BroadcastSlot>
+    note_bits: Option<engine_env::telemetry::BroadcastSlot>,
+    // note-offs of effects that left the consumer's chain, handed out first by its next pull
+    released: Vec<EventRecord>
 }
 
 impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0
+            params: Vec::new(), clock_armed: false, note_bits: None, automation_lag: 0, released: Vec::new()
         }
     }
 }
@@ -859,6 +891,15 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
 /// a native (test) build. `out_ptr` is the wasm address of `out`, forwarded only to a MIDI-fx device call
 /// (wasm-to-wasm; a native build's device stub never dereferences it).
 pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventRecord], out_ptr: u32) -> u32 {
+    let released = {
+        let pull = unsafe { PULL.get() };
+        let count = pull.released.len().min(out.len());
+        for (slot, record) in out.iter_mut().zip(pull.released.iter()) {*slot = EventRecord {position: from, ..*record}}
+        pull.released.clear();
+        count
+    };
+    let (released_records, out) = out.split_at_mut(released);
+    let out_ptr = out_ptr + (released * core::mem::size_of::<EventRecord>()) as u32;
     let max = out.len() as u32;
     let link = { unsafe { PULL.get() }.current.clone() };
     // The CONSUMER's note-bits slot, taken before any descent below swaps it out.
@@ -893,10 +934,10 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
         }
         None => 0
     };
-    if count > 0 {
+    if count > 0 || released > 0 {
         if let Some(slot) = consumer_bits {
             // Mark the UNIT's held notes (TS `NoteEventInstrument.#showEvent` per resolved lifecycle event).
-            for record in &out[..count as usize] {
+            for record in released_records.iter().chain(out[..count as usize].iter()) {
                 if record.kind == EVENT_NOTE_ON {
                     engine_env::telemetry::set_note_bit(&slot, record.pitch as i32, true);
                 } else if record.kind == EVENT_NOTE_OFF {
@@ -905,7 +946,7 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
             }
         }
     }
-    count
+    released as u32 + count
 }
 
 /// True when the CURRENT quantum's blocks are TRANSPORTING. The update clock only ticks while the transport
@@ -1372,6 +1413,8 @@ struct Engine {
     is_recording: bool,
     is_counting_in: bool,
     paused_locate: bool,
+    // a faded STOP (`stop_faded`): the next quantum fades the mix out, then every plugin resets
+    stop_fading: bool,
     recording_start: f64,
     recording_denominator: i32, // the signature denominator at the recording start (the count-in remaining unit)
     metronome_pref: bool,
@@ -1410,6 +1453,10 @@ struct Engine {
     // Queued marker-state notifications for `marker_changes_take` (uuid + plays-so-far, or the null
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
+    // This quantum's transport jumps (sample inside the quantum, position after the jump) and the sample
+    // `pauseOnLoopDisabled` paused at (-1 none), read back by the worklet through `transport_jump_*`.
+    transport_jumps: Vec<(u32, f64)>,
+    transport_pause_sample: i32,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
     tempo_stamp: TempoStamp,   // the tempo state the seconds-based audio spans were last sized with
 
@@ -1436,6 +1483,9 @@ struct Engine {
     solo_dirty: Rc<Cell<bool>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
+    // Per built device: (field_changed index, state ptr, observed field paths), so `override_device_field` can
+    // deliver a local value (never written to the box, never synced). Entries live exactly as long as the device.
+    field_overrides: BTreeMap<Uuid, (u32, u32, Vec<Vec<u16>>)>,
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
@@ -1483,6 +1533,7 @@ impl Engine {
             is_recording: false,
             is_counting_in: false,
             paused_locate: false,
+            stop_fading: false,
             recording_start: 0.0,
             recording_denominator: 4,
             metronome_pref: false,
@@ -1500,6 +1551,8 @@ impl Engine {
             signature: None,
             marker_track: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
+            transport_jumps: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM),
+            transport_pause_sample: -1,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             tempo_stamp: TempoStamp {bpm: 120.0, enabled: true, version: 0},
             context: EngineContext::new(),
@@ -1518,6 +1571,7 @@ impl Engine {
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
+            field_overrides: BTreeMap::new(),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
@@ -1556,8 +1610,14 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0});
         id
+    }
+
+    fn set_device_release_all(&mut self, device_id: u32, release_all_index: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.release_all_index = release_all_index;
+        }
     }
 
     fn set_device_record_collection(&mut self, device_id: u32, record_field: u32, buffer_field: u32, data_changed_index: u32) {
@@ -1759,7 +1819,9 @@ impl Engine {
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, metronome_delay, metronome_buffer, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
-            metronome_pref, audio_units, clip_sequencer, ..} = self;
+            metronome_pref, audio_units, clip_sequencer, transport_jumps, transport_pause_sample, stop_fading, ..} = self;
+        transport_jumps.clear();
+        *transport_pause_sample = -1;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
         // `output` above.
         metronome_staging.fill(0.0);
@@ -1791,6 +1853,9 @@ impl Engine {
                 // additionally be copied out as its own stem.
                 let (left, right) = metronome_staging.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, signature_slice, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
+                if block.discontinuous && transport_jumps.len() < transport_jumps.capacity() {
+                    transport_jumps.push((block.s0 as u32, block.p0));
+                }
                 blocks.push(Block {
                     index: blocks.len() as u32,
                     flags: BlockFlags::create(true, block.discontinuous, true, false),
@@ -1810,6 +1875,7 @@ impl Engine {
                 *is_counting_in = false;
                 metronome.set_enabled(*metronome_pref); // apply_metronome with the count-in force gone
                 let covered = blocks.last().map_or(0, |block| block.s1 as usize);
+                *transport_pause_sample = covered as i32;
                 if covered < RENDER_QUANTUM {
                     let paused = transport.render_paused_tail(RENDER_QUANTUM - covered);
                     blocks.push(Block {
@@ -1863,6 +1929,14 @@ impl Engine {
                 output[RENDER_QUANTUM + index] += buffer.right[index];
             }
         }
+        // a faded STOP: the tails still ringing fall to silence over this quantum (a cut clicks)
+        if *stop_fading {
+            for index in 0..RENDER_QUANTUM {
+                let gain = 1.0 - (index + 1) as f32 / RENDER_QUANTUM as f32;
+                output[index] *= gain;
+                output[RENDER_QUANTUM + index] *= gain;
+            }
+        }
         // the master analysis taps read the mix without the metronome (summing order is bit-identical: 0 + a + b)
         analysis.copy_from_slice(output);
         if let Some(delay) = metronome_delay.as_mut() {
@@ -1883,6 +1957,11 @@ impl Engine {
         write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
     }
 
+    /// After the quantum a faded STOP faded out (`render`): every plugin resets now.
+    fn end_faded_stop(&mut self) {
+        if core::mem::take(&mut self.stop_fading) {self.reset_plugins()}
+    }
+
     fn begin_quantum_position(&mut self) -> bool {
         let located = core::mem::take(&mut self.paused_locate) && !self.transport.is_playing();
         unsafe {
@@ -1895,6 +1974,8 @@ impl Engine {
     }
 
     fn play(&mut self) {
+        // a faded STOP not rendered yet: playback starts from cleared plugins, not inside the fade
+        if core::mem::take(&mut self.stop_fading) {self.reset_plugins()}
         // TS `#play` schedules MidiData.Start (the timestamp SongPosition is scheduled by `set_position`,
         // which the worklet's play command issues first when timestamp playback is enabled).
         self.schedule_midi_transport(midi_output::start_message());
@@ -1974,6 +2055,19 @@ impl Engine {
     /// filter + detector state) and the bus / strip buffers, so PLAY starts clean. The output bus is zeroed so
     /// no residual leaks into the final mix while stopped.
     fn stop(&mut self) {
+        self.stop_fading = false;
+        self.halt();
+        self.reset_plugins();
+    }
+
+    /// STOP from the user (realtime): the next quantum fades the mix out, then every plugin resets (`end_faded_stop`).
+    /// A reset cuts the tails still ringing, which clicks; an offline render keeps the immediate `stop`.
+    fn stop_faded(&mut self) {
+        self.halt();
+        self.stop_fading = true;
+    }
+
+    fn halt(&mut self) {
         self.is_recording = false;
         self.is_counting_in = false;
         self.apply_metronome();
@@ -1983,6 +2077,9 @@ impl Engine {
         self.transport.stop(true);
         self.transport.reset_marker_state(); // TS `#reset` -> `renderer.reset()` forgets the active marker (silently)
         self.clip_sequencer.borrow_mut().reset();
+    }
+
+    fn reset_plugins(&mut self) {
         self.context.reset_all();
         for unit in &self.audio_units {
             unit.clear_note_bits(); // TS `NoteEventInstrument.clear` on reset: no stuck note indicators
@@ -2089,6 +2186,14 @@ impl Engine {
                 staging[right * RENDER_QUANTUM..(right + 1) * RENDER_QUANTUM].copy_from_slice(&buffer.right);
             }
         }
+    }
+
+    fn override_device_field(&mut self, uuid: Uuid, key: u16, kind: u32, bits: u32) -> bool {
+        if !matches!(kind, abi::FIELD_KIND_INT | abi::FIELD_KIND_FLOAT | abi::FIELD_KIND_BOOL) {return false;}
+        let Some((field_changed_index, state_ptr, paths)) = self.field_overrides.get(&uuid) else {return false};
+        let Some(id) = paths.iter().position(|path| path.as_slice() == [key]) else {return false};
+        call_device_field_changed(*field_changed_index, *state_ptr, id as u32, kind, bits, 0);
+        true
     }
 
     fn set_metronome_enabled(&mut self, enabled: bool) {
@@ -2881,6 +2986,7 @@ pub extern "C" fn render() {
             engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
             engine.copy_stem_outputs();
+            engine.end_faded_stop();
         }
     }
 }
@@ -3042,6 +3148,15 @@ pub extern "C" fn stop() {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn stop_faded() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.stop_faded()
+        }
+    }
+}
+
 /// Arm recording (TS `EngineCommands.prepareRecordingState`): `count_in_bars` comes from the caller's
 /// preferences (the engine owns the signature). See `Engine::prepare_recording_state`.
 #[no_mangle]
@@ -3161,6 +3276,29 @@ pub extern "C" fn clip_changes_take(out_ptr: u32) -> u32 {
         });
         count
     }
+}
+
+/// TRANSPORT JUMPS of the last rendered quantum: every discontinuous block (loop wrap, seek, marker jump) as
+/// the sample inside the quantum and the position after the jump. The worklet stamps them in context time.
+#[no_mangle]
+pub extern "C" fn transport_jump_count() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.transport_jumps.len() as u32) }
+}
+
+#[no_mangle]
+pub extern "C" fn transport_jump_sample(index: u32) -> u32 {
+    unsafe { ENGINE.get().as_ref().and_then(|engine| engine.transport_jumps.get(index as usize)).map_or(0, |jump| jump.0) }
+}
+
+#[no_mangle]
+pub extern "C" fn transport_jump_position(index: u32) -> f64 {
+    unsafe { ENGINE.get().as_ref().and_then(|engine| engine.transport_jumps.get(index as usize)).map_or(0.0, |jump| jump.1) }
+}
+
+/// The sample inside the last rendered quantum at which `pauseOnLoopDisabled` paused the transport, else -1.
+#[no_mangle]
+pub extern "C" fn transport_pause_sample() -> i32 {
+    unsafe { ENGINE.get().as_ref().map_or(-1, |engine| engine.transport_pause_sample) }
 }
 
 /// MARKER-STATE notifications (TS `EngineToClient.switchMarkerState([uuid, count] | null)`): the
@@ -3299,6 +3437,15 @@ pub extern "C" fn set_truncate_notes_at_region_end(enabled: i32) {
     }
 }
 
+/// Deliver a LOCAL value for a device's observed plain field (a numeric `FIELD_KIND_*`), without editing the box:
+/// not undoable, not synced, gone with the next box edit of that field or a rebuild. Returns 1 if delivered.
+#[no_mangle]
+pub extern "C" fn override_device_field(uuid_ptr: u32, key: u32, kind: u32, bits: u32) -> u32 {
+    let uuid: Uuid = unsafe { *(uuid_ptr as *const Uuid) };
+    unsafe { ENGINE.get().as_mut() }.map_or(0, |engine| engine.override_device_field(uuid, key as u16, kind, bits) as u32)
+}
+
+/// Enable the metronome click.
 #[no_mangle]
 pub extern "C" fn set_metronome_enabled(enabled: i32) {
     unsafe {
@@ -3434,6 +3581,16 @@ pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.set_device_record_collection(device_id, record_field, buffer_field, data_changed_index);
+        }
+    }
+}
+
+/// Set the table slot of a registered MIDI effect's `release_all` export. Call after `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_release_all(device_id: u32, release_all_index: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_release_all(device_id, release_all_index);
         }
     }
 }

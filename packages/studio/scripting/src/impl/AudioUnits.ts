@@ -199,6 +199,19 @@ export class InstrumentAudioUnitImpl extends SendableAudioUnitFacade implements 
                 this.box.capture.targetVertex.ifSome(vertex => vertex.box.delete())
                 AudioUnitFactory.trackTypeToCapture(this.context.boxGraph, trackType)
                     .ifSome(capture => this.box.capture.refer(capture))
+                IndexedBox.collectIndexedBoxes(this.box.tracks, TrackBox)
+                    .filter(track => track.type.getValue() === previousTrackType)
+                    .toReversed()
+                    .forEach(track => {
+                        IndexedBox.removeOrder(this.box.tracks, track.index.getValue())
+                        track.delete()
+                    })
+                TrackBox.create(this.context.boxGraph, UUID.generate(), box => {
+                    box.index.setValue(IndexedBox.insertOrder(this.box.tracks, 0))
+                    box.type.setValue(trackType)
+                    box.tracks.refer(this.box.tracks)
+                    box.target.refer(this.box)
+                })
             }
             const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, key, this.box.input, label)
             return Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props) as unknown as Instruments[N]
