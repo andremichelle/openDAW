@@ -1,3 +1,4 @@
+import {installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -33,6 +34,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const {project} = service
+    const populateMenu = installTrackHeaderMenu(service, audioUnitBoxAdapter, Option.wrap(trackBoxAdapter))
     lifecycle.own(
         trackBoxAdapter.catchupAndSubscribePath(option => option.match({
             none: () => {
@@ -81,30 +83,24 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
                         }
                     })
             }}/>
-            <MenuButton root={MenuItem.root()
-                .setRuntimeChildrenProcedure(installTrackHeaderMenu(service, audioUnitBoxAdapter,
-                    Option.wrap(trackBoxAdapter)))}
+            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(populateMenu)}
                         style={{minWidth: "0", justifySelf: "end"}}
                         appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
                 <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
             </MenuButton>
         </div>
     )
+    installTrackSelection(lifecycle, project, element, audioUnitBoxAdapter.box, populateMenu)
     const audioUnitEditing = project.userEditingManager.audioUnit
     const hoverSwitch = createHoverEditSwitch(lifecycle, project, audioUnitBoxAdapter)
-    // The unit's head lane doubles as the unit reorder handle: dragging its icon carries the same
-    // payload as a mixer channel strip, so timeline and mixer drops interoperate.
     const dragLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
         unitHead.catchupAndSubscribe(owner => {
             dragLifecycle.terminate()
             iconContainer.draggable = false
             if (owner.getValue() && !audioUnitBoxAdapter.isOutput) {
-                dragLifecycle.own(DragAndDrop.installSource(iconContainer, () => ({
-                    uuid: UUID.toString(audioUnitBoxAdapter.uuid),
-                    type: "channelstrip",
-                    start_index: audioUnitBoxAdapter.indexField.getValue()
-                }), element))
+                dragLifecycle.own(installGroupTrackDrag(element, project, audioUnitBoxAdapter.box,
+                    target => target instanceof Node && labels.contains(target) && trackManager.groupMembers(trackBoxAdapter.uuid).length > 1))
             }
         }),
         DragAndDrop.installSource(labels, () =>
@@ -137,8 +133,10 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => {
                 if (isDeviceDrag(data)) {hoverSwitch.hover()}
-                return ((data.type === "midi-effect" || data.type === "audio-effect") && data.uuids === null)
-                    || (data.type === "script" && (data.script.target === "werkstatt" || data.script.target === "spielwerk"))
+                return (((data.type === "midi-effect" && !audioUnitBoxAdapter.box.isGroup.getValue())
+                    || data.type === "audio-effect") && data.uuids === null)
+                    || (data.type === "script" && (data.script.target === "werkstatt"
+                        || data.script.target === "spielwerk" && !audioUnitBoxAdapter.box.isGroup.getValue()))
             },
             drop: (_event: DragEvent, data: AnyDragData) => {
                 hoverSwitch.cancel()

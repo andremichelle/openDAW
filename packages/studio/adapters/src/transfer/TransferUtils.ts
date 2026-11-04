@@ -21,6 +21,7 @@ import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {AudioUnitGroups} from "../audio-unit/AudioUnitGroups"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -86,7 +87,8 @@ export namespace TransferUtils {
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
         uuidMap.addMany([
             ...audioUnitBoxes
-                .filter(({output: {targetAddress}}) => targetAddress.nonEmpty())
+                .filter(({output: {targetAddress}}) => targetAddress.nonEmpty()
+                    && !dependencies.some(dependency => UUID.equals(dependency.address.uuid, targetAddress.unwrap().uuid)))
                 .map(box => ({
                     source: box.output.targetAddress.unwrap().uuid,
                     target: masterBusBoxUUID
@@ -155,14 +157,14 @@ export namespace TransferUtils {
     export const reorderAudioUnits = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
                                       audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                       rootBox: RootBox,
-                                      insertIndex?: int): void => {
+                                      insertIndex?: int, layoutOrder: boolean = false): void => {
         const targets = audioUnitBoxes
             .toSorted(compareIndex)
             .map(source => asInstanceOf(rootBox.graph
                 .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         const targetSet = new Set<AudioUnitBox>(targets)
-        const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
+        const allAudioUnits = layoutOrder ? AudioUnitGroups.ordered(rootBox) : IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
         const existing = allAudioUnits.filter(box => !targetSet.has(box))
         let ordered: ReadonlyArray<AudioUnitBox>
         if (isDefined(insertIndex)) {
@@ -173,7 +175,7 @@ export namespace TransferUtils {
             // can sit at a low index, so findIndex over the index-sorted list would insert the copy
             // before it. Sort existing by order first so the copy lands among its own kind (e.g. an
             // instrument after the other instruments but before the Output unit).
-            const byOrder = existing.toSorted((a, b) =>
+            const byOrder = layoutOrder ? existing : existing.toSorted((a, b) =>
                 (AudioUnitOrdering[a.type.getValue()] ?? 0) - (AudioUnitOrdering[b.type.getValue()] ?? 0))
             const maxOrder = targets.reduce((max, box) =>
                 Math.max(max, AudioUnitOrdering[box.type.getValue()] ?? 0), 0)

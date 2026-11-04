@@ -13,13 +13,15 @@ component
   box-shadow: 0 2px 4px 0 rgba(black, 0.1)
   border-radius: 1px
   color: var(--color-cream)
-  border-top: 0.125em transparent solid
+  border-top: var(--unit-line-width, 0.125em) var(--unit-line-color) solid
 
   @include mixins.dragging
   @include mixins.unit-type-colors
+  @include mixins.audio-unit-line
 
   > div.icon-container
     position: relative
+    outline: none
     display: flex
     align-items: center
     justify-content: center
@@ -33,9 +35,25 @@ component
       opacity: 0.9
       filter: drop-shadow(0 3px 1px rgba(black, 0.75))
 
+  button.folder-toggle
+    position: absolute
+    right: -4px
+    top: 0
+    width: 24px
+    height: 100%
+    border: none
+    padding: 0
+    background: transparent
+    color: var(--color)
+    cursor: pointer
+    font-size: 18px
+
   &.editing
-    border-top: 0.125em var(--color) solid
     background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)
+
+    > h5.input
+      background: color-mix(in srgb, var(--color) 20%, transparent)
+      outline-color: var(--color)
 
   &.compact
     padding: 0.5em

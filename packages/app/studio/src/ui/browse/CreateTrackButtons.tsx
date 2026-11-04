@@ -15,15 +15,12 @@ const className = Html.adoptStyleSheet(css, "CreateTrackButtons")
 export namespace CreateTrack {
     // a new track goes right below the one in edit mode
     export const instrument = (service: StudioService): void =>
-        DeviceDialog.open(service, {type: "new-instrument", anchor: SpotlightCreate.anchorAfterEditing(service.project)})
+        DeviceDialog.open(service, {type: "new-instrument", insertion: SpotlightCreate.insertionAfterEditing(service.project)})
 
     export const audioTrack = (service: StudioService): void => {
         const {project} = service
-        const anchor = SpotlightCreate.anchorAfterEditing(project)
-        project.editing.modify(() => {
-            const {audioUnitBox} = project.api.createAnyInstrument(InstrumentFactories.Tape)
-            project.api.placeAudioUnitBefore(audioUnitBox, anchor)
-        })
+        const insertion = SpotlightCreate.insertionAfterEditing(project)
+        project.editing.modify(() => project.api.createInstrumentAt(InstrumentFactories.Tape, insertion))
     }
 }
 

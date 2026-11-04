@@ -18,5 +18,6 @@ export const ChannelOutputSelector = ({lifecycle, project, adapter}: Construct) 
                        selectable={bus => {
                            const inputUUID = adapter.input.adapter().unwrapOrNull()?.uuid ?? UUID.Lowest
                            return UUID.Comparator(bus.uuid, inputUUID) !== 0
+                               && project.grouping.canRoute([adapter.box], bus.audioUnitBoxAdapter().box)
                        }}/>
 )

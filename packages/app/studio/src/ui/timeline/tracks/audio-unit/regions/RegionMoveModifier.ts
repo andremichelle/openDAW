@@ -1,10 +1,10 @@
 import {Arrays, clamp, int, Option, RuntimeNotifier, Selection} from "@opendaw/lib-std"
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
-import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
-import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dragging} from "@opendaw/lib-dom"
+import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
+import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Snapping} from "@/ui/timeline/Snapping.ts"
+import type {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
@@ -57,6 +57,10 @@ type Construct = Readonly<{
 
 export class RegionMoveModifier implements RegionModifier {
     static create(trackManager: TracksManager, selection: Selection<AnyRegionBoxAdapter>, construct: Construct): Option<RegionMoveModifier> {
+        if (selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving regions.", icon: "Info"})
+            return Option.None
+        }
         return selection.isEmpty()
             ? Option.None
             : Option.wrap(new RegionMoveModifier(trackManager, selection, construct))
@@ -110,7 +114,7 @@ export class RegionMoveModifier implements RegionModifier {
     unselectedModifyStrategy(): RegionModifyStrategy {return this.#unselectedModifyStrategy}
 
     update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
-        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.nonEmpty())
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
         if (adapters.length === 0) {return}
         const maxIndex = this.#manager.numTracks() - 1
         const clientRect = this.#element.getBoundingClientRect()
@@ -143,11 +147,16 @@ export class RegionMoveModifier implements RegionModifier {
     }
 
     approve(): void {
+        if (this.#selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            this.cancel()
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving regions.", icon: "Info"})
+            return
+        }
         if (this.#deltaIndex === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
         }
-        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.nonEmpty())
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
         if (adapters.length === 0) {return}
         if (!adapters.every(adapter => {
             const trackIndex = adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex
@@ -206,12 +215,14 @@ export class RegionMoveModifier implements RegionModifier {
 
     #dispatchSameTrackChange(): void {
         this.#selection.selected().forEach(({trackBoxAdapter}) =>
-            trackBoxAdapter.ifSome(adapter => adapter.regions.dispatchChange()))
+            trackBoxAdapter.ifSome(adapter => {if (adapter.listIndex >= 0) {adapter.regions.dispatchChange()}}))
     }
 
     #dispatchShiftedTrackChange(deltaIndex: int): void {
         this.#selection.selected().forEach(({trackBoxAdapter}) =>
-            trackBoxAdapter.ifSome(adapter => this.#manager
-                .getByIndex(adapter.listIndex + deltaIndex).unwrapOrNull()?.trackBoxAdapter?.regions?.dispatchChange()))
+            trackBoxAdapter.ifSome(adapter => {
+                if (adapter.listIndex < 0) {return}
+                this.#manager.getByIndex(adapter.listIndex + deltaIndex).ifSome(track => track.trackBoxAdapter.regions.dispatchChange())
+            }))
     }
 }

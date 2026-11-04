@@ -9,10 +9,8 @@ component
   position: relative
   pointer-events: none
 
-  &:empty
-    display: none
-
   @include mixins.unit-type-colors
+  @include mixins.audio-unit-line
 
   &.modulator
     --color: var(--color-blue)
@@ -20,15 +18,49 @@ component
   &.editing
     --wash-color: var(--color)
 
-  &.editing:before
-    border-left: 4px var(--color) solid
-
   &:before
     content: ""
+    left: 0
     width: 100%
     height: 100%
     grid-column: 1 / 2
     position: absolute
-    border-radius: 2px 0 0 2px
-    border-left: 4px var(--color-black) solid
+    border-radius: 0
+    background-image: linear-gradient(var(--unit-line-color), var(--unit-line-color))
+    background-position: var(--folder-offset, 0px) 0
+    background-size: var(--unit-line-width, 4px) 100%
+    background-repeat: no-repeat
     @include colors.panel-background
+  &.folder-hidden
+    display: none
+
+  &.group-drop-inside:after
+    content: ""
+    position: absolute
+    grid-column: 1 / 2
+    left: var(--folder-offset, 0px)
+    right: 0
+    top: 0
+    height: var(--drop-header-height)
+    @include mixins.drop-corners
+    pointer-events: none
+    // Drop feedback must paint above GroupRails (z-index: 6).
+    z-index: 7
+
+  &.group-drop-before:after, &.group-drop-after:after
+    content: ""
+    position: absolute
+    grid-column: 1 / -1
+    left: var(--drop-indent, 0px)
+    right: 0
+    height: 2px
+    background: var(--color-blue)
+    pointer-events: none
+    // Drop feedback must paint above GroupRails (z-index: 6).
+    z-index: 7
+
+  &.group-drop-before:after
+    top: -1px
+
+  &.group-drop-after:after
+    bottom: -1px

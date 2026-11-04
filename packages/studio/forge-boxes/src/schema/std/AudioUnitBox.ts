@@ -1,4 +1,4 @@
-import {AudioSendRouting, AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {AudioSendRouting, AudioUnitType, MaxTrackHeight, Pointers} from "@opendaw/studio-enums"
 import {BipolarConstraints, ParameterPointerRules} from "./Defaults"
 import {BoxSchema} from "@opendaw/lib-box-forge"
 
@@ -69,10 +69,14 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 type: "object", name: "user-interface", class: {
                     name: "AudioUnitUserInterface",
                     fields: {
-                        1: {type: "boolean", name: "automation-collapsed"}
+                        1: {type: "boolean", name: "automation-collapsed"},
+                        2: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: MaxTrackHeight}, unit: "px"}
                     }
                 }
-            }
+            },
+            // 31/32 are reserved for obsolete folder pointers.
+            33: {type: "boolean", name: "is-group"},
+            34: {type: "boolean", name: "group-collapsed"}
         } as const
     },
     pointerRules: {

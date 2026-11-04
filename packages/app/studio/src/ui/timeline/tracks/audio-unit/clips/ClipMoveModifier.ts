@@ -1,10 +1,11 @@
-import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
 import {Arrays, asDefined, clamp, int, isDefined, Option, panic, RuntimeNotifier, Selection, ValueAxis} from "@opendaw/lib-std"
-import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
-import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {Dragging} from "@opendaw/lib-dom"
+import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
+import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {GroupClipColumnMoves} from "./GroupClipColumnMoves"
+import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
+import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier
@@ -42,6 +43,10 @@ export type Creation = {
 
 export class ClipMoveModifier implements ClipModifier {
     static start(creation: Creation): Option<ClipMoveModifier> {
+        if (creation.selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving clips.", icon: "Info"})
+            return Option.None
+        }
         return Option.wrap(new ClipMoveModifier(creation))
     }
 
@@ -87,7 +92,7 @@ export class ClipMoveModifier implements ClipModifier {
         const clipIndex: int = this.#xAxis.axisToValue(clientX)
         const trackIndex: int = this.#yAxis.axisToValue(clientY)
         const maxTrackIndex = this.#manager.numTracks() - 1
-        const adapters = this.#selection.selected()
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
         const clipDelta = adapters.reduce((delta, adapter) => {
             const listIndex = adapter.indexField.getValue()
             return clamp(delta, -listIndex, this.#manager.maxClipsIndex.getValue() + 1)
@@ -118,10 +123,15 @@ export class ClipMoveModifier implements ClipModifier {
     }
 
     approve(): void {
+        if (this.#selection.selected().some(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex < 0, false))) {
+            this.cancel()
+            RuntimeNotifier.notify({message: "Expand selected tracks before moving clips.", icon: "Info"})
+            return
+        }
         if (this.#trackDelta === 0 && this.#clipDelta === 0) {return}
         const tracks = this.#manager.tracks()
         const maxTrackIndex = tracks.length - 1
-        const adapters = this.#selection.selected()
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
         const trackDelta = adapters.reduce((delta, adapter) => {
             const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
             return clamp(delta, -listIndex, maxTrackIndex - listIndex)
@@ -160,7 +170,11 @@ export class ClipMoveModifier implements ClipModifier {
         console.debug("#copy", this.#copy, "#mirroredCopy", this.#mirroredCopy)
         const userEditingManager = this.#project.userEditingManager
         const editedAdapter = adapters.find(adapter => userEditingManager.timeline.isEditing(adapter.box))
+        const moveNames = GroupClipColumnMoves.prepare(this.#project, moveTasks.map(({adapter, newClipIndex, newTrack}) => ({
+            clip: adapter, index: newClipIndex, track: newTrack.trackBoxAdapter
+        })), this.#copy)
         this.#project.editing.modify(() => {
+            moveNames()
             if (this.#copy) {
                 adapters.forEach((adapter) => {
                     const track = adapter.trackBoxAdapter.unwrap("trackBoxAdapter")
@@ -199,11 +213,11 @@ export class ClipMoveModifier implements ClipModifier {
     }
 
     #dispatchSameTrackChange(): void {
-        this.#selection.selected().forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap("trackBoxAdapter").clips.dispatchChange())
+        this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false)).forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap("trackBoxAdapter").clips.dispatchChange())
     }
 
     #dispatchShiftedTrackChange(deltaIndex: int): void {
-        this.#selection.selected().forEach(({trackBoxAdapter}) => this.#manager
+        this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false)).forEach(({trackBoxAdapter}) => this.#manager
             .getByIndex(trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex)
             .unwrapOrNull()?.trackBoxAdapter?.clips?.dispatchChange())
     }

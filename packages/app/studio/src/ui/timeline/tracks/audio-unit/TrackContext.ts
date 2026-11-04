@@ -1,5 +1,5 @@
 import {AudioUnitBoxAdapter, ModulatorBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
-import {asDefined, DefaultObservableValue, Option, Terminable} from "@opendaw/lib-std"
+import {DefaultObservableValue, Option, Terminable} from "@opendaw/lib-std"
 
 /// What a lane hangs off. A modulator owns the lanes of its own parameters, and those rows carry none of a
 /// unit's duties (no channel controls, no unit drag, no collapse).
@@ -9,6 +9,7 @@ export type TrackOwner =
 
 export type Construct = {
     owner: TrackOwner
+    container: Element
     trackBoxAdapter: TrackBoxAdapter
     element: HTMLElement
     lifecycle: Terminable
@@ -16,6 +17,7 @@ export type Construct = {
 }
 
 export class TrackContext {
+    readonly #container: Element
     readonly #owner: TrackOwner
     readonly #trackBoxAdapter: TrackBoxAdapter
     readonly #element: HTMLElement
@@ -26,7 +28,8 @@ export class TrackContext {
     // and read by its header dedup pass.
     path: Option<[string, string]> = Option.None
 
-    constructor({owner, trackBoxAdapter, element, lifecycle, unitHead}: Construct) {
+    constructor({owner, container, trackBoxAdapter, element, lifecycle, unitHead}: Construct) {
+        this.#container = container
         this.#owner = owner
         this.#trackBoxAdapter = trackBoxAdapter
         this.#element = element
@@ -44,6 +47,6 @@ export class TrackContext {
     get unitHead(): DefaultObservableValue<boolean> {return this.#unitHead}
     get size(): number {return this.#element.clientHeight}
     get position(): number {
-        return asDefined(this.#element.parentElement, "Track has no parent.").offsetTop + this.#element.offsetTop
+        return this.#element.getBoundingClientRect().top - this.#container.getBoundingClientRect().top + this.#container.scrollTop
     }
 }

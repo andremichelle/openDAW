@@ -99,7 +99,7 @@ describe("Schema parity", () => {
         expect(assertMirrored(layer)).toEqual([])
         const send = unit.addSend(project.addAuxUnit())
         expect(assertMirrored(send)).toEqual(["routing"])
-        expect(assertMirrored(unit)).toEqual(["type", "userInterface.automationCollapsed"])
+        expect(assertMirrored(unit)).toEqual(["type", "userInterface.automationCollapsed", "userInterface.height", "isGroup", "groupCollapsed"])
         expect(assertMirrored(project.addModulator("LFO"))).toEqual([])
         expect(assertMirrored(project.addModulator("Steps"))).toEqual([])
         expect(assertMirrored(project.addModulator("Random"))).toEqual([])
