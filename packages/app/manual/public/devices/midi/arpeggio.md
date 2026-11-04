@@ -87,8 +87,10 @@ Velocity scaling. Range: **-100% to +100%** (displayed as 0% to 100%).
 
 Controls how the output velocity relates to the input note velocities:
 
-- **-100% (displayed 0%)**: All notes play at full velocity (127), ignoring input
-- **0% (displayed 50%)**: Blend of fixed and original velocity
+- **-100% (displayed 0%)**: All notes play at velocity 0 (silent), ignoring input
+- **-100% to 0% (displayed 0% to 50%)**: All notes play at the same fixed velocity, rising from 0 to full, ignoring input
+- **0% (displayed 50%)**: All notes play at full velocity (127), ignoring input
+- **0% to +100% (displayed 50% to 100%)**: Blend from full velocity toward the original input velocity
 - **+100% (displayed 100%)**: Notes retain their original input velocity
 
 ---
