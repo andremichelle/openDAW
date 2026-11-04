@@ -170,6 +170,9 @@ extern "C" {
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
     fn host_bar_at(pulse: f64, out_ptr: u32);
+    fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32;
+    fn host_groove_warp(slot: u32, pulse: f64) -> f64;
+    fn host_groove_unwarp(slot: u32, pulse: f64) -> f64;
     fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
@@ -325,6 +328,35 @@ pub fn bar_at(pulse: f64) -> Bar {
     {
         Bar {start: math::floor(pulse / 3840.0) * 3840.0, length: 3840.0, beat: 960.0}
     }
+}
+
+/// Follow the groove THIS device's pointer field at PATH targets (e.g. `[10]` for Zeitgeist's `groove`),
+/// returning a slot for [`groove_warp`] / [`groove_unwarp`]. The host keeps the slot on the pointer's current
+/// target, an unbound pointer passes positions through. A device calls this from `init`. Native stub returns 0.
+#[inline]
+pub fn observe_groove(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_groove(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
+}
+
+/// The grooved position of a straight `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_warp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_warp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
+}
+
+/// The straight position of a grooved `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_unwarp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_unwarp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
 }
 
 /// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.

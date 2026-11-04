@@ -12,7 +12,7 @@ import {SoundfontFileBox} from "./SoundfontFileBox"
 import {NeuralAmpModelBox} from "./NeuralAmpModelBox"
 import {AudioBusBox, AudioUnitBox, AuxSendBox} from "./AudioUnitBox"
 import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
-import {GrooveShuffleBox} from "./GrooveBoxes"
+import {GrooveFunctionBox, GrooveRandomBox, GrooveShuffleBox, GrooveStackBox, GrooveStackEntryBox} from "./GrooveBoxes"
 import {LfoModulatorBox} from "./modulators/LfoModulatorBox"
 import {StepsModulatorBox} from "./modulators/StepsModulatorBox"
 import {MacroModulatorBox} from "./modulators/MacroModulatorBox"
@@ -50,6 +50,6 @@ export const Definitions = [
     AudioFileBox, SoundfontFileBox, NeuralAmpModelBox,
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
-    GrooveShuffleBox,
+    GrooveShuffleBox, GrooveFunctionBox, GrooveRandomBox, GrooveStackBox, GrooveStackEntryBox,
     LfoModulatorBox, StepsModulatorBox, MacroModulatorBox, RandomModulatorBox, ModulationBox
 ]

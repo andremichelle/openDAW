@@ -1,0 +1,132 @@
+component
+  display: grid
+  grid-template-columns: 8.25em 8.25em
+  column-gap: 0.75em
+  height: 100%
+  min-height: 0
+
+  h3
+    margin: 0
+    font-size: 9px
+    height: 12px
+    line-height: 12px
+    letter-spacing: 0.5px
+    white-space: nowrap
+    color: var(--color-orange)
+
+  .field
+    display: grid
+    row-gap: 2px
+    min-width: 0
+    font-size: 12px
+
+    > div > button
+      width: 100%
+
+  > .left
+    display: grid
+    grid-template-rows: auto auto
+    align-content: start
+    row-gap: 0.5em
+    min-height: 0
+    min-width: 0
+
+    > .field > h3
+      color: var(--color-blue)
+
+      > .shared
+        margin-left: 0.5em
+        color: var(--color-dark)
+
+  > .right
+    display: grid
+    grid-template-rows: auto minmax(0, 1fr)
+    row-gap: 0.5em
+    min-height: 0
+    min-width: 0
+
+    > .settings
+      display: grid
+      grid-auto-rows: min-content
+      row-gap: 0.375em
+
+      h3
+        color: var(--color-green)
+
+    > .parameters
+      display: grid
+      grid-template-columns: repeat(2, 1fr)
+      grid-template-rows: repeat(2, min-content)
+      row-gap: 0.25em
+      column-gap: 2px
+      align-content: center
+
+      &.stack
+        grid-template-columns: 1fr
+        grid-template-rows: 1fr
+        align-content: stretch
+
+      h3
+        color: var(--color-cream)
+
+      .control
+        display: grid
+        grid-template-rows: 12px auto
+        row-gap: 1px
+        justify-items: center
+        white-space: nowrap
+
+      > .slot.amount
+        grid-area: 1 / 1
+
+      > .slot.roughness
+        grid-area: 1 / 2
+
+      > .slot.steps
+        grid-area: 2 / 1
+
+      > .slot.seed
+        grid-area: 2 / 2
+
+      > .slot:only-child
+        grid-column: 1 / -1
+
+      > .slot.members
+        grid-area: 1 / 1
+        align-self: stretch
+        display: grid
+        grid-template-rows: auto 1fr
+        row-gap: 2px
+        min-width: 0
+
+        > .head
+          display: grid
+          grid-template-columns: 1fr auto
+          align-items: center
+          padding-right: 2px
+          font-size: 9px
+
+        > .rows
+          display: grid
+          grid-auto-rows: min-content
+          row-gap: 1px
+          font-size: 9px
+
+          > .placeholder
+            color: rgba(white, 0.2)
+
+          > .member
+            position: relative
+            display: grid
+            grid-template-columns: 1fr auto
+            align-items: center
+            padding: 1px 2px 1px 4px
+            border-radius: 2px
+            background-color: rgba(white, 0.06)
+            color: var(--color-gray)
+            outline: none
+
+            > .name
+              overflow: hidden
+              text-overflow: ellipsis
+              white-space: nowrap

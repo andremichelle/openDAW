@@ -12,15 +12,28 @@ import {
     Predicate,
     SetMultimap,
     SortedSet,
+    Strings,
+    Optional,
     UUID
 } from "@opendaw/lib-std"
-import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, ModulationBox, RootBox, TrackBox} from "@opendaw/studio-boxes"
+import {
+    AudioUnitBox,
+    AuxSendBox,
+    BoxIO,
+    BoxVisitor,
+    GrooveStackBox,
+    GrooveStackEntryBox,
+    ModulationBox,
+    RootBox,
+    TrackBox
+} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {GrooveBox, isGrooveBox} from "../grooves/GrooveBoxAdapter"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -30,7 +43,8 @@ export namespace TransferUtils {
     export const excludeTimelinePredicate = (box: Box): boolean =>
         box.accept<BoxVisitor<boolean>>({visitTrackBox: () => true}) === true
     export const shouldExclude = (box: Box): boolean => box.ephemeral || box.name === AuxSendBox.ClassName
-    export const keepsIdentity = (box: Box): boolean => box.resource === "preserved" || isModulatorBox(box)
+    export const keepsIdentity = (box: Box): boolean =>
+        box.resource === "preserved" || isModulatorBox(box) || isGrooveBox(box)
 
     // modulators live in rootBox.modulators, outside every unit; carried alone, never walked (their other assignments)
     export const withModulators = (boxes: ReadonlyArray<Box>): ReadonlyArray<Box> => {
@@ -45,15 +59,81 @@ export namespace TransferUtils {
                 modulators.push(modulator)
             })
         })
-        return [...boxes, ...modulators]
+        return withGrooves([...boxes, ...modulators])
+    }
+
+    // The project's global groove never travels, a paste maps it onto the target project's global groove
+    export const isGlobalGroove = (box: Box): boolean =>
+        isGrooveBox(box) && box.pointerHub.incoming().some(pointer => isInstanceOf(pointer.box, RootBox))
+
+    // grooves live in rootBox.grooves like modulators: carried alone, a stack with its entries and members
+    export const withGrooves = (boxes: ReadonlyArray<Box>): ReadonlyArray<Box> => {
+        const known = UUID.newSet<Box>(box => box.address.uuid)
+        boxes.forEach(box => known.add(box))
+        const added: Array<Box> = []
+        const carry = (groove: Box): void => {
+            if (!isGrooveBox(groove) || isGlobalGroove(groove) || known.hasKey(groove.address.uuid)) {return}
+            known.add(groove)
+            added.push(groove)
+            if (isInstanceOf(groove, GrooveStackBox)) {
+                groove.entries.pointerHub.incoming().forEach(({box: entry}) => {
+                    if (!known.hasKey(entry.address.uuid)) {
+                        known.add(entry)
+                        added.push(entry)
+                    }
+                    if (isInstanceOf(entry, GrooveStackEntryBox)) {
+                        entry.groove.targetVertex.ifSome(({box}) => carry(box))
+                    }
+                })
+            }
+        }
+        boxes.forEach(box => box.outgoingEdges().forEach(([pointer]) => {
+            if (pointer.pointerType === Pointers.Groove) {pointer.targetVertex.ifSome(({box}) => carry(box))}
+        }))
+        return added.length === 0 ? boxes : [...boxes, ...added]
+    }
+
+    // An entry of a stack the target already holds is already there
+    export const isEntryOfExistingStack = (box: Box, targetGraph: BoxGraph): boolean =>
+        isInstanceOf(box, GrooveStackEntryBox)
+        && box.stack.targetAddress.mapOr(address => targetGraph.findBox(address.uuid).nonEmpty(), false)
+
+    // Pasted grooves land behind the existing ones with unique labels, the global groove stays first. A used
+    // groove outside the list (from an old preset) joins it. Read from the graph, since grooves pasted in this
+    // transaction are not in the collection yet.
+    export const normalizeGrooves = (graph: BoxGraph): void => {
+        const rootBox = graph.boxes().find(box => isInstanceOf(box, RootBox))
+        if (!isDefined(rootBox) || !isInstanceOf(rootBox, RootBox)) {return}
+        const collection = rootBox.grooves.address
+        const members = graph.boxes()
+            .filter((box): box is GrooveBox => isGrooveBox(box) && box.isAttached())
+            .filter(box => box.collection.targetAddress.match({
+                none: () => box.pointerHub.incoming().length > 0,
+                some: address => address.equals(collection)
+            }))
+        members.forEach(box => {
+            if (box.collection.targetAddress.isEmpty()) {box.collection.refer(rootBox.grooves)}
+        })
+        members
+            .sort((a, b) => Number(isGlobalGroove(b)) - Number(isGlobalGroove(a))
+                || a.index.getValue() - b.index.getValue()
+                || UUID.Comparator(a.address.uuid, b.address.uuid))
+        const taken: Array<string> = []
+        members.forEach((groove, index) => {
+            if (groove.index.getValue() !== index) {groove.index.setValue(index)}
+            const label = groove.label.getValue()
+            const unique = taken.includes(label) ? Strings.getUniqueName(taken, label) : label
+            taken.push(unique)
+            if (unique !== label) {groove.label.setValue(unique)}
+        })
     }
 
     export const deviceDependencies = (root: Box, exclude: Predicate<Box> = () => false): ReadonlyArray<Box> =>
-        withModulators(Array.from(root.graph.dependenciesOf([root], {
+        withModulators([root, ...root.graph.dependenciesOf([root], {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox: box => exclude(box) || shouldExclude(box) || excludeTimelinePredicate(box) || box instanceof AudioUnitBox
-        }).boxes).filter(box => box !== root))
+        }).boxes]).filter(box => box !== root)
 
     export const mapUuids = (boxes: ReadonlyArray<Box>): SortedSet<UUID.Bytes, UUIDMapper> => {
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
@@ -73,11 +153,21 @@ export namespace TransferUtils {
             targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
         })
 
-    export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> =>
-        pointer.pointerType === Pointers.ModulatorCollection
-            ? Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)))
-                .map(rootBox => rootBox.modulators.address)
-            : Option.None
+    // Reached for a target the copy did not carry: modulators and grooves join the target root, a groove that
+    // stayed behind (the global one) becomes the target's global groove
+    export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> => {
+        const rootBox = Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
+        switch (pointer.pointerType) {
+            case Pointers.ModulatorCollection:
+                return rootBox.map(rootBox => rootBox.modulators.address)
+            case Pointers.GrooveCollection:
+                return rootBox.map(rootBox => rootBox.grooves.address)
+            case Pointers.Groove:
+                return rootBox.flatMap(rootBox => rootBox.groove.targetAddress)
+            default:
+                return Option.None
+        }
+    }
 
     export const generateMap = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                 dependencies: ReadonlyArray<Box>,
@@ -119,8 +209,11 @@ export namespace TransferUtils {
         dependencies.forEach((source: Box) => {
             if (targetBoxGraph.findBox(source.address.uuid).isEmpty()) {return}
             if (source.resource === "preserved") {existingPreservedUuids.add(source.address.uuid)}
-            if (isModulatorBox(source)) {existingModulatorUuids.add(source.address.uuid)}
+            if (isModulatorBox(source) || isGrooveBox(source)) {existingModulatorUuids.add(source.address.uuid)}
         })
+        // decided before copying: a stack copied in this very pass would otherwise read as already there
+        const existingStackEntries = new Set<Box>(
+            dependencies.filter(source => isEntryOfExistingStack(source, targetBoxGraph)))
         const isOwnedByExistingPreserved = (box: Box): boolean => {
             for (const [pointer, targetAddress] of box.outgoingEdges()) {
                 if (pointer.mandatory && !targetAddress.isBox()) {
@@ -130,10 +223,11 @@ export namespace TransferUtils {
             return false
         }
         PointerField.decodeWith({
-            map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
+            map: (pointer: PointerField, address: Option<Address>): Option<Address> =>
                 address.flatMap(addr => uuidMap.opt(addr.uuid).match({
                     some: ({target}) => Option.wrap(addr.moveTo(target)),
-                    none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
+                    none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty()
+                        ? Option.wrap(addr) : mapModulatorCollection(pointer, targetBoxGraph)
                 }))
         }, () => {
             audioUnitBoxes.forEach((source: AudioUnitBox) => {
@@ -144,6 +238,7 @@ export namespace TransferUtils {
             dependencies.forEach((source: Box) => {
                 if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
                 if (existingModulatorUuids.hasKey(source.address.uuid)) {return}
+                if (existingStackEntries.has(source)) {return}
                 if (isOwnedByExistingPreserved(source)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
                 const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target

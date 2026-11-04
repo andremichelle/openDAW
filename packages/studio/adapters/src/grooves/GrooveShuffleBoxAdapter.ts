@@ -1,72 +1,27 @@
-import {Address} from "@opendaw/lib-box"
 import {GrooveShuffleBox} from "@opendaw/studio-boxes"
-import {int, moebiusEase, squashUnit, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
-import {GroovePattern, GroovePatternFunction, ppqn, PPQN} from "@opendaw/lib-dsp"
-import {GrooveAdapter} from "./GrooveBoxAdapter"
+import {int, moebiusEase, squashUnit} from "@opendaw/lib-std"
+import {GrooveFunction} from "@opendaw/lib-dsp"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {ParameterAdapterSet} from "../ParameterAdapterSet"
+import {GrooveKind} from "./GrooveBoxAdapter"
+import {GrooveDurations} from "./GrooveDurations"
+import {CellGrooveBoxAdapter} from "./CellGrooveBoxAdapter"
 
-export class GrooveShuffleBoxAdapter implements GrooveAdapter {
-    static readonly Durations: ReadonlyArray<[int, int]> = [
-        [1, 8], [1, 4], [1, 4], [1, 2], [1, 1], [2, 1], [4, 1], [8, 1], [16, 1]
-    ]
+export class GrooveShuffleBoxAdapter extends CellGrooveBoxAdapter<GrooveShuffleBox> {
+    static readonly Durations: ReadonlyArray<[int, int]> = GrooveDurations.Signatures
+    static readonly DurationPPQNs: ReadonlyArray<int> = GrooveDurations.PPQNs
+    static readonly DurationStrings: ReadonlyArray<string> = GrooveDurations.Labels
 
-    static readonly DurationPPQNs: ReadonlyArray<int> =
-        GrooveShuffleBoxAdapter.Durations.map(([n, d]) => PPQN.fromSignature(n, d))
-    static readonly DurationStrings: ReadonlyArray<string> =
-        GrooveShuffleBoxAdapter.Durations.map(([n, d]) => (`${n}/${d}`))
-
-    readonly type = "groove-adapter"
-
-    readonly #terminator: Terminator = new Terminator()
-
-    readonly #context: BoxAdaptersContext
-    readonly #box: GrooveShuffleBox
-
-    readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
 
-    readonly #groove: GroovePattern = new GroovePattern({
-        duration: (): ppqn => this.#duration,
-        fx: x => moebiusEase(x, this.#amount),
-        fy: y => moebiusEase(y, 1.0 - this.#amount)
-    } satisfies GroovePatternFunction)
-
-    #amount: number = 0.0
-    #duration: ppqn = PPQN.SemiQuaver * 2
-
     constructor(context: BoxAdaptersContext, box: GrooveShuffleBox) {
-        this.#context = context
-        this.#box = box
-
-        this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        this.namedParameter = this.#wrapParameters(box)
-        this.#terminator.ownAll(
-            this.namedParameter.duration.catchupAndSubscribe(owner => this.#duration = owner.getValue()),
-            this.namedParameter.amount.catchupAndSubscribe(owner => this.#amount = squashUnit(owner.getValue(), 0.01))
-        )
+        super(context, box)
+        this.namedParameter = {amount: this.amountParameter, duration: this.durationParameter} as const
     }
 
-    unwarp(position: ppqn): ppqn {return this.#groove.unwarp(position)}
-    warp(position: ppqn): ppqn {return this.#groove.warp(position)}
+    get kind(): GrooveKind {return "shuffle"}
 
-    get box(): GrooveShuffleBox {return this.#box}
-    get uuid(): UUID.Bytes {return this.#box.address.uuid}
-    get address(): Address {return this.#box.address}
-
-    terminate(): void {this.#terminator.terminate()}
-
-    #wrapParameters(box: GrooveShuffleBox) {
-        return {
-            duration: this.#parametric.createParameter(
-                box.duration,
-                ValueMapping.values(GrooveShuffleBoxAdapter.DurationPPQNs),
-                StringMapping.values("", GrooveShuffleBoxAdapter.DurationPPQNs, GrooveShuffleBoxAdapter.DurationStrings),
-                "Duration"),
-            amount: this.#parametric.createParameter(
-                box.amount,
-                ValueMapping.unipolar(),
-                StringMapping.percent({fractionDigits: 0}), "Amount")
-        } as const
+    protected createFunction(): GrooveFunction {
+        const amount = squashUnit(this.box.amount.getValue(), 0.01)
+        return {fx: x => moebiusEase(x, amount), fy: y => moebiusEase(y, 1.0 - amount)}
     }
 }

@@ -13,6 +13,8 @@ import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
+import {GroovesList} from "@/ui/grooves/GroovesList.tsx"
+import {panelTab, PanelTab, PanelTabs} from "@/ui/grooves/PanelTabs.tsx"
 
 const className = Html.adoptStyleSheet(css, "ModulationPanel")
 
@@ -34,7 +36,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             return lifecycle.own(installScrollbars(host))
         }}>
             <h5 className="head modulators">
-                <span>Modulators</span>
+                <PanelTabs lifecycle={lifecycle} active="modulators"/>
                 <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent =>
                     parent.addMenuItem(...Modulators.Kinds.map(kind => MenuItem.default({label: kind.label})
                         .setTriggerProcedure(() => editing.modify(() => kind.create(project))))))}
@@ -66,8 +68,20 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
                 const doomed = modulatorSelection.selected().map(adapter => adapter.box)
                 modulatorSelection.deselectAll()
                 editing.modify(() => Modulators.deleteAll(project, doomed))
-            }))}>{scroller}</div>
+            }))}/>
     )
+    const grooves = lifecycle.own(new Terminator())
+    const showTab = (tab: PanelTab) => {
+        grooves.terminate()
+        Html.empty(element)
+        if (tab === "modulators") {
+            element.append(scroller)
+        } else {
+            modulatorSelection.deselectAll()
+            element.append(GroovesList({lifecycle: grooves, service}))
+        }
+    }
+    lifecycle.own(panelTab.catchupAndSubscribe(owner => showTab(owner.getValue())))
     const editors = UUID.newSet<{uuid: UUID.Bytes, element: HTMLElement}>(entry => entry.uuid)
     /// The editor's own element is `display: contents`, so the scroll must target the row that has a box.
     const revealRequested = () => ModulatorReveal.requested.ifSome(uuid => editors.opt(uuid)

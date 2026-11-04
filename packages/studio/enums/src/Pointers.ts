@@ -68,4 +68,6 @@ export enum Pointers {
     ScriptBuffer,
     ScriptBufferChunk,
     MasteringHost,
+    GrooveCollection,
+    GrooveStackEntries,
 }

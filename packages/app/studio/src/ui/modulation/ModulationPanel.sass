@@ -57,6 +57,22 @@ component
         pointer-events: none
         background: linear-gradient(to bottom, var(--color-panel-background), transparent)
 
+      .tabs
+        display: grid
+        grid-auto-flow: column
+        column-gap: 1em
+
+        > .tab
+          cursor: pointer
+          color: var(--color-dark)
+
+          &:hover
+            color: var(--color-gray)
+
+          &.active
+            cursor: default
+            color: var(--color-cream)
+
       &.modulators
         grid-column: 1 / -2
         color: var(--color-cream)

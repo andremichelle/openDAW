@@ -27,6 +27,11 @@ export const RootBox: BoxSchema<Pointers> = {
                 name: "modulators",
                 pointerRules: {accepts: [Pointers.ModulatorCollection], mandatory: false}
             },
+            12: {
+                type: "field",
+                name: "grooves",
+                pointerRules: {accepts: [Pointers.GrooveCollection], mandatory: false}
+            },
             20: {
                 type: "field",
                 name: "audio-units",

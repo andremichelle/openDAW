@@ -10,8 +10,8 @@ import {BoxAdapterCollection} from "./BoxAdapterCollection"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
-import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
 import {isModulatorBoxAdapter, ModulatorBoxAdapter} from "./modulation/ModulatorBoxAdapter"
+import {GrooveAdapter} from "./grooves/GrooveBoxAdapter"
 import {PianoModeAdapter} from "./PianoModeAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "./LabeledAudioOutputsOwner"
 
@@ -22,6 +22,7 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
     readonly #audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>
     readonly #audioBusses: BoxAdapterCollection<AudioBusBoxAdapter>
     readonly #modulators: IndexedBoxAdapterCollection<ModulatorBoxAdapter, Pointers.ModulatorCollection>
+    readonly #grooves: IndexedBoxAdapterCollection<GrooveAdapter, Pointers.GrooveCollection>
     readonly #pianoMode: PianoModeAdapter
 
     constructor(context: BoxAdaptersContext, box: RootBox) {
@@ -37,6 +38,9 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
         this.#modulators = IndexedBoxAdapterCollection.create(this.#box.modulators,
             box => this.#context.boxAdapters.adapterFor(box, isModulatorBoxAdapter), Pointers.ModulatorCollection)
 
+        this.#grooves = IndexedBoxAdapterCollection.create(this.#box.grooves,
+            box => this.#context.boxAdapters.adapterFor(box, GrooveAdapter.checkType), Pointers.GrooveCollection)
+
         this.#pianoMode = new PianoModeAdapter(this.#box.pianoMode)
     }
 
@@ -48,14 +52,15 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
     get modulators(): IndexedBoxAdapterCollection<ModulatorBoxAdapter, Pointers.ModulatorCollection> {
         return this.#modulators
     }
+    get grooves(): IndexedBoxAdapterCollection<GrooveAdapter, Pointers.GrooveCollection> {return this.#grooves}
     get clips(): ReadonlyArray<AnyClipBoxAdapter> {
         return this.#audioUnits.adapters()
             .flatMap(adapter => adapter.tracks.collection.adapters())
             .flatMap(track => track.clips.collection.adapters())
     }
-    get groove(): GrooveShuffleBoxAdapter {
+    get groove(): GrooveAdapter {
         return this.#context.boxAdapters
-            .adapterFor(this.#box.groove.targetVertex.unwrap("no groove").box, GrooveShuffleBoxAdapter)
+            .adapterFor(this.#box.groove.targetVertex.unwrap("no groove").box, GrooveAdapter.checkType)
     }
     get timeline(): TimelineBoxAdapter {
         return this.#context.boxAdapters

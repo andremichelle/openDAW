@@ -73,8 +73,8 @@ export namespace PresetEncoder {
                 if (pointer.pointerType === Pointers.ModulatorCollection) {
                     return Option.wrap(rootBox.modulators.address)
                 }
-                return address.flatMap(addr =>
-                    boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
+                return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
+                    ? Option.wrap(addr) : TransferUtils.mapModulatorCollection(pointer, boxGraph))
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...dependencies], uuidMap, boxGraph))
         boxGraph.endTransaction()
@@ -111,11 +111,11 @@ export namespace PresetEncoder {
                 || TransferUtils.excludeTimelinePredicate(box)
                 || box instanceof AudioUnitBox
             const effectSet = new Set<Box>(effects)
-            const dependencies = TransferUtils.withModulators(Array.from(sourceGraph.dependenciesOf(effects, {
+            const dependencies = TransferUtils.withModulators([...effects, ...sourceGraph.dependenciesOf(effects, {
                 alwaysFollowMandatory: true,
                 stopAtResources: true,
                 excludeBox
-            }).boxes).filter(box => !effectSet.has(box)))
+            }).boxes]).filter(box => !effectSet.has(box))
             const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
             uuidMap.addMany([
                 ...effects.map(box => ({source: box.address.uuid, target: UUID.generate()})),
@@ -146,8 +146,8 @@ export namespace PresetEncoder {
                     if (pointer.pointerType === Pointers.ModulatorCollection) {
                         return Option.wrap(rootBox.modulators.address)
                     }
-                    return address.flatMap(addr =>
-                        boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
+                    return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
+                        ? Option.wrap(addr) : TransferUtils.mapModulatorCollection(pointer, boxGraph))
                 }
             }, () => {
                 effects.forEach((source, i) => {

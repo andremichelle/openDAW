@@ -34,7 +34,9 @@ import {
     EffectDeviceBox,
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
+    isGrooveBox,
     isModulatorBox,
+    TransferUtils,
     MidiEffectDeviceAdapter,
     UnionBoxTypes
 } from "@opendaw/studio-adapters"
@@ -132,7 +134,8 @@ export namespace DevicesClipboard {
                 alwaysFollowMandatory: true,
                 excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
             }).boxes).filter(dep => dep.resource === "preserved"))
-            return [...owned, ...modulators, ...mandatoryDeps, ...preserved]
+            return TransferUtils.withGrooves([box, ...owned, ...modulators, ...mandatoryDeps, ...preserved])
+                .filter(dependency => dependency !== box)
         })
     }
 
@@ -167,8 +170,12 @@ export namespace DevicesClipboard {
         || isInstanceOf(box, ValueEventBox)
         || isInstanceOf(box, ValueEventCurveBox)
 
+    // Modulators and grooves keep their uuid, so pasting into the project they came from finds them
+    export const keepUuid = (box: Box): boolean => isModulatorBox(box) || isGrooveBox(box)
+
     export const excludeExistingModulator = (box: Box, boxGraph: BoxGraph): boolean =>
-        isModulatorBox(box) && boxGraph.findBox(box.address.uuid).nonEmpty()
+        (keepUuid(box) && boxGraph.findBox(box.address.uuid).nonEmpty())
+        || TransferUtils.isEntryOfExistingStack(box, boxGraph)
 
     // Only reached for a pointer the uuid remap did not answer, i.e. a target outside the pasted set. A `source`
     // whose modulator is already in this graph keeps its address (same project). A `collection` belongs to a
@@ -181,6 +188,13 @@ export namespace DevicesClipboard {
         }
         if (pointer.pointerType === Pointers.ModulatorCollection) {
             return findRootBox(boxGraph).map(rootBox => rootBox.modulators.address)
+        }
+        if (pointer.pointerType === Pointers.Groove) {
+            return address.flatMap(target => boxGraph.findVertex(target).map(() => target))
+                .match({some: target => Option.wrap(target), none: () => TransferUtils.mapModulatorCollection(pointer, boxGraph)})
+        }
+        if (pointer.pointerType === Pointers.GrooveCollection) {
+            return TransferUtils.mapModulatorCollection(pointer, boxGraph)
         }
         return Option.None
     }
@@ -428,7 +442,7 @@ export namespace DevicesClipboard {
                                 }
                                 return mapModulationPointer(pointer, address, boxGraph)
                             },
-                            keepUuid: isModulatorBox,
+                            keepUuid,
                             excludeBox: box => {
                                 if (excludeExistingModulator(box, boxGraph)) {return true}
                                 // A ONE-SIDED host (a composite entry) takes only ONE chain kind. An effect of the
@@ -445,6 +459,7 @@ export namespace DevicesClipboard {
                             }
                         }
                     )
+                    TransferUtils.normalizeGrooves(boxGraph)
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
                     reindexPastedTopLevelEffects(boxes,
                         host.audioEffectsField.map(field => field.address),

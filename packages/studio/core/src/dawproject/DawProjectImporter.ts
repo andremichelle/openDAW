@@ -118,7 +118,7 @@ export namespace DawProjectImport {
         const isoString = new Date().toISOString()
         console.debug(`New Project imported on ${isoString}`)
         const grooveShuffleBox = GrooveShuffleBox.create(boxGraph, UUID.generate(),
-            box => box.label.setValue("Groove Shuffle"))
+            box => box.label.setValue("Global Shuffle"))
         const timelineBox = TimelineBox.create(boxGraph, UUID.generate(),
             box => ifDefined(schema.transport, transport => readTransport(transport, box)))
         const rootBox = RootBox.create(boxGraph, UUID.generate(), box => {
@@ -126,6 +126,7 @@ export namespace DawProjectImport {
             box.created.setValue(isoString)
             box.timeline.refer(timelineBox.root)
         })
+        grooveShuffleBox.collection.refer(rootBox.grooves)
         const userInterfaceBox = UserInterfaceBox.create(boxGraph, UUID.generate(), box => box.root.refer(rootBox.users))
 
         // <---

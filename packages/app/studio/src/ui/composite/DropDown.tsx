@@ -1,5 +1,5 @@
 import css from "./DropDown.sass?inline"
-import {Func, Lifecycle, MutableObservableValue, Provider} from "@opendaw/lib-std"
+import {Func, Lifecycle, MutableObservableValue, Predicate, Procedure, Provider} from "@opendaw/lib-std"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {MenuItem} from "@opendaw/studio-core"
@@ -17,9 +17,13 @@ type Construct<T> = {
     mapping: Func<T, string>
     appearance?: Appearance
     width?: string
+    // further items below the values, e.g. actions that are no value
+    extra?: Procedure<MenuItem>
+    // values listed but not choosable
+    selectable?: Predicate<T>
 }
 
-export const DropDown = <T, >({lifecycle, owner, provider, mapping, appearance, width}: Construct<T>) => {
+export const DropDown = <T, >({lifecycle, owner, provider, mapping, appearance, width, extra, selectable}: Construct<T>) => {
     const injectLabel = Inject.value(mapping(owner.getValue()))
     lifecycle.own(owner.subscribe(owner => {injectLabel.value = mapping(owner.getValue())}))
     return (
@@ -28,9 +32,11 @@ export const DropDown = <T, >({lifecycle, owner, provider, mapping, appearance, 
                 for (const value of provider()) {
                     parent.addMenuItem(MenuItem.default({
                         label: mapping(value),
-                        checked: value === owner.getValue()
+                        checked: value === owner.getValue(),
+                        selectable: selectable?.(value) ?? true
                     }).setTriggerProcedure(() => owner.setValue(value)))
                 }
+                extra?.(parent)
             })} appearance={appearance ?? {framed: true, color: Colors.dark, activeColor: Colors.gray}}>
                 <label style={{minWidth: width ?? "unset", maxWidth: "100%"}}>
                     <span className="text">{injectLabel}</span>

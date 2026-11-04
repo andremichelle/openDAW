@@ -175,6 +175,9 @@ export type EngineExports = {
     // whose TS counterpart tunes against it (the Vaporisateur) pulls it per note-on.
     host_base_frequency: () => number
     host_bar_at: (pulse: number, outPtr: number) => void
+    host_observe_groove: (pathPtr: number, pathLen: number) => number
+    host_groove_warp: (slot: number, pulse: number) => number
+    host_groove_unwarp: (slot: number, pulse: number) => number
     host_set_latency: (frames: number) => void
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number

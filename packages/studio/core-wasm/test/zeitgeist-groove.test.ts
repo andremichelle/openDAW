@@ -1,29 +1,18 @@
-// Zeitgeist groove parity at the wasm-binary level. The groove parameters live on the CONNECTED
-// GrooveShuffleBox (the device box's `groove` pointer at [10]), so the device declares field observations
-// THROUGH the pointer ([10, 10] amount / [10, 11] duration) instead of `bind_parameter` bindings — the
-// engine resolves the pointer at the path head and delivers the target box's values (catch-up + live
-// edits + repoint). Automation needs no mirror: the studio's ZeitgeistDeviceEditor creates both groove
-// knobs with `disableAutomation: true`, so no Value track can target the groove fields. Verified here:
-// the observation paths, `map_parameter` parity against the GrooveShuffleBoxAdapter value mappings (the
-// source of truth), the warp `process_events` applies — the upstream is pulled over the UN-warped range
-// and each event's position is warped back, exactly the TS `ZeitgeistDeviceProcessor.processNotes` +
-// `GroovePattern` composition, live-updated by `field_changed` deliveries (amount 0.5 is the
-// straight/identity setting) — and END-TO-END: a groove-amount edit synced into the RUNNING full engine
-// moves a note's rendered onset to the GroovePattern oracle's position.
+// Zeitgeist groove parity at the wasm-binary level. The groove lives in the engine's groove registry: the
+// device observes its `groove` pointer ([10]) once and warps through the `host_groove_warp` /
+// `host_groove_unwarp` imports. Verified here: the observation, the pull-range and warp contract of
+// `process_events` against stub imports, and END-TO-END in the running full engine: a note's rendered onset
+// follows the TS groove adapters for a shuffle (live amount edit), a power groove, a stack and no groove.
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {clamp, isDefined, moebiusEase, panic, squashUnit, UUID} from "@opendaw/lib-std"
-import {GroovePattern, ppqn} from "@opendaw/lib-dsp"
-import {BoxGraph} from "@opendaw/lib-box"
+import {clamp, isDefined, moebiusEase, squashUnit, UUID} from "@opendaw/lib-std"
+import {Groove, GrooveChain, GrooveCurves, GroovePattern, ppqn} from "@opendaw/lib-dsp"
 import {
-    ApparatDeviceBox, AudioUnitBox, GrooveShuffleBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox,
-    TrackBox, ZeitgeistDeviceBox
+    ApparatDeviceBox, AudioUnitBox, GrooveFunctionBox, GrooveShuffleBox, GrooveStackBox, GrooveStackEntryBox,
+    NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {
-    AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, GrooveShuffleBoxAdapter,
-    ParameterFieldAdapters, ProjectSkeleton, ScriptCompiler, TrackType
-} from "@opendaw/studio-adapters"
+import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
 import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../src/device-linker"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
@@ -32,16 +21,12 @@ const PLUGINS = path.resolve(__dirname, "../dist/wasm/plugins")
 const SAMPLE_RATE = 48000
 const PAGE = 65536
 const RECORD_SIZE = 40 // abi::EventRecord (position f64, offset/kind/id/pitch u32, velocity/cent f32, duration f64)
-const FIELD_KIND_INT = 0
-const FIELD_KIND_FLOAT = 1
 const DEVICE_KIND_MIDI_EFFECT = 2
 const INPUT_POSITIONS = [0.0, 240.0, 480.0, 720.0]
 
 const alignUp = (value: number, alignment: number): number => Math.ceil(value / alignment) * alignment
 
 type ZeitgeistExports = DeviceExports & {
-    field_changed: (statePtr: number, id: number, kind: number, bits: number, len: number) => void
-    map_parameter: (id: number, unit: number) => number
     process_events: (from: number, to: number, flags: number, statePtr: number, outPtr: number, max: number) => number
 }
 
@@ -52,9 +37,11 @@ type ZeitgeistDevice = {
     outPtr: number
     observations: ReadonlyArray<string>
     pulledRanges: Array<[number, number]>
+    slots: Array<number>
 }
 
-const loadZeitgeist = (): ZeitgeistDevice => {
+// The device against stub imports: slot 7 for its groove, warp/unwarp by the given groove
+const loadZeitgeist = (groove: Groove): ZeitgeistDevice => {
     const module = new WebAssembly.Module(readFileSync(path.join(PLUGINS, "device_zeitgeist.wasm")))
     const {memorySize, tableSize} = parseDylink(module)
     const memory = new WebAssembly.Memory({initial: 256})
@@ -64,18 +51,24 @@ const loadZeitgeist = (): ZeitgeistDevice => {
     const stackTop = stackBase + DEVICE_STACK_SIZE
     const observations: Array<string> = []
     const pulledRanges: Array<[number, number]> = []
+    const slots: Array<number> = []
     const env: Record<string, unknown> = {
         memory, __indirect_function_table: table,
         __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
         __table_base: new WebAssembly.Global({value: "i32", mutable: false}, 0),
         __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackTop),
-        host_observe_field: (pathPtr: number, pathLen: number): number => {
-            const keys = Array.from(new Uint16Array(memory.buffer, pathPtr, pathLen))
-            observations.push(keys.join(","))
-            return observations.length - 1
+        host_observe_groove: (pathPtr: number, pathLen: number): number => {
+            observations.push(Array.from(new Uint16Array(memory.buffer, pathPtr, pathLen)).join(","))
+            return 7
         },
-        // The upstream pull: hand back the fixed note-on stream (positions within the requested range),
-        // recording the requested (un-warped) range so the pull-range contract is checkable.
+        host_groove_warp: (slot: number, pulse: number): number => {
+            slots.push(slot)
+            return groove.warp(pulse)
+        },
+        host_groove_unwarp: (slot: number, pulse: number): number => {
+            slots.push(slot)
+            return groove.unwarp(pulse)
+        },
         host_pull_events: (from: number, to: number, _flags: number, outPtr: number, max: number): number => {
             pulledRanges.push([from, to])
             const view = new DataView(memory.buffer)
@@ -83,12 +76,12 @@ const loadZeitgeist = (): ZeitgeistDevice => {
             positions.slice(0, max).forEach((position, index) => {
                 const base = outPtr + index * RECORD_SIZE
                 view.setFloat64(base, position, true)
-                view.setUint32(base + 8, 0, true)      // offset
-                view.setUint32(base + 12, 0, true)     // kind = EVENT_NOTE_ON
-                view.setUint32(base + 16, index, true) // id
-                view.setUint32(base + 20, 60, true)    // pitch
-                view.setFloat32(base + 24, 0.8, true)  // velocity
-                view.setFloat32(base + 28, 0.0, true)  // cent
+                view.setUint32(base + 8, 0, true)
+                view.setUint32(base + 12, 0, true)
+                view.setUint32(base + 16, index, true)
+                view.setUint32(base + 20, 60, true)
+                view.setFloat32(base + 24, 0.8, true)
+                view.setFloat32(base + 28, 0.0, true)
                 view.setFloat64(base + 32, 240.0, true)
             })
             return positions.length
@@ -109,134 +102,48 @@ const loadZeitgeist = (): ZeitgeistDevice => {
     const havePages = memory.buffer.byteLength / PAGE
     if (needed / PAGE > havePages) {memory.grow(needed / PAGE - havePages)}
     exports.init?.(statePtr, SAMPLE_RATE)
-    return {exports, memory, statePtr, outPtr, observations, pulledRanges}
+    return {exports, memory, statePtr, outPtr, observations, pulledRanges, slots}
 }
 
-const floatBits = (value: number): number => {
-    const scratch = new DataView(new ArrayBuffer(4))
-    scratch.setFloat32(0, value, true)
-    return scratch.getUint32(0, true)
-}
-
-// The TS reference groove (GrooveShuffleBoxAdapter's GroovePattern parameterization): the oracle for the
-// wasm warp. `amount` passes Math.fround, since the box field (and the wire to the device) is a float32.
-const referenceGroove = (amount: number, duration: ppqn): GroovePattern => {
+// The TS reference grooves: the oracles for the engine. Amounts pass Math.fround like the float32 box field.
+const shuffleGroove = (amount: number, duration: ppqn): GroovePattern => {
     const h = squashUnit(Math.fround(amount), 0.01)
     return new GroovePattern({duration: () => duration, fx: x => moebiusEase(x, h), fy: y => moebiusEase(y, 1.0 - h)})
 }
 
-const readPositions = (device: ZeitgeistDevice, count: number): ReadonlyArray<number> => {
-    const view = new DataView(device.memory.buffer)
-    return Array.from({length: count}, (_, index) => view.getFloat64(device.outPtr + index * RECORD_SIZE, true))
-}
+const powerGroove = (amount: number, duration: ppqn): GroovePattern =>
+    new GroovePattern({duration: () => duration, ...GrooveCurves.blend(GrooveCurves.Power, Math.fround(amount))})
 
 const processRange = (device: ZeitgeistDevice, from: number, to: number): ReadonlyArray<number> => {
     const written = device.exports.process_events(from, to, 0, device.statePtr, device.outPtr, 16)
-    return readPositions(device, written)
+    const view = new DataView(device.memory.buffer)
+    return Array.from({length: written}, (_, index) => view.getFloat64(device.outPtr + index * RECORD_SIZE, true))
 }
 
-const collectGrooveParameters = (): ReadonlyArray<AutomatableParameterFieldAdapter> => {
-    class Recorder extends ParameterFieldAdapters {
-        readonly recorded: Array<AutomatableParameterFieldAdapter> = []
-        register(adapter: AutomatableParameterFieldAdapter) {
-            this.recorded.push(adapter)
-            return super.register(adapter)
-        }
-    }
-    const {boxGraph, mandatoryBoxes: {rootBox}} = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
-    const recorder = new Recorder()
-    const context: BoxAdaptersContext = {
-        get boxGraph() {return boxGraph as unknown as BoxGraph},
-        get boxAdapters() {return boxAdapters},
-        get sampleManager() {return panic("sampleManager unused")},
-        get soundfontManager() {return panic("soundfontManager unused")},
-        get rootBoxAdapter() {return panic("rootBoxAdapter unused")},
-        get timelineBoxAdapter() {return panic("timelineBoxAdapter unused")},
-        get liveStreamReceiver() {return panic("liveStreamReceiver unused")},
-        get liveStreamBroadcaster() {return panic("liveStreamBroadcaster unused")},
-        get clipSequencing() {return panic("clipSequencing unused")},
-        get parameterFieldAdapters() {return recorder},
-        get tempoMap() {return panic("tempoMap unused")},
-        get isMainThread() {return false},
-        get isAudioContext() {return true},
-        terminate: () => {}
-    }
-    const boxAdapters = new BoxAdapters(context)
-    const grooveBox = rootBox.groove.targetVertex.unwrap("rootBox.groove").box as GrooveShuffleBox
-    const adapter = new GrooveShuffleBoxAdapter(context, grooveBox)
-    const recorded = recorder.recorded.slice()
-    adapter.terminate()
-    return recorded
-}
-
-describe("zeitgeist groove (wasm device vs TS GrooveShuffle)", () => {
-    it("declares the groove observations through the device's groove pointer", () => {
-        const device = loadZeitgeist()
+describe("zeitgeist groove (wasm device vs TS grooves)", () => {
+    it("observes its groove pointer once", () => {
+        const device = loadZeitgeist(Groove.Identity)
         expect(device.exports.kind()).toBe(DEVICE_KIND_MIDI_EFFECT)
         expect(device.exports.state_size(SAMPLE_RATE)).toBeGreaterThan(0)
-        expect(device.observations).toEqual(["10,10", "10,11"])
+        expect(device.observations).toEqual(["10"])
     })
 
-    it("map_parameter mirrors the GrooveShuffleBoxAdapter value mappings", () => {
-        const device = loadZeitgeist()
-        const parameters = collectGrooveParameters()
-        const byPath = new Map(parameters.map(parameter => [Array.from(parameter.address.fieldKeys).join(","), parameter]))
-        const amount = byPath.get("10") ?? panic("no amount parameter")
-        const duration = byPath.get("11") ?? panic("no duration parameter")
-        for (const unit of [0.0, 0.25, 0.5, 0.75, 1.0]) {
-            expect(device.exports.map_parameter(0, unit)).toBeCloseTo(amount.valueMapping.y(unit) as number, 6)
-            expect(device.exports.map_parameter(1, unit)).toBe(duration.valueMapping.y(unit) as number)
-        }
-    })
-
-    it("seeds the GrooveShuffleBox schema defaults and pulls the un-warped range", () => {
-        const device = loadZeitgeist()
-        const groove = referenceGroove(0.6, 480)
+    it("pulls the un-warped range and warps every event through its slot", () => {
+        const groove = shuffleGroove(0.6, 480)
+        const device = loadZeitgeist(groove)
         const positions = processRange(device, 0.0, 960.0)
         expect(positions).toHaveLength(INPUT_POSITIONS.length)
         positions.forEach((position, index) =>
-            expect(position, `default groove @ ${INPUT_POSITIONS[index]}`)
-                .toBeCloseTo(clamp(groove.warp(INPUT_POSITIONS[index]), 0.0, 960.0), 9))
+            expect(position).toBeCloseTo(clamp(groove.warp(INPUT_POSITIONS[index]), 0.0, 960.0), 9))
         const [from, to] = device.pulledRanges[0]
         expect(from).toBeCloseTo(groove.unwarp(0.0), 9)
         expect(to).toBeCloseTo(groove.unwarp(960.0), 9)
+        expect(new Set(device.slots)).toEqual(new Set([7]))
     })
 
-    it("a delivered amount 0.5 straightens the stream (identity) and re-delivery re-swings it", () => {
-        const device = loadZeitgeist()
-        device.exports.field_changed(device.statePtr, 0, FIELD_KIND_FLOAT, floatBits(0.5), 0)
-        expect(processRange(device, 0.0, 960.0)).toEqual(INPUT_POSITIONS)
-        // the amount whose squash equals the previously hardcoded h = 0.65: moebius(0.5, 0.65) * 480 = 312
-        const legacyAmount = (0.65 - 0.01) / 0.98
-        device.exports.field_changed(device.statePtr, 0, FIELD_KIND_FLOAT, floatBits(legacyAmount), 0)
-        const groove = referenceGroove(legacyAmount, 480)
-        const positions = processRange(device, 0.0, 960.0)
-        positions.forEach((position, index) =>
-            expect(position, `legacy swing @ ${INPUT_POSITIONS[index]}`)
-                .toBeCloseTo(groove.warp(INPUT_POSITIONS[index]), 9))
-        expect(positions[1]).toBeCloseTo(312.0, 4)
-        expect(positions[3]).toBeCloseTo(792.0, 4)
-    })
-
-    it("a delivered duration re-cells the warp and a non-positive one is ignored", () => {
-        const device = loadZeitgeist()
-        device.exports.field_changed(device.statePtr, 1, FIELD_KIND_INT, 960, 0)
-        const groove = referenceGroove(0.6, 960)
-        const positions = processRange(device, 0.0, 960.0)
-        positions.forEach((position, index) =>
-            expect(position, `960 cell @ ${INPUT_POSITIONS[index]}`)
-                .toBeCloseTo(groove.warp(INPUT_POSITIONS[index]), 9))
-        device.exports.field_changed(device.statePtr, 1, FIELD_KIND_INT, 0, 0)
-        const unchanged = processRange(device, 0.0, 960.0)
-        unchanged.forEach((position, index) => expect(position).toBeCloseTo(positions[index], 9))
-    })
-
-    it("a live groove-amount edit reaches the running engine across the pointer", async () => {
+    it("follows the groove in the running engine for every kind", async () => {
         // FULL engine, real sync: an Apparat instrument outputs DC 0.3 while a note is held, so the note's
-        // rendered ONSET sample is measurable. One note at the off-beat (240 pulses) behind a Zeitgeist:
-        // the default groove (amount 0.6, duration 480) swings it to warp(240) ≈ 287 pulses; a LIVE edit of
-        // the CONNECTED GrooveShuffleBox's amount to 0.5 (the identity) must move the onset back to 240 —
-        // the engine delivers the target box's field edit through the device's `groove` pointer.
+        // rendered ONSET sample is measurable. One note at the off-beat (240 pulses) behind a Zeitgeist.
         const DC_CODE = `class Processor {
             voices = []
             noteOn(pitch, velocity, cent, id) { this.voices.push(id) }
@@ -248,6 +155,7 @@ describe("zeitgeist groove (wasm device vs TS GrooveShuffle)", () => {
         }`
         const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
             ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
+        const globalShuffle = rootBox.groove.targetVertex.unwrap().box as GrooveShuffleBox
         source.beginTransaction()
         const unit = AudioUnitBox.create(source, UUID.generate(), box => {
             box.collection.refer(rootBox.audioUnits)
@@ -258,13 +166,29 @@ describe("zeitgeist groove (wasm device vs TS GrooveShuffle)", () => {
             box.host.refer(unit.input)
             box.code.setValue("// @apparat js 1 1\n" + DC_CODE)
         })
-        const grooveBox = GrooveShuffleBox.create(source, UUID.generate(), box => {
-            box.label.setValue("Shuffle")
-            box.duration.setValue(480)
+        const power = GrooveFunctionBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.grooves)
+            box.index.setValue(1)
+            box.amount.setValue(0.9)
+            box.duration.setValue(960)
         })
-        ZeitgeistDeviceBox.create(source, UUID.generate(), box => {
+        const stack = GrooveStackBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.grooves)
+            box.index.setValue(2)
+        })
+        GrooveStackEntryBox.create(source, UUID.generate(), box => {
+            box.stack.refer(stack.entries)
+            box.groove.refer(globalShuffle)
+            box.index.setValue(0)
+        })
+        GrooveStackEntryBox.create(source, UUID.generate(), box => {
+            box.stack.refer(stack.entries)
+            box.groove.refer(power)
+            box.index.setValue(1)
+        })
+        const zeitgeist = ZeitgeistDeviceBox.create(source, UUID.generate(), box => {
             box.host.refer(unit.midiEffects)
-            box.groove.refer(grooveBox)
+            box.groove.refer(globalShuffle)
             box.index.setValue(0)
         })
         const track = TrackBox.create(source, UUID.generate(), box => {
@@ -306,23 +230,36 @@ describe("zeitgeist groove (wasm device vs TS GrooveShuffle)", () => {
             const left = new Float32Array(quanta * half)
             for (let quantum = 0; quantum < quanta; quantum++) {
                 engine.render()
-                const enginePtr = engine.output_ptr()
-                left.set(new Float32Array(memory.buffer, enginePtr, half), quantum * half)
+                left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), quantum * half)
             }
             const onset = left.findIndex(value => value > 0.1)
             expect(onset, "the note must be audible").toBeGreaterThan(0)
             return onset
         }
-        const swung = renderOnset()
-        const swungOracle = referenceGroove(0.6, 480).warp(240) * SAMPLES_PER_PULSE
-        expect(Math.abs(swung - swungOracle), `swung onset ${swung} vs oracle ${swungOracle}`).toBeLessThan(64)
-        source.beginTransaction()
-        grooveBox.amount.setValue(0.5) // the identity groove: the off-beat plays straight
-        source.endTransaction()
-        await sync.settle()
-        const straight = renderOnset()
-        expect(Math.abs(straight - 240 * SAMPLES_PER_PULSE), `straight onset ${straight}`).toBeLessThan(64)
+        const expectOnset = (expected: ppqn, what: string): number => {
+            const onset = renderOnset()
+            expect(Math.abs(onset - expected * SAMPLES_PER_PULSE), `${what}: onset ${onset} vs ${expected}`).toBeLessThan(64)
+            return onset
+        }
+        const edit = async (change: () => void) => {
+            source.beginTransaction()
+            change()
+            source.endTransaction()
+            await sync.settle()
+        }
+        const swung = expectOnset(shuffleGroove(0.6, 480).warp(240), "global shuffle")
+        await edit(() => globalShuffle.amount.setValue(0.5))
+        const straight = expectOnset(240, "global shuffle at 50%")
         expect(swung - straight, "the live edit moved the onset earlier").toBeGreaterThan(600)
+        await edit(() => globalShuffle.amount.setValue(0.6))
+        await edit(() => zeitgeist.groove.refer(power))
+        expectOnset(powerGroove(0.9, 960).warp(240), "power")
+        await edit(() => power.amount.setValue(0.7))
+        expectOnset(powerGroove(0.7, 960).warp(240), "power edited")
+        await edit(() => zeitgeist.groove.refer(stack))
+        expectOnset(new GrooveChain([shuffleGroove(0.6, 480), powerGroove(0.7, 960)]).warp(240), "stack")
+        await edit(() => zeitgeist.groove.defer())
+        expectOnset(240, "no groove")
         sync.close()
     }, 60000)
 })

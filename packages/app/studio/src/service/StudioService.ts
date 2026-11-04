@@ -30,6 +30,8 @@ import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
+import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
+import {panelTab} from "@/ui/grooves/PanelTabs"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
@@ -175,6 +177,11 @@ export class StudioService implements ProjectEnv {
         this.sampleEditor = new SampleEditorService(this)
         ModulatorReveal.requested.subscribe(option =>
             option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
+        GrooveReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("grooves")
+            this.switchScreen("modulation")
+        }))
         this.#projectProfileService = new ProjectProfileService({
             env: this,
             sampleService: this.#sampleService, sampleManager: this.sampleManager,

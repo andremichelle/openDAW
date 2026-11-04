@@ -400,6 +400,8 @@ mod monitor;
 mod frozen;
 use metronome::Metronome;
 mod signature_track;
+mod groove_registry;
+use groove_registry::GrooveRegistry;
 use signature_track::{SignatureEvent, SignatureEvents, SignatureTrack};
 mod marker_track;
 use marker_track::MarkerTrack;
@@ -637,6 +639,41 @@ shared_static! {
 // The signature track for `host_bar_at`, its OWN cell like `BASE_FREQUENCY`. 4/4 before bind.
 shared_static! {
     static SIGNATURES: Option<SignatureEvents> = None;
+}
+// The project's grooves for `host_groove_warp` / `host_groove_unwarp`, its OWN cell like `SIGNATURES`.
+shared_static! {
+    static GROOVES: Option<GrooveRegistry> = None;
+}
+// Every observed groove pointer's current target by GLOBAL slot id, plus the free ids for reuse. Written only
+// by `bind_device` and the pointer watchers (off render), read by the warp imports during render.
+shared_static! {
+    static GROOVE_SLOTS: Vec<Option<Uuid>> = Vec::new();
+}
+shared_static! {
+    static GROOVE_FREE: Vec<u32> = Vec::new();
+}
+// The groove-observe recorder `host_observe_groove` appends to during `init`: (slot, pointer path).
+shared_static! {
+    pub(crate) static GROOVE_BINDS: Vec<(u32, Vec<u16>)> = Vec::new();
+}
+
+fn set_groove_slot(slot: u32, target: Option<Uuid>) {
+    if let Some(entry) = unsafe { GROOVE_SLOTS.get() }.get_mut(slot as usize) {
+        *entry = target;
+    }
+}
+
+/// Point a slot at its pointer's target, the registry follows that groove even outside the list.
+pub(crate) fn follow_groove(slot: u32, graph: &BoxGraph, target: Option<Uuid>) {
+    set_groove_slot(slot, target);
+    if let (Some(target), Some(registry)) = (target, unsafe { GROOVES.get() }.as_ref()) {
+        registry.ensure(graph, target);
+    }
+}
+
+pub(crate) fn release_groove_slot(slot: u32) {
+    set_groove_slot(slot, None);
+    unsafe { GROOVE_FREE.get() }.push(slot);
 }
 // The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
 // range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
@@ -1162,6 +1199,37 @@ pub extern "C" fn host_resolve_input(id: u32, out_ptr: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn host_base_frequency() -> f32 {
     unsafe { *BASE_FREQUENCY.get() }
+}
+
+/// Host import a device calls from its `init` to follow the groove its pointer field at PATH targets. Only
+/// RECORDS the path and returns a GLOBAL slot id, `bind_device` keeps the slot on the pointer's target.
+#[no_mangle]
+pub extern "C" fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let slots = unsafe { GROOVE_SLOTS.get() };
+    let slot = match unsafe { GROOVE_FREE.get() }.pop() {
+        Some(slot) => { slots[slot as usize] = None; slot }
+        None => { slots.push(None); (slots.len() - 1) as u32 }
+    };
+    unsafe { GROOVE_BINDS.get() }.push((slot, path.to_vec()));
+    slot
+}
+
+fn groove_of(slot: u32) -> Option<(GrooveRegistry, Uuid)> {
+    let target = (*unsafe { GROOVE_SLOTS.get() }.get(slot as usize)?)?;
+    Some((unsafe { GROOVES.get() }.as_ref()?.clone(), target))
+}
+
+/// Host import: the grooved position of a straight `pulse` through the slot's groove (unchanged without one).
+#[no_mangle]
+pub extern "C" fn host_groove_warp(slot: u32, pulse: f64) -> f64 {
+    groove_of(slot).map_or(pulse, |(registry, groove)| registry.warp(&groove, pulse))
+}
+
+/// Host import: the straight position of a grooved `pulse` through the slot's groove (unchanged without one).
+#[no_mangle]
+pub extern "C" fn host_groove_unwarp(slot: u32, pulse: f64) -> f64 {
+    groove_of(slot).map_or(pulse, |(registry, groove)| registry.unwarp(&groove, pulse))
 }
 
 /// Host import a device calls for the bar holding `pulse`: writes its start, length and beat length (3 x f64).
@@ -2283,6 +2351,10 @@ impl Engine {
         // `EngineContext.baseFrequency`). Catch-up delivers the loaded value; live edits retune NEW notes
         // only (the TS voicing strategies call `computeFrequency` at note-on, never mid-voice).
         // WASM CONTRACT: RootBox.baseFrequency = field key 5 (Float32, default 440, boxes RootBox.ts).
+        if let Some(root) = self.graph.find_by_name("RootBox").map(|root| root.uuid) {
+            let (grooves, _subscription) = GrooveRegistry::observe(&mut self.graph, root);
+            unsafe { *GROOVES.get() = Some(grooves); }
+        }
         if let Some(root) = self.graph.find_by_name("RootBox") {
             self.graph.catchup_and_subscribe(Address::of(root.uuid, vec![5]), |value| {
                 if let Some(value) = value.as_float32() {
@@ -2961,6 +3033,9 @@ pub extern "C" fn reset() {
         CHECKSUM.get().fill(0);
         *BASE_FREQUENCY.get() = 440.0; // back to the default until the next session's `bind` catches up
         *SIGNATURES.get() = None;
+        *GROOVES.get() = None;
+        GROOVE_SLOTS.get().clear();
+        GROOVE_FREE.get().clear();
     }
 }
 

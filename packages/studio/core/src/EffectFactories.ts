@@ -13,7 +13,6 @@ import {
     FoldDeviceBox,
     FrequencySplitBox,
     GateDeviceBox,
-    GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -136,13 +135,7 @@ export namespace EffectFactories {
             hostField,
             index
         ): ZeitgeistDeviceBox => {
-            const useGlobal = false // TODO First Zeitgeist should be true
-            const shuffleBox = useGlobal
-                ? rootBoxAdapter.groove.box
-                : GrooveShuffleBox.create(boxGraph, UUID.generate(), (box) => {
-                    box.label.setValue("Shuffle")
-                    box.duration.setValue(480)
-                })
+            const shuffleBox = rootBoxAdapter.groove.box
             return ZeitgeistDeviceBox.create(
                 boxGraph,
                 UUID.generate(),

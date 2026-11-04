@@ -33,6 +33,7 @@ import {PresetHeader} from "./PresetHeader"
 import {DeviceMigration} from "../migration/DeviceMigration"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {isGrooveBox} from "../grooves/GrooveBoxAdapter"
 import {InstrumentFactories} from "../factories/InstrumentFactories"
 
 export namespace PresetDecoder {
@@ -109,6 +110,7 @@ export namespace PresetDecoder {
                 }
             })
         })
+        TransferUtils.normalizeGrooves(target.boxGraph)
         return importedAudioUnits
     }
 
@@ -204,7 +206,7 @@ export namespace PresetDecoder {
             stopAtResources: true
         }).boxes))
         const keepsIdentity = (box: Box): boolean =>
-            box instanceof AudioFileBox || box instanceof SoundfontFileBox || isModulatorBox(box)
+            box instanceof AudioFileBox || box instanceof SoundfontFileBox || isModulatorBox(box) || isGrooveBox(box)
         uuidMap.addMany([
             {
                 source: sourceAudioUnitBox.address.uuid,
@@ -216,7 +218,8 @@ export namespace PresetDecoder {
         // Identity-keeping boxes already in the target graph are shared, not copied
         const existingKeptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
-            if (keepsIdentity(source) && targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
+            if ((keepsIdentity(source) && targetBoxGraph.findBox(source.address.uuid).nonEmpty())
+                || TransferUtils.isEntryOfExistingStack(source, targetBoxGraph)) {
                 existingKeptUuids.add(source.address.uuid)
             }
         })
@@ -238,6 +241,7 @@ export namespace PresetDecoder {
                     targetBoxGraph.createBox(key, uuid, box => box.read(input))
                 })
         })
+        TransferUtils.normalizeGrooves(targetBoxGraph)
         return Attempts.Ok
     }
 
@@ -298,14 +302,15 @@ export namespace PresetDecoder {
             || TransferUtils.excludeTimelinePredicate(box)
             || box instanceof AudioUnitBox
         const effectSet = new Set<Box>(effects)
-        const dependencies = TransferUtils.withModulators(Array.from(sourceAudioUnit.graph.dependenciesOf(effects, {
+        const dependencies = TransferUtils.withModulators([...effects, ...sourceAudioUnit.graph.dependenciesOf(effects, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes).filter(box => !effectSet.has(box)))
+        }).boxes]).filter(box => !effectSet.has(box))
         const existingKeptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach(source => {
-            if (TransferUtils.keepsIdentity(source) && targetGraph.findBox(source.address.uuid).nonEmpty()) {
+            if ((TransferUtils.keepsIdentity(source) && targetGraph.findBox(source.address.uuid).nonEmpty())
+                || TransferUtils.isEntryOfExistingStack(source, targetGraph)) {
                 existingKeptUuids.add(source.address.uuid)
             }
         })
@@ -351,6 +356,7 @@ export namespace PresetDecoder {
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
         })
+        TransferUtils.normalizeGrooves(targetGraph)
         return Attempts.Ok
     }
 
@@ -372,7 +378,8 @@ export namespace PresetDecoder {
         const dependencies = TransferUtils.deviceDependencies(instrument)
         const uuidMap = TransferUtils.mapUuids([instrument, ...dependencies])
         const fresh = dependencies.filter(source =>
-            !TransferUtils.keepsIdentity(source) || targetGraph.findBox(source.address.uuid).isEmpty())
+            (!TransferUtils.keepsIdentity(source) || targetGraph.findBox(source.address.uuid).isEmpty())
+            && !TransferUtils.isEntryOfExistingStack(source, targetGraph))
         cellBox.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
         PointerField.decodeWith({
             map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
@@ -388,6 +395,7 @@ export namespace PresetDecoder {
                         : TransferUtils.mapModulatorCollection(pointer, targetGraph))
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...fresh], uuidMap, targetGraph))
+        TransferUtils.normalizeGrooves(targetGraph)
         return Attempts.Ok
     }
 }

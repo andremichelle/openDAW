@@ -19,7 +19,8 @@ that can be shared, stacked and edited in one place, like modulators.
    is a dropdown, not a knob.
 5. Groove parameters are neither automatable nor modulatable. Changing a curve within a cell can move notes
    backwards in time.
-6. Power and S-curve have a Shape parameter, the strength of the curve at 100% amount.
+6. Power and S-curve have no Shape parameter. Their curve at 100% amount is fixed (exponent 4), amount covers
+   the range.
 
 ## Groove types
 
@@ -41,11 +42,14 @@ that can be shared, stacked and edited in one place, like modulators.
    curve at 1/8 and is listed first.
 3. A groove can be used by any number of targets. Targets are Zeitgeist devices, tracks and regions are postponed.
 4. A target may have no groove. The Zeitgeist groove pointer becomes optional and Zeitgeist then passes events
-   through unchanged.
+   through unchanged. The Zeitgeist groove dropdown offers None.
 5. A new Zeitgeist starts on the global shuffle.
 6. **Make unique** replaces the shared groove of one target with a real copy.
 7. Deleting a groove that is in use asks the user to either fall back to the global shuffle or remove it from
    its targets.
+8. Copy, paste and presets of a Zeitgeist: within one project the copy keeps the same groove. Into another
+   project or as a preset, the global shuffle maps to that project's global shuffle and any other groove comes
+   along as a new, unshared groove.
 
 ## UI
 
@@ -73,8 +77,11 @@ Preview: `plans/zeitgeist-grooves-preview.html` (open it in a browser, knobs and
 2. **Zeitgeist**: the editor is the whole panel. The groove dropdown lists the global shuffle, every shared
    groove and New Groove.
 3. **Grooves tab**: the modulation panel gets a tab bar, Modulators and Grooves. Each groove is a row with its
-   name and type in the header, the editor without the groove dropdown, and a Used by list on the right with
-   reassign, copy and delete. Every editor showing the same groove updates together.
+   name and type in the header, the editor without the groove dropdown, and a Used by list on the right.
+   Every editor showing the same groove updates together.
+    1. The header has a menu like the modulators: Replace with (another type), Duplicate, Delete.
+    2. The Used by list looks like the modulators' target list, each target with a delete button that removes
+       the groove from that target.
 4. **Header**: the global shuffle amount next to the tempo. Its duration is edited in the Grooves list only.
 
 ## Scope
@@ -95,6 +102,12 @@ The engine registry is still built so that tracks and regions can read from it l
 5. Grooves tab with target list, reassign, copy and delete dialog.
 6. Global shuffle amount in the header.
 
+## Engine mechanism (approved)
+
+1. The engine keeps a groove registry built from the project's groove boxes, stacks included.
+2. Devices get two new host imports, warp and unwarp, for the groove they point to. A device observes its groove
+   pointer once in `init` and gets a slot id, the engine keeps the slot on the pointer's target.
+
 ## Postponed
 
 1. Grooves on tracks and regions, including how they chain with a Zeitgeist groove.
@@ -104,6 +117,8 @@ The engine registry is still built so that tracks and regions can read from it l
    registry.
 3. Very late: grooves in all scriptable devices (Spielwerk, Werkstatt, Apparat). A script can select a groove
    and warp and unwarp positions through it, for example to swing the notes it generates.
+4. Offset groove: moves every position by a fixed amount instead of bending a cell. Useful for laid back or
+   pushed parts, and as a member of a stack. `GrooveOffsetBox` already exists in the schema, unused.
 
 ## To decide later
 

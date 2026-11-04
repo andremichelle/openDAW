@@ -36,6 +36,10 @@ import {
     FoldDeviceBox,
     GateDeviceBox,
     GrooveShuffleBox,
+    GrooveFunctionBox,
+    GrooveRandomBox,
+    GrooveStackBox,
+    GrooveStackEntryBox,
     LfoModulatorBox,
     StepsModulatorBox,
     MacroModulatorBox,
@@ -160,6 +164,10 @@ import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
 import {ZeitgeistDeviceBoxAdapter} from "./devices/midi-effects/ZeitgeistDeviceBoxAdapter"
 import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
+import {GrooveFunctionBoxAdapter} from "./grooves/GrooveFunctionBoxAdapter"
+import {GrooveRandomBoxAdapter} from "./grooves/GrooveRandomBoxAdapter"
+import {GrooveStackBoxAdapter} from "./grooves/GrooveStackBoxAdapter"
+import {GrooveStackEntryBoxAdapter} from "./grooves/GrooveStackEntryBoxAdapter"
 import {LfoModulatorBoxAdapter} from "./modulation/LfoModulatorBoxAdapter"
 import {StepsModulatorBoxAdapter} from "./modulation/StepsModulatorBoxAdapter"
 import {MacroModulatorBoxAdapter} from "./modulation/MacroModulatorBoxAdapter"
@@ -277,6 +285,10 @@ export class BoxAdapters implements Terminable {
             visitTidalDeviceBox: (box: TidalDeviceBox) => new TidalDeviceBoxAdapter(this.#context, box),
             visitFoldDeviceBox: (box: FoldDeviceBox) => new FoldDeviceBoxAdapter(this.#context, box),
             visitGrooveShuffleBox: (box: GrooveShuffleBox) => new GrooveShuffleBoxAdapter(this.#context, box),
+            visitGrooveFunctionBox: (box: GrooveFunctionBox) => new GrooveFunctionBoxAdapter(this.#context, box),
+            visitGrooveRandomBox: (box: GrooveRandomBox) => new GrooveRandomBoxAdapter(this.#context, box),
+            visitGrooveStackBox: (box: GrooveStackBox) => new GrooveStackBoxAdapter(this.#context, box),
+            visitGrooveStackEntryBox: (box: GrooveStackEntryBox) => new GrooveStackEntryBoxAdapter(this.#context, box),
             visitLfoModulatorBox: (box: LfoModulatorBox) => new LfoModulatorBoxAdapter(this.#context, box),
             visitStepsModulatorBox: (box: StepsModulatorBox) => new StepsModulatorBoxAdapter(this.#context, box),
             visitMacroModulatorBox: (box: MacroModulatorBox) => new MacroModulatorBoxAdapter(this.#context, box),
