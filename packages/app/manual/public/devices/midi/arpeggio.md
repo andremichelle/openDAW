@@ -48,7 +48,7 @@ How the arpeggiator walks through the held notes. Click the value for the list, 
 | **Random Once** | | one random order, repeated |
 | **Walk** | | moves one note up (50%), stays (25%) or moves down (25%) |
 
-All random modes follow the **Seed** (see 3). The same seed always plays the same notes, also after a loop, a jump or in an export.
+All random modes follow the **Seed** (see Sequencer). The same seed always plays the same notes, also after a loop, a jump or in an export.
 
 ### Order
 
@@ -63,11 +63,13 @@ Octave range extension. Range: **1 to 5**. The held notes repeat one octave high
 
 ### Hold
 
-When on, the arpeggiator keeps playing the last notes after you let go of the keys. Keys pressed while others are still down are added. A key pressed after all keys were released starts a new set.
+When on, the arpeggiator keeps playing the last notes after you let go of the keys. Keys pressed while others are still down are added. A key pressed after all keys were released starts a new set. Starting or stopping playback, a jump and a loop wrap clear the held notes.
 
 ---
 
-## 2. Rate
+## 2. Time
+
+### Rate
 
 Step rate as a tempo-synced fraction. Available values:
 
@@ -81,9 +83,7 @@ Step rate as a tempo-synced fraction. Available values:
 |  | 3/64 | |
 |  | 1/24 | |
 
----
-
-## 3. Repeat
+### Repeat
 
 Note repetition count. Range: **1 to 16**.
 
@@ -109,7 +109,9 @@ Starts the walk later by this many notes. Range: **0 to 15**.
 
 ---
 
-## 4. Gate
+## 3. Note
+
+### Gate
 
 Note length as a percentage of the step rate. Range: **0% to 200%**.
 
@@ -117,23 +119,21 @@ Note length as a percentage of the step rate. Range: **0% to 200%**.
 - **100%**: Notes fill exactly one step (legato)
 - **> 100%**: Notes overlap into the next step
 
----
+### Velocity
 
-## 5. Velocity
-
-Velocity scaling. Range: **-100% to +100%** (displayed as 0% to 100%).
+Velocity scaling. Range: **-100% to +100%**.
 
 Controls how the output velocity relates to the input note velocities:
 
-- **-100% (displayed 0%)**: All notes play at velocity 0 (silent), ignoring input
-- **-100% to 0% (displayed 0% to 50%)**: All notes play at the same fixed velocity, rising from 0 to full, ignoring input
-- **0% (displayed 50%)**: All notes play at full velocity (127), ignoring input
-- **0% to +100% (displayed 50% to 100%)**: Blend from full velocity toward the original input velocity
-- **+100% (displayed 100%)**: Notes retain their original input velocity
+- **-100%**: All notes play at velocity 0, ignoring input
+- **-100% to 0%**: All notes play at the same fixed velocity, rising from 0 to full, ignoring input
+- **0%**: All notes play at full velocity, ignoring input
+- **0% to +100%**: Blend from full velocity toward the original input velocity
+- **+100%**: Notes retain their original input velocity
 
 ---
 
-## 6. Sequencer
+## 4. Sequencer
 
 A 64-step sequencer shapes every step of the arpeggio. **Length** sets how many steps play (1 to 64). **Steps** switches the visible page of 16 steps. The blue bar above the steps shows the playing step.
 
@@ -162,16 +162,16 @@ Pick a lane on the left and drag the bars to edit it:
 ### Tools
 
 - **< >**: Shift all steps one step left or right within the length.
-- **Clear**: Reset every step to a plain note.
+- **Clear**: Reset every step to a plain note and every lane to its default.
 - **Seed** and the dice: the seed of all random decisions. Type a number or roll a new one.
 
 ---
 
-## 7. Technical Notes
+## 5. Technical Notes
 
 - Arpeggio pattern syncs to transport position (unless Retrigger is set)
 - Random modes and Chance depend only on the seed and the step position, never on what played before
 - Every played note keeps the fine tuning (cents) of the held note it comes from
 - A played note lasts its full gate length, even when the held key is released during the step
 - UpDown mode sequence length: `(notes × octaves × 2) - 2` to avoid repeating endpoints
-- Projects made with earlier versions play exactly as before, Mode automation is converted to the new list of modes
+- Projects made with earlier versions play as before. Mode automation and modulation are converted to the new list of modes
