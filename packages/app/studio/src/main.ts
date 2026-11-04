@@ -8,10 +8,14 @@ import {boot} from "@/boot"
 import {initializeColors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {Browser, Html} from "@opendaw/lib-dom"
+import {mountMobileContestPage} from "@/ui/pages/contest/MobileContestPage"
 
 initializeColors(document.documentElement)
 DisplayPaint.initialize(document.documentElement)
-if (Browser.isMobile()) {
+const mobileContest = /^\/contests\/([^/]+)\/?$/.exec(location.pathname)
+if (Browser.isMobile() && mobileContest !== null) {
+    mountMobileContestPage(document.body, mobileContest[1])
+} else if (Browser.isMobile()) {
     const className = Html.adoptStyleSheet(mobileCss, "Mobile")
     document.body.innerHTML = `<div class="${className}">
         <div>
