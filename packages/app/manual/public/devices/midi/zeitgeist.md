@@ -56,6 +56,7 @@ For example, with Duration set to 1/8, the offbeat semiquaver (16th note) within
 ## 3. Technical Notes
 
 - Uses Möbius easing function for smooth time warping
-- Only note positions are affected, durations remain unchanged
+- Warps time itself: note-ons and note-offs both move, so a note's duration stretches or shrinks with its place in the groove cell
+- The automation clock of the devices after Zeitgeist is warped the same way
 - Works with any MIDI source (clips, live input, other MIDI effects)
 - Groove is applied in real-time during playback
