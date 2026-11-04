@@ -1,7 +1,7 @@
-import {AudioUnitBox, GrooveShuffleBox, ProjectMetaBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ProjectMetaBox} from "@opendaw/studio-boxes"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
-import {ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
+import {Grooves, ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
 import {asInstanceOf, clamp, float, isDefined, isNull, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioUnit,
@@ -10,7 +10,7 @@ import {
     AuxAudioUnit,
     BusAudioUnitProps,
     DeepPartial,
-    GrooveShuffle,
+    AnyGroove,
     GroupAudioUnit,
     InstrumentAudioUnit,
     Instruments,
@@ -31,7 +31,7 @@ import {Props} from "./Common"
 import {Fields} from "./Fields"
 import {Guard} from "./Guard"
 import {AudioUnitImpls, AuxAudioUnitImpl, GroupAudioUnitImpl, InstrumentAudioUnitImpl} from "./AudioUnits"
-import {GrooveShuffleImpl} from "./GrooveShuffleImpl"
+import {GrooveImpls} from "./Grooves"
 import {MarkerImpl, Markers} from "./timeline/Markers"
 import {TempoTrackImpl} from "./timeline/TempoTrackImpl"
 import {SignatureTrackImpl} from "./timeline/SignatureTrackImpl"
@@ -157,9 +157,17 @@ export class ProjectImpl implements Project {
 
     get meta(): ProjectMeta {return this.#meta}
 
-    get groove(): GrooveShuffle {
+    get groove(): AnyGroove {
         const {rootBox} = this.#context.skeleton.mandatoryBoxes
-        return GrooveShuffleImpl.wrap(this.#context, asInstanceOf(rootBox.groove.targetVertex.unwrap("project has no groove").box, GrooveShuffleBox))
+        return GrooveImpls.wrap(this.#context, rootBox.groove.targetVertex.unwrap("project has no groove").box)
+    }
+
+    get grooves(): ReadonlyArray<AnyGroove> {
+        const {rootBox} = this.#context.skeleton.mandatoryBoxes
+        return rootBox.grooves.pointerHub.incoming()
+            .map(pointer => Grooves.asGrooveBox(pointer.box))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+            .map(box => GrooveImpls.wrap(this.#context, box))
     }
 
     get output(): OutputAudioUnit {

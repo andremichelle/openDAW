@@ -2,7 +2,7 @@ component
   display: grid
   grid-template-columns: 8.25em 8.25em
   column-gap: 0.75em
-  height: 100%
+  align-self: start
   min-height: 0
 
   h3
@@ -25,7 +25,7 @@ component
 
   > .left
     display: grid
-    grid-template-rows: auto auto
+    grid-auto-rows: auto
     align-content: start
     row-gap: 0.5em
     min-height: 0
@@ -42,7 +42,8 @@ component
     display: grid
     grid-template-rows: auto minmax(0, 1fr)
     row-gap: 0.5em
-    min-height: 0
+    height: 0
+    min-height: 100%
     min-width: 0
 
     > .settings
@@ -63,8 +64,9 @@ component
 
       &.stack
         grid-template-columns: 1fr
-        grid-template-rows: 1fr
+        grid-template-rows: minmax(0, 1fr)
         align-content: stretch
+        min-height: 0
 
       h3
         color: var(--color-cream)
@@ -94,10 +96,12 @@ component
       > .slot.members
         grid-area: 1 / 1
         align-self: stretch
+        position: relative
         display: grid
-        grid-template-rows: auto 1fr
+        grid-template-rows: auto minmax(0, 1fr)
         row-gap: 2px
         min-width: 0
+        min-height: 0
 
         > .head
           display: grid
@@ -109,8 +113,11 @@ component
         > .rows
           display: grid
           grid-auto-rows: min-content
+          align-content: start
           row-gap: 1px
           font-size: 9px
+          min-height: 0
+          overflow-y: auto
 
           > .placeholder
             color: rgba(white, 0.2)

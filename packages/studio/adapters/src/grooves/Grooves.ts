@@ -143,7 +143,7 @@ export namespace Grooves {
                 if (isInstanceOf(pointer.box, GrooveStackEntryBox)
                     && wouldContain(global, asGrooveBox(pointer.box.stack.targetVertex
                         .unwrap("Entry without stack").box))) {
-                    pointer.box.delete()
+                    unassign(pointer)
                 } else {
                     pointer.refer(global)
                 }

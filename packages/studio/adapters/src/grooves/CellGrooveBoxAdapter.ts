@@ -4,6 +4,7 @@ import {GrooveFunctionBox, GrooveRandomBox, GrooveShuffleBox} from "@opendaw/stu
 import {Pointers} from "@opendaw/studio-enums"
 import {
     int,
+    isDefined,
     Notifier,
     Nullable,
     Observer,
@@ -88,7 +89,7 @@ export abstract class CellGrooveBoxAdapter<BOX extends CellGrooveBox> implements
     terminate(): void {this.terminator.terminate()}
 
     #cellFunction(): GrooveFunction {
-        if (this.#function === null) {this.#function = this.createFunction()}
+        if (!isDefined(this.#function)) {this.#function = this.createFunction()}
         return this.#function
     }
 }

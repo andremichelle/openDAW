@@ -120,6 +120,59 @@ The engine registry is still built so that tracks and regions can read from it l
 4. Offset groove: moves every position by a fixed amount instead of bending a cell. Useful for laid back or
    pushed parts, and as a member of a stack. `GrooveOffsetBox` already exists in the schema, unused.
 
+## Groove DNA
+
+A groove type that carries the timing of a real performance, taken from a drum loop. It plays like the other
+grooves: a cell, an amount and a duration, warp and unwarp in the engine registry, usable alone and in a stack.
+
+### The groove
+
+1. A DNA groove holds one cell of measured timing: a number of steps (for example 16 sixteenths in one bar) and
+   for each step how far the hit lands before or after the straight grid.
+2. The curve runs through these measured points and stays monotonic, so warp and unwarp keep their exact
+   round trips. Points that would overtake their neighbour are clamped during extraction, never in the engine.
+3. Amount works like on every other type: 50% is straight, 100% is the measured timing, 0% is its inverse.
+4. Duration is the cell the DNA was measured over (one bar, two bars). A DNA groove can be stretched to another
+   duration like any other groove.
+5. The Groove editor shows the measured points on the curve. The points are read only, a new extraction
+   replaces them.
+6. The engine registry gets a table variant fed from the points, so Rust and TS share one curve.
+
+### Extraction from a drum loop
+
+1. Source: an audio region or a sample in the project. The loop's tempo comes from its warp markers or its bpm,
+   so the extraction knows where the beats are.
+2. Onsets are found with the existing `TransientDetector`. Transient markers the sample already has are used
+   instead when present.
+3. A grid is chosen (1/8, 1/16, triplets). Every onset is assigned to its nearest step, and the deviation from
+   the step is measured in ppqn.
+4. When the loop spans several cells, the deviations of each step are averaged over all cells. Louder hits
+   weigh more than ghost notes, outliers far from the step are dropped.
+5. Steps without a hit take the straight position, so the curve stays defined.
+6. A dialog shows the loop's waveform with the detected hits, the grid and the resulting curve before the
+   groove is created. Grid and sensitivity can be changed there with a live preview.
+7. Entry points: "Extract Groove DNA" in the context menu of an audio region and in the sample browser, and
+   "From audio" in the Grooves tab's add menu. The new groove lands in the groove list, named after the source.
+
+### Phases
+
+1. Schema: a DNA groove box with amount, duration, step count and the measured offsets. Migration not needed,
+   the box is new.
+2. Curve: the DNA function in lib-dsp and the Rust mirror, with round trip, monotony and extreme value tests
+   like the other types.
+3. Extraction in lib-dsp: onsets in, steps and offsets out. Tests with synthetic loops of known swing and
+   jitter must recover the known offsets.
+4. Extraction dialog and the three entry points.
+5. Scripting: the DNA groove appears in `project.grooves` with its kind, steps and offsets.
+
+### To decide
+
+1. The step count needs a limit for the offsets array. A maximum (for example 64 steps per cell) needs your
+   approval first.
+2. Velocity: a drum loop also carries accents. Zeitgeist only moves time today. An accent part of the DNA
+   would need Zeitgeist to change velocities as well.
+3. Other sources: extracting from a note region is exact and simple, worth offering next to audio.
+
 ## To decide later
 
 1. Orphans: when a target switches grooves, the old groove may have no users left. Keep it in the list or

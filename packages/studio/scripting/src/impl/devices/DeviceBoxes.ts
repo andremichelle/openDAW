@@ -1,5 +1,5 @@
 import {BoxGraph, Field} from "@opendaw/lib-box"
-import {Arrays, INVERSE_SQRT_2, int, isDefined, isInstanceOf, panic, Strings, Unhandled, UUID} from "@opendaw/lib-std"
+import {Arrays, INVERSE_SQRT_2, int, isInstanceOf, panic, Unhandled, UUID} from "@opendaw/lib-std"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {
     ArpeggioDeviceBox,
@@ -15,7 +15,6 @@ import {
     FoldDeviceBox,
     FrequencySplitBox,
     GateDeviceBox,
-    GrooveShuffleBox,
     MaximizerDeviceBox,
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
@@ -176,22 +175,10 @@ export namespace DeviceBoxes {
                     box.host.refer(host)
                 })
             case "Zeitgeist": {
-                // the shuffle joins the project's groove list, counted in this transaction where new members are pending
                 const rootBox = boxGraph.boxes().find((box): box is RootBox => isInstanceOf(box, RootBox))
-                const listed = boxGraph.boxes().filter(box => box.tags.type === "groove"
-                    && box.outgoingEdges().some(([pointer]) => pointer.pointerType === Pointers.GrooveCollection))
-                const shuffleBox = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => {
-                    box.label.setValue(Strings.getUniqueName(listed.map(groove =>
-                        (groove as GrooveShuffleBox).label.getValue()), "Shuffle"))
-                    box.duration.setValue(480)
-                    if (isDefined(rootBox)) {
-                        box.collection.refer(rootBox.grooves)
-                        box.index.setValue(listed.length)
-                    }
-                })
                 return ZeitgeistDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
-                    box.groove.refer(shuffleBox)
+                    rootBox?.groove.targetVertex.ifSome(global => box.groove.refer(global.box))
                     box.index.setValue(index)
                     box.host.refer(host)
                 })

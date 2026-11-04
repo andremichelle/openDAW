@@ -37,12 +37,12 @@ describe("GrooveCurves", () => {
         expect(GrooveCurves.SCurve.fx(0.75)).toBeLessThan(0.75)
         expect(GrooveCurves.SCurve.fx(0.5)).toBe(0.5)
     })
-    it("blend is straight at 50%, nearly the function at 100% and nearly the inverse at 0%", () => {
+    it("blend is straight at 50%, nearly the function at 100% and its mirror at 0%", () => {
         for (const func of [GrooveCurves.Power, GrooveCurves.SCurve]) {
             for (const x of samples) {
                 expect(GrooveCurves.blend(func, 0.5).fx(x)).toBeCloseTo(x, 12)
                 expect(GrooveCurves.blend(func, 1.0).fx(x)).toBeCloseTo(x + 0.98 * (func.fx(x) - x), 12)
-                expect(GrooveCurves.blend(func, 0.0).fx(x)).toBeCloseTo(x + 0.98 * (func.fy(x) - x), 12)
+                expect(GrooveCurves.blend(func, 0.0).fy(x)).toBeCloseTo(x + 0.98 * (func.fx(x) - x), 12)
             }
         }
     })
@@ -52,8 +52,8 @@ describe("GrooveCurves", () => {
                 const blended = GrooveCurves.blend(func, amount)
                 expectMonotonic(blended)
                 expectEndpoints(blended)
-                // the inverse s-curve has a vertical tangent at the middle, a jump of 6e-5 of a cell in double precision
-                expectInverse(blended, 3)
+                expectInverse(blended, 9)
+                for (const x of samples) {expect(blended.fy(blended.fx(x))).toBeCloseTo(x, 9)}
             }
         }
     })
@@ -73,6 +73,29 @@ describe("GrooveCurves", () => {
     it("roughness 0 is straight", () => {
         const values = GrooveCurves.randomValues(3, 4, 0.0)
         expect(Array.from(values)).toEqual([0.0, 0.25, 0.5, 0.75, 1.0])
+    })
+    it("an amount and its mirror around 50% are inverse to each other", () => {
+        for (const func of [GrooveCurves.Power, GrooveCurves.SCurve]) {
+            for (const amount of [0.0, 0.1, 0.3]) {
+                const low = GrooveCurves.blend(func, amount)
+                const high = GrooveCurves.blend(func, 1.0 - amount)
+                for (const x of samples) {
+                    expect(low.fx(x)).toBeCloseTo(high.fy(x), 12)
+                    expect(low.fy(x)).toBeCloseTo(high.fx(x), 12)
+                }
+            }
+        }
+    })
+    it("round trips stay exact next to a cell edge", () => {
+        for (const func of [GrooveCurves.Power, GrooveCurves.SCurve]) {
+            for (const amount of [0.0, 0.001, 0.999, 1.0]) {
+                const blended = GrooveCurves.blend(func, amount)
+                for (const y of [1e-12, 1e-9, 1e-6, 0.5 - 1e-9, 0.5 + 1e-9, 1 - 1e-6, 1 - 1e-9, 1 - 1e-12]) {
+                    expect(Math.abs(blended.fx(blended.fy(y)) - y)).toBeLessThan(1e-12)
+                    expect(Math.abs(blended.fy(blended.fx(y)) - y)).toBeLessThan(1e-12)
+                }
+            }
+        }
     })
     it("random blends are monotonic and invert", () => {
         const random = new QuantisedGrooveFunction(GrooveCurves.randomValues(11, 8, 1.0))

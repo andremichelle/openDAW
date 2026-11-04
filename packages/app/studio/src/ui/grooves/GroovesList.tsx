@@ -55,7 +55,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
     const contents = lifecycle.own(new Terminator())
     // Who uses the groove, like a modulator's targets: the instrument, the device, a delete
     const usedBy = (owner: Lifecycle, groove: GrooveAdapter): HTMLElement => {
-        const entries: HTMLElement = <div className="entries"/>
+        const entries: HTMLElement = <div className="entries" style={{gridTemplateColumns: "1fr auto"}}/>
         const rows = owner.own(new Terminator())
         const render = () => {
             rows.terminate()

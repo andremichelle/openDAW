@@ -1,6 +1,5 @@
 import {
     ArpeggioDeviceBox,
-    GrooveShuffleBox,
     NoteFilterDeviceBox,
     PitchDeviceBox,
     SpielwerkDeviceBox,
@@ -8,9 +7,10 @@ import {
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
-import {asInstanceOf, bipolar, float, int, panic, unitValue} from "@opendaw/lib-std"
+import {bipolar, float, int, Nullable, panic, unitValue} from "@opendaw/lib-std"
 import {
     AnyAudioUnit,
+    AnyGroove,
     ArpeggioEffect,
     ArpeggioStep,
     MIDIEffects,
@@ -25,7 +25,7 @@ import {
 import {Context} from "../Context"
 import {EffectDeviceBox, EffectFacade} from "./EffectChain"
 import {Facades} from "../Facades"
-import {GrooveShuffleImpl} from "../GrooveShuffleImpl"
+import {GrooveImpls} from "../Grooves"
 import {ScriptSupport} from "./ScriptDevices"
 import {MIDIEffectBox} from "./DeviceBoxes"
 
@@ -118,9 +118,8 @@ export class ZeitgeistEffectImpl extends MIDIEffectFacade<ZeitgeistDeviceBox> im
 
     constructor(context: Context, box: ZeitgeistDeviceBox) {super(context, box)}
 
-    get groove(): GrooveShuffleImpl {
-        const grooveBox = this.box.groove.targetVertex.unwrap("Zeitgeist has no groove").box
-        return GrooveShuffleImpl.wrap(this.context, asInstanceOf(grooveBox, GrooveShuffleBox))
+    get groove(): Nullable<AnyGroove> {
+        return this.box.groove.targetVertex.mapOr(vertex => GrooveImpls.wrap(this.context, vertex.box), null)
     }
 }
 

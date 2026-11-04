@@ -1,6 +1,7 @@
 import css from "./GrooveEditor.sass?inline"
 import {
     clamp,
+    isDefined,
     isInstanceOf,
     Option,
     Lifecycle,
@@ -35,6 +36,7 @@ import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 import {GrooveLabelControl} from "@/ui/grooves/GrooveLabelControl"
 import {GrooveDisplay} from "@/ui/grooves/GrooveDisplay"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
@@ -82,10 +84,10 @@ export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): 
     const left: HTMLElement = <div className="left"/>
     const right: HTMLElement = <div className="right"/>
     const settings: HTMLElement = <div className="settings"/>
-    if (pointer !== undefined) {
+    if (isDefined(pointer)) {
         const current = (): Nullable<GrooveBox> => pointer.targetVertex.mapOr(vertex => Grooves.asGrooveBox(vertex.box), null)
         const shared: HTMLElement = <span className="shared"/>
-        if (groove !== null) {
+        if (isDefined(groove)) {
             const update = () => {
                 const count = Grooves.targets(groove.box).length
                 shared.textContent = count > 1 ? `shared ×${count}` : ""
@@ -96,11 +98,11 @@ export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): 
         left.append(field("Groove", (
             <DropDown lifecycle={lifecycle}
                       owner={model<Nullable<GrooveBox>>(current,
-                          box => editing.modify(() => box === null ? pointer.defer() : pointer.refer(box)),
+                          box => editing.modify(() => isDefined(box) ? pointer.refer(box) : pointer.defer()),
                           notify => Terminable.many(pointer.subscribe(notify),
-                              groove === null ? Terminable.Empty : groove.labelField.subscribe(notify)))}
+                              isDefined(groove) ? groove.labelField.subscribe(notify) : Terminable.Empty))}
                       provider={() => [null, ...rootBoxAdapter.grooves.adapters().map(entry => entry.box)]}
-                      mapping={box => box === null ? GrooveMenus.NoneLabel : box.label.getValue()}
+                      mapping={box => isDefined(box) ? box.label.getValue() : GrooveMenus.NoneLabel}
                       width="100%"
                       appearance={{framed: true, color: Colors.blue, activeColor: Colors.bright}}
                       extra={parent => {
@@ -110,16 +112,16 @@ export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): 
                                       editing.modify(() => pointer.refer(Grooves.create(project, kind.kind))))))))
                           parent.addMenuItem(MenuItem.default({
                               label: "Make Unique",
-                              selectable: groove !== null && Grooves.targets(groove.box).length > 1
+                              selectable: isDefined(groove) && Grooves.targets(groove.box).length > 1
                           }).setTriggerProcedure(() => {
-                              if (groove !== null) {
+                              if (isDefined(groove)) {
                                   editing.modify(() => Grooves.makeUnique(project, groove.box, pointer))
                               }
                           }))
                       }}/>
         ), shared))
     }
-    if (groove === null) {
+    if (!isDefined(groove)) {
         return (
             <div className={className}>
                 {left}
@@ -193,7 +195,7 @@ type StackMembersConstruct = {
 const StackMembers = ({lifecycle, service, stack}: StackMembersConstruct): HTMLElement => {
     const {project} = service
     const {editing} = project
-    const rows: HTMLElement = <div className="rows"/>
+    const rows: HTMLElement = <div className="rows" onConnect={element => lifecycle.own(installScrollbars(element))}/>
     const owner = lifecycle.own(new Terminator())
     const render = () => {
         owner.terminate()
@@ -216,7 +218,7 @@ const StackMembers = ({lifecycle, service, stack}: StackMembersConstruct): HTMLE
             owner.own(Events.subscribe(element, "dblclick", () =>
                 entry.groove().ifSome(member => GrooveReveal.request(member.uuid))))
             owner.own(Dragging.attach(element, (event: PointerEvent) => {
-                if (event.target instanceof Element && event.target.closest("button, input, label") !== null) {
+                if (event.target instanceof Element && isDefined(event.target.closest("button, input, label"))) {
                     return Option.None
                 }
                 let target = index

@@ -335,8 +335,8 @@ export interface VelocityEffect extends MIDIEffect {
 export interface ZeitgeistEffect extends MIDIEffect {
     /** Always "Zeitgeist" */
     readonly key: "Zeitgeist"
-    /** The shuffle groove driving this effect */
-    readonly groove: GrooveShuffle
+    /** The groove driving this effect, null when set to none */
+    readonly groove: Nullable<AnyGroove>
 }
 
 /**
@@ -1737,6 +1737,8 @@ export type Automatable =
     | ScriptParameter
     | MIDIOutputParameter
     | GrooveShuffle
+    | GrooveFunction
+    | GrooveRandom
     | AnyModulator
     | Modulation
 
@@ -2452,17 +2454,83 @@ export interface TimeSignature {
 }
 
 /**
- * Global shuffle groove
- * @group Essentials
+ * Groove types
+ * @group Grooves
  */
-export interface GrooveShuffle {
+export type GrooveKind = "Shuffle" | "Power" | "S-Curve" | "Random" | "Stack"
+
+/**
+ * Common surface of all grooves
+ * @group Grooves
+ */
+export interface Groove {
+    /** The groove type */
+    readonly kind: GrooveKind
     /** Custom label */
     label: string
+}
+
+/**
+ * Shuffle / swing groove
+ * @group Grooves
+ */
+export interface GrooveShuffle extends Groove {
+    /** Always "Shuffle" */
+    readonly kind: "Shuffle"
     /** Shuffle amount (0.0 to 1.0, default 0.6) */
     amount: unitValue
     /** Shuffle grid in PPQN (default 1/8) */
     duration: ppqn
 }
+
+/**
+ * Power or S-curve groove
+ * @group Grooves
+ */
+export interface GrooveFunction extends Groove {
+    /** "Power" or "S-Curve" */
+    readonly kind: "Power" | "S-Curve"
+    /** Amount (0.0 to 1.0, default 0.75): 0.5 is straight, below bends the inverse curve */
+    amount: unitValue
+    /** Cell duration in PPQN (default 1/4) */
+    duration: ppqn
+}
+
+/**
+ * Random groove
+ * @group Grooves
+ */
+export interface GrooveRandom extends Groove {
+    /** Always "Random" */
+    readonly kind: "Random"
+    /** Amount (0.0 to 1.0, default 0.75): 0.5 is straight, below bends the inverse curve */
+    amount: unitValue
+    /** Cell duration in PPQN (default 1 bar) */
+    duration: ppqn
+    /** Random seed (0 to 999999, default 1) */
+    seed: int
+    /** Roughness (0.0 to 1.0, default 1.0) */
+    roughness: unitValue
+    /** Steps per cell (2 to 64, default 64) */
+    steps: int
+}
+
+/**
+ * A groove chaining its members in order
+ * @group Grooves
+ */
+export interface GrooveStack extends Groove {
+    /** Always "Stack" */
+    readonly kind: "Stack"
+    /** The members in the order they apply */
+    readonly members: ReadonlyArray<AnyGroove>
+}
+
+/**
+ * Any groove
+ * @group Grooves
+ */
+export type AnyGroove = GrooveShuffle | GrooveFunction | GrooveRandom | GrooveStack
 
 /**
  * Descriptive project metadata
@@ -2671,8 +2739,10 @@ export interface Project {
     readonly loop: LoopArea
     /** Project metadata */
     readonly meta: ProjectMeta
-    /** Global shuffle groove */
-    readonly groove: GrooveShuffle
+    /** The global groove, a shuffle unless its type was changed */
+    readonly groove: AnyGroove
+    /** The project's groove list, the global groove included */
+    readonly grooves: ReadonlyArray<AnyGroove>
     /** Primary output unit */
     readonly output: OutputAudioUnit
     /** All units ordered by index */

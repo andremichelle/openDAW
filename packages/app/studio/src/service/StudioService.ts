@@ -175,8 +175,11 @@ export class StudioService implements ProjectEnv {
         }))
         this.samplePlayback = new SamplePlayback()
         this.sampleEditor = new SampleEditorService(this)
-        ModulatorReveal.requested.subscribe(option =>
-            option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
+        ModulatorReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("modulators")
+            this.switchScreen("modulation")
+        }))
         GrooveReveal.requested.subscribe(option => option.ifSome(() => {
             if (!this.hasProfile) {return}
             panelTab.setValue("grooves")

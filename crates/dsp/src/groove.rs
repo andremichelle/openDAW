@@ -52,20 +52,21 @@ pub fn curve_fy(curve: Curve, y: f64) -> f64 {
     }
 }
 
-/// 50% is straight, 100% the curve, 0% its inverse (lib-dsp `GrooveCurves.blend`).
-pub fn blend_fx(curve: Curve, amount: f64, x: f64) -> f64 {
+fn weight_of(amount: f64) -> f64 {
+    libm::fabs(2.0 * amount - 1.0).min(1.0) * MAX_WEIGHT
+}
+
+fn forward(curve: Curve, weight: f64, x: f64) -> f64 {
     if x <= 0.0 {
         return 0.0;
     }
     if x >= 1.0 {
         return 1.0;
     }
-    let weight = libm::fabs(2.0 * amount - 1.0).min(1.0) * MAX_WEIGHT;
-    let target = if amount >= 0.5 { curve_fx(curve, x) } else { curve_fy(curve, x) };
-    x + weight * (target - x)
+    x + weight * (curve_fx(curve, x) - x)
 }
 
-pub fn blend_fy(curve: Curve, amount: f64, y: f64) -> f64 {
+fn inverse(curve: Curve, weight: f64, y: f64) -> f64 {
     if y <= 0.0 {
         return 0.0;
     }
@@ -75,18 +76,31 @@ pub fn blend_fy(curve: Curve, amount: f64, y: f64) -> f64 {
     let (mut low, mut high) = (0.0, 1.0);
     for _ in 0..BISECT_ITERATIONS {
         let middle = (low + high) * 0.5;
-        if blend_fx(curve, amount, middle) < y { low = middle } else { high = middle }
+        if forward(curve, weight, middle) < y { low = middle } else { high = middle }
     }
     (low + high) * 0.5
 }
 
-/// One cell of `duration` pulses bent by `transform` on its normalized position. A cell starts at the
-/// truncated multiple of the duration, like the Zeitgeist always did. A non-positive duration passes through.
+/// 50% is straight, 100% the curve and 0% its mirror on y = x (lib-dsp `GrooveCurves.blend`). Below 50% the
+/// warp is the inverse of the blend at 100% minus the amount, so both directions only evaluate the curve itself
+/// and bisect a function whose slope stays at least 1 - MAX_WEIGHT.
+pub fn blend_fx(curve: Curve, amount: f64, x: f64) -> f64 {
+    let weight = weight_of(amount);
+    if amount >= 0.5 { forward(curve, weight, x) } else { inverse(curve, weight, x) }
+}
+
+pub fn blend_fy(curve: Curve, amount: f64, y: f64) -> f64 {
+    let weight = weight_of(amount);
+    if amount >= 0.5 { inverse(curve, weight, y) } else { forward(curve, weight, y) }
+}
+
+/// One cell of `duration` pulses bent by `transform` on its normalized position. A cell starts at the floored
+/// multiple of the duration (lib-dsp `quantizeFloor`), also before zero. A non-positive duration passes through.
 pub fn cell<F: Fn(f64) -> f64>(position: f64, duration: f64, transform: F) -> f64 {
     if duration <= 0.0 {
         return position;
     }
-    let start = (position / duration) as i64 as f64 * duration;
+    let start = math::floor(position / duration) * duration;
     start + transform((position - start) / duration) * duration
 }
 
@@ -226,7 +240,20 @@ mod tests {
         assert_eq!(b, [0.0, 0.05333333333333334, 0.2, 0.3466666666666667, 0.5066666666666667, 0.6533333333333333,
             0.8133333333333334, 0.92, 1.0]);
         assert!((blend_fx(Curve::SCurve, 0.8, 0.3) - 0.41007360000000004).abs() < 1.0e-15);
-        assert!((blend_fy(Curve::Power, 0.2, 0.7) - 0.9492465853935409).abs() < 1.0e-12);
+        assert!((blend_fy(Curve::Power, 0.2, 0.7) - 0.8716372).abs() < 1.0e-12);
+        assert!((blend_fx(Curve::Power, 0.2, 0.7) - 0.42637134059686843).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn round_trips_stay_exact_next_to_a_cell_edge() {
+        for curve in [Curve::Power, Curve::SCurve] {
+            for amount in [0.0, 0.001, 0.999, 1.0] {
+                for y in [1.0e-12, 1.0e-9, 1.0e-6, 0.5 - 1.0e-9, 0.5 + 1.0e-9, 1.0 - 1.0e-6, 1.0 - 1.0e-9, 1.0 - 1.0e-12] {
+                    assert!((blend_fx(curve, amount, blend_fy(curve, amount, y)) - y).abs() < 1.0e-12);
+                    assert!((blend_fy(curve, amount, blend_fx(curve, amount, y)) - y).abs() < 1.0e-12);
+                }
+            }
+        }
     }
 
     #[test]
@@ -244,5 +271,8 @@ mod tests {
             assert!((cell(start, 480.0, shuffle) - start).abs() < 1.0e-9);
         }
         assert_eq!(cell(123.0, 0.0, shuffle), 123.0);
+        assert!((cell(-480.0, 480.0, shuffle) + 480.0).abs() < 1.0e-9, "a cell before zero starts at its floor");
+        let before = cell(-240.0, 480.0, shuffle);
+        assert!(before > -480.0 && before < 0.0, "a position before zero stays in its own cell");
     }
 }

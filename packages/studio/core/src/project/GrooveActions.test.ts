@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {GrooveBox, Grooves, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {GrooveBox, Grooves, InstrumentFactories, ProjectSkeleton, ZeitgeistDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {
     GrooveFunctionBox,
     GrooveRandomBox,
@@ -73,6 +73,18 @@ describe("Grooves", () => {
         const zeitgeist = createZeitgeist(project)
         expect(targetOf(zeitgeist).unwrap()).toBe(Grooves.globalGroove(project))
         expect(labels(project)).toEqual(["Global Shuffle"])
+    })
+    it("a Zeitgeist without a groove has an adapter and no groove", async () => {
+        const project = await createProject()
+        const zeitgeist = createZeitgeist(project)
+        project.editing.modify(() => zeitgeist.groove.defer())
+        const adapter = project.boxAdapters.adapterFor(zeitgeist, ZeitgeistDeviceBoxAdapter)
+        expect(adapter.groove().isEmpty()).toBe(true)
+        const seen: Array<boolean> = []
+        const subscription = adapter.catchupAndSubscribeGroove(groove => seen.push(groove.nonEmpty()))
+        project.editing.modify(() => zeitgeist.groove.refer(Grooves.globalGroove(project)))
+        subscription.terminate()
+        expect(seen).toEqual([false, true])
     })
     it("creates every kind with a unique label at the end of the list", async () => {
         const project = await createProject()

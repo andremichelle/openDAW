@@ -26,9 +26,13 @@ const RANDOM_STEPS: u16 = 14; // GrooveRandomBox.steps (Int32)
 const STACK_ENTRIES: u16 = 10; // GrooveStackBox.entries (hub)
 const ENTRY_GROOVE: u16 = 2; // GrooveStackEntryBox.groove (pointer)
 const ENTRY_INDEX: u16 = 3; // GrooveStackEntryBox.index (Int32)
-// The schema defaults, read when a field is missing
-const DEFAULT_SHUFFLE_AMOUNT: f32 = 0.6;
-const DEFAULT_DURATION: i32 = 480;
+// WASM CONTRACT: the forge schema defaults (GrooveBoxes.ts), read when a field is missing
+const SHUFFLE_DEFAULTS: (f32, i32) = (0.6, 480);
+const FUNCTION_DEFAULTS: (f32, i32) = (0.75, 960);
+const RANDOM_DEFAULTS: (f32, i32) = (0.75, 3840);
+const RANDOM_DEFAULT_SEED: i32 = 1;
+const RANDOM_DEFAULT_ROUGHNESS: f32 = 1.0;
+const RANDOM_DEFAULT_STEPS: i32 = 64;
 // A stack never holds itself (the editing functions refuse it), this only guards a broken document
 const MAX_DEPTH: u32 = 16;
 
@@ -43,7 +47,9 @@ pub enum GrooveDef {
 #[derive(Default)]
 struct State {
     defs: BTreeMap<Uuid, GrooveDef>,
-    subs: BTreeMap<Uuid, Vec<SubscriptionId>>
+    subs: BTreeMap<Uuid, Vec<SubscriptionId>>,
+    // a stack entry's subscription by entry, with the stack it belongs to, released with either
+    entry_subs: BTreeMap<Uuid, (Uuid, SubscriptionId)>
 }
 
 /// A cheap handle on the registry, the `host_groove_*` imports read it during render.
@@ -88,7 +94,10 @@ impl GrooveRegistry {
                         join(&hub_state, &hub_deferred, graph, source.uuid)
                     }
                 }
-                HubEvent::Removed(source) => leave(&hub_state, &hub_deferred, source.uuid)
+                // a groove that leaves the list but still exists stays followed, devices and stacks may use it
+                HubEvent::Removed(source) => if graph.find_box(&source.uuid).is_none() {
+                    leave(&hub_state, &hub_deferred, source.uuid)
+                }
             }));
         graph.apply_deferred();
         (Self {state, deferred}, subscription)
@@ -129,17 +138,26 @@ fn read(graph: &BoxGraph, groove: Uuid) -> Option<GrooveDef> {
         .and_then(FieldValue::as_float32).unwrap_or(default) as f64;
     let int = |key: u16, default: i32| graph.field_value(&Address::of(groove, vec![key]))
         .and_then(FieldValue::as_int32).unwrap_or(default);
-    let duration = int(GROOVE_DURATION, DEFAULT_DURATION) as f64;
     match graph_box.name.as_str() {
-        "GrooveShuffleBox" => Some(GrooveDef::Shuffle {h: squash_unit(float(GROOVE_AMOUNT, DEFAULT_SHUFFLE_AMOUNT)), duration}),
+        "GrooveShuffleBox" => Some(GrooveDef::Shuffle {
+            h: squash_unit(float(GROOVE_AMOUNT, SHUFFLE_DEFAULTS.0)),
+            duration: int(GROOVE_DURATION, SHUFFLE_DEFAULTS.1) as f64
+        }),
         "GrooveFunctionBox" => Some(GrooveDef::Function {
-            s_curve: int(FUNCTION_TYPE, 0) == 1, amount: float(GROOVE_AMOUNT, 0.75), duration
+            s_curve: int(FUNCTION_TYPE, 0) == 1,
+            amount: float(GROOVE_AMOUNT, FUNCTION_DEFAULTS.0),
+            duration: int(GROOVE_DURATION, FUNCTION_DEFAULTS.1) as f64
         }),
         "GrooveRandomBox" => {
-            let steps = int(RANDOM_STEPS, 8);
+            let steps = int(RANDOM_STEPS, RANDOM_DEFAULT_STEPS);
             let mut values = vec![0.0; random_value_count(steps)];
-            fill_random_values(int(RANDOM_SEED, 1), steps, float(RANDOM_ROUGHNESS, 0.5), &mut values);
-            Some(GrooveDef::Random {values, amount: float(GROOVE_AMOUNT, 0.75), duration})
+            fill_random_values(int(RANDOM_SEED, RANDOM_DEFAULT_SEED), steps,
+                float(RANDOM_ROUGHNESS, RANDOM_DEFAULT_ROUGHNESS), &mut values);
+            Some(GrooveDef::Random {
+                values,
+                amount: float(GROOVE_AMOUNT, RANDOM_DEFAULTS.0),
+                duration: int(GROOVE_DURATION, RANDOM_DEFAULTS.1) as f64
+            })
         }
         "GrooveStackBox" => {
             let mut entries: Vec<(i32, Uuid)> = graph.incoming(&Address::of(groove, vec![STACK_ENTRIES])).into_iter()
@@ -201,11 +219,13 @@ fn join(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, groov
                         let entry_deferred = hub_deferred.clone();
                         let id = hub_deferred.subscribe_vertex(Propagation::Parent, Address::box_of(entry),
                             Box::new(move |graph, _update| update(&entry_state, &entry_deferred, graph, groove)));
-                        hub_state.borrow_mut().subs.entry(entry).or_default().push(id);
+                        if let Some((_, previous)) = hub_state.borrow_mut().entry_subs.insert(entry, (groove, id)) {
+                            hub_deferred.unsubscribe(previous);
+                        }
                     }
                     HubEvent::Removed(source) => {
-                        if let Some(ids) = hub_state.borrow_mut().subs.remove(&source.uuid) {
-                            ids.into_iter().for_each(|id| hub_deferred.unsubscribe(id));
+                        if let Some((_, id)) = hub_state.borrow_mut().entry_subs.remove(&source.uuid) {
+                            hub_deferred.unsubscribe(id);
                         }
                     }
                 }
@@ -221,6 +241,15 @@ fn leave(state: &Rc<RefCell<State>>, deferred: &Deferred, groove: Uuid) {
     if let Some(ids) = state.subs.remove(&groove) {
         ids.into_iter().for_each(|id| deferred.unsubscribe(id));
     }
+    let entries: Vec<Uuid> = state.entry_subs.iter()
+        .filter(|(_, (stack, _))| *stack == groove)
+        .map(|(entry, _)| *entry)
+        .collect();
+    entries.into_iter().for_each(|entry| {
+        if let Some((_, id)) = state.entry_subs.remove(&entry) {
+            deferred.unsubscribe(id);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -300,7 +329,10 @@ mod tests {
         graph.transaction(&[Update::Pointer {
             address: Address::of(POWER, vec![2]), old: Some(Address::of(ROOT, vec![ROOT_GROOVES])), new: None
         }], &schema).unwrap();
-        assert_eq!(registry.def(&POWER), None, "a groove leaving the list leaves the registry");
+        assert!(registry.def(&POWER).is_some(), "a groove leaving the list but still existing stays followed");
+        graph.transaction(&[Update::Delete {uuid: POWER, name: "GrooveFunctionBox".to_string(), settings: Vec::new()}], &schema)
+            .unwrap();
+        assert_eq!(registry.def(&POWER), None, "a deleted groove leaves the registry");
     }
 
     #[test]
@@ -349,6 +381,89 @@ mod tests {
             address: Address::of(SHUFFLE, vec![GROOVE_AMOUNT]), old: FieldValue::Float32(0.8), new: FieldValue::Float32(0.5)
         }], &schema).unwrap();
         assert!((registry.warp(&SHUFFLE, 240.0) - 240.0).abs() < 1.0e-9, "an adopted groove follows its edits");
+    }
+
+    #[test]
+    fn every_type_round_trips_at_extreme_amounts_and_durations() {
+        let durations = [240, 480, 960, 1920, 3840, 7680, 15360, 30720, 61440];
+        let amounts = [0.0f32, 0.001, 0.01, 0.5, 0.99, 0.999, 1.0];
+        for duration in durations {
+            for amount in amounts {
+                let shuffle = graph_box(SHUFFLE, "GrooveShuffleBox", &[listed(),
+                    (GROOVE_AMOUNT, FieldValue::Float32(amount)), (GROOVE_DURATION, FieldValue::Int32(duration))]);
+                let power = graph_box(POWER, "GrooveFunctionBox", &[listed(), (GROOVE_AMOUNT, FieldValue::Float32(amount)),
+                    (GROOVE_DURATION, FieldValue::Int32(duration)), (FUNCTION_TYPE, FieldValue::Int32(1))]);
+                let random = graph_box(RANDOM, "GrooveRandomBox", &[listed(), (GROOVE_AMOUNT, FieldValue::Float32(amount)),
+                    (GROOVE_DURATION, FieldValue::Int32(duration)), (RANDOM_SEED, FieldValue::Int32(3)),
+                    (RANDOM_ROUGHNESS, FieldValue::Float32(1.0)), (RANDOM_STEPS, FieldValue::Int32(64))]);
+                let mut graph = BoxGraph::from_boxes(vec![root(), shuffle, power, random]);
+                let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+                for groove in [SHUFFLE, POWER, RANDOM] {
+                    let tolerance = duration as f64 * 1.0e-9 + 1.0e-9;
+                    for cell in 0..3 {
+                        let start = (cell * duration) as f64;
+                        for offset in [0.0, 1.0e-6, 1.0, 0.25, 0.5, 0.75] {
+                            let position = start + if offset < 0.2 { offset } else { offset * duration as f64 };
+                            let back = registry.unwarp(&groove, registry.warp(&groove, position));
+                            assert!((back - position).abs() < tolerance, "{amount} {duration} {position} -> {back}");
+                            let forth = registry.warp(&groove, registry.unwarp(&groove, position));
+                            assert!((forth - position).abs() < tolerance, "{amount} {duration} {position} -> {forth}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn large_stack(amounts: &[f32]) -> (BoxGraph, GrooveRegistry) {
+        let durations = [240, 480, 960, 1920, 3840, 7680, 15360, 30720, 61440];
+        let mut boxes = vec![root(), stack()];
+        for index in 0..24usize {
+            let groove: Uuid = [100 + index as u8; 16];
+            let entry_uuid: Uuid = [200 + index as u8; 16];
+            let (name, extra) = match index % 3 {
+                0 => ("GrooveShuffleBox", vec![]),
+                1 => ("GrooveFunctionBox", vec![(FUNCTION_TYPE, FieldValue::Int32((index % 2) as i32))]),
+                _ => ("GrooveRandomBox", vec![(RANDOM_SEED, FieldValue::Int32(index as i32)),
+                    (RANDOM_ROUGHNESS, FieldValue::Float32(0.8)), (RANDOM_STEPS, FieldValue::Int32(16))])
+            };
+            let mut fields = vec![listed(), (GROOVE_AMOUNT, FieldValue::Float32(amounts[index % amounts.len()])),
+                (GROOVE_DURATION, FieldValue::Int32(durations[index % durations.len()]))];
+            fields.extend(extra);
+            boxes.push(graph_box(groove, name, &fields));
+            boxes.push(entry(entry_uuid, groove, index as i32));
+        }
+        let mut graph = BoxGraph::from_boxes(boxes);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        match registry.def(&STACK) {
+            Some(GrooveDef::Stack {members}) => assert_eq!(members.len(), 24),
+            other => panic!("expected a stack, got {other:?}")
+        }
+        (graph, registry)
+    }
+
+    #[test]
+    fn a_stack_with_many_entries_round_trips() {
+        let (_graph, registry) = large_stack(&[0.25, 0.4, 0.6, 0.75, 0.5, 0.3, 0.7]);
+        for position in [0.0, 1.0, 239.0, 240.0, 480.0, 1000.0, 3839.0, 3840.0, 12345.678, 61439.0, 61440.0, 122897.0] {
+            let back = registry.unwarp(&STACK, registry.warp(&STACK, position));
+            assert!((back - position).abs() < 1.0e-3, "stack {position} -> {back}");
+        }
+    }
+
+    #[test]
+    fn a_stack_of_many_extreme_entries_stays_finite_and_in_order() {
+        // many members at 0% and 100% pull a cell onto almost one position, which no unwarp tells apart again
+        let (_graph, registry) = large_stack(&[0.0, 0.25, 0.75, 1.0, 0.5, 0.01, 0.99]);
+        let mut previous = f64::NEG_INFINITY;
+        let mut position = 0.0;
+        while position <= 7680.0 {
+            let warped = registry.warp(&STACK, position);
+            assert!(warped.is_finite() && warped >= previous, "order at {position}");
+            assert!(registry.unwarp(&STACK, warped).is_finite());
+            previous = warped;
+            position += 13.0;
+        }
     }
 
     #[test]
