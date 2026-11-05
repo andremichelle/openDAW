@@ -10,8 +10,6 @@ type Construct = {
     service: StudioService
 }
 
-// The global groove's amount in percent, dragged like the tempo or typed after a double-click. It follows the
-// global groove when that changes its type, a stack has no amount and shows a dash.
 export const ShuffleControl = ({lifecycle, service}: Construct) => {
     const {projectProfileService} = service
     const unitString = lifecycle.own(new DefaultObservableValue("60"))

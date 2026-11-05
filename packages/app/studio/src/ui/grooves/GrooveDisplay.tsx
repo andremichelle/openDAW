@@ -14,7 +14,6 @@ type Construct = {
     groove: GrooveAdapter
 }
 
-// The curve over one cell, a stack shows one bar
 export const GrooveDisplay = ({lifecycle, groove}: Construct): HTMLElement => {
     const curveCanvas: HTMLCanvasElement = <canvas/>
     const span = (): number => {

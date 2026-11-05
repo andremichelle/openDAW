@@ -50,13 +50,10 @@ const OffsetLimit = PPQN.fromSignature(1, 8)
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    // Nothing for a Zeitgeist without a groove
     groove: Nullable<GrooveAdapter>
-    // The Zeitgeist's pointer: the editor then shows the Groove choice on top
     pointer?: PointerField<Pointers.Groove>
 }
 
-// A dropdown model from plain functions, the editor's values live in the box graph
 const model = <T, >(get: () => T, set: (value: T) => void,
                      subscribe: (notify: () => void) => Subscription): MutableObservableValue<T> => {
     const notifier = new Notifier<ObservableValue<T>>()
@@ -76,14 +73,12 @@ const model = <T, >(get: () => T, set: (value: T) => void,
     return self
 }
 
-// The groove editor of the Zeitgeist panel and the Grooves list: the choices, the type's parameters, the display
 export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): HTMLElement => {
     const {project} = service
     const {editing, rootBoxAdapter} = project
     const field = (label: string, control: HTMLElement, extra?: HTMLElement): HTMLElement => (
         <div className="field"><h3>{label}{extra ?? ""}</h3>{control}</div>
     )
-    // left: the Groove choice and the display, right: Type, Duration and the type's parameters
     const left: HTMLElement = <div className="left"/>
     const right: HTMLElement = <div className="right"/>
     const settings: HTMLElement = <div className="settings"/>
@@ -213,7 +208,6 @@ type StackMembersConstruct = {
     stack: GrooveStackBoxAdapter
 }
 
-// A stack's members in the order they apply, which changes the result: drag a row to move it, × removes it
 const StackMembers = ({lifecycle, service, stack}: StackMembersConstruct): HTMLElement => {
     const {project} = service
     const {editing} = project
@@ -244,7 +238,6 @@ const StackMembers = ({lifecycle, service, stack}: StackMembersConstruct): HTMLE
                     return Option.None
                 }
                 let target = index
-                // the rows show the new order while dragging
                 const mark = () => elements.forEach((other, position) => {
                     const shown = position === index ? target
                         : position < index && position >= target ? position + 1

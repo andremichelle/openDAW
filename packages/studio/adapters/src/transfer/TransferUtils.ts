@@ -66,7 +66,6 @@ export namespace TransferUtils {
     export const isGlobalGroove = (box: Box): boolean =>
         isGrooveBox(box) && box.pointerHub.incoming().some(pointer => isInstanceOf(pointer.box, RootBox))
 
-    // grooves live in rootBox.grooves like modulators: carried alone, a stack with its entries and members
     export const withGrooves = (boxes: ReadonlyArray<Box>): ReadonlyArray<Box> => {
         const known = UUID.newSet<Box>(box => box.address.uuid)
         boxes.forEach(box => known.add(box))
@@ -93,12 +92,10 @@ export namespace TransferUtils {
         return added.length === 0 ? boxes : [...boxes, ...added]
     }
 
-    // An entry of a stack the target already holds is already there
     export const isEntryOfExistingStack = (box: Box, targetGraph: BoxGraph): boolean =>
         isInstanceOf(box, GrooveStackEntryBox)
         && box.stack.targetAddress.mapOr(address => targetGraph.findBox(address.uuid).nonEmpty(), false)
 
-    // Pasted grooves land behind the existing ones with unique labels, the global groove stays first
     export const normalizeGrooves = (graph: BoxGraph, isPasted: Predicate<Box>): void => {
         const rootBox = graph.boxes().find(box => isInstanceOf(box, RootBox))
         if (!isDefined(rootBox) || !isInstanceOf(rootBox, RootBox)) {return}
@@ -130,7 +127,6 @@ export namespace TransferUtils {
         })
     }
 
-    // Tells the boxes a uuid map created in the target graph, without the kept ones the target already had
     export const createdBy = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
                               existed: Predicate<UUID.Bytes> = () => false): Predicate<Box> => {
         const targets = UUID.newSet<UUID.Bytes>(uuid => uuid)
@@ -138,14 +134,12 @@ export namespace TransferUtils {
         return box => targets.hasKey(box.address.uuid)
     }
 
-    // Tells the source uuids whose target the graph holds already, ask before copying
     export const presentIn = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>, graph: BoxGraph): Predicate<UUID.Bytes> => {
         const present = UUID.newSet<UUID.Bytes>(uuid => uuid)
         uuidMap.forEach(({source, target}) => {if (graph.findBox(target).nonEmpty()) {present.add(source)}})
         return uuid => present.hasKey(uuid)
     }
 
-    // Tells the boxes of a paste
     export const among = (boxes: ReadonlyArray<Box>): Predicate<Box> => {
         const pasted = new Set<Box>(boxes)
         return box => pasted.has(box)

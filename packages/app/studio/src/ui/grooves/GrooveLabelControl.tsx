@@ -10,7 +10,6 @@ type Construct = {
     parameter: AutomatableParameterFieldAdapter<number>
 }
 
-// The devices' label control (a name above a framed value you drag), without automation: grooves have none
 export const GrooveLabelControl = ({lifecycle, editing, parameter}: Construct): HTMLElement => (
     <div className="control">
         <h3>{parameter.name}</h3>

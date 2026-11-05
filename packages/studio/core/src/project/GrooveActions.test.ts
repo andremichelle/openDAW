@@ -536,6 +536,18 @@ describe("groove list migration", () => {
         expect(members.map(box => box.label.getValue())).toEqual(["Global Shuffle", "Shuffle", "Shuffle 2"])
         expect(own.amount.getValue()).toBeCloseTo(0.7)
     })
+    it("a list that already has members keeps the global groove first and the labels unique", () => {
+        const {boxGraph, rootBox, global, own, second} = oldProject()
+        boxGraph.beginTransaction()
+        own.collection.refer(rootBox.grooves)
+        own.index.setValue(0)
+        boxGraph.endTransaction()
+        expect(migrateGrooveCollection(boxGraph, rootBox)).toBe(false)
+        const members = rootBox.grooves.pointerHub.incoming().map(pointer => asInstanceOf(pointer.box, GrooveShuffleBox))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+        expect(members).toEqual([global, own, second])
+        expect(members.map(box => box.label.getValue())).toEqual(["Global Shuffle", "Shuffle", "Shuffle 2"])
+    })
     it("runs once", () => {
         const {boxGraph, rootBox} = oldProject()
         migrateGrooveCollection(boxGraph, rootBox)

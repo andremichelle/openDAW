@@ -4,11 +4,9 @@ import {MenuItem, Project} from "@opendaw/studio-core"
 import {Box} from "@opendaw/lib-box"
 import {isDefined, Nullable} from "@opendaw/lib-std"
 
-// The menus of the groove controls, shared by the Zeitgeist panel and the Grooves list
 export namespace GrooveMenus {
     export const NoneLabel = "None"
 
-    // A new groove of any kind or an existing one joins the stack at its end
     export const memberItems = (project: Project, stack: GrooveStackBoxAdapter) => (parent: MenuItem): void => {
         const {editing, rootBoxAdapter} = project
         parent.addMenuItem(MenuItem.default({
@@ -26,7 +24,6 @@ export namespace GrooveMenus {
                 editing.modify(() => Grooves.addToStack(project, stack.box, candidate.box)))))))
     }
 
-    // Picks the groove of the selected regions or clips, hidden when none of them takes one
     export const timelineItem = (project: Project, boxes: ReadonlyArray<Box>) => {
         const {editing} = project
         const pointers = boxes.flatMap(box => Grooves.pointerOf(box).match({none: () => [], some: pointer => [pointer]}))

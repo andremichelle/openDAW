@@ -1737,8 +1737,6 @@ export type Automatable =
     | ScriptParameter
     | MIDIOutputParameter
     | GrooveShuffle
-    | GrooveFunction
-    | GrooveRandom
     | AnyModulator
     | Modulation
 
