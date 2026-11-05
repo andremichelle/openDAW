@@ -6,6 +6,7 @@ import {
     GrooveRandomBox,
     GrooveShuffleBox,
     GrooveStackBox,
+    GrooveStackEntryBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {EffectFactories} from "../EffectFactories"
@@ -187,7 +188,30 @@ describe("Grooves", () => {
         expect(labels(project)).toEqual(["Global Shuffle", "Random"])
         expect(indices(project)).toEqual([0, 1])
     })
-    it("a stack never contains itself", async () => {
+    it("a cycle of stacks from merged edits does not overflow", async () => {
+        const project = await createProject()
+        const [a, b, other] = project.editing.modify(() => {
+            const a = Grooves.create(project, "stack") as GrooveStackBox
+            const b = Grooves.create(project, "stack") as GrooveStackBox
+            const other = Grooves.create(project, "power")
+            // two peers each added one stack into the other
+            GrooveStackEntryBox.create(project.boxGraph, UUID.generate(), box => {
+                box.stack.refer(a.entries)
+                box.groove.refer(b)
+            })
+            GrooveStackEntryBox.create(project.boxGraph, UUID.generate(), box => {
+                box.stack.refer(b.entries)
+                box.groove.refer(a)
+            })
+            return [a, b, other] as const
+        }).unwrap()
+        const c = project.editing.modify(() => Grooves.create(project, "stack") as GrooveStackBox).unwrap()
+        expect(Grooves.canAddToStack(c, a)).toBe(true)
+        expect(Grooves.wouldContain(a, b)).toBe(true)
+        expect(Grooves.wouldContain(other, a)).toBe(false)
+        expect(() => project.editing.modify(() => Grooves.deleteAll(project, [b], "fallback"))).not.toThrow()
+    })
+        it("a stack never contains itself", async () => {
         const project = await createProject()
         const {outer, inner, power} = project.editing.modify(() => ({
             outer: Grooves.create(project, "stack") as GrooveStackBox,

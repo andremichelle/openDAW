@@ -9,7 +9,7 @@ import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdap
 import {GrooveAdapter, GrooveKind} from "./GrooveBoxAdapter"
 import {GrooveStackEntryBoxAdapter} from "./GrooveStackEntryBoxAdapter"
 
-// Guards against a stack that contains itself, which the editing functions never create
+// Guards against a stack that contains itself, which only merged edits of two peers create
 const MaxDepth = 16
 
 const greatestCommonDivisor = (a: int, b: int): int => b === 0 ? a : greatestCommonDivisor(b, a % b)
@@ -27,6 +27,7 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
     readonly #notifier: Notifier<GrooveAdapter>
 
     #notifying: boolean = false
+    #listening: boolean = false
 
     constructor(context: BoxAdaptersContext, box: GrooveStackBox) {
         this.#box = box
@@ -35,14 +36,13 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
             box => context.boxAdapters.adapterFor(box, GrooveStackEntryBoxAdapter), Pointers.GrooveStackEntries))
         this.#terminator.own(this.#members)
         const changed = () => {
-            this.#resubscribeMembers()
+            if (this.#listening) {this.#resubscribeMembers()}
             this.#notify()
         }
         this.#terminator.ownAll(
             this.#entries.subscribe({onAdd: changed, onRemove: changed, onReorder: changed}),
             box.subscribe(Propagation.Children, () => this.#notify())
         )
-        this.#resubscribeMembers()
     }
 
     get kind(): GrooveKind {return "stack"}
@@ -79,7 +79,15 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
             .reduceRight((value, groove) => groove.unwarp(value), position))
     }
 
-    subscribeChange(observer: Observer<GrooveAdapter>): Subscription {return this.#notifier.subscribe(observer)}
+    // members are followed once someone listens, never while adapters are built (stacks that hold each other)
+    subscribeChange(observer: Observer<GrooveAdapter>): Subscription {
+        const subscription = this.#notifier.subscribe(observer)
+        if (!this.#listening) {
+            this.#listening = true
+            this.#resubscribeMembers()
+        }
+        return subscription
+    }
 
     users(): ReadonlyArray<PointerField<Pointers.Groove>> {
         return this.#box.pointerHub.filter(Pointers.Groove) as ReadonlyArray<PointerField<Pointers.Groove>>

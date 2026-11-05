@@ -214,10 +214,10 @@ export namespace DevicesClipboard {
         }
         if (pointer.pointerType === Pointers.Groove) {
             return address.flatMap(target => boxGraph.findVertex(target).map(() => target))
-                .match({some: target => Option.wrap(target), none: () => TransferUtils.mapModulatorCollection(pointer, boxGraph)})
+                .match({some: target => Option.wrap(target), none: () => TransferUtils.mapRootPointer(pointer, boxGraph)})
         }
         if (pointer.pointerType === Pointers.GrooveCollection) {
-            return TransferUtils.mapModulatorCollection(pointer, boxGraph)
+            return TransferUtils.mapRootPointer(pointer, boxGraph)
         }
         return Option.None
     }
@@ -466,7 +466,7 @@ export namespace DevicesClipboard {
                             }
                         }
                     )
-                    TransferUtils.normalizeGrooves(boxGraph)
+                    TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
                     reindexPastedTopLevelEffects(boxes,
                         host.audioEffectsField.map(field => field.address),

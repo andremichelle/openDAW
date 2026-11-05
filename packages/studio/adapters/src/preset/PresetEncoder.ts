@@ -74,7 +74,7 @@ export namespace PresetEncoder {
                     return Option.wrap(rootBox.modulators.address)
                 }
                 return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
-                    ? Option.wrap(addr) : TransferUtils.mapModulatorCollection(pointer, boxGraph))
+                    ? Option.wrap(addr) : TransferUtils.mapRootPointer(pointer, boxGraph))
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...dependencies], uuidMap, boxGraph))
         boxGraph.endTransaction()
@@ -147,7 +147,7 @@ export namespace PresetEncoder {
                         return Option.wrap(rootBox.modulators.address)
                     }
                     return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
-                        ? Option.wrap(addr) : TransferUtils.mapModulatorCollection(pointer, boxGraph))
+                        ? Option.wrap(addr) : TransferUtils.mapRootPointer(pointer, boxGraph))
                 }
             }, () => {
                 effects.forEach((source, i) => {

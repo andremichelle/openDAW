@@ -220,7 +220,7 @@ export namespace AudioUnitsClipboard {
             }
         )
         DevicesClipboard.reindexModulatorLanes(boxes)
-        TransferUtils.normalizeGrooves(boxGraph)
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
     }
 
     const pasteNewAudioUnit = (data: ArrayBufferLike,
@@ -235,7 +235,7 @@ export namespace AudioUnitsClipboard {
         const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox | undefined
         if (!pastedAudioUnit) {return undefined}
         DevicesClipboard.reindexModulatorLanes(boxes)
-        TransferUtils.normalizeGrooves(boxGraph)
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
         const insertAfterIndex = currentAudioUnit
             .map(adapter => adapter.indexField.getValue())
             .unwrapOrElse(() => -1)

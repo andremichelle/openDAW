@@ -3,13 +3,13 @@ import {
     GrooveOffsetBox,
     GrooveRandomBox,
     GrooveShuffleBox,
-    GrooveStackBox,
-    GrooveStackEntryBox
+    GrooveStackBox
 } from "@opendaw/studio-boxes"
 import {Box, PointerField} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
-import {int, isInstanceOf, isNull, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {Grooves, isGrooveBox} from "@opendaw/studio-adapters"
+import {int, isNull, Nullable, panic, unitValue} from "@opendaw/lib-std"
 import {AnyGroove, GrooveFunction, GrooveOffset, GrooveRandom, GrooveShuffle, GrooveStack} from "../Api"
 import {Context} from "./Context"
 import {Facade} from "./Common"
@@ -102,10 +102,7 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
     }
 
     get members(): ReadonlyArray<AnyGroove> {
-        return this.box.entries.pointerHub.incoming()
-            .map(pointer => pointer.box)
-            .filter((box): box is GrooveStackEntryBox => isInstanceOf(box, GrooveStackEntryBox))
-            .sort((left, right) => left.index.getValue() - right.index.getValue())
+        return Grooves.entriesOf(this.box)
             .flatMap(entry => entry.groove.targetVertex.match({
                 none: () => [],
                 some: vertex => [GrooveImpls.wrap(this.context, vertex.box)]
@@ -114,8 +111,7 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
 }
 
 export namespace GrooveImpls {
-    export const isBox = (box: Box): boolean => box instanceof GrooveShuffleBox || box instanceof GrooveFunctionBox
-        || box instanceof GrooveRandomBox || box instanceof GrooveOffsetBox || box instanceof GrooveStackBox
+    export const isBox = (box: Box): boolean => isGrooveBox(box)
 
     // The groove a pointer targets, null for none
     export const read = (context: Context, pointer: PointerField<Pointers.Groove>): Nullable<AnyGroove> =>

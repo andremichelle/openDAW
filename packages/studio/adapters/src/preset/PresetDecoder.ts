@@ -110,7 +110,7 @@ export namespace PresetDecoder {
                 }
             })
         })
-        TransferUtils.normalizeGrooves(target.boxGraph)
+        TransferUtils.normalizeGrooves(target.boxGraph, TransferUtils.createdBy(uuidMap))
         return importedAudioUnits
     }
 
@@ -229,7 +229,7 @@ export namespace PresetDecoder {
                     some: ({target}) => Option.wrap(address.moveTo(target)),
                     none: () => targetBoxGraph.findBox(address.uuid).nonEmpty()
                         ? Option.wrap(address)
-                        : TransferUtils.mapModulatorCollection(pointer, targetBoxGraph)
+                        : TransferUtils.mapRootPointer(pointer, targetBoxGraph)
                 }))
         }, () => {
             dependencies
@@ -241,7 +241,7 @@ export namespace PresetDecoder {
                     targetBoxGraph.createBox(key, uuid, box => box.read(input))
                 })
         })
-        TransferUtils.normalizeGrooves(targetBoxGraph)
+        TransferUtils.normalizeGrooves(targetBoxGraph, TransferUtils.createdBy(uuidMap, uuid => existingKeptUuids.hasKey(uuid)))
         return Attempts.Ok
     }
 
@@ -338,7 +338,7 @@ export namespace PresetDecoder {
                 return address.flatMap(addr =>
                     targetGraph.findBox(addr.uuid).nonEmpty()
                         ? Option.wrap(addr)
-                        : TransferUtils.mapModulatorCollection(pointer, targetGraph))
+                        : TransferUtils.mapRootPointer(pointer, targetGraph))
             }
         }, () => {
             effects.forEach((source, i) => {
@@ -356,7 +356,7 @@ export namespace PresetDecoder {
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
         })
-        TransferUtils.normalizeGrooves(targetGraph)
+        TransferUtils.normalizeGrooves(targetGraph, TransferUtils.createdBy(uuidMap, uuid => existingKeptUuids.hasKey(uuid)))
         return Attempts.Ok
     }
 
@@ -392,10 +392,10 @@ export namespace PresetDecoder {
                 return address.flatMap(addr =>
                     targetGraph.findBox(addr.uuid).nonEmpty()
                         ? Option.wrap(addr)
-                        : TransferUtils.mapModulatorCollection(pointer, targetGraph))
+                        : TransferUtils.mapRootPointer(pointer, targetGraph))
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...fresh], uuidMap, targetGraph))
-        TransferUtils.normalizeGrooves(targetGraph)
+        TransferUtils.normalizeGrooves(targetGraph, TransferUtils.createdBy(uuidMap, uuid => !fresh.some(source => UUID.equals(source.address.uuid, uuid)) && !UUID.equals(instrument.address.uuid, uuid)))
         return Attempts.Ok
     }
 }

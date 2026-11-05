@@ -98,10 +98,8 @@ export namespace TransferUtils {
         isInstanceOf(box, GrooveStackEntryBox)
         && box.stack.targetAddress.mapOr(address => targetGraph.findBox(address.uuid).nonEmpty(), false)
 
-    // Pasted grooves land behind the existing ones with unique labels, the global groove stays first. A used
-    // groove outside the list (from an old preset) joins it. Read from the graph, since grooves pasted in this
-    // transaction are not in the collection yet.
-    export const normalizeGrooves = (graph: BoxGraph): void => {
+    // Pasted grooves land behind the existing ones with unique labels, the global groove stays first
+    export const normalizeGrooves = (graph: BoxGraph, isPasted: Predicate<Box>): void => {
         const rootBox = graph.boxes().find(box => isInstanceOf(box, RootBox))
         if (!isDefined(rootBox) || !isInstanceOf(rootBox, RootBox)) {return}
         const collection = rootBox.grooves.address
@@ -114,18 +112,35 @@ export namespace TransferUtils {
         members.forEach(box => {
             if (box.collection.targetAddress.isEmpty()) {box.collection.refer(rootBox.grooves)}
         })
+        const listed = new Set<Box>(members.filter(groove => !isPasted(groove)))
         members
             .sort((a, b) => Number(isGlobalGroove(b)) - Number(isGlobalGroove(a))
+                || Number(listed.has(b)) - Number(listed.has(a))
                 || a.index.getValue() - b.index.getValue()
                 || UUID.Comparator(a.address.uuid, b.address.uuid))
-        const taken: Array<string> = []
+        const taken: Array<string> = members.filter(groove => listed.has(groove)).map(groove => groove.label.getValue())
         members.forEach((groove, index) => {
             if (groove.index.getValue() !== index) {groove.index.setValue(index)}
+            if (listed.has(groove)) {return}
             const label = groove.label.getValue()
             const unique = taken.includes(label) ? Strings.getUniqueName(taken, label) : label
             taken.push(unique)
             if (unique !== label) {groove.label.setValue(unique)}
         })
+    }
+
+    // Tells the boxes a uuid map created in the target graph, without the kept ones the target already had
+    export const createdBy = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
+                              existed: Predicate<UUID.Bytes> = () => false): Predicate<Box> => {
+        const targets = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        uuidMap.forEach(({source, target}) => {if (!existed(source)) {targets.add(target)}})
+        return box => targets.hasKey(box.address.uuid)
+    }
+
+    // Tells the boxes of a paste
+    export const among = (boxes: ReadonlyArray<Box>): Predicate<Box> => {
+        const pasted = new Set<Box>(boxes)
+        return box => pasted.has(box)
     }
 
     export const deviceDependencies = (root: Box, exclude: Predicate<Box> = () => false): ReadonlyArray<Box> =>
@@ -153,9 +168,8 @@ export namespace TransferUtils {
             targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
         })
 
-    // Reached for a target the copy did not carry: modulators and grooves join the target root, a groove that
-    // stayed behind (the global one) becomes the target's global groove
-    export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> => {
+    // A pointer to what the copy did not carry joins the target root, a left-behind groove becomes its global one
+    export const mapRootPointer = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> => {
         const rootBox = (): Option<RootBox> =>
             Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
         switch (pointer.pointerType) {
@@ -169,6 +183,9 @@ export namespace TransferUtils {
                 return Option.None
         }
     }
+
+    /** @deprecated use mapRootPointer, it maps groove pointers too */
+    export const mapModulatorCollection = mapRootPointer
 
     export const generateMap = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                 dependencies: ReadonlyArray<Box>,
@@ -228,7 +245,7 @@ export namespace TransferUtils {
                 address.flatMap(addr => uuidMap.opt(addr.uuid).match({
                     some: ({target}) => Option.wrap(addr.moveTo(target)),
                     none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty()
-                        ? Option.wrap(addr) : mapModulatorCollection(pointer, targetBoxGraph)
+                        ? Option.wrap(addr) : mapRootPointer(pointer, targetBoxGraph)
                 }))
         }, () => {
             audioUnitBoxes.forEach((source: AudioUnitBox) => {

@@ -1219,9 +1219,8 @@ pub extern "C" fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32 {
     slot
 }
 
-fn groove_of(slot: u32) -> Option<(GrooveRegistry, Uuid)> {
-    let target = (*unsafe { GROOVE_SLOTS.get() }.get(slot as usize)?)?;
-    Some((unsafe { GROOVES.get() }.as_ref()?.clone(), target))
+fn slot_target(slot: u32) -> Option<Uuid> {
+    *unsafe { GROOVE_SLOTS.get() }.get(slot as usize)?
 }
 
 /// The grooved position of a straight `pulse` through `groove` (unchanged when the registry is not bound).
@@ -1237,13 +1236,13 @@ pub(crate) fn unwarp_through(groove: &Uuid, pulse: f64) -> f64 {
 /// Host import: the grooved position of a straight `pulse` through the slot's groove (unchanged without one).
 #[no_mangle]
 pub extern "C" fn host_groove_warp(slot: u32, pulse: f64) -> f64 {
-    groove_of(slot).map_or(pulse, |(registry, groove)| registry.warp(&groove, pulse))
+    slot_target(slot).map_or(pulse, |groove| warp_through(&groove, pulse))
 }
 
 /// Host import: the straight position of a grooved `pulse` through the slot's groove (unchanged without one).
 #[no_mangle]
 pub extern "C" fn host_groove_unwarp(slot: u32, pulse: f64) -> f64 {
-    groove_of(slot).map_or(pulse, |(registry, groove)| registry.unwarp(&groove, pulse))
+    slot_target(slot).map_or(pulse, |groove| unwarp_through(&groove, pulse))
 }
 
 /// Host import: writes the loop area the transport wraps at (2 x f64) and returns 1, or 0 when it does not wrap.

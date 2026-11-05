@@ -130,10 +130,7 @@ export namespace GrooveCurves {
     // Keeps a blend invertible where a curve flattens (like the shuffle's squashUnit margin)
     const MaxWeight = 0.98
 
-    // 50% is straight, 100% the function and 0% its mirror on y = x. Below 50% the warp is the inverse of the
-    // blend at 100% minus the amount, so both directions only ever evaluate the curve itself and bisect a
-    // function whose slope stays at least 1 - MaxWeight. Inverting the inverse curve instead would bisect a
-    // vertical tangent, which a double cannot resolve near the cell end.
+    // 50% is straight, 100% the function, 0% its mirror on y = x (the inverse of the blend at 100% minus the amount)
     export const blend = (func: GrooveFunction, amount: unitValue): GrooveFunction => {
         const weight = Math.min(1.0, Math.abs(2.0 * amount - 1.0)) * MaxWeight
         const forward = (x: unitValue): unitValue => {

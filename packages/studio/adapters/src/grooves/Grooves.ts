@@ -213,11 +213,13 @@ export namespace Grooves {
     }
 
     // True when `groove` is `stack` or holds it somewhere inside, so adding it would make a cycle
-    export const wouldContain = (groove: GrooveBox, stack: GrooveBox): boolean => {
+    export const wouldContain = (groove: GrooveBox, stack: GrooveBox, visited: Set<GrooveBox> = new Set()): boolean => {
         if (groove === stack) {return true}
-        if (!isInstanceOf(groove, GrooveStackBox)) {return false}
+        if (!isInstanceOf(groove, GrooveStackBox) || visited.has(groove)) {return false}
+        // a cycle from merged edits in a live room ends here
+        visited.add(groove)
         return entriesOf(groove).some(entry => entry.groove.targetVertex
-            .mapOr(vertex => wouldContain(asGrooveBox(vertex.box), stack), false))
+            .mapOr(vertex => wouldContain(asGrooveBox(vertex.box), stack, visited), false))
     }
 
     export const canAddToStack = (stack: GrooveStackBox, groove: GrooveBox): boolean => !wouldContain(groove, stack)

@@ -41,7 +41,8 @@ pub fn clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool
     let Some((loop_from, loop_to)) = area else {return (u0, u1)};
     let limit = |position: f64| {
         let position = if from < loop_to && position > loop_to {loop_to} else {position};
-        if wrapped && position < loop_from {loop_from} else {position}
+        let inside = from >= loop_from && from < loop_to;
+        if wrapped && inside && position < loop_from {loop_from} else {position}
     };
     (limit(u0), limit(u1))
 }
@@ -92,6 +93,10 @@ pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32,
     let area = abi::loop_area();
     if flags & abi::BlockFlags::DISCONTINUOUS != 0 {
         state.wrapped = area.is_some_and(|(loop_from, loop_to)| from == loop_from && (state.last_to - loop_to).abs() < WRAP_TOLERANCE);
+    }
+    // a loop moved away from the playhead ends the wrapped passes
+    if !area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to) {
+        state.wrapped = false;
     }
     state.last_to = to;
     let (pull_from, pull_to) = clip(abi::groove_unwarp(slot, from), abi::groove_unwarp(slot, to), area, from, state.wrapped);
@@ -161,6 +166,12 @@ mod tests {
         assert_eq!(clip(3600.0, 3900.0, area, 3840.0, true), (3840.0, 3900.0));
         assert_eq!(clip(3600.0, 3700.0, area, 3840.0, true), (3840.0, 3840.0));
         assert_eq!(clip(3600.0, 3900.0, area, 3840.0, false), (3600.0, 3900.0));
+    }
+
+    #[test]
+    fn a_loop_moved_away_from_the_playhead_clamps_nothing() {
+        // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
+        assert_eq!(clip(8000.0, 8100.0, Some((30720.0, 46080.0)), 8000.0, true), (8000.0, 8100.0));
     }
 
     #[test]

@@ -120,7 +120,7 @@ export namespace AudioUnitAsLayer {
                 if (unitField.nonEmpty()) {return unitField}
                 return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
                     ? Option.wrap(addr)
-                    : TransferUtils.mapModulatorCollection(pointer, boxGraph))
+                    : TransferUtils.mapRootPointer(pointer, boxGraph))
             }
         }, () => TransferUtils.cloneBoxes(fresh, uuidMap, boxGraph))
         sources.filter((box): box is TrackBox => isInstanceOf(box, TrackBox))

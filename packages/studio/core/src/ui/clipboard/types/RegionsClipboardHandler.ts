@@ -179,7 +179,7 @@ export namespace RegionsClipboard {
                             }
                         }
                     )
-                    TransferUtils.normalizeGrooves(boxGraph)
+                    TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
                     overlapSolvers.forEach(solver => solver())
                     const regionBoxes = boxes.filter(UnionBoxTypes.isRegionBox)
                     const adapters = regionBoxes.map(box => RegionAdapters.for(boxAdapters, box))
