@@ -1,10 +1,11 @@
-// An offset groove behind a Zeitgeist in the FULL engine: every note must sound exactly once, moved by the
-// offset, across block edges, at the playback start and across loop wraps. The Apparat writes an impulse of
-// 1.0 at each note-on sample, so every onset and every doubled or missing note is countable.
+// An offset groove behind a Zeitgeist in the FULL engine: every note sounds once, moved by the offset, across
+// block edges and at the playback start. A loop wrap is a jump: each pass plays the loop's notes the groove keeps
+// inside the loop, nothing from beyond it. The Apparat writes an impulse of 1.0 at each note-on sample, so every
+// onset and every doubled or missing note is countable.
 import {describe, expect, it} from "vitest"
 import {int, UUID} from "@opendaw/lib-std"
 import {
-    ApparatDeviceBox, AudioUnitBox, GrooveOffsetBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox,
+    ApparatDeviceBox, AudioUnitBox, GrooveFunctionBox, GrooveOffsetBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
@@ -35,7 +36,8 @@ const LENGTH_CODE = `class Processor {
     }
 }`
 
-type Setup = { offset: int, loop?: [int, int], bars: int }
+// a cell groove instead of the offset: a power curve over `duration` at `amount`
+type Setup = { offset: int, loop?: [int, int], bars: int, power?: {duration: int, amount: number} }
 
 // 16ths, every odd bar half a 16th later, so a note leaking in from beyond the loop shows
 const notePositions = (bars: int): ReadonlyArray<int> => {
@@ -48,20 +50,24 @@ const notePositions = (bars: int): ReadonlyArray<int> => {
     return positions
 }
 
-// the notes as played: straight up to the loop start, then the loop over and over, each moved by the offset
-const unrolled = (bars: int, [loopFrom, loopTo]: [int, int], offset: int, span: int): ReadonlyArray<number> => {
+// the notes as played: up to the loop end every note moved before it, then each pass the loop's notes the
+// offset keeps inside the loop
+const jumped = (bars: int, [loopFrom, loopTo]: [int, int], offset: int, span: int): ReadonlyArray<number> => {
     const positions = notePositions(bars)
+    const length = loopTo - loopFrom
     const expected: Array<number> = []
     const keep = (at: number) => {if (at >= 0 && at < span) {expected.push(at)}}
-    positions.filter(position => position < loopFrom).forEach(position => keep(position + offset))
-    for (let pass = 0; loopFrom + pass * (loopTo - loopFrom) < span + Math.abs(offset); pass++) {
+    positions.filter(position => position < loopTo && position + offset < loopTo).forEach(position => keep(position + offset))
+    for (let pass = 1; loopFrom + pass * length < span; pass++) {
         positions.filter(position => position >= loopFrom && position < loopTo)
-            .forEach(position => keep(position + pass * (loopTo - loopFrom) + offset))
+            .map(position => position + offset)
+            .filter(at => at >= loopFrom && at < loopTo)
+            .forEach(at => keep(at + pass * length))
     }
     return expected
 }
 
-const build = async ({offset, loop, bars}: Setup, code: string) => {
+const build = async ({offset, loop, bars, power}: Setup, code: string) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -81,11 +87,18 @@ const build = async ({offset, loop, bars}: Setup, code: string) => {
         box.host.refer(unit.input)
         box.code.setValue("// @apparat js 1 1\n" + code)
     })
-    const groove = GrooveOffsetBox.create(source, UUID.generate(), box => {
-        box.collection.refer(rootBox.grooves)
-        box.index.setValue(1)
-        box.offset.setValue(offset)
-    })
+    const groove = power === undefined
+        ? GrooveOffsetBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.grooves)
+            box.index.setValue(1)
+            box.offset.setValue(offset)
+        })
+        : GrooveFunctionBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.grooves)
+            box.index.setValue(1)
+            box.amount.setValue(power.amount)
+            box.duration.setValue(power.duration)
+        })
     ZeitgeistDeviceBox.create(source, UUID.generate(), box => {
         box.host.refer(unit.midiEffects)
         box.groove.refer(groove)
@@ -170,30 +183,21 @@ describe("an offset groove in the engine", () => {
             expectOnsets(onsets, expected, `offset ${offset}`)
         }
     }, 300000)
-    it("plays every note of the loop once per pass, wrapped around the loop", async () => {
+    it("plays the loop's notes the offset keeps inside the loop on every pass", async () => {
         for (const offset of Offsets) {
-            const passes = 3
-            const onsets = await render({offset, loop: [0, BAR], bars: 2}, passes * BAR)
-            const expected: Array<number> = []
-            for (let pass = 0; pass <= passes; pass++) {
-                // a note moved past the loop end plays at the start of the next pass, one moved before the
-                // loop start at the end of the previous pass, nothing before the playback start
-                for (let position = 0; position < BAR; position += STEP) {
-                    const at = pass * BAR + position + offset
-                    if (at >= 0 && at < passes * BAR) {expected.push(at)}
-                }
-            }
-            expectOnsets(onsets, expected, `loop offset ${offset}`)
+            const loop: [int, int] = [0, BAR]
+            const onsets = await render({offset, loop, bars: 2}, 3 * BAR)
+            expectOnsets(onsets, jumped(2, loop, offset, 3 * BAR), `loop offset ${offset}`)
         }
     }, 300000)
-    it("enters a loop that starts later straight and wraps it from then on", async () => {
+    it("enters a loop that starts later straight and jumps from then on", async () => {
         for (const offset of Offsets) {
             const loop: [int, int] = [BAR, 2 * BAR]
             const onsets = await render({offset, loop, bars: 3}, 4 * BAR)
-            expectOnsets(onsets, unrolled(3, loop, offset, 4 * BAR), `late loop offset ${offset}`)
+            expectOnsets(onsets, jumped(3, loop, offset, 4 * BAR), `late loop offset ${offset}`)
         }
     }, 300000)
-    it("keeps every note's length across the loop wrap", async () => {
+    it("keeps every note's length, a note sounding at the wrap ends there", async () => {
         for (const offset of Offsets) {
             const {play} = await build({offset, loop: [0, BAR], bars: 2}, LENGTH_CODE)
             const ons: Array<int> = [], offs: Array<int> = []
@@ -201,17 +205,45 @@ describe("an offset groove in the engine", () => {
                 for (let count = 0; count < Math.round(value); count++) {ons.push(start + index)}
                 for (let count = 0; count < Math.round(right[index]); count++) {offs.push(start + index)}
             }))
-            // every note but the last is released half a 16th after it started
-            ons.slice(0, -1).forEach((on, index) => expect(Math.abs(offs[index] - on - STEP / 2 * SAMPLES_PER_PULSE),
-                `offset ${offset}: note ${index} at ${on / SAMPLES_PER_PULSE} lasts ${(offs[index] - on) / SAMPLES_PER_PULSE}`)
-                .toBeLessThanOrEqual(1))
+            // every note is released once, half a 16th after it started or within the first block after the wrap
+            const length = STEP / 2 * SAMPLES_PER_PULSE, wrap = BAR * SAMPLES_PER_PULSE, block = 128
+            expect(offs.length, `offset ${offset}: releases`).toBeGreaterThanOrEqual(ons.length - 1)
+            ons.slice(0, -1).forEach((on, index) => {
+                const lasts = offs[index] - on, nextWrap = (Math.floor(on / wrap) + 1) * wrap
+                const what = `offset ${offset}: note ${index} at ${on / SAMPLES_PER_PULSE} lasts ${lasts / SAMPLES_PER_PULSE}`
+                if (on + length < nextWrap) {expect(Math.abs(lasts - length), what).toBeLessThanOrEqual(1)}
+                else {expect(offs[index] >= nextWrap - 1 && offs[index] <= nextWrap + block, what).toBe(true)}
+            })
         }
     }, 300000)
-    it("wraps a loop shorter than the offset more than once", async () => {
+    it("repeats a loop whose cell is longer than the loop pass by pass, without piling notes up", async () => {
+        // the PEAK project: a power curve over 8 bars at 92% on a 4 bar loop pushes the second half past the loop end,
+        // at 8% pulls notes from beyond it
+        for (const amount of [0.92, 0.08]) {
+            const loopLength = 4 * BAR, passes = 4
+            const onsets = await render({offset: 0, loop: [0, loopLength], bars: 4, power: {duration: 8 * BAR, amount}},
+                passes * loopLength)
+            // the windows start a little early, the engine's loop wrap drifts by a sample per pass
+            const start = (index: int) => index * loopLength * SAMPLES_PER_PULSE - 64
+            const pass = (index: int) => onsets
+                .filter(sample => sample >= start(index) && sample < start(index + 1))
+                .map(sample => sample - index * loopLength * SAMPLES_PER_PULSE)
+            expect(new Set(onsets).size, `amount ${amount}: notes sharing a sample`).toBe(onsets.length)
+            // every pass sounds like the one before
+            expect(pass(0).length, `amount ${amount}: notes in the first pass`).toBeGreaterThan(0)
+            for (let index = 1; index < passes; index++) {
+                const [previous, current] = [pass(index - 1), pass(index)]
+                expect(current.length, `amount ${amount}: pass ${index} has ${current.length} notes`).toBe(previous.length)
+                current.forEach((sample, note) => expect(Math.abs(sample - previous[note]),
+                    `amount ${amount}: pass ${index} note ${note}`).toBeLessThanOrEqual(1))
+            }
+        }
+    }, 300000)
+    it("plays a loop shorter than the offset", async () => {
         for (const offset of Offsets) {
             const loop: [int, int] = [BAR, BAR + STEP]
             const onsets = await render({offset, loop, bars: 3}, 2 * BAR)
-            expectOnsets(onsets, unrolled(3, loop, offset, 2 * BAR), `short loop offset ${offset}`)
+            expectOnsets(onsets, jumped(3, loop, offset, 2 * BAR), `short loop offset ${offset}`)
         }
     }, 300000)
 })
