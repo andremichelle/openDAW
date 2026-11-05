@@ -21,7 +21,7 @@ type Construct = {
 
 export const ZeitgeistDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {liveStreamReceiver, rootBoxAdapter} = project
+    const {liveStreamReceiver} = project
     const pointer = adapter.box.groove
     const host: HTMLElement = <div className={className}/>
     const contents = lifecycle.own(new Terminator())
@@ -36,9 +36,7 @@ export const ZeitgeistDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
             pointer
         }))
     }
-    lifecycle.ownAll(
-        pointer.subscribe(() => render()),
-        rootBoxAdapter.grooves.subscribe({onAdd: () => render(), onRemove: () => render(), onReorder: () => {}}))
+    lifecycle.own(pointer.subscribe(() => render()))
     render()
     return (
         <DeviceEditor lifecycle={lifecycle}

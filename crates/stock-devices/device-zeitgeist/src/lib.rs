@@ -4,8 +4,7 @@
 //! (clamped back into `[from, to]`). The groove itself lives in the engine's groove registry (every groove
 //! type, stacks included), the device follows its pointer through a slot from `abi::observe_groove`. Without
 //! a groove the stream passes through unchanged. It works entirely in PULSE positions, so this device touches
-//! no sample timing at all. While the transport loops, nothing after the loop end is read, and after a wrap nothing
-//! before the loop start: every pass plays like a start at the loop start.
+//! no sample timing at all.
 //!
 //! Exports: `kind()` (midi effect), `state_size()`, `init(...)`, `process_events(...)`.
 

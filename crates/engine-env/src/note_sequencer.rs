@@ -200,7 +200,8 @@ impl NoteEventSource for NoteSequencer {
                             let origin = region.position - region.loop_offset;
                             let grooved = Grooved {access, groove, origin, length: region.loop_duration,
                                 low: region.position - origin, high: region.complete() - origin, truncate};
-                            process_grooved(notes, &grooved, section.from, section.to, retainer, random, next_id, sink);
+                            process_grooved(notes, &grooved, section.from.max(region.position), section.to.min(region.complete()),
+                                retainer, random, next_id, sink);
                             return;
                         }
                         for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, section.from, section.to) {
@@ -358,8 +359,6 @@ fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local
     }
 }
 
-// A groove a region or clip plays through, running on from `origin`. Its content repeats every `length` (one pass
-// without a loop), only notes whose straight position (relative to `origin`) lies in `[low, high)` are read.
 struct Grooved<'a> {
     access: &'a dyn NoteTrackAccess,
     groove: [u8; 16],
@@ -370,9 +369,6 @@ struct Grooved<'a> {
     truncate: bool
 }
 
-/// Plays the notes a groove places into `[from, to)`: a note at straight position `x` (relative to the origin)
-/// sounds at `origin + warp(x)` and ends at `origin + warp(x + duration)`, cut at its cycle or the end in
-/// truncate mode.
 #[allow(clippy::too_many_arguments)]
 fn process_grooved(notes: &EventCollection<NoteEvent>, grooved: &Grooved, from: f64, to: f64,
                    retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Mulberry32, next_id: &mut u64,

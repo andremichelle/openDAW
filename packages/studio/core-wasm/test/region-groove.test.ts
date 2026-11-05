@@ -139,8 +139,7 @@ describe("a region with a groove", () => {
             for (const cycle of [0, BAR]) {
                 for (let position = 0; position < BAR; position += STEP) {
                     const moved = cycle + position + offset
-                    // the block reaching the region end still reads it, so a note landing on the end sounds
-                    if (moved >= 0 && moved <= 2 * BAR) {expected.push(moved)}
+                    if (moved >= 0 && moved < 2 * BAR) {expected.push(moved)}
                 }
             }
             near(onsets, expected.sort((a, b) => a - b), `offset ${offset}`)

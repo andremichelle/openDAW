@@ -22,6 +22,6 @@ export class GrooveShuffleBoxAdapter extends CellGrooveBoxAdapter<GrooveShuffleB
 
     protected createFunction(): GrooveFunction {
         const amount = squashUnit(this.box.amount.getValue(), 0.01)
-        return {fx: x => moebiusEase(x, amount), fy: y => moebiusEase(y, 1.0 - amount)}
+        return {fx: phase => moebiusEase(phase, amount), fy: phase => moebiusEase(phase, 1.0 - amount)}
     }
 }

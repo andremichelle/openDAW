@@ -13,8 +13,8 @@ import {Grooves} from "./Grooves"
 // Stacks nested deeper than this play their inner members straight
 const MaxDepth = 16
 
-const greatestCommonDivisor = (a: int, b: int): int => b === 0 ? a : greatestCommonDivisor(b, a % b)
-const leastCommonMultiple = (a: int, b: int): int => a / greatestCommonDivisor(a, b) * b
+const greatestCommonDivisor = (left: int, right: int): int => right === 0 ? left : greatestCommonDivisor(right, left % right)
+const leastCommonMultiple = (left: int, right: int): int => left / greatestCommonDivisor(left, right) * right
 
 export class GrooveStackBoxAdapter implements GrooveAdapter {
     readonly type = "groove-adapter"

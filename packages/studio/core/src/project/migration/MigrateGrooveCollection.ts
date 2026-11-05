@@ -14,8 +14,8 @@ export const migrateGrooveCollection = (boxGraph: BoxGraph<BoxIO.TypeMap>, rootB
     if (missing.length === 0) {return members === 0}
     console.debug(`Migrate ${missing.length} grooves into the groove list`)
     const global: string = rootBox.groove.targetAddress.mapOr(address => UUID.toString(address.uuid), "")
-    const ordered = missing.slice().sort((a, b) =>
-        Number(UUID.toString(b.address.uuid) === global) - Number(UUID.toString(a.address.uuid) === global))
+    const ordered = missing.slice().sort((left, right) =>
+        Number(UUID.toString(right.address.uuid) === global) - Number(UUID.toString(left.address.uuid) === global))
     const taken: Array<string> = [GlobalGrooveLabel]
     boxGraph.beginTransaction()
     ordered.forEach((groove, offset) => {

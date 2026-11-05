@@ -115,10 +115,10 @@ export namespace TransferUtils {
             if (box.collection.targetAddress.isEmpty()) {box.collection.refer(rootBox.grooves)}
         })
         members
-            .sort((a, b) => Number(isGlobalGroove(b)) - Number(isGlobalGroove(a))
-                || Number(listed.has(b)) - Number(listed.has(a))
-                || a.index.getValue() - b.index.getValue()
-                || UUID.Comparator(a.address.uuid, b.address.uuid))
+            .sort((left, right) => Number(isGlobalGroove(right)) - Number(isGlobalGroove(left))
+                || Number(listed.has(right)) - Number(listed.has(left))
+                || left.index.getValue() - right.index.getValue()
+                || UUID.Comparator(left.address.uuid, right.address.uuid))
         const taken: Array<string> = members.filter(groove => listed.has(groove)).map(groove => groove.label.getValue())
         members.forEach((groove, index) => {
             if (groove.index.getValue() !== index) {groove.index.setValue(index)}

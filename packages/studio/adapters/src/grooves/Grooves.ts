@@ -71,7 +71,6 @@ export namespace Grooves {
     export const users = (groove: GrooveBox): ReadonlyArray<PointerField<Pointers.Groove>> =>
         groove.pointerHub.filter(Pointers.Groove) as ReadonlyArray<PointerField<Pointers.Groove>>
 
-    // The users a person sees: devices and stacks, never the project's own reference to its global groove
     export const targets = (groove: GrooveBox): ReadonlyArray<PointerField<Pointers.Groove>> =>
         users(groove).filter(pointer => !isInstanceOf(pointer.box, RootBox))
 
@@ -90,7 +89,6 @@ export namespace Grooves {
         return box
     }
 
-    // Becomes another kind in place: every user follows, label, index, amount and duration carry over
     export const replace = (context: BoxAdaptersContext, groove: GrooveBox, kind: GrooveKind): GrooveBox => {
         if (kindOf(groove) === kind) {return groove}
         if (isInstanceOf(groove, GrooveFunctionBox) && (kind === "power" || kind === "s-curve")) {
@@ -113,7 +111,6 @@ export namespace Grooves {
         return replacement
     }
 
-    // Same kind and settings, no users. A stack copies its entries, they point to the same members.
     export const duplicate = (context: BoxAdaptersContext, groove: GrooveBox): GrooveBox => {
         const input = new ByteArrayInput(groove.toArrayBuffer())
         const copy = asGrooveBox(context.boxGraph.createBox(groove.name as keyof BoxIO.TypeMap,
@@ -131,7 +128,6 @@ export namespace Grooves {
         return copy
     }
 
-    // One user gets its own copy
     export const makeUnique = (context: BoxAdaptersContext,
                                groove: GrooveBox,
                                user: PointerField<Pointers.Groove>): GrooveBox => {
@@ -146,21 +142,17 @@ export namespace Grooves {
         isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox)
         || isInstanceOf(box, NoteClipBox) || isInstanceOf(box, ValueClipBox)
 
-    // The groove pointer of a note or value region or clip
     export const pointerOf = (box: Box): Option<PointerField<Pointers.Groove>> =>
         isTimelineBox(box) ? Option.wrap(box.groove) : Option.None
 
-    // What Flatten does with the grooves of the regions: write them into the positions or keep the shared one
     export type FlattenGroove = "apply" | "keep"
 
-    // Where a box's groove, running on from `origin`, plays a straight position
     export const playedAt = (context: BoxAdaptersContext, box: Box, origin: number): Option<(position: number) => number> =>
         pointerOf(box).flatMap(pointer => pointer.targetVertex).map(({box: groove}) => {
             const adapter = adapterOf(context, asGrooveBox(groove))
             return (position: number) => origin + adapter.warp(position - origin)
         })
 
-    // The groove every one of the boxes points at, none when they differ or have none
     export const sharedOf = (boxes: ReadonlyArray<Box>): Option<GrooveBox> => {
         const targets = boxes.map(box => pointerOf(box).flatMap(pointer => pointer.targetVertex).map(vertex => vertex.box))
         const first = targets.at(0)
@@ -169,7 +161,6 @@ export namespace Grooves {
         return targets.every(target => target.contains(groove)) ? Option.wrap(asGrooveBox(groove)) : Option.None
     }
 
-    // The audio unit whose track holds a region or clip
     export const unitOf = (box: TimelineBox): Option<AudioUnitBox> =>
         (isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) ? box.regions : box.clips).targetVertex
             .flatMap(({box: track}) => isInstanceOf(track, TrackBox) ? track.tracks.targetVertex : Option.None)
@@ -177,7 +168,6 @@ export namespace Grooves {
 
     export type DeleteMode = "fallback" | "remove"
 
-    // The global groove is never deleted. Users fall back to the global groove or lose their groove.
     export const deleteAll = (context: BoxAdaptersContext,
                               grooves: ReadonlyArray<GrooveBox>,
                               mode: DeleteMode): void => {
@@ -204,7 +194,7 @@ export namespace Grooves {
         reindex(remaining)
     }
 
-    // A stack entry has no groove without its member, so it goes. Every other user keeps an empty pointer.
+    // a stack entry without its member is deleted
     export const unassign = (pointer: PointerField<Pointers.Groove>): void => {
         if (isInstanceOf(pointer.box, GrooveStackEntryBox)) {
             const stack = pointer.box.stack.targetVertex.map(vertex => asGrooveBox(vertex.box))
@@ -217,7 +207,6 @@ export namespace Grooves {
         }
     }
 
-    // Move a set to `target`'s place, keeping the moved ones in their own order
     export const move = (context: BoxAdaptersContext, grooves: ReadonlyArray<GrooveBox>, target: GrooveBox): void => {
         const moved = new Set<GrooveBox>(grooves)
         if (moved.has(target) || moved.size === 0) {return}
@@ -231,7 +220,6 @@ export namespace Grooves {
         reindex(stationary)
     }
 
-    // True when `groove` is `stack` or holds it somewhere inside, so adding it would make a cycle
     export const wouldContain = (groove: GrooveBox, stack: GrooveBox, visited: Set<GrooveBox> = new Set()): boolean => {
         if (groove === stack) {return true}
         if (!isInstanceOf(groove, GrooveStackBox) || visited.has(groove)) {return false}
@@ -254,7 +242,6 @@ export namespace Grooves {
 
     export const removeFromStack = (entry: GrooveStackEntryBox): void => unassign(entry.groove)
 
-    // The order of a stack changes its result, a member moves to another place
     export const moveInStack = (stack: GrooveStackBox, entry: GrooveStackEntryBox, to: int): void => {
         const entries = entriesOf(stack).slice()
         const from = entries.indexOf(entry)
@@ -268,9 +255,8 @@ export namespace Grooves {
         stack.entries.pointerHub.incoming()
             .map(pointer => pointer.box)
             .filter((box): box is GrooveStackEntryBox => isInstanceOf(box, GrooveStackEntryBox) && box.isAttached())
-            .sort((a, b) => a.index.getValue() - b.index.getValue())
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
 
-    // Whom a groove pointer belongs to, for lists of users
     export type User =
         | { type: "zeitgeist", box: ZeitgeistDeviceBox }
         | { type: "stack", box: GrooveStackBox, entry: GrooveStackEntryBox }
@@ -307,13 +293,8 @@ export namespace Grooves {
     const reindexEntries = (entries: ReadonlyArray<GrooveStackEntryBox>): void =>
         entries.forEach((entry, index) => entry.index.setValue(index))
 
-    // The list as it stands inside the running transaction, where new members are not in the collection yet
-    const listed = (context: BoxAdaptersContext): ReadonlyArray<GrooveBox> => {
-        const collection = context.rootBoxAdapter.box.grooves.address
-        return context.boxGraph.boxes()
-            .filter((box): box is GrooveBox => isGrooveBox(box) && box.isAttached())
-            .filter(box => box.collection.targetAddress.mapOr(address => address.equals(collection), false))
-    }
+    const listed = (context: BoxAdaptersContext): ReadonlyArray<GrooveBox> =>
+        context.rootBoxAdapter.box.grooves.pointerHub.incoming().map(pointer => asGrooveBox(pointer.box))
 
     const attach = (context: BoxAdaptersContext, box: GrooveBox, label: string): void => {
         const existing = listed(context)

@@ -280,6 +280,13 @@ describe("Grooves", () => {
         expect(zeitgeist.isAttached()).toBe(true)
         expect(zeitgeist.groove.targetAddress.isEmpty()).toBe(true)
     })
+    it("grooves created in one edit get their own index and label", async () => {
+        const project = await createProject()
+        const [first, second] = project.editing.modify(() =>
+            [Grooves.create(project, "power", "Mine"), Grooves.create(project, "power", "Mine")]).unwrap()
+        expect(second.index.getValue()).toBe(first.index.getValue() + 1)
+        expect(second.label.getValue()).not.toBe(first.label.getValue())
+    })
     it("deleting closes the index gaps", async () => {
         const project = await createProject()
         const [a, , c] = project.editing.modify(() =>

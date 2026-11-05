@@ -51,8 +51,8 @@ export abstract class CellGrooveBoxAdapter<BOX extends CellGrooveBox> implements
             StringMapping.values("", GrooveDurations.PPQNs, GrooveDurations.Labels), "Duration")
         this.#pattern = new GroovePattern({
             duration: (): ppqn => this.#box.duration.getValue(),
-            fx: x => this.#cellFunction().fx(x),
-            fy: y => this.#cellFunction().fy(y)
+            fx: phase => this.#cellFunction().fx(phase),
+            fy: phase => this.#cellFunction().fy(phase)
         })
         this.terminator.own(box.subscribe(Propagation.Children, () => {
             this.#function = null

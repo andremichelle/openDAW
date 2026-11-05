@@ -147,8 +147,6 @@ pub(crate) struct ValueBoundRegion {
     pub(crate) curve: ValueCurve
 }
 
-// The content position a curve repeating every `length` is read at through a groove running on from `origin`, the
-// straight position kept within `[low, high]`
 fn ungrooved<U: Fn(f64) -> f64>(unwarp: U, position: f64, origin: f64, length: f64, low: f64, high: f64) -> f64 {
     let straight = unwarp(position - origin);
     let straight = if straight < low {low} else if straight > high {high} else {straight};

@@ -342,6 +342,17 @@ fn a_note_the_groove_moves_into_the_next_cycle_sounds_there_one_moved_past_the_r
 }
 
 #[test]
+fn a_note_moved_past_the_region_end_stays_silent_also_when_a_block_spans_the_end() {
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(20.0, 10.0, 60, 0.0, 1.0), NoteEvent::new(80.0, 10.0, 62, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..12 {
+        all.extend(starts(&pull(&mut sequencer, block as f64 * 20.0 - 5.0, block as f64 * 20.0 + 15.0)));
+    }
+    assert_eq!(all.iter().map(|start| start.0).collect::<Vec<_>>(), vec![50.0, 110.0, 150.0]);
+}
+
+#[test]
 fn a_grooved_region_starts_its_groove_where_its_loop_starts() {
     // the region starts 40 into its content, the groove still counts from the content start
     let region = NoteRegion {position: 1000.0, duration: 60.0, loop_offset: 40.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
