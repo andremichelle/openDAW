@@ -23,6 +23,7 @@ const FUNCTION_TYPE: u16 = 12; // GrooveFunctionBox.function: 0 power, 1 s-curve
 const RANDOM_SEED: u16 = 12; // GrooveRandomBox.seed (Int32)
 const RANDOM_ROUGHNESS: u16 = 13; // GrooveRandomBox.roughness (Float32)
 const RANDOM_STEPS: u16 = 14; // GrooveRandomBox.steps (Int32)
+const OFFSET_TICKS: u16 = 10; // GrooveOffsetBox.offset (Int32 ppqn)
 const STACK_ENTRIES: u16 = 10; // GrooveStackBox.entries (hub)
 const ENTRY_GROOVE: u16 = 2; // GrooveStackEntryBox.groove (pointer)
 const ENTRY_INDEX: u16 = 3; // GrooveStackEntryBox.index (Int32)
@@ -33,6 +34,8 @@ const RANDOM_DEFAULTS: (f32, i32) = (0.75, 3840);
 const RANDOM_DEFAULT_SEED: i32 = 1;
 const RANDOM_DEFAULT_ROUGHNESS: f32 = 1.0;
 const RANDOM_DEFAULT_STEPS: i32 = 64;
+// WASM CONTRACT: GrooveOffsetBox.offset constraints, an eighth note either way
+const OFFSET_LIMIT: i32 = 480;
 // A stack never holds itself (the editing functions refuse it), this only guards a broken document
 const MAX_DEPTH: u32 = 16;
 
@@ -41,6 +44,7 @@ pub enum GrooveDef {
     Shuffle {h: f64, duration: f64},
     Function {s_curve: bool, amount: f64, duration: f64},
     Random {values: Vec<f64>, amount: f64, duration: f64},
+    Offset {ticks: f64},
     Stack {members: Vec<Uuid>}
 }
 
@@ -119,6 +123,7 @@ fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward:
             let curve = Curve::Table(values);
             cell(position, *duration, |x| if forward { blend_fx(curve, *amount, x) } else { blend_fy(curve, *amount, x) })
         }
+        GrooveDef::Offset {ticks} => if forward { position + *ticks } else { position - *ticks },
         GrooveDef::Stack {members} => {
             if depth >= MAX_DEPTH {
                 return position;
@@ -159,6 +164,7 @@ fn read(graph: &BoxGraph, groove: Uuid) -> Option<GrooveDef> {
                 duration: int(GROOVE_DURATION, RANDOM_DEFAULTS.1) as f64
             })
         }
+        "GrooveOffsetBox" => Some(GrooveDef::Offset {ticks: int(OFFSET_TICKS, 0).clamp(-OFFSET_LIMIT, OFFSET_LIMIT) as f64}),
         "GrooveStackBox" => {
             let mut entries: Vec<(i32, Uuid)> = graph.incoming(&Address::of(groove, vec![STACK_ENTRIES])).into_iter()
                 .filter_map(|source| {
@@ -385,7 +391,9 @@ mod tests {
 
     #[test]
     fn every_type_round_trips_at_extreme_amounts_and_durations() {
-        let durations = [240, 480, 960, 1920, 3840, 7680, 15360, 30720, 61440];
+        // every duration of the dropdown, triplets and dotted values included
+        let durations = [160, 240, 320, 480, 640, 720, 960, 1280, 1440, 1920, 2880, 3840, 7680, 11520, 15360,
+            23040, 30720, 46080, 61440];
         let amounts = [0.0f32, 0.001, 0.01, 0.5, 0.99, 0.999, 1.0];
         for duration in durations {
             for amount in amounts {
@@ -412,6 +420,80 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    const OFFSET: Uuid = [8u8; 16];
+
+    fn offset(ticks: i32) -> GraphBox {
+        graph_box(OFFSET, "GrooveOffsetBox", &[listed(), (OFFSET_TICKS, FieldValue::Int32(ticks))])
+    }
+
+    #[test]
+    fn an_offset_moves_every_position_and_round_trips() {
+        for ticks in [-480, -479, -1, 0, 1, 7, 240, 479, 480] {
+            let mut graph = BoxGraph::from_boxes(vec![root(), offset(ticks)]);
+            let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+            assert_eq!(registry.def(&OFFSET), Some(GrooveDef::Offset {ticks: ticks as f64}));
+            // positions on the tick grid come back bit for bit
+            for position in [-7680.0, -480.0, -0.5, 0.0, 0.5, 239.0, 480.0, 3840.0, 122897.25] {
+                assert_eq!(registry.warp(&OFFSET, position), position + ticks as f64);
+                assert_eq!(registry.unwarp(&OFFSET, registry.warp(&OFFSET, position)), position, "{ticks} {position}");
+                assert_eq!(registry.warp(&OFFSET, registry.unwarp(&OFFSET, position)), position, "{ticks} {position}");
+            }
+            // any fraction comes back within float rounding
+            for position in [1.0e-6, 0.1, 3839.999, 1234.5678] {
+                let back = registry.unwarp(&OFFSET, registry.warp(&OFFSET, position));
+                assert!((back - position).abs() < 1.0e-12, "{ticks} {position} -> {back}");
+                let forth = registry.warp(&OFFSET, registry.unwarp(&OFFSET, position));
+                assert!((forth - position).abs() < 1.0e-12, "{ticks} {position} -> {forth}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_offset_beyond_an_eighth_note_plays_at_the_limit() {
+        let mut graph = BoxGraph::from_boxes(vec![root(), offset(10000)]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.warp(&OFFSET, 1000.0), 1480.0);
+        let mut graph = BoxGraph::from_boxes(vec![root(), offset(-10000)]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.warp(&OFFSET, 1000.0), 520.0);
+    }
+
+    #[test]
+    fn an_offset_follows_its_field() {
+        let mut graph = BoxGraph::from_boxes(vec![root(), offset(120)]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.warp(&OFFSET, 1000.0), 1120.0);
+        graph.transaction(&[Update::Primitive {
+            address: Address::of(OFFSET, vec![OFFSET_TICKS]), old: FieldValue::Int32(120), new: FieldValue::Int32(-300)
+        }], &Registry::new()).unwrap();
+        assert_eq!(registry.warp(&OFFSET, 1000.0), 700.0);
+        assert_eq!(registry.unwarp(&OFFSET, 700.0), 1000.0);
+    }
+
+    #[test]
+    fn a_stack_of_offsets_and_odd_durations_round_trips() {
+        let shuffle = graph_box(SHUFFLE, "GrooveShuffleBox", &[listed(),
+            (GROOVE_AMOUNT, FieldValue::Float32(0.7)), (GROOVE_DURATION, FieldValue::Int32(320))]);
+        let power = graph_box(POWER, "GrooveFunctionBox", &[listed(), (GROOVE_AMOUNT, FieldValue::Float32(0.3)),
+            (GROOVE_DURATION, FieldValue::Int32(2880)), (FUNCTION_TYPE, FieldValue::Int32(1))]);
+        let mut graph = BoxGraph::from_boxes(vec![root(), shuffle, power, offset(-480), stack(),
+            entry(ENTRY_A, SHUFFLE, 0), entry(ENTRY_B, OFFSET, 1), entry([9u8; 16], POWER, 2)]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.def(&STACK), Some(GrooveDef::Stack {members: vec![SHUFFLE, OFFSET, POWER]}));
+        let mut previous = f64::NEG_INFINITY;
+        let mut position = -3840.0;
+        while position <= 11520.0 {
+            let warped = registry.warp(&STACK, position);
+            assert!(warped > previous, "order at {position}");
+            let back = registry.unwarp(&STACK, warped);
+            assert!((back - position).abs() < 1.0e-6, "{position} -> {back}");
+            let forth = registry.warp(&STACK, registry.unwarp(&STACK, position));
+            assert!((forth - position).abs() < 1.0e-6, "{position} -> {forth}");
+            previous = warped;
+            position += 7.25;
         }
     }
 

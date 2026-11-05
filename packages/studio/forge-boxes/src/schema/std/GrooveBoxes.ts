@@ -84,14 +84,7 @@ export const GrooveStackEntryBox: BoxSchema<Pointers> = {
 
 export const GrooveOffsetBox: BoxSchema<Pointers> = createGrooveBox("GrooveOffsetBox", {
     10: {
-        type: "float32",
-        name: "amount",
-        pointerRules: ParameterPointerRules, value: 0.0, ...UnipolarConstraints
-    },
-    11: {
-        type: "boolean",
-        name: "sync",
-        pointerRules: ParameterPointerRules,
-        value: true
+        type: "int32", name: "offset", value: 0,
+        constraints: {min: -PPQN.fromSignature(1, 8), max: PPQN.fromSignature(1, 8)}, unit: "ppqn"
     }
 })

@@ -3,6 +3,7 @@ import {PPQN} from "@opendaw/lib-dsp"
 import {isInstanceOf, UUID} from "@opendaw/lib-std"
 import {
     GrooveFunctionBox,
+    GrooveOffsetBox,
     GrooveRandomBox,
     GrooveStackBox,
     GrooveStackEntryBox,
@@ -11,7 +12,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {createFixture} from "./Fixture"
 import {ZeitgeistEffectImpl} from "../impl/devices/MIDIEffects"
-import {GrooveRandom, GrooveStack} from "../Api"
+import {GrooveOffset, GrooveRandom, GrooveStack} from "../Api"
 
 // Scripts cannot create grooves yet, the fixture builds them on the box graph like the studio does
 const setup = () => {
@@ -130,6 +131,25 @@ describe("grooves", () => {
             rootBox.groove.refer(boxes.random)
         })
         expect(project.groove.kind).toBe("Random")
+    })
+
+    it("reads and writes an offset groove within an eighth note", () => {
+        const {project, zeitgeist} = setup()
+        const {context} = zeitgeist
+        const box = context.edit(() => GrooveOffsetBox.create(context.boxGraph, UUID.generate(), box => {
+            box.label.setValue("Late")
+            box.collection.refer(context.boxGraph.boxes().find((box): box is RootBox => isInstanceOf(box, RootBox))!.grooves)
+            box.index.setValue(5)
+        }))
+        const groove = project.grooves.find(groove => groove.kind === "Offset") as GrooveOffset
+        expect(groove.label).toBe("Late")
+        expect(groove.offset).toBe(0)
+        groove.offset = -240
+        expect(box.offset.getValue()).toBe(-240)
+        groove.offset = 1000
+        expect(groove.offset).toBe(480)
+        groove.offset = -1000
+        expect(groove.offset).toBe(-480)
     })
 
     it("a Zeitgeist without a groove reads null", () => {

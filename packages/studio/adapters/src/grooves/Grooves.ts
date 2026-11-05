@@ -2,6 +2,7 @@ import {
     BoxIO,
     BoxVisitor,
     GrooveFunctionBox,
+    GrooveOffsetBox,
     GrooveRandomBox,
     GrooveShuffleBox,
     GrooveStackBox,
@@ -28,6 +29,7 @@ export namespace Grooves {
         {kind: "power", label: "Power"},
         {kind: "s-curve", label: "S-Curve"},
         {kind: "random", label: "Random"},
+        {kind: "offset", label: "Offset"},
         {kind: "stack", label: "Stack"}
     ]
 
@@ -39,6 +41,7 @@ export namespace Grooves {
         visitGrooveFunctionBox: (box: GrooveFunctionBox): GrooveKind =>
             box.function.getValue() === GrooveFunctionType.SCurve ? "s-curve" : "power",
         visitGrooveRandomBox: (): GrooveKind => "random",
+        visitGrooveOffsetBox: (): GrooveKind => "offset",
         visitGrooveStackBox: (): GrooveKind => "stack"
     }
 
@@ -48,6 +51,7 @@ export namespace Grooves {
         visitGrooveShuffleBox: (box: GrooveShuffleBox) => box,
         visitGrooveFunctionBox: (box: GrooveFunctionBox) => box,
         visitGrooveRandomBox: (box: GrooveRandomBox) => box,
+        visitGrooveOffsetBox: (box: GrooveOffsetBox) => box,
         visitGrooveStackBox: (box: GrooveStackBox) => box
     }) ?? panic(`${box.name} is no groove`)
 
@@ -74,7 +78,8 @@ export namespace Grooves {
                 : kind === "s-curve" ? GrooveFunctionBox.create(boxGraph, uuid,
                         box => box.function.setValue(GrooveFunctionType.SCurve))
                     : kind === "random" ? GrooveRandomBox.create(boxGraph, uuid)
-                        : GrooveStackBox.create(boxGraph, uuid)
+                        : kind === "offset" ? GrooveOffsetBox.create(boxGraph, uuid)
+                            : GrooveStackBox.create(boxGraph, uuid)
         attach(context, box, label ?? labelOf(kind))
         return box
     }
@@ -95,7 +100,7 @@ export namespace Grooves {
         groove.delete()
         replacement.label.setValue(label)
         replacement.index.setValue(index)
-        if (!isInstanceOf(replacement, GrooveStackBox)) {
+        if (!isInstanceOf(replacement, GrooveStackBox) && !isInstanceOf(replacement, GrooveOffsetBox)) {
             if (amount !== null) {replacement.amount.setValue(amount)}
             if (duration !== null) {replacement.duration.setValue(duration)}
         }
@@ -246,10 +251,10 @@ export namespace Grooves {
         context.boxAdapters.adapterFor(groove, GrooveAdapter.checkType)
 
     const amountOf = (groove: GrooveBox): Nullable<number> =>
-        isInstanceOf(groove, GrooveStackBox) ? null : groove.amount.getValue()
+        isInstanceOf(groove, GrooveStackBox) || isInstanceOf(groove, GrooveOffsetBox) ? null : groove.amount.getValue()
 
     const durationOf = (groove: GrooveBox): Nullable<number> =>
-        isInstanceOf(groove, GrooveStackBox) ? null : groove.duration.getValue()
+        isInstanceOf(groove, GrooveStackBox) || isInstanceOf(groove, GrooveOffsetBox) ? null : groove.duration.getValue()
 
     const reindex = (grooves: ReadonlyArray<GrooveBox>): void =>
         grooves.forEach((groove, index) => groove.index.setValue(index))

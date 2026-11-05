@@ -1,5 +1,6 @@
 import {
     GrooveFunctionBox,
+    GrooveOffsetBox,
     GrooveRandomBox,
     GrooveShuffleBox,
     GrooveStackBox,
@@ -8,7 +9,7 @@ import {
 import {Box} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {int, isInstanceOf, panic, unitValue} from "@opendaw/lib-std"
-import {AnyGroove, GrooveFunction, GrooveRandom, GrooveShuffle, GrooveStack} from "../Api"
+import {AnyGroove, GrooveFunction, GrooveOffset, GrooveRandom, GrooveShuffle, GrooveStack} from "../Api"
 import {Context} from "./Context"
 import {Facade} from "./Common"
 
@@ -69,6 +70,22 @@ export class GrooveRandomImpl extends Facade<GrooveRandomBox> implements GrooveR
     }
 }
 
+export class GrooveOffsetImpl extends Facade<GrooveOffsetBox> implements GrooveOffset {
+    static wrap(context: Context, box: GrooveOffsetBox): GrooveOffsetImpl {
+        return context.facade(box, () => new GrooveOffsetImpl(context, box))
+    }
+
+    readonly kind = "Offset" as const
+
+    declare label: string
+    declare offset: int
+
+    private constructor(context: Context, box: GrooveOffsetBox) {
+        super(context, box)
+        this.bind({label: box.label, offset: box.offset})
+    }
+}
+
 export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveStack {
     static wrap(context: Context, box: GrooveStackBox): GrooveStackImpl {
         return context.facade(box, () => new GrooveStackImpl(context, box))
@@ -97,12 +114,13 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
 
 export namespace GrooveImpls {
     export const isBox = (box: Box): boolean => box instanceof GrooveShuffleBox || box instanceof GrooveFunctionBox
-        || box instanceof GrooveRandomBox || box instanceof GrooveStackBox
+        || box instanceof GrooveRandomBox || box instanceof GrooveOffsetBox || box instanceof GrooveStackBox
 
     export const wrap = (context: Context, box: Box): AnyGroove => {
         if (box instanceof GrooveShuffleBox) {return GrooveShuffleImpl.wrap(context, box)}
         if (box instanceof GrooveFunctionBox) {return GrooveFunctionImpl.wrap(context, box)}
         if (box instanceof GrooveRandomBox) {return GrooveRandomImpl.wrap(context, box)}
+        if (box instanceof GrooveOffsetBox) {return GrooveOffsetImpl.wrap(context, box)}
         if (box instanceof GrooveStackBox) {return GrooveStackImpl.wrap(context, box)}
         return panic(`${box.name} is not a groove`)
     }

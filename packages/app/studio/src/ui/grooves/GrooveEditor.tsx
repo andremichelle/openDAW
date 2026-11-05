@@ -16,6 +16,7 @@ import {
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
+import {PPQN} from "@opendaw/lib-dsp"
 import {PointerField} from "@opendaw/lib-box"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {
@@ -24,6 +25,7 @@ import {
     GrooveBox,
     GrooveDurations,
     GrooveKind,
+    GrooveOffsetBoxAdapter,
     GrooveRandomBoxAdapter,
     Grooves,
     GrooveStackBoxAdapter
@@ -43,6 +45,7 @@ import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
 
 const className = Html.adoptStyleSheet(css, "GrooveEditor")
+const OffsetLimit = PPQN.fromSignature(1, 8)
 
 type Construct = {
     lifecycle: Lifecycle
@@ -105,6 +108,13 @@ export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): 
                       mapping={box => isDefined(box) ? box.label.getValue() : GrooveMenus.NoneLabel}
                       width="100%"
                       appearance={{framed: true, color: Colors.blue, activeColor: Colors.bright}}
+                      head={parent => parent.addMenuItem(MenuItem.default({
+                          label: `Go to ${current()?.label.getValue() ?? GrooveMenus.NoneLabel}`,
+                          selectable: isDefined(current())
+                      }).setTriggerProcedure(() => {
+                          const box = current()
+                          if (isDefined(box)) {GrooveReveal.request(box.address.uuid)}
+                      }))}
                       extra={parent => {
                           parent.addMenuItem(MenuItem.default({label: "New", separatorBefore: true})
                               .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...Grooves.Kinds.map(kind =>
@@ -168,6 +178,18 @@ export const GrooveEditor = ({lifecycle, service, groove, pointer}: Construct): 
                     <NumberInput lifecycle={lifecycle} maxChars={6}
                                  guard={{guard: value => clamp(value, 0, GrooveRandomBoxAdapter.MaxSeed)}}
                                  model={EditWrapper.forValue(editing, groove.box.seed)}/>
+                </div>
+            </div>)
+    }
+    if (isInstanceOf(groove, GrooveOffsetBoxAdapter)) {
+        parameters.append(
+            <div className="slot offset">
+                <div className="control">
+                    <h3>Offset</h3>
+                    <NumberInput lifecycle={lifecycle} maxChars={4}
+                                 guard={{guard: value => clamp(Math.round(value), -OffsetLimit, OffsetLimit)}}
+                                 model={EditWrapper.forValue(editing, groove.offsetField)}/>
+                    <span className="hint">{`1/16 = ${PPQN.fromSignature(1, 16)}`}</span>
                 </div>
             </div>)
     }
@@ -255,7 +277,6 @@ const StackMembers = ({lifecycle, service, stack}: StackMembersConstruct): HTMLE
     return (
         <div className="slot members">
             <div className="head">
-                <h3>Members</h3>
                 <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(GrooveMenus.memberItems(project, stack))}
                             appearance={{color: Colors.gray, tooltip: "Add a groove"}}>
                     <Icon symbol={IconSymbol.Add}/>

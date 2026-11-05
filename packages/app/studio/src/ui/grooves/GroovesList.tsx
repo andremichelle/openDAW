@@ -161,6 +161,8 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
         const target = element.firstElementChild
         if (!(target instanceof HTMLElement) || !target.isConnected) {return}
         target.scrollIntoView({block: "nearest"})
+        element.classList.add("revealed")
+        element.addEventListener("animationend", () => element.classList.remove("revealed"), {once: true})
         GrooveReveal.requested.clear()
     }))
     const render = () => {

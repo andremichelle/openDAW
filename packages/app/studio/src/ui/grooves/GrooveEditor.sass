@@ -78,6 +78,11 @@ component
         justify-items: center
         white-space: nowrap
 
+        > .hint
+          font-size: 9px
+          margin-top: 1px
+          color: var(--color-shadow)
+
       > .slot.amount
         grid-area: 1 / 1
 
@@ -105,7 +110,7 @@ component
 
         > .head
           display: grid
-          grid-template-columns: 1fr auto
+          justify-content: end
           align-items: center
           padding-right: 2px
           font-size: 9px
@@ -129,7 +134,7 @@ component
             align-items: center
             padding: 1px 2px 1px 4px
             border-radius: 2px
-            background-color: rgba(white, 0.06)
+            background-color: rgba(black, 0.15)
             color: var(--color-gray)
             outline: none
 

@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {GrooveAdapter, GrooveBox, GrooveDurations, GrooveKind, Grooves, ProjectSkeleton} from "@opendaw/studio-adapters"
-import {GrooveFunctionBox, GrooveRandomBox, GrooveShuffleBox, GrooveStackBox} from "@opendaw/studio-boxes"
+import {GrooveFunctionBox, GrooveOffsetBox, GrooveRandomBox, GrooveShuffleBox, GrooveStackBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {Project} from "./Project"
 
@@ -38,8 +38,13 @@ const positionsFor = (duration: number): ReadonlyArray<number> => {
     return positions
 }
 
+const OffsetTicks = [-480, -479, -240, -1, 0, 1, 7, 240, 479, 480]
+
+const greatestCommonDivisor = (a: number, b: number): number => b === 0 ? a : greatestCommonDivisor(b, a % b)
+const leastCommonMultiple = (a: number, b: number): number => a / greatestCommonDivisor(a, b) * b
+
 const configure = (groove: GrooveBox, amount: number, duration: number): void => {
-    if (groove instanceof GrooveStackBox) {return}
+    if (groove instanceof GrooveStackBox || groove instanceof GrooveOffsetBox) {return}
     groove.amount.setValue(amount)
     groove.duration.setValue(duration)
     if (groove instanceof GrooveRandomBox) {
@@ -106,13 +111,52 @@ describe("grooves come back to the input through warp and unwarp", () => {
             }
         }
     })
-    it("a stack with many entries of every kind and extreme amounts", async () => {
+    it("an offset moves every position by its ticks and comes back", async () => {
         const project = await createProject()
+        const groove = project.editing.modify(() => Grooves.create(project, "offset")).unwrap() as GrooveOffsetBox
+        const adapter = Grooves.adapterOf(project, groove)
+        expect(adapter.kind).toBe("offset")
+        expect(adapter.cellDuration()).toBe(0)
+        for (const ticks of OffsetTicks) {
+            project.editing.modify(() => groove.offset.setValue(ticks))
+            // positions on the tick grid come back exactly, any fraction within float rounding
+            for (const position of [-7680, -480, -0.5, 0, 0.5, 239, 480, 3840, 122897.25]) {
+                expect(adapter.warp(position)).toBe(position + ticks)
+                expect(adapter.unwarp(adapter.warp(position))).toBe(position)
+                expect(adapter.warp(adapter.unwarp(position))).toBe(position)
+            }
+            for (const position of [1e-6, 0.1, 3839.999, 1234.5678]) {
+                expectRoundTrip(adapter, position, 1e-12, `offset ${ticks}`)
+            }
+        }
+    })
+    it("an offset beyond an eighth note either way plays at the limit", async () => {
+        const project = await createProject()
+        const groove = project.editing.modify(() => Grooves.create(project, "offset")).unwrap() as GrooveOffsetBox
+        const adapter = Grooves.adapterOf(project, groove)
+        project.editing.modify(() => groove.offset.setValue(10000))
+        expect(adapter.warp(1000)).toBe(1480)
+        expect(adapter.unwarp(1480)).toBe(1000)
+        project.editing.modify(() => groove.offset.setValue(-10000))
+        expect(adapter.warp(1000)).toBe(520)
+        expect(adapter.unwarp(520)).toBe(1000)
+    })
+    it("every duration of the list, triplets and dotted ones included", () => {
+        expect(GrooveDurations.PPQNs).toEqual([160, 240, 320, 480, 640, 720, 960, 1280, 1440, 1920, 2880, 3840,
+            7680, 11520, 15360, 23040, 30720, 46080, 61440])
+        expect(GrooveDurations.Labels).toEqual(["1/24", "1/16", "1/12", "1/8", "1/6", "3/16", "1/4", "1/3", "3/8",
+            "1/2", "3/4", "1 bar", "2 bars", "3 bars", "4 bars", "6 bars", "8 bars", "12 bars", "16 bars"])
+    })
+    it("a stack with many entries of every kind, offsets and extreme amounts", async () => {
+        const project = await createProject()
+        const durations = GrooveDurations.PPQNs
         const stack = project.editing.modify(() => {
             const stack = Grooves.create(project, "stack") as GrooveStackBox
-            const durations = GrooveDurations.PPQNs
             for (let index = 0; index < 24; index++) {
-                const member = Grooves.create(project, CellKinds[index % CellKinds.length])
+                const member = index % 5 === 4
+                    ? Grooves.create(project, "offset")
+                    : Grooves.create(project, CellKinds[index % CellKinds.length])
+                if (member instanceof GrooveOffsetBox) {member.offset.setValue(OffsetTicks[index % OffsetTicks.length])}
                 configure(member, Amounts[index % Amounts.length], durations[index % durations.length])
                 Grooves.addToStack(project, stack, member)
             }
@@ -121,7 +165,10 @@ describe("grooves come back to the input through warp and unwarp", () => {
         expect(Grooves.entriesOf(stack).length).toBe(24)
         const adapter = Grooves.adapterOf(project, stack)
         const span = adapter.cellDuration()
-        expect(span).toBe(Math.max(...GrooveDurations.PPQNs))
+        const used = Array.from({length: 24}, (_, index) => index)
+            .filter(index => index % 5 !== 4)
+            .map(index => durations[index % durations.length])
+        expect(span).toBe(used.reduce(leastCommonMultiple))
         for (const position of [0, 1, 239, 240, 241, 480, 1000, 3839, 3840, 12345.678, span - 1, span, span * 2 + 17]) {
             expectRoundTrip(adapter, position, 1e-3, "stack")
         }

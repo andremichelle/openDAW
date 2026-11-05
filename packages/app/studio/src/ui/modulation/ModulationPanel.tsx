@@ -89,6 +89,8 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             const row = element.firstElementChild
             if (!isInstanceOf(row, HTMLElement) || !row.isConnected) {return}
             row.scrollIntoView({block: "nearest"})
+            element.classList.add("revealed")
+            element.addEventListener("animationend", () => element.classList.remove("revealed"), {once: true})
             ModulatorReveal.requested.clear()
         }))
     const render = () => {

@@ -39,6 +39,7 @@ import {
     GrooveFunctionBox,
     GrooveRandomBox,
     GrooveStackBox,
+    GrooveOffsetBox,
     GrooveStackEntryBox,
     LfoModulatorBox,
     StepsModulatorBox,
@@ -167,6 +168,7 @@ import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
 import {GrooveFunctionBoxAdapter} from "./grooves/GrooveFunctionBoxAdapter"
 import {GrooveRandomBoxAdapter} from "./grooves/GrooveRandomBoxAdapter"
 import {GrooveStackBoxAdapter} from "./grooves/GrooveStackBoxAdapter"
+import {GrooveOffsetBoxAdapter} from "./grooves/GrooveOffsetBoxAdapter"
 import {GrooveStackEntryBoxAdapter} from "./grooves/GrooveStackEntryBoxAdapter"
 import {LfoModulatorBoxAdapter} from "./modulation/LfoModulatorBoxAdapter"
 import {StepsModulatorBoxAdapter} from "./modulation/StepsModulatorBoxAdapter"
@@ -287,6 +289,7 @@ export class BoxAdapters implements Terminable {
             visitGrooveShuffleBox: (box: GrooveShuffleBox) => new GrooveShuffleBoxAdapter(this.#context, box),
             visitGrooveFunctionBox: (box: GrooveFunctionBox) => new GrooveFunctionBoxAdapter(this.#context, box),
             visitGrooveRandomBox: (box: GrooveRandomBox) => new GrooveRandomBoxAdapter(this.#context, box),
+            visitGrooveOffsetBox: (box: GrooveOffsetBox) => new GrooveOffsetBoxAdapter(this.#context, box),
             visitGrooveStackBox: (box: GrooveStackBox) => new GrooveStackBoxAdapter(this.#context, box),
             visitGrooveStackEntryBox: (box: GrooveStackEntryBox) => new GrooveStackEntryBoxAdapter(this.#context, box),
             visitLfoModulatorBox: (box: LfoModulatorBox) => new LfoModulatorBoxAdapter(this.#context, box),

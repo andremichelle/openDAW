@@ -2457,7 +2457,7 @@ export interface TimeSignature {
  * Groove types
  * @group Grooves
  */
-export type GrooveKind = "Shuffle" | "Power" | "S-Curve" | "Random" | "Stack"
+export type GrooveKind = "Shuffle" | "Power" | "S-Curve" | "Random" | "Offset" | "Stack"
 
 /**
  * Common surface of all grooves
@@ -2516,6 +2516,17 @@ export interface GrooveRandom extends Groove {
 }
 
 /**
+ * Moves every position by a fixed number of ticks
+ * @group Grooves
+ */
+export interface GrooveOffset extends Groove {
+    /** Always "Offset" */
+    readonly kind: "Offset"
+    /** Ticks (-480 to 480, an eighth note either way, default 0): negative plays earlier */
+    offset: int
+}
+
+/**
  * A groove chaining its members in order
  * @group Grooves
  */
@@ -2530,7 +2541,7 @@ export interface GrooveStack extends Groove {
  * Any groove
  * @group Grooves
  */
-export type AnyGroove = GrooveShuffle | GrooveFunction | GrooveRandom | GrooveStack
+export type AnyGroove = GrooveShuffle | GrooveFunction | GrooveRandom | GrooveOffset | GrooveStack
 
 /**
  * Descriptive project metadata
