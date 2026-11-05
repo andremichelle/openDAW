@@ -8,6 +8,7 @@ import {IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
 import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"
 import {GrooveAdapter, GrooveKind} from "./GrooveBoxAdapter"
 import {GrooveStackEntryBoxAdapter} from "./GrooveStackEntryBoxAdapter"
+import {Grooves} from "./Grooves"
 
 // Stacks nested deeper than this play their inner members straight
 const MaxDepth = 16
@@ -80,7 +81,6 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
             .reduceRight((value, groove) => groove.unwarp(value), position))
     }
 
-    // members are followed once someone listens, never while adapters are built (stacks that hold each other)
     subscribeChange(observer: Observer<GrooveAdapter>): Subscription {
         const subscription = this.#notifier.subscribe(observer)
         if (!this.#listening) {
@@ -113,13 +113,6 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
         return result
     }
 
-    static #reaches(groove: GrooveAdapter, target: GrooveStackBoxAdapter, visited: Set<GrooveAdapter>): boolean {
-        if (groove === target) {return true}
-        if (!(groove instanceof GrooveStackBoxAdapter) || visited.has(groove)) {return false}
-        visited.add(groove)
-        return groove.members().some(member => GrooveStackBoxAdapter.#reaches(member, target, visited))
-    }
-
     #notify(): void {
         if (this.#notifying) {return}
         this.#notifying = true
@@ -135,9 +128,15 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
                 this.#notify()
             }))
             entry.groove().ifSome(groove => {
-                // a member that holds this stack again (merged edits of two peers) is not followed
-                if (!GrooveStackBoxAdapter.#reaches(groove, this, new Set())) {
+                if (!Grooves.wouldContain(groove.box, this.#box)) {
                     this.#members.own(groove.subscribeChange(() => this.#notify()))
+                } else if (groove instanceof GrooveStackBoxAdapter) {
+                    // a member that holds this stack again is followed once that changes
+                    this.#members.own(groove.entries.subscribe({
+                        onAdd: () => this.#resubscribeMembers(),
+                        onRemove: () => this.#resubscribeMembers(),
+                        onReorder: () => {}
+                    }))
                 }
             })
         })

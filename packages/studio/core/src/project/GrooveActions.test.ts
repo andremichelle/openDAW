@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {
     GrooveBox, Grooves, InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, ValueRegionBoxAdapter, ZeitgeistDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
@@ -209,7 +209,7 @@ describe("Grooves", () => {
             const {trackBox} = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
             // a region at bar 2 showing its content from the second beat, the groove runs from bar 2 minus a beat
             const region = project.api.createNoteRegion({trackBox, position: 3840, duration: 1920, loopOffset: 960, loopDuration: 3840})
-            const events = region.events.targetVertex.unwrap().box as NoteEventCollectionBox
+            const events = asInstanceOf(region.events.targetVertex.unwrap().box, NoteEventCollectionBox)
             for (const position of [960, 1920, 2820]) {
                 NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
                     box.events.refer(events.events)
@@ -224,8 +224,8 @@ describe("Grooves", () => {
         const adapter = project.boxAdapters.adapterFor(region, NoteRegionBoxAdapter)
         adapter.onSelected()
         const flat = project.editing.modify(() => adapter.flatten([adapter], false, "apply")).unwrap().unwrap("flatten")
-        const notes = (flat.events.targetVertex.unwrap().box as NoteEventCollectionBox).events.pointerHub.incoming()
-            .map(pointer => pointer.box as NoteEventBox)
+        const notes = asInstanceOf(flat.events.targetVertex.unwrap().box, NoteEventCollectionBox).events.pointerHub.incoming()
+            .map(pointer => asInstanceOf(pointer.box, NoteEventBox))
             .map(note => [note.position.getValue(), note.duration.getValue()])
             .sort((a, b) => a[0] - b[0])
         // straight at 0, 960 and 1860 of the flattened region, 120 later, the last moved past its end
@@ -255,7 +255,7 @@ describe("Grooves", () => {
                 box.regions.refer(trackBox.regions)
                 box.events.refer(events.owners)
                 box.position.setValue(0)
-                box.duration.setValue(960)
+                box.duration.setValue(1920)
                 box.loopDuration.setValue(960)
                 box.groove.refer(late)
             })
@@ -263,17 +263,15 @@ describe("Grooves", () => {
         const adapter = project.boxAdapters.adapterFor(region, ValueRegionBoxAdapter)
         adapter.onSelected()
         const flat = project.editing.modify(() => adapter.flatten([adapter], false, "apply")).unwrap().unwrap("flatten")
-        const positions = (flat.events.targetVertex.unwrap().box as ValueEventCollectionBox).events.pointerHub.incoming()
-            .map(pointer => (pointer.box as ValueEventBox).position.getValue())
-            .sort((a, b) => a - b)
-        // the point at the loop start moves to 120, the start keeps its value
-        expect(positions).toContain(0)
-        expect(positions).toContain(120)
-        expect(positions).toContain(600)
-        expect(positions).not.toContain(480)
+        const points = asInstanceOf(flat.events.targetVertex.unwrap().box, ValueEventCollectionBox).events.pointerHub.incoming()
+            .map(pointer => asInstanceOf(pointer.box, ValueEventBox))
+            .map(point => [point.position.getValue(), point.index.getValue(), point.value.getValue()])
+            .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+        // every point moves 120 later, also the jump back to the loop start at the seam
+        expect(points).toEqual([[120, 0, 0.25], [600, 0, 0.5], [1080, 0, 0.5], [1080, 1, 0.25], [1560, 0, 0.5], [2040, 0, 0.5]])
         expect(flat.groove.isEmpty()).toBe(true)
     })
-        it("deleting with remove leaves users without a groove", async () => {
+    it("deleting with remove leaves users without a groove", async () => {
         const project = await createProject()
         const zeitgeist = createZeitgeist(project)
         const groove = project.editing.modify(() => Grooves.create(project, "power")).unwrap()
@@ -340,7 +338,36 @@ describe("Grooves", () => {
         again.terminate()
         expect(calls).toBeGreaterThan(before)
     })
-    it("a stack never contains itself", async () => {
+    it("a stack follows the other stack again once they no longer hold each other", async () => {
+        const project = await createProject()
+        const [a, b, power, backEntry] = project.editing.modify(() => {
+            const a = Grooves.create(project, "stack") as GrooveStackBox
+            const b = Grooves.create(project, "stack") as GrooveStackBox
+            const power = Grooves.create(project, "power") as GrooveFunctionBox
+            GrooveStackEntryBox.create(project.boxGraph, UUID.generate(), box => {
+                box.stack.refer(a.entries)
+                box.groove.refer(b)
+                box.index.setValue(0)
+            })
+            Grooves.addToStack(project, b, power)
+            // merged edits of two peers: b holds a as well
+            const backEntry = GrooveStackEntryBox.create(project.boxGraph, UUID.generate(), box => {
+                box.stack.refer(b.entries)
+                box.groove.refer(a)
+                box.index.setValue(1)
+            })
+            return [a, b, power, backEntry] as const
+        }).unwrap()
+        let calls = 0
+        const subscription = Grooves.adapterOf(project, a).subscribeChange(() => calls++)
+        project.editing.modify(() => Grooves.removeFromStack(backEntry))
+        const before = calls
+        project.editing.modify(() => power.amount.setValue(0.2))
+        subscription.terminate()
+        expect(b.isAttached()).toBe(true)
+        expect(calls).toBeGreaterThan(before)
+    })
+        it("a stack never contains itself", async () => {
         const project = await createProject()
         const {outer, inner, power} = project.editing.modify(() => ({
             outer: Grooves.create(project, "stack") as GrooveStackBox,
@@ -482,7 +509,7 @@ describe("groove list migration", () => {
     const oldProject = () => {
         const skeleton = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
         const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
-        const global = rootBox.groove.targetVertex.unwrap().box as GrooveShuffleBox
+        const global = asInstanceOf(rootBox.groove.targetVertex.unwrap().box, GrooveShuffleBox)
         boxGraph.beginTransaction()
         global.collection.defer()
         const own = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => {

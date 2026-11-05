@@ -253,6 +253,7 @@ export class ValueRegionBoxAdapter
                 const region = anyRegion as ValueRegionBoxAdapter
                 const played = groove === "apply"
                     ? Grooves.playedAt(this.#context, region.box, region.position - region.loopOffset) : Option.None
+                const place = (position: ppqn): ppqn => played.mapOr(play => Math.round(play(position)), position)
                 const collection = region.optCollection.unwrap("optCollection")
                 const events = collection.events
                 for (const {
@@ -263,12 +264,11 @@ export class ValueRegionBoxAdapter
                     const searchMin = regionStart - rawStart
                     const searchMax = regionEnd - rawStart
                     const firstContent = events.greaterEqual(searchMin)
-                    // a grooved point at the loop start moves away from it, the start keeps its value
-                    if (!isDefined(firstContent) || firstContent.position !== searchMin || played.nonEmpty()) {
+                    if (!isDefined(firstContent) || firstContent.position !== searchMin) {
                         const lowerEvent = events.lowerEqual(searchMin)
                         if (isDefined(lowerEvent)) {
                             entries.push({
-                                position: regionStart - rangeMin,
+                                position: place(regionStart) - rangeMin,
                                 value: collection.valueAt(searchMin, 0),
                                 interpolation: lowerEvent.interpolation
                             })
@@ -278,16 +278,14 @@ export class ValueRegionBoxAdapter
                     for (const event of events.iterateRange(searchMin, Integer.MAX_VALUE)) {
                         const globalPos = event.position + rawStart
                         if (globalPos < regionEnd) {
-                            // a point moves to where the groove plays it
-                            const at = played.mapOr(play => Math.round(play(globalPos)), globalPos)
                             entries.push({
-                                position: at - rangeMin,
+                                position: place(globalPos) - rangeMin,
                                 value: event.value,
                                 interpolation: event.interpolation
                             })
                         } else if (globalPos === regionEnd) {
                             entries.push({
-                                position: globalPos - rangeMin,
+                                position: place(globalPos) - rangeMin,
                                 value: event.value,
                                 interpolation: Interpolation.None
                             })
@@ -295,7 +293,7 @@ export class ValueRegionBoxAdapter
                             break
                         } else {
                             entries.push({
-                                position: regionEnd - rangeMin,
+                                position: place(regionEnd) - rangeMin,
                                 value: collection.valueAt(searchMax, 0),
                                 interpolation: Interpolation.None
                             })
@@ -305,14 +303,13 @@ export class ValueRegionBoxAdapter
                     }
                     if (!addedBoundary) {
                         entries.push({
-                            position: regionEnd - rangeMin,
+                            position: place(regionEnd) - rangeMin,
                             value: collection.valueAt(searchMax, 0),
                             interpolation: Interpolation.None
                         })
                     }
                 }
             })
-        // moved points can pass a loop seam, the events are written in time order
         if (groove === "apply") {entries.sort((left, right) => left.position - right.position)}
         const cleaned: Array<Entry> = []
         for (const entry of entries) {

@@ -65,11 +65,11 @@ pub struct GrooveRegistry {
 
 impl GrooveRegistry {
     pub fn warp(&self, groove: &Uuid, position: f64) -> f64 {
-        warp(&self.state.borrow().defs, groove, position, true, &mut [[0; 16]; MAX_DEPTH], 0)
+        evaluate(&self.state.borrow().defs, groove, position, true)
     }
 
     pub fn unwarp(&self, groove: &Uuid, position: f64) -> f64 {
-        warp(&self.state.borrow().defs, groove, position, false, &mut [[0; 16]; MAX_DEPTH], 0)
+        evaluate(&self.state.borrow().defs, groove, position, false)
     }
 
     pub fn def(&self, groove: &Uuid) -> Option<GrooveDef> {
@@ -108,9 +108,17 @@ impl GrooveRegistry {
     }
 }
 
-// `path` holds the stacks being evaluated, a stack met again on it (merged edits of two peers) is skipped
+// only a stack needs the path of the stacks being evaluated
+fn evaluate(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward: bool) -> f64 {
+    match defs.get(groove) {
+        Some(GrooveDef::Stack {..}) => warp(defs, groove, position, forward, &mut [[0; 16]; MAX_DEPTH], 0),
+        _ => warp(defs, groove, position, forward, &mut [], 0)
+    }
+}
+
+// a stack met again on `path` (merged edits of two peers) is skipped
 fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward: bool,
-        path: &mut [Uuid; MAX_DEPTH], depth: usize) -> f64 {
+        path: &mut [Uuid], depth: usize) -> f64 {
     let Some(def) = defs.get(groove) else { return position };
     match def {
         GrooveDef::Shuffle {h, duration} => {
@@ -127,7 +135,7 @@ fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward:
         }
         GrooveDef::Offset {ticks} => if forward { position + *ticks } else { position - *ticks },
         GrooveDef::Stack {members} => {
-            if depth >= MAX_DEPTH || path[..depth].contains(groove) {
+            if depth >= path.len() || path[..depth].contains(groove) {
                 return position;
             }
             path[depth] = *groove;

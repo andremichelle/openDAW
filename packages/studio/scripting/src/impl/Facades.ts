@@ -1,3 +1,4 @@
+import {isGrooveBox} from "@opendaw/studio-adapters"
 import {Box, Field, PointerField, Vertex} from "@opendaw/lib-box"
 import {
     AudioBusBox,
@@ -74,7 +75,7 @@ export namespace Facades {
         if (box instanceof WerkstattParameterBox) {return ScriptParameterImpl.wrap(context, box)}
         if (box instanceof WerkstattSampleBox) {return ScriptSampleImpl.wrap(context, box)}
         if (box instanceof MIDIOutputParameterBox) {return MIDIOutputParameterImpl.wrap(context, box)}
-        if (GrooveImpls.isBox(box)) {return GrooveImpls.wrap(context, box)}
+        if (isGrooveBox(box)) {return GrooveImpls.wrap(context, box)}
         if (box instanceof LfoModulatorBox || box instanceof StepsModulatorBox
             || box instanceof MacroModulatorBox || box instanceof RandomModulatorBox) {
             return ModulatorImpls.wrap(context, box)

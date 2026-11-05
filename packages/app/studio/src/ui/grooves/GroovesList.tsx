@@ -103,7 +103,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
                     </div>)
             })
         }
-        // a user added inside a transaction is not wired to its instrument yet, it is shown once the transaction ends
+        // a user added inside a transaction is shown once it ends
         const pending = owner.own(new Terminator())
         const schedule = () => {
             if (!project.boxGraph.inTransaction()) {

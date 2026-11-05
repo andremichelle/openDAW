@@ -111,8 +111,6 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
 }
 
 export namespace GrooveImpls {
-    export const isBox = isGrooveBox
-
     // The groove a pointer targets, null for none
     export const read = (context: Context, pointer: PointerField<Pointers.Groove>): Nullable<AnyGroove> =>
         pointer.targetVertex.mapOr(vertex => wrap(context, vertex.box), null)
@@ -123,7 +121,7 @@ export namespace GrooveImpls {
             context.edit(() => pointer.defer())
             return
         }
-        if (!(groove instanceof Facade) || !isBox(groove.box)
+        if (!(groove instanceof Facade) || !isGrooveBox(groove.box)
             || groove.box.graph !== pointer.box.graph || !groove.box.isAttached()) {
             return panic("Expected a groove of the project")
         }

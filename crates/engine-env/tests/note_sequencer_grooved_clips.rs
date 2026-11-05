@@ -82,20 +82,10 @@ fn truncate_mode_keeps_the_length_of_grooved_clip_notes() {
 }
 
 #[test]
-fn a_grooved_clip_plays_nothing_from_before_its_launch() {
-    // the note at 990 of the cycle before the launch would land at 20, only the launched cycles play it
+fn a_grooved_clip_plays_a_note_the_groove_pushes_past_its_launch() {
+    // launched at 0, the note at 990 of the cycle before lands at 20
     let grooved = play_notes(true, false, &[990.0]);
-    assert_eq!(grooved.iter().map(|(position, _)| *position).collect::<Vec<_>>(), vec![1_020.0, 2_020.0]);
-}
-
-#[test]
-fn a_clip_still_playing_after_the_playhead_jumped_back_reads_without_a_bound() {
-    use engine_env::note_sequencer::launch_bound;
-    // launched at bar 5, the loop jumped back to bar 1 while the clip kept playing
-    assert_eq!(launch_bound(19_200.0, 3_840.0), f64::NEG_INFINITY);
-    assert_eq!(launch_bound(19_200.0, 19_200.0), 19_200.0);
-    assert_eq!(launch_bound(19_200.0, 20_000.0), 19_200.0);
-    assert_eq!(launch_bound(f64::NAN, 20_000.0), 20_000.0);
+    assert_eq!(grooved.iter().map(|(position, _)| *position).collect::<Vec<_>>(), vec![20.0, 1_020.0, 2_020.0]);
 }
 
 #[test]

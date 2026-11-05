@@ -136,7 +136,7 @@ export const installRegionContextMenu =
                             }
                             // a region deleted meanwhile (undo, a peer) closes the dialog and nothing is flattened
                             const deleted = new AbortController()
-                            const watches = regions.map(adapter => adapter.box.subscribeDeletion(() => deleted.abort()))
+                            const watches = [...regions, region].map(adapter => adapter.box.subscribeDeletion(() => deleted.abort()))
                             Dialogs.choose<Grooves.FlattenGroove | "cancel">({
                                 headline: "Flatten Grooved Regions",
                                 message: "Apply Groove moves the notes and automation points to where the groove plays them, the region sounds the same. Keep Groove leaves them in place and keeps the groove only when all regions share it, it then starts at the new region start.",
