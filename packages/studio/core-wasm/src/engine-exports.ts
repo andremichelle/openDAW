@@ -178,6 +178,7 @@ export type EngineExports = {
     host_observe_groove: (pathPtr: number, pathLen: number) => number
     host_groove_warp: (slot: number, pulse: number) => number
     host_groove_unwarp: (slot: number, pulse: number) => number
+    host_loop_area: (outPtr: number) => number
     host_set_latency: (frames: number) => void
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number

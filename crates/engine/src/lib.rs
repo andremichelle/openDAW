@@ -644,6 +644,10 @@ shared_static! {
 shared_static! {
     static GROOVES: Option<GrooveRegistry> = None;
 }
+// The loop area the transport wraps at for `host_loop_area`, set per quantum by the render.
+shared_static! {
+    static LOOP_AREA: Option<(f64, f64)> = None;
+}
 // Every observed groove pointer's current target by GLOBAL slot id, plus the free ids for reuse. Written only
 // by `bind_device` and the pointer watchers (off render), read by the warp imports during render.
 shared_static! {
@@ -1230,6 +1234,14 @@ pub extern "C" fn host_groove_warp(slot: u32, pulse: f64) -> f64 {
 #[no_mangle]
 pub extern "C" fn host_groove_unwarp(slot: u32, pulse: f64) -> f64 {
     groove_of(slot).map_or(pulse, |(registry, groove)| registry.unwarp(&groove, pulse))
+}
+
+/// Host import: writes the loop area the transport wraps at (2 x f64) and returns 1, or 0 when it does not wrap.
+#[no_mangle]
+pub extern "C" fn host_loop_area(out_ptr: u32) -> u32 {
+    let Some((from, to)) = *(unsafe { LOOP_AREA.get() }) else {return 0};
+    unsafe { *(out_ptr as usize as *mut [f64; 2]) = [from, to]; }
+    1
 }
 
 /// Host import a device calls for the bar holding `pulse`: writes its start, length and beat length (3 x f64).
@@ -1880,6 +1892,10 @@ impl Engine {
         self.transport.set_loop_pause(self.pause_on_loop_disabled);
         self.transport.set_loop_from(self.controls.loop_from.get());
         self.transport.set_loop_to(self.controls.loop_to.get());
+        let (loop_from, loop_to) = (self.controls.loop_from.get(), self.controls.loop_to.get());
+        *unsafe { LOOP_AREA.get() } = if loop_gate && !self.pause_on_loop_disabled && loop_from < loop_to {
+            Some((loop_from, loop_to))
+        } else {None};
         self.refresh_tempo_map();
         // The count-in flip (TS `renderer.setCallback(recordingStartTime, ...)`): once the playhead reaches
         // the recording start, counting-in becomes recording and the metronome returns to its preference.

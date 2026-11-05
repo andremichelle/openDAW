@@ -69,6 +69,7 @@ const loadZeitgeist = (groove: Groove): ZeitgeistDevice => {
             slots.push(slot)
             return groove.unwarp(pulse)
         },
+        host_loop_area: (): number => 0,
         host_pull_events: (from: number, to: number, _flags: number, outPtr: number, max: number): number => {
             pulledRanges.push([from, to])
             const view = new DataView(memory.buffer)

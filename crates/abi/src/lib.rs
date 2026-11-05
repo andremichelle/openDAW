@@ -173,6 +173,7 @@ extern "C" {
     fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32;
     fn host_groove_warp(slot: u32, pulse: f64) -> f64;
     fn host_groove_unwarp(slot: u32, pulse: f64) -> f64;
+    fn host_loop_area(out_ptr: u32) -> u32;
     fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
@@ -357,6 +358,18 @@ pub fn groove_unwarp(slot: u32, pulse: f64) -> f64 {
     { unsafe { host_groove_unwarp(slot, pulse) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = slot; pulse }
+}
+
+/// The loop area `(from, to)` the transport wraps at, or `None` when playback does not wrap. Native stub: `None`.
+#[inline]
+pub fn loop_area() -> Option<(f64, f64)> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0.0f64; 2];
+        if unsafe { host_loop_area(out.as_mut_ptr() as u32) } == 0 { None } else { Some((out[0], out[1])) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { None }
 }
 
 /// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
