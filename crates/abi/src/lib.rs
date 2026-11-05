@@ -372,6 +372,56 @@ pub fn loop_area() -> Option<(f64, f64)> {
     { None }
 }
 
+// block ends drift from the loop end by accumulated float error (1e-10 after a bar)
+const GROOVE_WRAP_TOLERANCE: f64 = 1e-3;
+
+/// A device's groove pointer, followed block by block: which straight range sounds in a block, kept inside the
+/// loop, and where a straight position sounds. An unbound pointer passes every position through.
+#[derive(Clone, Copy)]
+pub struct GrooveFollower {
+    slot: u32,
+    last_to: f64,
+    wrapped: bool
+}
+
+impl GrooveFollower {
+    /// Call from `init`, PATH is the device's groove pointer field.
+    pub fn observe(path: &[u16]) -> Self {
+        Self {slot: observe_groove(path), last_to: f64::NAN, wrapped: false}
+    }
+
+    /// The straight range whose positions the groove moves into `[from, to)`.
+    pub fn straight(&mut self, from: f64, to: f64, discontinuous: bool) -> (f64, f64) {
+        let area = loop_area();
+        if discontinuous {
+            self.wrapped = area.is_some_and(|(loop_from, loop_to)|
+                from == loop_from && (self.last_to - loop_to).abs() < GROOVE_WRAP_TOLERANCE);
+        }
+        self.wrapped = groove_still_wrapped(self.wrapped, area, from);
+        self.last_to = to;
+        groove_clip(groove_unwarp(self.slot, from), groove_unwarp(self.slot, to), area, from, self.wrapped)
+    }
+
+    /// Where the straight `pulse` sounds.
+    pub fn warp(&self, pulse: f64) -> f64 {groove_warp(self.slot, pulse)}
+}
+
+/// A wrap holds while the block lies inside the loop, a loop moved away from the playhead ends it.
+pub fn groove_still_wrapped(wrapped: bool, area: Option<(f64, f64)>, from: f64) -> bool {
+    wrapped && area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to)
+}
+
+/// Limits the straight range `[u0, u1]` to the loop `area`: never past its end while the block lies before it,
+/// never before its start after a wrap.
+pub fn groove_clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool) -> (f64, f64) {
+    let Some((loop_from, loop_to)) = area else {return (u0, u1)};
+    let limit = |position: f64| {
+        let position = if from < loop_to && position > loop_to {loop_to} else {position};
+        if wrapped && position < loop_from {loop_from} else {position}
+    };
+    (limit(u0), limit(u1))
+}
+
 /// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
 #[inline]
 pub fn set_latency(frames: u32) {
@@ -2014,5 +2064,39 @@ mod modulation_tests {
         assert_eq!(unit_value(ParamValue::Float(LINEAR.y(0.75)), &LINEAR), 0.75);
         let modulated = unit_value(ParamValue::Modulated {base: LINEAR.y(0.25), kind: PARAM_KIND_FLOAT, sum: 0.5}, &LINEAR);
         assert!((modulated - 0.75).abs() < 1.0e-5, "normalize, add, clamp; got {modulated}");
+    }
+}
+
+#[cfg(test)]
+mod groove_tests {
+    use super::{groove_clip, groove_still_wrapped};
+
+    #[test]
+    fn without_a_loop_the_range_stays() {
+        assert_eq!(groove_clip(-240.0, 4000.0, None, 0.0, true), (-240.0, 4000.0));
+    }
+
+    #[test]
+    fn nothing_after_the_loop_end_is_read_while_the_block_lies_before_it() {
+        let area = Some((0.0, 3840.0));
+        assert_eq!(groove_clip(3800.0, 4100.0, area, 3500.0, false), (3800.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3600.0, false), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3840.0, false), (3900.0, 4100.0));
+    }
+
+    #[test]
+    fn nothing_before_the_loop_start_is_read_after_a_wrap() {
+        let area = Some((3840.0, 7680.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, true), (3840.0, 3900.0));
+        assert_eq!(groove_clip(3600.0, 3700.0, area, 3840.0, true), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, false), (3600.0, 3900.0));
+    }
+
+    #[test]
+    fn a_loop_moved_away_from_the_playhead_ends_the_wrap() {
+        // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
+        assert!(!groove_still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
+        assert!(groove_still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
+        assert!(!groove_still_wrapped(true, None, 8000.0));
     }
 }

@@ -8,6 +8,7 @@ import {
     GrooveStackBox,
     GrooveStackEntryBox,
     AudioUnitBox,
+    CubedDeviceBox,
     TrackBox,
     NoteClipBox,
     NoteRegionBox,
@@ -175,7 +176,7 @@ export namespace Grooves {
         if (doomed.size === 0) {return}
         const global = globalGroove(context)
         doomed.forEach(groove => users(groove).slice().forEach(pointer => {
-            if (mode === "fallback" && !isTimelineBox(pointer.box)) {
+            if (mode === "fallback" && !isTimelineBox(pointer.box) && !isInstanceOf(pointer.box, CubedDeviceBox)) {
                 if (isInstanceOf(pointer.box, GrooveStackEntryBox)
                     && wouldContain(global, asGrooveBox(pointer.box.stack.targetVertex
                         .unwrap("Entry without stack").box))) {

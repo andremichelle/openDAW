@@ -3,6 +3,7 @@ import {UUID} from "@opendaw/lib-std"
 import {
     AudioUnitBox,
     CaptureMidiBox,
+    CubedDeviceBox,
     GrooveFunctionBox,
     GrooveShuffleBox,
     GrooveStackBox,
@@ -212,5 +213,58 @@ describe("grooves travel with a Zeitgeist", () => {
         source.boxGraph.endTransaction()
         transfer(audioUnit, target)
         expect(zeitgeistsOf(target)[0].groove.targetAddress.isEmpty()).toBe(true)
+    })
+})
+
+describe("grooves travel with a Cubed", () => {
+    const createCubed = (skeleton: ProjectSkeleton, groove: (skeleton: ProjectSkeleton) => GrooveBox) => {
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = skeleton
+        boxGraph.beginTransaction()
+        const audioUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(AudioUnitType.Instrument)
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer(primaryAudioBusBox.input)
+            box.index.setValue(1)
+        })
+        audioUnit.capture.refer(CaptureMidiBox.create(boxGraph, UUID.generate()))
+        const target = groove(skeleton)
+        CubedDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(audioUnit.input)
+            box.groove.refer(target)
+        })
+        boxGraph.endTransaction()
+        return {audioUnit, groove: target}
+    }
+    const cubedOf = (skeleton: ProjectSkeleton): ReadonlyArray<CubedDeviceBox> =>
+        skeleton.boxGraph.boxes().filter((box): box is CubedDeviceBox => box instanceof CubedDeviceBox)
+
+    it("a copy into another project carries the groove into its list", () => {
+        const source = empty()
+        const target = empty()
+        const {audioUnit} = createCubed(source, customGroove("Laid Back"))
+        transfer(audioUnit, target)
+        const pasted = cubedOf(target)[0].groove.targetVertex.unwrap().box as GrooveFunctionBox
+        expect(pasted.graph).toBe(target.boxGraph)
+        expect(groovesOf(target).map(box => box.label.getValue())).toEqual(["Global Shuffle", "Laid Back"])
+    })
+    it("a copy within the same project keeps the same groove", () => {
+        const source = empty()
+        const {audioUnit, groove} = createCubed(source, customGroove("Laid Back"))
+        transfer(audioUnit, source)
+        expect(cubedOf(source).map(cubed => cubed.groove.targetVertex.unwrap().box)).toEqual([groove, groove])
+        expect(groovesOf(source).length).toBe(2)
+    })
+    it("a preset carries a custom groove and maps the global one", () => {
+        for (const [groove, labels] of [[customGroove("Laid Back"), ["Global Shuffle", "Laid Back"]],
+            [globalOf, ["Global Shuffle"]]] as const) {
+            const target = empty()
+            const preset = PresetEncoder.encode(createCubed(empty(), groove).audioUnit)
+            target.boxGraph.beginTransaction()
+            PresetDecoder.decode(preset, target)
+            target.boxGraph.endTransaction()
+            const pasted = cubedOf(target)[0].groove.targetVertex.unwrap().box
+            expect(groovesOf(target).map(box => box.label.getValue())).toEqual(labels)
+            expect(groovesOf(target)).toContain(pasted)
+        }
     })
 })

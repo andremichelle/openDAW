@@ -23,6 +23,7 @@ import {CubedStep as CubedStepCodec, InstrumentFactories} from "@opendaw/studio-
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
+    AnyGroove,
     AnyMIDIEffect,
     Apparat,
     AudioEffects,
@@ -64,6 +65,7 @@ import {Context} from "../Context"
 import {Accessors, Facade, Props} from "../Common"
 import {Fields, FieldSpec} from "../Fields"
 import {Guard} from "../Guard"
+import {GrooveImpls} from "../Grooves"
 import {AudioFiles} from "../AudioFiles"
 import {EffectChain} from "./EffectChain"
 import {DeviceBoxes} from "./DeviceBoxes"
@@ -594,6 +596,9 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
         })
         this.patterns = Object.freeze(box.patterns.fields().map((pattern, index) => createCubedPattern(context, pattern, index)))
     }
+
+    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
+    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
 }
 
 export class ApparatImpl extends InstrumentFacade<ApparatDeviceBox> implements Apparat {

@@ -174,6 +174,21 @@ describe("grooves", () => {
         expect(boxes.random.pointerHub.incoming().length).toBe(1)
     })
 
+    it("a Cubed plays straight until a script gives it a groove", () => {
+        const {project, boxes} = setup()
+        const cubed = project.addInstrumentUnit("Cubed").instrument
+        if (cubed.key !== "Cubed") {throw new Error("expected a Cubed")}
+        expect(cubed.groove).toBeNull()
+        const random = project.grooves.find(groove => groove.kind === "Random")!
+        cubed.groove = random
+        expect(cubed.groove).toBe(random)
+        expect(boxes.random.pointerHub.incoming().length).toBe(2)
+        cubed.groove = null
+        expect(cubed.groove).toBeNull()
+        const other = setup().project
+        expect(() => {cubed.groove = other.groove}).toThrow("Expected a groove of the project")
+    })
+
     it("a region refuses a groove of another project", () => {
         const {project} = setup()
         const other = setup().project

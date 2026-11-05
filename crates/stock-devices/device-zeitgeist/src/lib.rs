@@ -23,31 +23,10 @@ fn panic(info: &PanicInfo) -> ! {
 // WASM CONTRACT: the groove pointer key on `ZeitgeistDeviceBox`
 const GROOVE_POINTER: [u16; 1] = [10];
 const PULL_SCRATCH: usize = 256;
-// block ends drift from the loop end by accumulated float error (1e-10 after a bar)
-const WRAP_TOLERANCE: f64 = 1e-3;
 
-/// The device's per-instance state (engine-allocated, set in `init`): the groove slot the engine keeps on the
-/// `groove` pointer's target, the end of the last block and whether the transport wrapped since the last jump.
+/// The device's per-instance state (engine-allocated, set in `init`): its groove pointer, followed block by block.
 pub struct ZeitgeistState {
-    slot: u32,
-    last_to: f64,
-    wrapped: bool
-}
-
-/// A wrap holds while the block lies inside the loop, a loop moved away from the playhead ends it.
-pub fn still_wrapped(wrapped: bool, area: Option<(f64, f64)>, from: f64) -> bool {
-    wrapped && area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to)
-}
-
-/// Limits the un-warped range `[u0, u1]` to the loop `area`: never past its end while the block lies before it,
-/// never before its start after a wrap.
-pub fn clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool) -> (f64, f64) {
-    let Some((loop_from, loop_to)) = area else {return (u0, u1)};
-    let limit = |position: f64| {
-        let position = if from < loop_to && position > loop_to {loop_to} else {position};
-        if wrapped && position < loop_from {loop_from} else {position}
-    };
-    (limit(u0), limit(u1))
+    groove: abi::GrooveFollower
 }
 
 /// The pure block transform (host-free, so native tests drive it): warp each input record's position and
@@ -84,29 +63,21 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn init(state_ptr: u32, _sample_rate: f32) {
     let state = unsafe { &mut *(state_ptr as *mut ZeitgeistState) };
-    state.slot = abi::observe_groove(&GROOVE_POINTER);
-    state.last_to = f64::NAN;
-    state.wrapped = false;
+    state.groove = abi::GrooveFollower::observe(&GROOVE_POINTER);
 }
 
 #[no_mangle]
 pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut ZeitgeistState) };
-    let slot = state.slot;
-    let area = abi::loop_area();
-    if flags & abi::BlockFlags::DISCONTINUOUS != 0 {
-        state.wrapped = area.is_some_and(|(loop_from, loop_to)| from == loop_from && (state.last_to - loop_to).abs() < WRAP_TOLERANCE);
-    }
-    state.wrapped = still_wrapped(state.wrapped, area, from);
-    state.last_to = to;
-    let (pull_from, pull_to) = clip(abi::groove_unwarp(slot, from), abi::groove_unwarp(slot, to), area, from, state.wrapped);
+    let (pull_from, pull_to) = state.groove.straight(from, to, flags & abi::BlockFlags::DISCONTINUOUS != 0);
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut scratch = [blank; PULL_SCRATCH];
     // Pull the UN-warped range, so events that the groove pushes into [from, to) are captured.
     let pulled = abi::pull_events(pull_from, pull_to, flags, &mut scratch);
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
     let released = if flags & abi::BlockFlags::DISCONTINUOUS != 0 {Some(pull_from)} else {None};
-    process(|position| abi::groove_warp(slot, position), from, to, released, &scratch[..pulled], out) as u32
+    let groove = state.groove;
+    process(|position| groove.warp(position), from, to, released, &scratch[..pulled], out) as u32
 }
 
 #[cfg(test)]
@@ -145,35 +116,6 @@ mod tests {
         assert_eq!(process(|position| position + 479.0, 3840.0, 3845.12, Some(3840.0), &[off, note_on(3840.0)], &mut out), 2);
         assert_eq!(out[0].position, 3840.0);
         assert_eq!(out[1].position, 3845.12);
-    }
-
-    #[test]
-    fn without_a_loop_the_range_stays() {
-        assert_eq!(clip(-240.0, 4000.0, None, 0.0, true), (-240.0, 4000.0));
-    }
-
-    #[test]
-    fn nothing_after_the_loop_end_is_read_while_the_block_lies_before_it() {
-        let area = Some((0.0, 3840.0));
-        assert_eq!(clip(3800.0, 4100.0, area, 3500.0, false), (3800.0, 3840.0));
-        assert_eq!(clip(3900.0, 4100.0, area, 3600.0, false), (3840.0, 3840.0));
-        assert_eq!(clip(3900.0, 4100.0, area, 3840.0, false), (3900.0, 4100.0));
-    }
-
-    #[test]
-    fn nothing_before_the_loop_start_is_read_after_a_wrap() {
-        let area = Some((3840.0, 7680.0));
-        assert_eq!(clip(3600.0, 3900.0, area, 3840.0, true), (3840.0, 3900.0));
-        assert_eq!(clip(3600.0, 3700.0, area, 3840.0, true), (3840.0, 3840.0));
-        assert_eq!(clip(3600.0, 3900.0, area, 3840.0, false), (3600.0, 3900.0));
-    }
-
-    #[test]
-    fn a_loop_moved_away_from_the_playhead_ends_the_wrap() {
-        // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
-        assert!(!still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
-        assert!(still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
-        assert!(!still_wrapped(true, None, 8000.0));
     }
 
     #[test]

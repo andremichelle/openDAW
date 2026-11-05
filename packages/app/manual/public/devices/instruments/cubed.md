@@ -95,7 +95,7 @@ Right-click the field to copy or paste the pattern itself, see **6. Exchanging P
 
 ### 2.2 Random
 
-Fills the current pattern with a generated line. Click for another variation using the current settings,
+The dice button fills the current pattern with a generated line. Click for another variation using the current settings,
 **shift-click** to open the generator dialog:
 
 - **Root** and **Scale**: the key the notes are drawn from
@@ -107,21 +107,27 @@ Fills the current pattern with a generated line. Click for another variation usi
 - **Density**: how many steps get a gate, **Accent** and **Slide**: how often those flags are set
 - **Start on tonic**: forces step 1 to the root, gated
 
-### 2.3 < and >
+### 2.3 Groove
+
+Picks a groove from the project's groove list for the pattern to play through: **Go to** opens it in the Grooves list,
+**None** plays the pattern straight, **New** creates a groove of any type. A new Cubed plays straight. See
+[Grooves](/manuals/grooves).
+
+### 2.4 < and >
 
 Rotate the pattern one step to the left or to the right. Useful for shifting a line off the downbeat without editing
 each step.
 
-### 2.4 Clear
+### 2.5 Clear
 
 Empties the current pattern. The other 15 are untouched.
 
-### 2.5 Length
+### 2.6 Length
 
 Number of steps the pattern plays, 1 to 64. The sequencer wraps after this many steps; the grid dims the index of every
 step beyond it.
 
-### 2.6 Steps
+### 2.7 Steps
 
 Which block of 16 steps the grid shows: **16**, **32**, **48** or **64**. This is a view switch only, it does not change
 the pattern.
@@ -158,6 +164,7 @@ Marks the step as accented: louder, brighter, and with a snappier attack, scaled
 ## 4. Timing
 
 Steps are sixteenth notes, and the sequencer follows the transport: it plays while the project plays and stops with it.
+With a groove, each step and its release move with the groove.
 
 A gated step holds 55% of its step, so notes stay detached unless a slide bridges them. A sliding step holds 105%
 instead, which is what makes it overlap the next note and glide into it. Both figures are part of the voice

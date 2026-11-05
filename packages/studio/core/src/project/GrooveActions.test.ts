@@ -4,6 +4,7 @@ import {
     GrooveBox, Grooves, InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, ValueRegionBoxAdapter, ZeitgeistDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
 import {
+    CubedDeviceBox,
     GrooveFunctionBox,
     GrooveOffsetBox,
     NoteEventBox,
@@ -178,6 +179,17 @@ describe("Grooves", () => {
         project.editing.modify(() => Grooves.deleteAll(project, [groove], "fallback"))
         expect(region.groove.isEmpty()).toBe(true)
         expect(clip.groove.isEmpty()).toBe(true)
+    })
+    it("a new Cubed plays straight and deleting its groove with fallback leaves it without one", async () => {
+        const project = await createProject()
+        const groove = project.editing.modify(() => Grooves.create(project, "power")).unwrap()
+        const cubed = project.editing.modify(() =>
+            asInstanceOf(project.api.createAnyInstrument(InstrumentFactories.Cubed).instrumentBox, CubedDeviceBox)).unwrap()
+        expect(cubed.groove.isEmpty()).toBe(true)
+        project.editing.modify(() => cubed.groove.refer(groove))
+        expect(Grooves.users(groove).length).toBe(1)
+        project.editing.modify(() => Grooves.deleteAll(project, [groove], "fallback"))
+        expect(cubed.groove.isEmpty()).toBe(true)
     })
     it("flattening keeps a groove only when every region shares it", async () => {
         const project = await createProject()

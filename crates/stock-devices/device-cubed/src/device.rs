@@ -47,6 +47,9 @@ mod field {
     pub const STEPS: u16 = 2;
 }
 
+// WASM CONTRACT: the groove pointer key on `CubedDeviceBox`
+const GROOVE_POINTER: [u16; 1] = [40];
+
 /// Rendered in chunks so the mono voice can be summed into both channels without a heap buffer.
 const SCRATCH: usize = 128;
 
@@ -58,7 +61,8 @@ pub struct State {
     ids: [u32; param::COUNT],
     length_ids: [u32; PATTERN_COUNT],
     steps_ids: [u32; PATTERN_COUNT],
-    step_broadcast: u32
+    step_broadcast: u32,
+    groove: abi::GrooveFollower
 }
 
 impl State {
@@ -105,6 +109,7 @@ impl abi::Instrument for Device {
             state.steps_ids[pattern] = abi::observe_field(&[field::PATTERNS, key, field::STEPS]);
         }
         state.step_broadcast = abi::bind_broadcast_int_array(&[0], 1);
+        state.groove = abi::GrooveFollower::observe(&GROOVE_POINTER);
     }
 
     fn field_changed(state: &mut State, id: u32, value: abi::FieldValue) {
@@ -124,7 +129,9 @@ impl abi::Instrument for Device {
     /// field, i.e. a manual selection, which waits for the next bar line.
     fn generate_events(state: &mut State, from: f64, to: f64, flags: BlockFlags,
                        out: &mut [EventRecord]) -> usize {
-        let count = state.pattern.generate(from, to, flags, out);
+        let straight = state.groove.straight(from, to, flags.discontinuous());
+        let groove = state.groove;
+        let count = state.pattern.generate(from, to, straight, |position| groove.warp(position), flags, out);
         let slot = abi::broadcast_ptr(state.step_broadcast);
         if slot != 0 {
             unsafe {*(slot as *mut i32) = state.pattern.step();}

@@ -1671,6 +1671,8 @@ export interface Cubed extends Instrument {
     patternIndex: int
     /** 16 patterns */
     readonly patterns: ReadonlyArray<CubedPattern>
+    /** The groove its pattern plays through, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**

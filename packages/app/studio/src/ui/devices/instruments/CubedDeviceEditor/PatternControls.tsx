@@ -2,8 +2,8 @@ import css from "./PatternControls.sass?inline"
 import {clamp, DefaultObservableValue, Editing, int, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions} from "@opendaw/studio-adapters"
-import {ContextMenu, MIDILearning} from "@opendaw/studio-core"
+import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions, Grooves} from "@opendaw/studio-adapters"
+import {ContextMenu, MenuItem, MIDILearning, Project} from "@opendaw/studio-core"
 import {CubedPatternActions} from "@/ui/devices/instruments/CubedDeviceEditor/CubedPatternActions"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
@@ -11,19 +11,23 @@ import {Button} from "@/ui/components/Button"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {showRandomizeDialog} from "@/ui/devices/instruments/CubedDeviceEditor/RandomizeDialog"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Icon} from "@/ui/components/Icon"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 
 const className = Html.adoptStyleSheet(css, "CubedPatternControls")
 
 type Construct = {
     lifecycle: Lifecycle
+    project: Project
     editing: Editing
     midiLearning: MIDILearning
     adapter: CubedDeviceBoxAdapter
     stepRange: DefaultObservableValue<int>
 }
 
-export const PatternControls = ({lifecycle, editing, midiLearning, adapter, stepRange}: Construct) => {
+export const PatternControls = ({lifecycle, project, editing, midiLearning, adapter, stepRange}: Construct) => {
     const {patternIndex} = adapter.namedParameter
     const randomizeOptions = lifecycle.own(
         new DefaultObservableValue<CubedRandomizeOptions>(CubedRandomize.Default))
@@ -58,7 +62,16 @@ export const PatternControls = ({lifecycle, editing, midiLearning, adapter, step
             <div className="field">
                 <Button lifecycle={lifecycle}
                         onClick={onRandomClick}
-                        appearance={{framed: true, color: Colors.orange}}>Random</Button>
+                        appearance={{framed: true, color: Colors.orange, tooltip: "Random (Shift for options)"}}>
+                    <Icon symbol={IconSymbol.Random}/>
+                </Button>
+                <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(
+                    GrooveMenus.choiceItems(project, [adapter.box.groove]))}
+                            style={{padding: "0 0.5em"}}
+                            appearance={{framed: true, color: Colors.purple, tooltip: () => `Groove: ${adapter.box.groove.targetVertex
+                                .mapOr(({box}) => Grooves.adapterOf(project, Grooves.asGrooveBox(box)).label, GrooveMenus.NoneLabel)}`}}>
+                    Groove
+                </MenuButton>
                 <div className="group">
                     <Button lifecycle={lifecycle}
                             onClick={() => rotateActivePattern(1)}
