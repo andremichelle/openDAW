@@ -63,7 +63,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
             Html.empty(entries)
             const targets = Grooves.targets(groove.box)
             if (targets.length === 0) {
-                entries.append(<div className="placeholder">Choose this groove in a Zeitgeist</div>)
+                entries.append(<div className="placeholder">Choose this groove in a Zeitgeist, region or clip</div>)
                 return
             }
             targets.forEach(pointer => {
@@ -103,7 +103,23 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
                     </div>)
             })
         }
-        owner.own(groove.box.pointerHub.subscribe({onAdded: () => render(), onRemoved: () => render()}))
+        // a user added inside a transaction is not wired to its instrument yet, it is shown once the transaction ends
+        const pending = owner.own(new Terminator())
+        const schedule = () => {
+            if (!project.boxGraph.inTransaction()) {
+                render()
+                return
+            }
+            pending.terminate()
+            pending.own(project.boxGraph.subscribeTransaction({
+                onBeginTransaction: () => {},
+                onEndTransaction: () => {
+                    pending.terminate()
+                    render()
+                }
+            }))
+        }
+        owner.own(groove.box.pointerHub.subscribe({onAdded: schedule, onRemoved: schedule}))
         render()
         return <div className={usersClassName}>{entries}</div>
     }
