@@ -123,7 +123,10 @@ export namespace GrooveImpls {
             context.edit(() => pointer.defer())
             return
         }
-        if (!(groove instanceof Facade) || !isBox(groove.box)) {return panic("Expected a groove of the project")}
+        if (!(groove instanceof Facade) || !isBox(groove.box)
+            || groove.box.graph !== pointer.box.graph || !groove.box.isAttached()) {
+            return panic("Expected a groove of the project")
+        }
         const box = groove.box
         context.edit(() => pointer.refer(box))
     }

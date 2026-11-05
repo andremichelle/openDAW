@@ -9,7 +9,7 @@ import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdap
 import {GrooveAdapter, GrooveKind} from "./GrooveBoxAdapter"
 import {GrooveStackEntryBoxAdapter} from "./GrooveStackEntryBoxAdapter"
 
-// Guards against a stack that contains itself, which only merged edits of two peers create
+// Stacks nested deeper than this play their inner members straight
 const MaxDepth = 16
 
 const greatestCommonDivisor = (a: int, b: int): int => b === 0 ? a : greatestCommonDivisor(b, a % b)
@@ -18,7 +18,8 @@ const leastCommonMultiple = (a: int, b: int): int => a / greatestCommonDivisor(a
 export class GrooveStackBoxAdapter implements GrooveAdapter {
     readonly type = "groove-adapter"
 
-    static #depth: int = 0
+    // the stacks being evaluated, one met again (merged edits of two peers) is skipped
+    static readonly #active: Set<GrooveStackBoxAdapter> = new Set()
 
     readonly #terminator: Terminator = new Terminator()
     readonly #members: Terminator = new Terminator()
@@ -96,10 +97,11 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
     terminate(): void {this.#terminator.terminate()}
 
     #guarded(position: ppqn, compute: () => ppqn): ppqn {
-        if (GrooveStackBoxAdapter.#depth >= MaxDepth) {return position}
-        GrooveStackBoxAdapter.#depth++
+        const active = GrooveStackBoxAdapter.#active
+        if (active.has(this) || active.size >= MaxDepth) {return position}
+        active.add(this)
         const result = compute()
-        GrooveStackBoxAdapter.#depth--
+        active.delete(this)
         return result
     }
 

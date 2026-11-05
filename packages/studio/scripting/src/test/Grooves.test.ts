@@ -174,6 +174,14 @@ describe("grooves", () => {
         expect(boxes.random.pointerHub.incoming().length).toBe(1)
     })
 
+        it("a region refuses a groove of another project", () => {
+        const {project} = setup()
+        const other = setup().project
+        const region = project.addInstrumentUnit("Vaporisateur").addNoteTrack().addRegion({duration: PPQN.Bar})
+        expect(() => {region.groove = other.groove}).toThrow("Expected a groove of the project")
+        expect(region.groove).toBeNull()
+    })
+
         it("a Zeitgeist without a groove reads null", () => {
         const {zeitgeist, point} = setup()
         point(null)

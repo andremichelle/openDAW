@@ -27,6 +27,7 @@ import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"
 import {MutableRegion} from "./MutableRegion"
 import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
 import {NoteRegionBoxAdapter} from "./NoteRegionBoxAdapter"
+import {Grooves} from "../../grooves/Grooves"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -337,6 +338,7 @@ export class ValueRegionBoxAdapter
             }
             idx = end
         }
+        const groove = Grooves.sharedOf(overlapping.map(region => region.box))
         overlapping.forEach(({box}) => box.delete())
         return Option.wrap(ValueRegionBox.create(graph, UUID.generate(), box => {
             box.position.setValue(rangeMin)
@@ -345,7 +347,7 @@ export class ValueRegionBoxAdapter
             box.loopOffset.setValue(0)
             box.hue.setValue(this.hue)
             box.mute.setValue(this.mute)
-            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
+            groove.ifSome(groove => box.groove.refer(groove))
             box.label.setValue(this.label)
             box.events.refer(collectionBox.owners)
             box.regions.refer(trackBoxAdapter.box.regions)

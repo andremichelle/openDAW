@@ -36,8 +36,8 @@ const RANDOM_DEFAULT_ROUGHNESS: f32 = 1.0;
 const RANDOM_DEFAULT_STEPS: i32 = 64;
 // WASM CONTRACT: GrooveOffsetBox.offset constraints, an eighth note either way
 const OFFSET_LIMIT: i32 = 480;
-// A stack never holds itself (the editing functions refuse it), this only guards a broken document
-const MAX_DEPTH: u32 = 16;
+// Stacks nested deeper than this play their inner members straight
+const MAX_DEPTH: usize = 16;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GrooveDef {
@@ -65,11 +65,11 @@ pub struct GrooveRegistry {
 
 impl GrooveRegistry {
     pub fn warp(&self, groove: &Uuid, position: f64) -> f64 {
-        warp(&self.state.borrow().defs, groove, position, true, 0)
+        warp(&self.state.borrow().defs, groove, position, true, &mut [[0; 16]; MAX_DEPTH], 0)
     }
 
     pub fn unwarp(&self, groove: &Uuid, position: f64) -> f64 {
-        warp(&self.state.borrow().defs, groove, position, false, 0)
+        warp(&self.state.borrow().defs, groove, position, false, &mut [[0; 16]; MAX_DEPTH], 0)
     }
 
     pub fn def(&self, groove: &Uuid) -> Option<GrooveDef> {
@@ -108,7 +108,9 @@ impl GrooveRegistry {
     }
 }
 
-fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward: bool, depth: u32) -> f64 {
+// `path` holds the stacks being evaluated, a stack met again on it (merged edits of two peers) is skipped
+fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward: bool,
+        path: &mut [Uuid; MAX_DEPTH], depth: usize) -> f64 {
     let Some(def) = defs.get(groove) else { return position };
     match def {
         GrooveDef::Shuffle {h, duration} => {
@@ -125,13 +127,14 @@ fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward:
         }
         GrooveDef::Offset {ticks} => if forward { position + *ticks } else { position - *ticks },
         GrooveDef::Stack {members} => {
-            if depth >= MAX_DEPTH {
+            if depth >= MAX_DEPTH || path[..depth].contains(groove) {
                 return position;
             }
+            path[depth] = *groove;
             if forward {
-                members.iter().fold(position, |value, member| warp(defs, member, value, true, depth + 1))
+                members.iter().fold(position, |value, member| warp(defs, member, value, true, path, depth + 1))
             } else {
-                members.iter().rev().fold(position, |value, member| warp(defs, member, value, false, depth + 1))
+                members.iter().rev().fold(position, |value, member| warp(defs, member, value, false, path, depth + 1))
             }
         }
     }
@@ -191,13 +194,16 @@ fn update(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, gro
         }
         _ => Vec::new()
     };
-    {
-        let mut state = state.borrow_mut();
-        match def {
-            Some(def) => {state.defs.insert(groove, def);}
-            None => {state.defs.remove(&groove);}
+    let Some(def) = def else {
+        // a deleted groove is let go, whoever points at it again (an undo) follows it anew
+        if graph.find_box(&groove).is_none() {
+            leave(state, deferred, groove);
+        } else {
+            state.borrow_mut().defs.remove(&groove);
         }
-    }
+        return;
+    };
+    state.borrow_mut().defs.insert(groove, def);
     unknown.into_iter().for_each(|member| {
         if !state.borrow().subs.contains_key(&member) {
             join(state, deferred, graph, member);
@@ -462,6 +468,23 @@ mod tests {
     }
 
     #[test]
+    fn a_deleted_groove_outside_the_list_is_let_go() {
+        let unlisted = graph_box(SHUFFLE, "GrooveShuffleBox", &[
+            (GROOVE_AMOUNT, FieldValue::Float32(0.8)), (GROOVE_DURATION, FieldValue::Int32(480))]);
+        let mut graph = BoxGraph::from_boxes(vec![root(), unlisted]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        let before = graph.subscription_count();
+        registry.ensure(&graph, SHUFFLE);
+        graph.apply_deferred();
+        assert!(graph.subscription_count() > before);
+        graph.transaction(&[Update::Delete {uuid: SHUFFLE, name: "GrooveShuffleBox".to_string(), settings: Vec::new()}],
+            &Registry::new()).unwrap();
+        graph.apply_deferred();
+        assert_eq!(graph.subscription_count(), before, "no subscription is left behind");
+        assert_eq!(registry.warp(&SHUFFLE, 240.0), 240.0);
+    }
+
+        #[test]
     fn an_offset_follows_its_field() {
         let mut graph = BoxGraph::from_boxes(vec![root(), offset(120)]);
         let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
@@ -549,6 +572,32 @@ mod tests {
     }
 
     #[test]
+    fn two_stacks_holding_each_other_many_times_stay_quick() {
+        // merged edits of two peers: STACK holds the other stack three times and the other one holds STACK
+        // three times, a depth limit alone would evaluate 3^16 members per call
+        const OTHER: Uuid = [8u8; 16];
+        let into = |uuid: Uuid, stack: Uuid, member: Uuid, index: i32| graph_box(uuid, "GrooveStackEntryBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(stack, vec![STACK_ENTRIES])))),
+            (ENTRY_GROOVE, FieldValue::Pointer(Some(Address::box_of(member)))),
+            (ENTRY_INDEX, FieldValue::Int32(index))
+        ]);
+        let mut boxes = vec![root(), stack(), shuffle(0.7),
+            graph_box(OTHER, "GrooveStackBox", &[listed(), (STACK_ENTRIES, FieldValue::Hook)])];
+        for index in 0..3 {
+            boxes.push(into([30 + index as u8; 16], STACK, OTHER, index));
+            boxes.push(into([40 + index as u8; 16], OTHER, STACK, index));
+        }
+        boxes.push(into([50; 16], OTHER, SHUFFLE, 3));
+        let mut graph = BoxGraph::from_boxes(boxes);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        let started = std::time::Instant::now();
+        for position in 0..1000 {
+            assert!(registry.warp(&STACK, position as f64).is_finite());
+        }
+        assert!(started.elapsed().as_millis() < 500, "took {:?}", started.elapsed());
+    }
+
+        #[test]
     fn a_stack_holding_itself_cannot_loop() {
         let mut graph = BoxGraph::from_boxes(vec![root(), stack(), entry(ENTRY_A, STACK, 0)]);
         let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);

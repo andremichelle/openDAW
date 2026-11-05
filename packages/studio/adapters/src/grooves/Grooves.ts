@@ -150,6 +150,15 @@ export namespace Grooves {
     export const pointerOf = (box: Box): Option<PointerField<Pointers.Groove>> =>
         isTimelineBox(box) ? Option.wrap(box.groove) : Option.None
 
+    // The groove every one of the boxes points at, none when they differ or have none
+    export const sharedOf = (boxes: ReadonlyArray<Box>): Option<GrooveBox> => {
+        const targets = boxes.map(box => pointerOf(box).flatMap(pointer => pointer.targetVertex).map(vertex => vertex.box))
+        const first = targets.at(0)
+        if (!isDefined(first) || first.isEmpty()) {return Option.None}
+        const groove = first.unwrap()
+        return targets.every(target => target.contains(groove)) ? Option.wrap(asGrooveBox(groove)) : Option.None
+    }
+
     // The audio unit whose track holds a region or clip
     export const unitOf = (box: TimelineBox): Option<AudioUnitBox> =>
         (isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) ? box.regions : box.clips).targetVertex

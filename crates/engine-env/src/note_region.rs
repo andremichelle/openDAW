@@ -1,7 +1,7 @@
 //! A loopable note region on the timeline (the span the note sequencer reads): a region at `position`
 //! of `duration` pulses whose content loops every `loop_duration` from `loop_offset`, plus its `mute`
-//! flag (a muted region emits no notes — TS `NoteSequencer.#processRegions` skips it) and its groove (restarting
-//! at every loop cycle). Mirrors the
+//! flag (a muted region emits no notes — TS `NoteSequencer.#processRegions` skips it) and its groove (running on
+//! from where its loop starts). Mirrors the
 //! lib-dsp `LoopableRegion` fields the sequencer needs; the loop math is `value::region::locate_loops`.
 
 #[derive(Clone, Copy, Debug)]

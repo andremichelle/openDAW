@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {GrooveBox, Grooves, InstrumentFactories, ProjectSkeleton, ZeitgeistDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {GrooveBox, Grooves, InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, ZeitgeistDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {
     GrooveFunctionBox,
     GrooveRandomBox,
@@ -171,6 +171,28 @@ describe("Grooves", () => {
         expect(region.groove.isEmpty()).toBe(true)
         expect(clip.groove.isEmpty()).toBe(true)
     })
+        it("flattening keeps a groove only when every region shares it", async () => {
+        const project = await createProject()
+        const flatten = (grooves: ReadonlyArray<"late" | "none">) => {
+            const late = project.editing.modify(() => Grooves.create(project, "offset")).unwrap()
+            const regions = project.editing.modify(() => {
+                const {trackBox} = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+                return grooves.map((groove, index) => {
+                    const region = project.api.createNoteRegion({trackBox, position: index * 960, duration: 960})
+                    if (groove === "late") {region.groove.refer(late)}
+                    return region
+                })
+            }).unwrap()
+            const adapters = regions.map(region => project.boxAdapters.adapterFor(region, NoteRegionBoxAdapter))
+            // the studio marks selected regions, flatten works on them
+            adapters.forEach(adapter => adapter.onSelected())
+            const flat = project.editing.modify(() => adapters[0].flatten(adapters)).unwrap().unwrap("flatten")
+            return flat.groove.targetVertex.map(vertex => vertex.box).match({none: () => null, some: box => box === late})
+        }
+        expect(flatten(["late", "late"])).toBe(true)
+        expect(flatten(["late", "none"])).toBe(null)
+        expect(flatten(["none", "late"])).toBe(null)
+    })
         it("deleting with remove leaves users without a groove", async () => {
         const project = await createProject()
         const zeitgeist = createZeitgeist(project)
@@ -209,6 +231,9 @@ describe("Grooves", () => {
         expect(Grooves.canAddToStack(c, a)).toBe(true)
         expect(Grooves.wouldContain(a, b)).toBe(true)
         expect(Grooves.wouldContain(other, a)).toBe(false)
+        const adapter = Grooves.adapterOf(project, a)
+        expect(Number.isFinite(adapter.warp(123))).toBe(true)
+        expect(Number.isFinite(adapter.cellDuration())).toBe(true)
         expect(() => project.editing.modify(() => Grooves.deleteAll(project, [b], "fallback"))).not.toThrow()
     })
         it("a stack never contains itself", async () => {

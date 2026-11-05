@@ -23,6 +23,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {MutableRegion} from "./MutableRegion"
 import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
 import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
+import {Grooves} from "../../grooves/Grooves"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -258,6 +259,7 @@ export class NoteRegionBoxAdapter
                     }
                 }
             )
+        const groove = Grooves.sharedOf(overlapping.map(region => region.box))
         const keep = regions.includes(this) ? this : first as NoteRegionBoxAdapter
         overlapping.filter(region => region !== keep).forEach(({box}) => box.delete())
         const {box} = keep
@@ -268,6 +270,7 @@ export class NoteRegionBoxAdapter
         box.hue.setValue(this.hue)
         box.mute.setValue(this.mute)
         box.label.setValue(this.label)
+        groove.match({none: () => box.groove.defer(), some: groove => box.groove.refer(groove)})
         const replaced = keep.optCollection.map(collection => collection.box)
         box.events.refer(collectionBox.owners)
         replaced.ifSome(collection => {if (collection.owners.pointerHub.isEmpty()) {collection.delete()}})
