@@ -123,10 +123,9 @@ Audio regions do not take a groove yet.
 
 ## 6. Loops
 
-When the transport loops, every pass plays as if it started at the loop start. A note the groove would move
-across the loop end, or before the loop start, is not played in that pass. A groove whose duration fits the
-loop, like a 1 or 2 bar groove in a 4 bar loop, or an Offset groove, plays the same on every pass without
-losing a note.
+When the transport loops, a Zeitgeist plays every pass as if it started at the loop start. A note the groove
+would move across the loop end, or before the loop start, is not played in that pass. A groove whose cells fit
+the loop, like a 1 or 2 bar groove in a 4 bar loop, loses no note.
 
 ---
 
