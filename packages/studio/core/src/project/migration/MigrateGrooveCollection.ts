@@ -5,8 +5,7 @@ import {GrooveBox, isGrooveBox} from "@opendaw/studio-adapters"
 
 export const GlobalGrooveLabel = "Global Shuffle"
 
-// Every groove joins the project's groove list, the global one first. Returns true for a project made before
-// the list existed, so later passes can tell an old empty groove pointer from a deliberate None.
+// true for a project made before the groove list existed
 export const migrateGrooveCollection = (boxGraph: BoxGraph<BoxIO.TypeMap>, rootBox: RootBox): boolean => {
     const members = rootBox.grooves.pointerHub.incoming().length
     const missing = boxGraph.boxes()

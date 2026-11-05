@@ -1,7 +1,4 @@
-//! The GROOVE REGISTRY: every groove of the project's groove list (`RootBox.grooves`), kept in sync with
-//! the box graph inside subscription dispatch (off the render path). Devices reach a groove through the
-//! `host_groove_warp` / `host_groove_unwarp` imports by a slot that follows their groove pointer. Mirrors
-//! the TS groove adapters (`CellGrooveBoxAdapter`, `GrooveStackBoxAdapter`).
+//! Every groove of the project kept in sync with the box graph, mirrors the TS groove adapters.
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -123,15 +120,15 @@ fn warp(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forward:
     match def {
         GrooveDef::Shuffle {h, duration} => {
             let h = if forward { *h } else { 1.0 - *h };
-            cell(position, *duration, |x| moebius(x, h))
+            cell(position, *duration, |phase| moebius(phase, h))
         }
         GrooveDef::Function {s_curve, amount, duration} => {
             let curve = if *s_curve { Curve::SCurve } else { Curve::Power };
-            cell(position, *duration, |x| if forward { blend_fx(curve, *amount, x) } else { blend_fy(curve, *amount, x) })
+            cell(position, *duration, |phase| if forward { blend_fx(curve, *amount, phase) } else { blend_fy(curve, *amount, phase) })
         }
         GrooveDef::Random {values, amount, duration} => {
             let curve = Curve::Table(values);
-            cell(position, *duration, |x| if forward { blend_fx(curve, *amount, x) } else { blend_fy(curve, *amount, x) })
+            cell(position, *duration, |phase| if forward { blend_fx(curve, *amount, phase) } else { blend_fy(curve, *amount, phase) })
         }
         GrooveDef::Offset {ticks} => if forward { position + *ticks } else { position - *ticks },
         GrooveDef::Stack {members} => {

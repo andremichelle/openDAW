@@ -27,10 +27,11 @@ type Setup = {
     offset: int
     notes?: { grooved: boolean, position: int, loopOffset: int, loopDuration: int, duration: int }
     // the unit is muted until `at`, the region carrying the switch grooved or not
-    unmute?: { at: int, grooved: boolean }
+    unmute?: { at: int, grooved: boolean, duration?: int }
+    unlisted?: boolean
 }
 
-const render = async ({offset, notes, unmute}: Setup, pulses: int): Promise<ReadonlyArray<number>> => {
+const render = async ({offset, notes, unmute, unlisted}: Setup, pulses: int): Promise<ReadonlyArray<number>> => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -45,7 +46,7 @@ const render = async ({offset, notes, unmute}: Setup, pulses: int): Promise<Read
         box.code.setValue("// @apparat js 1 1\n" + CODE)
     })
     const groove = GrooveOffsetBox.create(source, UUID.generate(), box => {
-        box.collection.refer(rootBox.grooves)
+        if (unlisted !== true) {box.collection.refer(rootBox.grooves)}
         box.index.setValue(1)
         box.offset.setValue(offset)
     })
@@ -100,8 +101,8 @@ const render = async ({offset, notes, unmute}: Setup, pulses: int): Promise<Read
             box.regions.refer(lane.regions)
             box.events.refer(curve.owners)
             box.position.setValue(0)
-            box.duration.setValue(4 * BAR)
-            box.loopDuration.setValue(4 * BAR)
+            box.duration.setValue(unmute.duration ?? 4 * BAR)
+            box.loopDuration.setValue(unmute.duration ?? 4 * BAR)
             if (unmute.grooved) {box.groove.refer(groove)}
         })
     }
@@ -146,6 +147,11 @@ describe("a region with a groove", () => {
         }
     }, 120000)
 
+    it("moves the notes through a groove that is not in the list", async () => {
+        const onsets = await render({offset: 120, unlisted: true, notes: {grooved: true, position: 0, loopOffset: 0, loopDuration: BAR, duration: BAR}}, BAR)
+        near(onsets, Array.from({length: 16}, (_, index) => index * STEP + 120), "unlisted")
+    }, 120000)
+
     it("starts the groove where the region's loop starts", async () => {
         // a region at bar 2 showing its content from the second beat: the cycle starts a beat before the region
         const onsets = await render({offset: 120, notes: {grooved: true, position: BAR, loopOffset: 960, loopDuration: BAR, duration: 3 * 960}}, 2 * BAR)
@@ -167,5 +173,13 @@ describe("a region with a groove", () => {
         const grooved = await render({offset: 480, unmute: {at: 1800, grooved: true}}, BAR)
         expect(straight[0]).toBe(1920)
         expect(grooved[0]).toBe(2400)
+    }, 120000)
+
+    it("holds the value the groove reached at the end of an automation region", async () => {
+        // the switch just before the region end moves past it, so the unit stays muted after the region
+        const straight = await render({offset: 480, unmute: {at: 2 * BAR - 60, grooved: false, duration: 2 * BAR}}, 4 * BAR)
+        const grooved = await render({offset: 480, unmute: {at: 2 * BAR - 60, grooved: true, duration: 2 * BAR}}, 4 * BAR)
+        expect(straight[0]).toBe(2 * BAR)
+        expect(grooved).toEqual([])
     }, 120000)
 })

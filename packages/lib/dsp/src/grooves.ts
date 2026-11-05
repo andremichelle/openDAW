@@ -90,18 +90,18 @@ export namespace GrooveCurves {
 
     // Pushes positions towards the end of the cell
     export const Power: GrooveFunction = {
-        fx: (x: unitValue): unitValue => 1.0 - Math.pow(1.0 - x, Exponent),
-        fy: (y: unitValue): unitValue => 1.0 - Math.pow(1.0 - y, InverseExponent)
+        fx: (phase: unitValue): unitValue => 1.0 - Math.pow(1.0 - phase, Exponent),
+        fy: (value: unitValue): unitValue => 1.0 - Math.pow(1.0 - value, InverseExponent)
     }
 
     // Pulls positions towards the middle of the cell
     export const SCurve: GrooveFunction = {
-        fx: (x: unitValue): unitValue => x < 0.5
-            ? 0.5 - 0.5 * Math.pow(1.0 - 2.0 * x, Exponent)
-            : 0.5 + 0.5 * Math.pow(2.0 * x - 1.0, Exponent),
-        fy: (y: unitValue): unitValue => y < 0.5
-            ? 0.5 - 0.5 * Math.pow(1.0 - 2.0 * y, InverseExponent)
-            : 0.5 + 0.5 * Math.pow(2.0 * y - 1.0, InverseExponent)
+        fx: (phase: unitValue): unitValue => phase < 0.5
+            ? 0.5 - 0.5 * Math.pow(1.0 - 2.0 * phase, Exponent)
+            : 0.5 + 0.5 * Math.pow(2.0 * phase - 1.0, Exponent),
+        fy: (value: unitValue): unitValue => value < 0.5
+            ? 0.5 - 0.5 * Math.pow(1.0 - 2.0 * value, InverseExponent)
+            : 0.5 + 0.5 * Math.pow(2.0 * value - 1.0, InverseExponent)
     }
 
     export const randomUnit = (seed: number, index: number): unitValue => {
@@ -133,19 +133,19 @@ export namespace GrooveCurves {
     // 50% is straight, 100% the function, 0% its mirror on y = x (the inverse of the blend at 100% minus the amount)
     export const blend = (func: GrooveFunction, amount: unitValue): GrooveFunction => {
         const weight = Math.min(1.0, Math.abs(2.0 * amount - 1.0)) * MaxWeight
-        const forward = (x: unitValue): unitValue => {
-            if (x <= 0.0) {return 0.0}
-            if (x >= 1.0) {return 1.0}
-            return x + weight * (func.fx(x) - x)
+        const forward = (phase: unitValue): unitValue => {
+            if (phase <= 0.0) {return 0.0}
+            if (phase >= 1.0) {return 1.0}
+            return phase + weight * (func.fx(phase) - phase)
         }
-        const inverse = (y: unitValue): unitValue => {
-            if (y <= 0.0) {return 0.0}
-            if (y >= 1.0) {return 1.0}
+        const inverse = (value: unitValue): unitValue => {
+            if (value <= 0.0) {return 0.0}
+            if (value >= 1.0) {return 1.0}
             let low = 0.0
             let high = 1.0
             for (let iteration = 0; iteration < BisectIterations; iteration++) {
                 const middle = (low + high) * 0.5
-                if (forward(middle) < y) {low = middle} else {high = middle}
+                if (forward(middle) < value) {low = middle} else {high = middle}
             }
             return (low + high) * 0.5
         }

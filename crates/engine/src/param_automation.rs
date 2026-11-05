@@ -201,6 +201,7 @@ impl ValueBoundRegion {
     /// "automation doesn't keep its last value when the region ends" bug). TS: `(complete - offset) %
     /// loopDuration === 0` with `offset = position - loopOffset`, i.e. `(duration + loopOffset) % loopDuration`.
     fn outgoing_value(&self) -> Option<f32> {
+        if self.groove.is_some() {return self.value_at(self.position + self.duration)}
         let ends_on_loop_pass = self.loop_duration > 0.0
             && ((self.duration + self.loop_offset) % self.loop_duration).abs() < 1.0e-6;
         if ends_on_loop_pass {

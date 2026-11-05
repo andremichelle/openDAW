@@ -381,9 +381,11 @@ pub(crate) const NOTE_REGION_MUTE_KEY: u16 = 15;
 pub(crate) const NOTE_REGION_GROOVE_KEY: u16 = 18;
 pub(crate) const NOTE_CLIP_GROOVE_KEY: u16 = 14;
 
-/// The groove a region's or clip's `groove` pointer at `key` targets.
+/// The groove a region's or clip's `groove` pointer at `key` targets, the registry follows it even outside the list.
 pub(crate) fn groove_of(graph: &BoxGraph, uuid: Uuid, key: u16) -> Option<Uuid> {
-    graph.target_of(&Address::of(uuid, vec![key])).map(|address| address.uuid)
+    let groove = graph.target_of(&Address::of(uuid, vec![key])).map(|address| address.uuid);
+    if let Some(groove) = groove {crate::follow_unlisted_groove(graph, groove)}
+    groove
 }
 
 /// Read a region's loopable span from the box graph (position 10, duration 11, loopOffset 12, loopDuration 13)

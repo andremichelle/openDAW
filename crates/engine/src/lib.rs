@@ -670,8 +670,12 @@ fn set_groove_slot(slot: u32, target: Option<Uuid>) {
 /// Point a slot at its pointer's target, the registry follows that groove even outside the list.
 pub(crate) fn follow_groove(slot: u32, graph: &BoxGraph, target: Option<Uuid>) {
     set_groove_slot(slot, target);
-    if let (Some(target), Some(registry)) = (target, unsafe { GROOVES.get() }.as_ref()) {
-        registry.ensure(graph, target);
+    if let Some(target) = target {follow_unlisted_groove(graph, target)}
+}
+
+pub(crate) fn follow_unlisted_groove(graph: &BoxGraph, groove: Uuid) {
+    if let Some(registry) = unsafe { GROOVES.get() }.as_ref() {
+        registry.ensure(graph, groove);
     }
 }
 

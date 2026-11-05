@@ -81,9 +81,7 @@ fn inverse(curve: Curve, weight: f64, y: f64) -> f64 {
     (low + high) * 0.5
 }
 
-/// 50% is straight, 100% the curve and 0% its mirror on y = x (lib-dsp `GrooveCurves.blend`). Below 50% the
-/// warp is the inverse of the blend at 100% minus the amount, so both directions only evaluate the curve itself
-/// and bisect a function whose slope stays at least 1 - MAX_WEIGHT.
+/// 50% is straight, 100% the curve and 0% its mirror on y = x (lib-dsp `GrooveCurves.blend`)
 pub fn blend_fx(curve: Curve, amount: f64, x: f64) -> f64 {
     let weight = weight_of(amount);
     if amount >= 0.5 { forward(curve, weight, x) } else { inverse(curve, weight, x) }
