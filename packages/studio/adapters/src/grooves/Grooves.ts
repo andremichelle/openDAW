@@ -7,12 +7,18 @@ import {
     GrooveShuffleBox,
     GrooveStackBox,
     GrooveStackEntryBox,
+    AudioUnitBox,
+    TrackBox,
+    NoteClipBox,
+    NoteRegionBox,
     RootBox,
+    ValueClipBox,
+    ValueRegionBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {ByteArrayInput, int, isInstanceOf, Nullable, panic, Strings, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, int, isInstanceOf, Nullable, Option, panic, Strings, UUID} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {GrooveAdapter, GrooveBox, GrooveKind, isGrooveBox} from "./GrooveBoxAdapter"
 import {GrooveFunctionType} from "./GrooveFunctionBoxAdapter"
@@ -134,6 +140,22 @@ export namespace Grooves {
         return copy
     }
 
+    export type TimelineBox = NoteRegionBox | ValueRegionBox | NoteClipBox | ValueClipBox
+
+    export const isTimelineBox = (box: Box): box is TimelineBox =>
+        isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox)
+        || isInstanceOf(box, NoteClipBox) || isInstanceOf(box, ValueClipBox)
+
+    // The groove pointer of a note or value region or clip
+    export const pointerOf = (box: Box): Option<PointerField<Pointers.Groove>> =>
+        isTimelineBox(box) ? Option.wrap(box.groove) : Option.None
+
+    // The audio unit whose track holds a region or clip
+    export const unitOf = (box: TimelineBox): Option<AudioUnitBox> =>
+        (isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) ? box.regions : box.clips).targetVertex
+            .flatMap(({box: track}) => isInstanceOf(track, TrackBox) ? track.tracks.targetVertex : Option.None)
+            .flatMap(({box: unit}) => isInstanceOf(unit, AudioUnitBox) ? Option.wrap(unit) : Option.None)
+
     export type DeleteMode = "fallback" | "remove"
 
     // The global groove is never deleted. Users fall back to the global groove or lose their groove.
@@ -144,7 +166,7 @@ export namespace Grooves {
         if (doomed.size === 0) {return}
         const global = globalGroove(context)
         doomed.forEach(groove => users(groove).slice().forEach(pointer => {
-            if (mode === "fallback") {
+            if (mode === "fallback" && !isTimelineBox(pointer.box)) {
                 if (isInstanceOf(pointer.box, GrooveStackEntryBox)
                     && wouldContain(global, asGrooveBox(pointer.box.stack.targetVertex
                         .unwrap("Entry without stack").box))) {
@@ -232,12 +254,14 @@ export namespace Grooves {
         | { type: "zeitgeist", box: ZeitgeistDeviceBox }
         | { type: "stack", box: GrooveStackBox, entry: GrooveStackEntryBox }
         | { type: "project", box: RootBox }
+        | { type: "timeline", box: TimelineBox }
         | { type: "other", box: Box }
 
     export const userOf = (pointer: PointerField<Pointers.Groove>): User => {
         const box = pointer.box
         if (isInstanceOf(box, ZeitgeistDeviceBox)) {return {type: "zeitgeist", box}}
         if (isInstanceOf(box, RootBox)) {return {type: "project", box}}
+        if (isTimelineBox(box)) {return {type: "timeline", box}}
         if (isInstanceOf(box, GrooveStackEntryBox)) {
             const stack = box.stack.targetVertex.map(vertex => vertex.box)
             if (stack.nonEmpty() && isInstanceOf(stack.unwrap(), GrooveStackBox)) {

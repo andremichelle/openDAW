@@ -27,6 +27,7 @@ import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
 import {MonoConversions} from "@/service/MonoConversions"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 
 type Construct = {
     element: Element
@@ -90,6 +91,7 @@ export const installRegionContextMenu =
                 })),
                 ColorMenu.createItem(hue => editing.modify(() =>
                     selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
+                GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Rename"})
                     .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label)
                         .then(value => NameValidator.validate(value, {

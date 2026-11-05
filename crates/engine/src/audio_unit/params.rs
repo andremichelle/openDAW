@@ -195,6 +195,7 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
             position: spec.position, duration: spec.duration,
             loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
             mute: spec.mute,
+            groove: spec.groove,
             curve: collection.curve()
         });
         collections.push(collection);
@@ -205,7 +206,8 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
     let mut clips = Vec::new();
     for spec in value_clips_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
-        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute, curve: collection.curve()});
+        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute,
+            groove: spec.groove, curve: collection.curve()});
         collections.push(collection);
         rebind_uuids.push(spec.clip);
     }

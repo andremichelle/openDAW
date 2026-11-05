@@ -181,6 +181,7 @@ export class NoteRegionBoxAdapter
             box.hue.setValue(this.hue)
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
+            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
             box.events.refer(eventTarget)
             box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
         }), NoteRegionBoxAdapter)

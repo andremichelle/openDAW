@@ -9,6 +9,7 @@ import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-box
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleEditorService} from "@/service/SampleEditorService"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 
 type Creation = {
     element: HTMLElement
@@ -51,6 +52,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                         modify(({box: {mute}}) => mute.setValue(newValue))
                     }),
                 ColorMenu.createItem(hue => modify(adapter => adapter.box.hue.setValue(hue))),
+                GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Consolidate", selectable: clip.isMirrowed})
                     .setTriggerProcedure(() => editing.modify(() =>
                         selection.selected().forEach(clip => clip.consolidate()))),
@@ -130,6 +132,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
+                                clip.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                                 box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })
@@ -157,6 +160,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
+                                clip.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                                 box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })

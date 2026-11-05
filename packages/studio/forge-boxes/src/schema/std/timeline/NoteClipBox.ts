@@ -15,7 +15,8 @@ export const NoteClipBox: BoxSchema<Pointers> = {
             10: {type: "int32", name: "duration", ...PPQNDurationConstraints},
             11: {type: "boolean", name: "mute"},
             12: {type: "string", name: "label"},
-            13: {type: "int32", name: "hue", ...HueConstraints}
+            13: {type: "int32", name: "hue", ...HueConstraints},
+            14: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.Editing, Pointers.MetaData], mandatory: false}
 }

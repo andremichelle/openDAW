@@ -155,7 +155,22 @@ describe("Grooves", () => {
         expect(targetOf(zeitgeist).unwrap()).toBe(Grooves.globalGroove(project))
         expect(labels(project)).toEqual(["Global Shuffle"])
     })
-    it("deleting with remove leaves users without a groove", async () => {
+    it("deleting with fallback leaves a region and a clip without a groove", async () => {
+        const project = await createProject()
+        const groove = project.editing.modify(() => Grooves.create(project, "power")).unwrap()
+        const [region, clip] = project.editing.modify(() => {
+            const {trackBox} = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const region = project.api.createNoteRegion({trackBox, position: 0, duration: 960})
+            const clip = project.api.createNoteClip(trackBox, 0)
+            region.groove.refer(groove)
+            clip.groove.refer(groove)
+            return [region, clip] as const
+        }).unwrap()
+        project.editing.modify(() => Grooves.deleteAll(project, [groove], "fallback"))
+        expect(region.groove.isEmpty()).toBe(true)
+        expect(clip.groove.isEmpty()).toBe(true)
+    })
+        it("deleting with remove leaves users without a groove", async () => {
         const project = await createProject()
         const zeitgeist = createZeitgeist(project)
         const groove = project.editing.modify(() => Grooves.create(project, "power")).unwrap()

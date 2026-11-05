@@ -1,12 +1,13 @@
 import modulatorCss from "../modulation/ModulatorEditor.sass?inline"
 import targetCss from "../modulation/TargetList.sass?inline"
 import css from "./GroovesList.sass?inline"
-import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
+import {Errors, isInstanceOf, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {GrooveAdapter, Grooves, ParameterOwner} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, GrooveAdapter, Grooves, ParameterOwner} from "@opendaw/studio-adapters"
+import {NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
@@ -72,6 +73,16 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
                 if (user.type === "stack") {
                     deviceName.textContent = "Stack member"
                     rows.own(user.box.label.catchupAndSubscribe(field => ownerName.textContent = field.getValue()))
+                } else if (user.type === "timeline") {
+                    const kind = isInstanceOf(user.box, NoteRegionBox) || isInstanceOf(user.box, ValueRegionBox) ? "Region" : "Clip"
+                    rows.own(user.box.label.catchupAndSubscribe(field =>
+                        deviceName.textContent = field.getValue().length > 0 ? `${kind} ${field.getValue()}` : kind))
+                    Grooves.unitOf(user.box).ifSome(unit => {
+                        const adapter = project.boxAdapters.adapterFor(unit, AudioUnitBoxAdapter)
+                        rows.own(adapter.input.catchupAndSubscribeLabelChange(label =>
+                            ownerName.textContent = label.unwrapOrElse("")))
+                        rows.own(Events.subscribe(ownerName, "click", () => userEditingManager.audioUnit.edit(unit.editing)))
+                    })
                 } else {
                     ParameterOwner.audioUnitOf(project, pointer).ifSome(unit => {
                         rows.own(unit.input.catchupAndSubscribeLabelChange(label =>

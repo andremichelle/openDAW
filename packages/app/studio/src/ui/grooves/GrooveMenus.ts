@@ -1,5 +1,8 @@
-import {Grooves, GrooveStackBoxAdapter} from "@opendaw/studio-adapters"
+import {GrooveAdapter, Grooves, GrooveStackBoxAdapter} from "@opendaw/studio-adapters"
+import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
 import {MenuItem, Project} from "@opendaw/studio-core"
+import {Box} from "@opendaw/lib-box"
+import {Nullable} from "@opendaw/lib-std"
 
 // The menus of the groove controls, shared by the Zeitgeist panel and the Grooves list
 export namespace GrooveMenus {
@@ -21,5 +24,36 @@ export namespace GrooveMenus {
         }).setRuntimeChildrenProcedure(sub => sub.addMenuItem(...candidates.map(candidate =>
             MenuItem.default({label: candidate.label}).setTriggerProcedure(() =>
                 editing.modify(() => Grooves.addToStack(project, stack.box, candidate.box)))))))
+    }
+
+    // Picks the groove of the selected regions or clips, hidden when none of them takes one
+    export const timelineItem = (project: Project, boxes: ReadonlyArray<Box>) => {
+        const {editing} = project
+        const pointers = boxes.flatMap(box => Grooves.pointerOf(box).match({none: () => [], some: pointer => [pointer]}))
+        const uses = (groove: Nullable<Box>) => pointers.length > 0 && pointers.every(pointer =>
+            pointer.targetVertex.match({none: () => groove === null, some: ({box}) => box === groove}))
+        const current = (): Nullable<GrooveAdapter> => project.rootBoxAdapter.grooves.adapters()
+            .find(groove => uses(groove.box)) ?? null
+        return MenuItem.default({label: "Groove", hidden: pointers.length === 0})
+            .setRuntimeChildrenProcedure(parent => {
+                const shared = current()
+                parent.addMenuItem(MenuItem.default({
+                    label: `Go to ${shared?.label ?? NoneLabel}`,
+                    selectable: shared !== null
+                }).setTriggerProcedure(() => {if (shared !== null) {GrooveReveal.request(shared.uuid)}}))
+                parent.addMenuItem(MenuItem.default({label: NoneLabel, checked: uses(null), separatorBefore: true})
+                    .setTriggerProcedure(() => editing.modify(() => pointers.forEach(pointer => pointer.defer()))))
+                parent.addMenuItem(...project.rootBoxAdapter.grooves.adapters().map(groove =>
+                    MenuItem.default({label: groove.label, checked: uses(groove.box)})
+                        .setTriggerProcedure(() => editing.modify(() =>
+                            pointers.forEach(pointer => pointer.refer(groove.box))))))
+                parent.addMenuItem(MenuItem.default({label: "New", separatorBefore: true})
+                    .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...Grooves.Kinds.map(kind =>
+                        MenuItem.default({label: kind.label}).setTriggerProcedure(() => editing.modify(() => {
+                            const groove = Grooves.create(project, kind.kind)
+                            pointers.forEach(pointer => pointer.refer(groove))
+                            return groove
+                        }).ifSome(groove => GrooveReveal.request(groove.address.uuid)))))))
+            })
     }
 }

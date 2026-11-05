@@ -152,7 +152,29 @@ describe("grooves", () => {
         expect(groove.offset).toBe(-480)
     })
 
-    it("a Zeitgeist without a groove reads null", () => {
+    it("a note region, a note clip and an automation region read and write their groove", () => {
+        const {project, boxes} = setup()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const track = unit.addNoteTrack()
+        const region = track.addRegion({duration: PPQN.Bar})
+        const clip = track.addClip({duration: PPQN.Bar})
+        const lane = unit.addValueTrack(unit.instrument, "cutoff")
+        const automation = lane.addRegion({duration: PPQN.Bar})
+        const random = project.grooves.find(groove => groove.kind === "Random")!
+        for (const owner of [region, clip, automation]) {
+            expect(owner.groove).toBeNull()
+            owner.groove = random
+            expect(owner.groove).toBe(random)
+            owner.groove = project.groove
+            expect(owner.groove?.kind).toBe("Shuffle")
+            owner.groove = null
+            expect(owner.groove).toBeNull()
+        }
+        // only the stack member still points at it
+        expect(boxes.random.pointerHub.incoming().length).toBe(1)
+    })
+
+        it("a Zeitgeist without a groove reads null", () => {
         const {zeitgeist, point} = setup()
         point(null)
         expect(zeitgeist.groove).toBeNull()

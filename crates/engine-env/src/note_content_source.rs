@@ -16,6 +16,12 @@ pub trait NoteTrackAccess {
     fn clip_info(&self, clip: &[u8; 16]) -> Option<(f64, bool)>;
     /// Visit a clip's note events; an absent clip visits nothing.
     fn clip_events(&self, clip: &[u8; 16], visit: &mut dyn FnMut(&EventCollection<NoteEvent>));
+    /// The groove a clip plays through, restarting at every clip cycle.
+    fn clip_groove(&self, _clip: &[u8; 16]) -> Option<[u8; 16]> {None}
+    /// The grooved position of a cycle-local `position` through `groove`.
+    fn warp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
+    /// The straight position of a grooved cycle-local `position` through `groove`.
+    fn unwarp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
 }
 
 pub trait NoteContentSource {

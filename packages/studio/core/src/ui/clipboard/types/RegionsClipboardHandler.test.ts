@@ -2,7 +2,9 @@ import {afterEach, describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, TimeBase} from "@opendaw/lib-dsp"
 import {ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
-import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {
+    AudioFileBox, AudioRegionBox, GrooveOffsetBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, ValueEventCollectionBox
+} from "@opendaw/studio-boxes"
 import {StudioPreferences} from "../../../StudioPreferences"
 import type {ProjectEnv} from "../../../project/ProjectEnv"
 import {RegionsClipboard} from "./RegionsClipboardHandler"
@@ -100,5 +102,75 @@ describe("RegionsClipboard paste at a fractional playhead (live error 1165)", ()
         expect(regions.length).toBe(2)
         expect(regions[0].complete).toBeLessThanOrEqual(regions[1].position)
         expect(regions[1].position).toBe(959)
+    })
+})
+
+// A note region with a groove: within the project the copy keeps pointing at the same groove, another project
+// receives the groove (once) in its groove list.
+const buildGroovedRegion = async () => {
+    const {Project} = await import("../../../project/Project")
+    const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+    const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox, rootBox}} = skeleton
+    boxGraph.beginTransaction()
+    const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+        box.type.setValue(TrackType.Notes)
+        box.tracks.refer(primaryAudioUnitBox.tracks)
+        box.target.refer(primaryAudioUnitBox)
+    })
+    const groove = GrooveOffsetBox.create(boxGraph, UUID.generate(), box => {
+        box.label.setValue("Late")
+        box.collection.refer(rootBox.grooves)
+        box.index.setValue(1)
+        box.offset.setValue(120)
+    })
+    const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+    NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+        box.position.setValue(0)
+        box.duration.setValue(960)
+        box.loopDuration.setValue(960)
+        box.regions.refer(trackBox.regions)
+        box.events.refer(events.owners)
+        box.groove.refer(groove)
+    })
+    boxGraph.endTransaction()
+    const project = Project.fromSkeleton(env(), skeleton)
+    const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+    return {project, trackAdapter, groove}
+}
+
+const grooveOf = (region: {box: unknown}) => {
+    const box = region.box as NoteRegionBox
+    return box.groove.targetVertex.map(vertex => vertex.box)
+}
+
+describe("RegionsClipboard with a grooved region", () => {
+    it("a paste into the same project points at the same groove", async () => {
+        const {project, trackAdapter, groove} = await buildGroovedRegion()
+        const playhead = {value: 0}
+        const handler = createHandler(project, trackAdapter, playhead)
+        project.regionSelection.select(...trackAdapter.regions.collection.asArray())
+        const entry = handler.copy().unwrap("copy")
+        handler.paste(entry)
+        const regions = trackAdapter.regions.collection.asArray()
+        expect(regions.length).toBe(2)
+        regions.forEach(region => expect(grooveOf(region).unwrapOrNull()).toBe(groove))
+        expect(project.rootBoxAdapter.grooves.adapters().length).toBe(2)
+    })
+
+    it("a paste into another project brings the groove into its list", async () => {
+        const origin = await buildGroovedRegion()
+        const target = await buildGroovedRegion()
+        const playhead = {value: 0}
+        const copier = createHandler(origin.project, origin.trackAdapter, playhead)
+        origin.project.regionSelection.select(...origin.trackAdapter.regions.collection.asArray())
+        const entry = copier.copy().unwrap("copy")
+        const paster = createHandler(target.project, target.trackAdapter, playhead)
+        paster.paste(entry)
+        const regions = target.trackAdapter.regions.collection.asArray()
+        expect(regions.length).toBe(2)
+        const pasted = grooveOf(regions[1]).unwrap("the pasted region has a groove")
+        expect(pasted).not.toBe(target.groove)
+        expect(target.project.rootBoxAdapter.grooves.adapters().map(adapter => adapter.box)).toContain(pasted)
+        expect(target.project.rootBoxAdapter.grooves.adapters().length).toBe(3)
     })
 })

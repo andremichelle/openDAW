@@ -143,7 +143,16 @@ pub(crate) struct ValueBoundRegion {
     pub(crate) loop_offset: f64,
     pub(crate) loop_duration: f64,
     pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>,
     pub(crate) curve: ValueCurve
+}
+
+// The content position a curve repeating every `length` is read at through a groove running on from `origin`, the
+// straight position kept within `[low, high]`
+fn ungrooved(groove: &Uuid, position: f64, origin: f64, length: f64, low: f64, high: f64) -> f64 {
+    let straight = crate::unwarp_through(groove, position - origin);
+    let straight = if straight < low {low} else if straight > high {high} else {straight};
+    if length > 0.0 {math::mod_euclid(straight, length)} else {straight}
 }
 
 impl Span for ValueBoundRegion {
@@ -164,7 +173,15 @@ impl ValueBoundRegion {
 
     /// `None` when the curve is empty (the caller falls back to the field's STORED value, like TS).
     fn value_at(&self, position: f64) -> Option<f32> {
-        self.curve.value_at_opt(self.local(position))
+        match &self.groove {
+            None => self.curve.value_at_opt(self.local(position)),
+            Some(groove) => {
+                // the groove runs on from where the region's loop starts
+                let origin = self.position - self.loop_offset;
+                self.curve.value_at_opt(ungrooved(groove, position, origin, self.loop_duration,
+                    self.loop_offset, self.loop_offset + self.duration))
+            }
+        }
     }
 
     /// The region's INCOMING value, for a position BEFORE the track's first region (mirrors TS
@@ -212,6 +229,7 @@ pub(crate) struct BoundValueClip {
     pub(crate) duration: f64,
     pub(crate) looped: bool,
     pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>,
     pub(crate) curve: ValueCurve
 }
 
@@ -272,7 +290,10 @@ impl ParamCurve {
                     if section.from == position {
                         clips.iter().find(|bound| bound.clip_uuid == clip)
                             .filter(|bound| bound.duration > 0.0 && !bound.mute)
-                            .and_then(|bound| bound.curve.value_at_opt(position % bound.duration))
+                            .and_then(|bound| bound.curve.value_at_opt(match &bound.groove {
+                                None => position % bound.duration,
+                                Some(groove) => ungrooved(groove, position, 0.0, bound.duration, f64::NEG_INFINITY, f64::INFINITY)
+                            }))
                     } else {
                         None
                     }

@@ -6,9 +6,10 @@ import {
     GrooveStackBox,
     GrooveStackEntryBox
 } from "@opendaw/studio-boxes"
-import {Box} from "@opendaw/lib-box"
+import {Box, PointerField} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
-import {int, isInstanceOf, panic, unitValue} from "@opendaw/lib-std"
+import {Pointers} from "@opendaw/studio-enums"
+import {int, isInstanceOf, isNull, Nullable, panic, unitValue} from "@opendaw/lib-std"
 import {AnyGroove, GrooveFunction, GrooveOffset, GrooveRandom, GrooveShuffle, GrooveStack} from "../Api"
 import {Context} from "./Context"
 import {Facade} from "./Common"
@@ -115,6 +116,21 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
 export namespace GrooveImpls {
     export const isBox = (box: Box): boolean => box instanceof GrooveShuffleBox || box instanceof GrooveFunctionBox
         || box instanceof GrooveRandomBox || box instanceof GrooveOffsetBox || box instanceof GrooveStackBox
+
+    // The groove a pointer targets, null for none
+    export const read = (context: Context, pointer: PointerField<Pointers.Groove>): Nullable<AnyGroove> =>
+        pointer.targetVertex.mapOr(vertex => wrap(context, vertex.box), null)
+
+    // Points at a groove of the project, or at none
+    export const write = (context: Context, pointer: PointerField<Pointers.Groove>, groove: Nullable<AnyGroove>): void => {
+        if (isNull(groove)) {
+            context.edit(() => pointer.defer())
+            return
+        }
+        if (!(groove instanceof Facade) || !isBox(groove.box)) {return panic("Expected a groove of the project")}
+        const box = groove.box
+        context.edit(() => pointer.refer(box))
+    }
 
     export const wrap = (context: Context, box: Box): AnyGroove => {
         if (box instanceof GrooveShuffleBox) {return GrooveShuffleImpl.wrap(context, box)}

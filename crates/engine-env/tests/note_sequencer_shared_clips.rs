@@ -58,7 +58,7 @@ fn content() -> Content {
     for step in 0..38 {
         clip_notes.add(NoteEvent::new(step as f64 * 100.0, 10.0, CLIP_PITCH, 0.0, 1.0));
     }
-    let region = NoteRegion {position: 0.0, duration: 2.0 * BAR, loop_offset: 0.0, loop_duration: 2.0 * BAR, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 2.0 * BAR, loop_offset: 0.0, loop_duration: 2.0 * BAR, mute: false, groove: None};
     Content {region, region_notes, clip_notes}
 }
 

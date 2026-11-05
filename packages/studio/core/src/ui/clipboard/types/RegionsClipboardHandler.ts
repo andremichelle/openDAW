@@ -5,14 +5,18 @@ import {Pointers} from "@opendaw/studio-enums"
 import {
     AnyRegionBoxAdapter,
     BoxAdapters,
+    isGrooveBox,
     RegionAdapters,
     TrackBoxAdapter,
     TrackType,
+    TransferUtils,
     UnionBoxTypes
 } from "@opendaw/studio-adapters"
+import {RootBox} from "@opendaw/studio-boxes"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {RegionOverlapResolver} from "../../timeline/RegionOverlapResolver"
+import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 type ClipboardRegions = ClipboardEntry<"regions">
 
@@ -110,9 +114,9 @@ export namespace RegionsClipboard {
                 Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
                     stopAtResources: true,
-                    excludeBox: (dep: Box) => dep.ephemeral
+                    excludeBox: (dep: Box) => dep.ephemeral || isGrooveBox(dep) || dep.name === RootBox.ClassName
                 }).boxes))
-            const allBoxes = [...regionBoxes, ...dependencies]
+            const allBoxes = TransferUtils.withGrooves([...regionBoxes, ...dependencies])
             const metadata: RegionsMetadata = {minPosition, maxPosition, tracks: trackInfos}
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
             setPosition(maxPosition)
@@ -163,8 +167,10 @@ export namespace RegionsClipboard {
                                     return address.flatMap(addr => sourceTrackToTarget.opt(addr.uuid)
                                         .map(({target}) => target.box.clips.address))
                                 }
-                                return Option.None
+                                return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
                             },
+                            keepUuid: DevicesClipboard.keepUuid,
+                            excludeBox: box => DevicesClipboard.excludeExistingModulator(box, boxGraph),
                             modifyBox: (box: Box) => {
                                 if (UnionBoxTypes.isRegionBox(box)) {
                                     const regionBox = UnionBoxTypes.asRegionBox(box)
@@ -173,6 +179,7 @@ export namespace RegionsClipboard {
                             }
                         }
                     )
+                    TransferUtils.normalizeGrooves(boxGraph)
                     overlapSolvers.forEach(solver => solver())
                     const regionBoxes = boxes.filter(UnionBoxTypes.isRegionBox)
                     const adapters = regionBoxes.map(box => RegionAdapters.for(boxAdapters, box))

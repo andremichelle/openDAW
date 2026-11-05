@@ -2050,6 +2050,8 @@ export interface NoteEventOwner {
 export interface NoteRegion extends LoopableRegion, NoteEventOwner {
     /** The note track this region belongs to */
     readonly track: NoteTrack
+    /** The groove its notes play through, restarting where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2059,6 +2061,8 @@ export interface NoteRegion extends LoopableRegion, NoteEventOwner {
 export interface NoteClip extends Clip, NoteEventOwner {
     /** The note track this clip belongs to */
     readonly track: NoteTrack
+    /** The groove its notes play through, restarting where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2149,6 +2153,8 @@ export interface ValueEventOwner {
 export interface ValueRegion extends LoopableRegion, ValueEventOwner {
     /** The automation track this region belongs to */
     readonly track: ValueTrack
+    /** The groove its curve plays through, restarting where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2158,6 +2164,8 @@ export interface ValueRegion extends LoopableRegion, ValueEventOwner {
 export interface ValueClip extends Clip, ValueEventOwner {
     /** The automation track this clip belongs to */
     readonly track: ValueTrack
+    /** The groove its curve plays through, restarting where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
