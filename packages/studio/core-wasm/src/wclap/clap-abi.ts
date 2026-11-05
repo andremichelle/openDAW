@@ -150,6 +150,8 @@ export namespace ClapAbi {
 
     export namespace Feature {
         export const DEVICE_PANEL = "opendaw:device-panel"
+        // followed by the panel's width at 176 px: the studio reads it from the cloud index before the plugin loads
+        export const DEVICE_PANEL_WIDTH = "opendaw:device-panel-width:"
         export const NOTE_EFFECT = "note-effect"
     }
 
