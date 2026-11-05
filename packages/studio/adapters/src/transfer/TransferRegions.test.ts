@@ -1,6 +1,6 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, CaptureAudioBox, TrackBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, CaptureAudioBox, GrooveOffsetBox, TrackBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TrackType} from "../timeline/TrackType"
@@ -62,7 +62,24 @@ describe("TransferRegions.transfer", () => {
             boxGraph.verifyPointers()
         })
 
-        it("copies region to different track", () => {
+        it("keeps the region's groove", () => {
+            const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
+            boxGraph.beginTransaction()
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
+            const groove = GrooveOffsetBox.create(boxGraph, UUID.generate(), box => {
+                box.collection.refer(rootBox.grooves)
+                box.index.setValue(1)
+            })
+            regionBox.groove.refer(groove)
+            boxGraph.endTransaction()
+            boxGraph.beginTransaction()
+            const copied = TransferRegions.transfer(regionBox, trackBox, 500, false) as ValueRegionBox
+            boxGraph.endTransaction()
+            expect(copied.groove.targetVertex.unwrap("groove").box).toBe(groove)
+            expect(rootBox.grooves.pointerHub.incoming().length).toBe(2)
+        })
+
+                it("copies region to different track", () => {
             const {boxGraph} = skeleton
             boxGraph.beginTransaction()
             const {trackBox: trackA, regionBox, audioUnitBox} = createTrackWithRegion(skeleton)

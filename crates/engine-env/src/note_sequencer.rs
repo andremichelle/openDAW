@@ -217,7 +217,7 @@ impl NoteEventSource for NoteSequencer {
                         let Some((clip_duration, _)) = access.clip_info(&clip) else { return };
                         // the groove runs on the timeline grid the clip cycles on
                         let groove = access.clip_groove(&clip).map(|groove| Grooved {access, groove, origin: 0.0,
-                            length: clip_duration, low: section.from, high: section.to, truncate});
+                            length: clip_duration, low: f64::NEG_INFINITY, high: f64::INFINITY, truncate});
                         access.clip_events(&clip, &mut |notes| {
                             if let Some(grooved) = &groove {
                                 process_grooved(notes, grooved, section.from, section.to, retainer, random, next_id, sink);
@@ -390,7 +390,7 @@ fn process_grooved(notes: &EventCollection<NoteEvent>, grooved: &Grooved, from: 
         let local_from = if first > base {first - base} else {0.0};
         let local_to = if last < base + length {last - base} else {length};
         if local_from < local_to {
-            let end = if *truncate {(base + length).min(*high)} else {f64::INFINITY};
+            let end = if *truncate {access.warp(groove, (base + length).min(*high))} else {f64::INFINITY};
             play_grooved(notes, &|position: f64| access.warp(groove, base + position), local_from, local_to, *origin, end,
                 retainer, random, next_id, sink);
         }

@@ -12,7 +12,7 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, PointerField, Vertex} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, Field, PointerField, Vertex} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
     ModulationBox,
@@ -170,6 +170,29 @@ export namespace DevicesClipboard {
         || isInstanceOf(box, ValueEventBox)
         || isInstanceOf(box, ValueEventCurveBox)
 
+    // An audio unit's tracks with their regions and what those need, the regions' grooves included
+    export const collectTimeline = (tracksField: Field, boxGraph: BoxGraph): ReadonlyArray<Box> => {
+        const content: Array<Box> = []
+        for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
+            if (!isInstanceOf(pointer.box, TrackBox)) {continue}
+            const track = pointer.box
+            content.push(track)
+            for (const regionPointer of track.regions.pointerHub.incoming()) {
+                content.push(regionPointer.box)
+                content.push(...boxGraph.dependenciesOf(regionPointer.box, {
+                    alwaysFollowMandatory: true,
+                    stopAtResources: true,
+                    excludeBox: (dep: Box) => dep.ephemeral
+                        || isInstanceOf(dep, TrackBox)
+                        || DeviceBoxUtils.isDeviceBox(dep)
+                        || isGrooveBox(dep)
+                        || dep.name === RootBox.ClassName
+                }).boxes)
+            }
+        }
+        return TransferUtils.withGrooves(content)
+    }
+
     // Modulators and grooves keep their uuid, so pasting into the project they came from finds them
     export const keepUuid = (box: Box): boolean => isModulatorBox(box) || isGrooveBox(box)
 
@@ -298,23 +321,7 @@ export namespace DevicesClipboard {
                 // only an audio unit's instrument owns the timeline, a nested one (a layer's) travels alone
                 getHost().ifSome(host => {
                     if (!host.isAudioUnit) {return}
-                    const tracksField = host.audioUnitBoxAdapter().tracksField
-                    for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
-                        if (!isInstanceOf(pointer.box, TrackBox)) {continue}
-                        const track = pointer.box
-                        trackContent.push(track)
-                        for (const regionPointer of track.regions.pointerHub.incoming()) {
-                            trackContent.push(regionPointer.box)
-                            const regionDeps = Array.from(boxGraph.dependenciesOf(regionPointer.box, {
-                                alwaysFollowMandatory: true,
-                                stopAtResources: true,
-                                excludeBox: (dep: Box) => dep.ephemeral
-                                    || isInstanceOf(dep, TrackBox)
-                                    || DeviceBoxUtils.isDeviceBox(dep)
-                            }).boxes)
-                            trackContent.push(...regionDeps)
-                        }
-                    }
+                    trackContent.push(...collectTimeline(host.audioUnitBoxAdapter().tracksField, boxGraph))
                 })
             }
             const allBoxes = [...deviceBoxes, ...dependencies, ...trackContent]

@@ -149,10 +149,13 @@ pub(crate) struct ValueBoundRegion {
 
 // The content position a curve repeating every `length` is read at through a groove running on from `origin`, the
 // straight position kept within `[low, high]`
-fn ungrooved(groove: &Uuid, position: f64, origin: f64, length: f64, low: f64, high: f64) -> f64 {
-    let straight = crate::unwarp_through(groove, position - origin);
+fn ungrooved<U: Fn(f64) -> f64>(unwarp: U, position: f64, origin: f64, length: f64, low: f64, high: f64) -> f64 {
+    let straight = unwarp(position - origin);
     let straight = if straight < low {low} else if straight > high {high} else {straight};
-    if length > 0.0 {math::mod_euclid(straight, length)} else {straight}
+    if length <= 0.0 {return straight}
+    // held at the end of a pass, the curve is read at the loop end instead of wrapping back to its start
+    let content = math::mod_euclid(straight, length);
+    if straight >= high && content == 0.0 {length} else {content}
 }
 
 impl Span for ValueBoundRegion {
@@ -178,7 +181,7 @@ impl ValueBoundRegion {
             Some(groove) => {
                 // the groove runs on from where the region's loop starts
                 let origin = self.position - self.loop_offset;
-                self.curve.value_at_opt(ungrooved(groove, position, origin, self.loop_duration,
+                self.curve.value_at_opt(ungrooved(|straight| crate::unwarp_through(groove, straight), position, origin, self.loop_duration,
                     self.loop_offset, self.loop_offset + self.duration))
             }
         }
@@ -292,7 +295,8 @@ impl ParamCurve {
                             .filter(|bound| bound.duration > 0.0 && !bound.mute)
                             .and_then(|bound| bound.curve.value_at_opt(match &bound.groove {
                                 None => position % bound.duration,
-                                Some(groove) => ungrooved(groove, position, 0.0, bound.duration, f64::NEG_INFINITY, f64::INFINITY)
+                                Some(groove) => ungrooved(|straight| crate::unwarp_through(groove, straight), position, 0.0,
+                                    bound.duration, f64::NEG_INFINITY, f64::INFINITY)
                             }))
                     } else {
                         None
@@ -320,5 +324,27 @@ impl ParamCurve {
             Some(region) if position < region.position + region.duration => region.value_at(position),
             Some(region) => region.outgoing_value()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ungrooved;
+
+    #[test]
+    fn a_groove_pulling_earlier_holds_the_curve_end_instead_of_wrapping() {
+        // a region of one 3840 pass, the groove reads 30 later: the last 30 ticks stay at the loop end
+        let read = |position: f64| ungrooved(|straight| straight + 30.0, position, 0.0, 3840.0, 0.0, 3840.0);
+        assert_eq!(read(3800.0), 3830.0);
+        assert_eq!(read(3820.0), 3840.0);
+        assert_eq!(read(3839.0), 3840.0);
+    }
+
+    #[test]
+    fn the_groove_runs_on_across_loop_passes() {
+        // a 1000 loop played twice, the groove reads 30 later: the second pass reads its content 30 later too
+        let read = |position: f64| ungrooved(|straight| straight + 30.0, position, 0.0, 1000.0, 0.0, 2000.0);
+        assert_eq!(read(1100.0), 130.0);
+        assert_eq!(read(980.0), 10.0);
     }
 }

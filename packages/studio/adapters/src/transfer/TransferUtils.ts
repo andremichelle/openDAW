@@ -156,14 +156,15 @@ export namespace TransferUtils {
     // Reached for a target the copy did not carry: modulators and grooves join the target root, a groove that
     // stayed behind (the global one) becomes the target's global groove
     export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> => {
-        const rootBox = Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
+        const rootBox = (): Option<RootBox> =>
+            Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
         switch (pointer.pointerType) {
             case Pointers.ModulatorCollection:
-                return rootBox.map(rootBox => rootBox.modulators.address)
+                return rootBox().map(rootBox => rootBox.modulators.address)
             case Pointers.GrooveCollection:
-                return rootBox.map(rootBox => rootBox.grooves.address)
+                return rootBox().map(rootBox => rootBox.grooves.address)
             case Pointers.Groove:
-                return rootBox.flatMap(rootBox => rootBox.groove.targetAddress)
+                return rootBox().flatMap(rootBox => rootBox.groove.targetAddress)
             default:
                 return Option.None
         }

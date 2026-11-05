@@ -18,7 +18,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {Box, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {ByteArrayInput, int, isInstanceOf, Nullable, Option, panic, Strings, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, int, isDefined, isInstanceOf, Nullable, Option, panic, Strings, UUID} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {GrooveAdapter, GrooveBox, GrooveKind, isGrooveBox} from "./GrooveBoxAdapter"
 import {GrooveFunctionType} from "./GrooveFunctionBoxAdapter"
@@ -107,8 +107,8 @@ export namespace Grooves {
         replacement.label.setValue(label)
         replacement.index.setValue(index)
         if (!isInstanceOf(replacement, GrooveStackBox) && !isInstanceOf(replacement, GrooveOffsetBox)) {
-            if (amount !== null) {replacement.amount.setValue(amount)}
-            if (duration !== null) {replacement.duration.setValue(duration)}
+            if (isDefined(amount)) {replacement.amount.setValue(amount)}
+            if (isDefined(duration)) {replacement.duration.setValue(duration)}
         }
         return replacement
     }

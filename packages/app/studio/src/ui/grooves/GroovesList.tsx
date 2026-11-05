@@ -188,7 +188,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
         revealRequested()
     }
     lifecycle.own(GrooveReveal.requested.subscribe(() => requestAnimationFrame(() => revealRequested())))
-    lifecycle.own(rootBoxAdapter.grooves.catchupAndSubscribe({
+    lifecycle.own(rootBoxAdapter.grooves.subscribe({
         onAdd: () => render(),
         onRemove: () => render(),
         onReorder: () => render()

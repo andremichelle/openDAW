@@ -2,7 +2,7 @@ import {GrooveAdapter, Grooves, GrooveStackBoxAdapter} from "@opendaw/studio-ada
 import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
 import {MenuItem, Project} from "@opendaw/studio-core"
 import {Box} from "@opendaw/lib-box"
-import {Nullable} from "@opendaw/lib-std"
+import {isDefined, Nullable} from "@opendaw/lib-std"
 
 // The menus of the groove controls, shared by the Zeitgeist panel and the Grooves list
 export namespace GrooveMenus {
@@ -31,7 +31,7 @@ export namespace GrooveMenus {
         const {editing} = project
         const pointers = boxes.flatMap(box => Grooves.pointerOf(box).match({none: () => [], some: pointer => [pointer]}))
         const uses = (groove: Nullable<Box>) => pointers.length > 0 && pointers.every(pointer =>
-            pointer.targetVertex.match({none: () => groove === null, some: ({box}) => box === groove}))
+            pointer.targetVertex.match({none: () => !isDefined(groove), some: ({box}) => box === groove}))
         const current = (): Nullable<GrooveAdapter> => project.rootBoxAdapter.grooves.adapters()
             .find(groove => uses(groove.box)) ?? null
         return MenuItem.default({label: "Groove", hidden: pointers.length === 0})
@@ -39,8 +39,8 @@ export namespace GrooveMenus {
                 const shared = current()
                 parent.addMenuItem(MenuItem.default({
                     label: `Go to ${shared?.label ?? NoneLabel}`,
-                    selectable: shared !== null
-                }).setTriggerProcedure(() => {if (shared !== null) {GrooveReveal.request(shared.uuid)}}))
+                    selectable: isDefined(shared)
+                }).setTriggerProcedure(() => {if (isDefined(shared)) {GrooveReveal.request(shared.uuid)}}))
                 parent.addMenuItem(MenuItem.default({label: NoneLabel, checked: uses(null), separatorBefore: true})
                     .setTriggerProcedure(() => editing.modify(() => pointers.forEach(pointer => pointer.defer()))))
                 parent.addMenuItem(...project.rootBoxAdapter.grooves.adapters().map(groove =>
