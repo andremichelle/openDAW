@@ -212,6 +212,9 @@ fn update(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, gro
 }
 
 fn join(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, groove: Uuid) {
+    if graph.find_box(&groove).is_none() {
+        return;
+    }
     state.borrow_mut().subs.insert(groove, Vec::new());
     update(state, deferred, graph, groove);
     let mut subs = Vec::new();
@@ -484,7 +487,17 @@ mod tests {
         assert_eq!(registry.warp(&SHUFFLE, 240.0), 240.0);
     }
 
-        #[test]
+    #[test]
+    fn a_groove_that_does_not_exist_is_not_followed() {
+        let mut graph = BoxGraph::from_boxes(vec![root()]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        let before = graph.subscription_count();
+        registry.ensure(&graph, SHUFFLE);
+        graph.apply_deferred();
+        assert_eq!(graph.subscription_count(), before);
+    }
+
+    #[test]
     fn an_offset_follows_its_field() {
         let mut graph = BoxGraph::from_boxes(vec![root(), offset(120)]);
         let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
@@ -597,7 +610,7 @@ mod tests {
         assert!(started.elapsed().as_millis() < 500, "took {:?}", started.elapsed());
     }
 
-        #[test]
+    #[test]
     fn a_stack_holding_itself_cannot_loop() {
         let mut graph = BoxGraph::from_boxes(vec![root(), stack(), entry(ENTRY_A, STACK, 0)]);
         let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);

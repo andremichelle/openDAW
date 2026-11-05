@@ -35,14 +35,18 @@ pub struct ZeitgeistState {
     wrapped: bool
 }
 
+/// A wrap holds while the block lies inside the loop, a loop moved away from the playhead ends it.
+pub fn still_wrapped(wrapped: bool, area: Option<(f64, f64)>, from: f64) -> bool {
+    wrapped && area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to)
+}
+
 /// Limits the un-warped range `[u0, u1]` to the loop `area`: never past its end while the block lies before it,
 /// never before its start after a wrap.
 pub fn clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool) -> (f64, f64) {
     let Some((loop_from, loop_to)) = area else {return (u0, u1)};
     let limit = |position: f64| {
         let position = if from < loop_to && position > loop_to {loop_to} else {position};
-        let inside = from >= loop_from && from < loop_to;
-        if wrapped && inside && position < loop_from {loop_from} else {position}
+        if wrapped && position < loop_from {loop_from} else {position}
     };
     (limit(u0), limit(u1))
 }
@@ -94,10 +98,7 @@ pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32,
     if flags & abi::BlockFlags::DISCONTINUOUS != 0 {
         state.wrapped = area.is_some_and(|(loop_from, loop_to)| from == loop_from && (state.last_to - loop_to).abs() < WRAP_TOLERANCE);
     }
-    // a loop moved away from the playhead ends the wrapped passes
-    if !area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to) {
-        state.wrapped = false;
-    }
+    state.wrapped = still_wrapped(state.wrapped, area, from);
     state.last_to = to;
     let (pull_from, pull_to) = clip(abi::groove_unwarp(slot, from), abi::groove_unwarp(slot, to), area, from, state.wrapped);
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
@@ -169,9 +170,11 @@ mod tests {
     }
 
     #[test]
-    fn a_loop_moved_away_from_the_playhead_clamps_nothing() {
+    fn a_loop_moved_away_from_the_playhead_ends_the_wrap() {
         // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
-        assert_eq!(clip(8000.0, 8100.0, Some((30720.0, 46080.0)), 8000.0, true), (8000.0, 8100.0));
+        assert!(!still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
+        assert!(still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
+        assert!(!still_wrapped(true, None, 8000.0));
     }
 
     #[test]

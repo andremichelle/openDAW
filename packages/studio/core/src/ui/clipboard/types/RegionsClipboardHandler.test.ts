@@ -157,7 +157,20 @@ describe("RegionsClipboard with a grooved region", () => {
         expect(project.rootBoxAdapter.grooves.adapters().length).toBe(2)
     })
 
-    it("a paste into another project brings the groove into its list", async () => {
+    it("a region without a groove is pasted without one", async () => {
+        const {project, trackAdapter} = await buildGroovedRegion()
+        const region = trackAdapter.regions.collection.asArray()[0].box as NoteRegionBox
+        project.editing.modify(() => region.groove.defer())
+        const playhead = {value: 0}
+        const handler = createHandler(project, trackAdapter, playhead)
+        project.regionSelection.select(...trackAdapter.regions.collection.asArray())
+        handler.paste(handler.copy().unwrap("copy"))
+        const regions = trackAdapter.regions.collection.asArray()
+        expect(regions.length).toBe(2)
+        regions.forEach(region => expect(grooveOf(region).isEmpty()).toBe(true))
+    })
+
+        it("a paste into another project brings the groove into its list", async () => {
         const origin = await buildGroovedRegion()
         const target = await buildGroovedRegion()
         const playhead = {value: 0}

@@ -1034,7 +1034,7 @@ describe("DevicesClipboardHandler", () => {
             expect(content.some(box => isInstanceOf(box, RootBox))).toBe(false)
             expect(content.filter(box => box.name === groove.name).length).toBe(1)
         })
-                it("collects complete instrument with 2 tracks, 4 regions, 4 event collections", () => {
+        it("collects complete instrument with 2 tracks, 4 regions, 4 event collections", () => {
             const audioUnit = createAudioUnit(source)
             const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
             const noteTrack = addTrack(source, audioUnit, TrackType.Notes, 0)

@@ -150,6 +150,16 @@ export namespace Grooves {
     export const pointerOf = (box: Box): Option<PointerField<Pointers.Groove>> =>
         isTimelineBox(box) ? Option.wrap(box.groove) : Option.None
 
+    // What Flatten does with the grooves of the regions: write them into the positions or keep the shared one
+    export type FlattenGroove = "apply" | "keep"
+
+    // Where a box's groove, running on from `origin`, plays a straight position
+    export const playedAt = (context: BoxAdaptersContext, box: Box, origin: number): Option<(position: number) => number> =>
+        pointerOf(box).flatMap(pointer => pointer.targetVertex).map(({box: groove}) => {
+            const adapter = adapterOf(context, asGrooveBox(groove))
+            return (position: number) => origin + adapter.warp(position - origin)
+        })
+
     // The groove every one of the boxes points at, none when they differ or have none
     export const sharedOf = (boxes: ReadonlyArray<Box>): Option<GrooveBox> => {
         const targets = boxes.map(box => pointerOf(box).flatMap(pointer => pointer.targetVertex).map(vertex => vertex.box))

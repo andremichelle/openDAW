@@ -77,6 +77,7 @@ export namespace PresetDecoder {
         const {mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
         const uuidMap = TransferUtils.generateMap(
             sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
+        const present = TransferUtils.presentIn(uuidMap, target.boxGraph)
         TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
         // A slot is a place among the instruments; a rack that carries buses keeps the by-type placement.
         const allInstruments = sourceAudioUnitBoxes.every(box => box.type.getValue() === AudioUnitType.Instrument)
@@ -110,7 +111,7 @@ export namespace PresetDecoder {
                 }
             })
         })
-        TransferUtils.normalizeGrooves(target.boxGraph, TransferUtils.createdBy(uuidMap))
+        TransferUtils.normalizeGrooves(target.boxGraph, TransferUtils.createdBy(uuidMap, present))
         return importedAudioUnits
     }
 
@@ -381,6 +382,7 @@ export namespace PresetDecoder {
             (!TransferUtils.keepsIdentity(source) || targetGraph.findBox(source.address.uuid).isEmpty())
             && !TransferUtils.isEntryOfExistingStack(source, targetGraph))
         cellBox.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
+        const present = TransferUtils.presentIn(uuidMap, targetGraph)
         PointerField.decodeWith({
             map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
                 const internal = address.flatMap(addr =>
@@ -395,7 +397,7 @@ export namespace PresetDecoder {
                         : TransferUtils.mapRootPointer(pointer, targetGraph))
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...fresh], uuidMap, targetGraph))
-        TransferUtils.normalizeGrooves(targetGraph, TransferUtils.createdBy(uuidMap, uuid => !fresh.some(source => UUID.equals(source.address.uuid, uuid)) && !UUID.equals(instrument.address.uuid, uuid)))
+        TransferUtils.normalizeGrooves(targetGraph, TransferUtils.createdBy(uuidMap, present))
         return Attempts.Ok
     }
 }

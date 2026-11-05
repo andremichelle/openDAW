@@ -35,9 +35,10 @@ export namespace TransferAudioUnits {
         }).boxes))
         const uuidMap = TransferUtils.generateMap(
             sources, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
+        const present = TransferUtils.presentIn(uuidMap, targetBoxGraph)
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, sources, dependencies)
         TransferUtils.reorderAudioUnits(uuidMap, sources, rootBox, options.insertIndex)
-        TransferUtils.normalizeGrooves(targetBoxGraph, TransferUtils.createdBy(uuidMap))
+        TransferUtils.normalizeGrooves(targetBoxGraph, TransferUtils.createdBy(uuidMap, present))
         const result = sources.map(source => asInstanceOf(rootBox.graph
             .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
             .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))

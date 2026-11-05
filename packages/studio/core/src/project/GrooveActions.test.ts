@@ -1,8 +1,16 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {GrooveBox, Grooves, InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, ZeitgeistDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    GrooveBox, Grooves, InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, ValueRegionBoxAdapter, ZeitgeistDeviceBoxAdapter
+} from "@opendaw/studio-adapters"
 import {
     GrooveFunctionBox,
+    GrooveOffsetBox,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
+    ValueRegionBox,
     GrooveRandomBox,
     GrooveShuffleBox,
     GrooveStackBox,
@@ -171,7 +179,7 @@ describe("Grooves", () => {
         expect(region.groove.isEmpty()).toBe(true)
         expect(clip.groove.isEmpty()).toBe(true)
     })
-        it("flattening keeps a groove only when every region shares it", async () => {
+    it("flattening keeps a groove only when every region shares it", async () => {
         const project = await createProject()
         const flatten = (grooves: ReadonlyArray<"late" | "none">) => {
             const late = project.editing.modify(() => Grooves.create(project, "offset")).unwrap()
@@ -192,6 +200,78 @@ describe("Grooves", () => {
         expect(flatten(["late", "late"])).toBe(true)
         expect(flatten(["late", "none"])).toBe(null)
         expect(flatten(["none", "late"])).toBe(null)
+    })
+    it("flattening with Apply Groove moves the notes where the groove plays them", async () => {
+        const project = await createProject()
+        const [region, late] = project.editing.modify(() => {
+            const late = Grooves.create(project, "offset") as GrooveOffsetBox
+            late.offset.setValue(120)
+            const {trackBox} = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            // a region at bar 2 showing its content from the second beat, the groove runs from bar 2 minus a beat
+            const region = project.api.createNoteRegion({trackBox, position: 3840, duration: 1920, loopOffset: 960, loopDuration: 3840})
+            const events = region.events.targetVertex.unwrap().box as NoteEventCollectionBox
+            for (const position of [960, 1920, 2820]) {
+                NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
+                    box.events.refer(events.events)
+                    box.position.setValue(position)
+                    box.duration.setValue(60)
+                    box.pitch.setValue(60)
+                })
+            }
+            region.groove.refer(late)
+            return [region, late] as const
+        }).unwrap()
+        const adapter = project.boxAdapters.adapterFor(region, NoteRegionBoxAdapter)
+        adapter.onSelected()
+        const flat = project.editing.modify(() => adapter.flatten([adapter], false, "apply")).unwrap().unwrap("flatten")
+        const notes = (flat.events.targetVertex.unwrap().box as NoteEventCollectionBox).events.pointerHub.incoming()
+            .map(pointer => pointer.box as NoteEventBox)
+            .map(note => [note.position.getValue(), note.duration.getValue()])
+            .sort((a, b) => a[0] - b[0])
+        // straight at 0, 960 and 1860 of the flattened region, 120 later, the last moved past its end
+        expect(notes).toEqual([[120, 60], [1080, 60]])
+        expect(flat.groove.isEmpty()).toBe(true)
+        expect(late.pointerHub.incoming().length).toBe(0)
+    })
+    it("flattening automation with Apply Groove moves its points", async () => {
+        const project = await createProject()
+        const region = project.editing.modify(() => {
+            const late = Grooves.create(project, "offset") as GrooveOffsetBox
+            late.offset.setValue(120)
+            const {trackBox} = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const events = ValueEventCollectionBox.create(project.boxGraph, UUID.generate())
+            ValueEventBox.create(project.boxGraph, UUID.generate(), box => {
+                box.events.refer(events.events)
+                box.position.setValue(0)
+                box.value.setValue(0.25)
+            })
+            ValueEventBox.create(project.boxGraph, UUID.generate(), box => {
+                box.events.refer(events.events)
+                box.position.setValue(480)
+                box.value.setValue(0.5)
+                box.index.setValue(0)
+            })
+            return ValueRegionBox.create(project.boxGraph, UUID.generate(), box => {
+                box.regions.refer(trackBox.regions)
+                box.events.refer(events.owners)
+                box.position.setValue(0)
+                box.duration.setValue(960)
+                box.loopDuration.setValue(960)
+                box.groove.refer(late)
+            })
+        }).unwrap()
+        const adapter = project.boxAdapters.adapterFor(region, ValueRegionBoxAdapter)
+        adapter.onSelected()
+        const flat = project.editing.modify(() => adapter.flatten([adapter], false, "apply")).unwrap().unwrap("flatten")
+        const positions = (flat.events.targetVertex.unwrap().box as ValueEventCollectionBox).events.pointerHub.incoming()
+            .map(pointer => (pointer.box as ValueEventBox).position.getValue())
+            .sort((a, b) => a - b)
+        // the point at the loop start moves to 120, the start keeps its value
+        expect(positions).toContain(0)
+        expect(positions).toContain(120)
+        expect(positions).toContain(600)
+        expect(positions).not.toContain(480)
+        expect(flat.groove.isEmpty()).toBe(true)
     })
         it("deleting with remove leaves users without a groove", async () => {
         const project = await createProject()
@@ -233,10 +313,34 @@ describe("Grooves", () => {
         expect(Grooves.wouldContain(other, a)).toBe(false)
         const adapter = Grooves.adapterOf(project, a)
         expect(Number.isFinite(adapter.warp(123))).toBe(true)
+        // listening to one of them does not chain the two into each other
+        const subscription = adapter.subscribeChange(() => {})
+        expect(() => project.editing.modify(() => (other as GrooveFunctionBox).amount.setValue(0.2))).not.toThrow()
+        subscription.terminate()
         expect(Number.isFinite(adapter.cellDuration())).toBe(true)
         expect(() => project.editing.modify(() => Grooves.deleteAll(project, [b], "fallback"))).not.toThrow()
     })
-        it("a stack never contains itself", async () => {
+    it("a stack follows its members again after its listeners left and came back", async () => {
+        const project = await createProject()
+        const [stack, member] = project.editing.modify(() => {
+            const stack = Grooves.create(project, "stack") as GrooveStackBox
+            const member = Grooves.create(project, "power") as GrooveFunctionBox
+            Grooves.addToStack(project, stack, member)
+            return [stack, member] as const
+        }).unwrap()
+        const adapter = Grooves.adapterOf(project, stack)
+        let calls = 0
+        const subscription = adapter.subscribeChange(() => calls++)
+        project.editing.modify(() => member.amount.setValue(0.3))
+        expect(calls).toBeGreaterThan(0)
+        subscription.terminate()
+        const again = adapter.subscribeChange(() => calls++)
+        const before = calls
+        project.editing.modify(() => member.amount.setValue(0.4))
+        again.terminate()
+        expect(calls).toBeGreaterThan(before)
+    })
+    it("a stack never contains itself", async () => {
         const project = await createProject()
         const {outer, inner, power} = project.editing.modify(() => ({
             outer: Grooves.create(project, "stack") as GrooveStackBox,

@@ -79,7 +79,7 @@ describe("TransferRegions.transfer", () => {
             expect(rootBox.grooves.pointerHub.incoming().length).toBe(2)
         })
 
-                it("copies region to different track", () => {
+        it("copies region to different track", () => {
             const {boxGraph} = skeleton
             boxGraph.beginTransaction()
             const {trackBox: trackA, regionBox, audioUnitBox} = createTrackWithRegion(skeleton)

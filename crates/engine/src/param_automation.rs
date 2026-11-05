@@ -295,8 +295,10 @@ impl ParamCurve {
                             .filter(|bound| bound.duration > 0.0 && !bound.mute)
                             .and_then(|bound| bound.curve.value_at_opt(match &bound.groove {
                                 None => position % bound.duration,
+                                // nothing from before the clip's launch is read
                                 Some(groove) => ungrooved(|straight| crate::unwarp_through(groove, straight), position, 0.0,
-                                    bound.duration, f64::NEG_INFINITY, f64::INFINITY)
+                                    bound.duration, engine_env::note_sequencer::launch_bound(section.started, section.from),
+                                    f64::INFINITY)
                             }))
                     } else {
                         None
@@ -338,6 +340,15 @@ mod tests {
         assert_eq!(read(3800.0), 3830.0);
         assert_eq!(read(3820.0), 3840.0);
         assert_eq!(read(3839.0), 3840.0);
+    }
+
+    #[test]
+    fn a_clip_reads_nothing_from_before_its_launch() {
+        // a 3840 clip launched at bar 5, the groove reads 120 earlier: the launch reads the clip start, not the
+        // end of the cycle before
+        let read = |position: f64| ungrooved(|straight| straight - 120.0, position, 0.0, 3840.0, 19200.0, f64::INFINITY);
+        assert_eq!(read(19200.0), 0.0);
+        assert_eq!(read(19400.0), 80.0);
     }
 
     #[test]

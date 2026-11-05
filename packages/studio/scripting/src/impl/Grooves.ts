@@ -9,7 +9,7 @@ import {Box, PointerField} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {Grooves, isGrooveBox} from "@opendaw/studio-adapters"
-import {int, isNull, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {int, isAbsent, Nullable, panic, unitValue} from "@opendaw/lib-std"
 import {AnyGroove, GrooveFunction, GrooveOffset, GrooveRandom, GrooveShuffle, GrooveStack} from "../Api"
 import {Context} from "./Context"
 import {Facade} from "./Common"
@@ -111,7 +111,7 @@ export class GrooveStackImpl extends Facade<GrooveStackBox> implements GrooveSta
 }
 
 export namespace GrooveImpls {
-    export const isBox = (box: Box): boolean => isGrooveBox(box)
+    export const isBox = isGrooveBox
 
     // The groove a pointer targets, null for none
     export const read = (context: Context, pointer: PointerField<Pointers.Groove>): Nullable<AnyGroove> =>
@@ -119,7 +119,7 @@ export namespace GrooveImpls {
 
     // Points at a groove of the project, or at none
     export const write = (context: Context, pointer: PointerField<Pointers.Groove>, groove: Nullable<AnyGroove>): void => {
-        if (isNull(groove)) {
+        if (isAbsent(groove)) {
             context.edit(() => pointer.defer())
             return
         }

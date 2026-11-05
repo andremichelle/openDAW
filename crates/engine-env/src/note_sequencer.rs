@@ -215,9 +215,10 @@ impl NoteEventSource for NoteSequencer {
                     // A launched clip: its collection cycles at the CLIP duration (TS `#processClip`).
                     Some(clip) => {
                         let Some((clip_duration, _)) = access.clip_info(&clip) else { return };
-                        // the groove runs on the timeline grid the clip cycles on
+                        // the groove runs on the timeline grid the clip cycles on, nothing before the launch is read
                         let groove = access.clip_groove(&clip).map(|groove| Grooved {access, groove, origin: 0.0,
-                            length: clip_duration, low: f64::NEG_INFINITY, high: f64::INFINITY, truncate});
+                            length: clip_duration, low: launch_bound(section.started, section.from),
+                            high: f64::INFINITY, truncate});
                         access.clip_events(&clip, &mut |notes| {
                             if let Some(grooved) = &groove {
                                 process_grooved(notes, grooved, section.from, section.to, retainer, random, next_id, sink);
@@ -356,6 +357,12 @@ fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local
             retainer.add_and_retain(RetainedNote {position: global, duration, id, pitch: note.pitch});
         }
     }
+}
+
+/// Where a grooved clip starts reading: its launch, nothing before it. A launch after `from` means the playhead
+/// jumped back while the clip kept playing, then nothing is cut off.
+pub fn launch_bound(started: f64, from: f64) -> f64 {
+    if started.is_nan() {from} else if started > from {f64::NEG_INFINITY} else {started}
 }
 
 // A groove a region or clip plays through, running on from `origin`. Its content repeats every `length` (one pass

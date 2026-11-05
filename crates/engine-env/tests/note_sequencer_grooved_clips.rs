@@ -41,9 +41,13 @@ impl NoteContentSource for Content {
 
 // plays three clip cycles in blocks of 5 and returns every note-on with its duration
 fn play(grooved: bool, truncate: bool) -> Vec<(f64, f64)> {
+    play_notes(grooved, truncate, &(0..10).map(|step| step as f64 * 100.0).collect::<Vec<_>>())
+}
+
+fn play_notes(grooved: bool, truncate: bool, positions: &[f64]) -> Vec<(f64, f64)> {
     let mut notes = EventCollection::new();
-    for step in 0..10 {
-        notes.add(NoteEvent::new(step as f64 * 100.0, 10.0, 60, 0.0, 1.0));
+    for position in positions {
+        notes.add(NoteEvent::new(*position, 10.0, 60, 0.0, 1.0));
     }
     let clips = Rc::new(RefCell::new(ClipSequencer::new()));
     let mut sequencer = NoteSequencer::new(Box::new(Content {grooved, notes}), clips.clone());
@@ -75,4 +79,50 @@ fn truncate_mode_keeps_the_length_of_grooved_clip_notes() {
     let grooved = play(true, true);
     assert!(!grooved.is_empty());
     assert!(grooved.iter().all(|(_, duration)| *duration == 10.0), "{grooved:?}");
+}
+
+#[test]
+fn a_grooved_clip_plays_nothing_from_before_its_launch() {
+    // the note at 990 of the cycle before the launch would land at 20, only the launched cycles play it
+    let grooved = play_notes(true, false, &[990.0]);
+    assert_eq!(grooved.iter().map(|(position, _)| *position).collect::<Vec<_>>(), vec![1_020.0, 2_020.0]);
+}
+
+#[test]
+fn a_clip_still_playing_after_the_playhead_jumped_back_reads_without_a_bound() {
+    use engine_env::note_sequencer::launch_bound;
+    // launched at bar 5, the loop jumped back to bar 1 while the clip kept playing
+    assert_eq!(launch_bound(19_200.0, 3_840.0), f64::NEG_INFINITY);
+    assert_eq!(launch_bound(19_200.0, 19_200.0), 19_200.0);
+    assert_eq!(launch_bound(19_200.0, 20_000.0), 19_200.0);
+    assert_eq!(launch_bound(f64::NAN, 20_000.0), 20_000.0);
+}
+
+#[test]
+fn a_grooved_clip_keeps_playing_after_the_playhead_jumped_back() {
+    let mut notes = EventCollection::new();
+    for step in 0..10 {
+        notes.add(NoteEvent::new(step as f64 * 100.0, 10.0, 60, 0.0, 1.0));
+    }
+    let clips = Rc::new(RefCell::new(ClipSequencer::new()));
+    let mut sequencer = NoteSequencer::new(Box::new(Content {grooved: true, notes}), clips.clone());
+    let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
+    let mut run = |from: f64, blocks: usize, first_flags: BlockFlags| {
+        let mut starts = Vec::new();
+        for block in 0..blocks {
+            let position = from + block as f64 * 5.0;
+            let flags = if block == 0 {first_flags} else {flags};
+            sequencer.process_notes(position, position + 5.0, flags, &mut |event| {
+                if let Event::NoteStart {position, ..} = event {starts.push(position)}
+            });
+        }
+        starts
+    };
+    // launched during bar 2, the clip starts at bar 3 (7680)
+    run(0.0, 800, flags);
+    clips.borrow_mut().schedule_play(TRACK, CLIP);
+    run(4_000.0, 1_000, flags);
+    // the loop jumps back to 0 while the clip keeps playing
+    let after = run(0.0, 200, BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING | BlockFlags::DISCONTINUOUS));
+    assert!(after.len() >= 9, "the clip goes on playing after the jump: {after:?}");
 }

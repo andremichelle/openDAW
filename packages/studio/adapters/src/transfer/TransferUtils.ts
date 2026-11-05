@@ -109,10 +109,11 @@ export namespace TransferUtils {
                 none: () => box.pointerHub.incoming().length > 0,
                 some: address => address.equals(collection)
             }))
+        // a used groove outside the list (an old preset) joins it like a pasted one
+        const listed = new Set<Box>(members.filter(groove => !isPasted(groove) && groove.collection.targetAddress.nonEmpty()))
         members.forEach(box => {
             if (box.collection.targetAddress.isEmpty()) {box.collection.refer(rootBox.grooves)}
         })
-        const listed = new Set<Box>(members.filter(groove => !isPasted(groove)))
         members
             .sort((a, b) => Number(isGlobalGroove(b)) - Number(isGlobalGroove(a))
                 || Number(listed.has(b)) - Number(listed.has(a))
@@ -135,6 +136,13 @@ export namespace TransferUtils {
         const targets = UUID.newSet<UUID.Bytes>(uuid => uuid)
         uuidMap.forEach(({source, target}) => {if (!existed(source)) {targets.add(target)}})
         return box => targets.hasKey(box.address.uuid)
+    }
+
+    // Tells the source uuids whose target the graph holds already, ask before copying
+    export const presentIn = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>, graph: BoxGraph): Predicate<UUID.Bytes> => {
+        const present = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        uuidMap.forEach(({source, target}) => {if (graph.findBox(target).nonEmpty()) {present.add(source)}})
+        return uuid => present.hasKey(uuid)
     }
 
     // Tells the boxes of a paste

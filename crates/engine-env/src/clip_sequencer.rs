@@ -27,7 +27,9 @@ pub trait ClipInfo {
 pub struct Section {
     pub clip: Option<ClipKey>,
     pub from: f64,
-    pub to: f64
+    pub to: f64,
+    /// where `clip` started playing (NaN for the timeline)
+    pub started: f64
 }
 
 struct TrackState {
@@ -40,11 +42,12 @@ struct TrackState {
     // several sequencers can pull the same track per block (composite slots), so a repeated `iterate`
     // over the same range must replay without re-advancing the state machine.
     cached_range: Option<(f64, f64)>,
-    cached_sections: [Option<(Option<ClipKey>, f64, f64)>; 3],
+    cached_sections: CachedSections,
+    started: f64,
     shared: SharedRead
 }
 
-type CachedSections = [Option<(Option<ClipKey>, f64, f64)>; 3];
+type CachedSections = [Option<(Option<ClipKey>, f64, f64, f64)>; 3];
 
 const SHARED_BLOCKS: usize = 8;
 const SHARED_TRANSITIONS: usize = 8;
@@ -175,6 +178,7 @@ impl ClipSequencer {
             }
             if state.playing.as_ref() == Some(uuid) {
                 state.playing = None;
+                state.started = f64::NAN;
                 state.cached_range = None;
                 state.shared = SharedRead::new();
                 changes.push((*uuid, Change::Stopped));
@@ -197,21 +201,21 @@ impl ClipSequencer {
                    visit: &mut dyn FnMut(Section)) {
         let changes = &mut self.changes;
         let Some(state) = self.states.iter_mut().find(|state| &state.uuid == track) else {
-            visit(Section {clip: None, from: p0, to: p1});
+            visit(Section {clip: None, from: p0, to: p1, started: f64::NAN});
             return;
         };
         if state.cached_range == Some((p0, p1)) {
             for cached in state.cached_sections.iter().flatten() {
-                let (clip, from, to) = *cached;
-                visit(Section {clip, from, to});
+                let (clip, from, to, started) = *cached;
+                visit(Section {clip, from, to, started});
             }
             return;
         }
-        let mut sections: [Option<(Option<ClipKey>, f64, f64)>; 3] = [None; 3];
+        let mut sections: CachedSections = [None; 3];
         let mut count = 0;
         let mut visit = |section: Section| {
             if count < sections.len() {
-                sections[count] = Some((section.clip, section.from, section.to));
+                sections[count] = Some((section.clip, section.from, section.to, section.started));
                 count += 1;
             }
             visit(section);
@@ -224,19 +228,21 @@ impl ClipSequencer {
             let schedule_end = quantize_floor(p1, schedule_duration);
             if schedule_end >= p0 {
                 if p0 < schedule_end {
-                    visit(Section {clip: state.playing, from: p0, to: schedule_end});
+                    visit(Section {clip: state.playing, from: p0, to: schedule_end, started: state.started});
                 }
                 state.waiting = None;
                 if let Some(playing) = state.playing.take() {
+                    state.started = f64::NAN;
                     changes.push((playing, Change::Stopped));
                 }
                 if let Some(clip) = next {
                     state.playing = Some(clip);
+                    state.started = schedule_end;
                     changes.push((clip, Change::Started));
                 }
-                visit(Section {clip: state.playing, from: schedule_end, to: p1});
+                visit(Section {clip: state.playing, from: schedule_end, to: p1, started: state.started});
             } else {
-                visit(Section {clip: state.playing, from: p0, to: p1});
+                visit(Section {clip: state.playing, from: p0, to: p1, started: state.started});
             }
         } else if let Some(playing) = state.playing {
             let (duration, looped) = match info.resolve(&playing) {
@@ -244,22 +250,23 @@ impl ClipSequencer {
                 None => (BAR, true) // vanished mid-play: `forget` cleans up off-render
             };
             if looped {
-                visit(Section {clip: state.playing, from: p0, to: p1});
+                visit(Section {clip: state.playing, from: p0, to: p1, started: state.started});
             } else {
                 let schedule_end = quantize_floor(p0, duration) + duration;
                 if schedule_end <= p1 {
-                    visit(Section {clip: state.playing, from: p0, to: schedule_end});
+                    visit(Section {clip: state.playing, from: p0, to: schedule_end, started: state.started});
                     state.playing = None;
+                    state.started = f64::NAN;
                     changes.push((playing, Change::Stopped));
                     if schedule_end < p1 {
-                        visit(Section {clip: None, from: schedule_end, to: p1});
+                        visit(Section {clip: None, from: schedule_end, to: p1, started: f64::NAN});
                     }
                 } else {
-                    visit(Section {clip: state.playing, from: p0, to: p1});
+                    visit(Section {clip: state.playing, from: p0, to: p1, started: state.started});
                 }
             }
         } else {
-            visit(Section {clip: None, from: p0, to: p1});
+            visit(Section {clip: None, from: p0, to: p1, started: f64::NAN});
         }
         state.cached_range = Some((p0, p1));
         state.cached_sections = sections;
@@ -277,7 +284,7 @@ impl ClipSequencer {
         let mut count = 0;
         self.iterate(track, p0, p1, info, &mut |section| {
             if count < sections.len() {
-                sections[count] = Some((section.clip, section.from, section.to));
+                sections[count] = Some((section.clip, section.from, section.to, section.started));
                 count += 1;
             }
         });
@@ -286,7 +293,7 @@ impl ClipSequencer {
             state.shared.transitions = [None; SHARED_TRANSITIONS];
         }
         let mut current = before;
-        for (clip, from, _) in sections.iter().flatten() {
+        for (clip, from, _, _) in sections.iter().flatten() {
             if *clip != current {
                 state.shared.push_transition(Transition {position: *from, before: current});
                 current = *clip;
@@ -304,77 +311,84 @@ impl ClipSequencer {
     /// handovers, the part ahead by the handover rule on a COPY of the live state.
     pub fn sections_shared(&self, track: &TrackKey, p0: f64, p1: f64, info: &dyn ClipInfo, visit: &mut dyn FnMut(Section)) {
         let Some(state) = self.states.iter().find(|state| &state.uuid == track) else {
-            visit(Section {clip: None, from: p0, to: p1});
+            visit(Section {clip: None, from: p0, to: p1, started: f64::NAN});
             return;
         };
         if let Some(sections) = state.shared.find_block(p0, p1) {
-            for (clip, from, to) in sections.iter().flatten() {
-                visit(Section {clip: *clip, from: *from, to: *to});
+            for (clip, from, to, started) in sections.iter().flatten() {
+                visit(Section {clip: *clip, from: *from, to: *to, started: *started});
             }
             return;
         }
-        let mut points: [(f64, Option<ClipKey>); SHARED_POINTS] = [(0.0, None); SHARED_POINTS];
+        // each point carries where its clip started, a handover starts its clip at the handover
+        let mut points: [(f64, Option<ClipKey>, f64); SHARED_POINTS] = [(0.0, None, f64::NAN); SHARED_POINTS];
         let mut count = 0;
-        let mut push = |position: f64, clip: Option<ClipKey>| {
+        let mut push = |position: f64, clip: Option<ClipKey>, started: f64| {
             if count < SHARED_POINTS {
-                points[count] = (position, clip);
+                points[count] = (position, clip, started);
                 count += 1;
             }
         };
+        let after = |index: usize| state.shared.transitions.get(index + 1).copied().flatten()
+            .map_or(state.playing, |next| next.before);
         let behind_end = state.shared.cursor.map_or(p0, |cursor| cursor.min(p1));
         if p0 < behind_end {
             let mut clip = state.playing;
             for transition in state.shared.transitions.iter().rev().flatten() {
                 if transition.position > p0 { clip = transition.before } else { break }
             }
-            push(p0, clip);
-            let mut index = 0;
-            while index < SHARED_TRANSITIONS {
+            // the clip at p0 started at its last handover at or before p0, the playing one where the machine says
+            let mut started = if clip.is_some() && clip == state.playing {state.started} else {f64::NAN};
+            for index in 0..SHARED_TRANSITIONS {
+                if let Some(transition) = state.shared.transitions[index] {
+                    if transition.position <= p0 && after(index) == clip {started = transition.position}
+                }
+            }
+            push(p0, clip, started);
+            for index in 0..SHARED_TRANSITIONS {
                 if let Some(transition) = state.shared.transitions[index] {
                     if transition.position > p0 && transition.position < behind_end {
-                        let after = state.shared.transitions.get(index + 1).copied().flatten()
-                            .map_or(state.playing, |next| next.before);
-                        push(transition.position, after);
+                        push(transition.position, after(index), transition.position);
                     }
                 }
-                index += 1;
             }
         }
         let ahead_start = behind_end.max(p0);
         if ahead_start < p1 {
-            Self::predict(state.playing, state.waiting, ahead_start, p1, info, &mut push);
+            Self::predict(state.playing, state.started, state.waiting, ahead_start, p1, info, &mut push);
         }
         let mut index = 0;
         while index < count {
-            let (from, clip) = points[index];
+            let (from, clip, started) = points[index];
             let mut next = index + 1;
             while next < count && points[next].1 == clip {
                 next += 1;
             }
             let to = if next < count { points[next].0 } else { p1 };
             if from < to {
-                visit(Section {clip, from, to});
+                let started = if clip.is_none() {f64::NAN} else if started.is_nan() {from} else {started};
+                visit(Section {clip, from, to, started});
             }
             index = next;
         }
     }
 
     // The handover rule of `iterate` on a copy of `(playing, waiting)`: no transition, no change queued.
-    fn predict(playing: Option<ClipKey>, waiting: Option<Option<ClipKey>>, p0: f64, p1: f64, info: &dyn ClipInfo,
-               push: &mut dyn FnMut(f64, Option<ClipKey>)) {
-        push(p0, playing);
+    fn predict(playing: Option<ClipKey>, started: f64, waiting: Option<Option<ClipKey>>, p0: f64, p1: f64, info: &dyn ClipInfo,
+               push: &mut dyn FnMut(f64, Option<ClipKey>, f64)) {
+        push(p0, playing, started);
         if let Some(next) = waiting {
             let schedule_duration = playing.and_then(|clip| info.resolve(&clip)).map_or(BAR, |(duration, _)| duration);
             let schedule_end = quantize_floor(p1, schedule_duration);
             if schedule_end >= p0 {
-                push(schedule_end, next);
+                push(schedule_end, next, schedule_end);
             }
         } else if let Some(clip) = playing {
             let (duration, looped) = info.resolve(&clip).unwrap_or((BAR, true));
             if !looped {
                 let schedule_end = quantize_floor(p0, duration) + duration;
                 if schedule_end <= p1 {
-                    push(schedule_end, None);
+                    push(schedule_end, None, f64::NAN);
                 }
             }
         }
@@ -401,7 +415,7 @@ impl ClipSequencer {
             state.cached_range = None; // a schedule op invalidates the replay cache
             return state;
         }
-        states.push(TrackState {uuid: track, waiting: None, playing: None, cached_range: None, cached_sections: [None; 3],
+        states.push(TrackState {uuid: track, waiting: None, playing: None, cached_range: None, cached_sections: [None; 3], started: f64::NAN,
             shared: SharedRead::new()});
         states.last_mut().expect("just pushed")
     }
@@ -433,6 +447,29 @@ mod tests {
         let mut out = Vec::new();
         sequencer.take_changes(&mut |key, change| out.push((*key, change)));
         out
+    }
+
+    fn started(sequencer: &mut ClipSequencer, p0: f64, p1: f64, info: &Info) -> Vec<f64> {
+        let mut out = Vec::new();
+        sequencer.iterate(&TRACK, p0, p1, info, &mut |section| out.push(section.started));
+        out
+    }
+
+    #[test]
+    fn a_section_tells_where_its_clip_started() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        assert_eq!(started(&mut sequencer, BAR - 50.0, BAR + 50.0, &info)[1], BAR);
+        assert_eq!(started(&mut sequencer, 3.0 * BAR, 3.0 * BAR + 50.0, &info), [BAR]);
+        // stopped and launched again where the last block ended: a new start, not the old one
+        sequencer.schedule_stop(TRACK);
+        started(&mut sequencer, 4.0 * BAR - 50.0, 4.0 * BAR, &info);
+        started(&mut sequencer, 4.0 * BAR, 4.0 * BAR + 50.0, &info);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        let relaunched = started(&mut sequencer, 5.0 * BAR - 50.0, 5.0 * BAR + 50.0, &info);
+        assert_eq!(relaunched.last().copied(), Some(5.0 * BAR));
+        assert!(relaunched[0].is_nan(), "the timeline section has no start");
     }
 
     #[test]
@@ -529,7 +566,22 @@ mod tests {
         assert_eq!(changes(&mut sequencer), [(CLIP_A, Change::Started)], "the transition fires exactly once");
     }
 
-    fn shared(sequencer: &ClipSequencer, p0: f64, p1: f64, info: &Info) -> Vec<(Option<ClipKey>, f64, f64)> {
+    #[test]
+    fn a_shared_read_behind_the_cursor_tells_where_each_clip_started() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true), (CLIP_B, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, BAR - 50.0, BAR + 50.0, false, &info);
+        sequencer.schedule_play(TRACK, CLIP_B);
+        sequencer.advance(&TRACK, BAR + 50.0, 2.0 * BAR + 50.0, false, &info);
+        // a layer reading a window shifted back across the handover at bar 2
+        let mut out = Vec::new();
+        sequencer.sections_shared(&TRACK, 2.0 * BAR - 100.0, 2.0 * BAR + 20.0, &info,
+            &mut |section| out.push((section.clip, section.started)));
+        assert_eq!(out, [(Some(CLIP_A), BAR), (Some(CLIP_B), 2.0 * BAR)]);
+    }
+
+        fn shared(sequencer: &ClipSequencer, p0: f64, p1: f64, info: &Info) -> Vec<(Option<ClipKey>, f64, f64)> {
         let mut out = Vec::new();
         sequencer.sections_shared(&TRACK, p0, p1, info, &mut |section| out.push((section.clip, section.from, section.to)));
         out

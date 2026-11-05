@@ -212,9 +212,12 @@ export namespace DevicesClipboard {
         if (pointer.pointerType === Pointers.ModulatorCollection) {
             return findRootBox(boxGraph).map(rootBox => rootBox.modulators.address)
         }
+        // an empty groove pointer stays empty
         if (pointer.pointerType === Pointers.Groove) {
-            return address.flatMap(target => boxGraph.findVertex(target).map(() => target))
-                .match({some: target => Option.wrap(target), none: () => TransferUtils.mapRootPointer(pointer, boxGraph)})
+            return address.flatMap(target => boxGraph.findVertex(target).match({
+                some: () => Option.wrap(target),
+                none: () => TransferUtils.mapRootPointer(pointer, boxGraph)
+            }))
         }
         if (pointer.pointerType === Pointers.GrooveCollection) {
             return TransferUtils.mapRootPointer(pointer, boxGraph)

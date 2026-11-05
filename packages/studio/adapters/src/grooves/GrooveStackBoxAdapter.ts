@@ -87,7 +87,15 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
             this.#listening = true
             this.#resubscribeMembers()
         }
-        return subscription
+        return {
+            terminate: () => {
+                subscription.terminate()
+                if (this.#notifier.isEmpty()) {
+                    this.#listening = false
+                    this.#members.terminate()
+                }
+            }
+        }
     }
 
     users(): ReadonlyArray<PointerField<Pointers.Groove>> {
@@ -105,6 +113,13 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
         return result
     }
 
+    static #reaches(groove: GrooveAdapter, target: GrooveStackBoxAdapter, visited: Set<GrooveAdapter>): boolean {
+        if (groove === target) {return true}
+        if (!(groove instanceof GrooveStackBoxAdapter) || visited.has(groove)) {return false}
+        visited.add(groove)
+        return groove.members().some(member => GrooveStackBoxAdapter.#reaches(member, target, visited))
+    }
+
     #notify(): void {
         if (this.#notifying) {return}
         this.#notifying = true
@@ -120,7 +135,10 @@ export class GrooveStackBoxAdapter implements GrooveAdapter {
                 this.#notify()
             }))
             entry.groove().ifSome(groove => {
-                if (groove !== this) {this.#members.own(groove.subscribeChange(() => this.#notify()))}
+                // a member that holds this stack again (merged edits of two peers) is not followed
+                if (!GrooveStackBoxAdapter.#reaches(groove, this, new Set())) {
+                    this.#members.own(groove.subscribeChange(() => this.#notify()))
+                }
             })
         })
     }

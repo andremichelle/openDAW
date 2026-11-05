@@ -124,6 +124,19 @@ describe("grooves travel with a Zeitgeist", () => {
         zeitgeists.forEach(zeitgeist => expect(grooveOf(zeitgeist).unwrap()).toBe(groove))
         expect(groovesOf(source).length).toBe(2)
     })
+    it("a copy within the same project keeps the order of the list", () => {
+        const source = empty()
+        const {audioUnit} = createUnit(source, customGroove("Laid Back"))
+        source.boxGraph.beginTransaction()
+        GrooveShuffleBox.create(source.boxGraph, UUID.generate(), box => {
+            box.label.setValue("After")
+            box.collection.refer(source.mandatoryBoxes.rootBox.grooves)
+            box.index.setValue(2)
+        })
+        source.boxGraph.endTransaction()
+        transfer(audioUnit, source)
+        expect(groovesOf(source).map(box => box.label.getValue())).toEqual(["Global Shuffle", "Laid Back", "After"])
+    })
     it("a stack comes along with its entries and members, its global member maps to the target", () => {
         const source = empty()
         const target = empty()

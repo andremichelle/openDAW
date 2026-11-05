@@ -11,7 +11,7 @@ import {
     NoteMidiExport,
     TimelineRange
 } from "@opendaw/studio-core"
-import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, AudioRegionBoxAdapter, Grooves} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -28,6 +28,7 @@ import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
 import {MonoConversions} from "@/service/MonoConversions"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {Dialogs} from "@/ui/components/dialogs"
 
 type Construct = {
     element: Element
@@ -123,8 +124,32 @@ export const installRegionContextMenu =
                                 .then(EmptyExec, console.warn)
                         } else {
                             const {truncateNotesAtRegionEnd} = service.engine.preferences.settings.playback
-                            editing.modify(() => region.flatten(selection.selected(), truncateNotesAtRegionEnd)
-                                .ifSome(box => project.selection.select(box)))
+                            const regions = selection.selected().slice()
+                            const flatten = (groove: Grooves.FlattenGroove) => editing.modify(() =>
+                                region.flatten(regions, truncateNotesAtRegionEnd, groove)
+                                    .ifSome(box => project.selection.select(box)))
+                            const grooved = regions.some(adapter =>
+                                Grooves.pointerOf(adapter.box).flatMap(pointer => pointer.targetVertex).nonEmpty())
+                            if (!grooved) {
+                                flatten("keep")
+                                return
+                            }
+                            // a region deleted meanwhile (undo, a peer) closes the dialog and nothing is flattened
+                            const deleted = new AbortController()
+                            const watches = regions.map(adapter => adapter.box.subscribeDeletion(() => deleted.abort()))
+                            Dialogs.choose<Grooves.FlattenGroove>({
+                                headline: "Flatten Grooved Regions",
+                                message: "Apply Groove moves the notes and automation points to where the groove plays them, the region sounds the same. Keep Groove leaves them in place and keeps the groove only when all regions share it, it then starts at the new region start.",
+                                choices: [
+                                    {text: "Keep Groove", value: "keep"},
+                                    {text: "Apply Groove", value: "apply"}
+                                ],
+                                origin: element,
+                                abortSignal: deleted.signal
+                            }).then(choice => {
+                                watches.forEach(watch => watch.terminate())
+                                choice.ifSome(flatten)
+                            }, EmptyExec)
                         }
                     }),
                 MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounce(selection.selected())})
