@@ -13,8 +13,9 @@ export class ScrollModel implements Terminable {
     constructor() {this.#notifier = new Notifier<ScrollModel>()}
 
     moveTo(value: number): void {
-        if (!this.scrollable()) {return}
-        this.normalized = value / (this.#trackSize - this.thumbSize)
+        const range = this.#trackSize - this.thumbSize
+        if (!this.scrollable() || range <= 0.0) {return}
+        this.normalized = value / range
     }
 
     moveBy(delta: number): void {
@@ -58,6 +59,7 @@ export class ScrollModel implements Terminable {
 
     // the normalized thumb position
     set normalized(value: number) {
+        if (!Number.isFinite(value)) {return}
         const clamped = !this.scrollable() ? 0.0 : clamp(value, 0.0, 1.0)
         if (this.#normalized === clamped) {return}
         this.#normalized = clamped
