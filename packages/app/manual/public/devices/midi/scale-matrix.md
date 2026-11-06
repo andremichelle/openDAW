@@ -4,6 +4,10 @@ A MIDI effect that moves every incoming note onto the nearest key of a scale.
 
 ---
 
+![screenshot](scale-matrix.webp)
+
+---
+
 ## 0. Overview
 
 _Scale Matrix_ makes sure every note you play or program lands in key. A note that is part of the scale passes unchanged. Any other note moves to the closest key of the scale. When a note sits exactly between two keys, it moves down.
