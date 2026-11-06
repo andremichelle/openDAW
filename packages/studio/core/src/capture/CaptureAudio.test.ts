@@ -551,6 +551,16 @@ describe("CaptureAudio", () => {
             vi.useRealTimers()
         })
 
+        it("tells output node subscribers about a rechanneled chain", async () => {
+            const {capture} = await setup()
+            await armAndAwaitChain(capture)
+            const seen: Array<Option<AudioNode>> = []
+            const subscription = capture.subscribeOutputNode(node => seen.push(node))
+            capture.input.rechannel()
+            expect(seen.map(node => node.unwrapOrNull())).toEqual([null, capture.outputNode.unwrap()])
+            subscription.terminate()
+        })
+
         it("waits for the take to end before it builds the fresh source node", async () => {
             vi.useFakeTimers()
             const {capture, createdSourceNodes} = await setup()
