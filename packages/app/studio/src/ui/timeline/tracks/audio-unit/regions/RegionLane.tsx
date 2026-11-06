@@ -1,5 +1,5 @@
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, Subscription, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {RegionRenderer} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
 import {TrackBoxAdapter} from "@opendaw/studio-adapters"
@@ -31,8 +31,15 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         updated = false
         painter.requestUpdate()
     }
-    const {timelineFocus} = trackManager.service.project
+    const {timelineFocus, rootBoxAdapter} = trackManager.service.project
+    const grooveLabels = UUID.newSet<{uuid: UUID.Bytes, subscription: Subscription}>(entry => entry.uuid)
     lifecycle.ownAll(
+        rootBoxAdapter.grooves.catchupAndSubscribe({
+            onAdd: groove => grooveLabels.add({uuid: groove.uuid, subscription: groove.labelField.subscribe(requestUpdate)}),
+            onRemove: groove => grooveLabels.removeByKeyIfExist(groove.uuid)?.subscription.terminate(),
+            onReorder: () => {}
+        }),
+        {terminate: () => grooveLabels.forEach(entry => entry.subscription.terminate())},
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),
