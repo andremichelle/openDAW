@@ -94,7 +94,7 @@ const bundleOf: Record<DeviceBundle, { icon: IconSymbol, text: string }> = {
 }
 
 const badgeOf: Record<DeviceEntryKind, Nullable<IconSymbol>> = {
-    "device": null, "user-preset": IconSymbol.UserFolder, "stock-preset": IconSymbol.CloudFolder,
+    "device": IconSymbol.OpenDAW, "user-preset": IconSymbol.UserFolder, "stock-preset": IconSymbol.CloudFolder,
     "script": IconSymbol.Code, "wclap": IconSymbol.WebClap, "soundfont": IconSymbol.SoundFont
 }
 
