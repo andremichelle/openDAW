@@ -12,11 +12,14 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
 import {WavFile} from "@opendaw/lib-dsp"
+import {HTDEMUCS_FWD_HOP} from "@opendaw/lib-inference"
 import type {ExecutionProvider, Inference as InferenceNamespace, TaskKey} from "@opendaw/lib-inference"
 import {AudioContentFactory, Project, ProjectMeta, ProjectProfile} from "@opendaw/studio-core"
 import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
+import {StemPreviewDialog} from "@/ui/neural-demux/StemPreviewDialog"
+import {createStemPreviewPlayer} from "@/service/StemPreviewPlayer"
 import {StudioService} from "@/service/StudioService"
 import {ensureInference} from "@/service/InferenceLoader"
 
@@ -38,6 +41,11 @@ const MODELS: ReadonlyArray<ModelOption> = [
         key: "stem-separation-alt",
         label: "htdemucs v4 (jackjiangxinfa, Apache-2.0)",
         description: "Same Demucs v4 architecture, alternate ONNX export.\nUseful for A/B comparing separation quality. License: Apache-2.0."
+    },
+    {
+        key: "stem-separation-webnn",
+        label: "htdemucs v4 (fwd-only, WebNN-optimized)",
+        description: "Same Demucs v4 weights, split export — STFT/iSTFT run in JS so the ONNX graph is pure network.\nMeasured as a single WebNN partition (100% node coverage), the only one of these three that runs correctly on WebNN-NPU."
     }
 ]
 
@@ -52,8 +60,26 @@ interface Selection {
 const isWebGPUAvailable = (): boolean =>
     isDefined((navigator as Navigator & { gpu?: unknown }).gpu)
 
-const providerLabel = (provider: ExecutionProvider): string =>
-    provider === "webgpu" ? "WebGPU (GPU)" : "WASM (CPU)"
+const isWebNNAvailable = (): boolean =>
+    isDefined((navigator as Navigator & { ml?: unknown }).ml)
+
+const providerLabel = (provider: ExecutionProvider): string => {
+    switch (provider) {
+        case "webgpu":    return "WebGPU (GPU)"
+        case "webnn-npu": return "WebNN (NPU)"
+        case "webnn-gpu": return "WebNN (GPU)"
+        case "wasm":      return "WASM (CPU)"
+    }
+}
+
+const toExecutionProvider = (value: string): ExecutionProvider => {
+    switch (value) {
+        case "webgpu":
+        case "webnn-npu":
+        case "webnn-gpu": return value
+        default:          return "wasm"
+    }
+}
 
 const lastProviderByTask = new Map<StemSeparationKey, ExecutionProvider>()
 
@@ -73,10 +99,20 @@ const decodeAudioFile = async (file: File, sampleRate: number):
     return {audio: planar, channels, frames}
 }
 
+const PROVIDER_PREFERENCE: ReadonlyArray<ExecutionProvider> = ["webnn-npu", "webnn-gpu", "webgpu", "wasm"]
+
 const pickSelection = async (Inference: typeof InferenceNamespace,
                              defaultKey: StemSeparationKey): Promise<Option<Selection>> => {
     const webgpu = isWebGPUAvailable()
-    const defaultProvider: ExecutionProvider = webgpu ? "webgpu" : "wasm"
+    const webnn = isWebNNAvailable()
+    const browserAvailable = (provider: ExecutionProvider): boolean => {
+        switch (provider) {
+            case "webnn-npu":
+            case "webnn-gpu": return webnn
+            case "webgpu":    return webgpu
+            case "wasm":      return true
+        }
+    }
     const renderDescription = (model: ModelOption): string => {
         const size = Bytes.toString(Inference.modelDescriptor(model.key).bytes)
         return `${model.description}\n${size} one-time download.`
@@ -87,15 +123,38 @@ const pickSelection = async (Inference: typeof InferenceNamespace,
                 <option value={model.key} selected={model.key === defaultKey}>{model.label}</option>)}
         </select>
     ) as HTMLSelectElement
+    const providerOptionNpu: HTMLOptionElement = <option value="webnn-npu">{providerLabel("webnn-npu")}</option> as HTMLOptionElement
+    const providerOptionGpu: HTMLOptionElement = <option value="webnn-gpu">{providerLabel("webnn-gpu")}</option> as HTMLOptionElement
+    const providerOptionWebgpu: HTMLOptionElement = <option value="webgpu">{providerLabel("webgpu")}</option> as HTMLOptionElement
+    const providerOptionWasm: HTMLOptionElement = <option value="wasm">{providerLabel("wasm")}</option> as HTMLOptionElement
+    const providerOptions: Record<ExecutionProvider, HTMLOptionElement> = {
+        "webnn-npu": providerOptionNpu, "webnn-gpu": providerOptionGpu, webgpu: providerOptionWebgpu, wasm: providerOptionWasm
+    }
     const providerSelect: HTMLSelectElement = (
         <select style={{font: "inherit", padding: "4px 8px", width: "100%"}}>
-            <option value="webgpu" disabled={!webgpu} selected={defaultProvider === "webgpu"}>
-                {`WebGPU (GPU)${webgpu ? "" : " — not available in this browser"}`}
-            </option>
-            <option value="wasm" selected={defaultProvider === "wasm"}>WASM (CPU)</option>
+            {providerOptionNpu}{providerOptionGpu}{providerOptionWebgpu}{providerOptionWasm}
         </select>
     ) as HTMLSelectElement
+    const applyProviderCompatibility = (model: ModelOption): void => {
+        const compatible = Inference.executionProviders(model.key)
+        const previousValue = providerSelect.value as ExecutionProvider
+        for (const provider of PROVIDER_PREFERENCE) {
+            const option = providerOptions[provider]
+            const supportedByModel = compatible.includes(provider)
+            const availableInBrowser = browserAvailable(provider)
+            option.disabled = !(supportedByModel && availableInBrowser)
+            option.textContent = !availableInBrowser
+                ? `${providerLabel(provider)} — not available in this browser`
+                : !supportedByModel
+                    ? `${providerLabel(provider)} — not supported by this model`
+                    : providerLabel(provider)
+        }
+        const stillValid = !providerOptions[previousValue].disabled
+        const fallback = PROVIDER_PREFERENCE.find(provider => !providerOptions[provider].disabled) ?? "wasm"
+        providerSelect.value = stillValid ? previousValue : fallback
+    }
     const initial = MODELS.find(model => model.key === defaultKey)
+    if (isDefined(initial)) {applyProviderCompatibility(initial)}
     const descriptionEl: HTMLParagraphElement = (
         <p style={{margin: "8px 0 0", opacity: "0.7", fontSize: "12px", whiteSpace: "pre-line"}}>
             {isDefined(initial) ? renderDescription(initial) : ""}
@@ -104,6 +163,7 @@ const pickSelection = async (Inference: typeof InferenceNamespace,
     modelSelect.addEventListener("change", () => {
         const found = MODELS.find(model => model.key === modelSelect.value)
         descriptionEl.textContent = isDefined(found) ? renderDescription(found) : ""
+        if (isDefined(found)) {applyProviderCompatibility(found)}
     })
     const result = await Promises.tryCatch(Dialogs.show({
         headline: "Neural Demux",
@@ -122,7 +182,7 @@ const pickSelection = async (Inference: typeof InferenceNamespace,
     if (result.status === "rejected") {return Option.None}
     const found = MODELS.find(model => model.key === modelSelect.value)
     if (!isDefined(found)) {return Option.None}
-    const provider: ExecutionProvider = providerSelect.value === "webgpu" ? "webgpu" : "wasm"
+    const provider = toExecutionProvider(providerSelect.value)
     return Option.wrap({model: found, provider})
 }
 
@@ -197,9 +257,24 @@ export namespace NeuralDemux {
                 }
             } else {
                 const loadController = new AbortController()
+                // ORT's InferenceSession.create() reports no incremental progress for parsing/
+                // optimizing the graph, so this is an estimated curve (asymptotic, never reaches 1)
+                // rather than real progress - just enough to show the load is moving, not stalled.
+                const ESTIMATED_LOAD_SECONDS = 8
+                const loadProgress = new DefaultObservableValue<number>(0)
+                const loadStart = performance.now()
+                let loadTicking = true
+                const tickLoadProgress = () => {
+                    if (!loadTicking) {return}
+                    const elapsedSeconds = (performance.now() - loadStart) / 1000
+                    loadProgress.setValue(1 - Math.exp(-elapsedSeconds / ESTIMATED_LOAD_SECONDS))
+                    requestAnimationFrame(tickLoadProgress)
+                }
+                requestAnimationFrame(tickLoadProgress)
                 const loadDialog = RuntimeNotifier.progress({
                     headline: "Loading model",
                     message: `${sizeLabel}, from cache`,
+                    progress: loadProgress,
                     cancel: () => loadController.abort(Errors.AbortError)
                 })
                 const sessionResult = await Promises.tryCatch(Promise.race([
@@ -210,6 +285,7 @@ export namespace NeuralDemux {
                     new Promise<never>((_, reject) => loadController.signal.addEventListener(
                         "abort", () => reject(Errors.AbortError), {once: true}))
                 ]))
+                loadTicking = false
                 loadDialog.terminate()
                 if (sessionResult.status === "rejected") {
                     if (!Errors.isAbort(sessionResult.error)) {
@@ -221,21 +297,53 @@ export namespace NeuralDemux {
             }
             const sepProgress = new DefaultObservableValue<number>(0)
             const sepController = new AbortController()
-            const sepDialog = RuntimeNotifier.progress({
-                headline: "Separating stems",
-                message: `Using ${providerLabel(provider)}`,
-                progress: sepProgress,
-                cancel: () => sepController.abort(Errors.AbortError)
-            })
-            const inferenceResult = await Promises.tryCatch(Inference.run(model.key, {
-                audio, channels, sampleRate: 44100
-            }, {
-                progress: value => sepProgress.setValue(value),
-                signal: sepController.signal,
-                downloadShare: 0,
-                executionProvider: provider
-            }))
-            sepDialog.terminate()
+
+            async function runWithPlainProgress(key: StemSeparationKey) {
+                const sepDialog = RuntimeNotifier.progress({
+                    headline: "Separating stems",
+                    message: `Using ${providerLabel(provider)}`,
+                    progress: sepProgress,
+                    cancel: () => sepController.abort(Errors.AbortError)
+                })
+                const result = await Promises.tryCatch(Inference.run(key, {
+                    audio, channels, sampleRate: 44100
+                }, {
+                    progress: value => sepProgress.setValue(value),
+                    signal: sepController.signal,
+                    downloadShare: 0,
+                    executionProvider: provider
+                }))
+                sepDialog.terminate()
+                return result
+            }
+
+            // "stem-separation-webnn" is the only task that streams finalized segments as it goes
+            // (see HtdemucsFwdTask's onPartial) - the other two are full-pipeline exports with no
+            // intermediate results to preview.
+            async function runWithPreview(key: "stem-separation-webnn") {
+                const player = createStemPreviewPlayer(frames, 44100, HTDEMUCS_FWD_HOP)
+                const dialog = StemPreviewDialog.open({
+                    player, totalSamples: frames, sampleRate: 44100,
+                    progress: sepProgress, providerLabel: providerLabel(provider),
+                    onCancel: () => sepController.abort(Errors.AbortError)
+                })
+                const result = await Promises.tryCatch(Inference.run(key, {
+                    audio, channels, sampleRate: 44100
+                }, {
+                    progress: value => sepProgress.setValue(value),
+                    signal: sepController.signal,
+                    downloadShare: 0,
+                    executionProvider: provider,
+                    onPartial: partial => player.publish(partial)
+                }))
+                dialog.close()
+                player.terminate()
+                return result
+            }
+
+            const inferenceResult = model.key === "stem-separation-webnn"
+                ? await runWithPreview(model.key)
+                : await runWithPlainProgress(model.key)
             if (inferenceResult.status === "rejected") {
                 if (!Errors.isAbort(inferenceResult.error)) {
                     console.warn(inferenceResult.error)
