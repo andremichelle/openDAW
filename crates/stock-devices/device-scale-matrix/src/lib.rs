@@ -1,13 +1,14 @@
 //! The SCALE MATRIX MIDI-EFFECT device (`ScaleMatrixDeviceBox`): every note-on moves to the nearest key of
 //! a scale (ties down), either its own `root` + `scale` or, with `follow`, the project key at the note's
-//! position. A note-off replays the pitch its note-on was given. Notes quantised onto a pitch that is
-//! already sounding share it: only the first note-on and the last note-off go out.
+//! position. The scale index after the stock scales is CUSTOM: a per-pitch-class offset relative to the
+//! root (`custom`), where `MUTE` drops the note. A note-off replays the pitch its note-on was given. Notes
+//! quantised onto a pitch that is already sounding share it: only the first note-on and the last note-off go out.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{bool_value, int_value, EventRecord, MidiEffect, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
+use abi::{bool_value, int_value, EventRecord, FieldValue, MidiEffect, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
 use math::harmony::{quantise, STOCK_SCALES};
 use math::value_mapping::LinearInteger;
 
@@ -20,8 +21,12 @@ fn panic(info: &PanicInfo) -> ! {
 const ROOT_FIELD: [u16; 1] = [10];
 const SCALE_FIELD: [u16; 1] = [11];
 const FOLLOW_FIELD: [u16; 1] = [12];
+const CUSTOM_FIELD: [u16; 1] = [13];
 const ROOT_MAPPING: LinearInteger = LinearInteger {min: 0, max: 11};
-const SCALE_MAPPING: LinearInteger = LinearInteger {min: 0, max: STOCK_SCALES.len() as i32 - 1};
+// WASM CONTRACT: the index after the stock scales is Custom, `MUTE` is the custom offset of a muted pitch class.
+const CUSTOM_SCALE: i32 = STOCK_SCALES.len() as i32;
+const MUTE: i32 = 12;
+const SCALE_MAPPING: LinearInteger = LinearInteger {min: 0, max: CUSTOM_SCALE};
 
 // Same replay table size as device-note-filter. When full, a note-on is ignored so its note-off can never hang.
 const MAX_HELD: usize = 64;
@@ -40,19 +45,29 @@ pub struct ScaleMatrixState {
     root_id: u32,
     scale_id: u32,
     follow_id: u32,
+    custom: [i32; 12],
+    custom_id: u32,
     held: [Held; MAX_HELD],
     held_len: usize
 }
 
 impl ScaleMatrixState {
-    fn output_pitch(&self, pitch: i32, position: f64) -> u32 {
+    fn output_pitch(&self, pitch: i32, position: f64) -> Option<u32> {
         let (root, bits) = if self.follow {
             let harmony = abi::harmony_at(position);
             (harmony.root, harmony.bits)
         } else {
-            (self.root, STOCK_SCALES[self.scale as usize])
+            (self.root, STOCK_SCALES[self.scale.min(CUSTOM_SCALE - 1) as usize])
         };
-        quantise(pitch, root, bits) as u32
+        if self.scale != CUSTOM_SCALE {
+            return Some(quantise(pitch, root, bits) as u32);
+        }
+        let offset = self.custom[(pitch - root).rem_euclid(12) as usize];
+        if offset == MUTE {
+            return None;
+        }
+        let output = pitch + offset;
+        Some(if output < 0 {output + 12} else if output > 127 {output - 12} else {output} as u32)
     }
 
     fn sounding(&self, pitch: u32) -> Option<u32> {
@@ -91,6 +106,7 @@ impl MidiEffect for ScaleMatrix {
         state.root_id = abi::bind_parameter(&ROOT_FIELD);
         state.scale_id = abi::bind_parameter(&SCALE_FIELD);
         state.follow_id = abi::bind_parameter(&FOLLOW_FIELD);
+        state.custom_id = abi::observe_field(&CUSTOM_FIELD);
     }
 
     fn parameter_changed(state: &mut ScaleMatrixState, id: u32, value: ParamValue) {
@@ -112,7 +128,7 @@ impl MidiEffect for ScaleMatrix {
             match record.kind {
                 EVENT_NOTE_ON => {
                     if state.held_len >= MAX_HELD {continue}
-                    let pitch = state.output_pitch(record.pitch as i32, record.position);
+                    let Some(pitch) = state.output_pitch(record.pitch as i32, record.position) else {continue};
                     let owner = state.sounding(pitch);
                     state.held[state.held_len] = Held {id: record.id, pitch, owner: owner.unwrap_or(record.id)};
                     state.held_len += 1;
@@ -176,6 +192,22 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
     }
 }
 
+pub fn set_custom(state: &mut ScaleMatrixState, values: &[i32]) {
+    for (slot, value) in values.iter().take(12).enumerate() {
+        state.custom[slot] = (*value).clamp(-6, MUTE);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    let state = unsafe { &mut *(state_ptr as *mut ScaleMatrixState) };
+    if id == state.custom_id {
+        if let FieldValue::Ints(values) = unsafe { FieldValue::from_wire(kind, bits, len) } {
+            set_custom(state, values);
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn reset(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, |state: &mut ScaleMatrixState| state.held_len = 0) }
@@ -191,13 +223,16 @@ pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: 
 
 #[cfg(test)]
 mod tests {
-    use super::{Held, ScaleMatrix, ScaleMatrixState, MAX_HELD};
+    use super::{set_custom, Held, ScaleMatrix, ScaleMatrixState, CUSTOM_SCALE, MAX_HELD, MUTE};
     use abi::{EventRecord, Harmony, MidiEffect, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
     use math::harmony::{quantise, MAJOR_BITS, STOCK_SCALES};
 
+    // the native harmony is process-wide, tests that set it must not overlap
+    static HARMONY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn matrix(root: i32, scale: i32, follow: bool) -> ScaleMatrixState {
         ScaleMatrixState {
-            root, scale, follow, root_id: 1, scale_id: 2, follow_id: 3,
+            root, scale, follow, root_id: 1, scale_id: 2, follow_id: 3, custom: [0; 12], custom_id: 4,
             held: [Held {id: 0, pitch: 0, owner: 0}; MAX_HELD], held_len: 0
         }
     }
@@ -263,6 +298,7 @@ mod tests {
 
     #[test]
     fn follow_reads_the_project_key() {
+        let _lock = HARMONY_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut state = matrix(0, 0, true);
         abi::set_native_harmony(Harmony {root: 2, bits: MAJOR_BITS, chord: None});
         let output = run(&mut state, &[note(EVENT_NOTE_ON, 1, 60), note(EVENT_NOTE_ON, 2, 65)]);
@@ -300,6 +336,46 @@ mod tests {
     }
 
     #[test]
+    fn custom_offsets_apply_relative_to_the_root_and_mute_drops_the_note() {
+        let mut state = matrix(2, CUSTOM_SCALE, false);
+        let mut custom = [0; 12];
+        custom[1] = -1;
+        custom[3] = 5;
+        custom[4] = MUTE;
+        set_custom(&mut state, &custom);
+        let input = [note(EVENT_NOTE_ON, 1, 62), note(EVENT_NOTE_ON, 2, 63), note(EVENT_NOTE_ON, 3, 65), note(EVENT_NOTE_ON, 4, 66)];
+        assert_eq!(events(&run(&mut state, &input)), vec![(EVENT_NOTE_ON, 1, 62), (EVENT_NOTE_ON, 3, 70)],
+            "D stays, D# goes down to the sounding D, F goes up to A#, F# is muted");
+        assert!(run(&mut state, &[note(EVENT_NOTE_OFF, 4, 66)]).is_empty(), "the off of a muted note is dropped too");
+        state.root = 0;
+        assert_eq!(events(&run(&mut state, &[note(EVENT_NOTE_ON, 5, 64)])), vec![], "with root C the mute moves to E");
+    }
+
+    #[test]
+    fn custom_offsets_stay_inside_0_to_127() {
+        let mut state = matrix(0, CUSTOM_SCALE, false);
+        let mut custom = [0; 12];
+        custom[0] = -6;
+        custom[7] = 5;
+        set_custom(&mut state, &custom);
+        assert_eq!(events(&run(&mut state, &[note(EVENT_NOTE_ON, 1, 0), note(EVENT_NOTE_ON, 2, 127)])),
+            vec![(EVENT_NOTE_ON, 1, 6), (EVENT_NOTE_ON, 2, 120)]);
+    }
+
+    #[test]
+    fn custom_follows_the_project_root() {
+        let _lock = HARMONY_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = matrix(0, CUSTOM_SCALE, true);
+        let mut custom = [0; 12];
+        custom[1] = MUTE;
+        set_custom(&mut state, &custom);
+        abi::set_native_harmony(Harmony {root: 5, bits: MAJOR_BITS, chord: None});
+        let output = run(&mut state, &[note(EVENT_NOTE_ON, 1, 61), note(EVENT_NOTE_ON, 2, 66)]);
+        abi::set_native_harmony(Harmony {root: 0, bits: MAJOR_BITS, chord: None});
+        assert_eq!(events(&output), vec![(EVENT_NOTE_ON, 1, 61)], "with root F the mute sits on F#");
+    }
+
+    #[test]
     fn other_event_kinds_pass_through() {
         let mut state = matrix(0, 0, false);
         assert_eq!(run(&mut state, &[note(99, 1, 10)]).len(), 1);
@@ -311,7 +387,7 @@ mod tests {
         ScaleMatrix::parameter_changed(&mut state, 1, ParamValue::Unit(1.0));
         assert_eq!(state.root, 11);
         ScaleMatrix::parameter_changed(&mut state, 2, ParamValue::Unit(1.0));
-        assert_eq!(state.scale, 14);
+        assert_eq!(state.scale, CUSTOM_SCALE);
         ScaleMatrix::parameter_changed(&mut state, 2, ParamValue::Int(3));
         assert_eq!(state.scale, 3);
         ScaleMatrix::parameter_changed(&mut state, 3, ParamValue::Bool(true));

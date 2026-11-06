@@ -1,11 +1,15 @@
-import {int, Option} from "@opendaw/lib-std"
+import {int, isDefined, Option} from "@opendaw/lib-std"
 import {MidiKeys} from "./midi-keys"
 
 export namespace Harmony {
     export const MajorBits: int = 0b101010110101
 
     export type Key = { readonly root: int, readonly bits: int }
-    export type Chord = { readonly root: int, readonly bits: int }
+    // stack: intervals above the root in root position, voicing: after the inversion, bits: the voicing as a mask
+    export type Chord = {
+        readonly root: int, readonly stack: ReadonlyArray<int>, readonly voicing: ReadonlyArray<int>,
+        readonly bits: int, readonly shaped: boolean
+    }
     export type ChordShape = { readonly name: string, readonly suffix: string, readonly bits: int }
 
     export const DefaultKey: Key = {root: 0, bits: MajorBits}
@@ -48,16 +52,28 @@ export namespace Harmony {
         return pitch
     }
 
-    export const chord = ({root, bits}: Key, degree: int, shift: int, shapeBits: int): Option<Chord> => {
+    export const chord = ({root, bits}: Key, degree: int, shift: int, shapeBits: int,
+                          notes: int = 3, inversion: int = 0): Option<Chord> => {
         if (!isHeptatonic(bits) || degree < 1 || degree > 7) {return Option.None}
         const steps: Array<int> = []
         for (let index = 0; index < 12; index++) {if ((bits & (1 << index)) !== 0) {steps.push(index)}}
         const index = degree - 1
         const base = steps[index]
-        const chordBits = shapeBits !== 0 ? shapeBits : 1
-            | (1 << ((steps[(index + 2) % 7] - base + 12) % 12))
-            | (1 << ((steps[(index + 4) % 7] - base + 12) % 12))
-        return Option.wrap({root: ((root + base + shift) % 12 + 12) % 12, bits: chordBits})
+        const stack: Array<int> = []
+        if (shapeBits !== 0) {
+            for (let interval = 0; interval < 12; interval++) {if ((shapeBits & (1 << interval)) !== 0) {stack.push(interval)}}
+        } else {
+            for (let note = 0; note < Math.min(Math.max(notes, 3), 5); note++) {
+                const step = index + note * 2
+                stack.push(steps[step % 7] + Math.floor(step / 7) * 12 - base)
+            }
+        }
+        const rotate = Math.min(Math.max(inversion, 0), stack.length - 1)
+        const voicing = [...stack.slice(rotate), ...stack.slice(0, rotate).map(interval => interval + 12)]
+        return Option.wrap({
+            root: ((root + base + shift) % 12 + 12) % 12, stack, voicing,
+            bits: voicing.reduce((mask, interval) => mask | (1 << interval), 0), shaped: shapeBits !== 0
+        })
     }
 
     export const scaleName = (bits: int): string =>
@@ -65,10 +81,28 @@ export namespace Harmony {
 
     export const keyName = ({root, bits}: Key): string => `${MidiKeys.Names.English[root]} ${scaleName(bits)}`
 
-    export const chordName = ({root, bits}: Chord): string => {
-        const known = ChordShapes.find(chordShape => chordShape.bits === bits)
-        return `${MidiKeys.Names.English[root]}${known?.suffix ?? "*"}`
+    const stackSuffix = (stack: ReadonlyArray<int>): string => {
+        const [, third, fifth, seventh, ninth] = stack
+        const triad = third === 4 && fifth === 7 ? "" : third === 3 && fifth === 7 ? "m"
+            : third === 3 && fifth === 6 ? "dim" : third === 4 && fifth === 8 ? "aug" : "*"
+        if (!isDefined(seventh)) {return triad}
+        const suffix = triad === "" ? (seventh === 11 ? "maj7" : seventh === 10 ? "7" : "*")
+            : triad === "m" ? (seventh === 10 ? "m7" : seventh === 11 ? "m(maj7)" : "*")
+                : triad === "dim" ? (seventh === 10 ? "m7♭5" : seventh === 9 ? "dim7" : "*")
+                    : triad === "aug" ? (seventh === 11 ? "maj7♯5" : seventh === 10 ? "7♯5" : "*") : "*"
+        if (!isDefined(ninth)) {return suffix}
+        return ninth === 14 ? suffix.replace("7", "9") : ninth === 13 ? `${suffix}♭9` : ninth === 15 ? `${suffix}♯9` : "*"
     }
+
+    export const chordName = ({root, stack, voicing, shaped}: Chord): string => {
+        const shapeBits = stack.reduce((mask, interval) => mask | (1 << (interval % 12)), 0)
+        const suffix = shaped ? ChordShapes.find(chordShape => chordShape.bits === shapeBits)?.suffix ?? "*" : stackSuffix(stack)
+        const bass = voicing[0] === stack[0] ? "" : `/${MidiKeys.Names.English[(root + voicing[0]) % 12]}`
+        return `${MidiKeys.Names.English[root]}${suffix}${bass}`
+    }
+
+    export const pitchClasses = ({root, voicing}: Chord): ReadonlyArray<int> =>
+        voicing.map(interval => (root + interval) % 12)
 
     export const degreeName = (degree: int, shift: int): string =>
         `${shift < 0 ? "♭" : shift > 0 ? "♯" : ""}${degree}`

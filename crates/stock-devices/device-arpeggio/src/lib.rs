@@ -540,8 +540,8 @@ fn collect_chord(state: &ArpState, position: f64, root: i32, bits: i32, pool: &m
         held = true;
     }
     let mut count = 0;
-    for interval in 0..12 {
-        if bits & (1 << interval) != 0 {
+    for interval in 0..31 {
+        if bits & (1 << interval) != 0 && count < MAX_SOURCE {
             pool[count] = PoolNote {start: position, pitch: base + (root + interval) as u32, velocity, cent: 0.0};
             count += 1;
         }
@@ -1037,7 +1037,11 @@ mod tests {
         assert!(out[..written].iter().all(|event| event.position == 1000.0), "released at `from`");
     }
 
+    // the native harmony is process-wide, tests that set it must not overlap
+    static HARMONY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn chord_pitches(state: &mut ArpState, input: &[EventRecord], chord: Option<(i32, i32)>) -> Vec<u32> {
+        let _lock = HARMONY_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         abi::set_native_harmony(abi::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord});
         let mut out = [note_on(0.0, 0.0, 0, 0.0); 64];
         let written = process(state, 0.0, 3840.0, abi::BlockFlags::TRANSPORTING, input, &mut out);
@@ -1052,6 +1056,16 @@ mod tests {
         state.follow_chords = true;
         state.transporting = true;
         assert_eq!(chord_pitches(&mut state, &[], Some((7, 0x91))), vec![67, 71, 74, 67], "G major from C3 upwards");
+    }
+
+    #[test]
+    fn follow_chords_plays_stacked_and_inverted_voicings() {
+        let mut state = state_with_follow();
+        let g9 = (1 << 0) | (1 << 4) | (1 << 7) | (1 << 10) | (1 << 14);
+        assert_eq!(chord_pitches(&mut state, &[], Some((7, g9))), vec![67, 71, 74, 77], "G9 walks up into the ninth");
+        let mut inverted = state_with_follow();
+        let c_first = (1 << 4) | (1 << 7) | (1 << 12);
+        assert_eq!(chord_pitches(&mut inverted, &[], Some((0, c_first))), vec![64, 67, 72, 64], "C/E starts on E");
     }
 
     #[test]

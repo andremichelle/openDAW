@@ -333,7 +333,7 @@ pub fn bar_at(pulse: f64) -> Bar {
 }
 
 /// The project's harmony at a pulse: the key (root pitch class + 12-bit scale mask) and, when the chord
-/// track has a chord there, its root pitch class and mask relative to that root.
+/// track has a chord there, its root pitch class and voicing (a mask of semitones 0..31 above that root).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Harmony {
     pub root: i32,

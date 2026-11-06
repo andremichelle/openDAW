@@ -20,7 +20,7 @@ const INSTRUMENT = `class Processor {
     }
 }`
 
-type Chord = { position: number, duration: number, degree: number }
+type Chord = { position: number, duration: number, degree: number, notes?: number, inversion?: number }
 type Settings = { follow?: boolean, chords?: ReadonlyArray<Chord>, keyRoot?: number }
 
 // rate 1/4 = 960 pulses = 0.5s at 120 bpm = 187.5 quanta of 128 frames, gate 1
@@ -53,11 +53,13 @@ const createScene = async ({follow, chords, keyRoot}: Settings) => {
             box.scale.setValue(Harmony.MajorBits)
         })
     }
-    const chordBoxes = (chords ?? []).map(({position, duration, degree}) => ChordEventBox.create(source, UUID.generate(), box => {
+    const chordBoxes = (chords ?? []).map(({position, duration, degree, notes, inversion}) => ChordEventBox.create(source, UUID.generate(), box => {
         box.track.refer(timelineBox.chordTrack.events)
         box.position.setValue(position)
         box.duration.setValue(duration)
         box.degree.setValue(degree)
+        box.notes.setValue(notes ?? 3)
+        box.inversion.setValue(inversion ?? 0)
     }))
     source.endTransaction()
     new Function(ScriptCompiler.wrap(
@@ -110,6 +112,12 @@ describe("Arpeggio follows the chord track", () => {
         const result = await levels({chords: [{position: 0, duration: 960, degree: 1}, {position: 960, duration: 2880, degree: 6}]})
         expect(result[0]).toBeCloseTo(0.060, 6)
         expect(result[1]).toBeCloseTo(0.072, 6)
+    }, 60000)
+    it("plays stacked notes and inversions", async () => {
+        const seventh = await levels({chords: [{position: 0, duration: 3840, degree: 5, notes: 4, inversion: 2}]})
+        expect(seventh[0]).toBeCloseTo(0.074, 6)
+        expect(seventh[1]).toBeCloseTo(0.077, 6)
+        expect(seventh[2]).toBeCloseTo(0.079, 6)
     }, 60000)
     it("stays silent without chords and held keys", async () => {
         expect(await levels({chords: []})).toEqual([0, 0, 0])

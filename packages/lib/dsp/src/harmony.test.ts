@@ -77,6 +77,24 @@ describe("Harmony.chord", () => {
         expect(Harmony.chordName(Harmony.chord({root: 5, bits: Harmony.MajorBits}, 7, -1, major).unwrap())).toBe("D#")
         expect(Harmony.chordName(Harmony.chord(CMajor, 5, 0, Harmony.ChordShapes[6].bits).unwrap())).toBe("G7")
     })
+    it("stacks 7ths and 9ths from the scale", () => {
+        const sevenths = [1, 2, 3, 4, 5, 6, 7].map(degree => Harmony.chordName(Harmony.chord(CMajor, degree, 0, 0, 4).unwrap()))
+        expect(sevenths).toEqual(["Cmaj7", "Dm7", "Em7", "Fmaj7", "G7", "Am7", "Bm7♭5"])
+        const ninths = [1, 2, 3, 4, 5, 6, 7].map(degree => Harmony.chordName(Harmony.chord(CMajor, degree, 0, 0, 5).unwrap()))
+        expect(ninths).toEqual(["Cmaj9", "Dm9", "Em7♭9", "Fmaj9", "G9", "Am9", "Bm7♭5♭9"])
+        expect(Harmony.chord(CMajor, 5, 0, 0, 5).unwrap().stack).toEqual([0, 4, 7, 10, 14])
+        expect(Harmony.chordName(Harmony.chord({root: 0, bits: scaleBits("Harmonic Minor")}, 1, 0, 0, 4).unwrap())).toBe("Cm(maj7)")
+    })
+    it("inverts by moving the lowest notes up an octave", () => {
+        const first = Harmony.chord(CMajor, 1, 0, 0, 3, 1).unwrap()
+        expect(first.voicing).toEqual([4, 7, 12])
+        expect(Harmony.chordName(first)).toBe("C/E")
+        const third = Harmony.chord(CMajor, 5, 0, 0, 4, 3).unwrap()
+        expect(third.voicing).toEqual([10, 12, 16, 19])
+        expect(Harmony.chordName(third)).toBe("G7/F")
+        expect(Harmony.chord(CMajor, 1, 0, 0, 3, 9).unwrap().voicing).toEqual([7, 12, 16], "the inversion is capped by the note count")
+        expect(Harmony.pitchClasses(first)).toEqual([4, 7, 0])
+    })
     it("yields no chord for scales without 7 notes", () => {
         for (const name of ["Pentatonic Major", "Pentatonic Minor", "Blues", "Whole Tone", "Diminished", "Augmented"]) {
             expect(Harmony.chord({root: 0, bits: scaleBits(name)}, 1, 0, 0).isEmpty()).toBe(true)

@@ -10,7 +10,8 @@ export const ScaleMatrixDeviceBox: BoxSchema<Pointers> = DeviceFactory.createMid
     },
     11: {
         type: "int32", name: "scale", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {length: 15}, unit: ""
+        value: 0, constraints: {length: 16}, unit: ""
     },
-    12: {type: "boolean", name: "follow", pointerRules: ParameterPointerRules, value: false}
+    12: {type: "boolean", name: "follow", pointerRules: ParameterPointerRules, value: false},
+    13: {type: "array", name: "custom", length: 12, element: {type: "int32", value: 0, constraints: {min: -6, max: 12}, unit: "st"}}
 })

@@ -1,5 +1,6 @@
 //! Keys and chords, the port of lib-dsp `Harmony`: a key is a root pitch class plus a 12-bit scale mask
-//! (bit i = i semitones above the root), a chord a root pitch class plus a 12-bit mask relative to it.
+//! (bit i = i semitones above the root), a chord a root pitch class plus its voicing as a mask of semitones
+//! above that root (bits 0..31, so stacked 9ths and inversions keep their octave).
 
 pub const MAJOR_BITS: i32 = 0b1010_1011_0101;
 
@@ -38,9 +39,10 @@ pub fn quantise(pitch: i32, root: i32, bits: i32) -> i32 {
     pitch
 }
 
-/// The chord on `degree` (1..=7) of a 7-note key: `(root pitch class, mask relative to that root)`.
-/// `shape` 0 stacks the triad from the scale, any other value replaces it.
-pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32) -> Option<(i32, i32)> {
+/// The chord on `degree` (1..=7) of a 7-note key: `(root pitch class, voicing mask)`. `shape` 0 stacks
+/// `notes` (3..=5) scale notes in thirds, any other value replaces them. `inversion` moves that many of the
+/// lowest notes up an octave.
+pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i32, inversion: i32) -> Option<(i32, i32)> {
     if !is_heptatonic(bits) || !(1..=7).contains(&degree) {
         return None;
     }
@@ -54,12 +56,28 @@ pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32) -> Optio
     }
     let index = (degree - 1) as usize;
     let base = steps[index];
-    let chord_bits = if shape != 0 {
-        shape
+    let mut stack = [0i32; 12];
+    let mut size = 0;
+    if shape != 0 {
+        for interval in 0..12 {
+            if shape & (1 << interval) != 0 {
+                stack[size] = interval;
+                size += 1;
+            }
+        }
     } else {
-        1 | (1 << (steps[(index + 2) % 7] - base).rem_euclid(12)) | (1 << (steps[(index + 4) % 7] - base).rem_euclid(12))
-    };
-    Some(((root + base + shift).rem_euclid(12), chord_bits))
+        for note in 0..notes.clamp(3, 5) as usize {
+            let step = index + note * 2;
+            stack[size] = steps[step % 7] + (step / 7) as i32 * 12 - base;
+            size += 1;
+        }
+    }
+    let rotate = inversion.clamp(0, size as i32 - 1) as usize;
+    let mut voicing = 0;
+    for (position, interval) in stack[..size].iter().enumerate() {
+        voicing |= 1 << (interval + if position < rotate {12} else {0});
+    }
+    Some(((root + base + shift).rem_euclid(12), voicing))
 }
 
 #[cfg(test)]
@@ -110,18 +128,32 @@ mod tests {
     fn triads_follow_key_and_scale() {
         let major: [(i32, i32); 7] = [(0, 0x91), (2, 0x89), (4, 0x89), (5, 0x91), (7, 0x91), (9, 0x89), (11, 0x49)];
         for (degree, expected) in major.iter().enumerate() {
-            assert_eq!(chord(0, MAJOR_BITS, degree as i32 + 1, 0, 0), Some(*expected));
+            assert_eq!(chord(0, MAJOR_BITS, degree as i32 + 1, 0, 0, 3, 0), Some(*expected));
         }
-        assert_eq!(chord(5, MAJOR_BITS, 5, 0, 0), Some((0, 0x91)));
-        assert_eq!(chord(0, NATURAL_MINOR, 1, 0, 0), Some((0, 0x89)));
-        assert_eq!(chord(0, MAJOR_BITS, 7, -1, 0x91), Some((10, 0x91)));
-        assert_eq!(chord(5, MAJOR_BITS, 7, -1, 0x91), Some((3, 0x91)));
+        assert_eq!(chord(5, MAJOR_BITS, 5, 0, 0, 3, 0), Some((0, 0x91)));
+        assert_eq!(chord(0, NATURAL_MINOR, 1, 0, 0, 3, 0), Some((0, 0x89)));
+        assert_eq!(chord(0, MAJOR_BITS, 7, -1, 0x91, 3, 0), Some((10, 0x91)));
+        assert_eq!(chord(5, MAJOR_BITS, 7, -1, 0x91, 3, 0), Some((3, 0x91)));
+    }
+
+    fn intervals(mask: i32) -> Vec<i32> {
+        (0..32).filter(|interval| mask & (1 << interval) != 0).collect()
+    }
+
+    #[test]
+    fn stacks_sevenths_and_ninths_and_inverts() {
+        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 4, 0).map(|(root, mask)| (root, intervals(mask))), Some((0, vec![0, 4, 7, 11])));
+        assert_eq!(chord(0, MAJOR_BITS, 5, 0, 0, 5, 0).map(|(root, mask)| (root, intervals(mask))), Some((7, vec![0, 4, 7, 10, 14])));
+        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 3, 1).map(|(_, mask)| intervals(mask)), Some(vec![4, 7, 12]));
+        assert_eq!(chord(0, MAJOR_BITS, 5, 0, 0, 4, 3).map(|(_, mask)| intervals(mask)), Some(vec![10, 12, 16, 19]));
+        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 3, 9).map(|(_, mask)| intervals(mask)), Some(vec![7, 12, 16]), "capped by the note count");
+        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 9, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 4, 7, 11, 14]), "notes capped at 5");
     }
 
     #[test]
     fn no_chord_without_seven_notes_or_valid_degree() {
-        assert_eq!(chord(0, PENTATONIC_MAJOR, 1, 0, 0), None);
-        assert_eq!(chord(0, MAJOR_BITS, 0, 0, 0), None);
-        assert_eq!(chord(0, MAJOR_BITS, 8, 0, 0), None);
+        assert_eq!(chord(0, PENTATONIC_MAJOR, 1, 0, 0, 3, 0), None);
+        assert_eq!(chord(0, MAJOR_BITS, 0, 0, 0, 3, 0), None);
+        assert_eq!(chord(0, MAJOR_BITS, 8, 0, 0, 3, 0), None);
     }
 }

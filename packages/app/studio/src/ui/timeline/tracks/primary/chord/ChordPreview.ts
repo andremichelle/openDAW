@@ -1,21 +1,24 @@
 import {Harmony} from "@opendaw/lib-dsp"
 import {Devices, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
+import {Terminable} from "@opendaw/lib-std"
 
 export namespace ChordPreview {
     const BasePitch = 48
     const DurationMs = 600
 
-    export const play = (project: Project, chord: Harmony.Chord): void => {
+    export const start = (project: Project, chord: Harmony.Chord): Terminable => {
         const host = project.userEditingManager.audioUnit.get()
             .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost))
-        if (host.isEmpty()) {return}
+        if (host.isEmpty()) {return Terminable.Empty}
         const uuid = host.unwrap().audioUnitBoxAdapter().box.address.uuid
-        const pitches: Array<number> = []
-        for (let interval = 0; interval < 12; interval++) {
-            if ((chord.bits & (1 << interval)) !== 0) {pitches.push(BasePitch + chord.root + interval)}
-        }
+        const pitches = chord.voicing.map(interval => BasePitch + chord.root + interval)
         pitches.forEach(pitch => project.engine.noteSignal(NoteSignal.on(uuid, pitch, 0.8)))
-        setTimeout(() => pitches.forEach(pitch => project.engine.noteSignal(NoteSignal.off(uuid, pitch))), DurationMs)
+        return Terminable.create(() => pitches.forEach(pitch => project.engine.noteSignal(NoteSignal.off(uuid, pitch))))
+    }
+
+    export const play = (project: Project, chord: Harmony.Chord): void => {
+        const playing = start(project, chord)
+        setTimeout(() => playing.terminate(), DurationMs)
     }
 }

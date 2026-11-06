@@ -42,12 +42,16 @@ export class ChordEventBoxAdapter implements BoxAdapter, Event {
     get degree(): int {return this.#box.degree.getValue()}
     get shift(): int {return this.#box.shift.getValue()}
     get shape(): int {return this.#box.shape.getValue()}
+    get notes(): int {return this.#box.notes.getValue()}
+    get inversion(): int {return this.#box.inversion.getValue()}
     get trackAdapter(): Option<ChordTrackAdapter> {
         return this.#box.track.targetVertex
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, TimelineBoxAdapter).chordTrack)
     }
 
-    resolve(key: Harmony.Key): Option<Harmony.Chord> {return Harmony.chord(key, this.degree, this.shift, this.shape)}
+    resolve(key: Harmony.Key): Option<Harmony.Chord> {
+        return Harmony.chord(key, this.degree, this.shift, this.shape, this.notes, this.inversion)
+    }
 
     terminate() {this.#terminator.terminate()}
     toString(): string {return `{ChordEventBoxAdapter ${UUID.toString(this.#box.address.uuid).substring(0, 4)}, degree: ${this.degree}}`}

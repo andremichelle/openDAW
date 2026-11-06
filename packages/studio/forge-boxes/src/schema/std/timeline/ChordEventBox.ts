@@ -12,7 +12,9 @@ export const ChordEventBox: BoxSchema<Pointers> = {
             3: {type: "int32", name: "duration", ...PPQNDurationConstraints},
             4: {type: "int32", name: "degree", value: 1, constraints: {min: 1, max: 7}, unit: ""},
             5: {type: "int32", name: "shift", value: 0, constraints: {min: -1, max: 1}, unit: "st"},
-            6: {type: "int32", name: "shape", value: 0, constraints: {min: 0, max: 4095}, unit: ""}
+            6: {type: "int32", name: "shape", value: 0, constraints: {min: 0, max: 4095}, unit: ""},
+            7: {type: "int32", name: "notes", value: 3, constraints: {min: 3, max: 5}, unit: ""},
+            8: {type: "int32", name: "inversion", value: 0, constraints: {min: 0, max: 4}, unit: ""}
         }
     }, pointerRules: {accepts: [Pointers.Selection], mandatory: false}
 }

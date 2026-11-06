@@ -1,5 +1,5 @@
 import {Pointers} from "@opendaw/studio-enums"
-import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Nullable, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Harmony, MidiKeys} from "@opendaw/lib-dsp"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {ScaleMatrixDeviceBox} from "@opendaw/studio-boxes"
@@ -10,6 +10,10 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class ScaleMatrixDeviceBoxAdapter implements MidiEffectDeviceAdapter {
+    static readonly CustomScale: int = MidiKeys.StockScales.length
+    static readonly Mute: int = 12
+    static readonly ScaleNames: ReadonlyArray<string> = [...MidiKeys.StockScales.map(scale => scale.name), "Custom"]
+
     readonly type = "midi-effect"
     readonly accepts = "midi"
     readonly manualUrl = DeviceManualUrls.ScaleMatrix
@@ -36,7 +40,14 @@ export class ScaleMatrixDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     get host(): PointerField<Pointers.MIDIEffectHost> {return this.#box.host}
     get key(): Harmony.Key {
         const {root, scale} = this.namedParameter
-        return {root: root.getValue(), bits: MidiKeys.StockScales[scale.getValue()].bits}
+        return {root: root.getValue(), bits: MidiKeys.StockScales.at(scale.getValue())?.bits ?? 0xFFF}
+    }
+    get isCustom(): boolean {return this.namedParameter.scale.getValue() === ScaleMatrixDeviceBoxAdapter.CustomScale}
+
+    outputClass(input: int, key: Harmony.Key): Nullable<int> {
+        if (!this.isCustom) {return ((Harmony.quantise(60 + input, key) - 60) % 12 + 12) % 12}
+        const offset = this.#box.custom.getField(((input - key.root) % 12 + 12) % 12).getValue()
+        return offset === ScaleMatrixDeviceBoxAdapter.Mute ? null : ((input + offset) % 12 + 12) % 12
     }
 
     deviceHost(): DeviceHost {
@@ -56,8 +67,8 @@ export class ScaleMatrixDeviceBoxAdapter implements MidiEffectDeviceAdapter {
                 StringMapping.indices("", MidiKeys.Names.English), "Root"),
             scale: this.#parametric.createParameter(
                 box.scale,
-                ValueMapping.linearInteger(0, MidiKeys.StockScales.length - 1),
-                StringMapping.indices("", MidiKeys.StockScales.map(scale => scale.name)), "Scale"),
+                ValueMapping.linearInteger(0, ScaleMatrixDeviceBoxAdapter.CustomScale),
+                StringMapping.indices("", ScaleMatrixDeviceBoxAdapter.ScaleNames), "Scale"),
             follow: this.#parametric.createParameter(
                 box.follow,
                 ValueMapping.bool,

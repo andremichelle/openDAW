@@ -27,7 +27,9 @@ const KEY_SCALE: u16 = 4; // KeyEventBox.scale (Int32, 12-bit mask)
 const CHORD_DURATION: u16 = 3; // ChordEventBox.duration (Int32, ppqn)
 const CHORD_DEGREE: u16 = 4; // ChordEventBox.degree (Int32, 1..7)
 const CHORD_SHIFT: u16 = 5; // ChordEventBox.shift (Int32, -1..1)
-const CHORD_SHAPE: u16 = 6; // ChordEventBox.shape (Int32, 12-bit mask, 0 = triad from the scale)
+const CHORD_SHAPE: u16 = 6; // ChordEventBox.shape (Int32, 12-bit mask, 0 = stacked from the scale)
+const CHORD_NOTES: u16 = 7; // ChordEventBox.notes (Int32, 3..5)
+const CHORD_INVERSION: u16 = 8; // ChordEventBox.inversion (Int32, 0..4)
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct KeyEvent {
@@ -42,7 +44,9 @@ pub struct ChordEvent {
     pub duration: f64,
     pub degree: i32,
     pub shift: i32,
-    pub shape: i32
+    pub shape: i32,
+    pub notes: i32,
+    pub inversion: i32
 }
 
 pub use abi::Harmony;
@@ -99,7 +103,7 @@ impl State {
                 let event = self.chords[index - 1];
                 if position < event.position + event.duration {
                     let chord_key = self.key_at(event.position);
-                    math::harmony::chord(chord_key.root, chord_key.bits, event.degree, event.shift, event.shape)
+                    math::harmony::chord(chord_key.root, chord_key.bits, event.degree, event.shift, event.shape, event.notes, event.inversion)
                 } else {
                     None
                 }
@@ -203,7 +207,9 @@ fn upsert(state: &Rc<RefCell<State>>, graph: &BoxGraph, kind: Kind, uuid: Uuid) 
                 duration: field(CHORD_DURATION).unwrap_or(0) as f64,
                 degree: field(CHORD_DEGREE).unwrap_or(1),
                 shift: field(CHORD_SHIFT).unwrap_or(0),
-                shape: field(CHORD_SHAPE).unwrap_or(0)
+                shape: field(CHORD_SHAPE).unwrap_or(0),
+                notes: field(CHORD_NOTES).unwrap_or(3),
+                inversion: field(CHORD_INVERSION).unwrap_or(0)
             });
         }
     }
@@ -285,7 +291,9 @@ mod tests {
             (CHORD_DURATION, FieldValue::Int32(duration)),
             (CHORD_DEGREE, FieldValue::Int32(degree)),
             (CHORD_SHIFT, FieldValue::Int32(0)),
-            (CHORD_SHAPE, FieldValue::Int32(0))
+            (CHORD_SHAPE, FieldValue::Int32(0)),
+            (CHORD_NOTES, FieldValue::Int32(3)),
+            (CHORD_INVERSION, FieldValue::Int32(0))
         ])
     }
 
@@ -352,6 +360,10 @@ mod tests {
         assert_eq!(harmony.harmony_at(0.0).chord, Some((0, MAJOR_TRIAD)));
         primitive(&mut graph, CHORD_A, vec![CHORD_DEGREE], FieldValue::Int32(1), FieldValue::Int32(6));
         assert_eq!(harmony.harmony_at(0.0).chord, Some((9, MINOR_TRIAD)), "degree 6 of C major is Am");
+        primitive(&mut graph, CHORD_A, vec![CHORD_NOTES], FieldValue::Int32(3), FieldValue::Int32(4));
+        primitive(&mut graph, CHORD_A, vec![CHORD_INVERSION], FieldValue::Int32(0), FieldValue::Int32(1));
+        assert_eq!(harmony.harmony_at(0.0).chord, Some((9, (1 << 3) | (1 << 7) | (1 << 10) | (1 << 12))),
+            "Am7 in 1st inversion: C E G A");
         primitive(&mut graph, TIMELINE, vec![TIMELINE_CHORD_TRACK, TRACK_ENABLED], FieldValue::Boolean(true), FieldValue::Boolean(false));
         assert_eq!(harmony.harmony_at(0.0).chord, None, "a disabled chord track yields no chord");
         primitive(&mut graph, TIMELINE, vec![TIMELINE_CHORD_TRACK, TRACK_ENABLED], FieldValue::Boolean(false), FieldValue::Boolean(true));

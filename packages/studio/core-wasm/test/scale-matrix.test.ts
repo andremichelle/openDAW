@@ -24,7 +24,7 @@ const INSTRUMENT = `class Processor {
 
 type Note = { pitch: number, position?: number, duration?: number }
 type KeyEvent = { position: number, root: number, bits: number }
-type Settings = { root?: number, scale?: number, follow?: boolean, keys?: ReadonlyArray<KeyEvent>, storage?: Harmony.Key }
+type Settings = { root?: number, scale?: number, follow?: boolean, keys?: ReadonlyArray<KeyEvent>, storage?: Harmony.Key, custom?: ReadonlyArray<number> }
 
 const HELD = 200_000
 
@@ -46,6 +46,7 @@ const createScene = async (notes: ReadonlyArray<Note>, settings: Settings) => {
         box.root.setValue(settings.root ?? 0)
         box.scale.setValue(settings.scale ?? 0)
         box.follow.setValue(settings.follow ?? false)
+        settings.custom?.forEach((offset, index) => box.custom.getField(index).setValue(offset))
     })
     if (isDefined(settings.storage)) {
         timelineBox.keyTrack.root.setValue(settings.storage.root)
@@ -170,6 +171,14 @@ describe("Scale Matrix", () => {
         expect(scene.level(20)).toBeCloseTo(0.060, 6)
         expect(scene.level(800)).toBe(0)
         scene.close()
+    }, 60000)
+    it("plays a custom pattern relative to the root and mutes", async () => {
+        const custom = [0, -1, 0, 5, 12, 0, 0, 0, 0, 0, 0, 0]
+        const scale = MidiKeys.StockScales.length
+        expect(await levelOf(63, {root: 2, scale, custom})).toBeCloseTo(0.062, 6)
+        expect(await levelOf(65, {root: 2, scale, custom})).toBeCloseTo(0.070, 6)
+        expect(await levelOf(66, {root: 2, scale, custom})).toBe(0)
+        expect(await levelOf(64, {root: 0, scale, custom})).toBe(0)
     }, 60000)
     it("disabling ends the notes it passed", async () => {
         const scene = await createScene([{pitch: 60}, {pitch: 61}], {})

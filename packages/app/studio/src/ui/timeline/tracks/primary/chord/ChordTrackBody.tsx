@@ -1,5 +1,5 @@
 import css from "./ChordTrackBody.sass?inline"
-import {isDefined, Lifecycle, Nullable, Option, UUID} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {ElementCapturing} from "@opendaw/studio-core"
@@ -29,6 +29,22 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
     const {requestUpdate} = lifecycle.own(ChordRenderer.createTrackRenderer(canvas, range, chordTrack, () => selected))
     const preview = (adapter: ChordEventBoxAdapter) => chordTrack.resolve(adapter)
         .ifSome(chord => ChordPreview.play(project, chord))
+    const hold = (adapter: ChordEventBoxAdapter) => chordTrack.resolve(adapter)
+        .mapOr(chord => ChordPreview.start(project, chord), Terminable.Empty)
+    const resolveOverlaps = (adapter: ChordEventBoxAdapter) => {
+        const {position, complete} = adapter
+        events.asArray().filter(other => other !== adapter && other.position < complete && other.complete > position)
+            .forEach(other => {
+                if (other.position >= position && other.complete <= complete) {
+                    other.box.delete()
+                } else if (other.position < position) {
+                    other.box.duration.setValue(position - other.position)
+                } else {
+                    other.box.duration.setValue(other.complete - complete)
+                    other.box.position.setValue(complete)
+                }
+            })
+    }
     const select = (adapter: Nullable<ChordEventBoxAdapter>) => {
         selected = adapter
         requestUpdate()
@@ -37,8 +53,17 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
         capture: (localX: number, _localY: number): Nullable<ChordEventBoxAdapter> =>
             chordTrack.eventAt(range.xToUnit(localX))
     })
+    const resizeTarget = (localX: number): Nullable<ChordEventBoxAdapter> => {
+        const event = chordTrack.eventAt(range.xToUnit(localX - ResizeHandleWidth))
+        return isDefined(event) && Math.abs(range.unitToX(event.complete) - localX) <= ResizeHandleWidth ? event : null
+    }
     let lastTimeDown = 0
     lifecycle.ownAll(
+        Events.subscribe(canvas, "pointermove", (event: PointerEvent) => {
+            if (event.buttons !== 0) {return}
+            const localX = event.clientX - canvas.getBoundingClientRect().left
+            canvas.style.cursor = isDefined(resizeTarget(localX)) ? "ew-resize" : ""
+        }),
         range.subscribe(requestUpdate),
         chordTrack.subscribe(() => {
             if (isDefined(selected) && !events.contains(selected)) {selected = null}
@@ -65,7 +90,8 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
             const doubleClick = now - lastTimeDown < Events.DOUBLE_DOWN_THRESHOLD
             lastTimeDown = now
             const localX = startEvent.clientX - canvas.getBoundingClientRect().left
-            const adapter = capturing.captureEvent(startEvent)
+            const resizeAdapter = resizeTarget(localX)
+            const adapter = resizeAdapter ?? capturing.captureEvent(startEvent)
             if (!isDefined(adapter)) {
                 select(null)
                 if (doubleClick) {
@@ -88,11 +114,11 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
                 return Option.None
             }
             select(adapter)
-            preview(adapter)
+            const playing = hold(adapter)
             const pointerPulse = range.xToUnit(localX)
             const oldPosition = adapter.position
             const oldDuration = adapter.duration
-            const resizing = range.unitToX(adapter.complete) - localX < ResizeHandleWidth
+            const resizing = adapter === resizeAdapter
             return Option.wrap({
                 update: (event: Dragging.Event) => {
                     const x = event.clientX - canvas.getBoundingClientRect().left
@@ -111,7 +137,11 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
                     adapter.box.position.setValue(oldPosition)
                     adapter.box.duration.setValue(oldDuration)
                 }),
-                approve: () => editing.mark()
+                approve: () => {
+                    editing.modify(() => resolveOverlaps(adapter), false)
+                    editing.mark()
+                },
+                finally: () => playing.terminate()
             } satisfies Dragging.Process)
         })
     )
