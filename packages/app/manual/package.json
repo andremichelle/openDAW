@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/manual",
   "private": true,
-  "version": "0.0.11",
+  "version": "0.0.12",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -16,10 +16,10 @@
     "@opendaw/lib-jsx": "^0.0.98",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
-    "@opendaw/studio-enums": "^0.1.11",
-    "@opendaw/studio-icons": "^0.0.10",
-    "@opendaw/studio-markdown": "^0.0.10",
-    "@opendaw/studio-scrollbars": "^0.0.8"
+    "@opendaw/studio-enums": "^0.1.12",
+    "@opendaw/studio-icons": "^0.0.11",
+    "@opendaw/studio-markdown": "^0.0.11",
+    "@opendaw/studio-scrollbars": "^0.0.9"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
