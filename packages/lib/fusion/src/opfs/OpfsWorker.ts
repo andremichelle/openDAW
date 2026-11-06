@@ -1,4 +1,4 @@
-import {Arrays, asDefined, EmptyProcedure, isNotUndefined, panic, Procedure} from "@opendaw/lib-std"
+import {Arrays, asDefined, EmptyProcedure, isNotUndefined, panic, Procedure, tryCatch} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {OpfsProtocol} from "./OpfsProtocol"
 
@@ -69,12 +69,11 @@ export namespace OpfsWorker {
                 await this.#acquireLock("delete", path, async step => {
                     const segments = pathToSegments(path)
                     if (segments.length === 0) {return this.clear()}
-                    const {status} = await Promises.tryCatch(this.#resolveFolder(segments.slice(0, -1), step)
+                    await Promises.tryCatch(this.#resolveFolder(segments.slice(0, -1), step)
                         .then(folder => {
                             step("remove entry")
-                            return folder.removeEntry(asDefined(segments.at(-1)), {recursive: true})
+                            return removeChild(folder, asDefined(segments.at(-1)))
                         }))
-                    if (status === "rejected") {return}
                 })
             }
 
@@ -96,12 +95,8 @@ export namespace OpfsWorker {
 
             async clear(): Promise<void> {
                 const root = await getOpfsRoot()
-                for await (const [name, handle] of root.entries()) {
-                    if (handle.kind === "file") {
-                        await root.removeEntry(name)
-                    } else if (handle.kind === "directory") {
-                        await root.removeEntry(name, {recursive: true})
-                    }
+                for (const handle of await listHandles(root)) {
+                    await removeHandle(root, handle)
                 }
             }
 
@@ -175,6 +170,47 @@ export namespace OpfsWorker {
             throw new Error(`Storage not available (${reason})`)
         }
         return result.value
+    }
+
+    const listHandles = async (folder: FileSystemDirectoryHandle): Promise<ReadonlyArray<FileSystemHandle>> => {
+        const handles: Array<FileSystemHandle> = []
+        for await (const handle of folder.values()) {handles.push(handle)}
+        return handles
+    }
+
+    // Chrome subtracts a removed file's size from usage it never added for sync-handle writes (#527)
+    const emptyFile = async (handle: FileSystemFileHandle): Promise<void> => {
+        const opened = await Promises.tryCatch(handle.createSyncAccessHandle())
+        if (opened.status === "rejected") {
+            console.warn(`[OPFS] could not open '${handle.name}' to empty it before removal`, opened.error)
+            return
+        }
+        const access = opened.value
+        const result = tryCatch(() => {
+            access.truncate(0)
+            access.flush()
+        })
+        access.close()
+        if (result.status === "failure") {console.warn(`[OPFS] could not empty '${handle.name}' before removal`, result.error)}
+    }
+
+    const removeHandle = async (folder: FileSystemDirectoryHandle, handle: FileSystemHandle): Promise<void> => {
+        if (handle.kind === "file") {
+            await emptyFile(handle as FileSystemFileHandle)
+            return folder.removeEntry(handle.name)
+        }
+        const directory = handle as FileSystemDirectoryHandle
+        for (const child of await listHandles(directory)) {
+            await Promises.tryCatch(removeHandle(directory, child))
+        }
+        return folder.removeEntry(handle.name, {recursive: true})
+    }
+
+    const removeChild = async (folder: FileSystemDirectoryHandle, name: string): Promise<void> => {
+        const file = await Promises.tryCatch(folder.getFileHandle(name))
+        if (file.status === "resolved") {return removeHandle(folder, file.value)}
+        if (!(file.error instanceof DOMException && file.error.name === "TypeMismatchError")) {throw file.error}
+        return removeHandle(folder, await folder.getDirectoryHandle(name))
     }
 
     const pathToSegments = (path: string): ReadonlyArray<string> => {
