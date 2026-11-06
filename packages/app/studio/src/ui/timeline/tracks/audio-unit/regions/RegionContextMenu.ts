@@ -62,7 +62,7 @@ export const installRegionContextMenu =
     ({element, service, capturing, selection, timelineBox, range}: Construct): Terminable => {
         const {project} = service
         const {editing, selection: vertexSelection} = project
-        return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
+        return ContextMenu.subscribe(element, ({addItems, closeWhen, client}: ContextMenu.Collector) => {
             const target = capturing.captureEvent(client)
             if (target === null || target.type === "track") {return}
             if (!selection.isSelected(target.region)) {
@@ -70,6 +70,7 @@ export const installRegionContextMenu =
                 selection.select(target.region)
             }
             const region = target.region
+            closeWhen(close => region.box.subscribeDeletion(close))
             addItems(
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()

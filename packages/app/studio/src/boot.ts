@@ -147,7 +147,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
         config: (surface: Surface) => surface.ownAll(
-            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}) => {
+            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}, watch) => {
                 Html.unfocus(surface.owner)
                 const offset = 2
                 const x: number = clientX - offset
@@ -155,6 +155,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
                 const menu = Menu.create(menuItem)
                 menu.moveTo(x, y)
                 menu.attach(target instanceof Element ? Layers.get(target).flyout : surface.flyout)
+                menu.own(watch(() => menu.terminate()))
                 if (target instanceof Element) {
                     menu.own(AnimationFrame.add(() => {if (!target.isConnected) {menu.terminate()}}))
                 }

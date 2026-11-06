@@ -32,6 +32,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                 selection.deselectAll()
                 selection.select(clip)
             }
+            collector.closeWhen(close => clip.box.subscribeDeletion(close))
             const modify = <T extends AnyClipBoxAdapter>(procedure: Procedure<T>) =>
                 editing.modify(() => selection.selected().forEach(adapter => procedure(adapter as T)))
             collector.addItems(
