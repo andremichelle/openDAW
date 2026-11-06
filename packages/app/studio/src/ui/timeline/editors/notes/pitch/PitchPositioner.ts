@@ -16,7 +16,7 @@ export class PitchPositioner implements Terminable {
         this.#totalHeight = this.#noteHeight * this.#numNotes
         this.#scrollModel = this.#terminator.own(new ScrollModel())
         this.#scrollModel.contentSize = this.totalHeight
-        this.#terminator.own(this.#scrollModel.subscribe(() => this.position = this.#scrollModel.position))
+        this.#terminator.own(this.#scrollModel.subscribe(() => this.#notifier.notify(this)))
         this.#valueAxis = {
             axisToValue: (y: number) => clamp((this.#totalHeight - y -
                 Math.round(this.#scrollModel.position)) / this.#noteHeight, 0, this.#numNotes) - 1.0,

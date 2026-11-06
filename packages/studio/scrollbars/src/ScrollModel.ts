@@ -14,7 +14,7 @@ export class ScrollModel implements Terminable {
 
     moveTo(value: number): void {
         const range = this.#trackSize - this.thumbSize
-        if (!this.scrollable() || range <= 0.0) {return}
+        if (!this.scrollable() || !(range > 0.0)) {return}
         this.normalized = value / range
     }
 
@@ -59,7 +59,7 @@ export class ScrollModel implements Terminable {
 
     // the normalized thumb position
     set normalized(value: number) {
-        if (!Number.isFinite(value)) {return}
+        if (Number.isNaN(value)) {return}
         const clamped = !this.scrollable() ? 0.0 : clamp(value, 0.0, 1.0)
         if (this.#normalized === clamped) {return}
         this.#normalized = clamped
