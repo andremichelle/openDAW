@@ -53,7 +53,7 @@ import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine, RecordingStart, RecordingStop} from "./Engine"
-import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
+import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, SampleLoadEvent} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
@@ -244,14 +244,20 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 ready: (): void => resolve(),
                 fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
+                    const record = (event: SampleLoadEvent): void => variant.recordSampleLoad?.(event)
+                    record({type: "requested", uuid})
                     return new Promise((resolve, reject) => {
                         const handler = project.sampleManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {
                             if (state.type === "error") {
+                                record({type: "failed", uuid})
                                 reject(new Error(state.reason))
                                 subscription.terminate()
                             } else if (state.type === "loaded") {
-                                resolve(handler.data.unwrap("handler.data"))
+                                const data = handler.data.unwrap("handler.data")
+                                const {numberOfFrames, numberOfChannels, sampleRate} = data
+                                record({type: "delivered", uuid, numberOfFrames, numberOfChannels, sampleRate})
+                                resolve(data)
                                 subscription.terminate()
                             }
                         })

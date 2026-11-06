@@ -132,6 +132,7 @@ export class StudioService implements ProjectEnv {
     readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
+    readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
 
@@ -502,6 +503,7 @@ export class StudioService implements ProjectEnv {
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {
                     unload: async (event: unknown) => {
+                        if (event instanceof Event) {this.engineErrors.notify(event)}
                         screen = this.layout.screen.getValue()
                         // we need to restart the screen to subscribe to new broadcaster instances
                         this.switchScreen(null)

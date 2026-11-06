@@ -145,6 +145,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         new BufferUnderrunDetector(context.playbackStats, service.engine)
     }
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
+    service.engineErrors.subscribe(event => errorHandler.reportEngineError(event, WasmEngine.recentUpdates()))
     const surface = Surface.main({
         config: (surface: Surface) => surface.ownAll(
             ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}, watch) => {

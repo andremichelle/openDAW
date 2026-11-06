@@ -302,7 +302,15 @@ export class ErrorHandler {
         return true
     }
 
-    #report(scope: string, error: ErrorInfo): void {
+    // An engine trap restarts the worklet behind its own dialog, so it is reported without the fatal path.
+    reportEngineError(event: Event, recentUpdates: ReadonlyArray<string>): void {
+        const error = ErrorInfo.extract(event)
+        if (error.message === "Restart requested") {return}
+        const time = Date.now()
+        this.#report("audio-engine", error, recentUpdates.map(update => ({time, level: "info", args: [`engine update ${update}`]})))
+    }
+
+    #report(scope: string, error: ErrorInfo, extraLogs: ReadonlyArray<LogBuffer.Entry> = []): void {
         console.error(scope, error.name, error.message, error.stack)
         if (!import.meta.env.PROD) {return}
         const maxStackSize = 2000
@@ -312,7 +320,7 @@ export class ErrorHandler {
             build: this.#buildInfo,
             scripts: document.scripts.length,
             error: {...error, stack: error.stack?.slice(0, maxStackSize)},
-            logs: LogBuffer.get()
+            logs: [...LogBuffer.get(), ...extraLogs]
         } satisfies ErrorLog)
         fetch("https://logs.opendaw.studio/log.php", {
             method: "POST",
