@@ -47,6 +47,8 @@ import {
     RandomModulatorBox,
     ModulationBox,
     MarkerBox,
+    KeyEventBox,
+    ChordEventBox,
     NeonDeviceBox,
     TubularDeviceBox,
     MaximizerDeviceBox,
@@ -71,6 +73,7 @@ import {
     NoteEventCollectionBox,
     NoteRegionBox,
     NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
@@ -117,6 +120,8 @@ import {AudioFileBoxAdapter} from "./audio/AudioFileBoxAdapter"
 import {AudioRegionBoxAdapter} from "./timeline/region/AudioRegionBoxAdapter"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 import {MarkerBoxAdapter} from "./timeline/MarkerBoxAdapter"
+import {KeyEventBoxAdapter} from "./timeline/KeyEventBoxAdapter"
+import {ChordEventBoxAdapter} from "./timeline/ChordEventBoxAdapter"
 import {ModularAdapter} from "./modular/modular"
 import {ModuleDelayAdapter} from "./modular/modules/delay"
 import {ModuleMultiplierAdapter} from "./modular/modules/multiplier"
@@ -144,6 +149,7 @@ import {VaporisateurDeviceBoxAdapter} from "./devices/instruments/VaporisateurDe
 import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBoxAdapter"
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
 import {NoteFilterDeviceBoxAdapter} from "./devices/midi-effects/NoteFilterDeviceBoxAdapter"
+import {ScaleMatrixDeviceBoxAdapter} from "./devices/midi-effects/ScaleMatrixDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
@@ -298,6 +304,8 @@ export class BoxAdapters implements Terminable {
             visitRandomModulatorBox: (box: RandomModulatorBox) => new RandomModulatorBoxAdapter(this.#context, box),
             visitModulationBox: (box: ModulationBox) => new ModulationBoxAdapter(this.#context, box),
             visitMarkerBox: (box: MarkerBox) => new MarkerBoxAdapter(this.#context, box),
+            visitKeyEventBox: (box: KeyEventBox) => new KeyEventBoxAdapter(this.#context, box),
+            visitChordEventBox: (box: ChordEventBox) => new ChordEventBoxAdapter(this.#context, box),
             visitSignatureEventBox: (box: SignatureEventBox) => new SignatureEventBoxAdapter(this.#context, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => new MIDIOutputDeviceBoxAdapter(this.#context, box),
             visitModularAudioInputBox: (box: ModularAudioInputBox) => new ModularAudioInputAdapter(this.#context, box),
@@ -322,6 +330,7 @@ export class BoxAdapters implements Terminable {
             visitNoteRegionBox: (box: NoteRegionBox) => new NoteRegionBoxAdapter(this.#context, box),
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
             visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => new NoteFilterDeviceBoxAdapter(this.#context, box),
+            visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => new ScaleMatrixDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
             visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),

@@ -291,7 +291,8 @@ export const PitchEditor = ({
             editing,
             events: reader.content.events,
             stepRecording,
-            api: project.api
+            api: project.api,
+            keyAt: position => reader.timelineBoxAdapter.keyTrack.keyAt(position + reader.offset)
         }),
         positioner.subscribe(renderer.requestUpdate),
         range.subscribe(renderer.requestUpdate),

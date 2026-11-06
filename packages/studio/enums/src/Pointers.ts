@@ -70,4 +70,6 @@ export enum Pointers {
     MasteringHost,
     GrooveCollection,
     GrooveStackEntries,
+    KeyTrack,
+    ChordTrack,
 }

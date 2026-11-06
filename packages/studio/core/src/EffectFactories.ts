@@ -21,6 +21,7 @@ import {
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -79,6 +80,24 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index) =>
             NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Note Filter")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const ScaleMatrix: EffectFactory = {
+        defaultName: "Scale Matrix",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Scale Quantiser",
+        description: "Moves every note onto the nearest key of a scale",
+        manualPage: DeviceManualUrls.ScaleMatrix,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "ScaleMatrixDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Scale Matrix")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -659,6 +678,7 @@ export namespace EffectFactories {
         Arpeggio,
         NoteFilter,
         Pitch,
+        ScaleMatrix,
         Spielwerk,
         Velocity,
         WclapMidi,       // WebCLAP

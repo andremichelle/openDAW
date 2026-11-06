@@ -13,7 +13,7 @@ import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, 
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
-    NoteFilterDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
+    NoteFilterDeviceBox, ScaleMatrixDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
     ApparatDeviceBox, CubedDeviceBox, KorpusDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
     LfoModulatorBox, MacroModulatorBox, RandomModulatorBox, StepsModulatorBox
@@ -22,7 +22,7 @@ import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
     ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
-    NoteFilterDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
+    NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter, LfoModulatorBoxAdapter, MacroModulatorBoxAdapter, RandomModulatorBoxAdapter,
@@ -125,6 +125,7 @@ const buildBoxes = () => {
     const pitch = PitchDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(1)})
     const velocity = VelocityDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(2)})
     const noteFilter = NoteFilterDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(3)})
+    const scaleMatrix = ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(5)})
     const vaporisateurUnit = createUnit(2)
     const nanoUnit = createUnit(3)
     const playfieldUnit = createUnit(4)
@@ -163,7 +164,7 @@ const buildBoxes = () => {
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
     return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, velocity, vaporisateur, neon, tubular, nano, playfieldSample,
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, velocity, vaporisateur, neon, tubular, nano, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
@@ -265,6 +266,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new NeuralAmpDeviceBoxAdapter(context, boxes.neuralAmp), tsOnly: []},
     {name: "note-filter", file: "device_note_filter.wasm",
         createAdapter: context => new NoteFilterDeviceBoxAdapter(context, boxes.noteFilter), tsOnly: []},
+    {name: "scale-matrix", file: "device_scale_matrix.wasm",
+        createAdapter: context => new ScaleMatrixDeviceBoxAdapter(context, boxes.scaleMatrix), tsOnly: []},
     {name: "pitch", file: "device_pitch.wasm",
         createAdapter: context => new PitchDeviceBoxAdapter(context, boxes.pitch), tsOnly: []},
     {name: "playfield-sample", file: "device_playfield_sample.wasm",

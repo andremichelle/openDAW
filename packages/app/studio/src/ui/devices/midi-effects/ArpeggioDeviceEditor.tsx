@@ -18,6 +18,7 @@ import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
+import {Checkbox} from "@/ui/components/Checkbox"
 import {StepGrid} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor/StepGrid"
 import {ArpeggioLanes} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor/ArpeggioLanes"
 
@@ -33,7 +34,7 @@ type Construct = {
 }
 
 export const ArpeggioDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {modeIndex, numOctaves, rate, gate, repeat, velocity, order, hold, retrigger, offset} = adapter.namedParameter
+    const {modeIndex, numOctaves, rate, gate, repeat, velocity, order, hold, retrigger, offset, followChords} = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning} = project
     const {box} = adapter
@@ -127,6 +128,16 @@ export const ArpeggioDeviceEditor = ({lifecycle, service, adapter, deviceHost}: 
                         appearance={{framed: true, color: Colors.orange, tooltip: "Reseed"}}>
                     <Icon symbol={IconSymbol.Random}/>
                 </Button>
+            </div>
+            <div className="field">
+                <label>Chords</label>
+                {automated(followChords, (
+                    <Checkbox lifecycle={lifecycle}
+                              model={EditWrapper.forAutomatableParameter(editing, followChords)}
+                              appearance={{activeColor: Colors.orange, tooltip: "Follow the chord track"}}>
+                        <Icon symbol={IconSymbol.Checkbox}/>
+                    </Checkbox>
+                ))}
             </div>
         </div>
     )

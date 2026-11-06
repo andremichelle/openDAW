@@ -244,6 +244,8 @@ export interface ArpeggioEffect extends MIDIEffect {
     retrigger: int
     /** Steps the walk starts later (0 to 15, default 0) */
     offset: int
+    /** While playing, a chord on the project's chord track replaces the held notes (default false) */
+    followChords: boolean
     /** Seed of the random walks and the step chance (0 to 999999, default 0) */
     seed: int
     /** Number of steps the sequencer plays (1 to 64, default 16) */

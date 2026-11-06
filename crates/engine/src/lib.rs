@@ -407,6 +407,8 @@ use groove_registry::GrooveRegistry;
 use signature_track::{SignatureEvent, SignatureEvents, SignatureTrack};
 mod marker_track;
 use marker_track::MarkerTrack;
+mod harmony_track;
+use harmony_track::{HarmonyEvents, HarmonyTrack};
 mod plugin_instrument;
 mod plugin_audio_effect;
 mod plugin_midi_effect;
@@ -641,6 +643,10 @@ shared_static! {
 // The signature track for `host_bar_at`, its OWN cell like `BASE_FREQUENCY`. 4/4 before bind.
 shared_static! {
     static SIGNATURES: Option<SignatureEvents> = None;
+}
+// The key and chord tracks for `host_harmony_at`, its OWN cell like `SIGNATURES`. C major before bind.
+shared_static! {
+    static HARMONY: Option<HarmonyEvents> = None;
 }
 // The project's grooves for `host_groove_warp` / `host_groove_unwarp`, its OWN cell like `SIGNATURES`.
 shared_static! {
@@ -1259,6 +1265,18 @@ pub extern "C" fn host_loop_area(out_ptr: u32) -> u32 {
     1
 }
 
+/// Host import a device calls for the harmony at `pulse`: writes key root, key scale mask, chord root
+/// (-1 without a chord) and chord mask (4 x i32).
+#[no_mangle]
+pub extern "C" fn host_harmony_at(pulse: f64, out_ptr: u32) {
+    let harmony = match unsafe { HARMONY.get() }.as_ref() {
+        Some(events) => events.harmony_at(pulse),
+        None => harmony_track::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: None}
+    };
+    let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
+    unsafe { *(out_ptr as usize as *mut [i32; 4]) = [harmony.root, harmony.bits, chord_root, chord_bits]; }
+}
+
 /// Host import a device calls for the bar holding `pulse`: writes its start, length and beat length (3 x f64).
 #[no_mangle]
 pub extern "C" fn host_bar_at(pulse: f64, out_ptr: u32) {
@@ -1564,6 +1582,8 @@ struct Engine {
     // The MARKER TRACK (TS `MarkerTrackAdapter`): the position-sorted markers the transport's block
     // loop follows (a section repeats `plays` times before falling through).
     marker_track: Option<MarkerTrack>,
+    // The KEY and CHORD TRACKS (TS `KeyTrackAdapter` / `ChordTrackAdapter`), read by devices via `host_harmony_at`.
+    harmony: Option<HarmonyTrack>,
     // Queued marker-state notifications for `marker_changes_take` (uuid + plays-so-far, or the null
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
@@ -1664,6 +1684,7 @@ impl Engine {
             tempo: None,
             signature: None,
             marker_track: None,
+            harmony: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
             transport_jumps: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM),
             transport_pause_sample: -1,
@@ -2413,6 +2434,9 @@ impl Engine {
         // marker track: TimelineBox.markerTrack (21) = {markers (1, hub), enabled (20)} — the sorted
         // markers the transport's block loop follows and the switchMarkerState notifications feed from.
         self.marker_track = Some(MarkerTrack::observe(&mut self.graph, uuid));
+        let harmony = HarmonyTrack::observe(&mut self.graph, uuid);
+        unsafe { *HARMONY.get() = Some(harmony.handle()); }
+        self.harmony = Some(harmony);
         // Populate the tempo map BEFORE reconcile reads region spans: a seconds-based audio region's duration /
         // loop-duration are converted tempo-aware at the region position, so the map must reflect the loaded
         // tempo (nominal bpm + automation curve) already at bind, not only from the first render.
@@ -3077,6 +3101,7 @@ pub extern "C" fn reset() {
         CHECKSUM.get().fill(0);
         *BASE_FREQUENCY.get() = 440.0; // back to the default until the next session's `bind` catches up
         *SIGNATURES.get() = None;
+        *HARMONY.get() = None;
         *GROOVES.get() = None;
         GROOVE_SLOTS.get().clear();
         GROOVE_FREE.get().clear();

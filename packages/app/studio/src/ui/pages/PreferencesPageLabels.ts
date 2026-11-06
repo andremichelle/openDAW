@@ -22,6 +22,8 @@ export namespace PreferencesPageLabels {
                 "markers": "Show markers track",
                 "tempo": "Show tempo track",
                 "signature": "Show signature track",
+                "key": "Show key track",
+                "chords": "Show chords track",
                 "clips": "Show clips",
                 "follow-cursor": "Follow cursor"
             }

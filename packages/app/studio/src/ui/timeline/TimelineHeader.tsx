@@ -22,7 +22,7 @@ type Construct = {
 }
 
 export const TimelineHeader = ({lifecycle, service}: Construct) => {
-    const {snapping, followCursor, primaryVisibility: {markers, tempo, signature}, clips} = service.timeline
+    const {snapping, followCursor, primaryVisibility: {markers, tempo, signature, key, chords}, clips} = service.timeline
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
@@ -74,7 +74,15 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                         label: "Signature",
                         checked: signature.getValue(),
                         shortcut: GlobalShortcuts["toggle-signature-track"].shortcut.format()
-                    }).setTriggerProcedure(() => signature.setValue(!signature.getValue()))
+                    }).setTriggerProcedure(() => signature.setValue(!signature.getValue())),
+                    MenuItem.default({
+                        label: "Key",
+                        checked: key.getValue()
+                    }).setTriggerProcedure(() => key.setValue(!key.getValue())),
+                    MenuItem.default({
+                        label: "Chords",
+                        checked: chords.getValue()
+                    }).setTriggerProcedure(() => chords.setValue(!chords.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
             </MenuButton>

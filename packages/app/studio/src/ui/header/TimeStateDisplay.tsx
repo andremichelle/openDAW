@@ -10,6 +10,7 @@ import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 import {TempoControl} from "@/ui/header/TempoControl"
 import {MeterControl} from "@/ui/header/MeterControl"
 import {ShuffleControl} from "@/ui/header/ShuffleControl"
+import {KeyControl} from "@/ui/header/KeyControl"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")
@@ -52,6 +53,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             <TapButton service={service}/>
             <MeterControl lifecycle={lifecycle} service={service}/>
             <ShuffleControl lifecycle={lifecycle} service={service}/>
+            <KeyControl lifecycle={lifecycle} service={service}/>
         </div>
     )
     return element

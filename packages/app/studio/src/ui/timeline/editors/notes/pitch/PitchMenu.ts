@@ -1,17 +1,18 @@
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {Editing, MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
+import {Editing, Func, MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection, Harmony, ppqn} from "@opendaw/lib-dsp"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {MenuCollector, MenuItem, ProjectApi} from "@opendaw/studio-core"
 
-export const createPitchMenu = ({editing, snapping, selection, events, stepRecording, api}: {
+export const createPitchMenu = ({editing, snapping, selection, events, stepRecording, api, keyAt}: {
     editing: Editing
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
     events: EventCollection<NoteEventBoxAdapter>
     stepRecording: MutableObservableValue<boolean>
     api: ProjectApi
+    keyAt: Func<ppqn, Harmony.Key>
 }): Procedure<MenuCollector> => {
     const modify = (procedure: Procedure<ReadonlyArray<NoteEventBoxAdapter>>) => {
         const adapters: ReadonlyArray<NoteEventBoxAdapter> = selection.isEmpty() ? events.asArray() : selection.selected()
@@ -87,6 +88,9 @@ export const createPitchMenu = ({editing, snapping, selection, events, stepRecor
                 adapters.forEach(({box, position}) =>
                     box.position.setValue(origin[1] - (position - origin[0])))
             })),
+        MenuItem.default({label: "Fit to Key"})
+            .setTriggerProcedure(() => modify(adapters => adapters.forEach(({box, position, pitch}) =>
+                box.pitch.setValue(Harmony.quantise(pitch, keyAt(position)))))),
         MenuItem.default({label: "Transpose"})
             .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                 MenuItem.default({label: "+1 semitone"})

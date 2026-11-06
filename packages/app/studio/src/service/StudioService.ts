@@ -122,7 +122,9 @@ export class StudioService implements ProjectEnv {
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
             tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),
-            signature: StudioPreferences.createMutableObservableValue("timeline", "signature")
+            signature: StudioPreferences.createMutableObservableValue("timeline", "signature"),
+            key: StudioPreferences.createMutableObservableValue("timeline", "key"),
+            chords: StudioPreferences.createMutableObservableValue("timeline", "chords")
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -486,6 +488,13 @@ export class StudioService implements ProjectEnv {
                 // Signature
                 if (timelineBoxAdapter.signatureTrack.size > 0) {
                     this.timeline.primaryVisibility.signature.setValue(true)
+                }
+                // Key + Chords
+                if (!timelineBoxAdapter.keyTrack.events.isEmpty()) {
+                    this.timeline.primaryVisibility.key.setValue(true)
+                }
+                if (!timelineBoxAdapter.chordTrack.events.isEmpty()) {
+                    this.timeline.primaryVisibility.chords.setValue(true)
                 }
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()

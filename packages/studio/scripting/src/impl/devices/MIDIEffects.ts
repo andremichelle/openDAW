@@ -49,6 +49,7 @@ export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> impl
     declare hold: boolean
     declare retrigger: int
     declare offset: int
+    declare followChords: boolean
     declare seed: int
     declare patternLength: int
     declare readonly steps: ReadonlyArray<ArpeggioStep>
@@ -58,7 +59,7 @@ export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> impl
         this.bind({
             mode: box.modeIndex, octaves: box.numOctaves, rate: box.rateIndex,
             gate: box.gate, repeat: box.repeat, velocity: box.velocity,
-            order: box.order, hold: box.hold, retrigger: box.retrigger, offset: box.offset,
+            order: box.order, hold: box.hold, retrigger: box.retrigger, offset: box.offset, followChords: box.followChords,
             seed: box.seed, patternLength: box.patternLength,
             steps: box.stepKinds.fields().map((kind, index) => ({
                 kind, velocity: box.stepVelocities.getField(index), gate: box.stepGates.getField(index),
