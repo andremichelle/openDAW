@@ -203,6 +203,7 @@ export type EngineExports = {
     // the signal graph as text lines (see engine `signal_graph_report`), returns the full length
     signal_graph_report: (outPtr: number, max: number) => number
     compensation_latency: () => number // frames the heard output lags the timeline through delay compensation
+    compensation_exceeded: () => number // 1 when a path needs more compensation than the cap
     compensation_pending: () => number // 1 while a latency change awaits the next render's compensation pass
 }
 

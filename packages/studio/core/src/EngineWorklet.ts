@@ -77,6 +77,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #compensationExceeded: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
@@ -121,6 +122,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
             this.#compensationLatency.setValue(state.compensationLatency)
+            this.#compensationExceeded.setValue(state.compensationExceeded)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
@@ -381,6 +383,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
+    get compensationExceeded(): ObservableValue<boolean> {return this.#compensationExceeded}
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
     get recordingStop(): Option<RecordingStop> {return this.#recordingStop}

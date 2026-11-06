@@ -174,6 +174,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.isRecording = view.getUint8(18) === 1
             state.recordingStopTime = this.#recordingStopTime
             state.compensationLatency = engine.compensation_latency() / sampleRate
+            state.compensationExceeded = engine.compensation_exceeded() !== 0
             if (this.#measureLoad) {
                 state.perfBuffer.set(this.#perfBuffer)
                 state.perfIndex = this.#perfWriteIndex

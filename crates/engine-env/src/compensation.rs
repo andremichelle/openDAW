@@ -181,7 +181,8 @@ mod tests {
     struct Latent {
         latency: u32,
         aligns: bool,
-        events: EventBuffer
+        events: EventBuffer,
+        automation_delay: u32
     }
 
     impl EventReceiver for Latent {
@@ -199,14 +200,21 @@ mod tests {
         fn aligns_inputs(&self) -> bool {
             self.aligns
         }
+        fn set_automation_delay(&mut self, frames: u32) {
+            self.automation_delay = frames;
+        }
+    }
+
+    fn latent(latency: u32, aligns: bool) -> Rc<RefCell<Latent>> {
+        Rc::new(RefCell::new(Latent {latency, aligns, events: EventBuffer::new(), automation_delay: 0}))
     }
 
     fn add(context: &mut EngineContext, latency: u32) -> NodeId {
-        context.register_processor(Rc::new(RefCell::new(Latent {latency, aligns: false, events: EventBuffer::new()})))
+        context.register_processor(latent(latency, false))
     }
 
     fn add_aligning(context: &mut EngineContext, latency: u32) -> NodeId {
-        context.register_processor(Rc::new(RefCell::new(Latent {latency, aligns: true, events: EventBuffer::new()})))
+        context.register_processor(latent(latency, true))
     }
 
     #[test]
@@ -335,6 +343,106 @@ mod tests {
         context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
         let graph = context.signal_graph();
         assert_eq!(graph.edges.iter().find(|edge| edge.source == dry).unwrap().delay, 9000);
+    }
+
+    fn bus_of(context: &mut EngineContext, sources: &[NodeId]) -> NodeId {
+        use crate::audio_buffer::shared_audio_buffer;
+        use crate::audio_bus_processor::AudioBusProcessor;
+        let bus = Rc::new(RefCell::new(AudioBusProcessor::new(shared_audio_buffer())));
+        for &source in sources {
+            bus.borrow_mut().add_audio_source(shared_audio_buffer(), source);
+        }
+        let sum = context.register_processor(bus);
+        for &source in sources {
+            context.register_edge(source, sum);
+        }
+        sum
+    }
+
+    // #529: past the cap, the reported latency is where the earliest content lands, not the uncapped arrival
+    #[test]
+    fn below_the_cap_the_landing_equals_the_arrival() {
+        let mut context = EngineContext::new();
+        let dry = add(&mut context, 0);
+        let latent = add(&mut context, 4752);
+        let sum = bus_of(&mut context, &[dry, latent]);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(context.landing_of(sum), 4752);
+        assert_eq!(context.arrival_of(sum), 4752);
+        assert!(!context.compensation_exceeded());
+    }
+
+    #[test]
+    fn past_the_cap_the_dry_path_lands_at_the_cap() {
+        let mut context = EngineContext::new();
+        let dry = add(&mut context, 0);
+        let latent = add(&mut context, 7200);
+        let sum = bus_of(&mut context, &[dry, latent]);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(context.landing_of(sum), 4800);
+        assert_eq!(context.arrival_of(sum), 7200);
+        assert!(context.compensation_exceeded());
+    }
+
+    #[test]
+    fn past_the_cap_a_latent_earliest_path_adds_its_own_latency() {
+        let mut context = EngineContext::new();
+        let early = add(&mut context, 1000);
+        let late = add(&mut context, 9000);
+        let sum = bus_of(&mut context, &[early, late]);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(context.landing_of(sum), 5800);
+        assert!(context.compensation_exceeded());
+    }
+
+    #[test]
+    fn past_the_cap_in_a_sub_bus_the_master_follows_the_capped_landing() {
+        let mut context = EngineContext::new();
+        let dry_inner = add(&mut context, 0);
+        let latent = add(&mut context, 9000);
+        let sub = bus_of(&mut context, &[dry_inner, latent]);
+        let dry_outer = add(&mut context, 0);
+        let master = bus_of(&mut context, &[sub, dry_outer]);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(context.landing_of(sub), 4800);
+        assert_eq!(context.landing_of(master), 4800);
+        assert!(context.compensation_exceeded());
+    }
+
+    #[test]
+    fn past_the_cap_a_main_input_aligned_to_a_late_sidechain_lands_at_the_cap() {
+        let mut context = EngineContext::new();
+        let main = add(&mut context, 0);
+        let sidechain = add(&mut context, 9000);
+        let ducker = add_aligning(&mut context, 0);
+        context.register_edge(main, ducker);
+        context.register_order_edge(sidechain, ducker);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(context.landing_of(ducker), 4800);
+        assert!(context.compensation_exceeded());
+    }
+
+    #[test]
+    fn past_the_cap_automation_follows_the_capped_landing() {
+        let mut context = EngineContext::new();
+        let dry = add(&mut context, 0);
+        let late = add(&mut context, 9000);
+        let sum = bus_of(&mut context, &[dry, late]);
+        let effect = latent(0, false);
+        let effect_id = context.register_processor(effect.clone());
+        context.register_edge(sum, effect_id);
+        context.compensate(CompensationLimits {max_frames: 4800, fade_frames: 480});
+        assert_eq!(effect.borrow().automation_delay, 4800);
+    }
+
+    #[test]
+    fn before_compensating_the_landing_is_the_arrival() {
+        let mut context = EngineContext::new();
+        let dry = add(&mut context, 0);
+        let latent = add(&mut context, 9000);
+        let sum = bus_of(&mut context, &[dry, latent]);
+        assert_eq!(context.landing_of(sum), 9000);
+        assert!(!context.compensation_exceeded());
     }
 
     #[test]

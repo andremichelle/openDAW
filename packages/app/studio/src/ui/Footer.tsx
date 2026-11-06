@@ -17,6 +17,26 @@ const className = Html.adoptStyleSheet(css, "footer")
 
 type Construct = { lifecycle: Lifecycle, service: StudioService }
 
+const dismissibleWarning = (anchor: HTMLElement, message: string, href: string, label: string) => {
+    const state: { warning: Nullable<HTMLElement>, dismissed: boolean } = {warning: null, dismissed: false}
+    const hide = () => {
+        state.warning?.remove()
+        state.warning = null
+    }
+    const show = () => {
+        if (isNotNull(state.warning) || state.dismissed) {return}
+        const warning: HTMLElement = (
+            <LatencyWarning anchor={anchor} message={message} href={href} label={label} dismiss={() => {
+                state.dismissed = true
+                hide()
+            }}/>
+        )
+        state.warning = warning
+        anchor.appendChild(warning)
+    }
+    return {show, hide}
+}
+
 export const Footer = ({lifecycle, service}: Construct) => {
     const {audioContext, buildInfo, engine, projectProfileService} = service
     return (
@@ -59,23 +79,8 @@ export const Footer = ({lifecycle, service}: Construct) => {
                         onInit={({component, value}) => {
                             const threshold = () =>
                                 StudioPreferences.settings.engine["latency-warning-threshold"] / 1000.0
-                            const state: { warning: Nullable<HTMLElement>, dismissed: boolean } =
-                                {warning: null, dismissed: false}
-                            const hide = () => {
-                                state.warning?.remove()
-                                state.warning = null
-                            }
-                            const show = () => {
-                                if (isNotNull(state.warning) || state.dismissed) {return}
-                                const warning: HTMLElement = (
-                                    <LatencyWarning anchor={component} dismiss={() => {
-                                        state.dismissed = true
-                                        hide()
-                                    }}/>
-                                )
-                                state.warning = warning
-                                component.appendChild(warning)
-                            }
+                            const {show, hide} = dismissibleWarning(component,
+                                "High output latency", "/manuals/latency", "How to reduce it")
                             lifecycle.ownAll(
                                 Runtime.scheduleInterval(() => {
                                     const outputLatency = audioContext.outputLatency
@@ -91,11 +96,22 @@ export const Footer = ({lifecycle, service}: Construct) => {
                         }}>N/A</FooterItem>
             <FooterItem title="PDC" minWidth="6ch"
                         onInit={({component, value}) => {
-                            lifecycle.own(engine.compensationLatency.catchupAndSubscribe(owner => {
-                                const seconds = owner.getValue()
-                                component.classList.toggle("hidden", seconds <= 0.0)
-                                value.textContent = `${(seconds * 1000.0).toFixed(1)}ms`
-                            }))
+                            const {show, hide} = dismissibleWarning(component,
+                                "Delay compensation capped at 100 ms", "/manuals/delay-compensation", "Learn more")
+                            lifecycle.ownAll(
+                                engine.compensationLatency.catchupAndSubscribe(owner => {
+                                    const seconds = owner.getValue()
+                                    component.classList.toggle("hidden", seconds <= 0.0)
+                                    value.textContent = `${(seconds * 1000.0).toFixed(1)}ms`
+                                }),
+                                engine.compensationExceeded.catchupAndSubscribe(owner =>
+                                    value.style.color = owner.getValue() ? Colors.orange.toString() : ""),
+                                Runtime.scheduleInterval(() => {
+                                    const visible = component.isConnected && !component.classList.contains("hidden")
+                                    if (visible && engine.compensationExceeded.getValue()) {show()} else {hide()}
+                                }, 1000),
+                                {terminate: hide}
+                            )
                         }}>0.0ms</FooterItem>
             <FooterItem title="CPU Load" minWidth="4ch"
                         onInit={({component, value}) => {

@@ -1870,7 +1870,7 @@ impl Engine {
         let fade_frames = (COMPENSATION_CROSSFADE_SECONDS * self.sample_rate) as u32;
         let limits = CompensationLimits {max_frames: max_compensation_frames(self.sample_rate), fade_frames};
         self.context.compensate(limits);
-        self.output_latency = self.context.arrival_of(self.output_node);
+        self.output_latency = self.context.landing_of(self.output_node);
         if self.output_latency > 0 || self.metronome_delay.is_some() {
             self.metronome_delay.get_or_insert_with(engine_env::compensation::CompensatedInput::new)
                 .set_delay(self.output_latency, limits);
@@ -1879,7 +1879,7 @@ impl Engine {
         for (index, entry) in self.stem_exports.iter().enumerate() {
             let arrival = self.audio_units.iter().find(|unit| unit.unit == entry.uuid)
                 .and_then(|unit| unit.stem_tap(entry))
-                .map_or(self.output_latency, |(node, _)| self.context.arrival_of(node));
+                .map_or(self.output_latency, |(node, _)| self.context.landing_of(node));
             let frames = self.output_latency.saturating_sub(arrival);
             let slot = &mut self.stem_compensation[index];
             if frames > 0 || slot.is_some() {
@@ -3009,6 +3009,12 @@ pub extern "C" fn compensation_pending() -> u32 {
 #[no_mangle]
 pub extern "C" fn compensation_latency() -> u32 {
     unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.output_latency) }
+}
+
+/// 1 when a path needs more compensation than the cap, so it stays unaligned.
+#[no_mangle]
+pub extern "C" fn compensation_exceeded() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.context.compensation_exceeded() as u32) }
 }
 
 /// Refresh the 32-byte checksum buffer from the current graph and return its pointer. Computing the

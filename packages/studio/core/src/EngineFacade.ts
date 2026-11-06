@@ -43,6 +43,7 @@ export class EngineFacade implements Engine {
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #compensationExceeded: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
@@ -71,6 +72,7 @@ export class EngineFacade implements Engine {
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
             worklet.compensationLatency.catchupAndSubscribe(owner => this.#compensationLatency.setValue(owner.getValue())),
+            worklet.compensationExceeded.catchupAndSubscribe(owner => this.#compensationExceeded.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
             worklet.recordingStart.catchupAndSubscribe(option => option.match({
                 none: () => this.#recordingStart.clear(),
@@ -151,6 +153,7 @@ export class EngineFacade implements Engine {
     get playbackTimestamp(): ObservableValue<ppqn> {return this.#playbackTimestamp}
     get countInBeatsRemaining(): ObservableValue<int> {return this.#countInBeatsRemaining}
     get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
+    get compensationExceeded(): ObservableValue<boolean> {return this.#compensationExceeded}
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}

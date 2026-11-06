@@ -180,7 +180,7 @@ The engine then delays every parallel path by the same amount, so the track stay
 
 - The value is in milliseconds and may have decimals. The engine converts it to frames at the project sample rate.
 - Omitting `@latency` means no delay. A missing, negative or non-numeric value is a compile error.
-- The engine compensates up to 100 ms per path.
+- The engine compensates up to 100 ms per path. See [Delay Compensation](/manuals/delay-compensation) for what happens beyond that.
 
 If the delay changes while the script runs, for example when an FFT size parameter changes, set it in frames instead. A positive `this.latency` overrides the declaration:
 

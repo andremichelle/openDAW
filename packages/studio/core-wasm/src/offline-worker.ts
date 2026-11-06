@@ -304,6 +304,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 engineState.isCountingIn = false
                 engineState.isRecording = false
                 engineState.compensationLatency = engine.compensation_latency() / config.sampleRate
+                engineState.compensationExceeded = engine.compensation_exceeded() !== 0
                 engineState.recordingStopTime = Number.NaN
             })
             Communicator.executor<EngineCommands>(messenger.channel("engine-commands"), {

@@ -55,6 +55,8 @@ pub struct EngineContext {
     owners: BTreeMap<NodeId, [u8; 16]>,
     order_edges: BTreeSet<(NodeId, NodeId)>,
     edge_delays: BTreeMap<(NodeId, NodeId), u32>,
+    compensation_cap: u32,
+    compensation_exceeded: bool,
     compensation_dirty: bool,
     profiler: Option<Profiler>,
     // The topsorted processors CACHED as handles (rebuilt with the sort), so the steady-state render loop is
@@ -76,6 +78,8 @@ impl EngineContext {
             owners: BTreeMap::new(),
             order_edges: BTreeSet::new(),
             edge_delays: BTreeMap::new(),
+            compensation_cap: u32::MAX,
+            compensation_exceeded: false,
             compensation_dirty: false,
             profiler: None,
             queue: Vec::new(),
@@ -247,6 +251,51 @@ impl EngineContext {
         self.arrival(id, &mut BTreeMap::new())
     }
 
+    /// Like `arrival` but with each junction delay capped as applied: where the earliest content lands.
+    fn landing(&self, id: NodeId, arrivals: &mut BTreeMap<NodeId, u32>, memo: &mut BTreeMap<NodeId, u32>) -> u32 {
+        if let Some(&landing) = memo.get(&id) {
+            return landing;
+        }
+        memo.insert(id, 0);
+        let (own, junction, aligns) = self.processors.get(&id).map_or((0, None, false), |processor| {
+            let processor = processor.borrow();
+            (processor.latency(), processor.junction_sources(), processor.aligns_inputs())
+        });
+        let upstream = match junction {
+            Some(sources) => {
+                let latest = sources.iter().map(|&source| self.arrival(source, arrivals)).max().unwrap_or(0);
+                sources.iter().map(|&source| {
+                    let delay = (latest - self.arrival(source, arrivals)).min(self.compensation_cap);
+                    self.landing(source, arrivals, memo) + delay
+                }).min().unwrap_or(0)
+            }
+            None if aligns => {
+                let (sidechains, mains): (Vec<NodeId>, Vec<NodeId>) = self.graph.get_predecessors(id).iter()
+                    .filter(|&&source| !self.order_edges.contains(&(source, id)) || !self.would_cycle(source, id))
+                    .partition(|&&source| self.order_edges.contains(&(source, id)));
+                let main = mains.iter().map(|&source| self.arrival(source, arrivals)).max().unwrap_or(0);
+                let latest = sidechains.iter().map(|&source| self.arrival(source, arrivals)).max().unwrap_or(0).max(main);
+                mains.iter().map(|&source| self.landing(source, arrivals, memo)).max().unwrap_or(0)
+                    + (latest - main).min(self.compensation_cap)
+            }
+            None => self.graph.get_predecessors(id).iter()
+                .filter(|&&source| !self.order_edges.contains(&(source, id)))
+                .map(|&source| self.landing(source, arrivals, memo)).max().unwrap_or(0)
+        };
+        memo.insert(id, own + upstream);
+        own + upstream
+    }
+
+    /// The latency at which the earliest content of `id`'s output lands after capped compensation. Outside render.
+    pub fn landing_of(&self, id: NodeId) -> u32 {
+        self.landing(id, &mut BTreeMap::new(), &mut BTreeMap::new())
+    }
+
+    /// Whether the last `compensate` needed a delay beyond its cap.
+    pub fn compensation_exceeded(&self) -> bool {
+        self.compensation_exceeded
+    }
+
     pub fn compensation_dirty(&self) -> bool {
         self.compensation_dirty
     }
@@ -258,6 +307,7 @@ impl EngineContext {
     /// Align every junction: each input is delayed to the latest one, within `limits`. Outside render.
     pub fn compensate(&mut self, limits: CompensationLimits) {
         self.compensation_dirty = false;
+        self.compensation_cap = limits.max_frames;
         self.edge_delays.clear();
         let mut memo: BTreeMap<NodeId, u32> = BTreeMap::new();
         for (&id, processor) in &self.processors {
@@ -299,9 +349,11 @@ impl EngineContext {
             }).collect();
             processor.borrow_mut().set_input_delays(latest - main, &delays, limits);
         }
+        self.compensation_exceeded = self.edge_delays.values().any(|&delay| delay > limits.max_frames);
+        let mut landings: BTreeMap<NodeId, u32> = BTreeMap::new();
         for (&id, processor) in &self.processors {
             let own = processor.borrow().latency();
-            let input = self.arrival(id, &mut memo).saturating_sub(own);
+            let input = self.landing(id, &mut memo, &mut landings).saturating_sub(own);
             processor.borrow_mut().set_automation_delay(input);
         }
     }

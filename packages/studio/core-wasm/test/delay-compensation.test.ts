@@ -274,6 +274,28 @@ describe("plugin delay compensation", () => {
         expect(peaks(play(8))).toEqual([[480, 1]])
     }, 30000)
 
+    // #529: past the 100 ms cap the reported latency is the delay the dry path actually gets
+    for (const [millis, frames, latency, exceeded] of [[99, 4752, 4752, 0], [150, 7200, 4800, 1]]) {
+        it(`reports ${latency} frames for a Werkstatt declaring // @latency ${millis}`, async () => {
+            const code = `// @latency ${millis}\n` + delayScript(frames, 0)
+            const werkstatts: Array<{ uuid: string, code: string }> = []
+            const source = build((skeleton, scripts) => {
+                impulseUnit(skeleton, 1, scripts)
+                const latent = impulseUnit(skeleton, 2, scripts)
+                const werkstatt = WerkstattDeviceBox.create(skeleton.boxGraph, UUID.generate(), box => {
+                    box.host.refer(latent.audioEffects)
+                    box.index.setValue(0)
+                    box.code.setValue("// @werkstatt js 1 1\n" + code)
+                })
+                werkstatts.push({uuid: UUID.toString(werkstatt.address.uuid), code})
+            })
+            werkstatts.forEach(registerWerkstatt)
+            const {engine} = await start(source)
+            expect(engine.compensation_latency()).toBe(latency)
+            expect(engine.compensation_exceeded()).toBe(exceeded)
+        }, 30000)
+    }
+
     it("leaves a project without latency untouched", async () => {
         const source = build((skeleton, scripts) => {
             impulseUnit(skeleton, 1, scripts)
