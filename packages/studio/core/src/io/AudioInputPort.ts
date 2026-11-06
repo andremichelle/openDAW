@@ -1,4 +1,4 @@
-import {Exec, Func, MutableObservableOption, Option, Provider, Subscription, Terminable} from "@opendaw/lib-std"
+import {Exec, Func, MutableObservableOption, Observer, Option, Provider, Subscription, Terminable} from "@opendaw/lib-std"
 import {ChannelMapping} from "./ChannelMapping"
 import {MonitorPort} from "./MonitorPort"
 import {RecordingLatency} from "./RecordingLatency"
@@ -17,6 +17,8 @@ export interface AudioInputNodes {
     get stream(): MutableObservableOption<MediaStream>
     get streamMediaTrack(): Option<MediaStreamTrack>
     get outputNode(): Option<AudioNode>
+    // the output node is replaced without a new stream when the source is rebuilt
+    subscribeOutputNode(observer: Observer<Option<AudioNode>>): Subscription
     get monitorGainNode(): GainNode
     get monitorPanNode(): StereoPannerNode
 }

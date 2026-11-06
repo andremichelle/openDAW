@@ -533,6 +533,24 @@ describe("CaptureAudio", () => {
             vi.useRealTimers()
         })
 
+        // A meter connected to the output node must follow the fresh chain, or it keeps reading the discarded node
+        it("tells output node subscribers about the fresh chain", async () => {
+            vi.useFakeTimers()
+            const {capture} = await setup()
+            await armAndAwaitChain(capture)
+            const before = capture.outputNode.unwrap()
+            const seen: Array<Option<AudioNode>> = []
+            const subscription = capture.subscribeOutputNode(node => seen.push(node))
+            const {AudioDevices} = await import("../AudioDevices")
+            AudioDevices.notifyStreamsChanged()
+            vi.advanceTimersByTime(300)
+            const after = capture.outputNode.unwrap()
+            expect(after).not.toBe(before)
+            expect(seen.map(node => node.unwrapOrNull())).toEqual([null, after])
+            subscription.terminate()
+            vi.useRealTimers()
+        })
+
         it("waits for the take to end before it builds the fresh source node", async () => {
             vi.useFakeTimers()
             const {capture, createdSourceNodes} = await setup()

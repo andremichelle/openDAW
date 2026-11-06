@@ -1,4 +1,4 @@
-import {Exec, Func, MutableObservableOption, Option, Provider, Subscription, Terminable, VitalSigns} from "@opendaw/lib-std"
+import {Exec, Func, MutableObservableOption, Observer, Option, Provider, Subscription, Terminable, VitalSigns} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
 import {Capture} from "./Capture"
@@ -104,6 +104,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     get deviceLabel(): Option<string> {return this.#input.label}
     get streamMediaTrack(): Option<MediaStreamTrack> {return this.#input.nodes.flatMap(nodes => nodes.streamMediaTrack)}
     get outputNode(): Option<AudioNode> {return this.#input.nodes.flatMap(nodes => nodes.outputNode)}
+    subscribeOutputNode(observer: Observer<Option<AudioNode>>): Subscription {
+        return this.#input.nodes.mapOr(nodes => nodes.subscribeOutputNode(observer), Terminable.Empty)
+    }
     get effectiveChannelCount(): number {return this.#input.channelCount}
     get monitorGainNode(): GainNode {return this.#nodes().monitorGainNode}
     get monitorPanNode(): StereoPannerNode {return this.#nodes().monitorPanNode}

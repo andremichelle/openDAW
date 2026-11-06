@@ -104,6 +104,7 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
                 }
                 return Terminable.many(
                     capture.stream.catchupAndSubscribe(() => connectMeter()),
+                    capture.subscribeOutputNode(() => connectMeter()),
                     capture.captureBox.requestChannels.subscribe(() => connectMeter()),
                     capture.captureBox.leftInputs.subscribe(() => connectMeter()),
                     capture.captureBox.rightInputs.subscribe(() => connectMeter())
