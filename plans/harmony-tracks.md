@@ -57,6 +57,9 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 7. Software keyboard: a 1..7 pad row plays the chords of the key at the cursor. While recording, pads write chord events.
 8. Detection: command on a MIDI region that writes chord events (notes sounding together matched to chords)
    and suggests a key (most used notes). MIDI only.
+9. Key by playing: while the key display in the header has keyboard focus, it listens to incoming notes
+   (MIDI inputs and the software keyboard). A played chord is matched (major or minor triad, 7ths) and sets the
+   project key: its root as Root, Major or Natural Minor as Scale. One undo step per detected chord, focus out stops it.
 
 ## Devices
 
@@ -81,12 +84,12 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 4. Chord track: schema, adapters, UI, custom chords, preview.
 5. Chords in the engine lookup, Arpeggio "follow chords".
 6. Software keyboard chord pads, recording chord events.
-7. Chord and key detection from MIDI regions.
+7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
 8. Scripting API + docs.
 
 ## Status (2026-11-06, branch scales)
 
-1. Phases 1 to 5 implemented, uncommitted, not browser-checked.
+1. Phases 1 to 5 implemented and committed (8b2d1990e, e526af38c), partly browser-checked.
 2. The key track stores a default key (C major, edited in the header), key events override it from their position.
 3. Deviation: Scale Matrix `scale` is an index into `MidiKeys.StockScales` (automatable), the key events store masks.
 4. Open from 1 to 5: Scale Matrix live input highlight, Scale Matrix scripting, manual page for the key and chord tracks.

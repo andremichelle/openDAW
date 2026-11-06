@@ -79,6 +79,14 @@ export namespace Harmony {
     export const scaleName = (bits: int): string =>
         MidiKeys.StockScales.find(scale => scale.bits === bits)?.name ?? "Custom"
 
+    const ScaleAbbreviations: ReadonlyArray<string> =
+        ["maj", "min", "hmin", "mmin", "dor", "phr", "lyd", "mix", "loc", "pmaj", "pmin", "blu", "whl", "dim", "aug"]
+
+    export const scaleAbbreviation = (bits: int): string => {
+        const index = MidiKeys.StockScales.findIndex(scale => scale.bits === bits)
+        return index === -1 ? "*" : ScaleAbbreviations[index]
+    }
+
     export const keyName = ({root, bits}: Key): string => `${MidiKeys.Names.English[root]} ${scaleName(bits)}`
 
     const stackSuffix = (stack: ReadonlyArray<int>): string => {

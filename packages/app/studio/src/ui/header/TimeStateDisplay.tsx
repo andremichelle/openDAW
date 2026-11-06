@@ -1,5 +1,5 @@
 import css from "./TimeStateDisplay.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Client, isDefined, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
@@ -21,10 +21,16 @@ type Construct = {
 }
 
 export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
+    const musical: HTMLElement = <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
+    const absolute: HTMLElement = <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
+    const isTimeReadout = ({clientX, clientY}: Client): boolean => {
+        const target = document.elementFromPoint(clientX, clientY)
+        return isDefined(target) && (musical.contains(target) || absolute.contains(target))
+    }
     const element: HTMLElement = (
         <div className={className} onInit={element => {
             const values = StudioPreferences.settings["time-display"]
-            return ContextMenu.subscribe(element, collector => collector.addItems(
+            return ContextMenu.subscribe(element, collector => isTimeReadout(collector.client) && collector.addItems(
                 MenuItem.header({label: "Time Units", icon: IconSymbol.Time, color: Colors.green}),
                 MenuItem.default({
                     label: "Musical Time (Bars, Beats)",
@@ -47,8 +53,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                     }).setTriggerProcedure(() => values.fps = fps))))
             ))
         }}>
-            <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
-            <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
+            {musical}
+            {absolute}
             <TempoControl lifecycle={lifecycle} service={service}/>
             <TapButton service={service}/>
             <MeterControl lifecycle={lifecycle} service={service}/>
