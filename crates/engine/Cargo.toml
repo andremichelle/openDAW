@@ -7,6 +7,9 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+heap-guard = []
+
 [dependencies]
 signalsmith = {path = "../signalsmith"}
 boxgraph = {path = "../boxgraph"}

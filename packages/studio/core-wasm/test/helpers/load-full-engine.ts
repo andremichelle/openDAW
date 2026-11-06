@@ -15,6 +15,13 @@ import {COMPOSITES, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/e
 
 const DIST = path.resolve(__dirname, "../../dist")
 
+export const GUARD_ENGINE_WASM = path.join(DIST, "wasm-guard", "engine.wasm")
+
+let engineWasmPath = path.join(DIST, "wasm", "engine.wasm")
+
+// The heap stress tests run on the heap-guard engine (build-guard-engine.sh); every other test on the release one.
+export const useEngineWasm = (file: string): void => {engineWasmPath = file}
+
 // ONE device/composite list for every context: the production tables from engine-modules, with the vite
 // URL mapped to the dist/ file name. The former local copies had already drifted (wrong composite cell
 // field keys), which is exactly why they are gone.
@@ -43,7 +50,7 @@ export const loadFullEngine = async (sampleRate = 48000,
                                      extraDevices: ReadonlyArray<{file: string, boxType: string}> = []): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
-    const engineModule = await WebAssembly.compile(readFileSync(path.join(DIST, "wasm", "engine.wasm")))
+    const engineModule = await WebAssembly.compile(readFileSync(engineWasmPath))
     const engine = new WebAssembly.Instance(engineModule, {env: {
         memory, __indirect_function_table: table,
         host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler

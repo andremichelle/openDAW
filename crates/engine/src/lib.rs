@@ -395,6 +395,8 @@ const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits p
 const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
+#[cfg(all(target_family = "wasm", feature = "heap-guard"))]
+mod heap_guard;
 mod playhead_history;
 mod monitor;
 mod frozen;
@@ -3903,12 +3905,23 @@ mod heap {
     // memory lets the main thread write sample data, but it never executes the engine).
     unsafe impl Sync for EngineAlloc {}
 
+    #[cfg(not(feature = "heap-guard"))]
     unsafe impl GlobalAlloc for EngineAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {self.0.alloc(layout)}
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {self.0.dealloc(ptr, layout)}
         unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {self.0.alloc_zeroed(layout)}
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
             self.0.realloc(ptr, layout, new_size)
+        }
+    }
+
+    #[cfg(feature = "heap-guard")]
+    unsafe impl GlobalAlloc for EngineAlloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            crate::heap_guard::alloc(layout, |outer| self.0.alloc(outer))
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            crate::heap_guard::dealloc(ptr, layout, |base, outer| self.0.dealloc(base, outer))
         }
     }
 
