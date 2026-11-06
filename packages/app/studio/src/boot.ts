@@ -37,6 +37,7 @@ import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
+import {ReportNames} from "@/errors/ReportNames"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
@@ -144,7 +145,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     if (isDefined(context.playbackStats)) {
         new BufferUnderrunDetector(context.playbackStats, service.engine)
     }
-    const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
+    const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand(),
+        () => ReportNames.collectNames(service))
     service.engineErrors.subscribe(event => errorHandler.reportEngineError(event, WasmEngine.recentUpdates()))
     const surface = Surface.main({
         config: (surface: Surface) => surface.ownAll(
