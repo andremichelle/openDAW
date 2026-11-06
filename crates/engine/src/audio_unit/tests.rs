@@ -1215,6 +1215,38 @@ fn effects_monitoring_keeps_the_unit_out_of_the_main_mix_and_its_sends() {
 }
 
 #[test]
+fn aux_sends_follow_their_index_field() {
+    // An AuxSendBox stores its position in `index` (3); field 2 is its `target-bus` pointer.
+    const SEND_A: Uuid = [57u8; 16];
+    const SEND_B: Uuid = [58u8; 16];
+    let send = |uuid: Uuid, index: i32| graph_box(uuid, "AuxSendBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+        (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+        (super::SEND_INDEX_KEY, FieldValue::Int32(index)),
+        (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+        (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        send(SEND_A, 1),
+        send(SEND_B, 0)
+    ]);
+    let unit = engine.build_unit(UNIT);
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_B, SEND_A], "sends are ordered by their index field");
+    engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(SEND_A, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(1), new: FieldValue::Int32(0)},
+        Update::Primitive {address: Address::of(SEND_B, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(0), new: FieldValue::Int32(1)}
+    ], &engine.registry).expect("reorder");
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_A, SEND_B], "a reorder follows the index field");
+    engine.teardown_unit(unit);
+}
+
+#[test]
 fn effects_monitoring_detaches_the_units_audio_sinks() {
     use crate::monitor::MonitorEntry;
     let mut engine = sink_leaf_engine(Some(bus_input()));

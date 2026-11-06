@@ -121,6 +121,7 @@ const MIDI_OUT_PARAM_VALUE_KEY: u16 = 4;
 // AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), routing (4, Int32: AudioSendRouting Pre=0 /
 // Post=1), sendGain (5, dB), sendPan (6, bipolar).
 const SEND_TARGET_KEY: u16 = 2;
+const SEND_INDEX_KEY: u16 = 3;
 const SEND_ROUTING_KEY: u16 = 4;
 const SEND_GAIN_KEY: u16 = 5;
 const SEND_PAN_KEY: u16 = 6;
@@ -1289,7 +1290,7 @@ impl Engine {
         // SEND/RETURN: the `auxSends` (24) collection (parallel sends, ordered by index but order is not audible)
         // + a monitor on `output` (25) so a re-point of the unit's destination bus enqueues it. Both wired AFTER
         // observe so the catch-up members / value do not fire (the new unit enqueues itself once below).
-        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), EFFECT_INDEX_KEY);
+        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), SEND_INDEX_KEY);
         aux_sends.set_on_dirty(mark.signal());
         let output_mark = mark.clone();
         let output_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![UNIT_OUTPUT_KEY]),
