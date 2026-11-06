@@ -2,7 +2,7 @@ import css from "./ModulationPanel.sass?inline"
 import {isAbsent, isInstanceOf, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -40,7 +40,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
                 <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent =>
                     parent.addMenuItem(...Modulators.Kinds.map(kind => MenuItem.default({label: kind.label})
                         .setTriggerProcedure(() => editing.modify(() => kind.create(project))))))}
-                            appearance={{}}>
+                            appearance={{color: Colors.cream}}>
                     <Icon symbol={IconSymbol.Add}/>
                 </MenuButton>
             </h5>

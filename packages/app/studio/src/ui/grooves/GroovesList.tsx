@@ -172,7 +172,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
                 <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent =>
                     parent.addMenuItem(...Grooves.Kinds.map(kind => MenuItem.default({label: kind.label})
                         .setTriggerProcedure(() => editing.modify(() => Grooves.create(project, kind.kind))))))}
-                            appearance={{}}>
+                            appearance={{color: Colors.cream}}>
                     <Icon symbol={IconSymbol.Add}/>
                 </MenuButton>
             </h5>
