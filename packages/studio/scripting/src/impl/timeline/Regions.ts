@@ -130,6 +130,8 @@ export class AudioRegionImpl extends RegionFacade<AudioRegionBox> implements Aud
     set playbackRate(value: float) {AudioContents.setPlaybackRate(this.context, this.box, value)}
     get transpose(): float {return AudioContents.transpose(this.box)}
     set transpose(value: float) {AudioContents.setTranspose(this.context, this.box, value)}
+    get groove(): Nullable<AnyGroove> {return AudioContents.groove(this.context, this.box)}
+    set groove(value: Nullable<AnyGroove>) {AudioContents.setGroove(this.context, this.box, value)}
 }
 
 export type AnyRegionImpl = NoteRegionImpl | AudioRegionImpl | ValueRegionImpl

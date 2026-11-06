@@ -69,6 +69,11 @@ impl GrooveRegistry {
         evaluate(&self.state.borrow().defs, groove, position, false)
     }
 
+    /// The grid a groove moves content on: every sixteenth, or half its cell when that is shorter. An offset has none.
+    pub fn grid(&self, groove: &Uuid) -> Option<f64> {
+        grid(&self.state.borrow().defs, groove, 0)
+    }
+
     pub fn def(&self, groove: &Uuid) -> Option<GrooveDef> {
         self.state.borrow().defs.get(groove).cloned()
     }
@@ -110,6 +115,20 @@ fn evaluate(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, position: f64, forw
     match defs.get(groove) {
         Some(GrooveDef::Stack {..}) => warp(defs, groove, position, forward, &mut [[0; 16]; MAX_DEPTH], 0),
         _ => warp(defs, groove, position, forward, &mut [], 0)
+    }
+}
+
+const SIXTEENTH: f64 = 240.0;
+
+fn grid(defs: &BTreeMap<Uuid, GrooveDef>, groove: &Uuid, depth: usize) -> Option<f64> {
+    if depth >= MAX_DEPTH {
+        return None;
+    }
+    match defs.get(groove)? {
+        GrooveDef::Shuffle {duration, ..} | GrooveDef::Function {duration, ..} | GrooveDef::Random {duration, ..} =>
+            (*duration > 0.0).then(|| (duration / 2.0).min(SIXTEENTH)),
+        GrooveDef::Offset {..} => None,
+        GrooveDef::Stack {members} => members.iter().filter_map(|member| grid(defs, member, depth + 1)).reduce(f64::min)
     }
 }
 
@@ -363,6 +382,23 @@ mod tests {
         fill_random_values(7, 4, 0.5, &mut values);
         let expected = blend_fx(Curve::Table(&values), 0.8f32 as f64, 0.3) * 3840.0;
         assert_eq!(registry.warp(&RANDOM, 0.3 * 3840.0), expected);
+    }
+
+    #[test]
+    fn the_grid_is_every_sixteenth_or_half_a_shorter_cell() {
+        let mut graph = BoxGraph::from_boxes(vec![root(), shuffle(0.8), power(0.9), random(), offset(30), stack(),
+            entry(ENTRY_A, POWER, 1), entry(ENTRY_B, SHUFFLE, 0)]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.grid(&SHUFFLE), Some(240.0), "a shuffle over eighths moves the sixteenths");
+        assert_eq!(registry.grid(&POWER), Some(240.0));
+        assert_eq!(registry.grid(&RANDOM), Some(240.0));
+        assert_eq!(registry.grid(&OFFSET), None, "an offset moves everything alike");
+        assert_eq!(registry.grid(&STACK), Some(240.0));
+        let short = graph_box(SHUFFLE, "GrooveShuffleBox", &[listed(),
+            (GROOVE_AMOUNT, FieldValue::Float32(0.6)), (GROOVE_DURATION, FieldValue::Int32(240))]);
+        let mut graph = BoxGraph::from_boxes(vec![root(), short]);
+        let (registry, _) = GrooveRegistry::observe(&mut graph, ROOT);
+        assert_eq!(registry.grid(&SHUFFLE), Some(120.0), "a shuffle over sixteenths moves the thirty-seconds");
     }
 
     #[test]

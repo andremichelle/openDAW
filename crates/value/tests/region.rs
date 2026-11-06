@@ -1,7 +1,7 @@
 //! Loopable-region math, porting lib-dsp `LoopableRegion.test.ts` (cut-and-move keeps the sample
 //! offset via loopOffset) plus multi-cycle, window-clipping, and global_to_local edge cases.
 
-use value::region::{global_to_local, locate_loops, LoopCycle};
+use value::region::{global_to_local, locate_grooved_loops, locate_loops, GroovedPass, LoopCycle};
 
 const BAR: f64 = 3840.0;
 
@@ -182,4 +182,114 @@ fn a_long_region_under_later_regions_is_found_only_until_the_next_one_starts() {
     assert_eq!(ids(&collection, 120.0, 180.0), vec![1], "gone once the next one has started");
     assert_eq!(ids(&collection, 220.0, 280.0), Vec::<u32>::new(), "and it does not come back in the gap");
     assert_eq!(ids(&collection, 500.0, 600.0), Vec::<u32>::new(), "nor after the last region");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn passes(position: f64, complete: f64, loop_offset: f64, loop_duration: f64, from: f64, to: f64,
+          warp: impl Fn(f64) -> f64, unwarp: impl Fn(f64) -> f64) -> Vec<GroovedPass> {
+    locate_grooved_loops(position, complete, loop_offset, loop_duration, from, to, warp, unwarp).collect()
+}
+
+fn pass(raw_start: f64, content_start: f64, content_end: f64, result_start: f64, result_end: f64) -> GroovedPass {
+    GroovedPass {raw_start, content_start, content_end, result_start, result_end}
+}
+
+// a swing on eighth notes: the second eighth of every quarter starts 120 later
+const QUARTER: f64 = 960.0;
+fn swing(position: f64) -> f64 {
+    let base = (position / QUARTER).floor() * QUARTER;
+    let local = position - base;
+    base + if local < 480.0 {local * 600.0 / 480.0} else {600.0 + (local - 480.0) * 360.0 / 480.0}
+}
+fn unswing(position: f64) -> f64 {
+    let base = (position / QUARTER).floor() * QUARTER;
+    let local = position - base;
+    base + if local < 600.0 {local * 480.0 / 600.0} else {480.0 + (local - 600.0) * 480.0 / 360.0}
+}
+
+#[test]
+fn without_a_groove_the_passes_are_the_loop_cycles() {
+    let configs = [
+        (0.0, 4.0 * BAR, 0.0, BAR), (6.0 * BAR, 10.0 * BAR, 6.0 * BAR, 16.0 * BAR), (5.0 * BAR, 9.0 * BAR, 6.0 * BAR, 16.0 * BAR),
+        (100.0, 3000.0, 250.0, 700.0), (0.0, f64::INFINITY, 0.0, 1920.0)];
+    let windows = [(0.0, 128.0), (90.0, 2000.0), (3500.0, 4100.0), (6.0 * BAR, 7.5 * BAR), (0.0, 40.0 * BAR)];
+    for (position, complete, loop_offset, loop_duration) in configs {
+        for (from, to) in windows {
+            let expected: Vec<GroovedPass> = cycles(position, complete, loop_offset, loop_duration, from, to).iter()
+                .filter(|cycle| cycle.result_start < cycle.result_end)
+                .map(|cycle| pass(cycle.raw_start, cycle.result_start - cycle.raw_start, cycle.result_end - cycle.raw_start,
+                    cycle.result_start, cycle.result_end)).collect();
+            assert_eq!(passes(position, complete, loop_offset, loop_duration, from, to, |x| x, |x| x), expected,
+                "region {position} {complete} {loop_offset} {loop_duration} window {from} {to}");
+        }
+    }
+}
+
+#[test]
+fn an_offset_groove_reads_the_content_later_and_leaves_the_region_start_silent() {
+    let late = |x: f64| x + 240.0;
+    let early = |x: f64| x - 240.0;
+    // a one bar region, the content starts sounding 240 after the region start
+    assert_eq!(passes(0.0, BAR, 0.0, BAR, 0.0, 128.0, late, early), vec![]);
+    assert_eq!(passes(0.0, BAR, 0.0, BAR, 0.0, 480.0, late, early), vec![pass(0.0, 0.0, 240.0, 240.0, 480.0)]);
+    // the last 240 of the content would sound past the region end and is not played
+    assert_eq!(passes(0.0, BAR, 0.0, BAR, 3000.0, BAR, late, early), vec![pass(0.0, 2760.0, 3600.0, 3000.0, BAR)]);
+}
+
+#[test]
+fn an_early_groove_leaves_the_region_end_silent() {
+    let early = |x: f64| x - 240.0;
+    let late = |x: f64| x + 240.0;
+    // the content's first 240 would sound before the region start
+    assert_eq!(passes(0.0, BAR, 0.0, BAR, 0.0, 480.0, early, late), vec![pass(0.0, 240.0, 720.0, 0.0, 480.0)]);
+    // the content ends 240 before the region end
+    assert_eq!(passes(0.0, BAR, 0.0, BAR, 3000.0, BAR, early, late), vec![pass(0.0, 3240.0, BAR, 3000.0, 3600.0)]);
+}
+
+#[test]
+fn the_groove_runs_on_across_loop_passes() {
+    let late = |x: f64| x + 100.0;
+    let early = |x: f64| x - 100.0;
+    // a 1000 loop played four times: every wrap happens 100 later than the straight pass boundary
+    let result = passes(0.0, 4000.0, 0.0, 1000.0, 900.0, 1200.0, late, early);
+    assert_eq!(result, vec![pass(0.0, 800.0, 1000.0, 900.0, 1100.0), pass(1000.0, 0.0, 100.0, 1100.0, 1200.0)]);
+}
+
+#[test]
+fn the_groove_starts_where_the_loop_starts() {
+    let late = |x: f64| x + 100.0;
+    let early = |x: f64| x - 100.0;
+    // a region cut at 2 bars into its content: the content keeps its grooved timing
+    let result = passes(2.0 * BAR, 3.0 * BAR, 2.0 * BAR, 4.0 * BAR, 2.0 * BAR, 2.0 * BAR + 300.0, late, early);
+    assert_eq!(result, vec![pass(0.0, 2.0 * BAR, 2.0 * BAR + 200.0, 2.0 * BAR + 100.0, 2.0 * BAR + 300.0)]);
+}
+
+#[test]
+fn a_swing_moves_the_second_eighth() {
+    let result = passes(0.0, BAR, 0.0, BAR, 0.0, QUARTER, swing, unswing);
+    assert_eq!(result, vec![pass(0.0, 0.0, QUARTER, 0.0, QUARTER)]);
+    // the second eighth sounds from 600 on
+    let result = passes(0.0, BAR, 0.0, BAR, 600.0, QUARTER, swing, unswing);
+    assert_eq!(result, vec![pass(0.0, 480.0, QUARTER, 600.0, QUARTER)]);
+    // a loop of one quarter wraps at the grooved boundary, which a swing leaves in place
+    let result = passes(0.0, BAR, 0.0, QUARTER, 900.0, 1100.0, swing, unswing);
+    assert_eq!(result.len(), 2);
+    assert_eq!((result[0].result_end, result[1].result_start), (QUARTER, QUARTER));
+    assert!((result[1].content_end - unswing(140.0)).abs() < 1e-9);
+}
+
+#[test]
+fn a_clip_runs_the_groove_on_the_timeline_grid() {
+    let late = |x: f64| x + 100.0;
+    let early = |x: f64| x - 100.0;
+    let result = passes(0.0, f64::INFINITY, 0.0, 1920.0, 5.0 * 1920.0 + 50.0, 5.0 * 1920.0 + 150.0, late, early);
+    assert_eq!(result, vec![pass(4.0 * 1920.0, 1870.0, 1920.0, 9650.0, 9700.0), pass(5.0 * 1920.0, 0.0, 50.0, 9700.0, 9750.0)]);
+}
+
+#[test]
+fn a_degenerate_loop_or_window_yields_nothing() {
+    assert!(passes(0.0, BAR, 0.0, 0.0, 0.0, BAR, |x| x, |x| x).is_empty());
+    assert!(passes(0.0, BAR, 0.0, f64::NAN, 0.0, BAR, |x| x, |x| x).is_empty());
+    assert!(passes(0.0, BAR, 0.0, BAR, 500.0, 500.0, |x| x, |x| x).is_empty());
+    assert!(passes(0.0, BAR, 0.0, BAR, BAR, 2.0 * BAR, |x| x, |x| x).is_empty());
 }

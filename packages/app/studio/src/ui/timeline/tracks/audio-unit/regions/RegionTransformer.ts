@@ -42,6 +42,7 @@ export namespace RegionTransformer {
                     box.duration.setValue(source.loopDuration)
                     box.file.refer(source.box.file.targetVertex.unwrap("file.target"))
                     source.box.playMode.ifVertex(vertex => box.playMode.refer(vertex))
+                    source.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                     box.events.refer(events)
                     box.clips.refer(target)
                 })

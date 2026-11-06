@@ -81,6 +81,18 @@ impl Voice {
         matches!(self, Voice::Once(_))
     }
 
+    fn is_ending(&self) -> bool {
+        matches!(self, Voice::Once(voice) if voice.ending)
+    }
+
+    /// Fade out now, or with a groove let a once voice play on to its segment end, so no material is lost.
+    fn release(&mut self, at_segment_end: bool) {
+        match self {
+            Voice::Once(voice) if at_segment_end && voice.read_position < voice.segment_end => voice.ending = true,
+            _ => self.start_fade_out(0)
+        }
+    }
+
     fn is_fading_out(&self) -> bool {
         let fade = self.fade();
         fade.state == VoiceState::Fading && fade.fade_direction < 0.0
@@ -233,12 +245,14 @@ struct OnceVoice {
     playback_rate: f64,
     segment_end: f64,
     read_position: f64,
-    block_offset: usize
+    block_offset: usize,
+    // a groove cut in early, the voice plays on to its segment end under the next one
+    ending: bool
 }
 
 impl OnceVoice {
     fn new(segment_start: f64, segment_end: f64, playback_rate: f64, block_offset: usize, sample_rate: f32) -> Self {
-        Self {fade: Fade::new(segment_start, false, sample_rate), playback_rate, segment_end, read_position: segment_start, block_offset}
+        Self {fade: Fade::new(segment_start, false, sample_rate), playback_rate, segment_end, read_position: segment_start, block_offset, ending: false}
     }
 
     fn start_fade_out(&mut self, block_offset: usize) {
@@ -481,11 +495,12 @@ impl TimeStretchSequencer {
         output: &mut AudioBuffer,
         source: &Source,
         file_rate: f32,
-        transients: &[f64],
+        transients: &Cuts,
         config: &TimeStretchConfig,
         waveform_offset: f64,
         block: &Block,
-        cycle_raw_start: f64,
+        content: (f64, f64),
+        groove_gap: Option<&dyn Fn(f64, f64) -> f64>,
         cycle_result_start: f64,
         cycle_result_end: f64,
         fading_gain: &[f32],
@@ -509,11 +524,10 @@ impl TimeStretchSequencer {
             return;
         }
         let (first_pos, last_pos) = (warp[0].0, warp[warp.len() - 1].0);
-        let content_ppqn = cycle_result_start - cycle_raw_start;
+        let (content_ppqn, content_ppqn_end) = content;
         if content_ppqn < first_pos || content_ppqn >= last_pos {
             return;
         }
-        let content_ppqn_end = content_ppqn + pn;
         let warp_seconds_end = match ppqn_to_seconds(warp, content_ppqn_end) {
             Some(seconds) => seconds,
             None => return
@@ -529,20 +543,21 @@ impl TimeStretchSequencer {
         let file_to_output_ratio = if output_seconds_span > 0.0 {file_seconds_span / output_seconds_span} else {1.0};
         let transient_shift_seconds = VOICE_FADE_DURATION * file_to_output_ratio * playback_rate * (file_rate as f64 / engine_rate as f64);
         let shifted_file_seconds = file_seconds_end + transient_shift_seconds;
-        let transient_index_shifted = floor_last_index(transients, shifted_file_seconds);
+        let transient_index_shifted = transients.floor_last_index(shifted_file_seconds);
         if transient_index_shifted < self.current_transient_index {
             self.reset();
         }
         if transient_index_shifted > self.current_transient_index && transient_index_shifted >= 0 {
-            if let Some(&transient_seconds) = transients.get(transient_index_shifted as usize) {
+            if let Some(transient_seconds) = transients.get(transient_index_shifted as usize) {
                 self.handle_transient_boundary(
                     source, transients, warp, config.transient_play_mode, effective_playback_rate, waveform_offset,
-                    block.bpm, engine_rate, file_rate, transient_index_shifted, transient_seconds, file_seconds_start
+                    block.bpm, engine_rate, file_rate, transient_index_shifted, transient_seconds, file_seconds_start,
+                    groove_gap.map(|gap| (gap, content_ppqn, buffer_count))
                 );
                 self.current_transient_index = transient_index_shifted;
             }
         }
-        self.maintain_once_voices(source, transients, warp, config.transient_play_mode, effective_playback_rate, waveform_offset, block.bpm, engine_rate, file_rate, buffer_count);
+        self.maintain_once_voices(source, transients, warp, groove_gap, config.transient_play_mode, effective_playback_rate, waveform_offset, block.bpm, engine_rate, file_rate, buffer_count);
         for voice in &mut self.voices {
             voice.process(source, output, buffer_start, buffer_count, fading_gain);
         }
@@ -574,8 +589,8 @@ impl TimeStretchSequencer {
     /// when looping is needed to fill the remaining output, replace them with a looping voice.
     #[allow(clippy::too_many_arguments)]
     fn maintain_once_voices(
-        &mut self, source: &Source, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
-        effective_playback_rate: f64, waveform_offset: f64, bpm: f32, engine_rate: f32, file_rate: f32, buffer_count: usize
+        &mut self, source: &Source, transients: &Cuts, warp: &[(f64, f64)], groove_gap: Option<&dyn Fn(f64, f64) -> f64>,
+        mode: TransientPlayMode, effective_playback_rate: f64, waveform_offset: f64, bpm: f32, engine_rate: f32, file_rate: f32, buffer_count: usize
     ) {
         self.spawn.clear();
         let mut index = 0;
@@ -591,17 +606,25 @@ impl TimeStretchSequencer {
                 index += 1;
                 continue;
             }
+            if self.voices[index].is_ending() {
+                let samples_to_end = (seg_end - read_pos) / effective_playback_rate - round(VOICE_FADE_DURATION * engine_rate as f64);
+                if samples_to_end < buffer_count as f64 {
+                    self.voices[index].start_fade_out(math::clamp(math::floor(samples_to_end), 0.0, f64::MAX) as usize);
+                }
+                index += 1;
+                continue;
+            }
             if mode != TransientPlayMode::Once {
                 if let Some(info) = segment_info(transients, self.current_transient_index, source.num_frames, file_rate) {
                     let segment_length = info.end_samples - info.start_samples;
-                    let output_samples_until_next = self.output_samples_until_next(&info, transients, warp, waveform_offset, bpm, engine_rate);
+                    let output_samples_until_next = self.output_samples_until_next(&info, transients, warp, &straight_gap, waveform_offset, bpm, engine_rate);
                     let audio_samples_needed = output_samples_until_next * effective_playback_rate;
                     let speed_ratio = segment_length / audio_samples_needed;
                     let close_to_unity = (0.99..=1.01).contains(&speed_ratio);
                     let needs_looping = !close_to_unity && audio_samples_needed > segment_length;
                     if needs_looping {
                         self.voices[index].start_fade_out(0);
-                        if let Some(voice) = create_voice(info.start_samples, info.end_samples, effective_playback_rate, engine_rate, mode, true, Some(read_pos)) {
+                        if let Some(voice) = create_voice(info.start_samples, info.end_samples, effective_playback_rate, engine_rate, mode, true, Some(read_pos), 0) {
                             self.spawn.push(voice);
                         }
                         index += 1;
@@ -609,7 +632,15 @@ impl TimeStretchSequencer {
                     }
                 }
             }
-            let samples_to_end = (seg_end - read_pos) / effective_playback_rate;
+            // a groove that makes the gap longer than the segment ends the voice before it reaches the next attack
+            let ends_early = groove_gap.is_some_and(|gap| segment_info(transients, self.current_transient_index, source.num_frames, file_rate)
+                .is_some_and(|info| {
+                    let grooved = self.output_samples_until_next(&info, transients, warp, gap, waveform_offset, bpm, engine_rate);
+                    let straight = self.output_samples_until_next(&info, transients, warp, &straight_gap, waveform_offset, bpm, engine_rate);
+                    grooved > straight * 1.01 && grooved * effective_playback_rate > (info.end_samples - info.start_samples) * 1.01
+                }));
+            let fade_samples = if ends_early {round(VOICE_FADE_DURATION * engine_rate as f64)} else {0.0};
+            let samples_to_end = (seg_end - read_pos) / effective_playback_rate - fade_samples;
             if samples_to_end < buffer_count as f64 {
                 let fade_out_offset = math::clamp(math::floor(samples_to_end), 0.0, f64::MAX) as usize;
                 self.voices[index].start_fade_out(fade_out_offset);
@@ -623,9 +654,10 @@ impl TimeStretchSequencer {
     /// already in flight aren't re-attacked), else fade everything and spawn a fresh voice at the new segment.
     #[allow(clippy::too_many_arguments)]
     fn handle_transient_boundary(
-        &mut self, source: &Source, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
+        &mut self, source: &Source, transients: &Cuts, warp: &[(f64, f64)], mode: TransientPlayMode,
         playback_rate: f64, waveform_offset: f64, bpm: f32, engine_rate: f32, file_rate: f32,
-        transient_index: i32, transient_seconds: f64, file_seconds_start: f64
+        transient_index: i32, transient_seconds: f64, file_seconds_start: f64,
+        groove: Option<(&dyn Fn(f64, f64) -> f64, f64, usize)>
     ) {
         let info = match segment_info(transients, transient_index, source.num_frames, file_rate) {
             Some(info) => info,
@@ -645,7 +677,7 @@ impl TimeStretchSequencer {
         let lookahead_samples = VOICE_FADE_DURATION * engine_rate as f64 * playback_rate;
         let mut continued_index: Option<usize> = None;
         for (index, voice) in self.voices.iter_mut().enumerate() {
-            if voice.done() || !voice.is_once() {
+            if voice.done() || !voice.is_once() || voice.is_ending() {
                 continue;
             }
             let projected_read_pos = voice.read_position() + lookahead_samples;
@@ -665,14 +697,14 @@ impl TimeStretchSequencer {
         if let Some(continued) = continued_index {
             for (index, voice) in self.voices.iter_mut().enumerate() {
                 if index != continued && !voice.done() {
-                    voice.start_fade_out(0);
+                    voice.release(groove.is_some());
                 }
             }
             return;
         }
         for voice in &mut self.voices {
             if !voice.done() {
-                voice.start_fade_out(0);
+                voice.release(groove.is_some());
             }
         }
         let audio_samples_needed = output_samples_until_next * playback_rate;
@@ -691,23 +723,33 @@ impl TimeStretchSequencer {
         // playhead file position makes a gap-start read silence, and leaves normal boundary spawns (where the
         // playhead sits at the onset) effectively unchanged.
         let playhead_file_samples = file_seconds_start * file_rate as f64;
-        let voice_start_samples = pre_roll_start.max(playhead_file_samples);
-        if let Some(voice) = create_voice(voice_start_samples, info.end_samples, playback_rate, engine_rate, mode, needs_looping, None) {
+        let (voice_start_samples, block_offset) = match groove {
+            // the groove runs the content at its own speed, so the voice starts where its transient lands on time
+            Some((gap, content_ppqn, buffer_count)) => {
+                let transient_ppqn = seconds_to_ppqn(warp, transient_seconds - waveform_offset);
+                let distance = pulses_to_seconds(gap(content_ppqn, transient_ppqn), bpm) * engine_rate as f64;
+                let lead = (info.start_samples - pre_roll_start) / playback_rate;
+                let offset = math::clamp(math::floor(distance - lead), 0.0, buffer_count.saturating_sub(1) as f64);
+                (info.start_samples - (distance - offset) * playback_rate, offset as usize)
+            }
+            None => (pre_roll_start.max(playhead_file_samples), 0)
+        };
+        if let Some(voice) = create_voice(voice_start_samples, info.end_samples, playback_rate, engine_rate, mode, needs_looping, None, block_offset) {
             self.voices.push(voice);
         }
         self.accumulated_drift = 0.0;
     }
 
-    fn output_samples_until_next(&self, info: &SegmentInfo, transients: &[f64], warp: &[(f64, f64)], waveform_offset: f64, bpm: f32, engine_rate: f32) -> f64 {
+    fn output_samples_until_next(&self, info: &SegmentInfo, transients: &Cuts, warp: &[(f64, f64)], gap: &dyn Fn(f64, f64) -> f64, waveform_offset: f64, bpm: f32, engine_rate: f32) -> f64 {
         if !info.has_next {
             return f64::INFINITY;
         }
-        let Some(&current_seconds) = transients.get(self.current_transient_index.max(0) as usize) else {
+        let Some(current_seconds) = transients.get(self.current_transient_index.max(0) as usize) else {
             return f64::INFINITY;
         };
         let transient_ppqn = seconds_to_ppqn(warp, current_seconds - waveform_offset);
         let next_ppqn = seconds_to_ppqn(warp, info.next_transient_seconds - waveform_offset);
-        pulses_to_seconds(next_ppqn - transient_ppqn, bpm) * engine_rate as f64
+        pulses_to_seconds(gap(transient_ppqn, next_ppqn), bpm) * engine_rate as f64
     }
 
     #[cfg(test)]
@@ -716,28 +758,108 @@ impl TimeStretchSequencer {
     }
 }
 
+fn straight_gap(from: f64, to: f64) -> f64 {
+    to - from
+}
+
 /// TS `#createVoice`: pick the voice type for the transient play-mode + whether the segment must loop to fill.
-fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample_rate: f32, mode: TransientPlayMode, needs_looping: bool, initial_read_position: Option<f64>) -> Option<Voice> {
+fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample_rate: f32, mode: TransientPlayMode, needs_looping: bool, initial_read_position: Option<f64>,
+                block_offset: usize) -> Option<Voice> {
     if start_samples >= end_samples {
         return None;
     }
     if mode == TransientPlayMode::Once || !needs_looping {
-        return Some(Voice::Once(OnceVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate)));
+        return Some(Voice::Once(OnceVoice::new(start_samples, end_samples, playback_rate, block_offset, sample_rate)));
     }
     if mode == TransientPlayMode::Repeat {
-        return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position)));
+        return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, block_offset, sample_rate, initial_read_position)));
     }
     let initial = initial_read_position.map(|position| (position, 1.0));
-    Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial)))
+    Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, block_offset, sample_rate, initial)))
+}
+
+/// The points a time-stretch region cuts its segments at: the file's transients, and with a groove its grid too, so
+/// content without a transient moves with the groove. Merged on the fly, nothing is allocated.
+pub(crate) struct Cuts<'a> {
+    pub(crate) transients: &'a [f64],
+    pub(crate) grid: Option<Grid<'a>>
+}
+
+/// Grid points every `step` content pulses, `phase` before the multiples of `step`, as file seconds. The first point
+/// at or past the last warp marker closes the last segment there.
+pub(crate) struct Grid<'a> {
+    pub(crate) warp: &'a [(f64, f64)],
+    pub(crate) waveform_offset: f64,
+    pub(crate) step: f64,
+    pub(crate) phase: f64
+}
+
+impl Grid<'_> {
+    fn first_and_count(&self) -> (f64, usize) {
+        if self.warp.len() < 2 || self.step <= 0.0 {
+            return (0.0, 0);
+        }
+        let (first, last) = (self.warp[0].0, self.warp[self.warp.len() - 1].0);
+        let begin = -math::floor(-(first + self.phase) / self.step);
+        let end = -math::floor(-(last + self.phase) / self.step);
+        (begin, if end >= begin {(end - begin) as usize + 1} else {0})
+    }
+
+    fn count(&self) -> usize {
+        self.first_and_count().1
+    }
+
+    fn at(&self, index: usize) -> f64 {
+        let (begin, _) = self.first_and_count();
+        let ppqn = (begin + index as f64) * self.step - self.phase;
+        let seconds = ppqn_to_seconds(self.warp, ppqn).unwrap_or(if ppqn < self.warp[0].0 {self.warp[0].1} else {self.warp[self.warp.len() - 1].1});
+        seconds + self.waveform_offset
+    }
+
+    fn count_at_or_below(&self, value: f64) -> usize {
+        let (mut low, mut high) = (0, self.count());
+        while low < high {
+            let middle = (low + high) / 2;
+            if self.at(middle) <= value {low = middle + 1} else {high = middle}
+        }
+        low
+    }
+}
+
+impl Cuts<'_> {
+    /// The cut at `index` in time order, a transient before a grid point at the same time.
+    fn get(&self, index: usize) -> Option<f64> {
+        let Some(grid) = &self.grid else { return self.transients.get(index).copied() };
+        let (transients, count) = (self.transients.len(), grid.count());
+        if index >= transients + count {
+            return None;
+        }
+        let (mut low, mut high) = ((index + 1).saturating_sub(count), (index + 1).min(transients));
+        while low < high {
+            let middle = (low + high) / 2;
+            if self.transients[middle] <= grid.at(index - middle) {low = middle + 1} else {high = middle}
+        }
+        let transient = if low > 0 {Some(self.transients[low - 1])} else {None};
+        let point = if low <= index {Some(grid.at(index - low))} else {None};
+        match (transient, point) {
+            (Some(transient), Some(point)) => Some(transient.max(point)),
+            (transient, point) => transient.or(point)
+        }
+    }
+
+    fn floor_last_index(&self, value: f64) -> i32 {
+        let grid = self.grid.as_ref().map_or(0, |grid| grid.count_at_or_below(value));
+        floor_last_index(self.transients, value) + grid as i32
+    }
 }
 
 /// TS `#getSegmentInfo`: the sample bounds of transient `index`'s segment (to the next transient, or EOF).
-fn segment_info(transients: &[f64], index: i32, num_frames: usize, file_rate: f32) -> Option<SegmentInfo> {
+fn segment_info(transients: &Cuts, index: i32, num_frames: usize, file_rate: f32) -> Option<SegmentInfo> {
     if index < 0 {
         return None;
     }
-    let current = *transients.get(index as usize)?;
-    let next = transients.get(index as usize + 1).copied();
+    let current = transients.get(index as usize)?;
+    let next = transients.get(index as usize + 1);
     Some(SegmentInfo {
         start_samples: current * file_rate as f64,
         end_samples: next.map(|seconds| seconds * file_rate as f64).unwrap_or(num_frames as f64),
@@ -798,6 +920,26 @@ mod tests {
     }
 
     #[test]
+    fn cuts_merge_the_transients_with_the_grid_in_time_order() {
+        // the grid every 960 pulses = 0.25 s, 240 pulses before the multiples of 960
+        let warp = [(0.0, 0.0), (3840.0, 1.0)];
+        let transients = [0.0, 0.1, 0.4375, 0.9];
+        let cuts = Cuts {transients: &transients, grid: Some(Grid {warp: &warp, waveform_offset: 0.0, step: 960.0, phase: 240.0})};
+        let expected = [0.0, 0.1, 0.1875, 0.4375, 0.4375, 0.6875, 0.9, 0.9375, 1.0];
+        for (index, value) in expected.iter().enumerate() {
+            assert!((cuts.get(index).unwrap() - value).abs() < 1e-12, "cut {index}: {:?} vs {value}", cuts.get(index));
+        }
+        assert_eq!(cuts.get(expected.len()), None);
+        assert_eq!(cuts.floor_last_index(-0.1), -1);
+        assert_eq!(cuts.floor_last_index(0.2), 2);
+        assert_eq!(cuts.floor_last_index(0.4375), 4, "a transient on a grid point is the later of the two");
+        assert_eq!(cuts.floor_last_index(2.0), 8, "the warp end closes the last segment");
+        let shifted = Cuts {transients: &transients, grid: Some(Grid {warp: &warp, waveform_offset: 0.5, step: 960.0, phase: 0.0})};
+        let moved: Vec<f64> = (0..8).filter_map(|index| shifted.get(index)).collect();
+        assert_eq!(moved, [0.0, 0.1, 0.4375, 0.5, 0.75, 0.9, 1.0, 1.25], "the waveform offset moves the grid in the file");
+    }
+
+    #[test]
     fn warp_maps_ppqn_and_seconds_both_ways() {
         let warp = [(0.0, 0.0), (3840.0, 1.0)];
         assert!((ppqn_to_seconds(&warp, 1920.0).unwrap() - 0.5).abs() < 1e-9, "midpoint maps to half a second");
@@ -822,7 +964,7 @@ mod tests {
         let fading_gain = [1.0f32; 128];
         let block = playing_block();
         let src = Source {left: &source, right: &source, num_frames: source.len()};
-        sequencer.process(&mut output, &src, 48_000.0, &transients, &config, 0.0, &block, 0.0, 0.0, 240.0, &fading_gain, 48_000.0);
+        sequencer.process(&mut output, &src, 48_000.0, &Cuts {transients: &transients, grid: None}, &config, 0.0, &block, (0.0, 240.0), None, 0.0, 240.0, &fading_gain, 48_000.0);
         assert!(sequencer.voice_count() >= 1, "a voice spawned at the transient boundary");
         let peak = (0..64).map(|i| output.left[i].abs()).fold(0.0f32, f32::max);
         assert!(peak > 0.5, "the time-stretch segment is audible (peak {peak})");
@@ -843,7 +985,7 @@ mod tests {
         let fading_gain = [1.0f32; 128];
         let block = playing_block();
         let src = Source {left: &source, right: &source, num_frames: source.len()};
-        sequencer.process(&mut output, &src, 48_000.0, &transients, &config, 0.0, &block, 0.0, 0.0, 240.0, &fading_gain, 48_000.0);
+        sequencer.process(&mut output, &src, 48_000.0, &Cuts {transients: &transients, grid: None}, &config, 0.0, &block, (0.0, 240.0), None, 0.0, 240.0, &fading_gain, 48_000.0);
         let peak = (0..64).map(|i| output.left[i].abs()).fold(0.0f32, f32::max);
         assert!(peak < 1e-6, "starting inside the silent gap plays silence, not a replayed phrase (peak {peak})");
     }
@@ -859,7 +1001,7 @@ mod tests {
         // content_ppqn 100 is past the last warp marker (10) -> the cycle is silent.
         let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 340.0, s0: 0, s1: 64, bpm: 120.0};
         let src = Source {left: &source, right: &source, num_frames: source.len()};
-        sequencer.process(&mut output, &src, 48_000.0, &transients, &config, 0.0, &block, 100.0, 100.0, 340.0, &fading_gain, 48_000.0);
+        sequencer.process(&mut output, &src, 48_000.0, &Cuts {transients: &transients, grid: None}, &config, 0.0, &block, (0.0, 240.0), None, 100.0, 340.0, &fading_gain, 48_000.0);
         assert_eq!(output.left[0], 0.0, "content past the warp range is silent");
     }
 }

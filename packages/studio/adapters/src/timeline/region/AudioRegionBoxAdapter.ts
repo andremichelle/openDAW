@@ -274,6 +274,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.gain.setValue(this.gain.getValue())
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
                 clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
+                this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
                 this.#fadingAdapter.copyTo(box.fading)
             }), AudioRegionBoxAdapter)
         adapter.loopDuration = params?.loopDuration ?? this.resolveLoopDuration(adapter.position)

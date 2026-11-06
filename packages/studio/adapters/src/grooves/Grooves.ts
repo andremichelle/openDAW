@@ -1,4 +1,8 @@
 import {
+    AudioClipBox,
+    AudioPitchStretchBox,
+    AudioTimeStretchBox,
+    AudioRegionBox,
     BoxIO,
     BoxVisitor,
     GrooveFunctionBox,
@@ -137,14 +141,26 @@ export namespace Grooves {
         return copy
     }
 
-    export type TimelineBox = NoteRegionBox | ValueRegionBox | NoteClipBox | ValueClipBox
+    export type AudioContentBox = AudioRegionBox | AudioClipBox
+    export type TimelineBox = NoteRegionBox | ValueRegionBox | NoteClipBox | ValueClipBox | AudioContentBox
+
+    export const isAudioContentBox = (box: Box): box is AudioContentBox =>
+        isInstanceOf(box, AudioRegionBox) || isInstanceOf(box, AudioClipBox)
 
     export const isTimelineBox = (box: Box): box is TimelineBox =>
         isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox)
-        || isInstanceOf(box, NoteClipBox) || isInstanceOf(box, ValueClipBox)
+        || isInstanceOf(box, NoteClipBox) || isInstanceOf(box, ValueClipBox) || isAudioContentBox(box)
 
     export const pointerOf = (box: Box): Option<PointerField<Pointers.Groove>> =>
         isTimelineBox(box) ? Option.wrap(box.groove) : Option.None
+
+    // No Sync audio has no groove, and only the play modes the engine plays through one accept it
+    export const acceptsGroove = (box: Box): boolean => isAudioContentBox(box)
+        ? box.playMode.targetVertex.mapOr(({box: mode}) => isInstanceOf(mode, AudioPitchStretchBox) || isInstanceOf(mode, AudioTimeStretchBox), false)
+        : isTimelineBox(box)
+
+    export const isRegionBox = (box: TimelineBox): boolean =>
+        isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) || isInstanceOf(box, AudioRegionBox)
 
     export type FlattenGroove = "apply" | "keep"
 
@@ -163,7 +179,8 @@ export namespace Grooves {
     }
 
     export const unitOf = (box: TimelineBox): Option<AudioUnitBox> =>
-        (isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) ? box.regions : box.clips).targetVertex
+        (isInstanceOf(box, NoteRegionBox) || isInstanceOf(box, ValueRegionBox) || isInstanceOf(box, AudioRegionBox)
+            ? box.regions : box.clips).targetVertex
             .flatMap(({box: track}) => isInstanceOf(track, TrackBox) ? track.tracks.targetVertex : Option.None)
             .flatMap(({box: unit}) => isInstanceOf(unit, AudioUnitBox) ? Option.wrap(unit) : Option.None)
 

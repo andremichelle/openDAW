@@ -111,6 +111,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
             box.file.refer(this.#box.file.targetVertex.unwrap("file.target"))
             box.events.refer(this.#box.events.targetVertex.unwrap("events.target"))
             clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
+            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
         })
     }
 

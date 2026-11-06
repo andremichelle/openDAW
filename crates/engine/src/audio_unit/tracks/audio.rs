@@ -90,6 +90,9 @@ pub(crate) const AUDIO_REGION_WAVEFORM_OFFSET_KEY: u16 = 7;  // seconds into the
 pub(crate) const AUDIO_REGION_MUTE_KEY: u16 = 14;
 pub(crate) const AUDIO_REGION_GAIN_KEY: u16 = 17;            // decibels
 pub(crate) const AUDIO_REGION_FADING_KEY: u16 = 18;          // object: 1 in, 2 out (ppqn), 3 in-slope, 4 out-slope (ratio)
+// WASM CONTRACT: the `groove` pointer keys of AudioRegionBox and AudioClipBox
+pub(crate) const AUDIO_REGION_GROOVE_KEY: u16 = 19;
+pub(crate) const AUDIO_CLIP_GROOVE_KEY: u16 = 15;
 pub(crate) const AUDIO_REGION_PLAYMODE_KEY: u16 = 8;         // -> an AudioPitchStretchBox / AudioTimeStretchBox, or unset (native)
 pub(crate) const PITCH_STRETCH_WARP_HUB_KEY: u16 = 1;        // AudioPitchStretchBox.warp-markers hub
 // Every play-mode box (Pitch / TimeStretch / Signalsmith) exposes its warp-markers hub at field 1, so the
@@ -140,7 +143,9 @@ pub(crate) struct AudioRegion {
     pub(crate) signalsmith: Option<SignalsmithConfig>,
     // The SOURCE file's transient marker positions in SECONDS (sorted); read only when `time_stretch` is `Some`
     // (the sequencer aligns granular voices to these). Empty otherwise.
-    pub(crate) transients: Vec<f64>
+    pub(crate) transients: Vec<f64>,
+    // The groove the content plays through, only for a region with a play mode (No Sync has none)
+    pub(crate) groove: Option<Uuid>
 }
 
 impl Span for AudioRegion {
@@ -188,8 +193,15 @@ pub(crate) fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid, tempo_map: 
         warp: read_warp_markers(graph, region_uuid),
         time_stretch,
         signalsmith: read_signalsmith(graph, region_uuid),
-        transients
+        transients,
+        groove: audio_groove_of(graph, region_uuid, AUDIO_REGION_GROOVE_KEY)
     })
+}
+
+/// The groove of an audio region or clip, none without a play mode (the play mode key is 8 on both).
+fn audio_groove_of(graph: &BoxGraph, uuid: Uuid, key: u16) -> Option<Uuid> {
+    graph.target_of(&Address::of(uuid, vec![AUDIO_REGION_PLAYMODE_KEY]))?;
+    groove_of(graph, uuid, key)
 }
 
 /// Read a region's PitchStretch warp markers (sorted by ppqn position), mapping content ppqn -> source seconds.
@@ -397,7 +409,8 @@ pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, tempo_map: &Tem
         warp: read_warp_markers(graph, clip_uuid),
         time_stretch,
         signalsmith: read_signalsmith(graph, clip_uuid),
-        transients
+        transients,
+        groove: audio_groove_of(graph, clip_uuid, AUDIO_CLIP_GROOVE_KEY)
     };
     Some((region, looped))
 }

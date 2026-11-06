@@ -787,6 +787,39 @@ fn read_audio_region_reads_pitch_stretch_warp_markers_sorted() {
 }
 
 #[test]
+fn an_audio_region_or_clip_reads_its_groove_only_with_a_play_mode() {
+    use super::tracks::{read_audio_clip, read_audio_region};
+    const REGION: Uuid = [70u8; 16];
+    const CLIP: Uuid = [71u8; 16];
+    const FILE: Uuid = [72u8; 16];
+    const PITCH: Uuid = [73u8; 16];
+    const GROOVE: Uuid = [74u8; 16];
+    let build = |play_mode: bool| {
+        let mode = |key: u16| if play_mode {vec![(key, FieldValue::Pointer(Some(Address::box_of(PITCH))))]} else {vec![]};
+        let mut region = vec![(2, FieldValue::Pointer(Some(Address::box_of(FILE)))), (10, FieldValue::Int32(0)),
+            (11, FieldValue::Float32(3840.0)), (13, FieldValue::Float32(3840.0)), (19, FieldValue::Pointer(Some(Address::box_of(GROOVE))))];
+        region.extend(mode(8));
+        let mut clip = vec![(2, FieldValue::Pointer(Some(Address::box_of(FILE)))), (10, FieldValue::Float32(3840.0)),
+            (15, FieldValue::Pointer(Some(Address::box_of(GROOVE))))];
+        clip.extend(mode(8));
+        BoxGraph::from_boxes(vec![
+            graph_box(FILE, "AudioFileBox", &[]),
+            graph_box(PITCH, "AudioPitchStretchBox", &[(1, FieldValue::Hook)]),
+            graph_box(GROOVE, "GrooveOffsetBox", &[]),
+            graph_box(REGION, "AudioRegionBox", &region),
+            graph_box(CLIP, "AudioClipBox", &clip)
+        ])
+    };
+    let tempo = TempoMap::fixed(120.0);
+    let synced = build(true);
+    assert_eq!(read_audio_region(&synced, REGION, &tempo).unwrap().groove, Some(GROOVE));
+    assert_eq!(read_audio_clip(&synced, CLIP, &tempo).unwrap().0.groove, Some(GROOVE));
+    let no_sync = build(false);
+    assert_eq!(read_audio_region(&no_sync, REGION, &tempo).unwrap().groove, None, "No Sync has no groove");
+    assert_eq!(read_audio_clip(&no_sync, CLIP, &tempo).unwrap().0.groove, None, "No Sync has no groove");
+}
+
+#[test]
 fn read_audio_region_reads_time_stretch_config_and_file_transients() {
     use super::tracks::read_audio_region;
     use crate::time_stretch::TransientPlayMode;

@@ -42,6 +42,7 @@ export namespace AudioContentModifier {
             }
             const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             adapter.box.playMode.defer()
+            adapter.box.groove.defer()
             optPrev.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
             })

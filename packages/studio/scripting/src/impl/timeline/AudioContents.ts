@@ -10,11 +10,13 @@ import {
 import {Box} from "@opendaw/lib-box"
 import {PPQN, ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
 import {TransientPlayMode} from "@opendaw/studio-enums"
+import {Grooves} from "@opendaw/studio-adapters"
 import {asInstanceOf, Class, float, isDefined, isInstanceOf, Nullable, panic, quantizeRound, UUID} from "@opendaw/lib-std"
-import {AudioPlayback, Sample} from "../../Api"
+import {AnyGroove, AudioPlayback, Sample} from "../../Api"
 import {Context} from "../Context"
 import {Guard} from "../Guard"
 import {AudioFiles} from "../AudioFiles"
+import {GrooveImpls} from "../Grooves"
 
 export type AudioContentBox = AudioRegionBox | AudioClipBox
 export type PlayModeBox = AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox
@@ -113,6 +115,15 @@ export namespace AudioContents {
         const playMode = requirePlayMode(box, AudioSignalsmithBox, "transpose", "signalsmith")
         const validated = Guard.float32({min: -24.0, max: 24.0, scaling: "linear"}, value, "transpose")
         context.edit(() => playMode.transpose.setValue(validated))
+    }
+
+    export const groove = (context: Context, box: AudioContentBox): Nullable<AnyGroove> => GrooveImpls.read(context, box.groove)
+
+    export const setGroove = (context: Context, box: AudioContentBox, value: Nullable<AnyGroove>): void => {
+        if (isDefined(value) && !Grooves.acceptsGroove(box)) {
+            return panic(`Only playback "pitch" and "timestretch" take a groove, this one plays "${playback(box)}"`)
+        }
+        GrooveImpls.write(context, box.groove, value)
     }
 
     const requirePlayMode = <B extends Box>(box: AudioContentBox, type: Class<B>, name: string, playback: AudioPlayback): B => {

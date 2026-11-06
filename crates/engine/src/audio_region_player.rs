@@ -29,13 +29,15 @@ use engine_env::processor::Processor;
 use math::curve::normalized_at;
 use math::db_to_gain;
 use alloc::vec::Vec;
-use value::region::locate_loops;
+use value::region::{locate_grooved_loops, locate_loops};
 use boxgraph::address::Uuid;
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use crate::audio_unit::{AudioRegion, SignalsmithConfig, BoundAudioClip, SharedAudioTrackSets};
-use crate::time_stretch::{Source, TimeStretchSequencer};
+use crate::time_stretch::{Cuts, Grid, Source, TimeStretchConfig, TimeStretchSequencer};
+#[cfg(test)]
+use crate::time_stretch::TransientPlayMode;
 use signalsmith::SignalsmithStretch;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
@@ -464,31 +466,17 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             };
             visited.push(region.region_uuid);
             upsert(granular_files, region.region_uuid, region.file);
-            // A re-entry (transport looped back in) plays fresh, so drop any release seeded at a previous end.
-            granular_releases.retain(|release| release.region_uuid != region.region_uuid);
             let source = Source {left, right, num_frames: sample.frame_count as usize};
-            let complete = region.position + region.duration;
-            for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
-                fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
-                sequencers[index].1.process(
-                    output, &source, sample.sample_rate, &region.transients, config,
-                    region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
-                    fading_gain, sample_rate);
-            }
-            // The region ENDS within this block (no authored fade-out): ring its voices out past `complete` so the
-            // seam crossfades with the next region's fade-in. Render the in-block portion now (it overlaps the next
-            // region rendered after this in the same block); the remainder rides the block loop's release driver.
-            let pulses = block.p1 - block.p0;
-            if region.fade_out <= 0.0 && complete > from && complete <= to && pulses > 0.0 {
-                let samples = (block.s1 - block.s0) as f64;
-                let complete_sample = sample_of(block, complete, pulses, samples);
-                let block_end = block.s1 as usize;
-                let window = (VOICE_FADE_DURATION * sample_rate as f64).max(1.0);
-                let unity = [1.0f32; engine_env::RENDER_QUANTUM];
-                let count = block_end.saturating_sub(complete_sample);
-                sequencers[index].1.render_release(&source, output, complete_sample, count, &unity[..count]);
-                granular_releases.retain(|release| release.region_uuid != region.region_uuid);
-                granular_releases.push(GranularRelease {region_uuid: region.region_uuid, file: region.file, remaining: window - count as f64});
+            let sequencer = &mut sequencers[index].1;
+            let release = match region.groove {
+                Some(groove) => render_grooved_grain(sequencer, region, config, &source, sample.sample_rate, from, to, block, output, fading_gain,
+                    sample_rate, granular_releases, &|position| crate::warp_through(&groove, position),
+                    &|position| crate::unwarp_through(&groove, position), crate::grid_through(&groove)),
+                None => render_straight_grain(sequencer, region, config, &source, sample.sample_rate, from, to, block, output, fading_gain,
+                    sample_rate, granular_releases)
+            };
+            if let Some(start) = release {
+                release_granular(sequencer, region, &source, output, start, block, sample_rate, granular_releases);
             }
         }
         _ => {
@@ -509,6 +497,80 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             }
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_straight_grain(sequencer: &mut TimeStretchSequencer, region: &AudioRegion, config: &TimeStretchConfig, source: &Source, source_rate: f32,
+                         from: f64, to: f64, block: &Block, output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
+                         engine_rate: f32, granular_releases: &mut Vec<GranularRelease>) -> Option<usize> {
+    // A re-entry (transport looped back in) plays fresh, so drop any release seeded at a previous end.
+    granular_releases.retain(|release| release.region_uuid != region.region_uuid);
+    let complete = region.position + region.duration;
+    let pulses = block.p1 - block.p0;
+    for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
+        fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
+        let content = cycle.result_start - cycle.raw_start;
+        sequencer.process(output, source, source_rate, &Cuts {transients: &region.transients, grid: None}, config, region.waveform_offset, block,
+            (content, content + pulses), None, cycle.result_start, cycle.result_end, fading_gain, engine_rate);
+    }
+    // The region ENDS within this block (no authored fade-out): ring its voices out past `complete` so the seam
+    // crossfades with the next region's fade-in.
+    (region.fade_out <= 0.0 && complete > from && complete <= to && pulses > 0.0)
+        .then(|| sample_of(block, complete, pulses, (block.s1 - block.s0) as f64))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_grooved_grain(sequencer: &mut TimeStretchSequencer, region: &AudioRegion, config: &TimeStretchConfig, source: &Source, source_rate: f32,
+                        from: f64, to: f64, block: &Block, output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
+                        engine_rate: f32, granular_releases: &mut Vec<GranularRelease>,
+                        warp: &dyn Fn(f64) -> f64, unwarp: &dyn Fn(f64) -> f64, grid: Option<f64>) -> Option<usize> {
+    let pulses = block.p1 - block.p0;
+    if pulses <= 0.0 {return None}
+    let samples = (block.s1 - block.s0) as f64;
+    let complete = region.position + region.duration;
+    let origin = region.position - region.loop_offset;
+    let content_high = complete - origin;
+    let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
+    let mut rendered = false;
+    let mut content_ended: Option<usize> = None;
+    for pass in locate_grooved_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to, warp, unwarp) {
+        if !rendered {
+            granular_releases.retain(|release| release.region_uuid != region.region_uuid);
+            rendered = true;
+        }
+        let base = pass.raw_start - origin;
+        let reaches_end = base + pass.content_end >= content_high;
+        let count = fill_fading_gain(fading_gain, region, pass.result_start, pass.result_end, block);
+        // an authored fade-out leaves no release, so content the groove ends early gets a declick instead
+        if reaches_end && region.fade_out > 0.0 && declick_pulses > 0.0 {
+            let span = pass.result_end - pass.result_start;
+            for (index, slot) in fading_gain.iter_mut().enumerate().take(count) {
+                let remaining = span * (1.0 - index as f64 / count as f64);
+                *slot = slot.min((remaining / declick_pulses).clamp(0.0, 1.0) as f32);
+            }
+        }
+        let lookahead = unwarp(pass.result_start + pulses - origin) - base;
+        let grid = grid.map(|step| Grid {warp: &config.warp, waveform_offset: region.waveform_offset, step,
+            phase: base - math::floor(base / step) * step});
+        sequencer.process(output, source, source_rate, &Cuts {transients: &region.transients, grid}, config, region.waveform_offset, block,
+            (pass.content_start, lookahead), Some(&|from, to| warp(base + to) - warp(base + from)), pass.result_start, pass.result_end,
+            fading_gain, engine_rate);
+        if reaches_end {content_ended = Some(sample_of(block, pass.result_end, pulses, samples))}
+    }
+    if region.fade_out > 0.0 {return None}
+    content_ended.or_else(|| (complete > from && complete <= to).then(|| sample_of(block, complete, pulses, samples)))
+}
+
+/// Render the in-block portion of a granular ring out from `start`, the remainder rides the block loop's release driver.
+#[allow(clippy::too_many_arguments)]
+fn release_granular(sequencer: &mut TimeStretchSequencer, region: &AudioRegion, source: &Source, output: &mut AudioBuffer, start: usize,
+                    block: &Block, engine_rate: f32, granular_releases: &mut Vec<GranularRelease>) {
+    let window = (VOICE_FADE_DURATION * engine_rate as f64).max(1.0);
+    let unity = [1.0f32; engine_env::RENDER_QUANTUM];
+    let count = (block.s1 as usize).saturating_sub(start);
+    sequencer.render_release(source, output, start, count, &unity[..count]);
+    granular_releases.retain(|release| release.region_uuid != region.region_uuid);
+    granular_releases.push(GranularRelease {region_uuid: region.region_uuid, file: region.file, remaining: window - count as f64});
 }
 
 /// Drive the Signalsmith spectral players for one region/block: follow the warp (time) and
@@ -839,6 +901,10 @@ fn release_jumped_out(visited: &[Uuid], block: &Block, output: &mut AudioBuffer,
 /// reading PAST the region end (seeded here, rendered by `render_release_tails`), so a cut seam self-crossfades.
 #[allow(clippy::too_many_arguments)] // positional source planes / rates / block / tempo map / cursor; a struct adds no clarity
 fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], right: &[f32], source_rate: f32, from: f64, to: f64, block: &Block, engine_rate: f32, tempo_map: &TempoMap, cursor: &mut NativeCursor) -> Option<ReleaseTail> {
+    if let (Some(groove), false) = (region.groove, region.warp.is_empty()) {
+        return render_grooved_pitch(output, region, left, right, source_rate, from, to, block, engine_rate, cursor,
+            |position| crate::warp_through(&groove, position), |position| crate::unwarp_through(&groove, position));
+    }
     let pulses = block.p1 - block.p0;
     if pulses <= 0.0 {
         return None;
@@ -944,29 +1010,117 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
     // block where the region already ended. The in-block portion renders here so it overlaps a following region in
     // the SAME block; the remainder rides `render_release_tails` across later blocks.
     if region.fade_out <= 0.0 && end_rate > 0.0 && complete > from && complete <= to {
-        let complete_sample = sample_of(block, complete, pulses, samples);
-        let block_end = block.s1 as usize;
-        let mut read_frame = end_frame;
-        let mut elapsed = 0.0f64;
-        for index in complete_sample..block_end {
-            let base = read_frame as usize;
-            if elapsed >= window || base >= source_frames { break; }
-            let frac = (read_frame - base as f64) as f32;
-            let scale = gain * ((window - elapsed) / window) as f32;
-            output.left[index] += interpolate(left, base, frac) * scale;
-            output.right[index] += interpolate(right, base, frac) * scale;
-            read_frame += end_rate;
-            elapsed += 1.0;
-        }
-        let remaining = window - elapsed;
-        if remaining > 0.0 && (read_frame as usize) < source_frames {
-            return Some(ReleaseTail {
-                region_uuid: region.region_uuid, file: region.file,
-                read_frame, rate: end_rate, gain_db: region.gain_db, remaining, window
-            });
-        }
+        return release_tail(output, region, left, right, block, sample_of(block, complete, pulses, samples), end_frame, end_rate, window);
     }
     None
+}
+
+/// Continue the read from `read_frame` at `rate` past where the region's content ends, fading out over `window`
+/// samples. The in-block portion renders from `start`, the remainder returns as a tail.
+#[allow(clippy::too_many_arguments)]
+fn release_tail(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], right: &[f32], block: &Block, start: usize,
+                mut read_frame: f64, rate: f64, window: f64) -> Option<ReleaseTail> {
+    let gain = db_to_gain(region.gain_db);
+    let source_frames = left.len();
+    let mut elapsed = 0.0f64;
+    for index in start..block.s1 as usize {
+        let base = read_frame as usize;
+        if elapsed >= window || base >= source_frames { break; }
+        let frac = (read_frame - base as f64) as f32;
+        let scale = gain * ((window - elapsed) / window) as f32;
+        output.left[index] += interpolate(left, base, frac) * scale;
+        output.right[index] += interpolate(right, base, frac) * scale;
+        read_frame += rate;
+        elapsed += 1.0;
+    }
+    let remaining = window - elapsed;
+    if remaining > 0.0 && (read_frame as usize) < source_frames {
+        return Some(ReleaseTail {region_uuid: region.region_uuid, file: region.file, read_frame, rate, gain_db: region.gain_db, remaining, window});
+    }
+    None
+}
+
+const GROOVE_CHUNK: usize = 32;
+
+/// A Pitch region through a groove: the read follows the grooved content position, exact every `GROOVE_CHUNK`
+/// samples and linear in between, so the pitch bends with the groove like tape.
+#[allow(clippy::too_many_arguments)]
+fn render_grooved_pitch(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], right: &[f32], source_rate: f32,
+                        from: f64, to: f64, block: &Block, engine_rate: f32, cursor: &mut NativeCursor,
+                        warp: impl Fn(f64) -> f64, unwarp: impl Fn(f64) -> f64) -> Option<ReleaseTail> {
+    let pulses = block.p1 - block.p0;
+    if pulses <= 0.0 {return None}
+    let samples = (block.s1 - block.s0) as f64;
+    let complete = region.position + region.duration;
+    let origin = region.position - region.loop_offset;
+    let content_high = complete - origin;
+    let gain = db_to_gain(region.gain_db);
+    let source_frames = left.len();
+    let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
+    let declick_in = region.waveform_offset > 0.0 || region.loop_offset > 0.0;
+    let window = (VOICE_FADE_DURATION * engine_rate as f64).max(1.0);
+    let jump_window = (JUMP_FADE_DURATION * engine_rate as f64).max(1.0);
+    if block.flags.discontinuous() && from > region.position {cursor.fade_in = jump_window}
+    let markers = &region.warp;
+    let (first, last) = (markers[0].0, markers[markers.len() - 1].0);
+    let frame_of = |content: f64| (if content >= last {markers[markers.len() - 1].1} else {warp_seconds(markers, content, 0.0)}
+        + region.waveform_offset) * source_rate as f64;
+    let pulse_of = |index: usize| block.p0 + (index as f64 - block.s0 as f64) / samples * pulses;
+    let (mut end_frame, mut end_rate) = (0.0f64, 0.0f64);
+    let mut content_ended: Option<usize> = None;
+    for pass in locate_grooved_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to, &warp, &unwarp) {
+        let begin = sample_of(block, pass.result_start, pulses, samples);
+        let end = sample_of(block, pass.result_end, pulses, samples);
+        if begin >= end {continue}
+        let base = pass.raw_start - origin;
+        let content_of = |index: usize| if index == begin {pass.content_start} else if index == end {pass.content_end} else {
+            math::clamp(unwarp(pulse_of(index) - origin) - base, pass.content_start, pass.content_end)};
+        // the groove moved the content start into the region, so it needs its own declick
+        let edge_in = declick_in && declick_pulses > 0.0 && base + pass.content_start <= region.loop_offset;
+        let reaches_end = base + pass.content_end >= content_high;
+        // an authored fade-out leaves no tail, so content the groove ends early gets a declick instead
+        let edge_out = reaches_end && region.fade_out > 0.0 && declick_pulses > 0.0;
+        let mut chunk = begin;
+        while chunk < end {
+            let chunk_end = (chunk + GROOVE_CHUNK).min(end);
+            let (content_from, content_to) = (content_of(chunk), content_of(chunk_end));
+            if content_from >= first && content_from < last {
+                let start_frame = frame_of(content_from);
+                let rate = (frame_of(content_to) - start_frame) / (chunk_end - chunk) as f64;
+                for index in chunk..chunk_end {
+                    let frame = start_frame + (index - chunk) as f64 * rate;
+                    if frame < 0.0 {continue}
+                    let frame_index = frame as usize;
+                    if frame_index >= source_frames {break}
+                    let pulse = pulse_of(index);
+                    let mut envelope = fade_gain(pulse - region.position, region.duration, region, declick_pulses, declick_in, false);
+                    if edge_in {envelope = envelope.min(((pulse - pass.result_start) / declick_pulses).clamp(0.0, 1.0) as f32)}
+                    if edge_out {envelope = envelope.min(((pass.result_end - pulse) / declick_pulses).clamp(0.0, 1.0) as f32)}
+                    if cursor.fade_in > 0.0 {
+                        envelope = envelope.min(((jump_window - cursor.fade_in) / jump_window) as f32);
+                        cursor.fade_in -= 1.0;
+                    }
+                    cursor.level = envelope;
+                    let scale = gain * envelope;
+                    let frac = (frame - frame_index as f64) as f32;
+                    output.left[index] += interpolate(left, frame_index, frac) * scale;
+                    output.right[index] += interpolate(right, frame_index, frac) * scale;
+                }
+                end_frame = start_frame + (chunk_end - chunk) as f64 * rate;
+                end_rate = rate;
+            }
+            chunk = chunk_end;
+        }
+        if reaches_end {content_ended = Some(end)}
+        cursor.read_frame = end_frame;
+        cursor.file = region.file;
+        cursor.gain_db = region.gain_db;
+        cursor.rate = end_rate;
+    }
+    cursor.ended = complete <= to || content_ended.is_some();
+    if region.fade_out > 0.0 || end_rate <= 0.0 {return None}
+    let ends_here = content_ended.or_else(|| (complete > from && complete <= to).then(|| sample_of(block, complete, pulses, samples)));
+    ends_here.and_then(|start| release_tail(output, region, left, right, block, start, end_frame, end_rate, window))
 }
 
 /// The output sample index of a pulse position within a block, clamped to the block's sample window (truncated
@@ -1052,7 +1206,7 @@ mod tests {
         AudioRegion {
             region_uuid: [1u8; 16], position: 0.0, duration: 96_000.0, loop_offset: 0.0, loop_duration: 96_000.0,
             file: [9u8; 16], gain_db, mute: false, waveform_offset: 0.0, fade_in, fade_out,
-            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, signalsmith: None, transients: Vec::new()
+            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, signalsmith: None, transients: Vec::new(), groove: None
         }
     }
 
@@ -1646,4 +1800,426 @@ mod tests {
         assert!(peak < 2.0 && rms > 0.02, "stable under variable warp: peak {peak:.2} rms {rms:.3}");
     }
 
+
+    // 48 k at 120 bpm is 25 samples per pulse. The warp plays the source at its own rate, so a ramp source shows
+    // the content position: the output value is the source frame / 1000, frame = 25 * content pulses.
+    const SPP: f64 = 25.0;
+
+    fn pitch_region(duration: f64, loop_offset: f64, loop_duration: f64) -> AudioRegion {
+        let mut pitch = region(0.0, 0.0, 0.0);
+        pitch.duration = duration;
+        pitch.loop_offset = loop_offset;
+        pitch.loop_duration = loop_duration;
+        pitch.warp = vec![(0.0, 0.0), (96_000.0, 50.0)];
+        pitch
+    }
+
+    fn ramp(frames: usize) -> Vec<f32> {(0..frames).map(|frame| frame as f32 / 1000.0).collect()}
+
+    type Groove<'a> = (&'a dyn Fn(f64) -> f64, &'a dyn Fn(f64) -> f64);
+
+    fn run_pitch(region: &AudioRegion, source: &[f32], blocks: usize, groove: Option<Groove>) -> Vec<f32> {
+        run_pitch_at(120.0, region, source, blocks, groove)
+    }
+
+    fn run_pitch_at(bpm: f32, region: &AudioRegion, source: &[f32], blocks: usize, groove: Option<Groove>) -> Vec<f32> {
+        let tempo = TempoMap::fixed(bpm);
+        let spp = 48_000.0 * 60.0 / (bpm as f64 * 960.0);
+        let mut cursor = NativeCursor::new();
+        let mut tails: Vec<ReleaseTail> = Vec::new();
+        let mut out = Vec::with_capacity(blocks * 128);
+        for k in 0..blocks {
+            let (p0, p1) = ((k * 128) as f64 / spp, ((k + 1) * 128) as f64 / spp);
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k == 0, true, false), p0, p1, s0: 0, s1: 128, bpm};
+            let mut output = AudioBuffer::new();
+            tails.retain_mut(|tail| render_one_tail(tail, source, source, &mut output, &block));
+            let tail = match groove {
+                Some((warp, unwarp)) => render_grooved_pitch(&mut output, region, source, source, 48_000.0, p0, p1, &block, 48_000.0,
+                    &mut cursor, warp, unwarp),
+                None => render_region(&mut output, region, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut cursor)
+            };
+            if let Some(tail) = tail {tails.push(tail)}
+            out.extend_from_slice(&output.left[..128]);
+        }
+        out
+    }
+
+    fn late(position: f64) -> f64 {position + 240.0}
+    fn early(position: f64) -> f64 {position - 240.0}
+
+    #[test]
+    fn a_pitch_region_through_an_offset_groove_is_the_straight_region_delayed() {
+        let pitch = pitch_region(3840.0, 0.0, 3840.0);
+        let source = ramp(200_000);
+        let straight = run_pitch(&pitch, &source, 800, None);
+        let grooved = run_pitch(&pitch, &source, 800, Some((&late, &early)));
+        assert!(grooved[..6000].iter().all(|value| *value == 0.0), "the content starts 240 pulses late");
+        for index in 6000..96_000 {
+            assert!((grooved[index] - straight[index - 6000]).abs() < 1e-3, "sample {index}: {} vs {}", grooved[index], straight[index - 6000]);
+        }
+    }
+
+    #[test]
+    fn a_zero_offset_plays_like_the_straight_region() {
+        let pitch = pitch_region(3840.0, 0.0, 3840.0);
+        let source = ramp(200_000);
+        let identity = |position: f64| position;
+        let straight = run_pitch(&pitch, &source, 800, None);
+        let grooved = run_pitch(&pitch, &source, 800, Some((&identity, &identity)));
+        for (index, (left, right)) in straight.iter().zip(grooved.iter()).enumerate() {
+            assert!((left - right).abs() < 1e-3, "sample {index}: {left} vs {right}");
+        }
+    }
+
+    // the second eighth of every quarter starts 120 later
+    fn swing(position: f64) -> f64 {
+        let base = math::floor(position / 960.0) * 960.0;
+        let local = position - base;
+        base + if local < 480.0 {local * 600.0 / 480.0} else {600.0 + (local - 480.0) * 360.0 / 480.0}
+    }
+    fn unswing(position: f64) -> f64 {
+        let base = math::floor(position / 960.0) * 960.0;
+        let local = position - base;
+        base + if local < 600.0 {local * 480.0 / 600.0} else {480.0 + (local - 600.0) * 480.0 / 360.0}
+    }
+
+    #[test]
+    fn a_swing_moves_the_second_eighth_and_bends_the_pitch() {
+        let pitch = pitch_region(3840.0, 0.0, 3840.0);
+        let out = run_pitch(&pitch, &ramp(200_000), 800, Some((&swing, &unswing)));
+        let content = |sample: usize| out[sample] as f64 * 1000.0 / SPP;
+        assert!((content(7500) - 240.0).abs() < 0.01, "pulse 300 reads content 240: {}", content(7500));
+        assert!((content(15_008) - unswing(15_008.0 / SPP)).abs() < 0.05, "the second eighth sounds from pulse 600: {}", content(15_008));
+        assert!((content(20_000) - unswing(800.0)).abs() < 0.01, "pulse 800 reads {}", content(20_000));
+        assert!((content(24_000) - 960.0).abs() < 0.01, "the next quarter is straight again: {}", content(24_000));
+        let rate = |sample: usize| (out[sample + 1] - out[sample]) as f64 * 1000.0;
+        assert!((rate(7500) - 0.8).abs() < 0.01, "the first eighth plays slower: {}", rate(7500));
+        assert!((rate(20_000) - 4.0 / 3.0).abs() < 0.01, "the second eighth plays faster: {}", rate(20_000));
+    }
+
+    #[test]
+    fn the_groove_runs_on_across_loop_passes_and_wraps_late() {
+        let late = |position: f64| position + 100.0;
+        let early = |position: f64| position - 100.0;
+        let pitch = pitch_region(4000.0, 0.0, 1000.0);
+        let out = run_pitch(&pitch, &ramp(200_000), 800, Some((&late, &early)));
+        let content = |sample: usize| out[sample] as f64 * 1000.0 / SPP;
+        assert!(out[..2500].iter().all(|value| *value == 0.0), "nothing before the content starts");
+        assert!((content(26_250) - 950.0).abs() < 0.01, "pulse 1050 still reads the first pass: {}", content(26_250));
+        assert!(content(27_500 + 32) < 2.0, "the loop wraps at pulse 1100: {}", content(27_532));
+        assert!((content(52_500) - 0.0).abs() < 1.0 && (content(53_750) - 50.0).abs() < 0.01, "and again at 2100: {}", content(53_750));
+    }
+
+    #[test]
+    fn a_late_groove_declicks_content_that_starts_inside_the_file() {
+        let pitch = pitch_region(3840.0, 3840.0, 7680.0);
+        let out = run_pitch(&pitch, &ramp(400_000), 800, Some((&late, &early)));
+        assert!(out[..6000].iter().all(|value| *value == 0.0), "silent until the grooved content start");
+        assert!(out[6001] < 1.0, "fades in: {}", out[6001]);
+        assert!(out[7000] > 90.0, "full after the declick: {}", out[7000]);
+    }
+
+    #[test]
+    fn an_early_groove_ends_the_content_before_the_region_with_a_tail() {
+        let pitch = pitch_region(3840.0, 0.0, 3840.0);
+        let out = run_pitch(&pitch, &ramp(200_000), 800, Some((&early, &late)));
+        assert!((out[0] - 6.0).abs() < 0.01, "the content plays from 240 pulses in: {}", out[0]);
+        assert!((out[89_999] - out[90_000]).abs() < 0.2, "no click where the content ends: {} {}", out[89_999], out[90_000]);
+        assert!(out[90_200] > out[90_800], "the tail fades: {} {}", out[90_200], out[90_800]);
+        assert!(out[91_000..96_000].iter().all(|value| *value == 0.0), "silent until the region ends");
+    }
+
+    #[test]
+    fn an_early_groove_with_a_fade_out_declicks_the_content_end() {
+        let mut pitch = pitch_region(3840.0, 0.0, 3840.0);
+        pitch.fade_out = 480.0;
+        let out = run_pitch(&pitch, &ramp(200_000), 800, Some((&early, &late)));
+        assert!(out[89_000] > 40.0 && out[89_990] < 1.0, "declicked at the content end: {} {}", out[89_000], out[89_990]);
+        assert!(out[90_000..96_000].iter().all(|value| *value == 0.0), "no tail with an authored fade-out");
+    }
+
+    #[test]
+    fn a_grooved_pitch_region_follows_the_warp_markers_at_another_tempo() {
+        // at 90 bpm a pulse lasts 33.33 samples, the warp markers still map the content to the same source frames
+        let pitch = pitch_region(3840.0, 0.0, 3840.0);
+        let source = ramp(200_000);
+        let straight = run_pitch_at(90.0, &pitch, &source, 1100, None);
+        let grooved = run_pitch_at(90.0, &pitch, &source, 1100, Some((&late, &early)));
+        assert!(grooved[..8000].iter().all(|value| *value == 0.0), "the content starts 240 pulses late");
+        for index in 8000..128_000 {
+            assert!((grooved[index] - straight[index - 8000]).abs() < 1e-3, "sample {index}: {} vs {}", grooved[index], straight[index - 8000]);
+        }
+    }
+
+    fn grain_region(duration: f64, loop_duration: f64, mode: TransientPlayMode, transients: Vec<f64>) -> AudioRegion {
+        let mut grain = region(0.0, 0.0, 0.0);
+        grain.duration = duration;
+        grain.loop_duration = loop_duration;
+        grain.transients = transients;
+        grain.time_stretch = Some(TimeStretchConfig {warp: vec![(0.0, 0.0), (7680.0, 4.0)], transient_play_mode: mode, playback_rate: 1.0});
+        grain
+    }
+
+    // a transient every eighth (0.25 s), the warp plays the file at its own speed
+    fn eighths() -> Vec<f64> {(0..16).map(|index| index as f64 * 0.25).collect()}
+
+    // a 2000 frame burst at every eighth of the first bar, silence after, so a release past the region end stays silent
+    fn bursts() -> Vec<f32> {(0..192_000).map(|frame| if frame < 96_000 && frame % 12_000 < 2000 {1.0} else {0.0}).collect()}
+
+    fn run_grain(region: &AudioRegion, source: &[f32], blocks: usize, groove: Option<Groove>) -> Vec<f32> {
+        run_grain_on(region, source, blocks, groove, None)
+    }
+
+    fn run_grain_on(region: &AudioRegion, source: &[f32], blocks: usize, groove: Option<Groove>, grid: Option<f64>) -> Vec<f32> {
+        let config = region.time_stretch.clone().unwrap();
+        let source = Source {left: source, right: source, num_frames: source.len()};
+        let mut sequencer = TimeStretchSequencer::new();
+        let mut releases: Vec<GranularRelease> = Vec::new();
+        let unity = [1.0f32; engine_env::RENDER_QUANTUM];
+        let mut out = Vec::with_capacity(blocks * 128);
+        for k in 0..blocks {
+            let (p0, p1) = ((k * 128) as f64 / SPP, ((k + 1) * 128) as f64 / SPP);
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k == 0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            releases.retain_mut(|release| {
+                let active = sequencer.render_release(&source, &mut output, 0, 128, &unity[..128]);
+                release.remaining -= 128.0;
+                active && release.remaining > 0.0
+            });
+            let mut gain = [1.0f32; engine_env::RENDER_QUANTUM];
+            let release = match groove {
+                Some((warp, unwarp)) => render_grooved_grain(&mut sequencer, region, &config, &source, 48_000.0, p0, p1, &block, &mut output,
+                    &mut gain, 48_000.0, &mut releases, warp, unwarp, grid),
+                None => render_straight_grain(&mut sequencer, region, &config, &source, 48_000.0, p0, p1, &block, &mut output,
+                    &mut gain, 48_000.0, &mut releases)
+            };
+            if let Some(start) = release {
+                release_granular(&mut sequencer, region, &source, &mut output, start, &block, 48_000.0, &mut releases);
+            }
+            out.extend_from_slice(&output.left[..128]);
+        }
+        out
+    }
+
+    fn onsets(out: &[f32]) -> Vec<usize> {
+        let mut found = Vec::new();
+        let mut quiet = 1000usize;
+        for (index, value) in out.iter().enumerate() {
+            if value.abs() > 0.05 {
+                if quiet >= 1000 {found.push(index)}
+                quiet = 0;
+            } else {
+                quiet += 1;
+            }
+        }
+        found
+    }
+
+    fn assert_near(actual: usize, expected: usize, what: &str) {
+        assert!(actual.abs_diff(expected) <= 128, "{what}: onset at {actual}, expected {expected}");
+    }
+
+    #[test]
+    fn a_grain_region_through_a_zero_offset_plays_like_the_straight_region() {
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, eighths());
+        let identity = |position: f64| position;
+        let straight = run_grain(&grain, &bursts(), 800, None);
+        let grooved = run_grain(&grain, &bursts(), 800, Some((&identity, &identity)));
+        assert_eq!(onsets(&straight).len(), 8, "{:?}", onsets(&straight));
+        let error = straight.iter().zip(grooved.iter()).fold(0.0f32, |max, (left, right)| max.max((left - right).abs()));
+        assert!(error < 1e-4, "error {error}");
+    }
+
+    #[test]
+    fn a_grain_region_through_an_offset_groove_moves_every_onset() {
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, eighths());
+        let straight = onsets(&run_grain(&grain, &bursts(), 800, None));
+        let out = run_grain(&grain, &bursts(), 800, Some((&late, &early)));
+        assert!(out[..6000].iter().all(|value| *value == 0.0), "the content starts 240 pulses late");
+        let grooved = onsets(&out);
+        assert_eq!(straight.len(), 8);
+        assert_eq!(grooved.len(), 8);
+        for (index, (straight, grooved)) in straight.iter().zip(grooved.iter()).enumerate() {
+            assert_near(*straight, index * 12_000, "straight");
+            assert_near(*grooved, straight + 6000, "grooved");
+        }
+    }
+
+    #[test]
+    fn a_swing_moves_the_off_beat_onsets_and_keeps_the_on_beat_ones() {
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, eighths());
+        let grooved = onsets(&run_grain(&grain, &bursts(), 800, Some((&swing, &unswing))));
+        // a Once voice fading out past its segment end touches the next attack, as in a straight stretch to a slower tempo
+        for index in 0..8 {
+            let expected = (index / 2) * 24_000 + if index % 2 == 0 {0} else {15_000};
+            assert!(grooved.iter().any(|onset| onset.abs_diff(expected) <= 256), "onset {index} near {expected}: {grooved:?}");
+        }
+    }
+
+    #[test]
+    fn a_groove_alone_never_loops_a_segment_a_slower_tempo_still_does() {
+        let constant = vec![0.5f32; 192_000];
+        let unity = run_grain(&grain_region(3840.0, 3840.0, TransientPlayMode::Repeat, eighths()), &constant, 800, Some((&swing, &unswing)));
+        assert!(unity[13_000..13_800].iter().all(|value| value.abs() < 0.01), "the gap the groove made longer stays silent");
+        let mut slower = grain_region(3840.0, 3840.0, TransientPlayMode::Repeat, (0..16).map(|index| index as f64 * 0.2).collect());
+        slower.time_stretch.as_mut().unwrap().warp = vec![(0.0, 0.0), (7680.0, 3.2)];
+        let stretched = run_grain(&slower, &constant, 800, Some((&swing, &unswing)));
+        assert!(stretched[12_500..13_800].iter().all(|value| (value - 0.5).abs() < 0.01), "Repeat fills the stretched gap");
+    }
+
+    #[test]
+    fn the_grain_groove_runs_on_across_loop_passes() {
+        let grain = grain_region(7680.0, 3840.0, TransientPlayMode::Once, eighths());
+        let straight = onsets(&run_grain(&grain, &bursts(), 1600, None));
+        let out = run_grain(&grain, &bursts(), 1600, Some((&late, &early)));
+        let grooved = onsets(&out);
+        assert_eq!(straight.len(), 16);
+        assert_eq!(grooved.len(), 16);
+        for (straight, grooved) in straight.iter().zip(grooved.iter()) {
+            assert_near(*grooved, straight + 6000, "grooved");
+        }
+        assert!(out[96_000..101_000].iter().all(|value| value.abs() < 1e-6), "the end of the first pass is silent content");
+    }
+
+    #[test]
+    fn an_early_grain_groove_ends_the_content_early_with_a_release() {
+        let constant = vec![0.5f32; 192_000];
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, eighths());
+        let out = run_grain(&grain, &constant, 900, Some((&early, &late)));
+        assert!((out[89_000] - 0.5).abs() < 0.01, "plays up to the content end: {}", out[89_000]);
+        assert!(out[89_990..90_200].iter().all(|value| *value > 0.0), "rings out past the content end");
+        assert!(out[91_200..115_200].iter().all(|value| *value == 0.0), "silent after the release, also at the region end");
+    }
+
+    #[test]
+    fn transients_the_groove_moves_outside_the_region_do_not_fire() {
+        let mut transients = eighths();
+        transients.insert(8, 1.95);
+        let mut source = bursts();
+        source[93_600..95_600].fill(1.0);
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, transients);
+        let straight = onsets(&run_grain(&grain, &source, 900, None));
+        assert!(straight.iter().any(|onset| onset.abs_diff(93_600) <= 128), "the straight region plays it: {straight:?}");
+        let late_out = run_grain(&grain, &source, 900, Some((&late, &early)));
+        assert!(late_out[94_000..115_200].iter().all(|value| value.abs() < 1e-6), "pushed past the region end");
+        let early_out = run_grain(&grain, &bursts(), 900, Some((&early, &late)));
+        assert!(early_out[..4800].iter().all(|value| *value == 0.0), "pulled before the region start");
+        assert_near(onsets(&early_out)[0], 6000, "the next transient");
+    }
+
+
+    // a 909 like bar: a decaying 55 Hz kick on every quarter, a noise hat with a 40 ms decay on every sixteenth
+    fn drums() -> Vec<f32> {
+        let mut seed = 1u32;
+        (0..96_000).map(|frame| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let noise = (seed >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0;
+            let (hat, kick) = ((frame % 6000) as f32 / 48_000.0, (frame % 24_000) as f32 / 48_000.0);
+            noise * 0.3 * (-hat / 0.04).exp() + 0.6 * (core::f32::consts::TAU * 55.0 * kick).sin() * (-kick / 0.15).exp()
+        }).collect()
+    }
+
+    fn sixteenths() -> Vec<f64> {(0..16).map(|index| index as f64 * 0.125).collect()}
+
+    fn shuffle(position: f64) -> f64 {
+        let base = math::floor(position / 480.0) * 480.0;
+        let local = position - base;
+        base + if local < 240.0 {local * 300.0 / 240.0} else {300.0 + (local - 240.0) * 180.0 / 240.0}
+    }
+    fn unshuffle(position: f64) -> f64 {
+        let base = math::floor(position / 480.0) * 480.0;
+        let local = position - base;
+        base + if local < 300.0 {local * 240.0 / 300.0} else {240.0 + (local - 300.0) * 240.0 / 180.0}
+    }
+
+    // a shuffle below 50%: the second sixteenth comes early
+    fn rush(position: f64) -> f64 {
+        let base = math::floor(position / 480.0) * 480.0;
+        let local = position - base;
+        base + if local < 240.0 {local * 180.0 / 240.0} else {180.0 + (local - 240.0) * 300.0 / 240.0}
+    }
+    fn unrush(position: f64) -> f64 {
+        let base = math::floor(position / 480.0) * 480.0;
+        let local = position - base;
+        base + if local < 180.0 {local * 240.0 / 180.0} else {240.0 + (local - 180.0) * 240.0 / 300.0}
+    }
+
+    // the hats only: the kick hardly changes from one sample to the next
+    fn hats(out: &[f32]) -> Vec<f32> {
+        (0..out.len()).map(|index| if index == 0 {0.0} else {(out[index] - out[index - 1]).abs()}).collect()
+    }
+
+    #[test]
+    fn a_shuffle_moves_the_hats_in_every_mode_without_repeats_or_reversed_tails() {
+        assert_shuffled_hats(sixteenths(), None);
+        assert_grooved_hats(sixteenths(), None, (&rush, &unrush), 4500);
+    }
+
+    #[test]
+    fn a_cut_the_groove_brings_early_lets_the_segment_play_out() {
+        // the ramp tells the content: the first segment plays on under the early second one
+        let grain = grain_region(3840.0, 3840.0, TransientPlayMode::Once, sixteenths());
+        let out = run_grain(&grain, &ramp(96_000), 760, Some((&rush, &unrush)));
+        assert!((out[5000] - (5.0 + 6.5)).abs() < 0.05, "both segments sound: {}", out[5000]);
+        assert!((out[6500] - 8.0).abs() < 0.05, "the first ended at its segment end: {}", out[6500]);
+        let straight = run_grain(&grain, &ramp(96_000), 760, None);
+        assert!((straight[5000] - 5.0).abs() < 0.05, "straight reads one segment: {}", straight[5000]);
+    }
+
+    #[test]
+    fn the_groove_grid_moves_hats_without_a_transient() {
+        let quarters: Vec<f64> = (0..4).map(|index| index as f64 * 0.5).collect();
+        assert_shuffled_hats(quarters.clone(), Some(240.0));
+        assert_shuffled_hats(sixteenths(), Some(240.0));
+        assert_grooved_hats(quarters.clone(), Some(240.0), (&rush, &unrush), 4500);
+        let mut grain = grain_region(3840.0, 3840.0, TransientPlayMode::Pingpong, quarters);
+        grain.fade_out = 0.0;
+        let out = hats(&run_grain(&grain, &drums(), 760, Some((&shuffle, &unshuffle))));
+        assert!(out[6000..6200].iter().any(|value| *value > 0.1), "without the grid the hat stays unswung");
+    }
+
+    fn assert_shuffled_hats(transients: Vec<f64>, grid: Option<f64>) {
+        assert_grooved_hats(transients, grid, (&shuffle, &unshuffle), 7500);
+    }
+
+    fn assert_grooved_hats(transients: Vec<f64>, grid: Option<f64>, groove: Groove, second: usize) {
+        let expected: Vec<usize> = (0..16).map(|index| (index / 2) * 12_000 + if index % 2 == 0 {0} else {second}).collect();
+        for mode in [TransientPlayMode::Once, TransientPlayMode::Repeat, TransientPlayMode::Pingpong] {
+            let mut grain = grain_region(3840.0, 3840.0, mode, transients.clone());
+            grain.fade_out = 0.0;
+            if grid.is_some() {
+                // the warp ends with the file, where the grid closes the last segment
+                grain.time_stretch = Some(TimeStretchConfig {warp: vec![(0.0, 0.0), (3840.0, 2.0)], transient_play_mode: mode, playback_rate: 1.0});
+            }
+            let out = hats(&run_grain_on(&grain, &drums(), 760, Some(groove), grid));
+            let mut found = Vec::new();
+            let mut quiet = 1000usize;
+            // without the grid Repeat loops the last segment, which has no next transient, also without a groove
+            let end = if grid.is_some() {96_000} else {92_000};
+            for (index, value) in out[..end].iter().enumerate() {
+                if *value > 0.1 {
+                    if quiet >= 1000 {found.push(index)}
+                    quiet = 0;
+                } else {
+                    quiet += 1;
+                }
+            }
+            assert_eq!(found.len(), 16, "{mode:?}: one onset per hat {found:?}");
+            for (onset, expected) in found.iter().zip(expected.iter()) {
+                assert!(onset.abs_diff(*expected) <= 150, "{mode:?}: hat at {onset}, expected {expected}");
+            }
+            // between two hats the tail only decays, a repeat or a reversed read makes it rise again
+            for pair in expected.windows(2) {
+                let window = |start: usize| out[start..start + 250].iter().fold(0.0f32, |max, value| max.max(*value));
+                let mut previous = window(pair[0] + 1000);
+                let mut start = pair[0] + 1250;
+                while start + 250 < pair[1] - 1200 {
+                    let level = window(start);
+                    assert!(level <= previous * 1.5 + 0.01, "{mode:?}: the tail after {} rises at {start}: {previous} to {level}", pair[0]);
+                    previous = level;
+                    start += 250;
+                }
+            }
+        }
+    }
 }

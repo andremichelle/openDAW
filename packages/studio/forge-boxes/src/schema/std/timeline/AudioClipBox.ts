@@ -22,6 +22,7 @@ export const AudioClipBox: BoxSchema<Pointers> = {
             12: {type: "string", name: "label"},
             13: {type: "int32", name: "hue", ...HueConstraints},
             14: {type: "float32", name: "gain", constraints: "decibel", unit: "db"},
+            15: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false},
             20: {type: "string", name: "playback", deprecated},
             21: {type: "string", name: "time-base", value: TimeBase.Musical}
         }

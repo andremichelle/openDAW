@@ -2252,6 +2252,8 @@ export interface AudioContent {
     playbackRate: float
     /** Transpose in semitones (only `"signalsmith"`, -24 to 24) */
     transpose: float
+    /** The groove the audio plays through, null for none. Set a groove of the project or null. Only `"pitch"` and `"timestretch"` take a groove, `"no-sync"` never. */
+    groove: Nullable<AnyGroove>
 }
 
 /**

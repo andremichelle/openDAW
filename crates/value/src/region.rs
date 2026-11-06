@@ -91,6 +91,75 @@ impl Iterator for LoopCycles {
     }
 }
 
+/// One loop pass of a grooved region within a window: its content `[content_start, content_end)` sounds at
+/// `[result_start, result_end)`. `raw_start` is the straight pass start and identifies the pass like `LoopCycle`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroovedPass {
+    pub raw_start: f64,
+    pub content_start: f64,
+    pub content_end: f64,
+    pub result_start: f64,
+    pub result_end: f64
+}
+
+/// The loop passes of a region overlapping `[from, to)` when a groove moves its content. The groove runs on from
+/// where the region's loop starts, content it moves outside the region is not located.
+#[allow(clippy::too_many_arguments)]
+pub fn locate_grooved_loops<W: Fn(f64) -> f64>(position: f64, complete: f64, loop_offset: f64, loop_duration: f64,
+                                               from: f64, to: f64, warp: W, unwarp: impl Fn(f64) -> f64) -> GroovedPasses<W> {
+    let origin = position - loop_offset;
+    let seek_min = if position > from {position} else {from};
+    let seek_max = if complete < to {complete} else {to};
+    let (low, high) = (loop_offset, complete - origin);
+    let unclamped_first = unwarp(seek_min - origin);
+    let unclamped_last = unwarp(seek_max - origin);
+    let first = if unclamped_first > low {unclamped_first} else {low};
+    let last = if unclamped_last < high {unclamped_last} else {high};
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    let empty = !(loop_duration > 0.0) || !(seek_min < seek_max) || !(first < last);
+    let base = if empty {0.0} else {floor(first / loop_duration) * loop_duration};
+    GroovedPasses {warp, origin, loop_duration, seek_min, seek_max, first, last, base,
+        exact_first: first == unclamped_first, exact_last: last == unclamped_last, done: empty}
+}
+
+pub struct GroovedPasses<W: Fn(f64) -> f64> {
+    warp: W,
+    origin: f64,
+    loop_duration: f64,
+    seek_min: f64,
+    seek_max: f64,
+    first: f64,
+    last: f64,
+    base: f64,
+    exact_first: bool,
+    exact_last: bool,
+    done: bool
+}
+
+impl<W: Fn(f64) -> f64> Iterator for GroovedPasses<W> {
+    type Item = GroovedPass;
+
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    fn next(&mut self) -> Option<GroovedPass> {
+        while !self.done && self.base < self.last {
+            let base = self.base;
+            let pass_end = base + self.loop_duration;
+            let from = if self.first > base {self.first} else {base};
+            let to = if self.last < pass_end {self.last} else {pass_end};
+            self.base = pass_end;
+            let timeline = |content: f64, exact: bool, edge: f64|
+                if exact {edge} else {math::clamp(self.origin + (self.warp)(content), self.seek_min, self.seek_max)};
+            let result_start = timeline(from, from == self.first && self.exact_first, self.seek_min);
+            let result_end = timeline(to, to == self.last && self.exact_last, self.seek_max);
+            if result_start < result_end {
+                return Some(GroovedPass {raw_start: self.origin + base, content_start: from - base, content_end: to - base,
+                    result_start, result_end})
+            }
+        }
+        None
+    }
+}
+
 /// A timeline SPAN: an item at `position` lasting `duration` pulses (TS `EventSpan`). The orderable key
 /// for a `RegionCollection`.
 pub trait Span {

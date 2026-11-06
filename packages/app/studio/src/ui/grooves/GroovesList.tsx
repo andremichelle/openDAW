@@ -1,13 +1,12 @@
 import modulatorCss from "../modulation/ModulatorEditor.sass?inline"
 import targetCss from "../modulation/TargetList.sass?inline"
 import css from "./GroovesList.sass?inline"
-import {Errors, isInstanceOf, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
+import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AudioUnitBoxAdapter, GrooveAdapter, Grooves, ParameterOwner} from "@opendaw/studio-adapters"
-import {NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
@@ -71,7 +70,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
                     deviceName.textContent = "Stack member"
                     rows.own(user.box.label.catchupAndSubscribe(field => ownerName.textContent = field.getValue()))
                 } else if (user.type === "timeline") {
-                    const kind = isInstanceOf(user.box, NoteRegionBox) || isInstanceOf(user.box, ValueRegionBox) ? "Region" : "Clip"
+                    const kind = Grooves.isRegionBox(user.box) ? "Region" : "Clip"
                     rows.own(user.box.label.catchupAndSubscribe(field =>
                         deviceName.textContent = field.getValue().length > 0 ? `${kind} ${field.getValue()}` : kind))
                     Grooves.unitOf(user.box).ifSome(unit => {

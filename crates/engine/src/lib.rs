@@ -1237,6 +1237,11 @@ pub(crate) fn unwarp_through(groove: &Uuid, pulse: f64) -> f64 {
     unsafe { GROOVES.get() }.as_ref().map_or(pulse, |registry| registry.unwarp(groove, pulse))
 }
 
+/// The grid `groove` moves content on, none when the registry is not bound.
+pub(crate) fn grid_through(groove: &Uuid) -> Option<f64> {
+    unsafe { GROOVES.get() }.as_ref().and_then(|registry| registry.grid(groove))
+}
+
 /// Host import: the grooved position of a straight `pulse` through the slot's groove (unchanged without one).
 #[no_mangle]
 pub extern "C" fn host_groove_warp(slot: u32, pulse: f64) -> f64 {

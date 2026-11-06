@@ -3,7 +3,8 @@ import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, TimeBase} from "@opendaw/lib-dsp"
 import {ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {
-    AudioFileBox, AudioRegionBox, GrooveOffsetBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, ValueEventCollectionBox
+    AudioFileBox, AudioPitchStretchBox, AudioRegionBox, GrooveOffsetBox, NoteEventCollectionBox, NoteRegionBox, TrackBox,
+    ValueEventCollectionBox, WarpMarkerBox
 } from "@opendaw/studio-boxes"
 import {StudioPreferences} from "../../../StudioPreferences"
 import type {ProjectEnv} from "../../../project/ProjectEnv"
@@ -185,5 +186,76 @@ describe("RegionsClipboard with a grooved region", () => {
         expect(pasted).not.toBe(target.groove)
         expect(target.project.rootBoxAdapter.grooves.adapters().map(adapter => adapter.box)).toContain(pasted)
         expect(target.project.rootBoxAdapter.grooves.adapters().length).toBe(3)
+    })
+})
+
+// A Pitch audio region with a groove travels like a note region does.
+const buildGroovedAudioRegion = async () => {
+    const {Project} = await import("../../../project/Project")
+    const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+    const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox, rootBox}} = skeleton
+    boxGraph.beginTransaction()
+    const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+        box.type.setValue(TrackType.Audio)
+        box.tracks.refer(primaryAudioUnitBox.tracks)
+        box.target.refer(primaryAudioUnitBox)
+    })
+    const groove = GrooveOffsetBox.create(boxGraph, UUID.generate(), box => {
+        box.label.setValue("Late")
+        box.collection.refer(rootBox.grooves)
+        box.index.setValue(1)
+        box.offset.setValue(120)
+    })
+    const audioFileBox = AudioFileBox.create(boxGraph, UUID.generate(), box => {
+        box.fileName.setValue("take.wav")
+        box.endInSeconds.setValue(1)
+    })
+    const pitch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
+    WarpMarkerBox.create(boxGraph, UUID.generate(), box => {box.owner.refer(pitch.warpMarkers); box.position.setValue(0); box.seconds.setValue(0)})
+    WarpMarkerBox.create(boxGraph, UUID.generate(), box => {box.owner.refer(pitch.warpMarkers); box.position.setValue(960); box.seconds.setValue(1)})
+    const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+    AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+        box.position.setValue(0)
+        box.duration.setValue(960)
+        box.loopDuration.setValue(960)
+        box.timeBase.setValue(TimeBase.Musical)
+        box.regions.refer(trackBox.regions)
+        box.file.refer(audioFileBox)
+        box.events.refer(events.owners)
+        box.playMode.refer(pitch)
+        box.groove.refer(groove)
+    })
+    boxGraph.endTransaction()
+    const project = Project.fromSkeleton(env(), skeleton)
+    const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+    return {project, trackAdapter, groove}
+}
+
+const audioGrooveOf = (region: {box: unknown}) => (region.box as AudioRegionBox).groove.targetVertex.map(vertex => vertex.box)
+
+describe("RegionsClipboard with a grooved audio region", () => {
+    it("a paste into the same project points at the same groove", async () => {
+        const {project, trackAdapter, groove} = await buildGroovedAudioRegion()
+        const handler = createHandler(project, trackAdapter, {value: 0})
+        project.regionSelection.select(...trackAdapter.regions.collection.asArray())
+        handler.paste(handler.copy().unwrap("copy"))
+        const regions = trackAdapter.regions.collection.asArray()
+        expect(regions.length).toBe(2)
+        regions.forEach(region => expect(audioGrooveOf(region).unwrapOrNull()).toBe(groove))
+    })
+
+    it("a paste into another project brings the groove into its list", async () => {
+        const origin = await buildGroovedAudioRegion()
+        const target = await buildGroovedAudioRegion()
+        const playhead = {value: 0}
+        const copier = createHandler(origin.project, origin.trackAdapter, playhead)
+        origin.project.regionSelection.select(...origin.trackAdapter.regions.collection.asArray())
+        const entry = copier.copy().unwrap("copy")
+        createHandler(target.project, target.trackAdapter, playhead).paste(entry)
+        const regions = target.trackAdapter.regions.collection.asArray()
+        expect(regions.length).toBe(2)
+        const pasted = audioGrooveOf(regions[1]).unwrap("the pasted region has a groove")
+        expect(pasted).not.toBe(target.groove)
+        expect(target.project.rootBoxAdapter.grooves.adapters().map(adapter => adapter.box)).toContain(pasted)
     })
 })

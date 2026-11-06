@@ -17,6 +17,8 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {
+    AudioClipBox,
+    AudioRegionBox,
     AudioUnitBox,
     AuxSendBox,
     BoxIO,
@@ -99,6 +101,15 @@ export namespace TransferUtils {
     export const normalizeGrooves = (graph: BoxGraph, isPasted: Predicate<Box>): void => {
         const rootBox = graph.boxes().find(box => isInstanceOf(box, RootBox))
         if (!isDefined(rootBox) || !isInstanceOf(rootBox, RootBox)) {return}
+        // No Sync audio has no groove, a groove only it used goes with it
+        graph.boxes().filter(isPasted).forEach(box => {
+            if (!(isInstanceOf(box, AudioRegionBox) || isInstanceOf(box, AudioClipBox))
+                || box.playMode.targetAddress.nonEmpty()) {return}
+            box.groove.targetVertex.ifSome(({box: groove}) => {
+                box.groove.defer()
+                if (isPasted(groove) && groove.pointerHub.incoming().length === 0) {groove.delete()}
+            })
+        })
         const collection = rootBox.grooves.address
         const members = graph.boxes()
             .filter((box): box is GrooveBox => isGrooveBox(box) && box.isAttached())

@@ -34,7 +34,8 @@ export const AudioRegionBox: BoxSchema<Pointers> = {
                         4: {type: "float32", name: "out-slope", value: 0.25, constraints: "unipolar", unit: "ratio"}
                     }
                 }
-            }
+            },
+            19: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.Editing, Pointers.MetaData], mandatory: false}
 }

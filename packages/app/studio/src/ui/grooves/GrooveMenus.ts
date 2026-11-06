@@ -26,8 +26,10 @@ export namespace GrooveMenus {
     }
 
     export const timelineItem = (project: Project, boxes: ReadonlyArray<Box>) => {
-        const pointers = boxes.flatMap(box => Grooves.pointerOf(box).match({none: () => [], some: pointer => [pointer]}))
-        return MenuItem.default({label: "Groove", hidden: pointers.length === 0})
+        const owners = boxes.filter(box => Grooves.pointerOf(box).nonEmpty())
+        const pointers = owners.filter(Grooves.acceptsGroove)
+            .flatMap(box => Grooves.pointerOf(box).match({none: () => [], some: pointer => [pointer]}))
+        return MenuItem.default({label: "Groove", hidden: owners.length === 0, selectable: pointers.length > 0})
             .setRuntimeChildrenProcedure(choiceItems(project, pointers))
     }
 

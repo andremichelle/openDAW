@@ -150,6 +150,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                                 box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                                 clip.box.playMode.ifVertex(vertex => box.playMode.refer(vertex))
+                                clip.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                             })
                         } else if (clip.type === "value-clip") {
                             ValueRegionBox.create(clip.box.graph, UUID.generate(), box => {

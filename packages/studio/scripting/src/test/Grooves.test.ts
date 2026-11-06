@@ -10,7 +10,7 @@ import {
     RootBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {createFixture} from "./Fixture"
+import {createFixture, sample} from "./Fixture"
 import {ZeitgeistEffectImpl} from "../impl/devices/MIDIEffects"
 import {GrooveOffset, GrooveRandom, GrooveStack} from "../Api"
 
@@ -187,6 +187,31 @@ describe("grooves", () => {
         expect(cubed.groove).toBeNull()
         const other = setup().project
         expect(() => {cubed.groove = other.groove}).toThrow("Expected a groove of the project")
+    })
+
+    it("Pitch and timestretch audio take a groove, No Sync and Signalsmith refuse one", () => {
+        const {project} = setup()
+        const track = project.addInstrumentUnit("Tape").audioTracks[0]
+        const loop = sample("Loop", 2.0, 120)
+        const random = project.grooves.find(groove => groove.kind === "Random")!
+        const pitch = track.addRegion(loop)
+        expect(pitch.groove).toBeNull()
+        pitch.groove = random
+        expect(pitch.groove).toBe(random)
+        const clip = track.addClip(loop)
+        clip.groove = random
+        expect(clip.groove).toBe(random)
+        clip.groove = null
+        expect(clip.groove).toBeNull()
+        const noSync = track.addRegion(sample("Hit", 0.5), {position: PPQN.Bar * 2})
+        expect(() => {noSync.groove = random}).toThrow(`Only playback "pitch" and "timestretch" take a groove, this one plays "no-sync"`)
+        noSync.groove = null
+        const grain = track.addRegion(loop, {position: PPQN.Bar * 6, playback: "timestretch"})
+        grain.groove = random
+        expect(grain.groove).toBe(random)
+        const spectral = track.addRegion(loop, {position: PPQN.Bar * 4, playback: "signalsmith"})
+        expect(() => {spectral.groove = random}).toThrow(`this one plays "signalsmith"`)
+        expect(spectral.groove).toBeNull()
     })
 
     it("a region refuses a groove of another project", () => {

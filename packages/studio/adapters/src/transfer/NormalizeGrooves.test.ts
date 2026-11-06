@@ -1,6 +1,18 @@
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {GrooveShuffleBox, GrooveStackBox, GrooveStackEntryBox, RootBox} from "@opendaw/studio-boxes"
+import {
+    AudioClipBox,
+    AudioFileBox,
+    AudioPitchStretchBox,
+    AudioRegionBox,
+    GrooveShuffleBox,
+    GrooveStackBox,
+    GrooveStackEntryBox,
+    RootBox,
+    TrackBox,
+    ValueEventCollectionBox,
+    WarpMarkerBox
+} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "./TransferUtils"
 
@@ -56,5 +68,46 @@ describe("normalizeGrooves", () => {
         TransferUtils.normalizeGrooves(boxGraph, () => false)
         boxGraph.endTransaction()
         expect(listed(rootBox)).toEqual(["Global Shuffle", "Swing", "Stack", "Swing 2"])
+    })
+
+    it("pasted No Sync audio drops its groove, a groove only it used goes with it", () => {
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const track = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox)
+        })
+        const file = AudioFileBox.create(boxGraph, UUID.generate())
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        const content = <B extends AudioRegionBox | AudioClipBox>(box: B): void => {
+            box.file.refer(file)
+            box.events.refer(events.owners)
+            if (box instanceof AudioRegionBox) {box.regions.refer(track.regions)} else {box.clips.refer(track.clips)}
+        }
+        const groove = (label: string) => GrooveShuffleBox.create(boxGraph, UUID.generate(), box => box.label.setValue(label))
+        const [lonely, shared] = [groove("Lonely"), groove("Shared")]
+        const noSyncRegion = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            content(box)
+            box.groove.refer(lonely)
+        })
+        const noSyncClip = AudioClipBox.create(boxGraph, UUID.generate(), box => {
+            content(box)
+            box.groove.refer(shared)
+        })
+        const pitch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
+        const marker = WarpMarkerBox.create(boxGraph, UUID.generate(), box => box.owner.refer(pitch.warpMarkers))
+        const pitchRegion = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            content(box)
+            box.playMode.refer(pitch)
+            box.groove.refer(shared)
+        })
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among([lonely, shared, noSyncRegion, noSyncClip, pitch, marker, pitchRegion]))
+        boxGraph.endTransaction()
+        expect(noSyncRegion.groove.isEmpty()).toBe(true)
+        expect(noSyncClip.groove.isEmpty()).toBe(true)
+        expect(lonely.isAttached()).toBe(false)
+        expect(pitchRegion.groove.targetVertex.unwrap().box).toBe(shared)
+        expect(listed(rootBox)).toEqual(["Global Shuffle", "Shared"])
     })
 })
