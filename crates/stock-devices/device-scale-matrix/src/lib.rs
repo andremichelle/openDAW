@@ -34,6 +34,7 @@ const MAX_HELD: usize = 64;
 #[derive(Clone, Copy)]
 struct Held {
     id: u32,
+    input: u32,
     pitch: u32,
     owner: u32
 }
@@ -47,6 +48,7 @@ pub struct ScaleMatrixState {
     follow_id: u32,
     custom: [i32; 12],
     custom_id: u32,
+    activity_broadcast: u32,
     held: [Held; MAX_HELD],
     held_len: usize
 }
@@ -68,6 +70,12 @@ impl ScaleMatrixState {
         }
         let output = pitch + offset;
         Some(if output < 0 {output + 12} else if output > 127 {output - 12} else {output} as u32)
+    }
+
+    // bits 0..11 the held input pitch classes, bits 12..23 the pitch classes they play
+    fn activity(&self) -> i32 {
+        self.held[..self.held_len].iter()
+            .fold(0, |mask, held| mask | (1 << (held.input % 12)) | (1 << (12 + held.pitch % 12)))
     }
 
     fn sounding(&self, pitch: u32) -> Option<u32> {
@@ -107,6 +115,7 @@ impl MidiEffect for ScaleMatrix {
         state.scale_id = abi::bind_parameter(&SCALE_FIELD);
         state.follow_id = abi::bind_parameter(&FOLLOW_FIELD);
         state.custom_id = abi::observe_field(&CUSTOM_FIELD);
+        state.activity_broadcast = abi::bind_broadcast_int_array(&[0], 1);
     }
 
     fn parameter_changed(state: &mut ScaleMatrixState, id: u32, value: ParamValue) {
@@ -130,7 +139,7 @@ impl MidiEffect for ScaleMatrix {
                     if state.held_len >= MAX_HELD {continue}
                     let Some(pitch) = state.output_pitch(record.pitch as i32, record.position) else {continue};
                     let owner = state.sounding(pitch);
-                    state.held[state.held_len] = Held {id: record.id, pitch, owner: owner.unwrap_or(record.id)};
+                    state.held[state.held_len] = Held {id: record.id, input: record.pitch, pitch, owner: owner.unwrap_or(record.id)};
                     state.held_len += 1;
                     if owner.is_some() {continue}
                     let mut note = *record;
@@ -150,6 +159,10 @@ impl MidiEffect for ScaleMatrix {
                 }
             }
             count += 1;
+        }
+        let slot = abi::broadcast_ptr(state.activity_broadcast);
+        if slot != 0 {
+            unsafe { *(slot as *mut i32) = state.activity(); }
         }
         count
     }
@@ -218,7 +231,12 @@ pub extern "C" fn reset(state_ptr: u32) {
 pub extern "C" fn release_all(state_ptr: u32, position: f64, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut ScaleMatrixState) };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
-    state.release_all_into(position, out) as u32
+    let written = state.release_all_into(position, out) as u32;
+    let slot = abi::broadcast_ptr(state.activity_broadcast);
+    if slot != 0 {
+        unsafe { *(slot as *mut i32) = 0; }
+    }
+    written
 }
 
 #[cfg(test)]
@@ -233,7 +251,7 @@ mod tests {
     fn matrix(root: i32, scale: i32, follow: bool) -> ScaleMatrixState {
         ScaleMatrixState {
             root, scale, follow, root_id: 1, scale_id: 2, follow_id: 3, custom: [0; 12], custom_id: 4,
-            held: [Held {id: 0, pitch: 0, owner: 0}; MAX_HELD], held_len: 0
+            activity_broadcast: 0, held: [Held {id: 0, input: 0, pitch: 0, owner: 0}; MAX_HELD], held_len: 0
         }
     }
 
@@ -373,6 +391,15 @@ mod tests {
         let output = run(&mut state, &[note(EVENT_NOTE_ON, 1, 61), note(EVENT_NOTE_ON, 2, 66)]);
         abi::set_native_harmony(Harmony {root: 0, bits: MAJOR_BITS, chord: None});
         assert_eq!(events(&output), vec![(EVENT_NOTE_ON, 1, 61)], "with root F the mute sits on F#");
+    }
+
+    #[test]
+    fn activity_reports_held_inputs_and_their_outputs() {
+        let mut state = matrix(0, 0, false);
+        run(&mut state, &[note(EVENT_NOTE_ON, 1, 61), note(EVENT_NOTE_ON, 2, 64)]);
+        assert_eq!(state.activity(), (1 << 1) | (1 << 4) | (1 << 12) | (1 << 16), "C# plays C, E plays E");
+        run(&mut state, &[note(EVENT_NOTE_OFF, 1, 61), note(EVENT_NOTE_OFF, 2, 64)]);
+        assert_eq!(state.activity(), 0);
     }
 
     #[test]

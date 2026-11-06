@@ -48,6 +48,7 @@ export const ScaleMatrixDeviceEditor = ({lifecycle, service, adapter, deviceHost
     const cells: HTMLElement = <div className="cells">{canvas}</div>
     const keyName: HTMLElement = <span/>
     const currentKey = (): Harmony.Key => follow.getValue() ? keyTrack.keyAt(engine.position.getValue()) : adapter.key
+    let activity = 0
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         const {width, height} = canvas
         const cell = Math.floor(Math.min(width, height) / 12)
@@ -58,15 +59,21 @@ export const ScaleMatrixDeviceEditor = ({lifecycle, service, adapter, deviceHost
         context.fillStyle = Colors.panelBackgroundDark.toString()
         context.fillRect(0, 0, cell * 12, cell * 12)
         const active = Colors.orange.opacity(0.75).toString()
+        const playing = Colors.orange.toString()
         const white = Colors.shadow.opacity(0.25).toString()
         const black = Colors.shadow.opacity(0.08).toString()
+        const heldWhite = Colors.shadow.opacity(0.4).toString()
+        const heldBlack = Colors.shadow.opacity(0.2).toString()
         for (let column = 0; column < 12; column++) {
             const input = (key.root + column) % 12
             const output = adapter.outputClass(input, key)
+            const held = (activity & (1 << input)) !== 0
             for (let row = 0; row < 12; row++) {
                 const pitchClass = (key.root + row) % 12
-                context.fillStyle = pitchClass === output ? active
-                    : MidiKeys.isBlackKey(input) && MidiKeys.isBlackKey(pitchClass) ? black : white
+                const isBlack = MidiKeys.isBlackKey(input) && MidiKeys.isBlackKey(pitchClass)
+                context.fillStyle = pitchClass === output
+                    ? (held && (activity & (1 << (12 + pitchClass))) !== 0 ? playing : active)
+                    : held ? (isBlack ? heldBlack : heldWhite) : isBlack ? black : white
                 context.fillRect(column * cell + gap, (11 - row) * cell + gap, cell - gap * 2, cell - gap * 2)
             }
         }
@@ -94,6 +101,11 @@ export const ScaleMatrixDeviceEditor = ({lifecycle, service, adapter, deviceHost
         })
     }
     lifecycle.ownAll(
+        liveStreamReceiver.subscribeIntegers(adapter.address.append(0), array => {
+            if (activity === array[0]) {return}
+            activity = array[0]
+            painter.requestUpdate()
+        }),
         Events.subscribe(canvas, "pointerdown", toggleCell),
         ...adapter.box.custom.fields().map(field => field.subscribe(painter.requestUpdate)),
         Html.watchResize(cells, () => {
