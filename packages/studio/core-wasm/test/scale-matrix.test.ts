@@ -24,7 +24,7 @@ const INSTRUMENT = `class Processor {
 
 type Note = { pitch: number, position?: number, duration?: number }
 type KeyEvent = { position: number, root: number, bits: number }
-type Settings = { root?: number, scale?: number, follow?: boolean, keys?: ReadonlyArray<KeyEvent>, storage?: Harmony.Key, custom?: ReadonlyArray<number> }
+type Settings = { root?: number, scale?: number, follow?: boolean, keys?: ReadonlyArray<KeyEvent>, storage?: Harmony.Key, custom?: ReadonlyArray<number>, stopped?: boolean }
 
 const HELD = 200_000
 
@@ -102,8 +102,13 @@ const createScene = async (notes: ReadonlyArray<Note>, settings: Settings) => {
         source.beginTransaction(); modify(); source.endTransaction()
         await sync.settle()
     }
-    engine.stop(); engine.play()
-    return {matrix, keyEvents, timelineBox, level, edit, close: () => sync.close()}
+    const liveNoteOn = (pitch: number): void => {
+        new Uint8Array(memory.buffer, engine.input_reserve(16), 16).set(unit.address.uuid)
+        engine.note_signal_on(pitch, 0.8)
+    }
+    engine.stop()
+    if (settings.stopped !== true) {engine.play()}
+    return {matrix, keyEvents, timelineBox, level, edit, liveNoteOn, close: () => sync.close()}
 }
 
 const levelOf = async (pitch: number, settings: Settings): Promise<number> => {
@@ -141,6 +146,15 @@ describe("Scale Matrix", () => {
         expect(await levelOf(60, {follow: true, storage})).toBeCloseTo(0.059, 6)
         expect(await levelOf(60, {follow: true, storage, keys: [{position: 0, root: 0, bits: Harmony.MajorBits}]}))
             .toBeCloseTo(0.060, 6)
+    }, 60000)
+    it("follows the key at the playhead for live notes while stopped", async () => {
+        const minor = MidiKeys.StockScales[scaleIndex("Natural Minor")].bits
+        const keys = [{position: 0, root: 0, bits: minor}, {position: 15360, root: 5, bits: minor}]
+        const scene = await createScene([], {follow: true, keys, stopped: true})
+        scene.level(3200)
+        scene.liveNoteOn(61)
+        expect(scene.level(20)).toBeCloseTo(0.060, 6)
+        scene.close()
     }, 60000)
     it("reads the key at each note's position", async () => {
         const keys = [{position: 1920, root: 1, bits: Harmony.MajorBits}]

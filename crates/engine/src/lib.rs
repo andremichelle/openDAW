@@ -1269,8 +1269,10 @@ pub extern "C" fn host_loop_area(out_ptr: u32) -> u32 {
 /// (-1 without a chord) and chord mask (4 x i32).
 #[no_mangle]
 pub extern "C" fn host_harmony_at(pulse: f64, out_ptr: u32) {
+    // While PAUSED the caller's `pulse` is free-running, live notes follow the frozen song position.
+    let position = if quantum_transporting() {pulse} else {song_position()};
     let harmony = match unsafe { HARMONY.get() }.as_ref() {
-        Some(events) => events.harmony_at(pulse),
+        Some(events) => events.harmony_at(position),
         None => harmony_track::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: None}
     };
     let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
