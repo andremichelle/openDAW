@@ -404,7 +404,6 @@ export class OfflineEngineRenderer {
             let rendered = 0
             while (rendered < totalFrames) {
                 if (isDefined(abortSignal) && abortSignal.aborted) {return Promise.reject(Errors.AbortError)}
-                // chunks must be quantum multiples: a step discards the rest of its last quantum
                 const numSamples = Math.min(RenderQuantum * 375, totalFrames - rendered)
                 const channels = await this.step(numSamples)
                 const sourceOffset = Math.max(0, skipFrames - rendered)

@@ -53,6 +53,7 @@ import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exp
 import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
+import {QuantumStepper} from "./quantum-stepper"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
@@ -78,6 +79,7 @@ type EngineState = {
     running: boolean
     // frames still to drop from the start: the settled delay compensation latency (-1 until settled)
     latencyToTrim: int
+    readonly stepper: QuantumStepper
     position: ppqn // the transport the renderer requested, restored after settling
     playing: boolean
 }
@@ -310,12 +312,18 @@ Communicator.executor<OfflineEngineProtocol>(
                     engine.play()
                 },
                 stop: (reset: boolean): void => {
-                    state.ifSome(engineState => engineState.playing = false)
+                    state.ifSome(engineState => {
+                        engineState.playing = false
+                        if (reset) {engineState.stepper.clear()}
+                    })
                     engine.pause()
                     if (reset) {engine.stop()}
                 },
                 setPosition: (position: ppqn): void => {
-                    state.ifSome(engineState => engineState.position = position)
+                    state.ifSome(engineState => {
+                        engineState.position = position
+                        engineState.stepper.clear()
+                    })
                     engine.set_position(position)
                 },
                 prepareRecordingState: (_countIn: boolean, _generation: int): void => {},
@@ -347,16 +355,18 @@ Communicator.executor<OfflineEngineProtocol>(
                 terminate: (): void => {}
             })
             enginePort.start()
+            // `stemPairs` already counts the metronome stem, so the channel count and the staging read
+            // below stay in step with what `set_stem_export` allocated.
+            const numberOfChannels = stemPairs > 0 ? stemPairs * 2 : 2
             state = Option.wrap({
                 engine, memory, stateSender, pending, midi, broadcaster, analyser, peaks, broadcasts,
                 sampleRate: config.sampleRate,
-                // `stemPairs` already counts the metronome stem, so the channel count and the staging read
-                // below stay in step with what `set_stem_export` allocated.
-                numberOfChannels: stemPairs > 0 ? stemPairs * 2 : 2,
+                numberOfChannels,
                 stems: stemPairs,
                 totalFrames: 0,
                 running: false,
                 latencyToTrim: -1,
+                stepper: new QuantumStepper(numberOfChannels),
                 position: 0,
                 playing: false
             })
@@ -374,22 +384,12 @@ Communicator.executor<OfflineEngineProtocol>(
             // The loop stays fully SYNCHRONOUS (like the TS offline worker's step): every resource resolved
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
-            const {numberOfChannels} = engineState
             settle(engineState)
-            const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
-            const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
-            let offset = 0 | 0
-            while (offset < numSamples) {
+            return engineState.stepper.step(numSamples, outputChannels => {
                 renderQuantum(engineState, outputChannels)
-                const start = trimStart(engineState)
-                const toCopy = Math.min(numSamples - offset, RenderQuantum - start)
-                for (let channel = 0; channel < numberOfChannels; channel++) {
-                    result[channel].set(outputChannels[channel].subarray(start, start + toCopy), offset)
-                }
-                offset += toCopy
                 stateSender.tryWrite()
-            }
-            return result
+                return trimStart(engineState)
+            })
         },
         async render(config: OfflineEngineRenderConfig) {
             const engine = state.unwrap("state.render")
