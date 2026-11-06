@@ -1173,6 +1173,60 @@ fn arming_a_tape_drops_the_old_player_so_its_meter_re_registers() {
     assert_eq!(alive_meters, 1, "exactly one alive tape-device meter after arming (the fresh one, not the frozen old)");
 }
 
+#[test]
+fn effects_monitoring_keeps_the_unit_out_of_the_main_mix_and_its_sends() {
+    // #528: an EFFECTS-monitored unit returns through the monitor output only (plans/done/advanced-monitoring.md,
+    // TS AudioDeviceChain skipped the output bus and the aux sends while monitoring). It must neither sum into
+    // its output bus nor feed its aux sends, and both come back when monitoring ends.
+    use crate::monitor::MonitorEntry;
+    const SEND: Uuid = [56u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(SEND, "AuxSendBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+            (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+            (3, FieldValue::Int32(0)),
+            (super::SEND_ROUTING_KEY, FieldValue::Int32(super::SEND_ROUTING_POST)),
+            (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+            (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+        ])
+    ]);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let routing = |engine: &Engine| {
+        let unit = engine.audio_units.iter().find(|unit| unit.unit == UNIT).expect("unit");
+        (unit.routed.is_some(), unit.sends.iter().map(|send| send.source.is_some()).collect::<Vec<_>>())
+    };
+    assert_eq!(routing(&engine), (true, vec![true]), "unmonitored: routed to the master and feeding its send");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    assert_eq!(routing(&engine), (false, vec![false]), "monitored with effects: no output bus, no aux send");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(routing(&engine), (true, vec![true]), "monitoring ends: output and send come back");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: -1, right: -1}]);
+    assert_eq!(routing(&engine), (true, vec![true]), "an entry without a valid channel returns nothing, so the unit stays in the mix");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    engine.set_frozen_audio(UNIT, Rc::new(crate::frozen::FrozenData {frames: vec![0.0; 2], frame_count: 1, sample_rate: 48_000.0}));
+    assert_eq!(routing(&engine), (true, vec![true]), "a frozen unit keeps its routes while monitored (TS)");
+}
+
+#[test]
+fn effects_monitoring_detaches_the_units_audio_sinks() {
+    use crate::monitor::MonitorEntry;
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)]);
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: SINK_UNIT, left: 0, right: 1}]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![None],
+        "a monitored unit's sink does not feed its bus (#528)");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)],
+        "monitoring ends: the sink feeds its bus again");
+}
+
 // ---- Composite per-child lifecycle ----
 // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
 // identity-by-NodeId proof as the leaf case, one level down.

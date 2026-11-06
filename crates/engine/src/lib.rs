@@ -2282,6 +2282,13 @@ impl Engine {
         self.monitoring_map.iter().find(|entry| &entry.uuid == unit).map(|entry| (entry.left, entry.right))
     }
 
+    /// Whether `unit` is heard through the monitor output only (EFFECTS monitoring), so its output bus, aux sends
+    /// and sinks stay out of the mix (#528, TS `monitoringActive`). A frozen unit keeps its routes like in TS.
+    pub(crate) fn returns_through_monitor(&self, unit: &[u8; 16]) -> bool {
+        self.frozen_of(unit).is_none() && self.monitor_channels_of(unit)
+            .is_some_and(|(left, _)| (0..monitor::MONITOR_CHANNELS as i32).contains(&left))
+    }
+
     /// Copy each mapped unit's STRIP output (TS `unit.audioOutput()`) into the monitor OUTPUT staging, for
     /// the worklet's second output (the MonitoringRouter return). Runs right after `render`.
     fn copy_monitor_outputs(&mut self) {

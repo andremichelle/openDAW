@@ -147,6 +147,10 @@ impl Engine {
             self.unwire_output_route(unit); // no wired chain: drop any stale route
             return;
         };
+        if self.returns_through_monitor(&unit.unit) {
+            self.unwire_output_route(unit);
+            return;
+        }
         let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(unit.unit, vec![UNIT_OUTPUT_KEY]))
             .map(|target| target.uuid)
             .filter(|uuid| self.bus_registry.contains_key(uuid));
@@ -281,7 +285,8 @@ impl Engine {
     pub(crate) fn resolve_sinks(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding));
+            let monitored = self.returns_through_monitor(&unit.unit);
+            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding, monitored));
         }
         self.audio_units = units;
     }
@@ -290,8 +295,8 @@ impl Engine {
     /// otherwise the tap stays unwired (no master fallback, unlike an output route or a send: an unassigned
     /// sink is silent by design). A disabled sink is bypassed in the chain (never processed), so its tap is
     /// detached here rather than summed stale. A feedback loop is left unrouted.
-    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding) {
-        let wanted = if self.device_enabled(sink.device_uuid) {
+    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding, monitored: bool) {
+        let wanted = if !monitored && self.device_enabled(sink.device_uuid) {
             self.graph.target_of(&Address::of(sink.device_uuid, vec![SINK_TARGET_KEY]))
                 .map(|target| target.uuid)
                 .filter(|uuid| self.bus_registry.contains_key(uuid))
@@ -366,8 +371,8 @@ impl Engine {
     pub(crate) fn resolve_sends(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
-            let include_sends = self.unit_options(&unit.unit).include_sends;
+            // A STEM export with includeSends=false or EFFECTS monitoring leaves this unit's aux sends unwired (TS skips them).
+            let include_sends = self.unit_options(&unit.unit).include_sends && !self.returns_through_monitor(&unit.unit);
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
                 let tap = match (&unit.wired, include_sends) {
