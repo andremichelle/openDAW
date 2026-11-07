@@ -1,6 +1,6 @@
 import {Harmony} from "@opendaw/lib-dsp"
 import {Devices, NoteSignal} from "@opendaw/studio-adapters"
-import {Project} from "@opendaw/studio-core"
+import {MidiDevices, Project} from "@opendaw/studio-core"
 import {Terminable} from "@opendaw/lib-std"
 
 export namespace ChordPreview {
@@ -15,6 +15,14 @@ export namespace ChordPreview {
         const pitches = chord.voicing.map(interval => BasePitch + chord.root + interval)
         pitches.forEach(pitch => project.engine.noteSignal(NoteSignal.on(uuid, pitch, 0.8)))
         return Terminable.create(() => pitches.forEach(pitch => project.engine.noteSignal(NoteSignal.off(uuid, pitch))))
+    }
+
+    export const press = (project: Project, chord: Harmony.Chord): Terminable => {
+        if (!project.engine.isRecording.getValue()) {return start(project, chord)}
+        const {softwareMIDIInput} = MidiDevices
+        const pitches = chord.voicing.map(interval => BasePitch + chord.root + interval)
+        pitches.forEach(pitch => softwareMIDIInput.sendNoteOn(pitch, 0.8))
+        return Terminable.create(() => pitches.forEach(pitch => softwareMIDIInput.sendNoteOff(pitch)))
     }
 
     export const play = (project: Project, chord: Harmony.Chord): void => {

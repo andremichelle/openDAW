@@ -99,7 +99,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
 8. Scripting API + docs.
 9. ~~Devices follow the project key: Cubed randomizer, Autotune Follow, script devices, software keyboard scale mapping.~~
-10. Chord track editing: record chords into the armed track by clicking them, copy and duplicate chords like regions.
+10. ~~Chord track editing: record chords into the armed track by clicking them, copy and duplicate chords like regions.~~
 
 ## Status (2026-11-06, branch scales)
 
@@ -114,6 +114,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 7. Phase 9 part: Cubed randomizer Project Key option (on by default), Autotune Follow (field 16, block position).
    Software keyboard Scale switch maps the white keys onto the key. Scripts read `this.keyAt(position)` and
    `this.chordAt(position)` through the script bridge; examples Chord Player and Key Harmonizer in commons.
+8. Phase 10: while recording, holding a chord plays it through the software MIDI input into the armed tracks.
 
 ## Later
 

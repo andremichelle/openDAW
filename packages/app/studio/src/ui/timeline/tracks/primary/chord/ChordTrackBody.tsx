@@ -42,7 +42,7 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
     const preview = (adapter: ChordEventBoxAdapter) => chordTrack.resolve(adapter)
         .ifSome(chord => ChordPreview.play(project, chord))
     const hold = (adapter: ChordEventBoxAdapter) => chordTrack.resolve(adapter)
-        .mapOr(chord => ChordPreview.start(project, chord), Terminable.Empty)
+        .mapOr(chord => ChordPreview.press(project, chord), Terminable.Empty)
     const capturing = new ElementCapturing<ChordEventBoxAdapter>(canvas, {
         capture: (localX: number, _localY: number): Nullable<ChordEventBoxAdapter> =>
             chordTrack.eventAt(range.xToUnit(localX))

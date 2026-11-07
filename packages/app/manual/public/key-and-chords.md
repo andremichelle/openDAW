@@ -53,6 +53,8 @@ Each chord block shows its step and the chord it plays in the key at its start, 
 - **Click** a chord to select it, **Shift click** adds or removes chords, **drag** over an empty spot selects all
   chords in the frame. **Ctrl A** selects all chords. The selection is saved with the project.
 - **Click and hold** a chord to hear it on the instrument in edit mode. It sounds until you release it.
+  While recording, it plays into the armed tracks instead, like keys on the MIDI keyboard, so the chord is recorded
+  as notes, voiced and inverted as shown.
 - **Keys 1 to 7** set the step of the selected chords, **Delete** removes them.
 - **Drag** the selected chords to move them, drag a **right edge** to resize them. Hold **Ctrl** while
   dragging to copy them instead, for example to vary only the inversion of a copy.

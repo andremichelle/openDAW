@@ -120,7 +120,7 @@ export const StepGrid = ({lifecycle, editing, adapter, stepRange, lane, receiver
         replaceChildren(element,
             <div className="corner"/>, ...indexCells,
             <div className="corner"/>, ...playCells,
-            <div className="header">Type</div>, ...typeCells,
+            <div className="corner"/>, ...typeCells,
             laneLabels, laneArea)
     }
     lifecycle.ownAll(stepRange.subscribe(rebuild), lane.subscribe(rebuild))
