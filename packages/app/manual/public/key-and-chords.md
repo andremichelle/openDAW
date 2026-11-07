@@ -1,10 +1,8 @@
 # Key & Chords
 
-The key track and the chord track describe the harmony of your song. They make no sound themselves. MIDI
-devices can follow them, so a melody stays in key and an arpeggio plays your chord progression, also after you
-change the key. No music theory is needed: you pick a key and number the chords from 1 to 7.
-
-![screenshot](key-and-chords.webp)
+The project key, the key track and the chord track describe the harmony of your song. They make no sound
+themselves. MIDI devices can follow them, so a melody stays in key and an arpeggio plays your chord progression, also
+after you change the key. No music theory is needed: you pick a key and number the chords from 1 to 7.
 
 ---
 
@@ -15,16 +13,30 @@ change the key. No music theory is needed: you pick a key and number the chords 
   is Am, so the well known progression C, F, G, Am is 1, 4, 5, 6.
 - Chords are stored as steps, not as fixed chords. Change the key and every chord moves along.
 
-Show the tracks from the **Primary Tracks** menu in the timeline header, or from the context menu of the key
-display in the header.
+Both tracks are hidden until a project has key changes or chords. Show them from the **Primary Tracks** menu in the
+timeline header, from the context menu of the key display in the header, or with **Shift+K** (key track) and
+**Shift+C** (chord track).
 
 ---
 
 ## 1. Project Key
 
+![screenshot](root-key.webp)
+
 The key display next to Shuffle in the header shows the key at the play position, for example **C maj**.
 Right click it to set the project key with **Root** and **Scale**. A new project starts in C Major. The project
 key applies everywhere before the first key change, and everywhere when the key track is switched off.
+
+**Set the key by playing:** click the key display to listen, its label turns orange, and play a chord on a MIDI
+keyboard or the software keyboard. A major chord sets that root with Major, a minor chord with Natural Minor, so
+playing an A minor chord sets A min. Every new key is one undo step. Click the key display again to stop listening.
+
+**Detect from MIDI:** right click one or more MIDI regions:
+
+- **Detect Key** sets the project key from the notes the regions play.
+- **Detect Chords** writes their chords to the chord track, each starting where its notes start and lasting until
+  the next chord, as steps of the key at each position.
+  Run Detect Key first for the right steps. The new chords replace the chords they cover.
 
 Scale abbreviations: maj (Major), min (Natural Minor), hmin (Harmonic Minor), mmin (Melodic Minor), dor (Dorian),
 phr (Phrygian), lyd (Lydian), mix (Mixolydian), loc (Locrian), pmaj and pmin (Pentatonic Major and Minor),
@@ -33,6 +45,8 @@ blu (Blues), whl (Whole Tone), dim (Diminished), aug (Augmented).
 ---
 
 ## 2. Key Track
+
+![screenshot](key-and-chords.webp)
 
 A key change applies from its position until the next one, for example a bridge in another key.
 

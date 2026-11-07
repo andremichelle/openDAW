@@ -57,9 +57,9 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 7. Software keyboard: a 1..7 pad row plays the chords of the key at the cursor. While recording, pads write chord events.
 8. Detection: command on a MIDI region that writes chord events (notes sounding together matched to chords)
    and suggests a key (most used notes). MIDI only.
-9. Key by playing: while the key display in the header has keyboard focus, it listens to incoming notes
+9. Key by playing: a click on the key display in the header toggles listening to incoming notes
    (MIDI inputs and the software keyboard). A played chord is matched (major or minor triad, 7ths) and sets the
-   project key: its root as Root, Major or Natural Minor as Scale. One undo step per detected chord, focus out stops it.
+   project key: its root as Root, Major or Natural Minor as Scale. One undo step per detected chord, a second click stops it.
 10. Recording chords (user feedback): while recording, clicking a chord in the chord track plays it into the armed
     track like live keys, so the notes land in the recorded region, voiced and inverted as shown.
 11. Copy chords like regions (user feedback): alt drag copies, duplicate, copy and paste, so a chord can be copied
@@ -96,7 +96,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 4. ~~Chord track: schema, adapters, UI, custom chords, preview.~~
 5. ~~Chords in the engine lookup, Arpeggio "follow chords".~~
 6. ~~Software keyboard chord pads, recording chord events.~~
-7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
+7. ~~Chord and key detection from MIDI regions, key by playing into the focused header key display.~~
 8. ~~Scripting API + docs.~~
 9. ~~Devices follow the project key: Cubed randomizer, Autotune Follow, script devices, software keyboard scale mapping.~~
 10. ~~Chord track editing: record chords into the armed track by clicking them, copy and duplicate chords like regions.~~
@@ -118,6 +118,9 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 9. Phase 8: project scripts get `project.keyTrack` (root, scale, events, addEvent, keyAt) and `project.chordTrack`
    (events, addEvent resolving overlaps, chordAt returning root, notes and name). Scale Matrix joins the scripted MIDI effects
    (root, scale, follow, custom grid with setCustom).
+10. Phase 7: lib-dsp `ChordDetection` (chord templates with bass tie-break, Krumhansl-Kessler key profiles,
+    mapping onto steps, beat segmentation). Region menu Detect Chords / Detect Key, the header key display
+    (a click toggles listening) sets the project key from a played major or minor chord.
 
 ## Later
 

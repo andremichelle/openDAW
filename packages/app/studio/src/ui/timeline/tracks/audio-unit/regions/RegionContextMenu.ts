@@ -28,6 +28,7 @@ import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
 import {MonoConversions} from "@/service/MonoConversions"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {HarmonyDetection} from "@/service/HarmonyDetection"
 import {Dialogs} from "@/ui/components/dialogs"
 
 type Construct = {
@@ -154,6 +155,12 @@ export const installRegionContextMenu =
                             }, EmptyExec)
                         }
                     }),
+                MenuItem.default({label: "Detect Chords", hidden: region.type !== "note-region"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectChords(service,
+                        HarmonyDetection.fromRegions(selection.selected()))),
+                MenuItem.default({label: "Detect Key", hidden: region.type !== "note-region"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
+                        HarmonyDetection.fromRegions(selection.selected()))),
                 MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounce(selection.selected())})
                     .setTriggerProcedure(() => Bounces.bounceRegions(service, selection.selected().slice())
                         .then(EmptyExec, console.warn)),

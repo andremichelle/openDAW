@@ -490,12 +490,8 @@ export class StudioService implements ProjectEnv {
                     this.timeline.primaryVisibility.signature.setValue(true)
                 }
                 // Key + Chords
-                if (!timelineBoxAdapter.keyTrack.events.isEmpty()) {
-                    this.timeline.primaryVisibility.key.setValue(true)
-                }
-                if (!timelineBoxAdapter.chordTrack.events.isEmpty()) {
-                    this.timeline.primaryVisibility.chords.setValue(true)
-                }
+                this.timeline.primaryVisibility.key.setValue(!timelineBoxAdapter.keyTrack.events.isEmpty())
+                this.timeline.primaryVisibility.chords.setValue(!timelineBoxAdapter.chordTrack.events.isEmpty())
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()

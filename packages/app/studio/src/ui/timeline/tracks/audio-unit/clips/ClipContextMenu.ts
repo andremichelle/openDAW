@@ -10,6 +10,8 @@ import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleEditorService} from "@/service/SampleEditorService"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {HarmonyDetection} from "@/service/HarmonyDetection"
+import {StudioService} from "@/service/StudioService"
 
 type Creation = {
     element: HTMLElement
@@ -17,9 +19,10 @@ type Creation = {
     capturing: ElementCapturing<ClipCaptureTarget>
     selection: Selection<AnyClipBoxAdapter>
     sampleEditor: SampleEditorService
+    service: StudioService
 }
 
-export const installClipContextMenu = ({element, project, selection, capturing, sampleEditor}: Creation) =>
+export const installClipContextMenu = ({element, project, selection, capturing, sampleEditor, service}: Creation) =>
     ContextMenu.subscribe(element, collector => {
         const client = collector.client
         const target = capturing.captureEvent(client)
@@ -57,6 +60,12 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                 MenuItem.default({label: "Consolidate", selectable: clip.isMirrowed})
                     .setTriggerProcedure(() => editing.modify(() =>
                         selection.selected().forEach(clip => clip.consolidate()))),
+                MenuItem.default({label: "Detect Chords", hidden: clip.type !== "note-clip"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectChords(service,
+                        HarmonyDetection.fromClips(selection.selected(), Math.round(project.engine.position.getValue())))),
+                MenuItem.default({label: "Detect Key", hidden: clip.type !== "note-clip"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
+                        HarmonyDetection.fromClips(selection.selected(), 0))),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: clip.type !== "audio-clip"})
                     .setTriggerProcedure(() => {
                         if (clip.type === "audio-clip") {sampleEditor.openFile(clip.file).then(EmptyExec, console.warn)}
