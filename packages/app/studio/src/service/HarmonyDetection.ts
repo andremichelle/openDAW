@@ -1,4 +1,4 @@
-import {isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {ChordDetection, Harmony, LoopableRegion, ppqn} from "@opendaw/lib-dsp"
 import {
     AnyClipBoxAdapter,
@@ -12,16 +12,26 @@ import {StudioService} from "@/service/StudioService"
 import {ChordOverlaps} from "@/ui/timeline/tracks/primary/chord/ChordOverlaps"
 
 export namespace HarmonyDetection {
-    // the notes to analyse in song positions and the range they cover
-    export type Source = { readonly notes: ReadonlyArray<ChordDetection.Note>, readonly from: ppqn, readonly to: ppqn }
+    // the notes to analyse in song positions and the ranges they cover, chords never reach past a range
+    export type Source = {
+        readonly notes: ReadonlyArray<ChordDetection.Note>
+        readonly ranges: ReadonlyArray<readonly [ppqn, ppqn]>
+    }
+
+    const mergeRanges = (ranges: ReadonlyArray<readonly [ppqn, ppqn]>): ReadonlyArray<readonly [ppqn, ppqn]> =>
+        ranges.toSorted(([left], [right]) => left - right)
+            .reduce<Array<[ppqn, ppqn]>>((merged, [from, to]) => {
+                const last = merged.at(-1)
+                if (isDefined(last) && from <= last[1]) {last[1] = Math.max(last[1], to)} else {merged.push([from, to])}
+                return merged
+            }, [])
 
     // every note the note regions play, loops unrolled and cut at the region end
     export const fromRegions = (adapters: ReadonlyArray<AnyRegionBoxAdapter>): Source => {
         const regions = adapters.filter((region): region is NoteRegionBoxAdapter => isInstanceOf(region, NoteRegionBoxAdapter))
         return {
             notes: collectNotes(regions),
-            from: Math.min(...regions.map(({position}) => position)),
-            to: Math.max(...regions.map(({complete}) => complete))
+            ranges: mergeRanges(regions.map(({position, complete}) => [position, complete] as const))
         }
     }
 
@@ -36,8 +46,7 @@ export namespace HarmonyDetection {
                     duration: Math.min(event.duration, clip.duration - event.position),
                     pitch: event.pitch
                 })), [])),
-            from: position,
-            to: position + Math.max(0, ...clips.map(({duration}) => duration))
+            ranges: clips.length === 0 ? [] : [[position, position + Math.max(...clips.map(({duration}) => duration))]]
         }
     }
 
@@ -54,38 +63,39 @@ export namespace HarmonyDetection {
             return notes
         }, []))
 
-    export const detectChords = (service: StudioService, {notes, from, to}: Source): void => {
+    export const detectChords = (service: StudioService, {notes, ranges}: Source): void => {
         const {project, timeline: {primaryVisibility}} = service
         const {editing, boxGraph, boxAdapters, timelineBoxAdapter: {keyTrack, chordTrack}} = project
-        const segments = ChordDetection.segment(notes, from, to)
-        if (segments.length === 0) {
+        const steps = ranges.flatMap(([from, to]) => ChordDetection.segment(notes, from, to))
+            .flatMap(({position, duration, chord}) => ChordDetection.toStep(keyTrack.keyAt(position), chord)
+                .mapOr(step => [{position, duration, step}], []))
+        if (steps.length === 0) {
             RuntimeNotifier.notify({message: "No chords found", icon: "Info"})
             return
         }
         editing.modify(() => {
             const created: Array<ChordEventBoxAdapter> = []
-            segments.forEach(({position, duration, chord}) => ChordDetection.toStep(keyTrack.keyAt(position), chord)
-                .ifSome(({degree, shift, shape, notes, inversion}) => {
-                    const box = ChordEventBox.create(boxGraph, UUID.generate(), box => {
-                        box.position.setValue(position)
-                        box.duration.setValue(duration)
-                        box.degree.setValue(degree)
-                        box.shift.setValue(shift)
-                        box.shape.setValue(shape)
-                        box.notes.setValue(notes)
-                        box.inversion.setValue(inversion)
-                        box.track.refer(chordTrack.object.events)
-                    })
-                    created.push(boxAdapters.adapterFor(box, ChordEventBoxAdapter))
-                }))
+            steps.forEach(({position, duration, step: {degree, shift, shape, notes, inversion}}) => {
+                const box = ChordEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(position)
+                    box.duration.setValue(duration)
+                    box.degree.setValue(degree)
+                    box.shift.setValue(shift)
+                    box.shape.setValue(shape)
+                    box.notes.setValue(notes)
+                    box.inversion.setValue(inversion)
+                    box.track.refer(chordTrack.object.events)
+                })
+                created.push(boxAdapters.adapterFor(box, ChordEventBoxAdapter))
+            })
             created.forEach(adapter => ChordOverlaps.resolve(chordTrack, adapter, created))
         })
         primaryVisibility.chords.setValue(true)
     }
 
-    export const detectKey = (service: StudioService, {notes, from, to}: Source): void => {
+    export const detectKey = (service: StudioService, {notes}: Source): void => {
         const {editing, timelineBoxAdapter: {keyTrack}} = service.project
-        ChordDetection.detectKey(ChordDetection.pitchClassWeights(notes, from, to)).match({
+        ChordDetection.detectKey(ChordDetection.pitchClassWeights(notes, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY)).match({
             none: () => RuntimeNotifier.notify({message: "No notes found", icon: "Info"}),
             some: key => {
                 editing.modify(() => {

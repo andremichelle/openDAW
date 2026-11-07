@@ -18,7 +18,6 @@ const name = (pitches: ReadonlyArray<number>): string => ChordDetection
         return Harmony.chordName({root, stack, voicing, bits, shaped: true})
     }, "none")
 
-const MinorBits = 0b010110101101
 
 describe("ChordDetection", () => {
     it("names triads, sevenths and inversions", () => {
@@ -45,7 +44,7 @@ describe("ChordDetection", () => {
         const cMajor = weightsOf(60, 62, 64, 65, 67, 69, 71, 60, 64, 67)
         expect(ChordDetection.detectKey(cMajor).unwrap()).toEqual({root: 0, bits: Harmony.MajorBits})
         const aMinor = weightsOf(57, 59, 60, 62, 64, 65, 67, 57, 60, 64, 57)
-        expect(ChordDetection.detectKey(aMinor).unwrap()).toEqual({root: 9, bits: MinorBits})
+        expect(ChordDetection.detectKey(aMinor).unwrap()).toEqual({root: 9, bits: Harmony.NaturalMinorBits})
         expect(ChordDetection.detectKey(new Float64Array(12)).isEmpty()).toBe(true)
     })
     it("maps chords onto steps of the key", () => {
@@ -81,5 +80,13 @@ describe("ChordDetection", () => {
         const notes = [...chord(0, 240, 60), ...chord(240, 240, 64), ...chord(480, 240, 67), ...chord(720, 240, 72),
             ...chord(bar, 240, 65), ...chord(bar + 240, 240, 69), ...chord(bar + 480, 240, 72)]
         expect(summary(ChordDetection.segment(notes, 0, bar * 2))).toEqual([[0, bar, 0], [bar, bar, 5]])
+    })
+    it("segments a full song in well under a second", () => {
+        const progression = [[60, 64, 67], [57, 60, 64], [65, 69, 72], [55, 59, 62]]
+        const notes = Array.from({length: 5000}, (_, index) => chord(index * 960, 960, ...progression[index % 4])).flat()
+        const start = performance.now()
+        const segments = ChordDetection.segment(notes, 0, 5000 * 960)
+        expect(performance.now() - start).toBeLessThan(1000)
+        expect(segments.length).toBe(5000)
     })
 })

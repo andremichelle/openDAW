@@ -10,7 +10,6 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "KeyControl")
-const NaturalMinorBits: int = 0b010110101101
 
 // a held chord with a major third sets a major key, one with only a minor third a natural minor key
 const keyOfChord = (held: ReadonlySet<int>): Nullable<Harmony.Key> => {
@@ -19,7 +18,7 @@ const keyOfChord = (held: ReadonlySet<int>): Nullable<Harmony.Key> => {
     held.forEach(pitch => weights[pitch % 12] = 1)
     return ChordDetection.detectChord(weights, Math.min(...held)).mapOr(({root, bits}) =>
         (bits & (1 << 4)) !== 0 ? {root, bits: Harmony.MajorBits}
-            : (bits & (1 << 3)) !== 0 ? {root, bits: NaturalMinorBits} : null, null)
+            : (bits & (1 << 3)) !== 0 ? {root, bits: Harmony.NaturalMinorBits} : null, null)
 }
 
 type Construct = {

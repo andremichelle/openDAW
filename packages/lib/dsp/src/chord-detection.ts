@@ -19,7 +19,6 @@ export namespace ChordDetection {
         mask(0, 4, 7, 10), mask(0, 4, 7, 11), mask(0, 3, 7, 10), mask(0, 3, 6, 10), mask(0, 3, 6, 9)
     ]
     const PresentThreshold = 0.25
-    const NaturalMinorBits: int = 0b010110101101
     // Krumhansl-Kessler key profiles
     const MajorProfile: ReadonlyArray<number> = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
     const MinorProfile: ReadonlyArray<number> = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
@@ -40,7 +39,7 @@ export namespace ChordDetection {
         }
         if (countBits(present) < 3) {return Option.None}
         const bassClass = ((bass % 12) + 12) % 12
-        let best: Nullable<{ root: int, bits: int }> = null
+        let best: Nullable<Harmony.Key> = null
         let bestScore = Number.NEGATIVE_INFINITY
         for (let root = 0; root < 12; root++) {
             for (const bits of Templates) {
@@ -89,7 +88,7 @@ export namespace ChordDetection {
         let best: Nullable<Harmony.Key> = null
         let bestScore = 0
         for (let root = 0; root < 12; root++) {
-            for (const [profile, bits] of [[MajorProfile, Harmony.MajorBits], [MinorProfile, NaturalMinorBits]] as const) {
+            for (const [profile, bits] of [[MajorProfile, Harmony.MajorBits], [MinorProfile, Harmony.NaturalMinorBits]] as const) {
                 const score = correlate(weights, profile, root)
                 if (score > bestScore) {
                     best = {root, bits}
@@ -141,15 +140,33 @@ export namespace ChordDetection {
     // a stretch with too few notes for a chord (an arpeggio) collects the following onsets up to this length
     const MaxCollect: ppqn = 3840
 
-    const detectIn = (notes: ReadonlyArray<Note>, from: ppqn, to: ppqn): Option<Detected> => {
-        const sounding = notes.filter(note => note.position < to && note.position + note.duration > from)
-        if (sounding.length === 0) {return Option.None}
-        return detectChord(pitchClassWeights(sounding, from, to), Math.min(...sounding.map(note => note.pitch)))
+    // the notes sounding in a range without scanning them all: sorted by start, searched from the longest reach back
+    const soundingIndex = (notes: ReadonlyArray<Note>): (from: ppqn, to: ppqn) => ReadonlyArray<Note> => {
+        const sorted = [...notes].sort((left, right) => left.position - right.position)
+        const reach = sorted.reduce((max, {duration}) => Math.max(max, duration), 0)
+        return (from: ppqn, to: ppqn): ReadonlyArray<Note> => {
+            let low = 0, high = sorted.length
+            while (low < high) {
+                const middle = (low + high) >>> 1
+                if (sorted[middle].position < from - reach) {low = middle + 1} else {high = middle}
+            }
+            const result: Array<Note> = []
+            for (let index = low; index < sorted.length && sorted[index].position < to; index++) {
+                const note = sorted[index]
+                if (note.position + note.duration > from) {result.push(note)}
+            }
+            return result
+        }
     }
 
-    const pitchClassesIn = (notes: ReadonlyArray<Note>, from: ppqn, to: ppqn): int => notes
-        .filter(note => note.position < to && note.position + note.duration > from)
-        .reduce((bits, {pitch}) => bits | (1 << (pitch % 12)), 0)
+    const detectIn = (sounding: ReadonlyArray<Note>, from: ppqn, to: ppqn): Option<Detected> => {
+        if (sounding.length === 0) {return Option.None}
+        return detectChord(pitchClassWeights(sounding, from, to),
+            sounding.reduce((lowest, {pitch}) => Math.min(lowest, pitch), Number.POSITIVE_INFINITY))
+    }
+
+    const pitchClassesIn = (sounding: ReadonlyArray<Note>): int =>
+        sounding.reduce((bits, {pitch}) => bits | (1 << (pitch % 12)), 0)
 
     const pitchClassesOf = ({root, bits}: Detected): int => {
         let classes = 0
@@ -159,6 +176,7 @@ export namespace ChordDetection {
 
     // a chord starts where its notes start and lasts until the next chord, equal neighbours merge
     export const segment = (notes: ReadonlyArray<Note>, from: ppqn, to: ppqn): ReadonlyArray<Segment> => {
+        const soundingIn = soundingIndex(notes)
         const starts: Array<ppqn> = []
         notes.map(({position}) => position).filter(position => position >= from && position < to)
             .sort((a, b) => a - b)
@@ -172,10 +190,10 @@ export namespace ChordDetection {
             const position = starts[index]
             let next = index + 1
             const end = next < starts.length ? starts[next] : to
-            let chord = detectIn(notes, position, end)
+            let chord = detectIn(soundingIn(position, end), position, end)
             const previous = found.at(-1)
             if (chord.isEmpty() && isDefined(previous)) {
-                const classes = pitchClassesIn(notes, position, end)
+                const classes = pitchClassesIn(soundingIn(position, end))
                 if ((classes & pitchClassesOf(previous.chord)) === classes) {
                     index = next
                     continue
@@ -183,7 +201,8 @@ export namespace ChordDetection {
             }
             while (chord.isEmpty() && next < starts.length && starts[next] - position < MaxCollect) {
                 next++
-                chord = detectIn(notes, position, next < starts.length ? starts[next] : to)
+                const until = next < starts.length ? starts[next] : to
+                chord = detectIn(soundingIn(position, until), position, until)
             }
             chord.ifSome(chord => {
                 const last = found.at(-1)

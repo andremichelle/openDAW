@@ -52,7 +52,7 @@ export namespace Harmony {
         return pitch
     }
 
-    const NaturalMinorBits: int = 0b010110101101
+    export const NaturalMinorBits: int = 0b010110101101
     const PentatonicMajorBits: int = 0b001010010101
     const PentatonicMinorBits: int = 0b010010101001
     const BluesBits: int = 0b010011101001
