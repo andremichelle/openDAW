@@ -48,7 +48,7 @@ export const parameterContextItems = <T extends PrimitiveValues>(editing: Editin
                 midiDevices.learnMIDIControls(field).then()
             }
         }),
-        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+        MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
 }
@@ -77,7 +77,7 @@ const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,
                 midiDevices.learnMIDIControls(field).then()
             }
         }),
-        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+        MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
 }

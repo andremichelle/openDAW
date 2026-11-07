@@ -55,13 +55,13 @@ export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     #wrapParameters(box: RevampDeviceBox) {
         return {
-            highPass: createPass(this.#parametric, box.highPass, "High-Pass"),
-            lowShelf: createShelf(this.#parametric, box.lowShelf, "Low-Shelf"),
-            lowBell: createBell(this.#parametric, box.lowBell, "Low-Bell"),
-            midBell: createBell(this.#parametric, box.midBell, "Mid-Bell"),
-            highBell: createBell(this.#parametric, box.highBell, "High-Bell"),
-            highShelf: createShelf(this.#parametric, box.highShelf, "High-Shelf"),
-            lowPass: createPass(this.#parametric, box.lowPass, "Low-Pass")
+            highPass: createPass(this.#parametric, box.highPass, "High-Pass", 40.0, true),
+            lowShelf: createShelf(this.#parametric, box.lowShelf, "Low-Shelf", 80.0),
+            lowBell: createBell(this.#parametric, box.lowBell, "Low-Bell", 120.0),
+            midBell: createBell(this.#parametric, box.midBell, "Mid-Bell", 640.0),
+            highBell: createBell(this.#parametric, box.highBell, "High-Bell", 3600.0),
+            highShelf: createShelf(this.#parametric, box.highShelf, "High-Shelf", 10000.0),
+            lowPass: createPass(this.#parametric, box.lowPass, "Low-Pass", 15000.0, false)
         } as const
     }
 }
@@ -89,14 +89,16 @@ const FrequencyMapping = ValueMapping.exponential(20.0, 20_000.0)
 const GainMapping = ValueMapping.linear(-24.0, 24.0)
 const QMapping = ValueMapping.exponential(0.01, 10.0)
 
-const createPass = (parametric: ParameterAdapterSet, pass: RevampPass, name: string): PassParameters => {
+const createPass = (parametric: ParameterAdapterSet, pass: RevampPass, name: string,
+                    resetFrequency: number, resetEnabled: boolean): PassParameters => {
     return ({
-        enabled: parametric.createParameter(pass.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
+        enabled: parametric.createParameter(
+            pass.enabled, ValueMapping.bool, StringMapping.bool, "Enabled", undefined, resetEnabled),
         frequency: parametric.createParameter(
             pass.frequency,
             FrequencyMapping,
             StringMapping.numeric({unit: "Hz", fractionDigits: 0}),
-            `${name} Freq`),
+            `${name} Freq`, undefined, resetFrequency),
         order: parametric.createParameter(
             pass.order,
             ValueMapping.linearInteger(0, 3),
@@ -110,13 +112,14 @@ const createPass = (parametric: ParameterAdapterSet, pass: RevampPass, name: str
     })
 }
 
-const createShelf = (parametric: ParameterAdapterSet, shelf: RevampShelf, name: string): ShelfParameters => ({
+const createShelf = (parametric: ParameterAdapterSet, shelf: RevampShelf, name: string,
+                     resetFrequency: number): ShelfParameters => ({
     enabled: parametric.createParameter(shelf.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
     frequency: parametric.createParameter(
         shelf.frequency,
         FrequencyMapping,
         StringMapping.numeric({unit: "Hz", fractionDigits: 0}),
-        `${name} Freq`),
+        `${name} Freq`, undefined, resetFrequency),
     gain: parametric.createParameter(
         shelf.gain,
         GainMapping,
@@ -124,13 +127,14 @@ const createShelf = (parametric: ParameterAdapterSet, shelf: RevampShelf, name: 
         `${name} Gain`, 0.5)
 })
 
-const createBell = (parametric: ParameterAdapterSet, bell: RevampBell, name: string): BellParameters => ({
+const createBell = (parametric: ParameterAdapterSet, bell: RevampBell, name: string,
+                    resetFrequency: number): BellParameters => ({
     enabled: parametric.createParameter(bell.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
     frequency: parametric.createParameter(
         bell.frequency,
         FrequencyMapping,
         StringMapping.numeric({unit: "Hz", fractionDigits: 0}),
-        `${name} Freq`),
+        `${name} Freq`, undefined, resetFrequency),
     gain: parametric.createParameter(
         bell.gain,
         GainMapping,
