@@ -4,7 +4,8 @@ export namespace ReportScrubber {
 
     export const scrubber = (names: ReadonlyArray<string>): (text: string) => string => {
         if (names.length === 0) {return text => text}
-        const pattern = new RegExp(names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g")
+        const alternatives = names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+        const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives})(?![\\p{L}\\p{N}_])`, "gu")
         return text => text.replace(pattern, Placeholder)
     }
 }

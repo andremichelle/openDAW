@@ -13,6 +13,22 @@ describe("ReportScrubber.scrubber", () => {
         expect(scrub("x a+b*[c] y aab")).toBe("x <name> y aab")
     })
 
+    it("blanks whole words only, never parts of other words", () => {
+        const scrub = ReportScrubber.scrubber(["cut", "Bass", "Revamp"])
+        expect(scrub("ShortcutManager installed, cut the Bass, RevampDeviceBox:aaa1ed58 Revamp_2 Bass2"))
+            .toBe("ShortcutManager installed, <name> the <name>, RevampDeviceBox:aaa1ed58 Revamp_2 Bass2")
+    })
+
+    it("treats letters of any script as word characters", () => {
+        const scrub = ReportScrubber.scrubber(["Müll", "ドラム"])
+        expect(scrub("Müller Müll ドラムス ドラム")).toBe("Müller <name> ドラムス <name>")
+    })
+
+    it("blanks names that start or end with punctuation", () => {
+        const scrub = ReportScrubber.scrubber(["(final)", "#1 Hit"])
+        expect(scrub("song (final), #1 Hit!")).toBe("song <name>, <name>!")
+    })
+
     it("leaves the text alone without names", () => {
         expect(ReportScrubber.scrubber([])("nothing to hide")).toBe("nothing to hide")
     })
