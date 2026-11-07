@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guitar device preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --color-background: hsl(197, 8%, 9%);
+        --color-panel-background: hsl(197, 14%, 12%);
+        --color-panel-background-dark: hsl(197, 14%, 11%);
+        --color-gray: hsl(197, 31%, 91%);
+        --color-shadow: hsl(197, 10%, 60%);
+        --color-black: hsl(197, 10%, 30%);
+        --color-blue: hsl(189, 100%, 65%);
+        --color-orange: hsl(31, 100%, 73%);
+        --color-cream: hsl(65, 37%, 83%);
+        --color-green: hsl(150, 77%, 69%);
+        --color-purple: hsl(314, 100%, 78%);
+        --color-dark: hsl(197, 15%, 84%);
+        --display-grid: hsl(200, 40%, 70%);
+        --display-stroke: hsl(200, 83%, 60%);
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        padding: 2rem;
+        min-height: 100vh;
+        background: var(--color-background);
+        color: white;
+        font: 300 16px Rubik, sans-serif;
+        user-select: none;
+    }
+    .note { max-width: 70em; margin: 0 0 1.5rem; color: var(--color-shadow); font-size: 13px; line-height: 1.5; }
+    .panel { display: inline-block; background: var(--color-panel-background); border-radius: 4px; padding: 0 0.5em; }
+
+    /* frame: DeviceEditor header */
+    .device { display: grid; grid-template-rows: 2rem auto; width: min-content; }
+    .device > header {
+        position: relative; display: flex; align-items: center; column-gap: 3px; padding: 0 0.25rem;
+        font-size: 11px; letter-spacing: 0.03em; color: var(--color-blue);
+    }
+    .device > header::after {
+        content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0 1px, rgba(255, 255, 255, 0.03) 1px 2px);
+    }
+    .device > header svg { width: 14px; height: 14px; }
+    .controls { display: flex; column-gap: 1em; height: 192px; padding: 0.5em 0.25em; }
+
+    /* display: Vaporisateur header frame */
+    .display {
+        width: 7.5em; height: 100%; padding: 2px; border-radius: 6px;
+        outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.08); outline-offset: -1px;
+    }
+    .screen {
+        height: 100%; border-radius: 4px; display: flex; flex-direction: column; align-items: center; padding: 6px 4px 5px;
+        box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset;
+    }
+    .screen .name { font-size: 14px; line-height: 1; color: var(--color-cream); }
+    .screen .degree { margin-top: 3px; font-size: 8px; white-space: nowrap; color: var(--color-shadow); }
+    .screen svg { margin-top: 3px; }
+    .screen .next { margin-top: auto; font-size: 8px; color: var(--color-shadow); }
+    .screen .next b { font-weight: 300; color: var(--color-cream); }
+
+    /* toolbar fields: Arpeggio toolbar, ButtonCheckboxRadio colours */
+    .toolbar { display: flex; align-items: stretch; justify-content: space-between; column-gap: 0.5em; height: 1.75em; font-size: 10px; }
+    .field {
+        display: flex; align-items: center; column-gap: 0.75em; padding: 0 0.75em; border-radius: 3px;
+        background: rgba(0, 0, 0, 0.12); white-space: nowrap;
+    }
+    .field.wide { flex: 1; }
+    .field > label { opacity: 0.7; }
+    .options { display: flex; column-gap: 0.5em; }
+    .options > div { cursor: pointer; color: var(--color-dark); }
+    .options > div.active { color: var(--color-blue); }
+    .options > div.disabled { opacity: 0.3; pointer-events: none; }
+    .number {
+        min-width: 2.25em; padding: 0 0.375em; line-height: 1.5em; text-align: right; border-radius: 2px; cursor: ns-resize;
+        color: var(--color-blue); background: rgba(0, 0, 0, 0.3); box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
+    }
+    .framed {
+        position: relative; min-width: 1.5em; padding: 0 0.375em; line-height: 1.4em; text-align: center; cursor: pointer;
+        border-radius: 0.25em; border: 0.5px solid currentColor; box-shadow: 0 0 3px -1px currentColor;
+    }
+    .framed.blue { color: var(--color-blue); }
+    .framed.green { color: var(--color-green); }
+    .menu { position: relative; display: flex; align-items: center; column-gap: 0.375em; color: var(--color-dark); cursor: pointer; }
+    .menu::after { content: "▾"; font-size: 0.75em; opacity: 0.7; }
+    .menu > select { position: absolute; inset: 0; opacity: 0; cursor: pointer; font: inherit; }
+    .brushes { display: flex; column-gap: 2px; }
+    .brushes > div {
+        width: 1.5em; height: 1.5em; display: flex; align-items: center; justify-content: center; border-radius: 2px;
+        cursor: pointer; color: var(--color-orange);
+    }
+    .brushes > div.quiet { color: var(--color-cream); }
+    .brushes > div.active { background: rgba(255, 255, 255, 0.08); box-shadow: 0 0 0 0.5px var(--color-orange) inset; }
+
+    /* pattern: Arpeggio sequencer and StepGrid */
+    .sequencer { display: flex; flex-direction: column; row-gap: 6px; width: 22em; height: 100%; }
+    .grid {
+        flex: 1; display: grid; grid-template-columns: 4.5em repeat(16, minmax(0, 1fr)); grid-template-rows: 1.5em 2px 1.75em minmax(0, 1fr);
+        gap: 2px; font-size: 9px; min-height: 0;
+    }
+    .grid > .corner { min-width: 0; }
+    .grid > .header { display: flex; align-items: center; opacity: 0.4; }
+    .grid > .index { display: flex; align-items: center; justify-content: center; opacity: 0.4; }
+    .grid > .index.beat:not(.beyond) { border-radius: 2px; background: rgba(255, 255, 255, 0.04); }
+    .grid > .index.beyond { opacity: 0.1; }
+    .grid > .play { border-radius: 2px; background: rgba(255, 255, 255, 0.05); }
+    .grid > .play.on { background: var(--color-blue); }
+    .grid > .stroke {
+        display: flex; align-items: center; justify-content: center; border-radius: 3px; cursor: pointer;
+        font-size: 11px; color: var(--color-orange); background: rgba(0, 0, 0, 0.12);
+    }
+    .grid > .stroke.quiet { color: var(--color-cream); }
+    .grid > .stroke.pick { font-size: 9px; }
+    .grid > .stroke.beyond, .grid > .lane.beyond > * { opacity: 0.15; }
+    .grid > .lanes { display: flex; flex-direction: column; row-gap: 6px; }
+    .grid > .lanes > div { opacity: 0.4; cursor: pointer; }
+    .grid > .lanes > div.on { opacity: 1; color: var(--color-blue); }
+    .grid > .lane { position: relative; overflow: hidden; border-radius: 3px; background: rgba(0, 0, 0, 0.12); cursor: ns-resize; touch-action: none; }
+    .grid > .lane > .fill {
+        position: absolute; left: 3px; right: 3px; bottom: 3px; height: calc((100% - 6px) * var(--value)); border-radius: 1px;
+        background: color-mix(in srgb, var(--color-blue) 55%, transparent); border-top: 1px solid var(--color-blue);
+    }
+    .grid > .lane.strings { display: grid; grid-template-rows: repeat(6, 1fr); row-gap: 2px; padding: 3px; cursor: pointer; }
+    .grid > .lane.strings > div { border-radius: 1px; background: rgba(255, 255, 255, 0.06); }
+    .grid > .lane.strings > div.on { background: color-mix(in srgb, var(--color-blue) 55%, transparent); box-shadow: 0 0 0 0.5px var(--color-blue) inset; }
+    .grid > .lane.idle > * { opacity: 0.15; }
+
+    /* sound: the Arpeggio label column (Delay sections and rotated titles), one block per group pair */
+    .labels {
+        display: grid; grid-template-rows: repeat(10, 1fr); grid-template-columns: repeat(2, 4.25em) auto;
+        row-gap: 1px; height: 100%;
+    }
+    .labels > section, .labels > h3.rotated { grid-row: var(--rows); }
+    .labels > section.first, .labels > h3.rotated.first { margin-bottom: 2px; }
+    .labels > section.last, .labels > h3.rotated.last { margin-top: -2px; }
+    .labels > section.middle, .labels > h3.rotated.middle { margin: -2px 0 2px; }
+    .labels > section {
+        grid-column: 1 / 3; pointer-events: none;
+        border-left: 1px color-mix(in srgb, var(--color) 6%, transparent) solid;
+        background-color: color-mix(in srgb, var(--color) 3%, transparent);
+    }
+    .labels > section.first { border-top: 1px color-mix(in srgb, var(--color) 6%, transparent) solid; border-radius: 3px 0 0 0; }
+    .labels > section.last { border-bottom: 1px color-mix(in srgb, var(--color) 6%, transparent) solid; border-radius: 0 0 0 3px; }
+    .labels > h3.rotated {
+        grid-column: 3; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center; margin: 0;
+        padding: 0 1px; font-size: 9px; font-weight: 400; letter-spacing: 0.2px; line-height: 1; white-space: nowrap;
+        color: rgba(0, 0, 0, 0.8); background-color: color-mix(in srgb, var(--color) 66%, black);
+    }
+    .labels > h3.rotated.first { border-radius: 0 2px 0 0; }
+    .labels > h3.rotated.last { border-radius: 0 0 2px 0; }
+    .labels > h3.rotated.first.last { border-radius: 0 2px 2px 0; }
+    .labels > div.control {
+        grid-row: var(--row) / span 2; display: grid; grid-template-rows: auto auto; align-content: center; justify-content: center;
+        padding: 0 4px; white-space: nowrap; font-size: 10px; text-align: center; cursor: ns-resize; touch-action: none; z-index: 1;
+    }
+    .labels > div.control.option { cursor: pointer; }
+    .labels > div.control > h3 { margin: 0; height: 12px; font-size: 9px; font-weight: 300; letter-spacing: 0.5px; color: var(--color-shadow); }
+    .labels > div.control.variation > span { color: var(--color-shadow); }
+
+    .tryout { margin-top: 1.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+    .tryout button { font: inherit; font-size: 12px; color: var(--color-gray); background: rgba(255, 255, 255, 0.05); border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+    .tryout button.active { background: var(--color-orange); color: black; }
+    .tryout .play { background: var(--color-blue); color: black; min-width: 4.5em; }
+    .tryout .label { color: var(--color-shadow); margin-left: 10px; }
+</style>
+</head>
+<body>
+<p class="note">Guitar device preview at the studio panel height. The sound is the Karplus-Strong model (strings and
+    body) running in the page, the voicing search computes the shapes, so Position and Tuning change them. Pick a brush and
+    click steps to paint strokes, edit Velocity, Strings and Speed in the lanes, drag values and knobs vertically,
+    double click a knob to reset it.</p>
+
+<div class="panel">
+    <div class="device">
+        <header>
+            <svg viewBox="0 0 14 14"><circle cx="7" cy="7.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                <line x1="7" y1="1.5" x2="7" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            <span>Guitar</span>
+        </header>
+        <div class="controls">
+            <div class="display">
+                <div class="screen">
+                    <div class="name" id="chord-name"></div>
+                    <div class="degree" id="chord-degree"></div>
+                    <svg id="fretboard" width="100" height="118" viewBox="0 0 100 118"></svg>
+                    <div class="next" id="chord-next"></div>
+                </div>
+            </div>
+            <div class="sequencer">
+                <div class="toolbar">
+                    <div class="field wide"><div class="menu"><span id="pattern-name"></span><select id="pattern"></select></div></div>
+                    <div class="field"><label>Length</label><span class="number" id="length">16</span></div>
+                    <div class="field"><span class="framed blue" id="shift-left">‹</span><span class="framed blue" id="shift-right">›</span><span class="framed green" id="clear">Clear</span></div>
+                </div>
+                <div class="toolbar">
+                    <div class="field wide"><div class="brushes" id="brushes"></div></div>
+                    <div class="field"><label>Page</label><div class="options" id="pages"></div></div>
+                </div>
+                <div class="grid" id="grid"></div>
+            </div>
+            <div class="labels" id="sound-left"></div>
+            <div class="labels" id="sound-right"></div>
+        </div>
+    </div>
+</div>
+
+<div class="tryout" id="tryout">
+    <button class="play" id="play">Play</button>
+    <button id="progression">Progression</button>
+    <span class="label">Chord track:</span>
+</div>
+
+<script>
+    // ---------- model ----------
+    const Tunings = {
+        "Standard": [40, 45, 50, 55, 59, 64], "Drop D": [38, 45, 50, 55, 59, 64],
+        "Open G": [38, 43, 50, 55, 59, 62], "DADGAD": [38, 45, 50, 55, 57, 62]
+    }
+    const Names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    const Chords = {
+        "C": {root: 0, stack: [0, 4, 7], step: "1"}, "Dm": {root: 2, stack: [0, 3, 7], step: "2"},
+        "Em": {root: 4, stack: [0, 3, 7], step: "3"}, "F": {root: 5, stack: [0, 4, 7], step: "4"},
+        "G": {root: 7, stack: [0, 4, 7], step: "5"}, "G7": {root: 7, stack: [0, 4, 7, 10], step: "5, 7th"},
+        "Am": {root: 9, stack: [0, 3, 7], step: "6"}, "Am7": {root: 9, stack: [0, 3, 7, 10], step: "6, 7th"},
+        "Fmaj7": {root: 5, stack: [0, 4, 7, 11], step: "4, 7th"}, "C/E": {root: 0, stack: [0, 4, 7], bass: 4, step: "1, 1st inversion"},
+        "Dsus4": {root: 2, stack: [0, 5, 7], step: "2, Sus4"}, "Bdim": {root: 11, stack: [0, 3, 6], step: "7"}
+    }
+    const Progression = ["C", "G", "Am", "F"]
+    const Positions = ["Open", "3rd", "5th", "7th", "9th", "12th"]
+    const PositionFret = [0, 3, 5, 7, 9, 12]
+
+    // voicing search: every chord tone, chord bass lowest, span 4, near the position, open strings welcome
+    const voicingCache = new Map()
+    const voice = (name, tuning, position) => {
+        const key = `${name}|${tuning}|${position}`
+        if (voicingCache.has(key)) {return voicingCache.get(key)}
+        const {root, stack, bass} = Chords[name]
+        const tones = new Set(stack.map(interval => (root + interval) % 12))
+        const bassClass = (root + (bass ?? 0)) % 12
+        const open = Tunings[tuning]
+        const low = PositionFret[position]
+        const options = open.map(() => {
+            const frets = [-1]
+            for (let fret = Math.max(0, low - 1); fret <= low + 4; fret++) {frets.push(fret)}
+            if (low > 0) {frets.push(0)}
+            return frets
+        })
+        let best = null, bestScore = -Infinity
+        const tab = new Array(6)
+        const search = string => {
+            if (string === 6) {
+                const sounding = tab.map((fret, index) => fret < 0 ? null : (open[index] + fret)).filter(pitch => pitch !== null)
+                if (sounding.length < 3) {return}
+                const firstSounding = tab.findIndex(fret => fret >= 0)
+                if (tab.slice(firstSounding).some(fret => fret < 0)) {return}
+                if (sounding[0] % 12 !== bassClass) {return}
+                const classes = new Set(sounding.map(pitch => pitch % 12))
+                for (const tone of tones) {if (!classes.has(tone)) {return}}
+                if ([...classes].some(pitch => !tones.has(pitch))) {return}
+                const fretted = tab.filter(fret => fret > 0)
+                const span = fretted.length === 0 ? 0 : Math.max(...fretted) - Math.min(...fretted)
+                if (span > 3) {return}
+                const lowest = fretted.length === 0 ? low : Math.min(...fretted)
+                const opens = tab.filter(fret => fret === 0).length
+                const score = sounding.length * 3 + (low === 0 ? opens * 2 : -opens * 3) - Math.abs(lowest - Math.max(low, 1)) * 2 - span
+                if (score > bestScore) {
+                    bestScore = score
+                    best = [...tab]
+                }
+                return
+            }
+            for (const fret of options[string]) {
+                tab[string] = fret
+                search(string + 1)
+            }
+        }
+        search(0)
+        const result = best ?? [-1, -1, -1, -1, -1, -1]
+        voicingCache.set(key, result)
+        return result
+    }
+
+    // ---------- patterns ----------
+    // D down, U up, d/u treble strums, M palm muted down, X chuck, B bass, A alternate bass, 1-6 pick a string (1 = high e), - let ring, . rest
+    const Library = {
+        "Strumming": {
+            "Down Quarters": "D...D...D...D...", "Down Eighths": "D.D.D.D.D.D.D.D.", "Down Up Eighths": "D.U.D.U.D.U.D.U.",
+            "Pop": "D...D.U...U.D.U.", "Folk": "D.D.-UDUD.D.-UDU", "Island": "D.DU.UDUD.DU.UDU", "Sixteenths": "DUDUDUDUDUDUDUDU",
+            "Ballad Strum": "D.....U.D...d.u.", "Strum and Ring": "D-------U-------", "Two Bar Pop": "D...D.U...U.D.U.D...D.U.D.U.D.U."
+        },
+        "Rock": {
+            "Rock Eighths": "M.M.M.M.M.M.M.M.", "Power Drive": "D.MMD.MMD.MMD.MM", "Gallop": "M.MMM.MMM.MMM.MM",
+            "Punk": "DDDDDDDDDDDDDDDD", "Anthem": "D-------D---D-U-"
+        },
+        "Funk and Soul": {
+            "Funk Sixteenths": "D.XUX.UXD.XUX.UX", "Funk Chops": "X.u...u.X.u..uX.", "Motown": "....X.......X...",
+            "Disco": "X.u.X.u.X.u.X.u.", "Soul Ballad": "D...d.u.X...d.u."
+        },
+        "Reggae and Ska": {"Reggae": "....u.......u...", "One Drop": "....u.u.....u.u.", "Ska": "..u...u...u...u.", "Rocksteady": "....u..u....u..u"},
+        "Latin": {
+            "Bossa Nova": "B..d..d.A.d..d..B..d..d.A.d..d..", "Rumba": "D.DUX.DUD.DUX.DU", "Samba": "B.dd.dd.A.dd.dd.",
+            "Son Montuno": "D..U..D...U.D...", "Tango": "D.D.D.D.DDDD.D.D"
+        },
+        "Country": {"Boom Chick": "B...d...A...d...", "Train Beat": "MXMXMXMXMXMXMXMX", "Waltz": "B...d...d...", "Two Step": "B.d.A.d.B.d.A.d."},
+        "Fingerstyle": {
+            "Travis": "B.3.A.2.B.3.A.2.", "Arpeggio Up": "B.3.2.1.B.3.2.1.", "Arpeggio Up Down": "B.4.3.2.1.2.3.4.",
+            "Ballad Picking": "B.3.2.3.1.3.2.3.", "Pinch": "B.2.3.2.A.2.3.2.", "Six Eight": "B.3.2.1.2.3.", "Classical": "B321B321A321A321"
+        },
+        "Other": {"Custom": "D...D.UXD.U.DUDU"}
+    }
+    // P picks the strings of its Strings lane together, the strums cross the strings of their lane
+    const Brushes = [
+        ["D", "↓", "Down"], ["U", "↑", "Up"], ["M", "⇣", "Palm mute"], ["X", "×", "Chuck"], ["B", "●", "Bass"],
+        ["A", "○", "Alternate bass"], ["P", "♪", "Pick the lane strings"], ["-", "—", "Let ring"], [".", "·", "Rest"]
+    ]
+    const Glyph = Object.fromEntries(Brushes.map(([kind, glyph]) => [kind, glyph]))
+    const defaultMask = kind => kind === "P" ? [0, 0, 0, 0, 0, 1] : [1, 1, 1, 1, 1, 1]
+    const defaultVelocity = (kind, step) => kind === "X" ? 0.5 : kind === "U" ? 0.62
+        : step % 4 === 0 ? 0.95 : step % 2 === 0 ? 0.8 : 0.7
+    const fromText = text => text.split("").map((letter, step) => {
+        const pick = /[1-6]/.test(letter)
+        const treble = letter === "d" || letter === "u"
+        const kind = pick ? "P" : treble ? letter.toUpperCase() : letter
+        const mask = pick ? [0, 1, 2, 3, 4, 5].map(string => string === 6 - Number(letter) ? 1 : 0)
+            : treble ? [0, 0, 1, 1, 1, 1] : defaultMask(kind)
+        return {kind, mask, velocity: defaultVelocity(treble ? letter.toUpperCase() : kind, step) * (treble ? 0.9 : 1), speed: 0.5}
+    })
+    const glyphOf = ({kind, mask}) => {
+        if (kind !== "P") {return Glyph[kind]}
+        const strings = mask.map((on, string) => on ? String(6 - string) : "").filter(label => label !== "")
+        return strings.length === 1 ? strings[0] : Glyph.P
+    }
+    let steps = [], length = 16, page = 0, brush = "D", lane = "Velocity", patternRate = 1, playing = -1
+
+    // ---------- knobs ----------
+    const Groups = [
+        {title: "Strum", color: "var(--color-blue)", knobs: [
+            {id: "speed", name: "Speed", value: 0.3, format: value => `${Math.round(4 + value * 56)} ms`, variation: 0.2, variationName: "timing"},
+            {id: "velocity", name: "Velocity", value: 0.8, format: value => `${Math.round(value * 100)} %`, variation: 0.15},
+            {id: "swing", name: "Swing", value: 0, format: value => `${Math.round(value * 75)} %`},
+            {id: "accent", name: "Accent", value: 0.3, format: value => `${Math.round(value * 100)} %`}
+        ]},
+        {title: "String", color: "var(--color-orange)", knobs: [
+            {id: "damping", name: "Damping", value: 0.33, format: value => `${Math.round(value * 100)} %`, variation: 0.5},
+            {id: "pluck", name: "Pluck", value: 0.5, format: value => `${Math.round(value * 100)} %`, variation: 0.5},
+            {id: "tension", name: "Tension", value: 0, format: value => `${Math.round(value * 100)} %`},
+            {id: "character", name: "Character", value: 0.5, format: value => `#${1 + Math.round(value * 31)}`, variation: 0.5}
+        ]},
+        {title: "Output", color: "var(--color-green)", knobs: [
+            {id: "spread", name: "Spread", value: 0.6, format: value => `${Math.round(value * 100)} %`},
+            {id: "gain", name: "Gain", value: 0.7, format: value => `${(value * 24 - 18).toFixed(1)} dB`}
+        ]}
+    ]
+    const params = {}
+    Groups.forEach(({knobs}) => knobs.forEach(knob => {
+        params[knob.id] = knob.value
+        if (knob.variation !== undefined) {params[`${knob.id}Variation`] = knob.variation}
+    }))
+    let tuning = "Standard", position = 0, body = "Simple", chord = "Am", progressionOn = false, bar = 0
+
+    const dragValue = (element, get, set, defaultValue) => {
+        element.addEventListener("pointerdown", event => {
+            element.setPointerCapture(event.pointerId)
+            const startY = event.clientY, startValue = get()
+            const move = moveEvent => set(Math.min(1, Math.max(0, startValue + (startY - moveEvent.clientY) * (moveEvent.shiftKey ? 0.001 : 0.006))))
+            const up = () => {
+                element.removeEventListener("pointermove", move)
+                element.removeEventListener("pointerup", up)
+            }
+            element.addEventListener("pointermove", move)
+            element.addEventListener("pointerup", up)
+        })
+        element.addEventListener("dblclick", () => set(defaultValue))
+    }
+    const knobs = Object.fromEntries(Groups.flatMap(({knobs}) => knobs).map(knob => [knob.id, knob]))
+    let mode = "Chords"
+    const Options = {
+        mode: {name: "Mode", values: ["Chords", "Keys"], get: () => mode, set: value => {mode = value}},
+        rate: {name: "Rate", values: ["½×", "1×", "2×"], get: () => ["½×", "1×", "2×"][[0.5, 1, 2].indexOf(patternRate)], set: value => {patternRate = [0.5, 1, 2][["½×", "1×", "2×"].indexOf(value)]}},
+        position: {name: "Position", values: Positions, get: () => Positions[position], set: value => {position = Positions.indexOf(value); drawFretboard()}},
+        tuning: {name: "Tuning", values: Object.keys(Tunings), get: () => tuning, set: value => {tuning = value; drawFretboard()}},
+        body: {name: "Body", values: ["Simple", "Off"], get: () => body, set: value => {body = value}}
+    }
+    // each block: groups of rows, each row two controls (a knob id, "id~" for its variation, or an option id)
+    const Blocks = {
+        "sound-left": [
+            {title: "Strum", color: "var(--color-blue)", rows: [["speed", "speed~"], ["velocity", "velocity~"], ["swing", "accent"]]},
+            {title: "Play", color: "var(--color-purple)", rows: [["mode", "rate"]]},
+            {title: "Neck", color: "var(--color-orange)", rows: [["position", "tuning"]]}
+        ],
+        "sound-right": [
+            {title: "String", color: "var(--color-green)", rows: [["damping", "damping~"], ["pluck", "pluck~"], ["character", "character~"], ["tension", "body"]]},
+            {title: "Out", color: "var(--color-cream)", rows: [["spread", "gain"]]}
+        ]
+    }
+    const makeControl = (id, row, column) => {
+        const element = document.createElement("div")
+        element.style.setProperty("--row", String(row))
+        element.style.gridColumn = String(column)
+        const option = Options[id]
+        const variation = id.endsWith("~")
+        const knob = knobs[id.replace("~", "")]
+        element.className = `control ${option ? "option" : ""} ${variation ? "variation" : ""}`
+        element.innerHTML = `<h3>${option ? option.name : variation ? `± ${knob.name}` : knob.name}</h3><span></span>`
+        const value = element.querySelector("span")
+        if (option) {
+            const render = () => {value.textContent = option.get()}
+            element.addEventListener("click", () => {
+                option.set(option.values[(option.values.indexOf(option.get()) + 1) % option.values.length])
+                render()
+            })
+            render()
+            return element
+        }
+        const key = variation ? `${knob.id}Variation` : knob.id
+        const render = () => {value.textContent = variation ? `${Math.round(params[key] * 100)} %` : knob.format(params[key])}
+        dragValue(element, () => params[key], next => {params[key] = next; render()}, variation ? knob.variation : knob.value)
+        render()
+        return element
+    }
+    const buildSound = () => Object.entries(Blocks).forEach(([id, groups]) => {
+        const block = document.getElementById(id)
+        let row = 1
+        groups.forEach(({title, color, rows}, index) => {
+            const place = groups.length === 1 ? "first last" : index === 0 ? "first" : index === groups.length - 1 ? "last" : "middle"
+            const span = `${row} / span ${rows.length * 2}`
+            block.insertAdjacentHTML("beforeend", `<section class="${place}" style="--color: ${color}; --rows: ${span}"></section>
+                <h3 class="rotated ${place}" style="--color: ${color}; --rows: ${span}">${title.toUpperCase()}</h3>`)
+            rows.forEach((pair, offset) => pair.forEach((control, column) => block.appendChild(makeControl(control, row + offset * 2, column + 1))))
+            row += rows.length * 2
+        })
+    })
+
+    // ---------- display ----------
+    let lit = []
+    const drawFretboard = () => {
+        const tab = voice(chord, tuning, position)
+        const fretted = tab.filter(fret => fret > 0)
+        const base = fretted.length === 0 || Math.max(...fretted) <= 4 ? 1 : Math.min(...fretted)
+        const x = string => 12 + string * 15.2, y = fret => 16 + (fret - base + 0.5) * 20
+        const grid = "hsl(200 40% 70% / 0.22)", stroke = "hsl(200 83% 60%)", cream = "hsl(65 37% 83%)"
+        let svg = base === 1 ? `<rect x="11" y="14" width="78" height="2.5" rx="1" fill="${cream}"/>`
+            : `<text x="96" y="${y(base) + 3}" font-size="8" text-anchor="end" fill="${cream}">${base}</text>`
+        for (let fret = 0; fret <= 5; fret++) {svg += `<line x1="12" x2="88" y1="${16 + fret * 20}" y2="${16 + fret * 20}" stroke="${grid}"/>`}
+        tab.forEach((fret, string) => {
+            const on = lit.includes(string)
+            svg += `<line x1="${x(string)}" x2="${x(string)}" y1="16" y2="116" stroke="${on ? stroke : "hsl(200 40% 70% / 0.45)"}" stroke-width="${0.8 + (5 - string) * 0.2}"/>`
+            if (fret < 0) {svg += `<text x="${x(string)}" y="10" font-size="9" text-anchor="middle" fill="hsl(197 10% 60%)">×</text>`}
+            else if (fret === 0) {svg += `<circle cx="${x(string)}" cy="7" r="2.75" fill="none" stroke="${on ? stroke : cream}"/>`}
+            else {svg += `<circle cx="${x(string)}" cy="${y(fret)}" r="4.75" fill="${on ? "white" : stroke}"/>`}
+        })
+        document.getElementById("fretboard").innerHTML = svg
+        document.getElementById("chord-name").textContent = chord
+        document.getElementById("chord-degree").textContent = `${Chords[chord].step} · from the chord track`
+        document.getElementById("chord-next").innerHTML = progressionOn
+            ? `next <b>${Progression[(Progression.indexOf(chord) + 1) % Progression.length]}</b>` : `${tuning} · ${Positions[position]}`
+    }
+
+    // ---------- pattern editor ----------
+    const select = document.getElementById("pattern")
+    Object.entries(Library).forEach(([group, patterns]) => {
+        const optgroup = document.createElement("optgroup")
+        optgroup.label = group
+        Object.keys(patterns).forEach(name => optgroup.appendChild(new Option(name, `${group}|${name}`)))
+        select.appendChild(optgroup)
+    })
+    const loadPattern = value => {
+        const [group, name] = value.split("|")
+        document.getElementById("pattern-name").textContent = name
+        const text = Library[group][name]
+        steps = fromText(text.padEnd(64, "."))
+        length = text.length
+        page = 0
+        drawEditor()
+    }
+    select.addEventListener("change", () => loadPattern(select.value))
+    const markCustom = () => {
+        select.value = "Other|Custom"
+        document.getElementById("pattern-name").textContent = "Custom"
+    }
+
+    const brushes = document.getElementById("brushes")
+    Brushes.forEach(([kind, glyph, title]) => {
+        const cell = document.createElement("div")
+        cell.textContent = glyph
+        cell.title = title
+        cell.className = (kind === "X" || kind === "M" || kind === "-" || kind === "." ? "quiet" : "") + (kind === brush ? " active" : "")
+        cell.addEventListener("click", () => {
+            brush = kind
+            brushes.querySelectorAll("div").forEach(other => other.classList.toggle("active", other === cell))
+        })
+        brushes.appendChild(cell)
+    })
+
+    const grid = document.getElementById("grid")
+    const drawEditor = () => {
+        document.getElementById("length").textContent = String(length)
+        const pages = document.getElementById("pages")
+        pages.innerHTML = [1, 2, 3, 4].map(index => `<div class="${index - 1 === page ? "active" : ""} ${(index - 1) * 16 >= length ? "disabled" : ""}">${index}</div>`).join("")
+        pages.querySelectorAll("div").forEach((cell, index) => cell.addEventListener("click", () => {page = index; drawEditor()}))
+        let html = `<div class="corner"></div>`
+        for (let column = 0; column < 16; column++) {
+            const step = page * 16 + column
+            html += `<div class="index ${column % 4 === 0 ? "beat" : ""} ${step >= length ? "beyond" : ""}">${step + 1}</div>`
+        }
+        html += `<div class="corner"></div>`
+        for (let column = 0; column < 16; column++) {html += `<div class="play ${page * 16 + column === playing ? "on" : ""}"></div>`}
+        html += `<div class="header">Stroke</div>`
+        for (let column = 0; column < 16; column++) {
+            const step = page * 16 + column
+            const {kind} = steps[step]
+            const classes = ["stroke", kind === "X" || kind === "M" || kind === "-" || kind === "." ? "quiet" : "",
+                kind === "P" ? "pick" : "", step >= length ? "beyond" : ""].join(" ")
+            html += `<div class="${classes}" data-step="${step}">${kind === "." ? "" : glyphOf(steps[step])}</div>`
+        }
+        html += `<div class="lanes">${["Velocity", "Strings", "Speed"].map(name => `<div class="${name === lane ? "on" : ""}">${name}</div>`).join("")}</div>`
+        for (let column = 0; column < 16; column++) {
+            const step = page * 16 + column
+            const {mask, velocity, speed, kind} = steps[step]
+            const beyond = step >= length ? "beyond" : ""
+            const silent = kind === "." || kind === "-"
+            if (lane === "Strings") {
+                const idle = /[DUMXP]/.test(kind) ? "" : "idle"
+                html += `<div class="lane strings ${beyond} ${idle}" data-step="${step}">${mask.map((on, string) => `<div class="${on ? "on" : ""}" data-string="${string}"></div>`).reverse().join("")}</div>`
+            } else {
+                const value = lane === "Velocity" ? velocity : speed
+                html += `<div class="lane ${beyond} ${silent ? "idle" : ""}" data-step="${step}"><div class="fill" style="--value: ${value}"></div></div>`
+            }
+        }
+        grid.innerHTML = html
+        grid.querySelectorAll(".lanes > div").forEach(cell => cell.addEventListener("click", () => {lane = cell.textContent; drawEditor()}))
+    }
+    grid.addEventListener("click", event => {
+        const stroke = event.target.closest(".stroke")
+        if (stroke !== null) {
+            const step = Number(stroke.dataset.step)
+            steps[step] = {...steps[step], kind: brush, mask: defaultMask(brush)}
+            markCustom()
+            drawEditor()
+            return
+        }
+        const cell = event.target.closest(".lane.strings > div")
+        if (cell !== null) {
+            const step = Number(cell.parentElement.dataset.step), string = Number(cell.dataset.string)
+            steps[step].mask[string] = steps[step].mask[string] ? 0 : 1
+            markCustom()
+            drawEditor()
+        }
+    })
+    grid.addEventListener("pointerdown", event => {
+        const laneElement = event.target.closest(".lane:not(.strings)")
+        if (laneElement === null) {return}
+        const apply = moveEvent => {
+            const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest(".lane:not(.strings)")
+            if (!target) {return}
+            const rect = target.getBoundingClientRect()
+            const value = Math.min(1, Math.max(0, 1 - (moveEvent.clientY - rect.top) / rect.height))
+            steps[Number(target.dataset.step)][lane === "Velocity" ? "velocity" : "speed"] = value
+            target.querySelector(".fill").style.setProperty("--value", String(value))
+        }
+        apply(event)
+        const up = () => {
+            window.removeEventListener("pointermove", apply)
+            window.removeEventListener("pointerup", up)
+            markCustom()
+        }
+        window.addEventListener("pointermove", apply)
+        window.addEventListener("pointerup", up)
+    })
+    dragValue(document.getElementById("length"), () => (length - 1) / 63, value => {
+        length = 1 + Math.round(value * 63)
+        page = Math.min(page, Math.floor((length - 1) / 16))
+        drawEditor()
+    }, 15 / 63)
+    document.getElementById("shift-left").addEventListener("click", () => {steps = [...steps.slice(1, length), steps[0], ...steps.slice(length)]; markCustom(); drawEditor()})
+    document.getElementById("shift-right").addEventListener("click", () => {steps = [steps[length - 1], ...steps.slice(0, length - 1), ...steps.slice(length)]; markCustom(); drawEditor()})
+    document.getElementById("clear").addEventListener("click", () => {steps = fromText(".".repeat(64)); markCustom(); drawEditor()})
+
+    // ---------- sound: the Karplus-Strong model ----------
+    class NoiseGen {
+        constructor(seed = 0) {this.seed = seed >>> 0}
+        norm() {
+            let lo = (16807 * (this.seed & 0xFFFF)) >>> 0
+            const hi = (16807 * (this.seed >>> 16)) >>> 0
+            lo = (lo + ((hi & 0x7FFF) << 16)) >>> 0
+            lo = (lo + (hi >>> 15)) >>> 0
+            if (lo > 4151801719) {lo = (lo - 4151801719) >>> 0}
+            this.seed = lo
+            return lo / 4151801719
+        }
+        bipolar() {return this.norm() * 2 - 1}
+    }
+    class GuitarString {
+        constructor(index, rate, charNoise) {
+            this.index = index
+            this.rate = rate
+            this.charNoise = charNoise
+            this.delay = new Float64Array(Math.ceil(rate / 30) + 2)
+            this.noise = new NoiseGen(4095 + index)
+            this.events = []
+            this.periodN = -1
+            this.writeIndex = -1
+            this.af = 0
+            this.df = 0
+            this.muteAt = Infinity
+            this.muteRate = 1
+        }
+        pluck({pitch, velocity, palm, chuck}) {
+            this.periodN = Math.ceil(this.rate / (440 * Math.pow(2, (pitch - 69) / 12)))
+            this.feedNoise = true
+            this.velocity = velocity * 0.25
+            this.writeIndex = -1
+            const tone = Math.max(0, (pitch - 40) / 44)
+            const damp = (1 - params.damping) * 0.75
+            this.dc = damp + Math.sqrt(tone) * (1 - damp) * 0.5 + (1 - damp) * Math.random() * params.dampingVariation * 0.5
+            if (palm) {this.dc *= 0.4}
+            const pluck = 0.1 + params.pluck * 0.8
+            const spread = params.pluckVariation * 0.5
+            this.plugDamp = Math.min(0.9, Math.max(0.1, pluck + (Math.random() * 2 - 1) * spread * 0.4))
+            this.charVariation = params.characterVariation
+            this.readOffset = params.tension * (this.periodN - 1)
+            const pan = (params.spread * 2 - 1) * (this.index - 2.5) * 0.4
+            this.gainL = (1 - pan) * 0.5
+            this.gainR = (pan + 1) * 0.5
+            this.muteAt = chuck ? this.now + this.rate * 0.025 : palm ? this.now + this.rate * 0.18 : Infinity
+            this.muteRate = chuck ? 0.993 : 0.9993
+        }
+        process(left, right, from, to, time) {
+            for (let index = from; index < to; index++) {
+                this.now = time + index
+                while (this.events.length > 0 && this.events[0].at <= this.now) {this.pluck(this.events.shift())}
+                if (this.periodN === -1) {continue}
+                if (++this.writeIndex >= this.periodN) {
+                    this.writeIndex = 0
+                    this.feedNoise = false
+                }
+                if (this.feedNoise) {
+                    const value = (this.charNoise[this.writeIndex] * (1 - this.charVariation) + this.noise.bipolar() * this.charVariation) * this.velocity
+                    this.af += (value - this.af) * this.plugDamp
+                } else {
+                    let read = this.writeIndex + this.readOffset
+                    if (read >= this.periodN) {read -= this.periodN}
+                    let read0 = Math.floor(read), read1 = read0 + 1
+                    const alpha = read - read0
+                    if (read0 >= this.periodN) {read0 -= this.periodN}
+                    if (read1 >= this.periodN) {read1 -= this.periodN}
+                    this.af = this.delay[read0] * (1 - alpha) + this.delay[read1] * alpha
+                }
+                this.df += (this.af - this.df) * this.dc
+                this.df *= this.now >= this.muteAt ? this.muteRate : 1
+                this.delay[this.writeIndex] = this.df
+                left[index] += this.df * this.gainL
+                right[index] += this.df * this.gainR
+            }
+        }
+    }
+    class SimpleBody {
+        constructor(rate) {
+            this.state = new Float64Array(8)
+            this.f0 = 0
+            this.f1 = 0
+            this.c0 = 2 * Math.sin(Math.PI * 3.4375 / rate)
+            this.c1 = 2 * Math.sin(Math.PI * 6.124928687214833 / rate)
+        }
+        process(left, right, count) {
+            const state = this.state
+            for (let index = 0; index < count; index++) {
+                for (const [r, f, c, input] of [[0, 1, this.c0, this.f0], [2, 3, this.c0, this.f1], [4, 5, this.c1, this.f0], [6, 7, this.c1, this.f1]]) {
+                    state[r] *= 0.98
+                    state[r] += (input - state[f]) * c
+                    state[f] += state[r]
+                    state[f] -= state[f] * state[f] * state[f] * 0.166666666666666
+                }
+                this.f0 = left[index]
+                this.f1 = right[index]
+                left[index] = this.f0 + (state[1] + state[5]) * 2
+                right[index] = this.f1 + (state[3] + state[7]) * 2
+            }
+        }
+    }
+
+    let context = null, node = null, strings = [], guitarBody = null, sampleTime = 0, nextStepAt = 0, stepIndex = -1
+    const charNoiseFor = (rate, seed) => {
+        const generator = new NoiseGen(seed)
+        const noise = new Float64Array(Math.ceil(rate / 30) + 2)
+        for (let index = 0; index < noise.length; index++) {noise[index] = generator.bipolar()}
+        return noise
+    }
+    let charSeed = -1
+    const scheduleStep = (step, at) => {
+        const {kind, mask, velocity, speed} = steps[step]
+        if (kind === "." || kind === "-") {return []}
+        const open = Tunings[tuning]
+        const tab = voice(chord, tuning, position)
+        const sounding = tab.map((fret, string) => fret < 0 || !mask[string] ? -1 : string).filter(string => string >= 0)
+        const all = tab.map((fret, string) => fret < 0 ? -1 : string).filter(string => string >= 0)
+        let order
+        if (kind === "B") {order = all.slice(0, 1)}
+        else if (kind === "A") {order = all.slice(1, 2)}
+        else if (kind === "P") {
+            order = mask.map((on, wanted) => on ? all.reduce((best, string) => Math.abs(string - wanted) < Math.abs(best - wanted) ? string : best, all[0]) : -1)
+                .filter((string, index, list) => string >= 0 && list.indexOf(string) === index)
+        } else {
+            order = kind === "U" ? [...sounding].reverse() : sounding
+        }
+        const rate = context.sampleRate
+        const spacing = kind === "P" ? 0 : (0.004 + params.speed * 0.056) * (0.25 + speed * 1.5) * rate
+        const accent = step % 16 === 0 ? params.accent : 0
+        const level = Math.min(1.2, velocity * (0.4 + params.velocity * 0.8) * (1 + accent * 0.5))
+        order.forEach((string, index) => {
+            const jitter = (Math.random() * 2 - 1) * params.speedVariation * 0.012 * rate
+            const loudness = Math.max(0.05, level * (1 + (Math.random() * 2 - 1) * params.velocityVariation * 0.5))
+            strings[string].events.push({
+                at: Math.round(at + index * spacing + Math.max(0, jitter)), pitch: open[string] + tab[string],
+                velocity: kind === "X" ? loudness * 0.6 : loudness, palm: kind === "M", chuck: kind === "X"
+            })
+            strings[string].events.sort((left, right) => left.at - right.at)
+        })
+        return order
+    }
+    const startAudio = () => {
+        context ??= new AudioContext()
+        const rate = context.sampleRate
+        const seed = 1 + Math.round(params.character * 31)
+        if (strings.length === 0 || seed !== charSeed) {
+            charSeed = seed
+            const noise = charNoiseFor(rate, seed * 2047)
+            strings = [0, 1, 2, 3, 4, 5].map(index => new GuitarString(index, rate, noise))
+        }
+        guitarBody = new SimpleBody(rate)
+        sampleTime = 0
+        nextStepAt = Math.round(rate * 0.05)
+        stepIndex = -1
+        node = context.createScriptProcessor(1024, 0, 2)
+        node.onaudioprocess = event => {
+            const left = event.outputBuffer.getChannelData(0), right = event.outputBuffer.getChannelData(1)
+            left.fill(0)
+            right.fill(0)
+            const count = left.length, end = sampleTime + count
+            while (nextStepAt < end) {
+                stepIndex = (stepIndex + 1) % length
+                if (stepIndex === 0) {
+                    bar++
+                    if (progressionOn) {chord = Progression[bar % Progression.length]}
+                }
+                const stepLength = rate * 60 / 96 / 4 / patternRate
+                const swing = stepIndex % 2 === 1 ? params.swing * 0.75 * stepLength : 0
+                const order = scheduleStep(stepIndex, nextStepAt + swing)
+                const shown = stepIndex
+                const delayMs = (nextStepAt - sampleTime) / rate * 1000
+                setTimeout(() => {
+                    playing = shown
+                    lit = order
+                    page = Math.floor(shown / 16)
+                    drawEditor()
+                    drawFretboard()
+                }, delayMs + 80)
+                nextStepAt += stepLength
+            }
+            strings.forEach(string => string.process(left, right, 0, count, sampleTime))
+            if (body === "Simple") {guitarBody.process(left, right, count)}
+            const gain = Math.pow(10, (params.gain * 24 - 18) / 20) * 2
+            for (let index = 0; index < count; index++) {
+                left[index] = Math.tanh(left[index] * gain)
+                right[index] = Math.tanh(right[index] * gain)
+            }
+            sampleTime = end
+        }
+        node.connect(context.destination)
+    }
+    document.getElementById("play").addEventListener("click", event => {
+        if (node !== null) {
+            node.disconnect()
+            node = null
+            strings.forEach(string => {string.events = []; string.periodN = -1})
+            event.target.textContent = "Play"
+            playing = -1
+            lit = []
+            drawEditor()
+            drawFretboard()
+            return
+        }
+        event.target.textContent = "Stop"
+        startAudio()
+    })
+    const tryout = document.getElementById("tryout")
+    document.getElementById("progression").addEventListener("click", event => {
+        progressionOn = !progressionOn
+        event.target.classList.toggle("active", progressionOn)
+        drawFretboard()
+    })
+    Object.keys(Chords).forEach(name => {
+        const button = document.createElement("button")
+        button.textContent = name
+        button.className = "chord"
+        button.classList.toggle("active", name === chord)
+        button.addEventListener("click", () => {
+            chord = name
+            tryout.querySelectorAll("button.chord").forEach(other => other.classList.toggle("active", other === button))
+            drawFretboard()
+        })
+        tryout.appendChild(button)
+    })
+
+    buildSound()
+    loadPattern("Strumming|Folk")
+    select.value = "Strumming|Folk"
+    drawFretboard()
+</script>
+</body>
+</html>
