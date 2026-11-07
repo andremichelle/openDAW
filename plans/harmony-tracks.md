@@ -90,12 +90,12 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 
 ## Phases
 
-1. Key track: schema, adapters, harmony lookup, UI, piano roll follow, fit to key.
-2. Engine harmony lookup + abi + Rust tests.
-3. Scale Matrix device with "follow project".
-4. Chord track: schema, adapters, UI, custom chords, preview.
-5. Chords in the engine lookup, Arpeggio "follow chords".
-6. Software keyboard chord pads, recording chord events.
+1. ~~Key track: schema, adapters, harmony lookup, UI, piano roll follow, fit to key.~~
+2. ~~Engine harmony lookup + abi + Rust tests.~~
+3. ~~Scale Matrix device with "follow project".~~
+4. ~~Chord track: schema, adapters, UI, custom chords, preview.~~
+5. ~~Chords in the engine lookup, Arpeggio "follow chords".~~
+6. ~~Software keyboard chord pads, recording chord events.~~
 7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
 8. Scripting API + docs.
 9. Devices follow the project key: Cubed randomizer, Autotune Follow, script devices, software keyboard scale mapping.
@@ -111,6 +111,8 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
    the armed instruments. While recording a pad writes a chord event from press to release, snapped to the grid.
 6. Phase 10 part: chords use the project selection (saved), selection rectangle, shift click, Ctrl drag copies,
    Ctrl D duplicates, copy, cut and paste, keys 1 to 7 and Delete act on all selected chords.
+7. Phase 9 part: Cubed randomizer Project Key option (on by default), Autotune Follow (field 16, block position).
+   Software keyboard Scale switch maps the white keys onto the key. Open: script devices reading key and chord.
 
 ## Later
 

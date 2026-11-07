@@ -396,6 +396,8 @@ export interface AutotuneEffect extends AudioEffect {
     shift: float
     /** Smoothing (0.0 to 1.0, default 0.6) */
     smooth: unitValue
+    /** Uses the key of the project's key track instead of scaleKey and scale (default false) */
+    follow: boolean
 }
 
 /**

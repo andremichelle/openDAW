@@ -75,15 +75,18 @@ are drawn grey and do not play.
 
 ---
 
-## 4. Chord Pads
+## 4. MIDI Keyboard
 
-The MIDI keyboard (software keyboard) has a row of pads 1 to 7 below the keys. Each pad shows the chord of its step
+The MIDI keyboard (software keyboard) has a row of chord pads 1 to 7 below the keys. Each pad shows the chord of its step
 in the key at the play position and plays it on the armed instruments, in the octave of the keyboard.
 
 - **Click and hold** a pad, or hold the keys **Z X C V B N M**, to play steps 1 to 7.
 - While recording, every pad you play also writes a chord to the chord track, from the moment you press it until you
   release it, snapped to the grid. The chord track opens if it was hidden. The notes are recorded into the armed
   track as usual.
+- **Scale** in the keyboard's controls maps the white keys onto the key at the play position: C plays the root,
+  D the second step and so on, so every white key is in key. The black keys are silent while it is on. In scales with
+  more or fewer than 7 notes the white keys walk through the steps in order.
 
 ---
 

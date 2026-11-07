@@ -1,14 +1,17 @@
 import css from "./SoftwareMIDIPanel.sass?inline"
 import {Dragging, Events, Html, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
 import {
+    Arrays,
     asInstanceOf,
     byte,
     clamp,
     DefaultObservableValue,
     int,
+    isDefined,
     isInstanceOf,
     isUndefined,
     Lifecycle,
+    Nullable,
     Option,
     ParseResult,
     Predicates,
@@ -24,6 +27,8 @@ import {MenuButton} from "@/ui/components/MenuButton"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MidiData} from "@opendaw/lib-midi"
+import {Harmony} from "@opendaw/lib-dsp"
+import {Checkbox} from "@/ui/components/Checkbox"
 import {FlexSpacer} from "@/ui/components/FlexSpacer"
 import {PianoRoll} from "@/ui/software-midi/PianoRoll"
 import {Button} from "@/ui/components/Button"
@@ -39,6 +44,8 @@ const className = Html.adoptStyleSheet(css, "SoftwareMIDIPanel")
 const octave = new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)})
 const channel = new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)})
 const velocity = new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)})
+const scaleMapping = new DefaultObservableValue(false)
+const WhiteKeys: ReadonlyArray<int> = [0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6]
 
 type Construct = {
     lifecycle: Lifecycle
@@ -52,6 +59,18 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         blackKeys: {width: 19, height: 24}
     })
     const {softwareMIDIInput} = MidiDevices
+    const pitchOf = (key: int): Nullable<int> => {
+        const base = octave.getValue() * 12
+        if (!scaleMapping.getValue()) {return base + key}
+        const white = WhiteKeys[key % 12]
+        if (white === -1) {return null}
+        const {root, bits} = service.projectProfileService.getValue()
+            .mapOr(({project: {engine, timelineBoxAdapter: {keyTrack}}}) =>
+                keyTrack.keyAt(engine.position.getValue()), Harmony.DefaultKey)
+        const steps = Arrays.create(index => index, 12).filter(index => (bits & (1 << index)) !== 0)
+        const step = white + Math.floor(key / 12) * 7
+        return base + root + steps[step % steps.length] + Math.floor(step / steps.length) * 12
+    }
     const svg: SVGElement = (<PianoRoll lifecycle={lifecycle} pianoLayout={pianoLayout}/>)
     const chordPlayer = lifecycle.own(new ChordPadPlayer(service, octave, velocity))
     const midiIndicator: DomElement = <Icon symbol={IconSymbol.Connected}/>
@@ -65,7 +84,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         </header>
         <div className="controls">
             <div className="unit">
-                <span>Octave</span>
+                <span>Oct</span>
                 <NumberInput lifecycle={lifecycle} model={octave} mapper={{
                     x: (y: byte): StringResult => ({unit: "", value: String(y - 2)}),
                     y: (x: string): ParseResult<byte> => ({
@@ -75,7 +94,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
                 }} className="octave"/>
             </div>
             <div className="unit">
-                <span>Channel</span>
+                <span>Ch</span>
                 <NumberInput lifecycle={lifecycle} model={channel} mapper={{
                     x: (y: byte): StringResult => ({unit: "", value: String(y + 1)}),
                     y: (x: string): ParseResult<byte> => ({
@@ -85,7 +104,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
                 }} className="channel"/>
             </div>
             <div className="unit">
-                <span>Velocity</span>
+                <span>Vel</span>
                 <NumberInput lifecycle={lifecycle} model={velocity} mapper={{
                     x: (y: byte): StringResult => ({unit: "", value: String(y)}),
                     y: (x: string): ParseResult<byte> => ({
@@ -93,6 +112,14 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
                         value: parseInt(x)
                     })
                 }} className="velocity"/>
+            </div>
+            <div className="unit">
+                <span>Scale</span>
+                <Checkbox lifecycle={lifecycle} model={scaleMapping} className="scale"
+                          appearance={{color: Colors.shadow, activeColor: Colors.orange,
+                              tooltip: "White keys play the steps of the key at the play position"}}>
+                    <Icon symbol={IconSymbol.Checkbox}/>
+                </Checkbox>
             </div>
             <FlexSpacer/>
             <MenuButton root={MenuItem.root()
@@ -147,8 +174,8 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
             const key = parseInt(dataKey)
             if (lastPointerKey === key) {return}
             stopPointerNote()
-            const pitch = key + octave.getValue() * 12
-            if (pitch >= 0 && pitch < 128) {
+            const pitch = pitchOf(key)
+            if (isDefined(pitch) && pitch >= 0 && pitch < 128) {
                 softwareMIDIInput.sendNoteOn(pitch)
                 lastPointerKey = key
                 lastPointerKeyPitch = pitch
@@ -165,8 +192,8 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
             softwareMIDIInput.sendNoteOff(activeKeys[index])
             activeKeys[index] = -1
         } else {
-            const pitch = index + octave.getValue() * 12
-            if (pitch >= 0 && pitch < 128) {
+            const pitch = pitchOf(index)
+            if (isDefined(pitch) && pitch >= 0 && pitch < 128) {
                 softwareMIDIInput.sendNoteOn(pitch, velocity.getValue() / 100.0)
                 activeKeys[index] = pitch
             }
@@ -176,9 +203,10 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         Events.subscribe(softwareMIDIInput, "midimessage", event => {
             const update = () => {
                 for (let key = 0; key < numKeys; key++) {
-                    const note = key + octave.getValue() * 12
+                    const note = pitchOf(key)
                     svg.querySelector(`[data-key="${key}"]`)
-                        ?.classList.toggle("active", softwareMIDIInput.hasActiveNote(note))
+                        ?.classList.toggle("active", isDefined(note) && note >= 0 && note < 128
+                            && softwareMIDIInput.hasActiveNote(note))
                 }
             }
             MidiData.accept(event.data, {
@@ -189,6 +217,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         softwareMIDIInput.countListeners.catchupAndSubscribe(owner =>
             midiIndicator.style.color = owner.getValue() > 1 ? Colors.green.toString() : Colors.red.toString()),
         shortcuts,
+        scaleMapping.catchupAndSubscribe(owner => svg.classList.toggle("scale-mapped", owner.getValue())),
         shortcuts.register(SoftwareMIDIShortcuts["increment-octave"].shortcut, () => octave.setValue(octave.getValue() + 1)),
         shortcuts.register(SoftwareMIDIShortcuts["decrement-octave"].shortcut, () => octave.setValue(octave.getValue() - 1)),
         ...NoteShortcuts.map(({shortcut}, index) => shortcuts.register(shortcut, () => playNote(shortcut, index))),

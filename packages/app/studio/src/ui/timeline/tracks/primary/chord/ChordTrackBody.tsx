@@ -1,5 +1,5 @@
 import css from "./ChordTrackBody.sass?inline"
-import {isDefined, Lifecycle, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ClipboardManager, ElementCapturing} from "@opendaw/studio-core"
@@ -146,7 +146,8 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
         const minPosition = Math.min(...selected.map(({position}) => position))
         const limits = selected.map(({complete}) => Math.min(...selected
             .map(other => other.position).filter(other => other >= complete), Number.POSITIVE_INFINITY))
-        const playing = hold(adapter)
+        const playing = new Terminator()
+        playing.own(hold(adapter))
         const pointerPulse = range.xToUnit(localX)
         const resizing = adapter === resizeAdapter
         const state = {copy: false, deltaPosition: 0, deltaDuration: 0}
@@ -172,6 +173,7 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
                 } else {
                     state.deltaPosition = Math.max(-minPosition, snapping.computeDelta(pointerPulse, x, adapter.position))
                 }
+                if (state.deltaPosition !== 0 || state.deltaDuration !== 0) {playing.terminate()}
                 requestUpdate()
             },
             approve: () => {

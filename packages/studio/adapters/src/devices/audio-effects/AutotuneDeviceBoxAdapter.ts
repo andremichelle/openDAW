@@ -78,7 +78,11 @@ export class AutotuneDeviceBoxAdapter implements AudioEffectDeviceAdapter {
             shift: this.#parametric.createParameter(
                 box.shift,
                 ValueMapping.linear(-12.0, 12.0),
-                StringMapping.numeric({unit: "st"}), "Shift")
+                StringMapping.numeric({unit: "st"}), "Shift"),
+            follow: this.#parametric.createParameter(
+                box.follow,
+                ValueMapping.bool,
+                StringMapping.bool, "Follow")
         } as const
     }
 }

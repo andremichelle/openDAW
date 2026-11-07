@@ -40,10 +40,9 @@ export namespace ChordRenderer {
                 const x1 = Math.floor(range.unitToX(complete) * devicePixelRatio)
                 const valid = chordTrack.enabled && event.resolve(chordTrack.keyTrack.keyAt(position)).nonEmpty()
                 const color = valid ? Colors.orange : Colors.shadow
-                context.fillStyle = (selected ? color : color.opacity(0.2)).toString()
+                context.fillStyle = (selected ? color : color.opacity(0.1)).toString()
                 context.fillRect(x0 + 1, vPadding, Math.max(1, x1 - x0 - 2), height - (vPadding << 1))
                 context.fillStyle = (selected ? Colors.panelBackgroundDark : color).toString()
-                if (!selected) {context.fillRect(x0 + 1, vPadding, 2, height - (vPadding << 1))}
                 const {text} = Context2d.truncateText(context, label(chordTrack, event, position), x1 - x0 - textPadding * 2)
                 context.fillText(text, x0 + textPadding + 2, height >> 1)
             }

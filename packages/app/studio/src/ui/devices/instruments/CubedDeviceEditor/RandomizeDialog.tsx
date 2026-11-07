@@ -1,8 +1,8 @@
 import css from "./RandomizeDialog.sass?inline"
-import {clamp, DefaultObservableValue, int, Procedure, StringMapping, Terminator, unitValue} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, int, Procedure, Provider, StringMapping, Terminator, unitValue} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {MidiKeys} from "@opendaw/lib-dsp"
+import {Harmony, MidiKeys} from "@opendaw/lib-dsp"
 import {CubedContour, CubedRandomize, CubedRandomizeOptions} from "@opendaw/studio-adapters"
 import {Dialog} from "@/ui/components/Dialog"
 import {RadioGroup} from "@/ui/components/RadioGroup"
@@ -19,7 +19,12 @@ const ContourLabels: Record<CubedContour, string> = {
     free: "Free", walk: "Walk", rise: "Rise", fall: "Fall"
 }
 
+export const applyProjectKey = (options: CubedRandomizeOptions, {root, bits}: Harmony.Key): CubedRandomizeOptions =>
+    ({...options, root, scale: MidiKeys.StockScales.find(scale => scale.bits === bits) ?? options.scale})
+
 export const showRandomizeDialog = (options: CubedRandomizeOptions,
+                                    followKey: DefaultObservableValue<boolean>,
+                                    projectKey: Provider<Harmony.Key>,
                                     randomize: Procedure<CubedRandomizeOptions>,
                                     commit: Procedure<CubedRandomizeOptions>): void => {
     const lifecycle = new Terminator()
@@ -33,6 +38,18 @@ export const showRandomizeDialog = (options: CubedRandomizeOptions,
     const motif = lifecycle.own(new DefaultObservableValue<int>(options.motif))
     const contour = lifecycle.own(new DefaultObservableValue<CubedContour>(options.contour))
     const rootFirst = lifecycle.own(new DefaultObservableValue<boolean>(options.rootFirst))
+    const syncing = {value: false}
+    const syncKey = () => {
+        if (!followKey.getValue()) {return}
+        const synced = applyProjectKey({...options, root: root.getValue(), scale: scale.getValue()}, projectKey())
+        syncing.value = true
+        root.setValue(synced.root)
+        scale.setValue(synced.scale)
+        syncing.value = false
+    }
+    const unfollow = () => {if (!syncing.value) {followKey.setValue(false)}}
+    syncKey()
+    lifecycle.ownAll(followKey.subscribe(syncKey), root.subscribe(unfollow), scale.subscribe(unfollow))
     const percentInput = (model: DefaultObservableValue<unitValue>) => (
         <div className="percent">
             <NumberInput lifecycle={lifecycle} model={model} mapper={Percent} step={0.05}
@@ -80,6 +97,12 @@ export const showRandomizeDialog = (options: CubedRandomizeOptions,
                     <DropDown lifecycle={lifecycle} owner={scale} width="7.5em"
                               provider={() => MidiKeys.StockScales} mapping={scale => scale.name}/>
                 </div>
+                <span>Project Key</span>
+                <Checkbox lifecycle={lifecycle} model={followKey}
+                          appearance={{color: Colors.shadow, activeColor: Colors.orange, framed: true,
+                              tooltip: "Root and Scale follow the key at the play position"}}>
+                    <Icon symbol={IconSymbol.Checkbox}/>
+                </Checkbox>
                 <span>Contour</span>
                 <RadioGroup lifecycle={lifecycle} model={contour}
                             elements={CubedRandomize.Contours.map(value => ({

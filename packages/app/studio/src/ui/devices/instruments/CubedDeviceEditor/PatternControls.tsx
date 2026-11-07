@@ -10,7 +10,7 @@ import {NumberInput} from "@/ui/components/NumberInput"
 import {Button} from "@/ui/components/Button"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {showRandomizeDialog} from "@/ui/devices/instruments/CubedDeviceEditor/RandomizeDialog"
+import {applyProjectKey, showRandomizeDialog} from "@/ui/devices/instruments/CubedDeviceEditor/RandomizeDialog"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
@@ -31,18 +31,22 @@ export const PatternControls = ({lifecycle, project, editing, midiLearning, adap
     const {patternIndex} = adapter.namedParameter
     const randomizeOptions = lifecycle.own(
         new DefaultObservableValue<CubedRandomizeOptions>(CubedRandomize.Default))
+    const followKey = lifecycle.own(new DefaultObservableValue<boolean>(true))
+    const projectKey = () => project.timelineBoxAdapter.keyTrack.keyAt(project.engine.position.getValue())
+    const currentOptions = (): CubedRandomizeOptions => followKey.getValue()
+        ? applyProjectKey(randomizeOptions.getValue(), projectKey()) : randomizeOptions.getValue()
     const clearActivePattern = () => editing.modify(() => adapter.clearCurrentPattern())
     const randomizeActivePattern = (options: CubedRandomizeOptions) =>
         editing.modify(() => adapter.randomizeCurrentPattern(options))
     const rotateActivePattern = (offset: int) => editing.modify(() => adapter.rotateCurrentPattern(offset))
     const onRandomClick = (event: MouseEvent) => {
         if (event.shiftKey) {
-            showRandomizeDialog(randomizeOptions.getValue(), options => {
+            showRandomizeDialog(currentOptions(), followKey, projectKey, options => {
                 randomizeOptions.setValue(options)
                 randomizeActivePattern(options)
             }, options => randomizeOptions.setValue(options))
         } else {
-            randomizeActivePattern(randomizeOptions.getValue())
+            randomizeActivePattern(currentOptions())
         }
     }
     return (
