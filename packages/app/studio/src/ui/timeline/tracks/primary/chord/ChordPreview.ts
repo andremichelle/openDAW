@@ -8,6 +8,7 @@ export namespace ChordPreview {
     const DurationMs = 600
 
     export const start = (project: Project, chord: Harmony.Chord): Terminable => {
+        if (project.engine.isPlaying.getValue()) {return Terminable.Empty}
         const host = project.userEditingManager.audioUnit.get()
             .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost))
         if (host.isEmpty()) {return Terminable.Empty}
