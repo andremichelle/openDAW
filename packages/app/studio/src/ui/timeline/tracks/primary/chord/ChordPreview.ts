@@ -4,7 +4,7 @@ import {MidiDevices, Project} from "@opendaw/studio-core"
 import {Terminable} from "@opendaw/lib-std"
 
 export namespace ChordPreview {
-    const BasePitch = 48
+    const BasePitch = 60
     const DurationMs = 600
 
     export const start = (project: Project, chord: Harmony.Chord): Terminable => {
