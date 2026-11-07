@@ -8,6 +8,7 @@ import {FilePickerAcceptTypes, StudioPreferences} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Notifier, Objects} from "@opendaw/lib-std"
 import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
+import {ShortcutSheet} from "@/ui/components/ShortcutSheet"
 import {Button} from "@/ui/components/Button"
 import {Colors} from "@opendaw/studio-enums"
 import {Promises} from "@opendaw/lib-runtime"
@@ -57,17 +58,17 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                                 Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {workingDefinition}]) =>
                                     ShortcutDefinitions.copyInto(contexts[key], workingDefinition))
                                 StudioShortcutManager.store()
-                            }} appearance={{color: Colors.purple}}>APPLY</Button>
+                            }} appearance={{cursor: "pointer", color: Colors.purple}}>APPLY</Button>
                             <Button lifecycle={lifecycle} onClick={() => {
                                 Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {factory}]) =>
                                     contexts[key] = ShortcutDefinitions.copy(factory))
                                 updateNotifier.notify()
-                            }} appearance={{color: Colors.cream}}>FACTORY</Button>
+                            }} appearance={{cursor: "pointer", color: Colors.cream}}>FACTORY</Button>
                             <Button lifecycle={lifecycle} onClick={() => {
                                 Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {workingDefinition}]) =>
                                     contexts[key] = ShortcutDefinitions.copy(workingDefinition))
                                 updateNotifier.notify()
-                            }} appearance={{color: Colors.cream}}>RESET</Button>
+                            }} appearance={{cursor: "pointer", color: Colors.cream}}>RESET</Button>
                             <Button lifecycle={lifecycle} onClick={async () => {
                                 const {status, value: jsonString, error} = await Promises
                                     .tryCatch(Files.open({types: [FilePickerAcceptTypes.JsonFileType]})
@@ -78,11 +79,13 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                                 } else {
                                     console.warn(error)
                                 }
-                            }} appearance={{color: Colors.green}}>LOAD</Button>
+                            }} appearance={{cursor: "pointer", color: Colors.green}}>LOAD</Button>
                             <Button lifecycle={lifecycle} onClick={() => StudioShortcutManager.toJSONString(contexts)
                                 .ifSome(jsonString => Files.save(new TextEncoder().encode(jsonString).buffer,
                                     {suggestedName: "openDAW.shortcuts.json"}))}
-                                    appearance={{color: Colors.green}}>SAVE</Button>
+                                    appearance={{cursor: "pointer", color: Colors.green}}>SAVE</Button>
+                            <Button lifecycle={lifecycle} onClick={() => ShortcutSheet.open(contexts)}
+                                    appearance={{cursor: "pointer", color: Colors.cream, tooltip: "Open the shortcuts as a printable page"}}>PRINT</Button>
                         </div>
                     </div>
                     <ShortcutManagerView lifecycle={lifecycle}

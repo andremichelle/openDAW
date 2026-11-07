@@ -68,7 +68,7 @@ export namespace StudioShortcutManager {
             timeline: {
                 clips: {visible: clipsVisibility},
                 followCursor,
-                primaryVisibility: {markers, tempo, signature},
+                primaryVisibility: {markers, tempo, signature, key: keyTrack, chords: chordTrack},
                 snapping
             }
         } = service
@@ -127,6 +127,8 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-tempo-track"].shortcut, () => tempo.setValue(!tempo.getValue())),
             gc.register(gs["toggle-markers-track"].shortcut, () => markers.setValue(!markers.getValue())),
             gc.register(gs["toggle-signature-track"].shortcut, () => signature.setValue(!signature.getValue())),
+            gc.register(gs["toggle-key-track"].shortcut, () => keyTrack.setValue(!keyTrack.getValue())),
+            gc.register(gs["toggle-chord-track"].shortcut, () => chordTrack.setValue(!chordTrack.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].shortcut, () => metronome.enabled = !metronome.enabled),

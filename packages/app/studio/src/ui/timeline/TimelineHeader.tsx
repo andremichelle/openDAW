@@ -77,11 +77,13 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                     }).setTriggerProcedure(() => signature.setValue(!signature.getValue())),
                     MenuItem.default({
                         label: "Key",
-                        checked: key.getValue()
+                        checked: key.getValue(),
+                        shortcut: GlobalShortcuts["toggle-key-track"].shortcut.format()
                     }).setTriggerProcedure(() => key.setValue(!key.getValue())),
                     MenuItem.default({
                         label: "Chords",
-                        checked: chords.getValue()
+                        checked: chords.getValue(),
+                        shortcut: GlobalShortcuts["toggle-chord-track"].shortcut.format()
                     }).setTriggerProcedure(() => chords.setValue(!chords.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
