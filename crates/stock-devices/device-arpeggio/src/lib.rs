@@ -451,6 +451,23 @@ fn release_completed(state: &mut ArpState, to: f64, events: &mut [EventRecord], 
     }
 }
 
+/// End every emitted note at `position` and drop the pending ratchet hits, keeping the held keys. Note-ends are
+/// song positions, a stopped transport counts its own, so they would not come due in time.
+fn end_sounding(state: &mut ArpState, position: f64, events: &mut [EventRecord], count: &mut usize) {
+    let mut index = 0;
+    while index < state.retained_count as usize {
+        let retained = state.retained[index];
+        if emit(events, count, note_off(retained.id, retained.pitch, position)) {
+            state.retained[index] = state.retained[state.retained_count as usize - 1];
+            state.retained_count -= 1;
+        } else {
+            state.retained[index].complete = position;
+            index += 1;
+        }
+    }
+    state.pending_count = 0;
+}
+
 /// End every emitted note at `position` and forget the source notes (TS `releaseAll`), returning the count written.
 /// Notes that do not fit into `out` are released at the start of the next block.
 pub fn release_all_into(state: &mut ArpState, position: f64, out: &mut [EventRecord]) -> usize {
@@ -691,7 +708,8 @@ pub fn process_in(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &
     let events = &mut buffer[..out.len().min(EMIT_MAX)];
     let mut count = 0;
     let transporting = flags & abi::BlockFlags::TRANSPORTING != 0;
-    if transporting != state.transporting {
+    let transport_changed = transporting != state.transporting;
+    if transport_changed {
         state.transporting = transporting;
         state.latch_count = 0;
         state.latch_released = true;
@@ -699,6 +717,8 @@ pub fn process_in(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &
     let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
     if discontinuous {
         count = release_all_into(state, from, events);
+    } else if transport_changed {
+        end_sounding(state, from, events, &mut count);
     } else {
         release_completed(state, to, events, &mut count);
     }
@@ -1121,5 +1141,21 @@ mod tests {
         process(&mut state, 960.0, 1200.0, 0, &release, &mut out);
         let written = process(&mut state, 1200.0, 2160.0, 0, &[], &mut out);
         assert_eq!(on_count(&out[..written]), 0, "no step after the key went up");
+    }
+
+    #[test]
+    fn stopping_the_transport_ends_the_sounding_notes() {
+        // A step note ends at a song position, the stopped engine counts its own positions from the playhead:
+        // without an immediate note-off the last note sounds until that count passes the old song position.
+        let mut state = state();
+        state.rate = 3840.0;
+        let held = [note_on(15360.0, f64::INFINITY, 60, 0.8)];
+        let mut out = [note_on(0.0, 0.0, 0, 0.0); 64];
+        let written = process(&mut state, 15360.0, 15488.0, abi::BlockFlags::TRANSPORTING, &held, &mut out);
+        assert_eq!(on_count(&out[..written]), 1, "one step while transporting");
+        let written = process(&mut state, 0.0, 128.0, 0, &[], &mut out);
+        let offs = out[..written].iter().filter(|event| event.kind == EVENT_NOTE_OFF).count();
+        assert_eq!(offs, 1, "the step note ends when the transport stops");
+        assert_eq!(out[..written].iter().find(|event| event.kind == EVENT_NOTE_OFF).unwrap().position, 0.0);
     }
 }
