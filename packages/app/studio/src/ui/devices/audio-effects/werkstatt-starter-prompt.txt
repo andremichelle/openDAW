@@ -36,6 +36,13 @@ start at index 0 or that the full length is available.
 Use block.bpm and block.p0/p1 for tempo-synced effects. Use block.flags to detect
 transport state changes (e.g. reset phase on discontinuous).
 
+Key and chord of the song (call them in process, not in the constructor):
+- this.keyAt(block.p0) — the project key: { root, steps }. root is the pitch class 0–11 (0 = C),
+  steps are the scale's notes in semitones above the root, e.g. [0, 2, 4, 5, 7, 9, 11] for major.
+- this.chordAt(block.p0) — the chord of the chord track, or null: { root, notes }. notes are semitones
+  above the root as voiced (inversion included), e.g. [0, 4, 7]. Play a note as 60 + root + note.
+Both return frozen shared objects and allocate nothing, so they are safe to call every block.
+
 ## reset()
 Optional. Called when the transport stops. Use it to clear buffers and tails (delay lines,
 filter state). Without a reset() the Processor instance is rebuilt on stop, so all state in

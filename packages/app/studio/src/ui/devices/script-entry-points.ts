@@ -123,6 +123,35 @@ const streams: Property = {
     ].join("\n")
 }
 
+const keyAt: Property = {
+    name: "keyAt",
+    keys: null,
+    signature: "this.keyAt(position): {root, steps}",
+    documentation: [
+        "The project key at `position` (ppqn), from the key track or the project key in the header.",
+        "",
+        "- `root`: pitch class 0..11 (0 = C)",
+        "- `steps`: the scale's notes in semitones above the root, `[0, 2, 4, 5, 7, 9, 11]` for major",
+        "",
+        "Not available in the constructor. Frozen and shared, allocates nothing."
+    ].join("\n")
+}
+
+const chordAt: Property = {
+    name: "chordAt",
+    keys: null,
+    signature: "this.chordAt(position): {root, notes} | null",
+    documentation: [
+        "The chord of the chord track at `position` (ppqn), `null` where no chord sits.",
+        "",
+        "- `root`: pitch class 0..11 of the chord root",
+        "- `notes`: semitones above the root as voiced, inversion included, `[0, 4, 7]` for a major triad.",
+        "  Play it with `60 + root + note`.",
+        "",
+        "Not available in the constructor. Frozen and shared, allocates nothing."
+    ].join("\n")
+}
+
 const dataChanged: Method = {
     name: "dataChanged",
     generator: false,
@@ -335,9 +364,9 @@ export namespace ScriptEntryPointDocs {
         ({className, methods: viewMethods, properties: [], globals: GLOBALS})
 
     export const werkstatt: ScriptEntryPoints.Api =
-        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data, streams], globals: GLOBALS}
+        {className: "Processor", methods: werkstattMethods, properties: [samples, sidechains, latency, data, streams, keyAt, chordAt], globals: GLOBALS}
     export const apparat: ScriptEntryPoints.Api =
-        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data, streams], globals: GLOBALS}
+        {className: "Processor", methods: apparatMethods, properties: [samples, sidechains, data, streams, keyAt, chordAt], globals: GLOBALS}
     export const spielwerk: ScriptEntryPoints.Api =
-        {className: "Processor", methods: spielwerkMethods, properties: [data, streams], globals: GLOBALS}
+        {className: "Processor", methods: spielwerkMethods, properties: [data, streams, keyAt, chordAt], globals: GLOBALS}
 }
