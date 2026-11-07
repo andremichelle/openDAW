@@ -9,7 +9,8 @@
 //! Parameters (`ArpeggioDeviceBox`): modeIndex `[10]` (the 18 walks, 0..2 = the legacy Up/Down/UpDown),
 //! numOctaves `[11]` (1..5), rateIndex `[12]` (into `RATE_FRACTIONS`), gate `[13]` (0..2, step length as a
 //! fraction of the rate), repeat `[14]` (1..16, grid steps per walk step), velocity `[15]` (bipolar magnet),
-//! order `[16]` (played / pitch), hold `[17]`, retrigger `[18]` (off / note / bar / beat), offset `[19]`.
+//! order `[16]` (played / pitch), hold `[17]`, retrigger `[18]` (off / note / bar / beat), offset `[19]`,
+//! followChords `[21]` (while transporting, a chord on the project's chord track replaces the held notes).
 //! Plain fields: seed `[20]`, the 64-step lanes `[30..36]` and the pattern length `[37]`. With the new fields at
 //! their defaults the device emits exactly what the legacy device emitted (`tests/golden.rs`).
 //! Parameter automation is honored: the block is split at update boundaries (as `render_midi_effect` does).
@@ -61,6 +62,7 @@ const HOLD_FIELD: [u16; 1] = [17];
 const RETRIGGER_FIELD: [u16; 1] = [18];
 const OFFSET_FIELD: [u16; 1] = [19];
 const SEED_FIELD: [u16; 1] = [20];
+const FOLLOW_CHORDS_FIELD: [u16; 1] = [21];
 // WASM CONTRACT: mirrors the `ArpeggioDeviceBox` lane arrays (int32 x STEP_COUNT each) and `pattern-length`.
 const LANE_FIELDS: [u16; LANE_COUNT] = [30, 31, 32, 33, 34, 35, 36];
 const LENGTH_FIELD: [u16; 1] = [37];
@@ -101,6 +103,8 @@ const MAX_RETAINED: usize = MAX_SOURCE * 8; // emitted notes awaiting their sche
 const MAX_PENDING: usize = MAX_SOURCE * MAX_RATCHET as usize; // ratchet hits due in a later block
 const EMIT_MAX: usize = 256; // events emitted in one block (note-offs + note-ons), the host's per-quantum capacity
 const MAX_POOL: usize = MAX_SOURCE * 5; // notes x octaves
+const CHORD_BASE_PITCH: u32 = 60; // the octave chord notes play in when no key is held
+const CHORD_VELOCITY: f32 = 0.8;
 
 #[derive(Clone, Copy)]
 struct SourceNote {
@@ -163,6 +167,7 @@ pub struct ArpState {
     hold: bool,
     retrigger: i32,
     offset: i32,
+    follow_chords: bool,
     seed: u32,
     length: usize,
     kinds: [u8; STEP_COUNT],
@@ -182,6 +187,7 @@ pub struct ArpState {
     hold_id: u32,
     retrigger_id: u32,
     offset_id: u32,
+    follow_chords_id: u32,
     seed_id: u32,
     lane_ids: [u32; LANE_COUNT],
     length_id: u32,
@@ -445,6 +451,23 @@ fn release_completed(state: &mut ArpState, to: f64, events: &mut [EventRecord], 
     }
 }
 
+/// End every emitted note at `position` and drop the pending ratchet hits, keeping the held keys. Note-ends are
+/// song positions, a stopped transport counts its own, so they would not come due in time.
+fn end_sounding(state: &mut ArpState, position: f64, events: &mut [EventRecord], count: &mut usize) {
+    let mut index = 0;
+    while index < state.retained_count as usize {
+        let retained = state.retained[index];
+        if emit(events, count, note_off(retained.id, retained.pitch, position)) {
+            state.retained[index] = state.retained[state.retained_count as usize - 1];
+            state.retained_count -= 1;
+        } else {
+            state.retained[index].complete = position;
+            index += 1;
+        }
+    }
+    state.pending_count = 0;
+}
+
 /// End every emitted note at `position` and forget the source notes (TS `releaseAll`), returning the count written.
 /// Notes that do not fit into `out` are released at the start of the next block.
 pub fn release_all_into(state: &mut ArpState, position: f64, out: &mut [EventRecord]) -> usize {
@@ -468,6 +491,11 @@ pub fn release_all_into(state: &mut ArpState, position: f64, out: &mut [EventRec
 /// The pool for a step at `position`: the covering source notes, or with Hold the latched notes (a press after
 /// all keys were up replaces the latch, presses while keys are down add to it). Ordered per `order`.
 fn collect_pool(state: &mut ArpState, position: f64, pool: &mut [PoolNote; MAX_SOURCE]) -> usize {
+    if state.follow_chords && state.transporting {
+        if let Some((root, bits)) = abi::harmony_at(position).chord {
+            return collect_chord(state, position, root, bits, pool);
+        }
+    }
     let mut count = 0;
     for index in 0..state.source_count as usize {
         let note = state.source[index];
@@ -513,6 +541,27 @@ fn collect_pool(state: &mut ArpState, position: f64, pool: &mut [PoolNote; MAX_S
             inner -= 1;
         }
         pool[inner] = value;
+    }
+    count
+}
+
+/// The chord's notes ascending, in the octave of the lowest held key (or `CHORD_BASE_PITCH` without one).
+fn collect_chord(state: &ArpState, position: f64, root: i32, bits: i32, pool: &mut [PoolNote; MAX_SOURCE]) -> usize {
+    let mut base = CHORD_BASE_PITCH;
+    let mut velocity = CHORD_VELOCITY;
+    let mut held = false;
+    for note in state.source[..state.source_count as usize].iter().filter(|note| note.start <= position && position < note.end) {
+        let octave = note.pitch / 12 * 12;
+        base = if held {base.min(octave)} else {octave};
+        velocity = if held {velocity.max(note.velocity)} else {note.velocity};
+        held = true;
+    }
+    let mut count = 0;
+    for interval in 0..31 {
+        if bits & (1 << interval) != 0 && count < MAX_SOURCE {
+            pool[count] = PoolNote {start: position, pitch: base + (root + interval) as u32, velocity, cent: 0.0};
+            count += 1;
+        }
     }
     count
 }
@@ -659,7 +708,8 @@ pub fn process_in(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &
     let events = &mut buffer[..out.len().min(EMIT_MAX)];
     let mut count = 0;
     let transporting = flags & abi::BlockFlags::TRANSPORTING != 0;
-    if transporting != state.transporting {
+    let transport_changed = transporting != state.transporting;
+    if transport_changed {
         state.transporting = transporting;
         state.latch_count = 0;
         state.latch_released = true;
@@ -667,6 +717,8 @@ pub fn process_in(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &
     let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
     if discontinuous {
         count = release_all_into(state, from, events);
+    } else if transport_changed {
+        end_sounding(state, from, events, &mut count);
     } else {
         release_completed(state, to, events, &mut count);
     }
@@ -725,6 +777,7 @@ pub fn seed(state: &mut ArpState) {
     state.hold = false;
     state.retrigger = RETRIGGER_OFF;
     state.offset = 0;
+    state.follow_chords = false;
     state.seed = 0;
     state.length = 16;
     state.kinds = [STEP_NOTE; STEP_COUNT];
@@ -747,6 +800,7 @@ pub fn seed(state: &mut ArpState) {
     state.hold_id = abi::bind_parameter(&HOLD_FIELD);
     state.retrigger_id = abi::bind_parameter(&RETRIGGER_FIELD);
     state.offset_id = abi::bind_parameter(&OFFSET_FIELD);
+    state.follow_chords_id = abi::bind_parameter(&FOLLOW_CHORDS_FIELD);
     state.seed_id = abi::observe_field(&SEED_FIELD);
     for (index, path) in LANE_FIELDS.iter().enumerate() {
         state.lane_ids[index] = abi::observe_field(&[*path]);
@@ -831,6 +885,8 @@ pub fn apply_parameter(state: &mut ArpState, id: u32, value: ParamValue) {
         state.retrigger = abi::int_value(value, &RETRIGGER_MAPPING);
     } else if id == state.offset_id {
         state.offset = abi::int_value(value, &OFFSET_MAPPING);
+    } else if id == state.follow_chords_id {
+        state.follow_chords = abi::bool_value(value);
     }
 }
 
@@ -855,6 +911,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         7 => if abi::bool_value(value) { 1.0 } else { 0.0 },
         8 => abi::int_value(value, &RETRIGGER_MAPPING) as f32,
         9 => abi::int_value(value, &OFFSET_MAPPING) as f32,
+        10 => if abi::bool_value(value) { 1.0 } else { 0.0 },
         _ => f32::NAN
     }
 }
@@ -1000,6 +1057,76 @@ mod tests {
         assert!(out[..written].iter().all(|event| event.position == 1000.0), "released at `from`");
     }
 
+    // the native harmony is process-wide, tests that set it must not overlap
+    static HARMONY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn chord_pitches(state: &mut ArpState, input: &[EventRecord], chord: Option<(i32, i32)>) -> Vec<u32> {
+        let _lock = HARMONY_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        abi::set_native_harmony(abi::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord});
+        let mut out = [note_on(0.0, 0.0, 0, 0.0); 64];
+        let written = process(state, 0.0, 3840.0, abi::BlockFlags::TRANSPORTING, input, &mut out);
+        abi::set_native_harmony(abi::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: None});
+        out[..written].iter().filter(|event| event.kind == EVENT_NOTE_ON).map(|event| event.pitch).collect()
+    }
+
+    #[test]
+    fn follow_chords_plays_the_chord_without_held_keys() {
+        let mut state = state();
+        state.rate = rate_ppqn(3);
+        state.follow_chords = true;
+        state.transporting = true;
+        assert_eq!(chord_pitches(&mut state, &[], Some((7, 0x91))), vec![67, 71, 74, 67], "G major from C3 upwards");
+    }
+
+    #[test]
+    fn follow_chords_plays_stacked_and_inverted_voicings() {
+        let mut state = state_with_follow();
+        let g9 = (1 << 0) | (1 << 4) | (1 << 7) | (1 << 10) | (1 << 14);
+        assert_eq!(chord_pitches(&mut state, &[], Some((7, g9))), vec![67, 71, 74, 77], "G9 walks up into the ninth");
+        let mut inverted = state_with_follow();
+        let c_first = (1 << 4) | (1 << 7) | (1 << 12);
+        assert_eq!(chord_pitches(&mut inverted, &[], Some((0, c_first))), vec![64, 67, 72, 64], "C/E starts on E");
+    }
+
+    #[test]
+    fn follow_chords_voices_the_chord_in_the_octave_of_the_lowest_held_key() {
+        let mut state = state();
+        state.rate = rate_ppqn(3);
+        state.follow_chords = true;
+        state.transporting = true;
+        let input = [note_on(0.0, 4000.0, 50, 0.5), note_on(0.0, 4000.0, 77, 0.9)];
+        assert_eq!(chord_pitches(&mut state, &input, Some((9, 0x89))), vec![57, 60, 64, 57], "A minor in the octave of the lowest held key");
+    }
+
+    #[test]
+    fn follow_chords_falls_back_to_the_held_keys_without_a_chord() {
+        let mut state = state();
+        state.rate = rate_ppqn(3);
+        state.follow_chords = true;
+        state.transporting = true;
+        let input = [note_on(0.0, 4000.0, 62, 0.8)];
+        assert_eq!(chord_pitches(&mut state, &input, None), vec![62, 62, 62, 62]);
+        let mut silent = state_with_follow();
+        assert!(chord_pitches(&mut silent, &[], None).is_empty(), "no chord, no keys, no notes");
+    }
+
+    #[test]
+    fn follow_chords_off_ignores_the_chord_track() {
+        let mut state = state();
+        state.rate = rate_ppqn(3);
+        state.transporting = true;
+        let input = [note_on(0.0, 4000.0, 62, 0.8)];
+        assert_eq!(chord_pitches(&mut state, &input, Some((7, 0x91))), vec![62, 62, 62, 62]);
+    }
+
+    fn state_with_follow() -> ArpState {
+        let mut state = state();
+        state.rate = rate_ppqn(3);
+        state.follow_chords = true;
+        state.transporting = true;
+        state
+    }
+
     #[test]
     fn a_stopped_transport_arpeggiates_the_held_live_notes() {
         // TS `onlyExternal = !transporting`: while stopped the arp steps over the EXTERNAL (live) notes. The
@@ -1014,5 +1141,21 @@ mod tests {
         process(&mut state, 960.0, 1200.0, 0, &release, &mut out);
         let written = process(&mut state, 1200.0, 2160.0, 0, &[], &mut out);
         assert_eq!(on_count(&out[..written]), 0, "no step after the key went up");
+    }
+
+    #[test]
+    fn stopping_the_transport_ends_the_sounding_notes() {
+        // A step note ends at a song position, the stopped engine counts its own positions from the playhead:
+        // without an immediate note-off the last note sounds until that count passes the old song position.
+        let mut state = state();
+        state.rate = 3840.0;
+        let held = [note_on(15360.0, f64::INFINITY, 60, 0.8)];
+        let mut out = [note_on(0.0, 0.0, 0, 0.0); 64];
+        let written = process(&mut state, 15360.0, 15488.0, abi::BlockFlags::TRANSPORTING, &held, &mut out);
+        assert_eq!(on_count(&out[..written]), 1, "one step while transporting");
+        let written = process(&mut state, 0.0, 128.0, 0, &[], &mut out);
+        let offs = out[..written].iter().filter(|event| event.kind == EVENT_NOTE_OFF).count();
+        assert_eq!(offs, 1, "the step note ends when the transport stops");
+        assert_eq!(out[..written].iter().find(|event| event.kind == EVENT_NOTE_OFF).unwrap().position, 0.0);
     }
 }

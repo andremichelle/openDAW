@@ -237,6 +237,20 @@ Without the `// @no-pass` line this example would emit each note twice: once for
 | `bpm`    | `number` | Current project tempo in BPM                          |
 | `flags`  | `number` | Bitmask: 1 = transporting, 2 = discontinuous (jumped) |
 
+### Key and chord
+
+`this.keyAt(position)` and `this.chordAt(position)` read the harmony of the song at a position in ppqn, the same
+[key and chord](/manuals/key-and-chords) Scale Matrix and Arpeggio follow. Call them in `process`, they are not
+available in the constructor.
+
+| Call | Returns |
+|------|---------|
+| `this.keyAt(block.from)` | `{root, steps}`: `root` the pitch class 0 to 11 (0 = C), `steps` the scale's notes in semitones above the root, `[0, 2, 4, 5, 7, 9, 11]` for major |
+| `this.chordAt(block.from)` | `null` where no chord sits, else `{root, notes}`: `notes` the semitones above the root as voiced, inversion included, `[0, 4, 7]` for a major triad |
+
+A chord note plays as `60 + root + note`. Both return frozen objects shared between calls, so asking every block
+allocates nothing.
+
 ### Event types
 
 The `events` parameter is a unified iterator containing both note-ons and note-offs in chronological order.
@@ -352,7 +366,7 @@ Community scripts with views: Step Arp (a 16-step velocity and gate pattern with
 
 ## 9. Community Scripts
 
-Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
+Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Chord Player, Key Harmonizer, Random Humanizer, Probability Gate, Echo / Note Delay and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
 
 ---
 

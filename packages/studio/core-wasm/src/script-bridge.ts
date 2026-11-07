@@ -59,6 +59,16 @@ export interface ScriptEngine {
     host_resolve_sample(handle: number, outPtr: number): number
     host_resolve_input(id: number, outPtr: number): number
     input_reserve(length: number): number
+    host_harmony_at(pulse: number, outPtr: number): void
+}
+
+export type ScriptKey = Readonly<{ root: number, steps: ReadonlyArray<number> }>
+export type ScriptChord = Readonly<{ root: number, notes: ReadonlyArray<number> }>
+
+const bitsToIntervals = (bits: number, limit: number): ReadonlyArray<number> => {
+    const intervals: Array<number> = []
+    for (let interval = 0; interval < limit; interval++) {if ((bits & (1 << interval)) !== 0) {intervals.push(interval)}}
+    return Object.freeze(intervals)
 }
 
 // One scriptable device instance's JS-side state, keyed by the handle `host_script_create` returned.
@@ -185,6 +195,8 @@ export class ScriptBridges {
     readonly #broadcaster: Provider<Nullable<LiveStreamBroadcaster>>
     // the bridge publishing a uuid's streams: composite replicas share the device address, the first one wins
     readonly #streamOwners = new Map<string, number>()
+    readonly #keys = new Map<number, ScriptKey>()
+    readonly #chords = new Map<number, ScriptChord>()
     #nextHandle = 1
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
@@ -250,6 +262,8 @@ export class ScriptBridges {
             bridge.pass = registry.pass !== false
             try {
                 const proc = new registry.create()
+                proc.keyAt = (position: number): ScriptKey => this.#keyAt(position)
+                proc.chordAt = (position: number): Nullable<ScriptChord> => this.#chordAt(position)
                 bridge.paramMappings = new Map(registry.params.map(declaration => [declaration.index, {label: declaration.label, mapping: resolveMapping(declaration)}]))
                 bridge.sampleLabels = new Map(registry.samples.map(declaration => [declaration.index, declaration.label]))
                 bridge.sidechains = registry.sidechains ?? []
@@ -283,6 +297,37 @@ export class ScriptBridges {
             }
         }
         return bridge.silenced ? null : bridge.proc
+    }
+
+    // root, bits, chord root (-1 for none), chord mask; cached so a script asking every block allocates nothing
+    #harmonyAt(position: number): Int32Array {
+        const scratch = this.#engine.input_reserve(16)
+        this.#engine.host_harmony_at(position, scratch)
+        return new Int32Array(this.#memory.buffer, scratch, 4)
+    }
+
+    #keyAt(position: number): ScriptKey {
+        const [root, bits] = this.#harmonyAt(position)
+        const id = root | (bits << 4)
+        let key = this.#keys.get(id)
+        if (!isDefined(key)) {
+            key = Object.freeze({root, steps: bitsToIntervals(bits, 12)})
+            this.#keys.set(id, key)
+        }
+        return key
+    }
+
+    #chordAt(position: number): Nullable<ScriptChord> {
+        const harmony = this.#harmonyAt(position)
+        const root = harmony[2], mask = harmony[3] >>> 0
+        if (root < 0) {return null}
+        const id = root + mask * 16
+        let chord = this.#chords.get(id)
+        if (!isDefined(chord)) {
+            chord = Object.freeze({root, notes: bitsToIntervals(mask, 32)})
+            this.#chords.set(id, chord)
+        }
+        return chord
     }
 
     // a script declares its delay with `// @latency <ms>`, or changes it at runtime with `this.latency = frames`

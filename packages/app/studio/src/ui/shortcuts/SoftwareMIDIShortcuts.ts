@@ -80,6 +80,34 @@ export const SoftwareMIDIShortcutsFactory = ShortcutValidator.validate({
     "play-note-17": {
         shortcut: Shortcut.of(Key.Quote),
         description: "Play F (next octave)"
+    },
+    "play-chord-1": {
+        shortcut: Shortcut.of(Key.KeyZ),
+        description: "Play chord 1 of the key"
+    },
+    "play-chord-2": {
+        shortcut: Shortcut.of(Key.KeyX),
+        description: "Play chord 2 of the key"
+    },
+    "play-chord-3": {
+        shortcut: Shortcut.of(Key.KeyC),
+        description: "Play chord 3 of the key"
+    },
+    "play-chord-4": {
+        shortcut: Shortcut.of(Key.KeyV),
+        description: "Play chord 4 of the key"
+    },
+    "play-chord-5": {
+        shortcut: Shortcut.of(Key.KeyB),
+        description: "Play chord 5 of the key"
+    },
+    "play-chord-6": {
+        shortcut: Shortcut.of(Key.KeyN),
+        description: "Play chord 6 of the key"
+    },
+    "play-chord-7": {
+        shortcut: Shortcut.of(Key.KeyM),
+        description: "Play chord 7 of the key"
     }
 })
 
@@ -104,4 +132,14 @@ export const NoteShortcuts = [
     SoftwareMIDIShortcuts["play-note-15"],
     SoftwareMIDIShortcuts["play-note-16"],
     SoftwareMIDIShortcuts["play-note-17"]
+] as const
+
+export const ChordShortcuts = [
+    SoftwareMIDIShortcuts["play-chord-1"],
+    SoftwareMIDIShortcuts["play-chord-2"],
+    SoftwareMIDIShortcuts["play-chord-3"],
+    SoftwareMIDIShortcuts["play-chord-4"],
+    SoftwareMIDIShortcuts["play-chord-5"],
+    SoftwareMIDIShortcuts["play-chord-6"],
+    SoftwareMIDIShortcuts["play-chord-7"]
 ] as const

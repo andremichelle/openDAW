@@ -429,6 +429,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-scale-matrix"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "math",
+]
+
+[[package]]
 name = "device-sine"
 version = "0.0.0"
 dependencies = [

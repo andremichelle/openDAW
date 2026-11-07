@@ -170,6 +170,7 @@ extern "C" {
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
     fn host_bar_at(pulse: f64, out_ptr: u32);
+    fn host_harmony_at(pulse: f64, out_ptr: u32);
     fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32;
     fn host_groove_warp(slot: u32, pulse: f64) -> f64;
     fn host_groove_unwarp(slot: u32, pulse: f64) -> f64;
@@ -328,6 +329,47 @@ pub fn bar_at(pulse: f64) -> Bar {
     #[cfg(not(target_family = "wasm"))]
     {
         Bar {start: math::floor(pulse / 3840.0) * 3840.0, length: 3840.0, beat: 960.0}
+    }
+}
+
+/// The project's harmony at a pulse: the key (root pitch class + 12-bit scale mask) and, when the chord
+/// track has a chord there, its root pitch class and voicing (a mask of semitones 0..31 above that root).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Harmony {
+    pub root: i32,
+    pub bits: i32,
+    pub chord: Option<(i32, i32)>
+}
+
+// The native harmony behind `harmony_at` (root, bits, chord root or -1, chord bits); wasm builds ask the engine.
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_HARMONY: [core::sync::atomic::AtomicI32; 4] = [
+    core::sync::atomic::AtomicI32::new(0), core::sync::atomic::AtomicI32::new(math::harmony::MAJOR_BITS),
+    core::sync::atomic::AtomicI32::new(-1), core::sync::atomic::AtomicI32::new(0)];
+
+/// Native TEST SEAM: set what [`harmony_at`] returns (C major without a chord by default).
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_harmony(harmony: Harmony) {
+    let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
+    for (cell, value) in NATIVE_HARMONY.iter().zip([harmony.root, harmony.bits, chord_root, chord_bits]) {
+        cell.store(value, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The harmony at `pulse` on the project's key and chord tracks. Native builds return `set_native_harmony` (C major).
+#[inline]
+pub fn harmony_at(pulse: f64) -> Harmony {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0i32; 4];
+        unsafe { host_harmony_at(pulse, out.as_mut_ptr() as u32) };
+        Harmony {root: out[0], bits: out[1], chord: if out[2] < 0 {None} else {Some((out[2], out[3]))}}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = pulse;
+        let [root, bits, chord_root, chord_bits] = NATIVE_HARMONY.each_ref().map(|cell| cell.load(core::sync::atomic::Ordering::Relaxed));
+        Harmony {root, bits, chord: if chord_root < 0 {None} else {Some((chord_root, chord_bits))}}
     }
 }
 

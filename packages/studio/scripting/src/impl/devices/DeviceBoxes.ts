@@ -20,6 +20,7 @@ import {
     NoteFilterDeviceBox,
     PitchDeviceBox,
     RevampDeviceBox,
+    ScaleMatrixDeviceBox,
     ReverbDeviceBox,
     SpielwerkDeviceBox,
     StereoCompositeBox,
@@ -36,7 +37,8 @@ import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {AudioEffects, Instruments, MIDIEffects} from "../../Api"
 
 export type MIDIEffectBox =
-    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | SpielwerkDeviceBox
+    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox
+    | SpielwerkDeviceBox
 
 export type AudioEffectBox =
     | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
@@ -49,7 +51,8 @@ export namespace DeviceBoxes {
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
-        Arpeggio: "Arpeggio", Pitch: "Pitch", NoteFilter: "Note Filter", Velocity: "Velocity", Zeitgeist: "Zeitgeist",
+        Arpeggio: "Arpeggio", Pitch: "Pitch", NoteFilter: "Note Filter", ScaleMatrix: "Scale Matrix", Velocity: "Velocity",
+        Zeitgeist: "Zeitgeist",
         Spielwerk: "Spielwerk"
     }
 
@@ -66,6 +69,7 @@ export namespace DeviceBoxes {
             case "ArpeggioDeviceBox": return "Arpeggio"
             case "PitchDeviceBox": return "Pitch"
             case "NoteFilterDeviceBox": return "NoteFilter"
+            case "ScaleMatrixDeviceBox": return "ScaleMatrix"
             case "VelocityDeviceBox": return "Velocity"
             case "ZeitgeistDeviceBox": return "Zeitgeist"
             case "SpielwerkDeviceBox": return "Spielwerk"
@@ -118,7 +122,7 @@ export namespace DeviceBoxes {
     }
 
     export const isMIDIEffectBox = (boxName: string): boolean =>
-        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
+        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "ScaleMatrixDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
             "SpielwerkDeviceBox"]
             .includes(boxName)
 
@@ -164,6 +168,12 @@ export namespace DeviceBoxes {
                 })
             case "NoteFilter":
                 return NoteFilterDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "ScaleMatrix":
+                return ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

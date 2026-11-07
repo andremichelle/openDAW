@@ -41,6 +41,7 @@ export namespace ClipboardManager {
             case "modulators": return {one: "Modulator", many: "Modulators"}
             case "regions": return {one: "Region", many: "Regions"}
             case "notes": return {one: "Note", many: "Notes"}
+            case "chords": return {one: "Chord", many: "Chords"}
             case "values": return {one: "Automation point", many: "Automation points"}
             case "audio-units": return {one: "AudioUnit", many: "AudioUnits"}
             default: return {one: "Selection", many: "Selection"}

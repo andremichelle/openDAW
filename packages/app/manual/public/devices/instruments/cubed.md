@@ -99,6 +99,8 @@ The dice button fills the current pattern with a generated line. Click for anoth
 **shift-click** to open the generator dialog:
 
 - **Root** and **Scale**: the key the notes are drawn from
+- **Project Key**: Root and Scale follow the [project key](/manuals/key-and-chords) at the play position, also for a
+  plain click on the dice. On by default, picking a Root or Scale yourself switches it off
 - **Contour**: **Free** (jumps anywhere), **Walk** (small steps from the previous note), **Rise** and **Fall**
   (a ramp across the pattern)
 - **Octave**: the lowest octave, **Spanning**: how many octaves the line may cover

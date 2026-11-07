@@ -20,6 +20,13 @@ block (timing and transport):
     1 = transporting (transport is active)
     2 = discontinuous (position jumped, e.g. seek or loop restart)
 
+Key and chord of the song (call them in process, not in the constructor):
+- this.keyAt(block.from) — the project key: { root, steps }. root is the pitch class 0–11 (0 = C),
+  steps are the scale's notes in semitones above the root, e.g. [0, 2, 4, 5, 7, 9, 11] for major.
+- this.chordAt(block.from) — the chord of the chord track, or null: { root, notes }. notes are semitones
+  above the root as voiced (inversion included), e.g. [0, 4, 7]. Play a note as 60 + root + note.
+Both return frozen shared objects and allocate nothing, so they are safe to call every block.
+
 events (unified stream of note-ons and note-offs):
 - An iterator of event objects in chronological order within [block.from, block.to)
 - Note-on event (gate: true): { gate: true, id, position, duration, pitch, velocity, cent }

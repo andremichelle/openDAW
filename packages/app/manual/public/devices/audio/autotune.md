@@ -22,6 +22,10 @@ It is designed for **one voice at a time**: chords or several simultaneous sourc
 
 Detected pitches snap to the nearest allowed note. Chromatic corrects to the nearest semitone regardless of key, the other scales keep the correction inside the song's harmony, which also makes the tracking steadier, since fewer target notes means fewer accidental flips between neighbours.
 
+**Follow** uses the key of the project's [key track](/manuals/key-and-chords) at the play position instead of Key and
+Scale, so the correction moves along with the key changes of the song. Without key changes it uses the project key
+set in the header.
+
 ## 2. Amount
 
 How far the pitch is pulled toward the target note. At full amount the note lands on the grid; lower values correct only part of the distance, useful when a voice is nearly in tune and just needs tightening. The taper is fine at the top of the range, where transparent correction lives.

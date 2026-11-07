@@ -1,5 +1,6 @@
 import css from "./PitchEditorHeader.sass?inline"
-import {Editing, int, Lifecycle, Selection} from "@opendaw/lib-std"
+import {Editing, int, Lifecycle, MutableObservableValue, Selection} from "@opendaw/lib-std"
+import {Checkbox} from "@/ui/components/Checkbox"
 import {ScaleSelector} from "@/ui/timeline/editors/notes/pitch/ScaleSelector.tsx"
 import {ScaleConfigurator} from "@/ui/timeline/editors/notes/pitch/ScaleConfigurator.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -23,9 +24,10 @@ type Construct = {
     modifyContext: ObservableModifyContext<NoteModifier>
     selection: Selection<NoteEventBoxAdapter>
     scale: ScaleConfig
+    followKey: MutableObservableValue<boolean>
 }
 
-export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale}: Construct) => {
+export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale, followKey}: Construct) => {
     return (
         <div className={className}>
             <Icon symbol={IconSymbol.Note} className="label"/>
@@ -50,6 +52,11 @@ export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection,
                             horizontal="right">
                     <Icon symbol={IconSymbol.FileList}/>
                 </MenuButton>
+                <Checkbox lifecycle={lifecycle}
+                          model={followKey}
+                          appearance={{color: Colors.dark, activeColor: Colors.green, tooltip: "Follow project key"}}>
+                    <Icon symbol={IconSymbol.Magnet}/>
+                </Checkbox>
             </div>
             <Icon symbol={IconSymbol.Table} className="label"/>
             <PropertyTable lifecycle={lifecycle} selection={selection} editing={editing} modifyContext={modifyContext}/>

@@ -5,6 +5,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod curve;
+pub mod harmony;
 pub mod random;
 pub mod value_mapping;
 

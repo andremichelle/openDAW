@@ -244,6 +244,8 @@ export interface ArpeggioEffect extends MIDIEffect {
     retrigger: int
     /** Steps the walk starts later (0 to 15, default 0) */
     offset: int
+    /** While playing, a chord on the project's chord track replaces the held notes (default false) */
+    followChords: boolean
     /** Seed of the random walks and the step chance (0 to 999999, default 0) */
     seed: int
     /** Number of steps the sequencer plays (1 to 64, default 16) */
@@ -308,6 +310,28 @@ export interface NoteFilterEffect extends MIDIEffect {
 }
 
 /**
+ * Moves every note onto the nearest key of a scale (ties go down), or through a custom grid
+ * @group MIDI Effects
+ */
+export interface ScaleMatrixEffect extends MIDIEffect {
+    /** Always "ScaleMatrix" */
+    readonly key: "ScaleMatrix"
+    /** Root pitch class (0 to 11, 0 = C, default 0) */
+    root: int
+    /**
+     * Scale (0 to 15, default 0): Major, Natural Minor, Harmonic Minor, Melodic Minor, Dorian, Phrygian, Lydian,
+     * Mixolydian, Locrian, Pentatonic Major, Pentatonic Minor, Blues, Whole Tone, Diminished, Augmented, 15 Custom
+     */
+    scale: int
+    /** Uses the key of the project's key track at the note's position instead of root and scale (default false) */
+    follow: boolean
+    /** The custom grid, used when scale is 15: per note above the root its offset in semitones (-6 to 11), 12 mutes it */
+    readonly custom: ReadonlyArray<int>
+    /** Replace the custom grid, up to 12 offsets starting at the root */
+    setCustom(offsets: ReadonlyArray<int>): void
+}
+
+/**
  * Reshapes note velocities
  * @group MIDI Effects
  */
@@ -359,6 +383,8 @@ export interface MIDIEffects {
     "Pitch": PitchEffect
     /** {@link NoteFilterEffect} */
     "NoteFilter": NoteFilterEffect
+    /** {@link ScaleMatrixEffect} */
+    "ScaleMatrix": ScaleMatrixEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */
@@ -394,6 +420,8 @@ export interface AutotuneEffect extends AudioEffect {
     shift: float
     /** Smoothing (0.0 to 1.0, default 0.6) */
     smooth: unitValue
+    /** Uses the key of the project's key track instead of scaleKey and scale (default false) */
+    follow: boolean
 }
 
 /**
@@ -2438,6 +2466,122 @@ export interface SignatureTrack {
 }
 
 /**
+ * A key change on the key track
+ * @group Timeline
+ */
+export interface KeyEvent {
+    /** Unique id */
+    readonly uuid: string
+    /** Position in PPQN, the key applies from here to the next key change */
+    position: ppqn
+    /** Root pitch class (0 to 11, 0 = C) */
+    root: int
+    /** Scale as a 12-bit mask, bit i set when the note i semitones above the root is in the scale (Major = 0b101010110101) */
+    scale: int
+    /** Remove the event */
+    remove(): void
+}
+
+/**
+ * Settings accepted by {@link KeyTrack.addEvent}
+ * @group Timeline
+ */
+export type KeyEventProps = Partial<Pick<KeyEvent, "position" | "root" | "scale">>
+
+/**
+ * A key, as returned by {@link KeyTrack.keyAt}
+ * @group Timeline
+ */
+export type Key = Readonly<{
+    /** Root pitch class (0 to 11, 0 = C) */
+    root: int
+    /** Scale as a 12-bit mask, see {@link KeyEvent.scale} */
+    scale: int
+}>
+
+/**
+ * The key of the song: a project key plus key changes along the timeline
+ * @group Timeline
+ */
+export interface KeyTrack {
+    /** Enable the key changes. Without them the project key applies everywhere */
+    enabled: boolean
+    /** Root pitch class of the project key (0 to 11), applies before the first key change */
+    root: int
+    /** Scale mask of the project key, applies before the first key change */
+    scale: int
+    /** All key changes sorted by position */
+    readonly events: ReadonlyArray<KeyEvent>
+    /** Add a key change. Root and scale default to the key that applies at the position */
+    addEvent(props?: KeyEventProps): KeyEvent
+    /** The key at a position */
+    keyAt(position: ppqn): Key
+    /** Remove all key changes */
+    clearEvents(): void
+}
+
+/**
+ * A chord on the chord track, a step of the key at its position
+ * @group Timeline
+ */
+export interface ChordEvent {
+    /** Unique id */
+    readonly uuid: string
+    /** Position in PPQN */
+    position: ppqn
+    /** Duration in PPQN */
+    duration: ppqn
+    /** Step of the key (1 to 7) */
+    degree: int
+    /** Lowers (-1) or raises (1) the root by a semitone (default 0) */
+    shift: int
+    /** Fixed chord type as a 12-bit mask above the root, 0 stacks the notes from the scale (default 0) */
+    shape: int
+    /** Notes stacked from the scale: 3 triad, 4 7th, 5 9th (default 3) */
+    notes: int
+    /** How many of the lowest notes move an octave up (0 to 4, default 0) */
+    inversion: int
+    /** Remove the event */
+    remove(): void
+}
+
+/**
+ * Settings accepted by {@link ChordTrack.addEvent}
+ * @group Timeline
+ */
+export type ChordEventProps = Partial<Pick<ChordEvent, "position" | "duration" | "degree" | "shift" | "shape" | "notes" | "inversion">>
+
+/**
+ * A resolved chord, as returned by {@link ChordTrack.chordAt}
+ * @group Timeline
+ */
+export type ResolvedChord = Readonly<{
+    /** Root pitch class (0 to 11) */
+    root: int
+    /** Semitones above the root as voiced, inversion included. Play a note as 60 + root + note */
+    notes: ReadonlyArray<int>
+    /** Display name, for example "Am7" or "C/E" */
+    name: string
+}>
+
+/**
+ * The chord progression of the song, as steps of the key
+ * @group Timeline
+ */
+export interface ChordTrack {
+    /** Enable the chords */
+    enabled: boolean
+    /** All chords sorted by position */
+    readonly events: ReadonlyArray<ChordEvent>
+    /** Add a chord (one bar on step 1 by default). Chords it covers are shortened or removed */
+    addEvent(props?: ChordEventProps): ChordEvent
+    /** The chord sounding at a position in the key that applies there, null where no chord sits */
+    chordAt(position: ppqn): Nullable<ResolvedChord>
+    /** Remove all chords */
+    clearEvents(): void
+}
+
+/**
  * Transport loop range
  * @group Essentials
  */
@@ -2797,6 +2941,10 @@ export interface Project {
     readonly tempoTrack: TempoTrack
     /** Time signature changes */
     readonly signatureTrack: SignatureTrack
+    /** The key of the song and its key changes */
+    readonly keyTrack: KeyTrack
+    /** The chord progression */
+    readonly chordTrack: ChordTrack
     /** All modulators ordered by index */
     readonly modulators: ReadonlyArray<AnyModulator>
     /**

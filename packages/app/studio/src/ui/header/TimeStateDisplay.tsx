@@ -1,5 +1,5 @@
 import css from "./TimeStateDisplay.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Client, isDefined, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
@@ -10,6 +10,7 @@ import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 import {TempoControl} from "@/ui/header/TempoControl"
 import {MeterControl} from "@/ui/header/MeterControl"
 import {ShuffleControl} from "@/ui/header/ShuffleControl"
+import {KeyControl} from "@/ui/header/KeyControl"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")
@@ -20,10 +21,16 @@ type Construct = {
 }
 
 export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
+    const musical: HTMLElement = <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
+    const absolute: HTMLElement = <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
+    const isTimeReadout = ({clientX, clientY}: Client): boolean => {
+        const target = document.elementFromPoint(clientX, clientY)
+        return isDefined(target) && (musical.contains(target) || absolute.contains(target))
+    }
     const element: HTMLElement = (
         <div className={className} onInit={element => {
             const values = StudioPreferences.settings["time-display"]
-            return ContextMenu.subscribe(element, collector => collector.addItems(
+            return ContextMenu.subscribe(element, collector => isTimeReadout(collector.client) && collector.addItems(
                 MenuItem.header({label: "Time Units", icon: IconSymbol.Time, color: Colors.green}),
                 MenuItem.default({
                     label: "Musical Time (Bars, Beats)",
@@ -46,12 +53,13 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                     }).setTriggerProcedure(() => values.fps = fps))))
             ))
         }}>
-            <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
-            <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
+            {musical}
+            {absolute}
             <TempoControl lifecycle={lifecycle} service={service}/>
             <TapButton service={service}/>
             <MeterControl lifecycle={lifecycle} service={service}/>
             <ShuffleControl lifecycle={lifecycle} service={service}/>
+            <KeyControl lifecycle={lifecycle} service={service}/>
         </div>
     )
     return element

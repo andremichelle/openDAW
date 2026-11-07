@@ -35,6 +35,7 @@ import {PresetCategoryKey} from "@/ui/browse/PresetService"
 import {DevicePiano} from "@/ui/browse/DevicePiano"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
 import {AccessKey} from "@/opendaw-api/AccessKey"
+import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "DeviceDialog")
 
@@ -43,6 +44,7 @@ const MinHeight = 240
 const VisibleEntries = 3
 const EntryHeight = 19 // a row's height until one is rendered (16px icon, its padding and gap)
 const ListPadding = 24
+const PickDelayMs = 250
 
 const searchOf: Record<PresetCategoryKey, DefaultObservableValue<string>> = {
     "instrument": new DefaultObservableValue(""),
@@ -94,7 +96,7 @@ const bundleOf: Record<DeviceBundle, { icon: IconSymbol, text: string }> = {
 }
 
 const badgeOf: Record<DeviceEntryKind, Nullable<IconSymbol>> = {
-    "device": null, "user-preset": IconSymbol.UserFolder, "stock-preset": IconSymbol.CloudFolder,
+    "device": IconSymbol.OpenDAW, "user-preset": IconSymbol.UserFolder, "stock-preset": IconSymbol.CloudFolder,
     "script": IconSymbol.Code, "wclap": IconSymbol.WebClap, "soundfont": IconSymbol.SoundFont
 }
 
@@ -293,6 +295,7 @@ export namespace DeviceDialog {
             rows.replaceChildren(...visible.map(elementOf))
             if (visible.length === 0) {rows.appendChild(<span className="empty">Nothing matches.</span>)}
             markSelection()
+            if (!selected.mapOr(entry => visible.some(({key}) => key === entry.key), false)) {pendingPick.terminate()}
             if (query.length > 0 && visible.length === 1 && !cancelledKeys.has(visible[0].key)
                 && !selected.mapOr(entry => entry.key === visible[0].key, false)) {
                 pick(visible[0])
@@ -302,7 +305,9 @@ export namespace DeviceDialog {
             selected.wrap(entry)
             elementOf(entry).scrollIntoView({block: "nearest"})
         }
+        const pendingPick = lifecycle.own(new Terminator())
         const pick = (entry: DeviceEntry): void => {
+            pendingPick.terminate()
             select(entry)
             audition.pick(entry).then(cancelled => {
                 if (!cancelled) {return}
@@ -314,9 +319,14 @@ export namespace DeviceDialog {
             if (visible.length === 0) {return}
             const index = selected.mapOr(entry => visible.findIndex(({key}) => key === entry.key), -1)
             const next = index < 0 ? (delta > 0 ? 0 : visible.length - 1) : Math.max(0, Math.min(visible.length - 1, index + delta))
-            if (next !== index) {pick(visible[next])}
+            if (next === index) {return}
+            const entry = visible[next]
+            select(entry)
+            pendingPick.terminate()
+            pendingPick.own(Runtime.scheduleTimeout(() => pick(entry), PickDelayMs))
         }
         const approve = async (): Promise<void> => {
+            if (pendingPick.nonEmpty()) {selected.ifSome(pick)}
             await audition.approve()
             approved.value = true
             dialog.close("approve")
@@ -343,10 +353,9 @@ export namespace DeviceDialog {
         const onKeyDown = (event: KeyboardEvent): void => {
             const typing = Events.isTextInput(event.target) && searchText.getValue().length > 0
             if (event.code === "ArrowDown" || event.code === "ArrowUp") {
-                // every step applies its device, a held key would create them faster than they are freed
-                if (!event.repeat) {step(event.code === "ArrowDown" ? 1 : -1)}
+                step(event.code === "ArrowDown" ? 1 : -1)
             } else if (event.code === "Enter" || event.code === "NumpadEnter") {
-                if (searchText.getValue().trim().length > 0 && visible.length > 0
+                if (pendingPick.isEmpty() && searchText.getValue().trim().length > 0 && visible.length > 0
                     && !audition.applied.mapOr(entry => visible.some(({key}) => key === entry.key), false)) {
                     pick(visible[0])
                 }

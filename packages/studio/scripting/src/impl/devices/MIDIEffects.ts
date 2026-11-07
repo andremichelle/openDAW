@@ -2,12 +2,14 @@ import {
     ArpeggioDeviceBox,
     NoteFilterDeviceBox,
     PitchDeviceBox,
+    ScaleMatrixDeviceBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
 import {bipolar, float, int, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {Guard} from "../Guard"
 import {
     AnyAudioUnit,
     AnyGroove,
@@ -16,6 +18,7 @@ import {
     MIDIEffects,
     NoteFilterEffect,
     PitchEffect,
+    ScaleMatrixEffect,
     ScriptParameter,
     ScriptSample,
     SpielwerkEffect,
@@ -34,8 +37,8 @@ export abstract class MIDIEffectFacade<B extends EffectDeviceBox = EffectDeviceB
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
-export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | VelocityEffectImpl
-    | ZeitgeistEffectImpl | SpielwerkEffectImpl
+export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl
+    | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
     readonly key = "Arpeggio" as const
@@ -49,6 +52,7 @@ export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> impl
     declare hold: boolean
     declare retrigger: int
     declare offset: int
+    declare followChords: boolean
     declare seed: int
     declare patternLength: int
     declare readonly steps: ReadonlyArray<ArpeggioStep>
@@ -58,7 +62,7 @@ export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> impl
         this.bind({
             mode: box.modeIndex, octaves: box.numOctaves, rate: box.rateIndex,
             gate: box.gate, repeat: box.repeat, velocity: box.velocity,
-            order: box.order, hold: box.hold, retrigger: box.retrigger, offset: box.offset,
+            order: box.order, hold: box.hold, retrigger: box.retrigger, offset: box.offset, followChords: box.followChords,
             seed: box.seed, patternLength: box.patternLength,
             steps: box.stepKinds.fields().map((kind, index) => ({
                 kind, velocity: box.stepVelocities.getField(index), gate: box.stepGates.getField(index),
@@ -92,6 +96,27 @@ export class NoteFilterEffectImpl extends MIDIEffectFacade<NoteFilterDeviceBox> 
     constructor(context: Context, box: NoteFilterDeviceBox) {
         super(context, box)
         this.bind({min: box.min, max: box.max, set: box.set, transpose: box.transpose, targetKey: box.key})
+    }
+}
+
+export class ScaleMatrixEffectImpl extends MIDIEffectFacade<ScaleMatrixDeviceBox> implements ScaleMatrixEffect {
+    readonly key = "ScaleMatrix" as const
+    declare root: int
+    declare scale: int
+    declare follow: boolean
+    declare readonly custom: ReadonlyArray<int>
+
+    constructor(context: Context, box: ScaleMatrixDeviceBox) {
+        super(context, box)
+        this.bind({root: box.root, scale: box.scale, follow: box.follow, custom: box.custom.fields()})
+    }
+
+    setCustom(offsets: ReadonlyArray<int>): void {
+        if (!Array.isArray(offsets)) {return panic(new TypeError("setCustom: expected an array"))}
+        const fields = this.box.custom.fields()
+        if (offsets.length > fields.length) {return panic(new RangeError(`setCustom: at most ${fields.length} offsets`))}
+        this.context.edit(() => offsets.forEach((offset, index) =>
+            fields[index].setValue(Guard.int32(fields[index].constraints, offset, `custom.${index}`))))
     }
 }
 
@@ -145,6 +170,7 @@ export namespace MIDIEffectImpls {
         if (box instanceof ArpeggioDeviceBox) {return new ArpeggioEffectImpl(context, box)}
         if (box instanceof PitchDeviceBox) {return new PitchEffectImpl(context, box)}
         if (box instanceof NoteFilterDeviceBox) {return new NoteFilterEffectImpl(context, box)}
+        if (box instanceof ScaleMatrixDeviceBox) {return new ScaleMatrixEffectImpl(context, box)}
         if (box instanceof VelocityDeviceBox) {return new VelocityEffectImpl(context, box)}
         if (box instanceof ZeitgeistDeviceBox) {return new ZeitgeistEffectImpl(context, box)}
         if (box instanceof SpielwerkDeviceBox) {return new SpielwerkEffectImpl(context, box)}
@@ -153,5 +179,6 @@ export namespace MIDIEffectImpls {
 
     export const isBox = (box: Box): box is MIDIEffectBox =>
         box instanceof ArpeggioDeviceBox || box instanceof PitchDeviceBox || box instanceof VelocityDeviceBox
-        || box instanceof NoteFilterDeviceBox || box instanceof ZeitgeistDeviceBox || box instanceof SpielwerkDeviceBox
+        || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ZeitgeistDeviceBox
+        || box instanceof SpielwerkDeviceBox
 }

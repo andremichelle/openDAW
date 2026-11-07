@@ -10,13 +10,13 @@
 //! vibrato-flatten depth),
 //! shift `[14]` (linear -12..12 semitones, applied additively after the snap), smooth `[15]` (unipolar
 //! damping of the correction ratio: rounds note-change transitions, does NOT flatten vibrato — that is the
-//! retune knob).
+//! retune knob). follow `[16]` (boolean) replaces key and scale with the project key at the block's position.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{float_value, int_value, AudioEffect, Block, ParamValue, Ports};
+use abi::{bool_value, float_value, int_value, AudioEffect, Block, ParamValue, Ports};
 use dsp::autotune::Autotune;
 use dsp::psola::Psola;
 use math::value_mapping::{Linear, LinearInteger};
@@ -33,6 +33,7 @@ const AMOUNT_FIELD: [u16; 1] = [12];
 const RETUNE_FIELD: [u16; 1] = [13];
 const SHIFT_FIELD: [u16; 1] = [14];
 const SMOOTH_FIELD: [u16; 1] = [15];
+const FOLLOW_FIELD: [u16; 1] = [16];
 const TUNER_FIELD: [u16; 1] = [0]; // live tuner telemetry broadcast at address.append(0): [detected_midi, target_note, voiced]
 
 const KEY_MAPPING: LinearInteger = LinearInteger {min: 0, max: 11};
@@ -51,11 +52,22 @@ pub struct AutotuneState {
     retune_id: u32,
     shift_id: u32,
     smooth_id: u32,
+    follow_id: u32,
+    key: i32,
+    scale: i32,
+    follow: bool,
     tuner_id: u32,
     tuner_ptr: u32
 }
 
 pub struct AutotuneDevice;
+
+fn follow_key(state: &mut AutotuneState, position: f64) {
+    if !state.follow {return}
+    let harmony = abi::harmony_at(position);
+    state.core.set_key(harmony.root);
+    state.core.set_mask(harmony.bits as u32);
+}
 
 impl AudioEffect for AutotuneDevice {
     type State = AutotuneState;
@@ -63,6 +75,8 @@ impl AudioEffect for AutotuneDevice {
     fn init(state: &mut AutotuneState, sample_rate: f32) {
         state.dsp.prepare(sample_rate);
         state.core.prepare(sample_rate);
+        state.key = 0;
+        state.scale = 1;
         abi::set_latency(dsp::psola::LATENCY_FRAMES);
         state.key_id = abi::bind_parameter(&KEY_FIELD);
         state.scale_id = abi::bind_parameter(&SCALE_FIELD);
@@ -70,14 +84,23 @@ impl AudioEffect for AutotuneDevice {
         state.retune_id = abi::bind_parameter(&RETUNE_FIELD);
         state.shift_id = abi::bind_parameter(&SHIFT_FIELD);
         state.smooth_id = abi::bind_parameter(&SMOOTH_FIELD);
+        state.follow_id = abi::bind_parameter(&FOLLOW_FIELD);
         state.tuner_id = abi::bind_broadcast(&TUNER_FIELD, 3);
     }
 
     fn parameter_changed(state: &mut AutotuneState, id: u32, value: ParamValue) {
         if id == state.key_id {
-            state.core.set_key(int_value(value, &KEY_MAPPING));
+            state.key = int_value(value, &KEY_MAPPING);
+            if !state.follow {state.core.set_key(state.key)}
         } else if id == state.scale_id {
-            state.core.set_scale(int_value(value, &SCALE_MAPPING));
+            state.scale = int_value(value, &SCALE_MAPPING);
+            if !state.follow {state.core.set_scale(state.scale)}
+        } else if id == state.follow_id {
+            state.follow = bool_value(value);
+            if !state.follow {
+                state.core.set_key(state.key);
+                state.core.set_scale(state.scale);
+            }
         } else if id == state.amount_id {
             state.core.set_amount(float_value(value, &AMOUNT_MAPPING));
         } else if id == state.retune_id {
@@ -99,6 +122,7 @@ impl AudioEffect for AutotuneDevice {
         let [in_left, in_right] = input.channels();
         let [out_left, out_right] = output;
         let (from, to) = (block.s0 as usize, block.s1 as usize);
+        follow_key(state, block.p0);
         state.core.feed(in_left, in_right, from, to);
         state.dsp.set_period(state.core.current_period_samples());
         state.dsp.set_ratio_semitones(state.core.current_semitones());
@@ -151,6 +175,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         3 => float_value(value, &RETUNE_MAPPING),
         4 => float_value(value, &SHIFT_MAPPING),
         5 => float_value(value, &SMOOTH_MAPPING),
+        6 => if bool_value(value) {1.0} else {0.0},
         _ => f32::NAN
     }
 }
@@ -162,8 +187,8 @@ pub extern "C" fn reset(state_ptr: u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{AutotuneDevice, AutotuneState};
-    use abi::{AudioEffect, ParamValue};
+    use super::{follow_key, AutotuneDevice, AutotuneState};
+    use abi::{AudioEffect, Harmony, ParamValue};
 
     extern crate alloc;
     use alloc::boxed::Box;
@@ -178,12 +203,14 @@ mod tests {
         state.retune_id = 4;
         state.shift_id = 5;
         state.smooth_id = 6;
+        state.follow_id = 7;
         state
     }
 
 
     // Mirror `process_audio` without the engine: feed the core, hand PSOLA the period + ratio, render.
     fn render_block(state: &mut AutotuneState, input: &[f32], left: &mut [f32], right: &mut [f32], from: usize, to: usize) {
+        follow_key(state, 0.0);
         state.core.feed(input, input, from, to);
         state.dsp.set_period(state.core.current_period_samples());
         state.dsp.set_ratio_semitones(state.core.current_semitones());
@@ -259,5 +286,30 @@ mod tests {
         let left = render(&mut state, &tone(430.0, sample_rate, 48_000));
         let frequency = tail_frequency(&left, sample_rate);
         assert!((frequency - 440.0).abs() < 8.0, "expected ~440Hz (430 corrected to A), measured {frequency}");
+    }
+
+    // the native harmony is process-wide, tests that set it must not overlap
+    static HARMONY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    // A#4 is outside C major but inside F major: with Follow on an F major project key it must pass.
+    fn corrected_a_sharp(follow: bool) -> f32 {
+        let sample_rate = 48_000.0f32;
+        let mut state = state();
+        let (retune, smooth, follow_id) = (state.retune_id, state.smooth_id, state.follow_id);
+        AutotuneDevice::parameter_changed(&mut state, retune, ParamValue::Float(1.0));
+        AutotuneDevice::parameter_changed(&mut state, smooth, ParamValue::Float(0.0));
+        AutotuneDevice::parameter_changed(&mut state, follow_id, ParamValue::Bool(follow));
+        tail_frequency(&render(&mut state, &tone(466.16, sample_rate, 48_000)), sample_rate)
+    }
+
+    #[test]
+    fn follow_snaps_to_the_project_key() {
+        let _lock = HARMONY_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        abi::set_native_harmony(Harmony {root: 5, bits: math::harmony::MAJOR_BITS, chord: None});
+        let followed = corrected_a_sharp(true);
+        let own = corrected_a_sharp(false);
+        abi::set_native_harmony(Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: None});
+        assert!((followed - 466.16).abs() < 8.0, "F major keeps A#4, measured {followed}");
+        assert!((own - 466.16).abs() > 15.0, "C major moves A#4 away, measured {own}");
     }
 }
