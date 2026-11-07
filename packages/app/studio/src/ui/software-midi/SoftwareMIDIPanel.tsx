@@ -30,7 +30,9 @@ import {Button} from "@/ui/components/Button"
 import {StudioService} from "@/service/StudioService"
 import {AudioUnitBox, CaptureMidiBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface"
-import {NoteShortcuts, SoftwareMIDIShortcuts} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {ChordShortcuts, NoteShortcuts, SoftwareMIDIShortcuts} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {ChordPadPlayer} from "@/ui/software-midi/ChordPadPlayer"
+import {ChordPads} from "@/ui/software-midi/ChordPads"
 
 const className = Html.adoptStyleSheet(css, "SoftwareMIDIPanel")
 
@@ -51,6 +53,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
     })
     const {softwareMIDIInput} = MidiDevices
     const svg: SVGElement = (<PianoRoll lifecycle={lifecycle} pianoLayout={pianoLayout}/>)
+    const chordPlayer = lifecycle.own(new ChordPadPlayer(service, octave, velocity))
     const midiIndicator: DomElement = <Icon symbol={IconSymbol.Connected}/>
     const element: HTMLElement = <div className={className}>
         <header>
@@ -123,6 +126,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         <div className="piano">
             {svg}
         </div>
+        <ChordPads lifecycle={lifecycle} service={service} player={chordPlayer}/>
     </div>
     const activeKeys: Int8Array = new Int8Array(numKeys).fill(-1)
     let lastPointerKey = -1
@@ -154,6 +158,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
     const shortcuts = ShortcutManager.get()
         .createContext(Predicates.alwaysTrue, "SoftwareMIDIPanel", Number.MAX_SAFE_INTEGER)
     const activeCodes = new Map<string, int>()
+    const activeChordCodes = new Map<string, int>()
     const playNote = (shortcut: Shortcut, index: int) => {
         activeCodes.set(shortcut.code, index)
         if (activeKeys[index] > -1) {
@@ -187,7 +192,17 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         shortcuts.register(SoftwareMIDIShortcuts["increment-octave"].shortcut, () => octave.setValue(octave.getValue() + 1)),
         shortcuts.register(SoftwareMIDIShortcuts["decrement-octave"].shortcut, () => octave.setValue(octave.getValue() - 1)),
         ...NoteShortcuts.map(({shortcut}, index) => shortcuts.register(shortcut, () => playNote(shortcut, index))),
+        ...ChordShortcuts.map(({shortcut}, index) => shortcuts.register(shortcut, () => {
+            activeChordCodes.set(shortcut.code, index + 1)
+            if (chordPlayer.isActive(index + 1)) {chordPlayer.release(index + 1)} else {chordPlayer.press(index + 1)}
+        })),
         Surface.subscribeKeyboard("keyup", event => {
+            const degree = activeChordCodes.get(Shortcut.resolveCode(event)) ?? -1
+            if (degree > 0 && chordPlayer.isActive(degree)) {
+                chordPlayer.release(degree)
+                event.preventDefault()
+                return
+            }
             const index = activeCodes.get(Shortcut.resolveCode(event)) ?? -1
             if (index >= 0) {
                 if (activeKeys[index] === -1) {return}

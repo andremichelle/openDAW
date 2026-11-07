@@ -1,6 +1,6 @@
 import {ContextMenu, ElementCapturing, MenuItem} from "@opendaw/studio-core"
 import {ChordEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Arrays, Editing, int, Procedure} from "@opendaw/lib-std"
+import {Arrays, Editing, Func, int, Procedure} from "@opendaw/lib-std"
 import {Harmony} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug"
 
@@ -8,12 +8,14 @@ export namespace ChordContextMenu {
     export const install = (element: Element,
                             capturing: ElementCapturing<ChordEventBoxAdapter>,
                             editing: Editing,
+                            targetsOf: Func<ChordEventBoxAdapter, ReadonlyArray<ChordEventBoxAdapter>>,
                             onChange: Procedure<ChordEventBoxAdapter>) =>
         ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const adapter = capturing.captureEvent(client)
             if (adapter === null) {return}
+            const targets = targetsOf(adapter)
             const modify = (procedure: Procedure<ChordEventBoxAdapter>) => {
-                editing.modify(() => procedure(adapter))
+                editing.modify(() => targets.forEach(procedure))
                 onChange(adapter)
             }
             const shifts: ReadonlyArray<[string, int]> = [["♭ Lowered", -1], ["Natural", 0], ["♯ Raised", 1]]
@@ -32,7 +34,8 @@ export namespace ChordContextMenu {
                     ...notes.map(([label, count]) => MenuItem.default({label, checked: count === adapter.notes, selectable: adapter.shape === 0})
                         .setTriggerProcedure(() => modify(({box}) => {
                             box.notes.setValue(count)
-                            box.inversion.setValue(Math.min(box.inversion.getValue(), count - 1))
+                            box.inversion.setValue(Math.min(box.inversion.getValue(), box.shape.getValue() === 0
+                                ? count - 1 : Harmony.countNotes(box.shape.getValue()) - 1))
                         }))))),
                 MenuItem.default({label: "Inversion"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     ...inversions.slice(0, adapter.shape === 0 ? adapter.notes : Harmony.countNotes(adapter.shape))
@@ -47,7 +50,7 @@ export namespace ChordContextMenu {
                         separatorBefore: index === 0
                     }).setTriggerProcedure(() => modify(({box}) => box.shape.setValue(shape.bits)))))),
                 MenuItem.default({label: "Delete"})
-                    .setTriggerProcedure(() => editing.modify(() => adapter.box.delete())),
+                    .setTriggerProcedure(() => editing.modify(() => targets.forEach(({box}) => box.delete()))),
                 DebugMenus.debugBox(adapter.box))
         })
 }

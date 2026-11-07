@@ -21,6 +21,7 @@ import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/Pi
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {ChordTrackShortcuts, ChordTrackShortcutsFactory} from "@/ui/shortcuts/ChordTrackShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 import {ShortcutStorage} from "@/service/ShortcutStorage"
@@ -31,6 +32,7 @@ export namespace StudioShortcutManager {
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, workingDefinition: GlobalShortcuts},
         "regions": {factory: RegionsShortcutsFactory, workingDefinition: RegionsShortcuts},
+        "chord-track": {factory: ChordTrackShortcutsFactory, workingDefinition: ChordTrackShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, workingDefinition: NoteEditorShortcuts},
         "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},
         "device-panel": {factory: DevicePanelShortcutsFactory, workingDefinition: DevicePanelShortcuts},

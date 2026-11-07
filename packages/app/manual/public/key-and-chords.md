@@ -50,10 +50,15 @@ Before the first key change the track shows the project key in grey.
 Each chord block shows its step and the chord it plays in the key at its start, for example **5 · G**.
 
 - **Double click** an empty spot to add a chord filling the bar.
+- **Click** a chord to select it, **Shift click** adds or removes chords, **drag** over an empty spot selects all
+  chords in the frame. **Ctrl A** selects all chords. The selection is saved with the project.
 - **Click and hold** a chord to hear it on the instrument in edit mode. It sounds until you release it.
-- **Keys 1 to 7** set the step of the selected chord, **Delete** removes it.
-- **Drag** a chord to move it, drag its **right edge** to resize it. Chords never overlap: a chord you move or
-  resize shortens or deletes the chords it covers.
+- **Keys 1 to 7** set the step of the selected chords, **Delete** removes them.
+- **Drag** the selected chords to move them, drag a **right edge** to resize them. Hold **Ctrl** while
+  dragging to copy them instead, for example to vary only the inversion of a copy.
+- **Ctrl D** duplicates the selected chords after the last one. **Copy**, **Cut** and **Paste** work like for
+  regions, pasting at the play position.
+- Chords never overlap: a chord you move, copy, paste or resize shortens or deletes the chords it covers.
 
 Right click a chord for more:
 
@@ -70,7 +75,19 @@ are drawn grey and do not play.
 
 ---
 
-## 4. Following Devices
+## 4. Chord Pads
+
+The MIDI keyboard (software keyboard) has a row of pads 1 to 7 below the keys. Each pad shows the chord of its step
+in the key at the play position and plays it on the armed instruments, in the octave of the keyboard.
+
+- **Click and hold** a pad, or hold the keys **Z X C V B N M**, to play steps 1 to 7.
+- While recording, every pad you play also writes a chord to the chord track, from the moment you press it until you
+  release it, snapped to the grid. The chord track opens if it was hidden. The notes are recorded into the armed
+  track as usual.
+
+---
+
+## 5. Following Devices
 
 - **[Scale Matrix](/manuals/devices/midi/scale-matrix)** with **Follow** moves every note onto the nearest key of
   the key at the note's position.
@@ -80,7 +97,7 @@ are drawn grey and do not play.
 
 ---
 
-## 5. Note Editor
+## 6. Note Editor
 
 - The magnet button next to the scale selector makes the scale highlight follow the key at the play position.
 - **Fit to Key** in the note menu moves the selected notes, or all notes, onto the nearest key of the key at their

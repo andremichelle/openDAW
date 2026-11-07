@@ -60,6 +60,10 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 9. Key by playing: while the key display in the header has keyboard focus, it listens to incoming notes
    (MIDI inputs and the software keyboard). A played chord is matched (major or minor triad, 7ths) and sets the
    project key: its root as Root, Major or Natural Minor as Scale. One undo step per detected chord, focus out stops it.
+10. Recording chords (user feedback): while recording, clicking a chord in the chord track plays it into the armed
+    track like live keys, so the notes land in the recorded region, voiced and inverted as shown.
+11. Copy chords like regions (user feedback): alt drag copies, duplicate, copy and paste, so a chord can be copied
+    and only its inversion, notes or step changed.
 
 ## Devices
 
@@ -67,6 +71,14 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 2. Arpeggio "follow chords": plays the chord at the play position without held keys. First chord consumer.
 3. Scale Matrix chord mode (snap to chord tones) as a small second step.
 4. Scripting: `project.keyTrack` / `project.chordTrack` like `SignatureTrackImpl`, docs.
+5. Cubed randomizer: Root and Scale start from the key at the play position, plus a "Project Key" option.
+6. Autotune: a Follow switch like Scale Matrix, the key and scale come from the key track at the position.
+7. Script devices (Spielwerk, Apparat, Werkstatt): scripts read the key and chord at a position, so community
+   scripts (Chord Generator, Random Humanizer, ...) follow the song instead of their own key setting.
+8. Software keyboard: an option that maps the white keys onto the scale of the current key, so every key plays
+   a note of the key (C D E F G A B play the 7 steps, in other scales the steps in order).
+9. Scale Matrix icon: its own icon instead of the shared Piano icon (Note Filter uses it too), for example a small
+   grid with a diagonal of lit cells.
 
 ## Tests
 
@@ -86,6 +98,8 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 6. Software keyboard chord pads, recording chord events.
 7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
 8. Scripting API + docs.
+9. Devices follow the project key: Cubed randomizer, Autotune Follow, script devices, software keyboard scale mapping.
+10. Chord track editing: record chords into the armed track by clicking them, copy and duplicate chords like regions.
 
 ## Status (2026-11-06, branch scales)
 
@@ -93,6 +107,10 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 2. The key track stores a default key (C major, edited in the header), key events override it from their position.
 3. Deviation: Scale Matrix `scale` is an index into `MidiKeys.StockScales` (automatable), the key events store masks.
 4. Open from 1 to 5: Scale Matrix live input highlight, Scale Matrix scripting, manual page for the key and chord tracks.
+5. Phase 6: pads 1 to 7 under the software keyboard (keys Z to M) play the chords of the key at the play position into
+   the armed instruments. While recording a pad writes a chord event from press to release, snapped to the grid.
+6. Phase 10 part: chords use the project selection (saved), selection rectangle, shift click, Ctrl drag copies,
+   Ctrl D duplicates, copy, cut and paste, keys 1 to 7 and Delete act on all selected chords.
 
 ## Later
 
