@@ -17,11 +17,11 @@ const Pass = {
         },
         11: {
             type: "int32", name: "order", pointerRules: ParameterPointerRules,
-            constraints: {length: 4}, unit: ""
+            value: 1, constraints: {length: 4}, unit: ""
         },
         12: {
             type: "float32", name: "q", pointerRules: ParameterPointerRules,
-            constraints: qConstraints, unit: ""
+            value: Math.SQRT1_2, constraints: qConstraints, unit: ""
         }
     }
 } satisfies ClassSchema<Pointers>
@@ -36,7 +36,7 @@ const Shelf = {
         },
         11: {
             type: "float32", name: "gain", pointerRules: ParameterPointerRules,
-            constraints: gainConstraints, unit: "dB"
+            value: 6.0, constraints: gainConstraints, unit: "dB"
         }
     }
 } satisfies ClassSchema<Pointers>
@@ -51,11 +51,11 @@ const Bell = {
         },
         11: {
             type: "float32", name: "gain", pointerRules: ParameterPointerRules,
-            constraints: gainConstraints, unit: "dB"
+            value: 6.0, constraints: gainConstraints, unit: "dB"
         },
         12: {
             type: "float32", name: "q", pointerRules: ParameterPointerRules,
-            constraints: qConstraints, unit: ""
+            value: Math.SQRT1_2, constraints: qConstraints, unit: ""
         }
     }
 } satisfies ClassSchema<Pointers>

@@ -12,6 +12,9 @@ use math::clamp;
 /// The Butterworth (maximally flat) Q, the TS `setLowpassParams` default resonance (`Math.SQRT1_2`).
 pub const BUTTERWORTH_Q: f64 = core::f64::consts::FRAC_1_SQRT_2;
 
+/// The smallest resonance the low/high-pass use, a Q of 0 would make the coefficients NaN.
+pub const MIN_RESONANCE: f64 = 1.0e-6;
+
 /// The five normalised biquad coefficients (`a0` divided out). Mirrors TS `BiquadCoeff`.
 #[derive(Clone, Copy, Debug)]
 pub struct BiquadCoeff {
@@ -57,7 +60,7 @@ impl BiquadCoeff {
             self.set_normalized_coefficients(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
         } else if cutoff > 0.0 {
             let theta = TAU * cutoff;
-            let alpha = libm::sin(theta) / (2.0 * resonance);
+            let alpha = libm::sin(theta) / (2.0 * resonance.max(MIN_RESONANCE));
             let cosw = libm::cos(theta);
             let beta = (1.0 - cosw) / 2.0;
             self.set_normalized_coefficients(beta, 2.0 * beta, beta, 1.0 + alpha, -2.0 * cosw, 1.0 - alpha);
@@ -72,7 +75,7 @@ impl BiquadCoeff {
             self.set_normalized_coefficients(0.0, 0.0, 0.0, 1.0, 0.0, 0.0);
         } else if cutoff > 0.0 {
             let theta = TAU * cutoff;
-            let alpha = libm::sin(theta) / (2.0 * resonance);
+            let alpha = libm::sin(theta) / (2.0 * resonance.max(MIN_RESONANCE));
             let cosw = libm::cos(theta);
             let beta = (1.0 + cosw) / 2.0;
             self.set_normalized_coefficients(beta, -2.0 * beta, beta, 1.0 + alpha, -2.0 * cosw, 1.0 - alpha);
@@ -577,5 +580,35 @@ mod tests {
         assert!(energy(&reduced) < energy(&full) * 0.5,
                 "the order^1.25 Q reduction tames the stacked resonance ({} reduced vs {} full)",
                 energy(&reduced), energy(&full));
+    }
+
+    // live error 1206: "Reset Value" on a loaded Revamp set the high-pass Q to 0 and the output turned NaN
+    #[test]
+    fn zero_or_negative_resonance_stays_finite() {
+        let input = vec![0.5f32; 64];
+        for resonance in [0.0, -1.0] {
+            let mut highpass = BiquadCoeff::new();
+            highpass.set_highpass_params(40.0 / 48000.0, resonance);
+            let mut lowpass = BiquadCoeff::new();
+            lowpass.set_lowpass_params(1000.0 / 48000.0, resonance);
+            for coeff in [highpass, lowpass] {
+                let output = run(&mut BiquadMono::default(), &coeff, &input);
+                assert!(output.iter().all(|sample| sample.is_finite()), "Q {} must not produce NaN", resonance);
+            }
+        }
+    }
+
+    #[test]
+    fn valid_resonance_is_unchanged_by_the_guard() {
+        let mut guarded = BiquadCoeff::new();
+        guarded.set_highpass_params(40.0 / 48000.0, BUTTERWORTH_Q);
+        let theta = TAU * 40.0 / 48000.0;
+        let alpha = libm::sin(theta) / (2.0 * BUTTERWORTH_Q);
+        let cosw = libm::cos(theta);
+        let beta = (1.0 + cosw) / 2.0;
+        let mut plain = BiquadCoeff::new();
+        plain.set_normalized_coefficients(beta, -2.0 * beta, beta, 1.0 + alpha, -2.0 * cosw, 1.0 - alpha);
+        assert_eq!((guarded.a1, guarded.a2, guarded.b0, guarded.b1, guarded.b2),
+                   (plain.a1, plain.a2, plain.b0, plain.b1, plain.b2));
     }
 }
