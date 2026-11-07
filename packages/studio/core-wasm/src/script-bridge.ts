@@ -310,7 +310,7 @@ export class ScriptBridges {
         const [root, bits] = this.#harmonyAt(position)
         const id = root | (bits << 4)
         let key = this.#keys.get(id)
-        if (key === undefined) {
+        if (!isDefined(key)) {
             key = Object.freeze({root, steps: bitsToIntervals(bits, 12)})
             this.#keys.set(id, key)
         }
@@ -323,7 +323,7 @@ export class ScriptBridges {
         if (root < 0) {return null}
         const id = root + mask * 16
         let chord = this.#chords.get(id)
-        if (chord === undefined) {
+        if (!isDefined(chord)) {
             chord = Object.freeze({root, notes: bitsToIntervals(mask, 32)})
             this.#chords.set(id, chord)
         }

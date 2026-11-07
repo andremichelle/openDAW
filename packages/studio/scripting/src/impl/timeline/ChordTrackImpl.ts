@@ -1,7 +1,8 @@
 import {ChordEventBox, TimelineBox} from "@opendaw/studio-boxes"
 import {Harmony, PPQN, ppqn} from "@opendaw/lib-dsp"
-import {asInstanceOf, int, isDefined, Nullable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, BinarySearch, int, isDefined, Nullable, NumberComparator, UUID} from "@opendaw/lib-std"
 import {ChordEvent, ChordEventProps, ChordTrack, ResolvedChord} from "../../Api"
+import {ChordOverlaps} from "@opendaw/studio-adapters"
 import {Context} from "../Context"
 import {Facade, Props} from "../Common"
 import {Fields} from "../Fields"
@@ -37,6 +38,8 @@ export class ChordTrackImpl implements ChordTrack {
     readonly #timelineBox: TimelineBox
     readonly #keyTrack: KeyTrackImpl
 
+    #sorted: Nullable<ReadonlyArray<ChordEventImpl>> = null
+
     declare enabled: boolean
 
     constructor(context: Context, timelineBox: TimelineBox, keyTrack: KeyTrackImpl) {
@@ -44,19 +47,21 @@ export class ChordTrackImpl implements ChordTrack {
         this.#timelineBox = timelineBox
         this.#keyTrack = keyTrack
         Fields.bind(context, this, {enabled: timelineBox.chordTrack.enabled}, "chordTrack.")
+        context.boxGraph.subscribeToAllUpdatesImmediate({onUpdate: () => this.#sorted = null})
     }
 
     get events(): ReadonlyArray<ChordEventImpl> {
-        return this.#timelineBox.chordTrack.events.pointerHub.incoming()
+        return this.#sorted ??= Object.freeze(this.#timelineBox.chordTrack.events.pointerHub.incoming()
             .map(({box}) => ChordEventImpl.wrap(this.#context, asInstanceOf(box, ChordEventBox)))
-            .sort((a, b) => a.position - b.position)
+            .sort((left, right) => left.position - right.position))
     }
 
     chordAt(position: ppqn): Nullable<ResolvedChord> {
         const validated = Guard.finite(position, "position")
         if (!this.enabled) {return null}
-        const event = this.events.findLast(event => event.position <= validated)
-        if (!isDefined(event) || validated >= event.complete) {return null}
+        const events = this.events
+        const event = events.at(BinarySearch.rightMostMapped(events, validated, NumberComparator, ({position}) => position))
+        if (!isDefined(event) || validated < event.position || validated >= event.complete) {return null}
         const {root, scale} = this.#keyTrack.keyAt(event.position)
         return Harmony.chord({root, bits: scale}, event.degree, event.shift, event.shape, event.notes, event.inversion)
             .mapOr(chord => Object.freeze({
@@ -75,17 +80,7 @@ export class ChordTrackImpl implements ChordTrack {
                 box.degree.setValue(1)
             })
             const added = Props.apply(ChordEventImpl.wrap(this.#context, box), Props.without(props, "position", "duration"))
-            this.events.filter(other => other !== added && other.position < added.complete && other.complete > position)
-                .forEach(other => {
-                    if (other.position >= position && other.complete <= added.complete) {
-                        other.box.delete()
-                    } else if (other.position < position) {
-                        other.box.duration.setValue(position - other.position)
-                    } else {
-                        other.box.duration.setValue(other.complete - added.complete)
-                        other.box.position.setValue(added.complete)
-                    }
-                })
+            ChordOverlaps.resolve(this.#context.boxGraph, this.events.map(event => event.box), [box])
             return added
         })
     }

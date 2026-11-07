@@ -4,12 +4,12 @@ import {
     AnyClipBoxAdapter,
     AnyRegionBoxAdapter,
     ChordEventBoxAdapter,
+    ChordOverlaps,
     NoteClipBoxAdapter,
     NoteRegionBoxAdapter
 } from "@opendaw/studio-adapters"
 import {ChordEventBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
-import {ChordOverlaps} from "@/ui/timeline/tracks/primary/chord/ChordOverlaps"
 
 export namespace HarmonyDetection {
     // the notes to analyse in song positions and the ranges they cover, chords never reach past a range
@@ -88,7 +88,7 @@ export namespace HarmonyDetection {
                 })
                 created.push(boxAdapters.adapterFor(box, ChordEventBoxAdapter))
             })
-            created.forEach(adapter => ChordOverlaps.resolve(chordTrack, adapter, created))
+            ChordOverlaps.resolve(boxGraph, chordTrack.events.asArray().map(({box}) => box), created.map(({box}) => box))
         })
         primaryVisibility.chords.setValue(true)
     }

@@ -4,9 +4,8 @@ import {
 import {Harmony, ppqn} from "@opendaw/lib-dsp"
 import {MidiDevices, Project} from "@opendaw/studio-core"
 import {ChordEventBox} from "@opendaw/studio-boxes"
-import {ChordEventBoxAdapter} from "@opendaw/studio-adapters"
+import {ChordOverlaps} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {ChordOverlaps} from "@/ui/timeline/tracks/primary/chord/ChordOverlaps"
 
 type Held = { pitches: ReadonlyArray<int>, recording: Nullable<{ start: ppqn, end: ppqn }> }
 
@@ -103,7 +102,7 @@ export class ChordPadPlayer implements Terminable {
     }
 
     #write(project: Project, degree: int, {start, end}: { start: ppqn, end: ppqn }): void {
-        const {editing, boxGraph, boxAdapters, timelineBox: {loopArea}, timelineBoxAdapter: {chordTrack}} = project
+        const {editing, boxGraph, timelineBox: {loopArea}, timelineBoxAdapter: {chordTrack}} = project
         const {snapping, primaryVisibility} = this.#service.timeline
         const position = snapping.round(start)
         const complete = Math.max(snapping.round(end < start ? loopArea.to.getValue() : end),
@@ -115,7 +114,7 @@ export class ChordPadPlayer implements Terminable {
                 box.degree.setValue(degree)
                 box.track.refer(chordTrack.object.events)
             })
-            ChordOverlaps.resolve(chordTrack, boxAdapters.adapterFor(box, ChordEventBoxAdapter))
+            ChordOverlaps.resolve(boxGraph, chordTrack.events.asArray().map(({box}) => box), [box])
         })
         primaryVisibility.chords.setValue(true)
     }

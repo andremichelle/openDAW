@@ -4,13 +4,12 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ClipboardManager, ElementCapturing} from "@opendaw/studio-core"
 import {ChordEventBox} from "@opendaw/studio-boxes"
-import {ChordEventBoxAdapter} from "@opendaw/studio-adapters"
+import {ChordEventBoxAdapter, ChordOverlaps} from "@opendaw/studio-adapters"
 import {ppqn} from "@opendaw/lib-dsp"
 import {StudioService} from "@/service/StudioService.ts"
 import {ChordRenderer} from "@/ui/timeline/tracks/primary/chord/ChordRenderer"
 import {ChordContextMenu} from "@/ui/timeline/tracks/primary/chord/ChordContextMenu"
 import {ChordPreview} from "@/ui/timeline/tracks/primary/chord/ChordPreview"
-import {ChordOverlaps} from "@/ui/timeline/tracks/primary/chord/ChordOverlaps"
 import {ChordClipboard} from "@/ui/timeline/tracks/primary/chord/ChordClipboard"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator"
@@ -111,9 +110,10 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
         Events.subscribeDblDwn(element, (event: PointerEvent) => {
             const localX = event.clientX - canvas.getBoundingClientRect().left
             if (isDefined(targetAt(localX))) {return}
-            const {position, complete} = snapping.xToBarInterval(localX)
-            const next = events.greaterEqual(position)
-            const end = isDefined(next) ? Math.min(complete, next.position) : complete
+            const bar = snapping.xToBarInterval(localX)
+            const clicked = range.xToUnit(localX)
+            const position = Math.max(bar.position, events.lowerEqual(clicked)?.complete ?? bar.position)
+            const end = Math.min(bar.complete, events.greaterEqual(clicked)?.position ?? bar.complete)
             if (end <= position) {return}
             editing.modify(() => {
                 const box = ChordEventBox.create(boxGraph, UUID.generate(), box => {
@@ -189,7 +189,7 @@ export const ChordTrackBody = ({lifecycle, service}: Construct) => {
                             chord.box.duration.setValue(complete - position)
                             return chord
                         })
-                    targets.forEach(target => ChordOverlaps.resolve(chordTrack, target, targets))
+                    ChordOverlaps.resolve(boxGraph, events.asArray().map(({box}) => box), targets.map(({box}) => box))
                 })
             },
             finally: () => {

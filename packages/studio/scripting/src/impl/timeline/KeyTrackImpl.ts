@@ -1,6 +1,6 @@
 import {KeyEventBox, TimelineBox} from "@opendaw/studio-boxes"
 import {ppqn} from "@opendaw/lib-dsp"
-import {asInstanceOf, int, isDefined, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, BinarySearch, int, isDefined, Nullable, NumberComparator, UUID} from "@opendaw/lib-std"
 import {Key, KeyEvent, KeyEventProps, KeyTrack} from "../../Api"
 import {Context} from "../Context"
 import {Facade, Props} from "../Common"
@@ -26,6 +26,8 @@ export class KeyTrackImpl implements KeyTrack {
     readonly #context: Context
     readonly #timelineBox: TimelineBox
 
+    #sorted: Nullable<ReadonlyArray<KeyEventImpl>> = null
+
     declare enabled: boolean
     declare root: int
     declare scale: int
@@ -35,20 +37,22 @@ export class KeyTrackImpl implements KeyTrack {
         this.#timelineBox = timelineBox
         const {keyTrack} = timelineBox
         Fields.bind(context, this, {enabled: keyTrack.enabled, root: keyTrack.root, scale: keyTrack.scale}, "keyTrack.")
+        context.boxGraph.subscribeToAllUpdatesImmediate({onUpdate: () => this.#sorted = null})
     }
 
     get events(): ReadonlyArray<KeyEventImpl> {
-        return this.#timelineBox.keyTrack.events.pointerHub.incoming()
+        return this.#sorted ??= Object.freeze(this.#timelineBox.keyTrack.events.pointerHub.incoming()
             .map(({box}) => KeyEventImpl.wrap(this.#context, asInstanceOf(box, KeyEventBox)))
-            .sort((a, b) => a.position - b.position)
+            .sort((left, right) => left.position - right.position))
     }
 
     keyAt(position: ppqn): Key {
         const validated = Guard.finite(position, "position")
         const stored: Key = Object.freeze({root: this.root, scale: this.scale})
         if (!this.enabled) {return stored}
-        const event = this.events.findLast(event => event.position <= validated)
-        return isDefined(event) ? Object.freeze({root: event.root, scale: event.scale}) : stored
+        const events = this.events
+        const event = events.at(BinarySearch.rightMostMapped(events, validated, NumberComparator, ({position}) => position))
+        return isDefined(event) && event.position <= validated ? Object.freeze({root: event.root, scale: event.scale}) : stored
     }
 
     addEvent(props?: KeyEventProps): KeyEvent {

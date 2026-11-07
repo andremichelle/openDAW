@@ -184,6 +184,10 @@ describe("Project", () => {
         chordTrack.addEvent({position: 0, duration: PPQN.Bar * 2})
         expect(first.attached || cover.attached || fifth.attached).toBe(false)
         expect(chordTrack.events.length).toBe(1)
+        chordTrack.addEvent({position: PPQN.Bar / 2, duration: PPQN.Bar / 2, degree: 4})
+        expect(chordTrack.events.map(({position, duration, degree}) => [position, duration, degree]))
+            .toEqual([[0, PPQN.Bar / 2, 1], [PPQN.Bar / 2, PPQN.Bar / 2, 4], [PPQN.Bar, PPQN.Bar, 1]])
+        expect(chordTrack.chordAt(PPQN.Bar * 1.5)?.name).toBe("F")
         chordTrack.enabled = false
         expect(chordTrack.chordAt(0)).toBeNull()
         expect(() => chordTrack.addEvent({duration: 0})).toThrow(RangeError)

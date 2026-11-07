@@ -3,9 +3,8 @@ import {BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {ChordEventBox} from "@opendaw/studio-boxes"
-import {BoxAdapters, ChordEventBoxAdapter, ChordTrackAdapter} from "@opendaw/studio-adapters"
+import {BoxAdapters, ChordEventBoxAdapter, ChordOverlaps, ChordTrackAdapter} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler, ClipboardUtils} from "@opendaw/studio-core"
-import {ChordOverlaps} from "@/ui/timeline/tracks/primary/chord/ChordOverlaps"
 
 type ClipboardChords = ClipboardEntry<"chords">
 
@@ -37,7 +36,7 @@ export namespace ChordClipboard {
         })
         const pasted = boxes.filter((box): box is ChordEventBox => box instanceof ChordEventBox)
             .map(box => boxAdapters.adapterFor(box, ChordEventBoxAdapter))
-        pasted.forEach(adapter => ChordOverlaps.resolve(chordTrack, adapter, pasted))
+        ChordOverlaps.resolve(boxGraph, chordTrack.events.asArray().map(({box}) => box), pasted.map(({box}) => box))
         selection.deselectAll()
         selection.select(...pasted)
         return pasted
