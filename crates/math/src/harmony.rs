@@ -39,23 +39,45 @@ pub fn quantise(pitch: i32, root: i32, bits: i32) -> i32 {
     pitch
 }
 
-/// The chord on `degree` (1..=7) of a 7-note key: `(root pitch class, voicing mask)`. `shape` 0 stacks
-/// `notes` (3..=5) scale notes in thirds, any other value replaces them. `inversion` moves that many of the
-/// lowest notes up an octave.
+const NATURAL_MINOR_BITS: i32 = 0b0101_1010_1101;
+const PENTATONIC_MAJOR_BITS: i32 = 0b0010_1001_0101;
+const PENTATONIC_MINOR_BITS: i32 = 0b0100_1010_1001;
+const BLUES_BITS: i32 = 0b0100_1110_1001;
+const BLUES_DOMINANT: [i32; 5] = [0, 4, 7, 10, 14];
+
+/// The scale chords are built from: pentatonic and blues melodies sit over the chords of their parent scale,
+/// every other scale stacks its own notes.
+pub fn chord_scale(bits: i32) -> i32 {
+    match bits {
+        PENTATONIC_MAJOR_BITS => MAJOR_BITS,
+        PENTATONIC_MINOR_BITS | BLUES_BITS => NATURAL_MINOR_BITS,
+        _ => bits
+    }
+}
+
+/// The chord on `degree` (1..=7) of a key: `(root pitch class, voicing mask)`. `shape` 0 stacks `notes` (3..=5)
+/// notes of the chord scale in thirds, skipping repeated pitch classes, any other value replaces them. Blues
+/// plays steps 1, 4 and 5 as dominant 7ths. `inversion` moves that many of the lowest notes up an octave.
 pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i32, inversion: i32) -> Option<(i32, i32)> {
-    if !is_heptatonic(bits) || !(1..=7).contains(&degree) {
+    if !(1..=7).contains(&degree) {
         return None;
     }
-    let mut steps = [0i32; 7];
+    let scale = chord_scale(bits);
+    let mut steps = [0i32; 12];
     let mut count = 0;
     for index in 0..12 {
-        if bits & (1 << index) != 0 {
+        if scale & (1 << index) != 0 {
             steps[count] = index;
             count += 1;
         }
     }
+    if count < 3 {
+        return None;
+    }
+    let at = |step: usize| steps[step % count] + (step / count) as i32 * 12;
     let index = (degree - 1) as usize;
-    let base = steps[index];
+    let base = at(index);
+    let wanted = notes.clamp(3, 5) as usize;
     let mut stack = [0i32; 12];
     let mut size = 0;
     if shape != 0 {
@@ -65,11 +87,16 @@ pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i
                 size += 1;
             }
         }
+    } else if bits == BLUES_BITS && shift == 0 && matches!(degree, 1 | 4 | 5) {
+        size = wanted.max(4);
+        stack[..size].copy_from_slice(&BLUES_DOMINANT[..size]);
     } else {
-        for note in 0..notes.clamp(3, 5) as usize {
-            let step = index + note * 2;
-            stack[size] = steps[step % 7] + (step / 7) as i32 * 12 - base;
-            size += 1;
+        for note in 0..wanted {
+            let interval = at(index + note * 2) - base;
+            if !stack[..size].iter().any(|other| other % 12 == interval % 12) {
+                stack[size] = interval;
+                size += 1;
+            }
         }
     }
     let rotate = inversion.clamp(0, size as i32 - 1) as usize;
@@ -150,9 +177,40 @@ mod tests {
         assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 9, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 4, 7, 11, 14]), "notes capped at 5");
     }
 
+    fn chords(root: i32, bits: i32, notes: i32) -> Vec<(i32, Vec<i32>)> {
+        (1..=7).map(|degree| chord(root, bits, degree, 0, 0, notes, 0).map(|(root, mask)| (root, intervals(mask))).unwrap()).collect()
+    }
+
+    // mirrors the lib-dsp Harmony tables
     #[test]
-    fn no_chord_without_seven_notes_or_valid_degree() {
-        assert_eq!(chord(0, PENTATONIC_MAJOR, 1, 0, 0, 3, 0), None);
+    fn pentatonic_chords_come_from_the_parent_scale() {
+        assert_eq!(chords(0, PENTATONIC_MAJOR, 3), chords(0, MAJOR_BITS, 3));
+        assert_eq!(chords(9, 0x4A9, 3), chords(9, NATURAL_MINOR, 3));
+    }
+
+    #[test]
+    fn blues_plays_steps_1_4_5_as_dominant_sevenths() {
+        let blues = chords(9, 0x4E9, 3);
+        assert_eq!(blues[0], (9, vec![0, 4, 7, 10]));
+        assert_eq!(blues[3], (2, vec![0, 4, 7, 10]));
+        assert_eq!(blues[4], (4, vec![0, 4, 7, 10]));
+        assert_eq!(blues[1], (11, vec![0, 3, 6]));
+        assert_eq!(chord(9, 0x4E9, 1, 0, 0, 5, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 4, 7, 10, 14]));
+        assert_eq!(chord(9, 0x4E9, 1, -1, 0, 3, 0).map(|(root, mask)| (root, intervals(mask))), Some((8, vec![0, 3, 7])));
+    }
+
+    #[test]
+    fn symmetric_scales_stack_their_own_notes() {
+        let whole = chords(0, 0x555, 5);
+        assert!(whole.iter().all(|(_, stack)| stack == &vec![0, 4, 8]), "whole tone: augmented, no repeated pitch class");
+        assert_eq!(whole.iter().map(|(root, _)| *root).collect::<Vec<_>>(), vec![0, 2, 4, 6, 8, 10, 0]);
+        assert_eq!(chord(0, 0xB6D, 1, 0, 0, 5, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 3, 6, 9]), "diminished 7th");
+        assert_eq!(chord(0, 0x999, 2, 0, 0, 3, 0).map(|(root, mask)| (root, intervals(mask))), Some((3, vec![0, 4, 8])));
+    }
+
+    #[test]
+    fn no_chord_with_fewer_than_three_notes_or_an_invalid_degree() {
+        assert_eq!(chord(0, 0b1000_0001, 1, 0, 0, 3, 0), None);
         assert_eq!(chord(0, MAJOR_BITS, 0, 0, 0, 3, 0), None);
         assert_eq!(chord(0, MAJOR_BITS, 8, 0, 0, 3, 0), None);
     }

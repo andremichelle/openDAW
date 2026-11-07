@@ -249,7 +249,7 @@ mod tests {
     const BAR: i32 = 3840;
     const MAJOR_TRIAD: i32 = 0x91;
     const MINOR_TRIAD: i32 = 0x89;
-    const PENTATONIC_MAJOR: i32 = 0b0010_1001_0101;
+    const WHOLE_TONE: i32 = 0b0101_0101_0101;
     const NATURAL_MINOR: i32 = 0x5AD;
 
     fn graph_box(uuid: Uuid, name: &str, fields: &[(u16, FieldValue)]) -> GraphBox {
@@ -377,9 +377,9 @@ mod tests {
         let mut graph = BoxGraph::from_boxes(vec![timeline_box(), key_box(KEY_A, 0, 2, math::harmony::MAJOR_BITS), chord_box(CHORD_A, 0, BAR, 1)]);
         let harmony = HarmonyTrack::observe(&mut graph, TIMELINE);
         assert_eq!(harmony.harmony_at(0.0).chord, Some((2, MAJOR_TRIAD)));
-        primitive(&mut graph, KEY_A, vec![KEY_SCALE], FieldValue::Int32(math::harmony::MAJOR_BITS), FieldValue::Int32(PENTATONIC_MAJOR));
-        assert_eq!(harmony.harmony_at(0.0), Harmony {root: 2, bits: PENTATONIC_MAJOR, chord: None},
-            "no chord under a key without seven notes");
+        primitive(&mut graph, KEY_A, vec![KEY_SCALE], FieldValue::Int32(math::harmony::MAJOR_BITS), FieldValue::Int32(WHOLE_TONE));
+        assert_eq!(harmony.harmony_at(0.0), Harmony {root: 2, bits: WHOLE_TONE, chord: Some((2, 0x111))},
+            "the chord follows a live scale edit: D augmented under D whole tone");
         primitive(&mut graph, TIMELINE, vec![TIMELINE_KEY_TRACK, TRACK_ENABLED], FieldValue::Boolean(true), FieldValue::Boolean(false));
         assert_eq!(harmony.harmony_at(0.0), Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: Some((0, MAJOR_TRIAD))},
             "a disabled key track falls back to the stored key");

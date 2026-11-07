@@ -126,6 +126,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 
 ## Decisions
 
-1. Chords need a 7-note scale (Major, the three minors, the modes). Under a key with another scale (pentatonic,
-   blues, whole tone, diminished) chord events are drawn disabled and devices get the key only, no chord.
+1. Chords work under every scale. Pentatonic Major borrows Major, Pentatonic Minor and Blues borrow Natural Minor
+   (Blues plays steps 1, 4, 5 as dominant 7ths), Whole Tone, Diminished and Augmented stack their own notes
+   without repeating a pitch class. The chord menu names a borrowed source ("Chords from C Major").
 2. Key events sit at free ppqn positions, snapped in the UI.

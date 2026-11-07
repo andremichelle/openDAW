@@ -52,20 +52,43 @@ export namespace Harmony {
         return pitch
     }
 
+    const NaturalMinorBits: int = 0b010110101101
+    const PentatonicMajorBits: int = 0b001010010101
+    const PentatonicMinorBits: int = 0b010010101001
+    const BluesBits: int = 0b010011101001
+    const BluesDominant: ReadonlyArray<int> = [0, 4, 7, 10, 14]
+
+    // pentatonic and blues melodies sit over the chords of their parent scale, other scales stack their own notes
+    export const chordScale = (bits: int): int => bits === PentatonicMajorBits ? MajorBits
+        : bits === PentatonicMinorBits || bits === BluesBits ? NaturalMinorBits : bits
+
+    export const chordSource = ({root, bits}: Key): Option<string> => {
+        const parent = chordScale(bits)
+        if (parent === bits) {return Option.None}
+        const name = `${MidiKeys.Names.English[root]} ${scaleName(parent)}`
+        return Option.wrap(bits === BluesBits ? `${name}, steps 1, 4 and 5 as dominant 7ths` : name)
+    }
+
     export const chord = ({root, bits}: Key, degree: int, shift: int, shapeBits: int,
                           notes: int = 3, inversion: int = 0): Option<Chord> => {
-        if (!isHeptatonic(bits) || degree < 1 || degree > 7) {return Option.None}
+        if (degree < 1 || degree > 7) {return Option.None}
+        const scale = chordScale(bits)
         const steps: Array<int> = []
-        for (let index = 0; index < 12; index++) {if ((bits & (1 << index)) !== 0) {steps.push(index)}}
+        for (let index = 0; index < 12; index++) {if ((scale & (1 << index)) !== 0) {steps.push(index)}}
+        if (steps.length < 3) {return Option.None}
+        const at = (step: int): int => steps[step % steps.length] + Math.floor(step / steps.length) * 12
         const index = degree - 1
-        const base = steps[index]
+        const base = at(index)
+        const count = Math.min(Math.max(notes, 3), 5)
         const stack: Array<int> = []
         if (shapeBits !== 0) {
             for (let interval = 0; interval < 12; interval++) {if ((shapeBits & (1 << interval)) !== 0) {stack.push(interval)}}
+        } else if (bits === BluesBits && shift === 0 && (degree === 1 || degree === 4 || degree === 5)) {
+            stack.push(...BluesDominant.slice(0, Math.max(count, 4)))
         } else {
-            for (let note = 0; note < Math.min(Math.max(notes, 3), 5); note++) {
-                const step = index + note * 2
-                stack.push(steps[step % 7] + Math.floor(step / 7) * 12 - base)
+            for (let note = 0; note < count; note++) {
+                const interval = at(index + note * 2) - base
+                if (!stack.some(other => other % 12 === interval % 12)) {stack.push(interval)}
             }
         }
         const rotate = Math.min(Math.max(inversion, 0), stack.length - 1)

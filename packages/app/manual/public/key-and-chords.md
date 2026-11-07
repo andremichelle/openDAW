@@ -72,8 +72,18 @@ Right click a chord for more:
 - **Shape**: replaces the chord with a fixed chord type, such as Sus4 or Major 7th, on the step's root.
 
 A chord takes the key at its start. Moving a chord into a section with another key renames it and changes its
-notes. Chords need a scale with 7 notes. Under Pentatonic, Blues, Whole Tone, Diminished or Augmented the chords
-are drawn grey and do not play.
+notes.
+
+Chords work under every scale:
+
+- **Pentatonic** keys take their chords from the scale they come from: Pentatonic Major from Major, Pentatonic
+  Minor from Natural Minor. The melody stays pentatonic, the chords may use the two notes it leaves out.
+- **Blues** takes its chords from Natural Minor and plays steps 1, 4 and 5 as dominant 7ths, the chords of the
+  12-bar blues: A7, D7 and E7 in A.
+- **Whole Tone**, **Diminished** and **Augmented** stack their own notes, so every step is an augmented or
+  diminished chord. In the 6-note scales step 7 repeats step 1.
+
+The context menu of a chord names where its chords come from, for example **Chords from C Major**.
 
 ---
 

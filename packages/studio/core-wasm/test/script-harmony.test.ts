@@ -94,9 +94,9 @@ describe("scripts read the key and chord", () => {
         expect(first).toBeCloseTo(0.0023, 6)
         expect(second).toBeCloseTo(0.0910, 6)
     }, 60000)
-    it("reads a pentatonic key without chords", async () => {
+    it("reads a pentatonic key and the chord of its parent scale", async () => {
         const [[left, right]] = await render({keyRoot: 9, keyBits: 0b001010010101, chords: [{position: 0, duration: 3840, degree: 1}]}, [50])
         expect(left).toBeCloseTo(0.095, 6)
-        expect(right).toBe(0)
+        expect(right).toBeCloseTo(0.0911, 6)
     }, 60000)
 })

@@ -21,8 +21,11 @@ export namespace ChordContextMenu {
             const shifts: ReadonlyArray<[string, int]> = [["♭ Lowered", -1], ["Natural", 0], ["♯ Raised", 1]]
             const notes: ReadonlyArray<[string, int]> = [["Triad", 3], ["7th", 4], ["9th", 5]]
             const inversions: ReadonlyArray<string> = ["Root Position", "1st Inversion", "2nd Inversion", "3rd Inversion", "4th Inversion"]
+            const source = adapter.trackAdapter
+                .flatMap(({keyTrack}) => Harmony.chordSource(keyTrack.keyAt(adapter.position)))
+            source.ifSome(source => addItems(MenuItem.default({label: `Chords from ${source}`, selectable: false})))
             addItems(
-                MenuItem.default({label: "Degree"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                MenuItem.default({label: "Degree", separatorBefore: source.nonEmpty()}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     ...Arrays.create(index => MenuItem.default({
                         label: String(index + 1),
                         checked: index + 1 === adapter.degree

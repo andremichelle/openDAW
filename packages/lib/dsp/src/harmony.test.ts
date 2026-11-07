@@ -62,14 +62,14 @@ describe("Harmony.chord", () => {
     const names = (key: Harmony.Key) => [1, 2, 3, 4, 5, 6, 7]
         .map(degree => Harmony.chordName(Harmony.chord(key, degree, 0, 0).unwrap()))
     it("builds the triads of C major", () => {
-        expect(names(CMajor)).toEqual(["C", "Dm", "Em", "F", "G", "Am", "Bdim"])
+        expect(chordNames(CMajor)).toEqual(["C", "Dm", "Em", "F", "G", "Am", "Bdim"])
     })
     it("follows a key change", () => {
-        expect(names({root: 5, bits: Harmony.MajorBits})).toEqual(["F", "Gm", "Am", "A#", "C", "Dm", "Edim"])
+        expect(chordNames({root: 5, bits: Harmony.MajorBits})).toEqual(["F", "Gm", "Am", "A#", "C", "Dm", "Edim"])
     })
     it("follows the scale", () => {
-        expect(names({root: 0, bits: scaleBits("Natural Minor")})).toEqual(["Cm", "Ddim", "D#", "Fm", "Gm", "G#", "A#"])
-        expect(names({root: 9, bits: scaleBits("Harmonic Minor")})[4]).toBe("E")
+        expect(chordNames({root: 0, bits: scaleBits("Natural Minor")})).toEqual(["Cm", "Ddim", "D#", "Fm", "Gm", "G#", "A#"])
+        expect(chordNames({root: 9, bits: scaleBits("Harmonic Minor")})[4]).toBe("E")
     })
     it("applies shift and shape relative to the key", () => {
         const major = Harmony.ChordShapes[0].bits
@@ -95,10 +95,35 @@ describe("Harmony.chord", () => {
         expect(Harmony.chord(CMajor, 1, 0, 0, 3, 9).unwrap().voicing).toEqual([7, 12, 16], "the inversion is capped by the note count")
         expect(Harmony.pitchClasses(first)).toEqual([4, 7, 0])
     })
-    it("yields no chord for scales without 7 notes", () => {
-        for (const name of ["Pentatonic Major", "Pentatonic Minor", "Blues", "Whole Tone", "Diminished", "Augmented"]) {
-            expect(Harmony.chord({root: 0, bits: scaleBits(name)}, 1, 0, 0).isEmpty()).toBe(true)
-        }
+    const chordNames = (key: Harmony.Key, notes: number = 3) => [1, 2, 3, 4, 5, 6, 7]
+        .map(degree => Harmony.chordName(Harmony.chord(key, degree, 0, 0, notes).unwrap()))
+    it("takes pentatonic chords from the parent scale", () => {
+        expect(chordNames({root: 0, bits: scaleBits("Pentatonic Major")})).toEqual(["C", "Dm", "Em", "F", "G", "Am", "Bdim"])
+        expect(chordNames({root: 9, bits: scaleBits("Pentatonic Minor")})).toEqual(["Am", "Bdim", "C", "Dm", "Em", "F", "G"])
+    })
+    it("plays blues steps 1, 4 and 5 as dominant 7ths", () => {
+        const blues = {root: 9, bits: scaleBits("Blues")}
+        expect(chordNames(blues)).toEqual(["A7", "Bdim", "C", "D7", "E7", "F", "G"])
+        expect(chordNames(blues, 4)).toEqual(["A7", "Bm7♭5", "Cmaj7", "D7", "E7", "Fmaj7", "G7"])
+        expect(Harmony.chordName(Harmony.chord(blues, 1, 0, 0, 5).unwrap())).toBe("A9")
+        expect(Harmony.chordName(Harmony.chord(blues, 1, -1, 0).unwrap())).toBe("G#m")
+    })
+    it("stacks symmetric scales from their own notes", () => {
+        expect(chordNames({root: 0, bits: scaleBits("Whole Tone")})).toEqual(["Caug", "Daug", "Eaug", "F#aug", "G#aug", "A#aug", "Caug"])
+        expect(Harmony.chord({root: 0, bits: scaleBits("Whole Tone")}, 1, 0, 0, 5).unwrap().stack).toEqual([0, 4, 8])
+        expect(chordNames({root: 0, bits: scaleBits("Diminished")}).slice(0, 2)).toEqual(["Cdim", "Ddim"])
+        expect(Harmony.chordName(Harmony.chord({root: 0, bits: scaleBits("Diminished")}, 1, 0, 0, 5).unwrap())).toBe("Cdim7")
+        expect(chordNames({root: 0, bits: scaleBits("Augmented")}).slice(0, 2)).toEqual(["Caug", "D#aug"])
+    })
+    it("names where borrowed chords come from", () => {
+        expect(Harmony.chordSource({root: 0, bits: scaleBits("Pentatonic Major")}).unwrap()).toBe("C Major")
+        expect(Harmony.chordSource({root: 9, bits: scaleBits("Blues")}).unwrap())
+            .toBe("A Natural Minor, steps 1, 4 and 5 as dominant 7ths")
+        expect(Harmony.chordSource(CMajor).isEmpty()).toBe(true)
+        expect(Harmony.chordSource({root: 0, bits: scaleBits("Whole Tone")}).isEmpty()).toBe(true)
+    })
+    it("yields no chord for scales with fewer than 3 notes", () => {
+        expect(Harmony.chord({root: 0, bits: 0b10000001}, 1, 0, 0).isEmpty()).toBe(true)
     })
     it("rejects degrees outside 1..7", () => {
         expect(Harmony.chord(CMajor, 0, 0, 0).isEmpty()).toBe(true)
