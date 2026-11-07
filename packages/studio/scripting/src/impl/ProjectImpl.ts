@@ -23,6 +23,8 @@ import {
     Project,
     ProjectMeta,
     SignatureTrack,
+    KeyTrack,
+    ChordTrack,
     TempoTrack,
     TimeSignature
 } from "../Api"
@@ -35,6 +37,8 @@ import {GrooveImpls} from "./Grooves"
 import {MarkerImpl, Markers} from "./timeline/Markers"
 import {TempoTrackImpl} from "./timeline/TempoTrackImpl"
 import {SignatureTrackImpl} from "./timeline/SignatureTrackImpl"
+import {KeyTrackImpl} from "./timeline/KeyTrackImpl"
+import {ChordTrackImpl} from "./timeline/ChordTrackImpl"
 import {ModulatorImpls} from "./Modulators"
 import {Regions} from "./timeline/Regions"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
@@ -113,6 +117,8 @@ export class ProjectImpl implements Project {
     readonly #meta: ProjectMetaImpl
     readonly #tempoTrack: TempoTrackImpl
     readonly #signatureTrack: SignatureTrackImpl
+    readonly #keyTrack: KeyTrackImpl
+    readonly #chordTrack: ChordTrackImpl
     #name: string
 
     declare bpm: number
@@ -129,6 +135,8 @@ export class ProjectImpl implements Project {
         const {timelineBox, rootBox} = skeleton.mandatoryBoxes
         this.#tempoTrack = new TempoTrackImpl(this.#context, timelineBox)
         this.#signatureTrack = new SignatureTrackImpl(this.#context, timelineBox)
+        this.#keyTrack = new KeyTrackImpl(this.#context, timelineBox)
+        this.#chordTrack = new ChordTrackImpl(this.#context, timelineBox, this.#keyTrack)
         Fields.bind(this.#context, this, {
             bpm: timelineBox.bpm,
             baseFrequency: rootBox.baseFrequency,
@@ -226,6 +234,8 @@ export class ProjectImpl implements Project {
 
     get tempoTrack(): TempoTrack {return this.#tempoTrack}
     get signatureTrack(): SignatureTrack {return this.#signatureTrack}
+    get keyTrack(): KeyTrack {return this.#keyTrack}
+    get chordTrack(): ChordTrack {return this.#chordTrack}
 
     get modulators(): ReadonlyArray<AnyModulator> {return ModulatorImpls.list(this.#context)}
 

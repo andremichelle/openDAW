@@ -110,6 +110,8 @@ in the key at the play position and plays it on the armed instruments, in the oc
 - The **[Cubed](/manuals/devices/instruments/cubed)** randomizer with **Project Key** draws its notes from the key.
 - Scripts in **Spielwerk**, **Apparat** and **Werkstatt** read the key and chord with `this.keyAt(position)` and
   `this.chordAt(position)`.
+- Project scripts in the code editor read and write both tracks through `project.keyTrack` and
+  `project.chordTrack`, for example to generate a chord progression.
 - **[Arpeggio](/manuals/devices/midi/arpeggio)** with **Chords** plays the chord at the play position while the
   transport runs, even without holding keys. Held keys set the octave. Where no chord sits it arpeggiates the
   held keys as usual.

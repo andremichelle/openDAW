@@ -97,7 +97,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 5. ~~Chords in the engine lookup, Arpeggio "follow chords".~~
 6. ~~Software keyboard chord pads, recording chord events.~~
 7. Chord and key detection from MIDI regions, key by playing into the focused header key display.
-8. Scripting API + docs.
+8. ~~Scripting API + docs.~~
 9. ~~Devices follow the project key: Cubed randomizer, Autotune Follow, script devices, software keyboard scale mapping.~~
 10. ~~Chord track editing: record chords into the armed track by clicking them, copy and duplicate chords like regions.~~
 
@@ -106,7 +106,7 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
 1. Phases 1 to 5 implemented and committed (8b2d1990e, e526af38c), partly browser-checked.
 2. The key track stores a default key (C major, edited in the header), key events override it from their position.
 3. Deviation: Scale Matrix `scale` is an index into `MidiKeys.StockScales` (automatable), the key events store masks.
-4. Open from 1 to 5: Scale Matrix live input highlight, Scale Matrix scripting, manual page for the key and chord tracks.
+4. Scale Matrix live input highlight, Scale Matrix scripting and the manual page for the key and chord tracks are done.
 5. Phase 6: pads 1 to 7 under the software keyboard (keys Z to M) play the chords of the key at the play position into
    the armed instruments. While recording a pad writes a chord event from press to release, snapped to the grid.
 6. Phase 10 part: chords use the project selection (saved), selection rectangle, shift click, Ctrl drag copies,
@@ -115,6 +115,9 @@ of the song. MIDI devices with "follow project" read the key and chord at the pl
    Software keyboard Scale switch maps the white keys onto the key. Scripts read `this.keyAt(position)` and
    `this.chordAt(position)` through the script bridge; examples Chord Player and Key Harmonizer in commons.
 8. Phase 10: while recording, holding a chord plays it through the software MIDI input into the armed tracks.
+9. Phase 8: project scripts get `project.keyTrack` (root, scale, events, addEvent, keyAt) and `project.chordTrack`
+   (events, addEvent resolving overlaps, chordAt returning root, notes and name). Scale Matrix joins the scripted MIDI effects
+   (root, scale, follow, custom grid with setCustom).
 
 ## Later
 
