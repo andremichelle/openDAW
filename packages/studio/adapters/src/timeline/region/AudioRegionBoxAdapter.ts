@@ -250,8 +250,11 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 : -this.#context.tempoMap.intervalToSeconds(newPosition, oldPosition)
             this.#box.waveformOffset.setValue(this.waveformOffset.getValue() + deltaSeconds)
         } else {
-            this.optWarpMarkers.ifSome(warpMarkers => warpMarkers.asArray()
-                .forEach(marker => marker.box.position.setValue(marker.position - delta)))
+            this.optWarpMarkers.ifSome(warpMarkers => {
+                const markers = warpMarkers.asArray().slice()
+                if (delta < 0) {markers.reverse()}
+                markers.forEach(marker => marker.box.position.setValue(marker.position - delta))
+            })
         }
     }
 
