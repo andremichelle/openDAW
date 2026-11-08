@@ -137,6 +137,9 @@ impl SampleResource {
         let Some(slot) = self.slot_mut(handle) else {
             return 0;
         };
+        if slot.state != State::Requested {
+            return 0;
+        }
         slot.storage = vec![0u8; byte_len];
         slot.state = State::Allocated;
         slot.storage.as_ptr() as u32
@@ -146,6 +149,11 @@ impl SampleResource {
     /// f32 each, at `sample_rate`.
     pub fn set_ready(&mut self, handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
         if let Some(slot) = self.slot_mut(handle) {
+            if slot.state != State::Allocated {
+                return;
+            }
+            let bytes = frame_count as usize * channel_count as usize * 4;
+            assert!(bytes <= slot.storage.len(), "sample frames ({bytes} bytes) exceed the allocation ({} bytes)", slot.storage.len());
             slot.frame_count = frame_count;
             slot.channel_count = channel_count;
             slot.sample_rate = sample_rate;
@@ -227,6 +235,40 @@ mod tests {
         let sample = resource.resolve(handle).expect("ready resolves");
         assert_eq!(sample.frames_ptr, pointer, "resolves to the allocated storage");
         assert_eq!((sample.frame_count, sample.channel_count, sample.sample_rate), (100, 2, 48_000.0));
+    }
+
+    #[test]
+    fn a_second_allocate_never_replaces_live_storage() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(8));
+        let pointer = resource.allocate(handle, 2 * 100 * 4);
+        assert_eq!(resource.allocate(handle, 2 * 100 * 4), 0, "an allocated slot refuses a second allocation");
+        resource.set_ready(handle, 100, 2, 48_000.0);
+        assert_eq!(resource.allocate(handle, 4), 0, "a ready slot refuses a new allocation");
+        let sample = resource.resolve(handle).expect("ready resolves");
+        assert_eq!(sample.frames_ptr, pointer, "the first storage stays in place");
+        assert_eq!(sample.frame_count, 100);
+    }
+
+    #[test]
+    fn set_ready_only_completes_an_allocation() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(9));
+        resource.set_ready(handle, 100, 2, 48_000.0);
+        assert!(resource.resolve(handle).is_none(), "set_ready before allocate is ignored");
+        resource.allocate(handle, 2 * 100 * 4);
+        resource.set_ready(handle, 100, 2, 48_000.0);
+        resource.set_ready(handle, 1000, 2, 48_000.0);
+        assert_eq!(resource.resolve(handle).map(|sample| sample.frame_count), Some(100), "a ready slot keeps its metadata");
+    }
+
+    #[test]
+    #[should_panic(expected = "exceed")]
+    fn set_ready_panics_when_the_frames_exceed_the_allocation() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(10));
+        resource.allocate(handle, 2 * 100 * 4);
+        resource.set_ready(handle, 101, 2, 48_000.0);
     }
 
     #[test]

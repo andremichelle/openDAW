@@ -1,13 +1,13 @@
 import {BoxGraph} from "@opendaw/lib-box"
 import {asInstanceOf} from "@opendaw/lib-std"
-import {AudioPitchStretchBox, AudioTimeStretchBox, BoxIO, WarpMarkerBox} from "@opendaw/studio-boxes"
+import {AudioPitchStretchBox, AudioSignalsmithBox, AudioTimeStretchBox, BoxIO, WarpMarkerBox} from "@opendaw/studio-boxes"
 
 // Drop duplicate warp markers (same ppqn position) on a stretch box. The sorted
 // EventCollection used by AudioPitchStretchBoxAdapter / AudioTimeStretchBoxAdapter
 // panics on equal positions; old data with duplicates would make the project
 // unloadable.
 export const migrateWarpMarkers = (boxGraph: BoxGraph<BoxIO.TypeMap>,
-                                   box: AudioPitchStretchBox | AudioTimeStretchBox): void => {
+                                   box: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox): void => {
     const markers = [...box.warpMarkers.pointerHub.incoming()].map(({box}) => asInstanceOf(box, WarpMarkerBox))
     const seen = new Set<number>()
     const duplicates: Array<WarpMarkerBox> = []

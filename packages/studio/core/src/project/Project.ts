@@ -22,6 +22,7 @@ import {
 import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate, PrimitiveUpdate} from "@opendaw/lib-box"
 import type {YSync} from "../ysync/YSync"
 import {RoomOverlaps} from "../ysync/RoomOverlaps"
+import {WarpMarkerGuard} from "./audio/WarpMarkerGuard"
 import {
     ApparatDeviceBox,
     AudioBusBox,
@@ -296,6 +297,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 }
             }
         }))
+        this.#terminator.own(WarpMarkerGuard.install(this.boxGraph))
         this.#terminator.own(this.boxGraph.subscribeTransaction({
             onBeginTransaction: () => {},
             onEndTransaction: (rolledBack: boolean) => {

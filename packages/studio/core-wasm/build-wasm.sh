@@ -42,8 +42,9 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
 DEVICE_CRATES="device-korpus device-cubed device-autotune device-revamp device-pitch device-note-filter device-scale-matrix device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-neon device-tubular device-nano device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-convolver device-soundfont device-vocoder device-neural-amp device-wclap device-wclap-instrument device-wclap-midi"
 
+# The engine keeps its function names until wasm-opt has written them to engine.symbols (crash stacks), then drops them.
 RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
-  -C link-arg=--import-memory -C link-arg=--import-table $SHARED
+  -C link-arg=--import-memory -C link-arg=--import-table $SHARED -C strip=debuginfo
 # stretch_wasm.wasm  the analysis module for the core WORKER (transient descriptors, tempo). Plain
 #                    standalone build: it owns its memory, imports nothing, and never runs on the
 #                    audio thread, so none of the linker gymnastics above apply.
@@ -63,10 +64,14 @@ MODULES="engine stretch_wasm $DEVICE_MODULES"
 # sign-ext, nontrapping-fptoint, multivalue, reference-types) plus our +simd128; a feature mismatch makes
 # wasm-opt fail loudly (a safe, build-time error).
 if command -v wasm-opt >/dev/null 2>&1; then
+  FEATURES="--enable-bulk-memory --enable-mutable-globals --enable-simd --enable-sign-ext --enable-nontrapping-float-to-int --enable-multivalue --enable-reference-types"
   for module in $MODULES; do
-    wasm-opt -Oz --enable-bulk-memory --enable-mutable-globals --enable-simd \
-      --enable-sign-ext --enable-nontrapping-float-to-int --enable-multivalue --enable-reference-types \
-      "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt.$$"
+    if [ "$module" = "engine" ]; then
+      wasm-opt -Oz $FEATURES "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt.$$" --symbolmap="$OUT/engine.symbols"
+      wasm-opt $FEATURES --strip-debug "$OUT/$module.wasm.opt.$$" -o "$OUT/$module.wasm.opt.$$"
+    else
+      wasm-opt -Oz $FEATURES "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt.$$"
+    fi
     mv "$OUT/$module.wasm.opt.$$" "$OUT/$module.wasm"
   done
   echo "wasm-opt: optimised $MODULES"

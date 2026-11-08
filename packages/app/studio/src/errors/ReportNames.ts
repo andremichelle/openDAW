@@ -1,6 +1,7 @@
 import {Field, PrimitiveField, StringField} from "@opendaw/lib-box"
 import {Promises} from "@opendaw/lib-runtime"
-import {PresetStorage, ProjectMeta, ProjectStorage, SampleStorage, SoundfontStorage} from "@opendaw/studio-core"
+import {EffectFactories, PresetStorage, ProjectMeta, ProjectStorage, SampleStorage, SoundfontStorage} from "@opendaw/studio-core"
+import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {isDefined, Optional} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, readIdentity} from "@/service/RoomAwareness"
@@ -8,6 +9,14 @@ import {AwarenessUserState, readIdentity} from "@/service/RoomAwareness"
 // Every user-given name the app knows, longest first so a name containing another one is blanked whole.
 export namespace ReportNames {
     const MinLength = 3
+    const Letter = /\p{L}/u
+
+    const defaultNames = (): ReadonlySet<string> => new Set([
+        ...Object.values(InstrumentFactories.Named), ...Object.values(EffectFactories.MergedNamed)
+    ].map(factory => factory.defaultName))
+
+    const isUserName = (name: string, defaults: ReadonlySet<string>): boolean =>
+        name.length >= MinLength && Letter.test(name) && !defaults.has(name)
 
     const metaStrings = (meta: ProjectMeta): ReadonlyArray<string> =>
         [meta.name, meta.artist, meta.description, meta.notepad ?? "", ...meta.tags]
@@ -48,7 +57,8 @@ export namespace ReportNames {
             settled(async () => (await SoundfontStorage.get().list()).map(soundfont => soundfont.name))
         ])
         sources.forEach(source => names.push(...source))
-        return Array.from(new Set(names.map(name => name.trim()).filter(name => name.length >= MinLength)))
+        const defaults = defaultNames()
+        return Array.from(new Set(names.map(name => name.trim()).filter(name => isUserName(name, defaults))))
             .sort((left, right) => right.length - left.length)
     }
 }
