@@ -57,6 +57,19 @@ jobs:
         run: |
           npm run build
 
+      - name: 🗺️ Read the build uuid
+        id: build-info
+        run: echo "uuid=$(node -p "require('./packages/app/studio/public/build-info.json').uuid")" >> "$GITHUB_OUTPUT"
+
+      - name: 🗺️ Keep the engine symbol map (not deployed)
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: engine-symbols-${{ steps.build-info.outputs.uuid }}
+          path: crates/target/wasm32-unknown-unknown/release/engine.symbols
+          retention-days: 90
+          if-no-files-found: warn
+
       - name: 🚚 Run deploy script
         env:
           TERM: xterm-256color
