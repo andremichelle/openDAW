@@ -368,6 +368,33 @@ describe("Devices", () => {
         expect(project.audioUnits).toContain(unit)
     })
 
+    it("configures the Guitar pattern", () => {
+        const {project} = createFixture()
+        const guitar = project.addInstrumentUnit("Guitar").instrument
+        expect(guitar.steps.length).toBe(64)
+        expect(guitar.patternNames).toContain("Travis")
+        expect(guitar.patternLength).toBe(16)
+        expect(guitar.steps[0].stroke).toBe("down")
+        guitar.steps[1].stroke = "chuck"
+        guitar.steps[1].strings = 0b000111
+        expect(guitar.steps[1].stroke).toBe("chuck")
+        expect(guitar.steps[1].strings).toBe(7)
+        expect(() => {guitar.steps[1].stroke = "strum" as any}).toThrow()
+        guitar.setSteps([{stroke: "bass"}, {stroke: "pick", strings: 0b100000, velocity: 60}, {stroke: "up"}])
+        expect(guitar.patternLength).toBe(3)
+        expect(guitar.steps[1].velocity).toBe(60)
+        guitar.loadPattern("Travis")
+        expect(guitar.steps[0].stroke).toBe("bass")
+        expect(guitar.steps[2].stroke).toBe("pick")
+        expect(guitar.steps[2].strings).toBe(0b001000)
+        expect(() => guitar.loadPattern("Nope")).toThrow(RangeError)
+        guitar.body = 5
+        guitar.tuning = 1
+        guitar.spot = 0.5
+        guitar.pick = 0
+        expect([guitar.body, guitar.tuning, guitar.spot, guitar.pick]).toEqual([5, 1, 0.5, 0])
+    })
+
     it("configures Cubed, Neon and MIDI output", () => {
         const {project} = createFixture()
         const cubed = project.addInstrumentUnit("Cubed").instrument

@@ -50,6 +50,7 @@ import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {CubedDeviceBox} from "./instruments/CubedDeviceBox"
 import {KorpusDeviceBox} from "./instruments/KorpusDeviceBox"
+import {GuitarDeviceBox} from "./instruments/GuitarDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
 import {InstrumentCompositeBox} from "./instruments/InstrumentCompositeBox"
 import {InstrumentCompositeCellBox} from "./instruments/InstrumentCompositeCellBox"
@@ -116,6 +117,7 @@ export const DeviceDefinitions = [
     ApparatDeviceBox,
     CubedDeviceBox,
     KorpusDeviceBox,
+    GuitarDeviceBox,
     NoopInstrumentBox,
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,

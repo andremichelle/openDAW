@@ -104,6 +104,7 @@ import {
     ValueRegionBox,
     CubedDeviceBox,
     KorpusDeviceBox,
+    GuitarDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -154,6 +155,7 @@ import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceB
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
 import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
+import {GuitarDeviceBoxAdapter} from "./devices/instruments/GuitarDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
@@ -277,6 +279,7 @@ export class BoxAdapters implements Terminable {
             visitApparatDeviceBox: (box: ApparatDeviceBox) => new ApparatDeviceBoxAdapter(this.#context, box),
             visitCubedDeviceBox: (box: CubedDeviceBox) => new CubedDeviceBoxAdapter(this.#context, box),
             visitKorpusDeviceBox: (box: KorpusDeviceBox) => new KorpusDeviceBoxAdapter(this.#context, box),
+            visitGuitarDeviceBox: (box: GuitarDeviceBox) => new GuitarDeviceBoxAdapter(this.#context, box),
             visitAudioRegionBox: (box: AudioRegionBox) => new AudioRegionBoxAdapter(this.#context, box),
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),

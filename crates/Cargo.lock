@@ -321,6 +321,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-guitar"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-korpus"
 version = "0.0.0"
 dependencies = [

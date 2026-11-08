@@ -1704,6 +1704,91 @@ export interface Cubed extends Instrument {
 }
 
 /**
+ * What a Guitar step plays: strums cross the step's strings (down from the low E, up from the high e), "mute" is
+ * a palm muted down strum, "chuck" a muted percussive hit, "bass" and "alternate" the lowest and second lowest
+ * sounding string, "pick" plucks the step's strings together, "stop" silences the strings, "rest" plays nothing
+ * @group Instrument Parts
+ */
+export type GuitarStroke = "rest" | "down" | "up" | "mute" | "chuck" | "bass" | "alternate" | "pick" | "stop"
+
+/**
+ * One step of the Guitar pattern
+ * @group Instrument Parts
+ */
+export interface GuitarStep {
+    /** What the step plays */
+    stroke: GuitarStroke
+    /** The strings the stroke plays as a mask, bit 0 is the low E, bit 5 the high e (0 to 63, default 63) */
+    strings: int
+    /** Velocity in percent (0 to 100, default 80) */
+    velocity: int
+    /** Strum speed in percent, 50 strums at the device Speed (0 to 100, default 50) */
+    speed: int
+}
+
+/**
+ * Six string Karplus-Strong guitar. In mode 0 its pattern strums the chord track while the transport runs,
+ * played notes sound on its strings in both modes
+ * @group Instruments
+ */
+export interface Guitar extends Instrument {
+    /** Always "Guitar" */
+    readonly key: "Guitar"
+    /** 0 = strum the chord track with the pattern, 1 = play notes only (default 0) */
+    mode: 0 | 1
+    /** Pattern speed: 0 = eighths, 1 = sixteenths, 2 = thirty-seconds (default 1) */
+    rate: 0 | 1 | 2
+    /** Strum speed across the strings (0.0 to 1.0, default 0.3) */
+    speed: unitValue
+    /** Strum timing variation (0.0 to 1.0, default 0.2) */
+    speedVariation: unitValue
+    /** Velocity (0.0 to 1.0, default 0.8) */
+    velocity: unitValue
+    /** Velocity variation per pluck (0.0 to 1.0, default 0.15) */
+    velocityVariation: unitValue
+    /** Swing of the odd steps (0.0 to 1.0, default 0.0) */
+    swing: unitValue
+    /** Accent on the bar and the beats (0.0 to 1.0, default 0.3) */
+    accent: unitValue
+    /** Neck position: 0 = Open, 1 = 3rd, 2 = 5th, 3 = 7th, 4 = 9th, 5 = 12th fret (default 0) */
+    position: int
+    /** Tuning: 0 = Standard, 1 = Drop D, 2 = Open G, 3 = DADGAD (default 0) */
+    tuning: int
+    /** Body: 0 = Off, 1 = Dreadnought, 2 = Classical, 3 = Parlor, 4 = Jumbo, 5 = Archtop, 6 = Electric Neck, 7 = Electric Bridge (default 1) */
+    body: int
+    /** String damping, higher rings shorter and darker (0.0 to 1.0, default 0.33) */
+    damping: unitValue
+    /** Damping variation per pluck (0.0 to 1.0, default 0.5) */
+    dampingVariation: unitValue
+    /** Pick brightness (0.0 to 1.0, default 0.5) */
+    pluck: unitValue
+    /** Pick brightness variation per pluck (0.0 to 1.0, default 0.5) */
+    pluckVariation: unitValue
+    /** Tightens the strings, which shortens them and raises the pitch up to an octave (0.0 to 1.0, default 0.0) */
+    tension: unitValue
+    /** Where the pick hits the string, from the bridge to the middle (0.0 to 1.0, default 0.2) */
+    spot: unitValue
+    /** How different every pick sounds from the last, 0 plays identical picks (0.0 to 1.0, default 0.5) */
+    characterVariation: unitValue
+    /** What plucks the strings: 0 = Finger, 1 = Thumb, 2 = Nail, 3 = Plectrum (default 3) */
+    pick: int
+    /** Stereo spread of the strings (0.0 to 1.0, default 0.6) */
+    spread: unitValue
+    /** Volume in dB (default -6) */
+    volume: float
+    /** Number of steps played (1 to 64, default 16) */
+    patternLength: int
+    /** 64 steps */
+    readonly steps: ReadonlyArray<GuitarStep>
+    /** Replace the steps from the beginning and set the pattern length */
+    setSteps(steps: ReadonlyArray<Partial<GuitarStep>>): void
+    /** Load a built in pattern by name, see {@link Guitar.patternNames} */
+    loadPattern(name: string): void
+    /** The names of the built in patterns */
+    readonly patternNames: ReadonlyArray<string>
+}
+
+/**
  * Scriptable instrument. See {@link ScriptDevice}
  * @group Instruments
  */
@@ -1735,6 +1820,8 @@ export interface Instruments {
     "Tubular": Tubular
     /** {@link Cubed} */
     "Cubed": Cubed
+    /** {@link Guitar} */
+    "Guitar": Guitar
     /** {@link Apparat} */
     "Apparat": Apparat
     /** {@link InstrumentComposite} */

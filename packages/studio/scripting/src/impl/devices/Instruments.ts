@@ -2,6 +2,7 @@ import {
     ApparatDeviceBox,
     AudioFileBox,
     CubedDeviceBox,
+    GuitarDeviceBox,
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,
     MIDIOutputDeviceBox,
@@ -19,7 +20,7 @@ import {
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
-import {CubedStep as CubedStepCodec, InstrumentFactories} from "@opendaw/studio-adapters"
+import {CubedStep as CubedStepCodec, GuitarPatterns, InstrumentFactories} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
@@ -31,6 +32,9 @@ import {
     CubedPattern,
     CubedStep,
     DeepPartial,
+    Guitar,
+    GuitarStep,
+    GuitarStroke,
     InstrumentAudioUnit,
     InstrumentComposite,
     InstrumentCompositeLayer,
@@ -110,7 +114,7 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 
 export type AnyInstrumentImpl =
     | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | CubedImpl
-    | ApparatImpl | InstrumentCompositeImpl
+    | GuitarImpl | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
     readonly key = "Vaporisateur" as const
@@ -601,6 +605,88 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
     set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
 }
 
+// WASM CONTRACT: the index is the stroke kind of `GuitarPatterns` (step-kinds field 30)
+const GuitarStrokes: ReadonlyArray<GuitarStroke> = ["rest", "down", "up", "mute", "chuck", "bass", "alternate", "pick", "stop"]
+
+const createGuitarStep = (context: Context, box: GuitarDeviceBox, index: int): GuitarStep => {
+    const name = `steps.${index}`
+    const kind = box.stepKinds.getField(index)
+    const strings = box.stepStrings.getField(index)
+    const velocity = box.stepVelocities.getField(index)
+    const speed = box.stepSpeeds.getField(index)
+    const write = (procedure: () => void) => context.edit(() => {
+        procedure()
+        box.pattern.setValue(-1)
+    })
+    return Object.freeze({
+        get stroke(): GuitarStroke {return GuitarStrokes[kind.getValue()] ?? "rest"},
+        set stroke(value: GuitarStroke) {write(() => kind.setValue(GuitarStrokes.indexOf(Guard.oneOf(value, GuitarStrokes, `${name}.stroke`))))},
+        get strings(): int {return strings.getValue()},
+        set strings(value: int) {write(() => strings.setValue(Guard.int32({min: 0, max: 63}, value, `${name}.strings`)))},
+        get velocity(): int {return velocity.getValue()},
+        set velocity(value: int) {write(() => velocity.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.velocity`)))},
+        get speed(): int {return speed.getValue()},
+        set speed(value: int) {write(() => speed.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.speed`)))}
+    })
+}
+
+export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Guitar {
+    readonly key = "Guitar" as const
+    declare mode: 0 | 1
+    declare rate: 0 | 1 | 2
+    declare speed: unitValue
+    declare speedVariation: unitValue
+    declare velocity: unitValue
+    declare velocityVariation: unitValue
+    declare swing: unitValue
+    declare accent: unitValue
+    declare position: int
+    declare tuning: int
+    declare body: int
+    declare damping: unitValue
+    declare dampingVariation: unitValue
+    declare pluck: unitValue
+    declare pluckVariation: unitValue
+    declare tension: unitValue
+    declare spot: unitValue
+    declare characterVariation: unitValue
+    declare pick: int
+    declare spread: unitValue
+    declare volume: float
+    declare patternLength: int
+    readonly steps: ReadonlyArray<GuitarStep>
+
+    constructor(context: Context, box: GuitarDeviceBox) {
+        super(context, box)
+        this.bind({
+            mode: box.mode, rate: box.rate, speed: box.speed, speedVariation: box.speedVariation, velocity: box.velocity,
+            velocityVariation: box.velocityVariation, swing: box.swing, accent: box.accent, position: box.position,
+            tuning: box.tuning, body: box.body, damping: box.damping, dampingVariation: box.dampingVariation,
+            pluck: box.pluck, pluckVariation: box.pluckVariation, tension: box.tension, spot: box.spot,
+            characterVariation: box.characterVariation, pick: box.pick, spread: box.spread, volume: box.volume,
+            patternLength: box.patternLength
+        })
+        this.steps = Object.freeze(Array.from({length: GuitarPatterns.StepCount}, (_, index) => createGuitarStep(context, box, index)))
+    }
+
+    get patternNames(): ReadonlyArray<string> {return GuitarPatterns.Library.map(({name}) => name)}
+
+    setSteps(values: ReadonlyArray<Partial<GuitarStep>>): void {
+        this.context.edit(() => {
+            if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
+            if (values.length > this.steps.length) {return panic(new RangeError(`setSteps: at most ${this.steps.length} steps`))}
+            values.forEach((value, index) => Props.apply(this.steps[index], value, `steps.${index}`))
+            this.box.patternLength.setValue(clamp(values.length, 1, this.steps.length))
+        })
+    }
+
+    loadPattern(name: string): void {
+        const index = GuitarPatterns.Library.findIndex(pattern => pattern.name === Guard.string(name, "loadPattern"))
+        if (index < 0) {return panic(new RangeError(`loadPattern: no pattern named '${name}'`))}
+        this.context.edit(() => GuitarPatterns.load(this.box, index))
+    }
+}
+
 export class ApparatImpl extends InstrumentFacade<ApparatDeviceBox> implements Apparat {
     readonly key = "Apparat" as const
     readonly #script: ScriptSupport
@@ -629,6 +715,7 @@ export namespace InstrumentImpls {
         if (box instanceof NeonDeviceBox) {return new NeonImpl(context, box)}
         if (box instanceof TubularDeviceBox) {return new TubularImpl(context, box)}
         if (box instanceof CubedDeviceBox) {return new CubedImpl(context, box)}
+        if (box instanceof GuitarDeviceBox) {return new GuitarImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
         if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}
         return panic(`${box.name} is not a supported instrument`)

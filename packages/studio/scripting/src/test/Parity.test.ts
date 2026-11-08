@@ -41,7 +41,7 @@ const assertMirrored = (facade: object) => {
 describe("Schema parity", () => {
     it("mirrors every automatable instrument parameter", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Apparat", "InstrumentComposite"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Guitar", "Apparat", "InstrumentComposite"]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(project.addInstrumentUnit(key).instrument)})
         expect(plain).toEqual({
@@ -58,6 +58,12 @@ describe("Schema parity", () => {
                 `patterns.${pattern}.length`,
                 ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.steps.${step}`)
             ]).flat(),
+            // steps are exposed as GuitarStep objects, the pattern index only names the loaded pattern in the editor
+            Guitar: [
+                ...["stepKinds", "stepStrings", "stepVelocities", "stepSpeeds"]
+                    .flatMap(lane => Array.from({length: 64}, (_, step) => `${lane}.${step}`)),
+                "pattern"
+            ],
             Apparat: [],
             InstrumentComposite: []
         })

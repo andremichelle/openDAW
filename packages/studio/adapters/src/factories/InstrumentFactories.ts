@@ -4,6 +4,7 @@ import {
     BoxIO,
     CubedDeviceBox,
     KorpusDeviceBox,
+    GuitarDeviceBox,
     NeonDeviceBox,
     WclapInstrumentBox,
     TubularDeviceBox,
@@ -24,6 +25,7 @@ import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
 import {TrackType} from "../timeline/TrackType"
+import {GuitarPatterns} from "../devices/instruments/GuitarPatterns"
 
 export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
@@ -199,6 +201,26 @@ export namespace InstrumentFactories {
             })
     }
 
+    export const Guitar: InstrumentFactory<void, GuitarDeviceBox> = {
+        defaultName: "Guitar",
+        defaultIcon: IconSymbol.Guitar,
+        briefDescription: "Strummed Guitar",
+        description: "Strums the chord track with rhythm patterns or plays notes on six strings",
+        manualPage: "manuals/devices/instruments/guitar",
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): GuitarDeviceBox =>
+            GuitarDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+                GuitarPatterns.load(box, GuitarPatterns.DefaultPattern)
+            })
+    }
+
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Vaporisateur,
@@ -330,7 +352,7 @@ export namespace InstrumentFactories {
             })
     }
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
+    export const Named = {Apparat, Cubed, Guitar, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
     export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
         .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))

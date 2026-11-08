@@ -103,6 +103,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
     {url: "/wasm/plugins/device_cubed.wasm", boxType: "CubedDeviceBox"},
     {url: "/wasm/plugins/device_korpus.wasm", boxType: "KorpusDeviceBox"}, // instrument (physical modelling)   // instrument (303-style bassline)
+    {url: "/wasm/plugins/device_guitar.wasm", boxType: "GuitarDeviceBox"}, // instrument (strummed Karplus-Strong guitar)
     {url: "/wasm/plugins/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
     {url: "/wasm/plugins/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
     {url: "/wasm/plugins/device_wclap.wasm", boxType: "WclapDeviceBox"}, // audio effect (CLAP plugin, via the wclap bridge)
