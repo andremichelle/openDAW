@@ -1,0 +1,140 @@
+@use "@/mixins"
+
+component
+  display: flex
+  column-gap: 1em
+  @include mixins.Control
+
+  // labels, sections and rotated titles borrowed from ArpeggioDeviceEditor
+  > .labels
+    display: grid
+    grid-template-rows: repeat(10, 1fr)
+    grid-template-columns: repeat(2, 4.25em)
+    row-gap: 1px
+    height: 100%
+
+    &.six
+      grid-template-rows: repeat(12, 1fr)
+
+    > section, > h3.rotated
+      &.first, &.middle
+        margin-bottom: 2px
+
+      &.middle, &.last
+        margin-top: -2px
+
+    > section
+      grid-column: 1 / 3
+      border-left: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+      background-color: color-mix(in srgb, var(--color) 3%, transparent)
+      pointer-events: none
+
+      &.first
+        border-top: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+        border-radius: 3px 0 0 0
+
+      &.last
+        border-bottom: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+        border-radius: 0 0 0 3px
+
+    > h3.rotated
+      writing-mode: vertical-rl
+      justify-self: end
+      display: flex
+      align-items: center
+      justify-content: center
+      margin: 0
+      padding: 0 1px
+      font-size: 9px
+      font-weight: 400
+      letter-spacing: 0.2px
+      line-height: 1
+      white-space: nowrap
+      color: rgba(black, 0.8)
+      background-color: color-mix(in srgb, var(--color) 66%, black)
+
+      &.first
+        border-radius: 0 2px 0 0
+
+      &.last
+        border-radius: 0 0 2px 0
+
+    > div.control
+      display: grid
+      grid-template-rows: auto auto
+      align-content: center
+      white-space: nowrap
+      justify-content: center
+      padding: 0 4px
+
+      > h3
+        font-size: 9px
+        height: 12px
+        letter-spacing: 0.5px
+        text-align: center
+        text-transform: capitalize
+        color: var(--color-shadow)
+        z-index: 1
+
+      button > label
+        font-size: 0.5em
+
+  // toolbar borrowed from ArpeggioDeviceEditor
+  > .sequencer
+    display: flex
+    flex-direction: column
+    row-gap: 6px
+    width: 22em
+    height: 100%
+
+    > .toolbars
+      display: flex
+      flex-direction: column
+      row-gap: 4px
+
+      > .toolbar
+        display: flex
+        align-items: stretch
+        justify-content: space-between
+        gap: 0.5em
+        min-height: 1.5em
+        font-size: 10px
+
+        > .field
+          display: flex
+          align-items: center
+          column-gap: 0.75em
+          padding: 0.125em 0.75em
+          background: rgba(black, 0.12)
+          border-radius: 3px
+
+          &.wide
+            flex: 1
+
+          > label
+            opacity: 0.7
+
+          > .group
+            display: flex
+            column-gap: 0.25em
+
+          > .brushes
+            display: flex
+            column-gap: 2px
+
+            > div
+              width: 1.5em
+              height: 1.5em
+              display: flex
+              align-items: center
+              justify-content: center
+              border-radius: 2px
+              cursor: pointer
+              color: var(--color-orange)
+
+              &.quiet
+                color: var(--color-cream)
+
+              &.active
+                background: rgba(white, 0.08)
+                box-shadow: 0 0 0 0.5px var(--color-orange) inset

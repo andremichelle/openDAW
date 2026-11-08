@@ -1,0 +1,108 @@
+// index, play, header, lanes and lane cells borrowed from ArpeggioDeviceEditor/StepGrid
+component
+  flex: 1
+  min-height: 0
+  display: grid
+  grid-template-columns: 4.5em repeat(16, minmax(0, 1fr))
+  grid-template-rows: 1.5em 2px 1.75em minmax(0, 1fr)
+  gap: 2px
+  font-size: 9px
+
+  > .corner
+    min-width: 0
+
+  > .header
+    display: flex
+    align-items: center
+    opacity: 0.4
+
+  > .index
+    display: flex
+    align-items: center
+    justify-content: center
+    opacity: 0.4
+
+    &.beyond
+      opacity: 0.1
+
+    &:nth-child(4n + 2):not(.beyond)
+      border-radius: 2px
+      background-color: rgba(white, 0.04)
+
+  > .play
+    border-radius: 2px
+    background: rgba(white, 0.05)
+
+    &.on
+      background: var(--color-blue)
+
+  > .stroke
+    display: flex
+    align-items: center
+    justify-content: center
+    border-radius: 3px
+    cursor: pointer
+    font-size: 11px
+    color: var(--color-orange)
+    background: rgba(black, 0.12)
+
+    &.quiet
+      color: var(--color-cream)
+
+    &.beyond
+      opacity: 0.15
+
+  > .lanes
+    display: flex
+    flex-direction: column
+    row-gap: 6px
+
+    > .lane-label
+      opacity: 0.4
+      cursor: pointer
+
+      &.on
+        opacity: 1
+        color: var(--color-blue)
+
+  > .lane-area
+    grid-column: 2 / -1
+    display: grid
+    grid-template-columns: subgrid
+    min-height: 0
+    touch-action: none
+    cursor: ns-resize
+
+    > .lane
+      position: relative
+      overflow: hidden
+      border-radius: 3px
+      background: rgba(black, 0.12)
+
+      > .fill
+        position: absolute
+        left: 3px
+        right: 3px
+        bottom: 3px
+        height: calc((100% - 6px) * var(--value))
+        border-radius: 1px
+        background: color-mix(in srgb, var(--color-blue) 55%, transparent)
+        border-top: 1px solid var(--color-blue)
+
+      &.strings
+        display: grid
+        grid-template-rows: repeat(6, 1fr)
+        row-gap: 2px
+        padding: 3px
+        cursor: pointer
+
+        > div
+          border-radius: 1px
+          background: rgba(white, 0.06)
+
+          &.on
+            background: color-mix(in srgb, var(--color-blue) 55%, transparent)
+            box-shadow: 0 0 0 0.5px var(--color-blue) inset
+
+      &.inactive > *, &.beyond > *
+        opacity: 0.15
