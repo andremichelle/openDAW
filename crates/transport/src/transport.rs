@@ -7,7 +7,7 @@
 //! Mirrors core-processors `BlockRenderer`, including its action precedence: markers are evaluated
 //! first, the loop takes over only when strictly earlier, tempo only when strictly earlier than both.
 
-use engine_env::ppqn::{pulses_to_samples, samples_to_pulses};
+use engine_env::ppqn::{samples_to_pulses, QUARTER};
 use value::event::EventCollection;
 use value::value::{value_at, ValueEvent};
 
@@ -15,6 +15,15 @@ pub const RENDER_QUANTUM: usize = 128;
 
 /// Tempo is re-evaluated on this pulse grid (`PPQN.fromSignature(1, 48)` = 80, a ~10 ms window).
 pub const TEMPO_CHANGE_GRID: f64 = 80.0;
+
+// One division each, so a whole frame or pulse count converts exactly.
+fn frames_to_pulses(frames: f64, bpm: f32, sample_rate: f32) -> f64 {
+    frames * bpm as f64 * QUARTER / (60.0 * sample_rate as f64)
+}
+
+fn pulses_to_frames(pulses: f64, bpm: f32, sample_rate: f32) -> f64 {
+    pulses * 60.0 * sample_rate as f64 / (QUARTER * bpm as f64)
+}
 
 fn quantize_ceil(position: f64, grid: f64) -> f64 {
     let floored = (position / grid) as i64 as f64;
@@ -80,12 +89,25 @@ pub struct Transport {
     current_marker: Option<([u8; 16], i32)>, // the active marker + its plays SO FAR (TS `#currentMarker: [adapter, int]`)
     markers_dirty: bool, // the marker set was edited (TS `#someMarkersChanged`); the next block re-resolves the active marker
     marker_changed: bool, // the active marker state changed this quantum; the engine drains it into a switchMarkerState notification
+    anchor: f64, // pulses: the last position set from outside the block flow (seek, wrap, jump, bpm change)
+    anchor_bpm: f32,
+    anchor_offset: i64, // frames since `anchor` at the current quantum's first sample
 }
 
 impl Transport {
     pub fn new(sample_rate: f32, bpm: f32) -> Self {
         Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_pause: false, leap: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0,
-            current_marker: None, markers_dirty: false, marker_changed: false}
+            current_marker: None, markers_dirty: false, marker_changed: false, anchor: 0.0, anchor_bpm: bpm, anchor_offset: 0}
+    }
+
+    fn reanchor(&mut self, position: f64, offset: i64) {
+        self.anchor = position;
+        self.anchor_bpm = self.bpm;
+        self.anchor_offset = offset;
+    }
+
+    fn pulse_at(&self, sample: usize) -> f64 {
+        self.anchor + frames_to_pulses((self.anchor_offset + sample as i64) as f64, self.bpm, self.sample_rate)
     }
 
     pub fn position(&self) -> f64 {self.position}
@@ -132,12 +154,14 @@ impl Transport {
             self.position = 0.0;
             self.free_running = 0.0;
             self.leap = true;
+            self.reanchor(0.0, 0);
         }
     }
 
     pub fn seek(&mut self, position: f64) {
         self.position = position;
         self.free_running = position;
+        self.reanchor(position, 0);
         self.leap = true; // the next quantum's first block flags discontinuous (TS sets `#leap` on any position set)
     }
 
@@ -178,11 +202,15 @@ impl Transport {
 
     /// Advance one 128-sample quantum and return its block. Fixed bpm with no events → exactly one
     /// block spanning the whole quantum (the no-event path of the TS block loop). The per-quantum
-    /// accumulation matches TS's `timeInfo.advanceTo` step-by-step.
+    /// position is counted in frames from the anchor, so it carries no accumulated error.
     pub fn process_quantum(&mut self) -> Block {
         let p0 = self.position;
-        let p1 = p0 + samples_to_pulses(RENDER_QUANTUM as f64, self.bpm, self.sample_rate);
+        if self.bpm != self.anchor_bpm {
+            self.reanchor(p0, 0);
+        }
+        let p1 = self.pulse_at(RENDER_QUANTUM);
         self.position = p1;
+        self.anchor_offset += RENDER_QUANTUM as i64;
         Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
     }
 
@@ -201,6 +229,9 @@ impl Transport {
         let mut s0: usize = 0;
         let mut discontinuous = core::mem::replace(&mut self.leap, false);
         self.eval_tempo(tempo, p0);
+        if self.bpm != self.anchor_bpm {
+            self.reanchor(p0, 0);
+        }
         while s0 < RENDER_QUANTUM {
             // Re-resolve the active marker after a jump / seek or a marker edit (TS runs this at the top
             // of its block loop, REGARDLESS of the track's enabled flag): the marker at or before `p0`,
@@ -214,8 +245,7 @@ impl Transport {
                     self.marker_changed = true;
                 }
             }
-            let sn = RENDER_QUANTUM - s0;
-            let p1 = p0 + samples_to_pulses(sn as f64, self.bpm, self.sample_rate);
+            let p1 = self.pulse_at(RENDER_QUANTUM);
             let mut action_position = f64::INFINITY;
             let mut action = Action::None;
             // --- MARKER --- (TS evaluates markers FIRST; later actions only take over when strictly earlier)
@@ -235,7 +265,7 @@ impl Transport {
                             if let Some(next) = markers.get(start + 1) {
                                 if next.uuid != current_uuid // must be different from the current
                                     && prev.position < p0    // must be in the past
-                                    && next.position < p1    // must be inside the block
+                                    && next.position <= p1   // inside the block or on its end (like the loop end below)
                                 {
                                     action_position = next.position;
                                     action = Action::Marker(start);
@@ -247,7 +277,7 @@ impl Transport {
             }
             // --- LOOP SECTION --- Markers win ties (TS: `loopTo < actionPosition`, strict). Against the
             // block end the loop keeps `<=` (deviation from TS's `p1 > loopTo`): a quantum boundary can
-            // land EXACTLY on `loop_to` here (the pulse math is exact for round rates), and emitting the
+            // land EXACTLY on `loop_to` here (positions are exact on whole frames), and emitting the
             // full block would advance `p0` onto `loop_to`, so the wrap (`p0 < loop_to`) would never fire.
             if self.loop_enabled
                 && self.loop_from < self.loop_to
@@ -275,11 +305,10 @@ impl Transport {
             }
             match action {
                 Action::None => {
-                    let s1 = s0 + sn;
-                    emit(&Block {p0, p1, s0, s1, bpm: self.bpm, discontinuous});
+                    emit(&Block {p0, p1, s0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous});
                     discontinuous = false;
                     p0 = p1;
-                    s0 = s1;
+                    s0 = RENDER_QUANTUM;
                 }
                 Action::Marker(start) => {
                     let prev = markers[start];
@@ -293,6 +322,7 @@ impl Transport {
                                 s0 = self.emit_until(action_position, p0, s0, discontinuous, &mut emit);
                                 p0 = prev.position;
                                 self.eval_tempo(tempo, p0);
+                                self.reanchor(p0, -(s0 as i64));
                                 discontinuous = true;
                             } else {
                                 // plays exhausted: fall through into the next section, NO split / jump
@@ -312,6 +342,7 @@ impl Transport {
                     s0 = s1;
                     p0 = action_position;
                     self.bpm = new_bpm;
+                    self.reanchor(p0, -(s0 as i64));
                 }
                 Action::Loop => {
                     // the partial block up to the loop end carries the current flag; the next block,
@@ -324,22 +355,28 @@ impl Transport {
                         self.playing = false;
                         self.position = action_position;
                         self.free_running = action_position;
+                        self.reanchor(action_position, 0);
                         return;
                     }
                     p0 = self.loop_from;
                     self.eval_tempo(tempo, p0);
+                    self.reanchor(p0, -(s0 as i64));
                     discontinuous = true;
                 }
             }
         }
         self.position = p0;
         self.free_running = p0;
+        self.anchor_offset += RENDER_QUANTUM as i64;
+        self.leap = discontinuous; // a jump on the quantum's last frame flags the next quantum's first block
     }
 
     /// Emit the block from `p0` to `action_position` (if it spans any samples) and return the new
-    /// sample cursor. Shared by the tempo-change and loop-wrap splits.
+    /// sample cursor. Shared by the tempo-change and loop-wrap splits. The split frame is counted from
+    /// the anchor, so a split that falls on a whole frame lands on it exactly.
     fn emit_until<F: FnMut(&Block)>(&self, action_position: f64, p0: f64, s0: usize, discontinuous: bool, emit: &mut F) -> usize {
-        let s1 = s0 + pulses_to_samples(action_position - p0, self.bpm, self.sample_rate) as i64 as usize;
+        let frames = pulses_to_frames(action_position - self.anchor, self.bpm, self.sample_rate) as i64;
+        let s1 = (frames - self.anchor_offset).clamp(s0 as i64, RENDER_QUANTUM as i64) as usize;
         if s1 > s0 {
             emit(&Block {p0, p1: action_position, s0, s1, bpm: self.bpm, discontinuous});
         }

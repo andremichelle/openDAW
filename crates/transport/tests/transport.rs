@@ -17,18 +17,22 @@ fn quantum_advances_position() {
 }
 
 #[test]
-fn per_quantum_accumulation_is_exact() {
-    // Advancing N quanta one-by-one must match a step-by-step reference exactly (same summation
-    // order as the TS engine), so positions stay bit-identical over a long render.
+fn per_quantum_position_carries_no_accumulated_error() {
+    // #533: the position after N quanta is the frame count converted once, not N summed quantum lengths.
     let (sample_rate, bpm) = (48000.0, 140.0);
     let mut transport = Transport::new(sample_rate, bpm);
     transport.play();
-    let mut reference = 0.0;
     for _ in 0..2000 {
         transport.process_quantum();
-        reference += samples_to_pulses(RENDER_QUANTUM as f64, bpm, sample_rate);
     }
-    assert_eq!(transport.position(), reference);
+    assert_eq!(transport.position(), 2000.0 * 128.0 * 140.0 * 960.0 / (60.0 * 48000.0));
+    // 4 s at 137 bpm is exactly 8768 pulses
+    let mut transport = Transport::new(48000.0, 137.0);
+    transport.play();
+    for _ in 0..1500 {
+        transport.process_quantum();
+    }
+    assert_eq!(transport.position(), 8768.0);
 }
 
 #[test]

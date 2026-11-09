@@ -1111,6 +1111,42 @@ mod tests {
         out
     }
 
+    // #533: a looped bounce at 44.1 kHz / 120 bpm, region two loops of 4 s, source exactly one loop long. The
+    // blocks come from the real transport. The second cycle must start on frame 176400 and read the source to its
+    // last frame, so the bounce's last frame is not silent.
+    #[test]
+    fn second_loop_cycle_starts_on_its_whole_frame() {
+        let (rate, loop_frames) = (44_100.0f32, 176_400usize);
+        let source: Vec<f32> = (0..loop_frames).map(|index| 0.25 + 0.5 * index as f32 / loop_frames as f32).collect();
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 15_360.0;
+        region.loop_duration = 7_680.0;
+        let tempo = TempoMap::fixed(120.0);
+        let mut cursor = NativeCursor::new();
+        let mut transport = transport::transport::Transport::new(rate, 120.0);
+        transport.play();
+        let mut out: Vec<f32> = Vec::with_capacity(2 * loop_frames + 128);
+        let mut index = 0u32;
+        while out.len() < 2 * loop_frames {
+            let mut blocks = Vec::new();
+            transport.render_quantum(None, &[], false, |block| blocks.push(*block));
+            let mut output = AudioBuffer::new();
+            for block in blocks {
+                let block = Block {index, flags: BlockFlags::create(true, index == 0, true, false),
+                    p0: block.p0, p1: block.p1, s0: block.s0 as u32, s1: block.s1 as u32, bpm: block.bpm};
+                let (from, to) = (block.p0.max(region.position), block.p1.min(region.position + region.duration));
+                if from < to {
+                    let _ = render_region(&mut output, &region, &source, &source, rate, from, to, &block, rate, &tempo, &mut cursor);
+                }
+                index += 1;
+            }
+            out.extend_from_slice(&output.left[..128]);
+        }
+        assert_eq!(out[loop_frames], source[0], "the second cycle starts on frame 176400");
+        assert_eq!(out[loop_frames - 1], source[loop_frames - 1], "the first cycle ends on its last frame");
+        assert_eq!(out[2 * loop_frames - 1], source[loop_frames - 1], "the bounce's last frame reads the source's last frame");
+    }
+
     // The fix for "monitoring-with-effects gives the tape device no signal": the armed tape sums the staged
     // live input into its OWN output (no separate downstream node), so the tape device — its meter and any
     // side-chain tapping it (e.g. a vocoder modulator) — carries the live input. No regions, transport idle.
