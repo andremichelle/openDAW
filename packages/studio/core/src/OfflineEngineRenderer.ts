@@ -20,6 +20,7 @@ import {
     EngineCommands,
     EngineState,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
@@ -90,6 +91,7 @@ export class OfflineEngineRenderer {
         Communicator.executor<EngineToClient>(engineMessenger.channel("engine-to-client"), {
             log: (message: string): void => console.log("OFFLINE-ENGINE", message),
             error: (reason: unknown) => console.error("OFFLINE-ENGINE", reason),
+            notice: (notice: EngineNotice): void => console.warn("OFFLINE-ENGINE", notice),
             ready: (): void => {},
             fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => new Promise((resolve, reject) => {
                 const handler = source.sampleManager.getOrCreate(uuid)

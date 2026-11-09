@@ -13,6 +13,7 @@ import {
     Observer,
     Option,
     Procedure,
+    RuntimeNotifier,
     SetMultimap,
     Subscription,
     SyncStream,
@@ -24,7 +25,9 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
     ClipSequencingUpdates,
+    DeviceBoxUtils,
     EngineCommands,
+    EngineNotice,
     EngineProcessorAttachment,
     EngineSettings,
     EngineSettingsSchema,
@@ -32,6 +35,7 @@ import {
     EngineStateSchema,
     EngineToClient,
     ExportConfiguration,
+    LabeledAudioOutput,
     MonitoringMapEntry,
     NoteSignal,
     PERF_BUFFER_SIZE,
@@ -237,6 +241,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
                 error: (reason: unknown) => this.dispatchEvent(new ErrorEvent("error", {error: reason})),
+                notice: (notice: EngineNotice): void => RuntimeNotifier.notify({message: this.#describeNotice(notice)}),
                 deviceMessage: (uuid: string, message: string): void => {
                     for (const listener of this.#deviceMessageListeners.get(uuid)) {
                         listener(message)
@@ -397,6 +402,32 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
+
+    #describeNotice(notice: EngineNotice): string {
+        const device = this.#labelOf(notice.device)
+        switch (notice.type) {
+            case "sidechain-loop":
+                return `${device} listens to ${this.#labelOf(notice.source)}, which it feeds. This sidechain is a feedback loop.`
+            case "non-finite":
+                return `${device} was reset because its output overflowed in a feedback loop.`
+        }
+    }
+
+    #labelOf(uuid: string): string {
+        const bytes = UUID.parse(uuid)
+        const device = this.#project.boxGraph.findBox(bytes).flatMap(box => DeviceBoxUtils.isDeviceBox(box)
+            ? Option.wrap(DeviceBoxUtils.lookupLabelField(box).getValue()) : Option.None)
+        if (device.nonEmpty()) {return device.unwrap()}
+        const find = (outputs: Iterable<LabeledAudioOutput>): Option<string> => {
+            for (const output of outputs) {
+                if (UUID.equals(output.address.uuid, bytes)) {return Option.wrap(output.label)}
+                const nested = output.children().flatMap(children => find(children))
+                if (nested.nonEmpty()) {return nested}
+            }
+            return Option.None
+        }
+        return find(this.#project.rootBoxAdapter.labeledAudioOutputs()).unwrapOrElse("A device")
+    }
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get perfBuffer(): Float32Array {return this.#perfBuffer}

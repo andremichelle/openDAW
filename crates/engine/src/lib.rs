@@ -19,7 +19,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
@@ -1626,6 +1626,9 @@ struct Engine {
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
     output_registry: AudioOutputBufferRegistry<NodeId>,
+    // every resolved sidechain as (consumer node, consumer device, source node, source box), rebuilt per resolve
+    sidechain_links: Vec<(NodeId, Uuid, NodeId, Uuid)>,
+    looped_sidechains: BTreeSet<Uuid>,
     // The SEND/RETURN bus registry: each non-primary `AudioBusBox`'s summing bus (`AudioBusProcessor`), keyed
     // by the bus box uuid, built when its bus-type audio unit is wired. A unit's `output` (25) or an
     // `AuxSendBox`'s `targetBus` resolves through this to the sum node to feed; the PRIMARY bus is ABSENT (it
@@ -1710,6 +1713,8 @@ impl Engine {
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             field_overrides: BTreeMap::new(),
             output_registry: AudioOutputBufferRegistry::new(),
+            sidechain_links: Vec::new(),
+            looped_sidechains: BTreeSet::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
@@ -4046,6 +4051,38 @@ pub extern "C" fn report_message_len() -> usize {
 #[no_mangle]
 pub extern "C" fn report_message_clear() {
     unsafe { REPORT_MESSAGE.get() }.1 = 0;
+}
+
+const NOTICE_MESSAGE_CAPACITY: usize = 1024;
+const NOTICE_LINE_RESERVE: usize = 128;
+shared_static! {
+    static NOTICE_MESSAGE: ([u8; NOTICE_MESSAGE_CAPACITY], usize) = ([0; NOTICE_MESSAGE_CAPACITY], 0);
+}
+
+// a non-fatal line for the user (tab-separated, kind first), read and cleared after `render`
+pub(crate) fn notice(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    let (buffer, written) = unsafe { NOTICE_MESSAGE.get() };
+    if NOTICE_MESSAGE_CAPACITY - *written < NOTICE_LINE_RESERVE {return}
+    let mut writer = BufferWriter {buffer, written: *written};
+    if writer.written > 0 {let _ = writer.write_str("\n");}
+    let _ = writer.write_fmt(args);
+    *written = writer.written;
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_ptr() -> *const u8 {
+    unsafe { NOTICE_MESSAGE.get() }.0.as_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_len() -> usize {
+    unsafe { NOTICE_MESSAGE.get() }.1
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_clear() {
+    unsafe { NOTICE_MESSAGE.get() }.1 = 0;
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.

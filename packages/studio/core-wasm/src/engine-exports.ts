@@ -1,6 +1,6 @@
 import {Option} from "@opendaw/lib-std"
 import {RenderQuantum} from "@opendaw/lib-dsp"
-import {SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
+import {EngineNotice, SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
@@ -201,6 +201,10 @@ export type EngineExports = {
     report_message_ptr: () => number
     report_message_len: () => number
     report_message_clear: () => void
+    // non-fatal notices for the user, one tab-separated line each, read and cleared after `render`
+    notice_message_ptr: () => number
+    notice_message_len: () => number
+    notice_message_clear: () => void
     // the signal graph as text lines (see engine `signal_graph_report`), returns the full length
     signal_graph_report: (outPtr: number, max: number) => number
     compensation_latency: () => number // frames the heard output lags the timeline through delay compensation
@@ -223,6 +227,19 @@ export const takeReportMessage = (exports: EngineExports, memory: WebAssembly.Me
     const message = decodeUtf8(new Uint8Array(memory.buffer, exports.report_message_ptr(), length))
     exports.report_message_clear()
     return Option.wrap(message)
+}
+
+export const takeNotices = (exports: EngineExports, memory: WebAssembly.Memory): ReadonlyArray<EngineNotice> => {
+    const length = exports.notice_message_len()
+    if (length === 0) {return []}
+    const lines = decodeUtf8(new Uint8Array(memory.buffer, exports.notice_message_ptr(), length)).split("\n")
+    exports.notice_message_clear()
+    return lines.flatMap((line): ReadonlyArray<EngineNotice> => {
+        const [type, device, source] = line.split("\t")
+        if (type === "sidechain-loop") {return [{type, device, source}]}
+        if (type === "non-finite") {return [{type, device}]}
+        return []
+    })
 }
 
 export const readSignalGraph = (exports: EngineExports, memory: WebAssembly.Memory): SignalGraph => {

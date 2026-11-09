@@ -28,6 +28,7 @@ import {
     EngineCommands,
     EngineSettingsSchema,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
@@ -49,7 +50,7 @@ import {
     WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exports"
+import {EngineExports, settleCompensation, takeNotices, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
@@ -108,6 +109,7 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
         throw describeEngineTrap(engine, memory, rendered.error)
     }
     takeReportMessage(engine, memory).ifSome(message => {throw new Error(`engine: ${message}`)})
+    takeNotices(engine, memory).forEach(notice => console.warn("engine notice", notice))
     midi.drain(engine, memory, 0)
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
@@ -152,6 +154,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 dispatcher => new class implements EngineToClient {
                     log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                     error(reason: unknown): void {dispatcher.dispatchAndForget(this.error, reason)}
+                    notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                     deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}

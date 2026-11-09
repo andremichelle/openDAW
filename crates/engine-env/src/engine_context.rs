@@ -54,6 +54,7 @@ pub struct EngineContext {
     labels: BTreeMap<NodeId, String>,
     owners: BTreeMap<NodeId, [u8; 16]>,
     order_edges: BTreeSet<(NodeId, NodeId)>,
+    feedback: BTreeSet<NodeId>,
     edge_delays: BTreeMap<(NodeId, NodeId), u32>,
     compensation_cap: u32,
     compensation_exceeded: bool,
@@ -77,6 +78,7 @@ impl EngineContext {
             labels: BTreeMap::new(),
             owners: BTreeMap::new(),
             order_edges: BTreeSet::new(),
+            feedback: BTreeSet::new(),
             edge_delays: BTreeMap::new(),
             compensation_cap: u32::MAX,
             compensation_exceeded: false,
@@ -203,6 +205,38 @@ impl EngineContext {
             }
         }
         false
+    }
+
+    /// The nodes on every cycle the edge `source -> target` closes, empty when it closes none.
+    pub fn feedback_nodes(&self, source: NodeId, target: NodeId) -> BTreeSet<NodeId> {
+        let ancestors = |node: NodeId| {
+            let mut stack = alloc::vec![node];
+            let mut seen = BTreeSet::new();
+            while let Some(current) = stack.pop() {
+                for &predecessor in self.graph.get_predecessors(current) {
+                    if seen.insert(predecessor) {
+                        stack.push(predecessor);
+                    }
+                }
+            }
+            seen
+        };
+        let mut upstream = ancestors(source);
+        if !upstream.contains(&target) && source != target {
+            return BTreeSet::new();
+        }
+        upstream.insert(source);
+        upstream.into_iter().filter(|&node| node == target || ancestors(node).contains(&target)).collect()
+    }
+
+    /// Flag exactly `nodes` as sitting on a feedback loop, telling only the processors whose flag changed.
+    pub fn set_feedback(&mut self, nodes: BTreeSet<NodeId>) {
+        for id in self.feedback.symmetric_difference(&nodes) {
+            if let Some(processor) = self.processors.get(id) {
+                processor.borrow_mut().set_feedback(nodes.contains(id));
+            }
+        }
+        self.feedback = nodes;
     }
 
     /// Snapshot of every node and edge with reported latencies and arrivals. Diagnostic, allocates.

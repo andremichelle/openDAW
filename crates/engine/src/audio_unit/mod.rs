@@ -18,7 +18,7 @@
 //! `params` (device parameter automation) + `tests` (the whole suite, whitebox over every submodule).
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
@@ -863,6 +863,7 @@ impl Engine {
             self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
             self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
             self.resolve_sinks();   // wire each audio sink's tap -> target bus (no master fallback)
+            self.resolve_feedback();
             self.broadcasts.sweep(); // drop telemetry entries whose processor was torn down (generation bump)
             self.solo_dirty.set(true); // routing may have changed: the solo walk must re-resolve
         }
