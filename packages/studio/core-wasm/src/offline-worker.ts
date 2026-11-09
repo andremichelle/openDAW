@@ -55,6 +55,7 @@ import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modul
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {QuantumStepper} from "./quantum-stepper"
+import {SilenceTail} from "./silence-tail"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
@@ -397,14 +398,13 @@ Communicator.executor<OfflineEngineProtocol>(
         },
         async render(config: OfflineEngineRenderConfig) {
             const engine = state.unwrap("state.render")
-            const {silenceThresholdDb, silenceDurationSeconds, maxDurationSeconds} = config
-            const threshold = dbToGain(silenceThresholdDb ?? -72.0)
-            const silenceFramesNeeded = Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate)
+            const {silenceThresholdDb, silenceDurationSeconds, minDurationSeconds, maxDurationSeconds} = config
+            const tail = new SilenceTail(dbToGain(silenceThresholdDb ?? -72.0),
+                Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate),
+                Math.ceil((minDurationSeconds ?? 0) * engine.sampleRate), engine.sampleRate / 4)
             const maxFrames = isDefined(maxDurationSeconds) ? Math.ceil(maxDurationSeconds * engine.sampleRate) : Infinity
             const {numberOfChannels} = state.unwrap("state.render")
             const chunks: Float32Array[][] = Arrays.create(() => [], numberOfChannels)
-            let consecutiveSilentFrames = 0
-            let hasHadAudio = false
             let lastYield = 0
             engine.running = true
             await Wait.timeSpan(TimeSpan.seconds(0))
@@ -415,21 +415,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 const start = trimStart(engine)
                 if (start === RenderQuantum) {continue}
                 const kept = start === 0 ? outputChannels : outputChannels.map(channel => channel.subarray(start))
-                let maxSample = 0
-                for (const channel of kept) {
-                    for (const sample of channel) {
-                        const absoluteValue = Math.abs(sample)
-                        if (absoluteValue > maxSample) {maxSample = absoluteValue}
-                    }
-                }
-                const isSilent = maxSample <= threshold
-                if (maxSample > threshold) {hasHadAudio = true}
-                if (isSilent && hasHadAudio) {
-                    consecutiveSilentFrames += kept[0].length
-                    if (consecutiveSilentFrames >= silenceFramesNeeded) {break}
-                } else {
-                    consecutiveSilentFrames = 0
-                }
+                if (!tail.accept(kept)) {break}
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     chunks[channel].push(kept[channel].slice())
                 }
@@ -440,7 +426,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     await new Promise(resolve => setTimeout(resolve, 0))
                 }
             }
-            const framesToKeep = engine.totalFrames - consecutiveSilentFrames + Math.min(engine.sampleRate / 4, consecutiveSilentFrames)
+            const framesToKeep = tail.framesToKeep
             return Arrays.create(channelIndex => {
                 const total = new Float32Array(framesToKeep)
                 let offset = 0

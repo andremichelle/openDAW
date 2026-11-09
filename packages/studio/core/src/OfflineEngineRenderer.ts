@@ -275,10 +275,11 @@ export class OfflineEngineRenderer {
                 ? {startPosition: 0 as ppqn, endPosition: source.lastRegionAction()}
                 : {startPosition: r.start, endPosition: r.end}
         })
-        const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
+        const minDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition)
+        const maxDurationSeconds = minDurationSeconds + 30
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer =>
-                renderer.render({maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
+                renderer.render({minDurationSeconds, maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
         boxGraph.endTransaction()
@@ -311,7 +312,7 @@ export class OfflineEngineRenderer {
         const numFrames = Math.round(seconds * sampleRate)
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer => tail
-                ? renderer.render({maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
+                ? renderer.render({minDurationSeconds: seconds, maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
                 : renderer.#renderFrames(start, numFrames, passes, progress, abortSignal)))
         boxGraph.beginTransaction()
         loopArea.enabled.setValue(was.loopEnabled)
