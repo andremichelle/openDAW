@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-boxes",
-  "version": "0.0.120",
+  "version": "0.0.121",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -24,11 +24,11 @@
   "dependencies": {
     "@opendaw/lib-box": "^0.0.103",
     "@opendaw/lib-std": "^0.0.89",
-    "@opendaw/studio-enums": "^0.1.12"
+    "@opendaw/studio-enums": "^0.1.13"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-forge-boxes": "^0.1.7",
+    "@opendaw/studio-forge-boxes": "^0.1.8",
     "@opendaw/typescript-config": "^0.0.32"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"
