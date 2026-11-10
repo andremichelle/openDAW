@@ -104,6 +104,16 @@ describe("device live data", () => {
         expect(compIn, "compressor input dB is hot").toBeGreaterThan(-20)
         expect(compRed, "compressor reduces a hot signal over a -40 dB threshold").toBeLessThan(-3)
         expect(compOut, "compressor output dB present").toBeGreaterThan(-60)
+        // Compressor fast levels at [1] [input dB, output dB]: untouched while unsubscribed, live once subscribed.
+        const compressorStream = findEntry(entries, compressor.address.uuid, [1])
+        expect(compressorStream.len).toBe(2)
+        expect(floats(compressorStream), "no fast levels while unsubscribed").toStrictEqual([0, 0])
+        engine.broadcast_set_active(compressorStream.index, 1)
+        engine.render()
+        const [streamIn, streamOut] = floats(compressorStream)
+        expect(streamIn, "fast input dB is hot").toBeGreaterThan(-20)
+        expect(streamOut, "fast output dB present").toBeGreaterThan(-60)
+        expect(floats(compressorEditor), "the editor slot keeps its values").toHaveLength(3)
         // Gate editor values [input dB, output dB, envelope dB]: open on a hot signal.
         const gateEditor = findEntry(entries, gate.address.uuid, [0])
         const [gateIn, gateOut, gateEnv] = floats(gateEditor)
