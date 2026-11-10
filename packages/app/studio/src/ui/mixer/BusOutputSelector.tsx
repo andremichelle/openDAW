@@ -2,6 +2,7 @@ import css from "./OutputSelector.sass?inline"
 import {assert, DefaultObservableValue, Lifecycle, Predicate, StringComparator, UUID} from "@opendaw/lib-std"
 import {PointerField} from "@opendaw/lib-box"
 import {AudioBusBoxAdapter, AudioBusFactory, AudioUnitOutput} from "@opendaw/studio-adapters"
+import {busColor} from "@/ui/mixer/AuxSend"
 import {AudioUnitType, Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {createElement, DomElement, Frag} from "@opendaw/lib-jsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
@@ -36,10 +37,11 @@ export const BusOutputSelector = ({lifecycle, project, output, pointer, selectab
                 symbol.setValue(IconSymbol.NoAudio)
             },
             some: (adapter) => {
-                const color = adapter.colorField.getValue()
                 label.textContent = adapter.labelField.getValue()
-                label.style.color = color
-                iconCartridge.style.color = color
+                busColor(adapter).ifSome(color => {
+                    label.style.color = color.toString()
+                    iconCartridge.style.color = color.toString()
+                })
                 symbol.setValue(IconSymbol.fromName(adapter.iconField.getValue()))
             }
         })

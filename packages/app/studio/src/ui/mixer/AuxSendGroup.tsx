@@ -6,13 +6,12 @@ import {
     MutableObservableValue,
     Optional,
     SortedSet,
-    StringComparator,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
-import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
+import {AuxSend, sendTargets} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {MenuItem, Project} from "@opendaw/studio-core"
 import {AuxSendBox, MasteringDeviceBox} from "@opendaw/studio-boxes"
@@ -72,13 +71,11 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: 
     groupElement.appendChild(
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
             const currentAuxSends = audioUnitAdapter.auxSends.adapters()
-            const availableSends = project.rootBoxAdapter.audioBusses.adapters()
-                .toSorted((a, b) => StringComparator(a.labelField.getValue(), b.labelField.getValue()))
-                .filter(auxSendAdapter => !auxSendAdapter.deviceHost().audioUnitBoxAdapter().isOutput)
-                .map(auxSendAdapter => MenuItem.default({
+            const availableSends = sendTargets(project, audioUnitAdapter)
+                .map(({bus: auxSendAdapter, selectable}) => MenuItem.default({
                     label: auxSendAdapter.labelField.getValue(),
                     icon: auxSendAdapter.deviceHost().audioUnitBoxAdapter().input.icon,
-                    selectable: !currentAuxSends.some(send => send.targetBus.box.address.equals(auxSendAdapter.address))
+                    selectable
                 }).setTriggerProcedure(() => project.editing.modify(() => {
                     AuxSendBox.create(project.boxGraph, UUID.generate(), box => {
                         box.audioUnit.refer(audioUnitAdapter.box.auxSends)
@@ -124,7 +121,8 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: 
         onAdd: (adapter: AuxSendBoxAdapter) => {
             const terminator = lifecycle.spawn()
             const element: HTMLElement = <AuxSend lifecycle={terminator}
-                                                  editing={project.editing}
+                                                  project={project}
+                                                  audioUnitAdapter={audioUnitAdapter}
                                                   adapter={adapter}/>
             groupElement.appendChild(element)
             entries.add({element, terminator, uuid: adapter.uuid})
