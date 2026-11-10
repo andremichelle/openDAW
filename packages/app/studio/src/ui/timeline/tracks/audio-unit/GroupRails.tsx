@@ -12,8 +12,11 @@ const className = Html.adoptStyleSheet(css, "GroupRails")
 export class GroupRails implements Terminable {
     readonly #lifecycle: Terminator
     readonly #rails: Map<AudioUnitBox, {button: HTMLButtonElement, lifecycle: Terminator}>
-    constructor(readonly project: Project, readonly container: Element,
-                readonly horizontal: boolean, readonly reveal: Procedure<AudioUnitBox>) {
+
+    constructor(readonly project: Project,
+                readonly container: Element,
+                readonly horizontal: boolean,
+                readonly reveal: Procedure<AudioUnitBox>) {
         this.#lifecycle = new Terminator()
         this.#rails = new Map()
         if (container instanceof HTMLElement) {

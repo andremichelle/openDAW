@@ -127,7 +127,7 @@ describe("track groups on the real WASM engine", () => {
         const inner = project.editing.modify(() => project.grouping.create([unit]).unwrap()).unwrap()
         const outer = project.editing.modify(() => project.grouping.create([inner]).unwrap()).unwrap()
         expect(maxDiff(baseline, await render(project))).toBeLessThan(1e-6)
-        project.editing.modify(() => outer.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(outer).setValue(true))
         expect(maxDiff(baseline, await render(project))).toBeLessThan(1e-6)
         project.editing.modify(() => outer.solo.setValue(true))
         expect(maxDiff(baseline, await render(project))).toBeLessThan(1e-6)

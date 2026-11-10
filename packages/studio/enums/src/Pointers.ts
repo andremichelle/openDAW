@@ -72,4 +72,5 @@ export enum Pointers {
     GrooveStackEntries,
     KeyTrack,
     ChordTrack,
+    ViewState,
 }

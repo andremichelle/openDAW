@@ -7,7 +7,7 @@ export namespace GroupClipColumnMoves {
     export type Move = {clip: AnyClipBoxAdapter, index: int, track: TrackBoxAdapter}
     export const prepare = (project: Project, moves: ReadonlyArray<Move>, copy: boolean): (() => void) => {
         const moved = new Map(moves.map(move => [move.clip.box, move]))
-        const changes = project.audioUnitLayout.snapshot.rows.filter(row => row.unit.isGroup.getValue()).flatMap(({unit}) => {
+        const changes = project.audioUnitLayout.snapshot.rows.filter(row => AudioUnitGroups.isGroup(row.unit)).flatMap(({unit}) => {
             const tracks = AudioUnitGroups.subtree(project.rootBox, unit)
                 .flatMap(child => project.boxAdapters.adapterFor(child, AudioUnitBoxAdapter).tracks.values())
             const indices = new Set(moves.map(({clip}) => clip.indexField.getValue()))

@@ -193,13 +193,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     #terminated: boolean = false
     #workletStarted: boolean = false
 
-    private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
-        rootBox,
-        userInterfaceBoxes,
-        primaryAudioBusBox,
-        primaryAudioUnitBox,
-        timelineBox
-    }: ProjectMandatoryBoxes) {
+    private constructor(env: ProjectEnv,
+                        boxGraph: BoxGraph,
+                        {
+                            rootBox, userInterfaceBoxes, primaryAudioBusBox, primaryAudioUnitBox, timelineBox
+                        }: ProjectMandatoryBoxes) {
         this.#env = env
         this.boxGraph = boxGraph
         this.rootBox = rootBox

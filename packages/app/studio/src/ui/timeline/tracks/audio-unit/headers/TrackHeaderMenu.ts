@@ -5,6 +5,7 @@ import {Browser} from "@opendaw/lib-dom"
 import {isInstanceOf, Option, Procedure} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
+    AudioUnitGroups,
     DeviceAccepts,
     TrackBoxAdapter,
     TrackType,
@@ -29,7 +30,7 @@ export const installTrackHeaderMenu = (service: StudioService,
     const accepts: DeviceAccepts = inputAdapter.unwrap("Cannot unwrap input adapter").accepts
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)
     // An input that accepts neither (a Playfield slot) has no track type to offer.
-    const optTrackType = accepts === false || audioUnitBoxAdapter.box.isGroup.getValue() ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
+    const optTrackType = accepts === false || AudioUnitGroups.isGroup(audioUnitBoxAdapter.box) ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
     const {project} = service
     TrackGrouping.selectForMenu(project, audioUnitBoxAdapter.box)
     const {audioUnitFreeze, captureDevices, editing, selection} = project

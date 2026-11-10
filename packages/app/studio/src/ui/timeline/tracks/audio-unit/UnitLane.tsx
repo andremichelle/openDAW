@@ -2,7 +2,7 @@ import {Arrays, Client, DefaultObservableValue, Errors, Lifecycle, Option, panic
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioUnitBoxAdapter, InstrumentFactories, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitGroups, InstrumentFactories, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {AudioContentFactory, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
@@ -42,6 +42,7 @@ type Construct = {
 // (header + deactive body), carrying the unit head duties (channel controls, menu, editing focus, unit drag).
 export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}: Construct) => {
     const {project} = service
+    const {viewStates} = project.userEditingManager
     const {box} = audioUnitBoxAdapter
     const populateMenu = installTrackHeaderMenu(service, audioUnitBoxAdapter, Option.None)
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
@@ -54,17 +55,19 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             <h5 className="control-label"/>
         </div>
     )
-    if (audioUnitBoxAdapter.box.isGroup.getValue()) {
+    if (AudioUnitGroups.isGroup(audioUnitBoxAdapter.box)) {
+        const groupCollapsed = viewStates.groupCollapsed(audioUnitBoxAdapter.box)
         const toggle = () => {
-            project.editing.modify(() => audioUnitBoxAdapter.box.groupCollapsed.toggle())
+            project.editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))
             TrackGrouping.selectTracks(project, [audioUnitBoxAdapter.box])
         }
         const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group bus" onclick={toggle}
                                                   onpointerdown={(event: PointerEvent) => event.preventDefault()}/>
-        lifecycle.own(audioUnitBoxAdapter.box.groupCollapsed.catchupAndSubscribe(field => {
-            button.textContent = field.getValue() ? "▸" : "▾"
-            button.setAttribute("aria-expanded", String(!field.getValue()))
-            button.setAttribute("aria-label", field.getValue() ? "Expand group bus" : "Collapse group bus")
+        lifecycle.own(groupCollapsed.catchupAndSubscribe(owner => {
+            const collapsed = owner.getValue()
+            button.textContent = collapsed ? "▸" : "▾"
+            button.setAttribute("aria-expanded", String(!collapsed))
+            button.setAttribute("aria-label", collapsed ? "Expand group bus" : "Collapse group bus")
         }))
         labels.classList.add("group-labels")
         labels.prepend(button)
@@ -88,7 +91,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         )
     }
     iconHost.title = "Drag to move this track"
-    nameLabel.title = audioUnitBoxAdapter.box.isGroup.getValue() ? "Double-click to rename; drag to move this group bus" : ""
+    nameLabel.title = AudioUnitGroups.isGroup(audioUnitBoxAdapter.box) ? "Double-click to rename; drag to move this group bus" : ""
     const header: HTMLElement = (
         <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             {iconHost}
@@ -113,10 +116,10 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             </MenuButton>
         </div>
     )
-    const regionArea: HTMLElement = audioUnitBoxAdapter.box.isGroup.getValue()
+    const regionArea: HTMLElement = AudioUnitGroups.isGroup(audioUnitBoxAdapter.box)
         ? GroupOverview({lifecycle, service, unit: audioUnitBoxAdapter.box})
         : <div className={Html.buildClassList(RegionLaneClassName, "deactive")}/>
-    const clipArea: HTMLElement = box.isGroup.getValue()
+    const clipArea: HTMLElement = AudioUnitGroups.isGroup(box)
         ? GroupClipLane({lifecycle, service, unit: box, selection: trackManager.groupClipSelection})
         : <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
     const element: HTMLElement = (
@@ -127,10 +130,10 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         </div>
     )
     element.style.setProperty("--guide-display", "none")
-    installTrackResize(lifecycle, service, trackManager, audioUnitBoxAdapter.box.userInterface.height, element)
+    installTrackResize(lifecycle, service, trackManager, viewStates.height(audioUnitBoxAdapter.box), element)
     const isSampleDrag = (data: AnyDragData): boolean => data.type === "sample" || data.type === "file"
     const acceptsAudio = () => audioUnitBoxAdapter.input.adapter()
-        .mapOr(adapter => !audioUnitBoxAdapter.box.isGroup.getValue() && adapter.accepts === "audio", false)
+        .mapOr(adapter => !AudioUnitGroups.isGroup(audioUnitBoxAdapter.box) && adapter.accepts === "audio", false)
     TrackGrouping.installTrackSelection(lifecycle, project, header, audioUnitBoxAdapter.box, populateMenu)
     const audioUnitEditing = project.userEditingManager.audioUnit
     const clipCellsLifecycle = lifecycle.own(new Terminator())
@@ -178,7 +181,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             nameLabel.textContent = option.unwrapOrElse("")),
         // The clip column mirrors the ClipLane's placeholder cells (no clips can exist on this lane).
         service.timeline.clips.visible.catchupAndSubscribe(visibleOwner => {
-            if (box.isGroup.getValue()) {return}
+            if (AudioUnitGroups.isGroup(box)) {return}
             clipCellsLifecycle.terminate()
             Html.empty(clipArea)
             if (visibleOwner.getValue()) {

@@ -1,16 +1,18 @@
 import {AudioUnitLayout} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {isDefined, Optional} from "@opendaw/lib-std"
+import {Arrays, isDefined, Optional} from "@opendaw/lib-std"
 
 export class TrackListLayout<CONTENT> {
     readonly rows: ReadonlyArray<TrackListLayout.Row<CONTENT>>
     readonly units: ReadonlyArray<TrackListLayout.Unit>
     readonly boundaries: ReadonlyArray<AudioUnitLayout.Boundary>
-    constructor(channels: AudioUnitLayout, contents: ReadonlyMap<AudioUnitBox, TrackListLayout.Channel<CONTENT>>,
-                tail: ReadonlyArray<CONTENT> = []) {
-        const rows: TrackListLayout.Row<CONTENT>[] = []
-        const units: TrackListLayout.Unit[] = []
-        const offsets: number[] = []
+
+    constructor(channels: AudioUnitLayout,
+                contents: ReadonlyMap<AudioUnitBox, TrackListLayout.Channel<CONTENT>>,
+                tail: ReadonlyArray<CONTENT> = Arrays.empty()) {
+        const rows: Array<TrackListLayout.Row<CONTENT>> = []
+        const units: Array<TrackListLayout.Unit> = []
+        const offsets: Array<number> = []
         channels.visibleRows.forEach(channel => {
             offsets.push(rows.length)
             const content = contents.get(channel.unit)

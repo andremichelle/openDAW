@@ -213,7 +213,7 @@ export class ProjectApi {
 
     createInstrumentAt(factory: InstrumentFactory, insertion: AudioUnitInsertion): InstrumentProduct<InstrumentBox> {
         const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
-            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
         const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
         const product = this.createInstrument(factory, {destination})
         this.placeAudioUnitsAt([product.audioUnitBox], insertion)
@@ -225,7 +225,7 @@ export class ProjectApi {
 
     importAudioUnitsAt(bytes: ArrayBuffer, insertion: AudioUnitInsertion): ReadonlyArray<AudioUnitBox> {
         const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
-            .flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
         const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
         const imported = PresetDecoder.decode(bytes, this.#project.skeleton, undefined, destination)
         this.placeAudioUnitsAt(AudioUnitGroups.roots(imported), insertion)
@@ -234,7 +234,7 @@ export class ProjectApi {
 
     placeAudioUnitsAt(units: ReadonlyArray<AudioUnitBox>, insertion: AudioUnitInsertion): void {
         if (insertion.parent.isEmpty() && insertion.before.isEmpty()) {return}
-        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => unit.isGroup.getValue() ? Option.wrap(unit) : Option.None)
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
         const before = insertion.before.flatMap(uuid => this.#audioUnit(uuid))
             .flatMap(unit => AudioUnitGroups.parent(unit).equals(parent) ? Option.wrap(unit) : Option.None)
         this.#project.grouping.move(units, parent.unwrapOrUndefined(), before.unwrapOrUndefined())
@@ -748,7 +748,7 @@ export class ProjectApi {
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
         // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
         if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
-        if (audioUnitBox.isGroup.getValue()) {this.#project.grouping.deleteGroup(audioUnitBox); return}
+        if (AudioUnitGroups.isGroup(audioUnitBox)) {this.#project.grouping.deleteGroup(audioUnitBox); return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()

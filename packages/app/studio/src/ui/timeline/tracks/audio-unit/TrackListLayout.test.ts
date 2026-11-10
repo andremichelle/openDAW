@@ -17,7 +17,6 @@ const fixture = () => {
             box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent).unwrapOrUndefined()) : primaryAudioBusBox).input)
             box.index.setValue(index++)
             box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
-            box.isGroup.setValue(group)
         })
         if (group) {
             AudioBusBox.create(graph, UUID.generate(), box => {
@@ -40,9 +39,10 @@ const fixture = () => {
         [sibling, {unit: sibling, automationCollapsed: false, lanes: [{content: "sibling", automation: false}]}],
         [outside, {unit: outside, automationCollapsed: false, lanes: [{content: "outside", automation: false}]}]
     ])
-    const layout = () => new TrackListLayout(new AudioUnitLayout(rootBox), contents, ["modulator-head", "modulator-value"])
+    const collapsed = new Set<AudioUnitBox>()
+    const layout = () => new TrackListLayout(new AudioUnitLayout(rootBox, unit => collapsed.has(unit)), contents, ["modulator-head", "modulator-value"])
     const edit = (operation: () => void) => {graph.beginTransaction(); operation(); graph.endTransaction()}
-    return {outer, inner, child, output, rootBox, contents, layout, edit}
+    return {outer, inner, child, output, rootBox, contents, collapsed, layout, edit}
 }
 
 describe("flat track list projection", () => {
@@ -58,15 +58,14 @@ describe("flat track list projection", () => {
         expect(snapshot.rows.slice(-2).every(row => row.unit === undefined)).toBe(true)
     })
     it("hides nested rows and recalculates boundaries without losing nested collapse state", () => {
-        const {outer, inner, layout, edit} = fixture()
-        edit(() => inner.groupCollapsed.setValue(true))
+        const {outer, inner, layout, collapsed} = fixture()
+        collapsed.add(inner)
         expect(layout().rows.map(row => row.content)).toEqual([
             "outer", "outer-volume", "inner", "sibling", "outside", "modulator-head", "modulator-value"])
         expect(layout().boundaries.map(span => [span.start, span.end])).toEqual([[0, 4], [2, 3]])
-        edit(() => outer.groupCollapsed.setValue(true))
+        collapsed.add(outer)
         expect(layout().rows.map(row => row.content)).toEqual(["outer", "outside", "modulator-head", "modulator-value"])
-        edit(() => outer.groupCollapsed.setValue(false))
-        expect(inner.groupCollapsed.getValue()).toBe(true)
+        collapsed.delete(outer)
         expect(layout().rows.some(row => row.content === "notes")).toBe(false)
     })
     it("removes collapsed automation from both visible rows and group boundaries", () => {

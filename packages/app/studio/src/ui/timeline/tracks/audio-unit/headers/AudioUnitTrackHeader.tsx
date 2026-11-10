@@ -4,7 +4,7 @@ import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {EffectFactories, MenuItem} from "@opendaw/studio-core"
-import {AudioUnitBoxAdapter, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitGroups, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
 import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
@@ -134,10 +134,10 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => {
                 if (isDeviceDrag(data)) {hoverSwitch.hover()}
-                return (((data.type === "midi-effect" && !audioUnitBoxAdapter.box.isGroup.getValue())
+                return (((data.type === "midi-effect" && !AudioUnitGroups.isGroup(audioUnitBoxAdapter.box))
                     || data.type === "audio-effect") && data.uuids === null)
                     || (data.type === "script" && (data.script.target === "werkstatt"
-                        || data.script.target === "spielwerk" && !audioUnitBoxAdapter.box.isGroup.getValue()))
+                        || data.script.target === "spielwerk" && !AudioUnitGroups.isGroup(audioUnitBoxAdapter.box)))
             },
             drop: (_event: DragEvent, data: AnyDragData) => {
                 hoverSwitch.cancel()

@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Procedure, Provider, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Procedure, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -82,7 +82,7 @@ export namespace AudioUnitsClipboard {
         }).boxes))
 
     export const copyEntry = (audioUnitAdapter: AudioUnitBoxAdapter): Option<ClipboardAudioUnits> => {
-        if (audioUnitAdapter.type === AudioUnitType.Output || audioUnitAdapter.box.isGroup.getValue()) {return Option.None}
+        if (audioUnitAdapter.type === AudioUnitType.Output || AudioUnitGroups.isGroup(audioUnitAdapter.box)) {return Option.None}
         const audioUnitBox = audioUnitAdapter.box
         const dependencies = collectDependencies(audioUnitBox, false)
         const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
@@ -117,19 +117,25 @@ export namespace AudioUnitsClipboard {
                                       getEditedAudioUnit,
                                       placePasted
                                   }: Context): ClipboardHandler<ClipboardAudioUnits> => {
-        const copyAudioUnit = (): Option<ClipboardAudioUnits> => getEditedAudioUnit().flatMap(copyEntry)
+        const copyAudioUnit = (): Option<ClipboardAudioUnits> => getEditedAudioUnit().flatMap(audioUnit => {
+            if (AudioUnitGroups.isGroup(audioUnit.box)) {
+                RuntimeNotifier.notify({message: "Group buses cannot be copied. Use Duplicate instead.", icon: "Info"})
+                return Option.None
+            }
+            return copyEntry(audioUnit)
+        })
         return {
             canCopy: (): boolean => {
                 if (!getEnabled()) {return false}
                 const optAudioUnit = getEditedAudioUnit()
                 if (optAudioUnit.isEmpty()) {return false}
-                return !optAudioUnit.unwrap().isOutput && !optAudioUnit.unwrap().box.isGroup.getValue()
+                return !optAudioUnit.unwrap().isOutput
             },
             canCut: (): boolean => {
                 if (!getEnabled()) {return false}
                 const optAudioUnit = getEditedAudioUnit()
                 if (optAudioUnit.isEmpty()) {return false}
-                return !optAudioUnit.unwrap().isOutput && !optAudioUnit.unwrap().box.isGroup.getValue()
+                return !optAudioUnit.unwrap().isOutput && !AudioUnitGroups.isGroup(optAudioUnit.unwrap().box)
             },
             canPaste: (entry: ClipboardEntry): boolean => getEnabled() && entry.type === "audio-units",
             copy: copyAudioUnit,
@@ -253,7 +259,7 @@ export namespace AudioUnitsClipboard {
         const rootBox = rootBoxAdapter.box
         const existing = AudioUnitGroups.ordered(rootBox).filter(unit => unit !== pastedAudioUnit)
         let position = insertAfterIndex < 0 ? existing.findIndex(unit => AudioUnitGroups.parent(unit).isEmpty()
-            && (unit.isGroup.getValue() ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[unit.type.getValue()])
+            && (AudioUnitGroups.isGroup(unit) ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[unit.type.getValue()])
             >= AudioUnitOrdering[pastedAudioUnit.type.getValue()]) : existing.findIndex(unit => unit.index.getValue() > insertAfterIndex
             && !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined()))
         if (position === -1) {position = existing.length}

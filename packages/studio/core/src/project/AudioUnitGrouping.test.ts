@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from "vitest"
 import {asDefined, asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitGroups, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, DeviceHost, TransferAudioUnits} from "@opendaw/studio-adapters"
-import {AudioUnitBox, AuxSendBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, ViewStateBox, TrackBox} from "@opendaw/studio-boxes"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
 import {EffectFactories} from "../EffectFactories"
@@ -189,7 +189,7 @@ describe("track folders", () => {
         expectOrder(expanded.visibleRows.map(row => row.unit), [outer, inner, first, second, third, outside, project.primaryAudioUnitBox])
         expect(expanded.visibleRows.map(row => row.indent)).toEqual([0, 5, 10, 10, 5, 0, 0])
         expect(expanded.boundaries.map(span => [span.start, span.end, span.depth])).toEqual([[0, 5, 0], [1, 4, 1]])
-        project.editing.modify(() => inner.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(inner).setValue(true))
         const folded = project.audioUnitLayout.snapshot
         expectOrder(folded.visibleRows.map(row => row.unit), [outer, inner, third, outside, project.primaryAudioUnitBox])
         expect(folded.row(first).unwrap().visibleIndex).toBe(-1)
@@ -205,7 +205,7 @@ describe("track folders", () => {
         const notify = vi.fn()
         const subscription = project.audioUnitLayout.value.subscribe(notify)
         project.editing.modify(() => {
-            group.groupCollapsed.setValue(true)
+            project.userEditingManager.viewStates.groupCollapsed(group).setValue(true)
             third.index.setValue(32)
             first.index.setValue(15)
             second.index.setValue(16)
@@ -295,19 +295,19 @@ describe("track folders", () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const outer = asDefined(project.editing.modify(() => project.grouping.create([first, second, third]).unwrap()).unwrap())
         const inner = asDefined(project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap())
-        const visible = () => AudioUnitGroups.ordered(project.rootBox).filter(unit => !AudioUnitGroups.hidden(unit))
+        const visible = () => AudioUnitGroups.ordered(project.rootBox).filter(unit => !AudioUnitGroups.hidden(unit, group => project.userEditingManager.viewStates.groupCollapsed(group).getValue()))
         expect(visible()).toEqual([outer, inner, first, second, third, fourth, project.primaryAudioUnitBox])
         expect(project.audioUnitLayout.snapshot.boundaries.map(({indent, ...span}) => span)).toEqual([
             {unit: outer, start: 0, end: 5, depth: 0}, {unit: inner, start: 1, end: 4, depth: 1}
         ])
-        project.editing.modify(() => inner.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(inner).setValue(true))
         expect(project.audioUnitLayout.snapshot.boundaries.map(({indent, ...span}) => span)).toEqual([
             {unit: outer, start: 0, end: 3, depth: 0}, {unit: inner, start: 1, end: 2, depth: 1}
         ])
-        project.editing.modify(() => outer.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(outer).setValue(true))
         expect(project.audioUnitLayout.snapshot.boundaries.map(({indent, ...span}) => span)).toEqual([{unit: outer, start: 0, end: 1, depth: 0}])
-        project.editing.modify(() => outer.groupCollapsed.setValue(false))
-        expect(inner.groupCollapsed.getValue()).toBe(true)
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(outer).setValue(false))
+        expect(project.userEditingManager.viewStates.groupCollapsed(inner).getValue()).toBe(true)
         project.terminate()
     })
     it("creates FX buses after instruments and preserves explicit moves without rerouting sends", async () => {
@@ -391,7 +391,7 @@ describe("track folders", () => {
         expect(ordered.indexOf(pasted)).toBe(ordered.indexOf(outside) + 1)
         expect(AudioUnitGroups.subtree(project.rootBox, folder)).toEqual([folder, first, second])
         edited = project.boxAdapters.adapterFor(folder, AudioUnitBoxAdapter)
-        expect(handler.canCopy({clientX: 0, clientY: 0})).toBe(false)
+        expect(handler.copy().isEmpty()).toBe(true)
         expect(handler.canCut({clientX: 0, clientY: 0})).toBe(false)
         project.terminate()
     })
@@ -412,7 +412,7 @@ describe("track folders", () => {
     it("preserves custom and disconnected outputs during plain reorders and undo", async () => {
         const {project, units: [custom, disconnected, first, second]} = await setup()
         const bus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
-            "Custom", IconSymbol.AudioBus, AudioUnitType.Bus, Colors.blue)).unwrap()
+            "Custom", IconSymbol.AudioBus, AudioUnitType.Aux, Colors.blue)).unwrap()
         project.editing.modify(() => {
             custom.output.refer(bus.input)
             disconnected.output.defer()
@@ -499,7 +499,7 @@ describe("track folders", () => {
     it("derives membership, visibility and one layout publication from output-menu edits", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const group = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
-        project.editing.modify(() => group.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(group).setValue(true))
         const notify = vi.fn()
         const subscription = project.audioUnitLayout.value.subscribe(notify)
         project.editing.modify(() => {
@@ -525,20 +525,26 @@ describe("track folders", () => {
         subscription.terminate()
         project.terminate()
     })
-    it("does not turn aux sends or ordinary bus routes into folder membership", async () => {
-        const {project, units: [first, second]} = await setup()
+    it("turns every bus output into membership but never an aux send or an aux output", async () => {
+        const {project, units: [first, second, third]} = await setup()
         const group = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
-        const ordinary = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
-            "Ordinary bus", IconSymbol.AudioBus, AudioUnitType.Bus, Colors.blue)).unwrap()
+        const outputBus = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "Output bus", IconSymbol.AudioBus, AudioUnitType.Bus, Colors.blue)).unwrap()
+        const aux = project.editing.modify(() => AudioBusFactory.create(project.skeleton,
+            "Aux", IconSymbol.AudioBus, AudioUnitType.Aux, Colors.blue)).unwrap()
         project.editing.modify(() => {
             AuxSendBox.create(project.boxGraph, UUID.generate(), send => {
                 send.audioUnit.refer(second.auxSends)
                 send.targetBus.refer(asDefined(AudioUnitGroups.bus(group).unwrapOrUndefined()).input)
             })
-            second.output.refer(ordinary.input)
+            second.output.refer(outputBus.input)
+            third.output.refer(aux.input)
         })
+        const outputBusUnit = asInstanceOf(outputBus.output.targetVertex.unwrap().box, AudioUnitBox)
         expectOrder(AudioUnitGroups.children(project.rootBox, group), [first])
-        expect(AudioUnitGroups.parent(second).unwrapOrUndefined()).toBeUndefined()
+        expect(AudioUnitGroups.isGroup(outputBusUnit)).toBe(true)
+        expect(AudioUnitGroups.parent(second).unwrapOrUndefined()).toBe(outputBusUnit)
+        expect(AudioUnitGroups.parent(third).unwrapOrUndefined()).toBeUndefined()
         project.boxGraph.verifyPointers()
         project.terminate()
     })
@@ -593,7 +599,7 @@ describe("track folders", () => {
         const [nextCopy] = project.editing.modify(() => project.grouping.duplicate([copy])).unwrap()
         expect([label(first), label(copy), label(nextCopy)]).toEqual(["Mid", "Mid 2", "Mid 3"])
         const [outerCopy] = project.editing.modify(() => project.grouping.duplicate([outer])).unwrap()
-        const innerCopy = AudioUnitGroups.children(project.rootBox, outerCopy).find(unit => unit.isGroup.getValue())
+        const innerCopy = AudioUnitGroups.children(project.rootBox, outerCopy).find(unit => AudioUnitGroups.isGroup(unit))
         expect([label(outerCopy), label(asDefined(innerCopy))]).toEqual(["Group Bus 4", "Group Bus 5"])
         project.editing.modify(() => AudioUnitGroups.bus(first).unwrap().label.setValue("Mix 2024"))
         const [yearCopy] = project.editing.modify(() => project.grouping.duplicate([first])).unwrap()
@@ -670,11 +676,11 @@ describe("track folders", () => {
         const copies = project.editing.modify(() => TransferAudioUnits.transfer([group], project.skeleton, {includeGroupDescendants: true})).unwrap()
         const copy = copies[0]
         expect(copy).not.toBe(group)
-        expect(copy.isGroup.getValue()).toBe(true)
+        expect(AudioUnitGroups.isGroup(copy)).toBe(true)
         const children = AudioUnitGroups.children(project.rootBox, copy)
         expect(children.length).toBe(2)
         expect(children[0].output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(copy).unwrapOrUndefined())
-        const inner = children.find(unit => unit.isGroup.getValue())!
+        const inner = children.find(unit => AudioUnitGroups.isGroup(unit))!
         const leaf = AudioUnitGroups.children(project.rootBox, inner)[0]
         expect(leaf.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(inner).unwrapOrUndefined())
         project.boxGraph.verifyPointers()
@@ -727,15 +733,19 @@ describe("track folders", () => {
         const {project, units: [a, b]} = await setup()
         const group = project.editing.modify(() => project.grouping.create([a, b]).unwrap()).unwrap()
         project.editing.modify(() => {
-            group.groupCollapsed.setValue(true)
-            group.userInterface.height.setValue(132)
+            project.userEditingManager.viewStates.groupCollapsed(group).setValue(true)
+            project.userEditingManager.viewStates.height(group).setValue(132)
         })
-        expect(AudioUnitGroups.hidden(a)).toBe(true)
+        expect(AudioUnitGroups.hidden(a, unit => project.userEditingManager.viewStates.groupCollapsed(unit).getValue())).toBe(true)
         const loaded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
         const loadedGroup = loaded.boxGraph.findBox(group.address.uuid).unwrap() as typeof group
         const loadedA = loaded.boxGraph.findBox(a.address.uuid).unwrap() as typeof a
-        expect(loadedGroup.groupCollapsed.getValue()).toBe(true)
-        expect(loadedGroup.userInterface.height.getValue()).toBe(132)
+        const [entry, ...rest] = loaded.mandatoryBoxes.userInterfaceBoxes[0].viewStates.pointerHub.incoming()
+            .map(pointer => asInstanceOf(pointer.box, ViewStateBox))
+        expect(rest).toEqual([])
+        expect(entry.target.targetVertex.unwrap().box).toBe(loadedGroup)
+        expect(entry.groupCollapsed.getValue()).toBe(true)
+        expect(entry.height.getValue()).toBe(132)
         expect(AudioUnitGroups.parent(loadedA).unwrapOrUndefined()).toBe(loadedGroup)
         expect(loadedA.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(loadedGroup).unwrapOrUndefined())
         project.terminate()
@@ -749,7 +759,7 @@ describe("track folders", () => {
             const clip = project.api.createNoteClip(track, 0)
             const region = project.api.createNoteRegion({trackBox: track, position: 0, duration: 960})
             const effect = project.api.insertEffect(group.audioEffects, EffectFactories.AudioNamed.StereoTool)
-            group.groupCollapsed.setValue(true)
+            project.userEditingManager.viewStates.groupCollapsed(group).setValue(true)
             return [track, clip, region, effect]
         }).unwrap()
         const removed = [group, inner, a, b, AudioUnitGroups.bus(group).unwrapOrUndefined()!, AudioUnitGroups.bus(inner).unwrapOrUndefined()!, ...content]
@@ -763,7 +773,7 @@ describe("track folders", () => {
         const restored = project.boxGraph.findBox(group.address.uuid).unwrap() as typeof group
         const restoredInner = project.boxGraph.findBox(inner.address.uuid).unwrap() as typeof inner
         const restoredB = project.boxGraph.findBox(b.address.uuid).unwrap() as typeof b
-        expect(restored.groupCollapsed.getValue()).toBe(true)
+        expect(project.userEditingManager.viewStates.groupCollapsed(restored).getValue()).toBe(true)
         expect(AudioUnitGroups.parent(restoredInner).unwrapOrUndefined()).toBe(restored)
         expect(AudioUnitGroups.parent(restoredB).unwrapOrUndefined()).toBe(restoredInner)
         expect(restoredB.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(restoredInner).unwrapOrUndefined())

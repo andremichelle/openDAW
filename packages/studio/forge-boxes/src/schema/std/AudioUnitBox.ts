@@ -1,6 +1,6 @@
 import {AudioSendRouting, AudioUnitType, MaxTrackHeight, Pointers} from "@opendaw/studio-enums"
 import {BipolarConstraints, ParameterPointerRules} from "./Defaults"
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 
 export const AudioUnitBox: BoxSchema<Pointers> = {
     type: "box",
@@ -66,7 +66,7 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 pointerRules: {accepts: [Pointers.MasteringHost], mandatory: false, exclusive: true}
             },
             30: {
-                type: "object", name: "user-interface", class: {
+                type: "object", name: "user-interface", deprecated, class: {
                     name: "AudioUnitUserInterface",
                     fields: {
                         1: {type: "boolean", name: "automation-collapsed"},
@@ -75,12 +75,12 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 }
             },
             // 31/32 are reserved for obsolete folder pointers.
-            33: {type: "boolean", name: "is-group"},
-            34: {type: "boolean", name: "group-collapsed"}
+            33: {type: "boolean", name: "is-group", deprecated}, // every Bus is a group bus
+            34: {type: "boolean", name: "group-collapsed", deprecated} // 30 and 34 per user: ViewStateBox
         } as const
     },
     pointerRules: {
-        accepts: [Pointers.Selection, Pointers.Automation, Pointers.MetaData, Pointers.SideChain],
+        accepts: [Pointers.Selection, Pointers.Automation, Pointers.MetaData, Pointers.SideChain, Pointers.ViewState],
         mandatory: false
     }
 }

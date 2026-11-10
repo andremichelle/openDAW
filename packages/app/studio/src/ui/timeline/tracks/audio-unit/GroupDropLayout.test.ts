@@ -17,7 +17,6 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
             box.output.refer((isDefined(parent) ? asDefined(AudioUnitGroups.bus(parent).unwrapOrUndefined()) : primaryAudioBusBox).input)
             box.index.setValue(index++)
             box.type.setValue(group ? AudioUnitType.Bus : AudioUnitType.Instrument)
-            box.isGroup.setValue(group)
         })
         if (group) {
             AudioBusBox.create(graph, UUID.generate(), box => {
@@ -32,8 +31,9 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
     const after = create(false), last = create(false)
     output.index.setValue(index)
     graph.endTransaction()
+    const collapsed = new Set<AudioUnitBox>()
     const build = () => {
-        const layout = new AudioUnitLayout(rootBox)
+        const layout = new AudioUnitLayout(rootBox, unit => collapsed.has(unit))
         let position = 100
         const rows: GroupDropLayout.Row[] = layout.visibleRows.filter(row => row.unit !== output).map(({unit}) => {
             const height = unit === first ? firstHeight : unit === group ? groupHeight : 48
@@ -48,7 +48,7 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
             horizontal ? {clientX: coordinate, clientY: cross} : {clientX: cross, clientY: coordinate}, horizontal, originX).unwrap()
         return {layout, rows, row, resolve}
     }
-    return {first, group, child, inner, leaf, lastChild, after, last, output, graph, build}
+    return {first, group, child, inner, leaf, lastChild, after, last, output, collapsed, build}
 }
 
 const line = (target: GroupDropLayout.Target): number => target.row.bounds.y
@@ -105,10 +105,8 @@ describe("track drop layout", () => {
         }
     })
     it("retains both insertion edges around a collapsed group header", () => {
-        const {group, after, graph, build} = fixture()
-        graph.beginTransaction()
-        group.groupCollapsed.setValue(true)
-        graph.endTransaction()
+        const {group, after, collapsed, build} = fixture()
+        collapsed.add(group)
         const {row, resolve} = build()
         const header = row(group).header
         expect(resolve(header.y + 1).before).toBe(group)
@@ -152,10 +150,8 @@ describe("track drop layout", () => {
         expect(resolve(header.y + header.height / 2, header.x + header.width + 10).inside).toBe(false)
     })
     it("handles folded groups and a hidden Output without losing the final insertion slot", () => {
-        const {group, last, output, graph, build} = fixture()
-        graph.beginTransaction()
-        group.groupCollapsed.setValue(true)
-        graph.endTransaction()
+        const {group, last, output, collapsed, build} = fixture()
+        collapsed.add(group)
         const {rows, row, resolve} = build()
         expect(rows).toHaveLength(4)
         const target = resolve(row(last).bounds.y + row(last).bounds.height - 1)
@@ -201,10 +197,8 @@ describe("track drop layout", () => {
         }
     })
     it("retains both mixer insertion edges for collapsed groups", () => {
-        const {group, after, graph, build} = fixture({horizontal: true})
-        graph.beginTransaction()
-        group.groupCollapsed.setValue(true)
-        graph.endTransaction()
+        const {group, after, collapsed, build} = fixture({horizontal: true})
+        collapsed.add(group)
         const {row, resolve} = build()
         const header = row(group).header
         expect(resolve(header.x + 1, 150).before).toBe(group)

@@ -123,7 +123,7 @@ describe("group clip launcher", () => {
     })
     it("launches one column in a single batch, including hidden nested clips and muted clips, excluding outside tracks", async () => {
         const {project, group, nested, clips, play, launcher} = await setup()
-        project.editing.modify(() => {group.groupCollapsed.setValue(true); nested.groupCollapsed.setValue(true); clips[1].mute.setValue(true)})
+        project.editing.modify(() => {project.userEditingManager.viewStates.groupCollapsed(group).setValue(true); project.userEditingManager.viewStates.groupCollapsed(nested).setValue(true); clips[1].mute.setValue(true)})
         expect(launcher.clips(0).map(clip => clip.hue)).toEqual([0, 120])
         launcher.toggle(0)
         expect(ids(play.mock.calls[0][0])).toEqual(ids(clips.slice(0, 2).map(clip => clip.address.uuid)))

@@ -69,7 +69,7 @@ export namespace TrackGrouping {
     }
 
     export const ungroupSelectedTracks = (project: Project): void => {
-        const groups = project.audioUnitSelection.selected().filter(unit => unit.isGroup.getValue())
+        const groups = project.audioUnitSelection.selected().filter(unit => AudioUnitGroups.isGroup(unit))
             .toSorted((left, right) => AudioUnitGroups.depth(right) - AudioUnitGroups.depth(left))
         if (groups.length === 0) {return}
         const members = new Set(groups.flatMap(group => AudioUnitGroups.children(project.rootBox, group)))
@@ -106,7 +106,7 @@ export namespace TrackGrouping {
                 selectable: audioUnitSelection.nonEmpty()})
                 .setTriggerProcedure(() => groupSelectedTracks(project)),
             MenuItem.default({label: "Remove Group Bus (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(),
-                hidden: !unit.isGroup.getValue(), selectable: audioUnitSelection.nonEmpty()})
+                hidden: !AudioUnitGroups.isGroup(unit), selectable: audioUnitSelection.nonEmpty()})
                 .setTriggerProcedure(() => ungroupSelectedTracks(project)),
             MenuItem.default({label: "Move Out of Group Bus", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
                 .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,

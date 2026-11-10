@@ -16,7 +16,7 @@ type Construct = {
 // Sits below the head lane's type icon. Toggles the unit's automation-collapsed flag (hides its automation
 // lanes). Shown only on the head lane of a unit that actually has automation tracks.
 export const CollapseAutomationButton = ({lifecycle, service, audioUnitBoxAdapter, head}: Construct) => {
-    const collapsed = audioUnitBoxAdapter.automationCollapsed
+    const collapsed = service.project.userEditingManager.viewStates.automationCollapsed(audioUnitBoxAdapter.box)
     const button: HTMLElement = <Icon symbol={IconSymbol.Dropdown} className="collapse-automation"/>
     const hasAutomation = () => audioUnitBoxAdapter.tracks.values()
         .some(track => track.type === TrackType.Value)

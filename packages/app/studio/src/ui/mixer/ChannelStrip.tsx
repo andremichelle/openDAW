@@ -1,6 +1,6 @@
 import css from "./ChannelStrip.sass?inline"
 import {EmptyExec, Lifecycle, MutableObservableValue, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitGroups, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {createElement, DomElement, Frag, Inject} from "@opendaw/lib-jsx"
 import {VolumeSlider} from "@/ui/components/VolumeSlider.tsx"
@@ -39,8 +39,9 @@ type Construct = {
 export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: Construct) => {
     const {mute, panning, solo, volume} = adapter.namedParameter
     const {project} = service
-    const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning} = project
-    const isGroup = adapter.box.isGroup.getValue()
+    const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning, userEditingManager: {viewStates}} = project
+    const groupCollapsed = viewStates.groupCollapsed(adapter.box)
+    const isGroup = AudioUnitGroups.isGroup(adapter.box)
     const isBus = adapter.type === AudioUnitType.Bus
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
@@ -120,13 +121,14 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     </div>
     if (isGroup && !compact) {
         const folderToggle: HTMLButtonElement = <button className="folder-toggle" onclick={() => {
-            editing.modify(() => adapter.box.groupCollapsed.toggle())
+            editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))
         }}/>
-        lifecycle.own(adapter.box.groupCollapsed.catchupAndSubscribe(field => {
-            folderToggle.textContent = field.getValue() ? "▸" : "▾"
-            folderToggle.setAttribute("aria-expanded", String(!field.getValue()))
-            folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group bus" : "Collapse group bus")
-            folderToggle.title = field.getValue() ? "Expand group bus" : "Collapse group bus"
+        lifecycle.own(groupCollapsed.catchupAndSubscribe(owner => {
+            const collapsed = owner.getValue()
+            folderToggle.textContent = collapsed ? "▸" : "▾"
+            folderToggle.setAttribute("aria-expanded", String(!collapsed))
+            folderToggle.setAttribute("aria-label", collapsed ? "Expand group bus" : "Collapse group bus")
+            folderToggle.title = collapsed ? "Expand group bus" : "Collapse group bus"
         }))
         iconElement.appendChild(folderToggle)
     }
@@ -178,8 +180,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
             if (isGroup) {
                 collector.addItems(MenuItem.default({
-                    label: adapter.box.groupCollapsed.getValue() ? "Expand Group Bus" : "Collapse Group Bus"
-                }).setTriggerProcedure(() => editing.modify(() => adapter.box.groupCollapsed.toggle())))
+                    label: groupCollapsed.getValue() ? "Expand Group Bus" : "Collapse Group Bus"
+                }).setTriggerProcedure(() => editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))))
             }
             if (adapter.isInstrument) {
                 const isFrozen = project.audioUnitFreeze.isFrozen(adapter)

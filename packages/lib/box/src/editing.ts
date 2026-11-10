@@ -74,7 +74,8 @@ export class BoxEditing implements Editing {
     #savedHistoryIndex: int = 0 // -1 = saved state was spliced away, >= 0 = valid saved position
     #epoch: int = 0
 
-    constructor(graph: BoxGraph, outsideHistory: Predicate<Box> = Predicates.alwaysFalse) {
+    constructor(graph: BoxGraph,
+                outsideHistory: Predicate<Box> = Predicates.alwaysFalse) {
         this.#graph = graph
         this.#outsideHistory = outsideHistory
 

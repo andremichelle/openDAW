@@ -68,7 +68,7 @@ describe("Audio units", () => {
         expect(group.color).toBe("red")
         expect(aux.icon).toBe("Flask")
         expect(() => aux.icon = "NotAnIcon").toThrow(RangeError)
-        expect(project.audioUnits.map(unit => unit.kind)).toEqual(["instrument", "auxiliary", "group", "output"])
+        expect(project.audioUnits.map(unit => unit.kind)).toEqual(["instrument", "group", "auxiliary", "output"])
         synth.output = group
         expect(synth.output).toBe(group)
         group.output = null

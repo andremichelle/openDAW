@@ -1,5 +1,5 @@
-import {int, Notifier, Observer, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {AnyClipBoxAdapter, AudioUnitBoxAdapter, ClipNotification, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {Arrays, int, Notifier, Observer, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {AnyClipBoxAdapter, AudioUnitBoxAdapter, AudioUnitGroups, ClipNotification, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import {GroupClipAppearance} from "./GroupClipAppearance"
@@ -12,9 +12,11 @@ export class GroupClipLauncher implements Terminable {
     readonly #changes: Notifier<void>
     readonly #playing: SortedSet<UUID.Bytes, UUID.Bytes>
     readonly #waiting: SortedSet<UUID.Bytes, UUID.Bytes>
-    #units: ReadonlyArray<AudioUnitBox> = []
-    #tracks: ReadonlyArray<TrackBoxAdapter> = []
-    constructor(readonly project: Project, readonly group: AudioUnitBox) {
+    #units: ReadonlyArray<AudioUnitBox> = Arrays.empty()
+    #tracks: ReadonlyArray<TrackBoxAdapter> = Arrays.empty()
+
+    constructor(readonly project: Project,
+                readonly group: AudioUnitBox) {
         this.#lifecycle = new Terminator()
         this.#members = this.#lifecycle.own(new Terminator())
         this.#changes = this.#lifecycle.own(new Notifier())
@@ -30,7 +32,7 @@ export class GroupClipLauncher implements Terminable {
         )
     }
     clips(index: int): ReadonlyArray<AnyClipBoxAdapter> {
-        if (!this.group.isAttached()) {return []}
+        if (!this.group.isAttached()) {return Arrays.empty()}
         return this.#tracks.flatMap(track => track.clips.collection.getAdapterByIndex(index).match({none: () => [], some: clip => [clip]}))
     }
     state(index: int): GroupClipState {
@@ -74,7 +76,7 @@ export class GroupClipLauncher implements Terminable {
         if (!this.group.isAttached()) {return}
         this.project.editing.modify(() => {
             this.clips(index).forEach(clip => clip.box.delete())
-            this.#units.filter(unit => unit.isGroup.getValue()).forEach(unit => GroupClipAppearance.clear(unit, index))
+            this.#units.filter(unit => AudioUnitGroups.isGroup(unit)).forEach(unit => GroupClipAppearance.clear(unit, index))
         })
     }
     subscribe(observer: Observer<void>): Subscription {return this.#changes.subscribe(observer)}

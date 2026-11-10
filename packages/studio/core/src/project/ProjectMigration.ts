@@ -46,6 +46,7 @@ import {
     migrateZeitgeistDeviceBox,
     GlobalGrooveLabel,
     migrateGrooveCollection,
+    migrateViewStates,
     migrateZeroDurationRegions
 } from "./migration"
 
@@ -150,6 +151,8 @@ export class ProjectMigration {
         migrateUndefinedTracks(boxGraph)
         // Hard-coded "Notes" / "Automation" labels are no longer written at creation.
         migrateDefaultLabels(boxGraph)
+        // Collapse states and heights moved from the shared units and tracks into each user's interface.
+        migrateViewStates(boxGraph, mandatoryBoxes.userInterfaceBoxes)
         // 4th pass. Drop regions with a non-positive (derived) duration — legacy of the zero-length-sample
         // bug — so they can never trip validateTrack on a later edit. Runs after per-region migration (which
         // can rewrite audio durations) and before the overlap heal (which then sees only valid spans).

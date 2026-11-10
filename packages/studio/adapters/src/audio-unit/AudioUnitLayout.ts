@@ -1,4 +1,4 @@
-import {asDefined, Optional, Option} from "@opendaw/lib-std"
+import {asDefined, Optional, Option, Predicate} from "@opendaw/lib-std"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "./AudioUnitGroups"
 
@@ -7,10 +7,12 @@ export class AudioUnitLayout {
     readonly visibleRows: ReadonlyArray<AudioUnitLayout.Row>
     readonly boundaries: ReadonlyArray<AudioUnitLayout.Boundary>
     readonly #byUnit: ReadonlyMap<AudioUnitBox, AudioUnitLayout.Row>
-    constructor(root: RootBox) {
-        const rows: AudioUnitLayout.Row[] = []
-        const visible: AudioUnitLayout.Row[] = []
-        const boundaries: AudioUnitLayout.Boundary[] = []
+
+    constructor(root: RootBox,
+                isCollapsed: Predicate<AudioUnitBox>) {
+        const rows: Array<AudioUnitLayout.Row> = []
+        const visible: Array<AudioUnitLayout.Row> = []
+        const boundaries: Array<AudioUnitLayout.Boundary> = []
         const byUnit = new Map<AudioUnitBox, AudioUnitLayout.Row>()
         AudioUnitGroups.visit(root, (unit, ancestors) => {
             const hidden = ancestors.some(ancestor => byUnit.get(ancestor)?.collapsed)
@@ -18,13 +20,13 @@ export class AudioUnitLayout {
             const row: AudioUnitLayout.Row = {
                 unit, parent: ancestors.at(-1), ancestors, depth, indent: depth * AudioUnitLayout.Indent,
                 order: rows.length, visibleIndex: hidden ? -1 : visible.length,
-                collapsed: unit.groupCollapsed.getValue(), isGroup: unit.isGroup.getValue()
+                collapsed: isCollapsed(unit), isGroup: AudioUnitGroups.isGroup(unit)
             }
             rows.push(row)
             byUnit.set(unit, row)
             if (!hidden) {visible.push(row)}
         })
-        const stack: number[] = []
+        const stack: Array<number> = []
         visible.forEach(row => {
             while (stack.length > 0 && boundaries[stack[stack.length - 1]].depth >= row.depth) {
                 const index = asDefined(stack.pop())

@@ -35,7 +35,7 @@ describe("region moves with folded selections", () => {
         })).unwrap().map(box => project.boxAdapters.adapterFor(box, NoteRegionBoxAdapter))
         project.regionSelection.select(...regions)
         const group = project.editing.modify(() => project.grouping.create([products[1].audioUnitBox]).unwrap()).unwrap()
-        project.editing.modify(() => group.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(group).setValue(true))
         const tracks = products.map(product => project.boxAdapters.adapterFor(product.trackBox, TrackBoxAdapter))
         tracks[0].listIndex = 0
         tracks[1].listIndex = -1

@@ -5,6 +5,7 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {
     AudioBusBoxAdapter,
     AudioUnitBoxAdapter,
+    AudioUnitGroups,
     DeviceHost,
     Devices,
     InstrumentBox,
@@ -45,7 +46,7 @@ export namespace DevicePanelDragAndDrop {
                 if (editingDeviceChain.isEmpty()) {return false}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
                 const {type} = dragData
-                if (deviceHost instanceof AudioUnitBoxAdapter && deviceHost.box.isGroup.getValue()
+                if (deviceHost instanceof AudioUnitBoxAdapter && AudioUnitGroups.isGroup(deviceHost.box)
                     && (type === "instrument" || type === "midi-effect" || (type === "preset"
                         && dragData.category !== "audio-effect" && dragData.category !== "audio-effect-chain"))) {return false}
                 if (type === "preset") {
@@ -139,7 +140,7 @@ export namespace DevicePanelDragAndDrop {
                 if (editingDeviceChain.isEmpty()) {return}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap("editingDeviceChain isEmpty").box, Devices.isHost)
                 if (type === "instrument" && deviceHost instanceof AudioUnitBoxAdapter) {
-                    if (deviceHost.box.isGroup.getValue()) {return}
+                    if (AudioUnitGroups.isGroup(deviceHost.box)) {return}
                     if (dragData.device === null) {return}
                     const inputBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
                     if (isAbsent(inputBox)) {

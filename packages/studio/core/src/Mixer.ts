@@ -24,7 +24,8 @@ export class Mixer implements Terminable {
     readonly #virtualSolo: Set<AudioUnitBoxAdapter>
     readonly #deferUpdate: DeferExec
 
-    constructor(audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>, boxAdapters: BoxAdapters) {
+    constructor(audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>,
+                boxAdapters: BoxAdapters) {
         this.#audioUnits = audioUnits
         this.#boxAdapters = boxAdapters
         this.#states = UUID.newSet(({adapter: {uuid}}) => uuid)

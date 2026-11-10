@@ -11,6 +11,7 @@ import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {AuxSendBoxAdapter} from "./AuxSendBoxAdapter"
 import {AudioUnitOutput} from "./AudioUnitOutput"
+import {AudioUnitGroups} from "./AudioUnitGroups"
 import {BoxAdapter} from "../BoxAdapter"
 import {AudioUnitInputAdapter} from "./AudioUnitInputAdapter"
 import {TrackBoxAdapter} from "../timeline/TrackBoxAdapter"
@@ -32,7 +33,8 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     readonly #output: AudioUnitOutput
     readonly namedParameter // let typescript infer the type
 
-    constructor(context: BoxAdaptersContext, box: AudioUnitBox) {
+    constructor(context: BoxAdaptersContext,
+                box: AudioUnitBox) {
         this.#context = context
         this.#box = box
 
@@ -61,7 +63,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get input(): AudioUnitInput {return this.#input}
     // Group audio units host audio effects only.
     get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {
-        return this.#box.isGroup.getValue() ? Option.None : Option.wrap(this.#midiEffects)
+        return AudioUnitGroups.isGroup(this.#box) ? Option.None : Option.wrap(this.#midiEffects)
     }
     get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>> {
         return Option.wrap(this.#audioEffects)
@@ -75,14 +77,13 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
         return this.#box.output.targetVertex.mapOr(output =>
             output.box.address.equals(this.#context.rootBoxAdapter.address), false)
     }
-    get automationCollapsed(): BooleanField {return this.#box.userInterface.automationCollapsed}
-    get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>> {return this.#box.isGroup.getValue() ? Option.None : Option.wrap(this.#box.midiEffects)}
+    get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>> {return AudioUnitGroups.isGroup(this.#box) ? Option.None : Option.wrap(this.#box.midiEffects)}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
     get audioEffectsField(): Option<Field<Pointers.AudioEffectHost>> {return Option.wrap(this.#box.audioEffects)}
     get tracksField(): Field<Pointers.TrackCollection> {return this.#box.tracks}
     get minimizedField(): BooleanField {return this.#input.adapter().unwrap("input.adapter").minimizedField}
     get isAudioUnit(): boolean {return true}
-    get hostsInstrument(): boolean {return !this.#box.isGroup.getValue()}
+    get hostsInstrument(): boolean {return !AudioUnitGroups.isGroup(this.#box)}
     get label(): string {return this.#input.adapter().mapOr(input => input.labelField.getValue(), "")}
 
     deviceHost(): DeviceHost {return this}

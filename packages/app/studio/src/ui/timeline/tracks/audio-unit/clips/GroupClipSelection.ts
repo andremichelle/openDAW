@@ -1,5 +1,5 @@
 import {EmptyExec, int, MutableObservableOption, Terminable, Terminator} from "@opendaw/lib-std"
-import {UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AudioUnitGroups, UnionBoxTypes} from "@opendaw/studio-adapters"
 import type {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 
@@ -7,6 +7,7 @@ export class GroupClipSelection implements Terminable {
     readonly value: MutableObservableOption<{unit: AudioUnitBox, index: int}>
     readonly #lifecycle: Terminator
     readonly #selectedUnit: Terminator
+
     constructor(readonly project: Project) {
         this.value = new MutableObservableOption()
         this.#lifecycle = new Terminator()
@@ -17,7 +18,7 @@ export class GroupClipSelection implements Terminable {
         }))
     }
     select(unit: AudioUnitBox, index: int): void {
-        if (!unit.isAttached() || !unit.isGroup.getValue()) {return}
+        if (!unit.isAttached() || !AudioUnitGroups.isGroup(unit)) {return}
         this.project.selection.deselect(...this.project.selection.selected()
             .filter(vertex => UnionBoxTypes.isClipBox(vertex.box)))
         this.#selectedUnit.terminate()

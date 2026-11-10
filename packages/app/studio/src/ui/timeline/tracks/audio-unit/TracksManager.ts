@@ -93,7 +93,10 @@ export class TracksManager implements Terminable {
     #visibleTracks: Option<ReadonlyArray<TrackContext>> = Option.None
     #layout: Option<TrackListLayout<RowContent>> = Option.None
 
-    constructor(service: StudioService, scrollContainer: Element, scrollModel: ScrollModel, factory: TrackFactory) {
+    constructor(service: StudioService,
+                scrollContainer: Element,
+                scrollModel: ScrollModel,
+                factory: TrackFactory) {
         this.#service = service
         this.#project = service.project
         this.#scrollContainer = scrollContainer
@@ -251,8 +254,8 @@ export class TracksManager implements Terminable {
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     this.#watchLayers(audioUnitLifecycle, audioUnitBoxAdapter.input.adapter())
                     // Collapsing/expanding this unit's automation re-sorts (its value lanes leave/rejoin the set).
-                    audioUnitLifecycle.own(audioUnitBoxAdapter.automationCollapsed
-                        .subscribe(() => this.#invalidateOrder()))
+                    audioUnitLifecycle.own(this.#service.project.userEditingManager.viewStates
+                        .automationCollapsed(audioUnitBoxAdapter.box).subscribe(() => this.#invalidateOrder()))
                     // A unit WITHOUT notes/audio tracks shows one synthetic unit lane (the former
                     // TrackType.Undefined placeholder, now render-only), swapped as content tracks come and go.
                     // The output unit is the exception: it only shows the lane once it HAS automation (a value
@@ -466,6 +469,7 @@ export class TracksManager implements Terminable {
         const sorted = this.#toSortedTrackScopes()
         const channels = new Map<AudioUnitBox, TrackListLayout.Channel<RowContent>>()
         const byUnit = new Map<AudioUnitBox, TrackListLayout.Lane<RowContent>[]>()
+        const {viewStates} = this.#service.project.userEditingManager
         sorted.forEach(track => {
             if (track.owner.type !== "audio-unit") {return}
             const unit = track.owner.adapter.box
@@ -474,17 +478,17 @@ export class TracksManager implements Terminable {
             lanes.push({content: {kind: "track", track}, automation: track.trackBoxAdapter.type === TrackType.Value})
         })
         this.#audioUnits.values().forEach(entry => {
-            const lanes: TrackListLayout.Lane<RowContent>[] = entry.synthetic.mapOr(element =>
+            const lanes: Array<TrackListLayout.Lane<RowContent>> = entry.synthetic.mapOr(element =>
                 [{content: {kind: "synthetic", element}, automation: false}], [])
             lanes.push(...byUnit.get(entry.adapter.box) ?? [])
             channels.set(entry.adapter.box, {unit: entry.adapter.box,
-                automationCollapsed: entry.adapter.automationCollapsed.getValue(), lanes})
+                automationCollapsed: viewStates.automationCollapsed(entry.adapter.box).getValue(), lanes})
         })
         const modulators = sorted.filter(track => track.owner.type === "modulator")
-        const tail: RowContent[] = modulators.length > 0
+        const tail: ReadonlyArray<RowContent> = modulators.length > 0
             ? [{kind: "modulator-header", element: this.#modulatorsHeader},
                 ...this.#modulatorsCollapsed.getValue() ? [] : modulators.map(track => ({kind: "track" as const, track}))]
-            : []
+            : Arrays.empty()
         return new TrackListLayout(this.#service.project.audioUnitLayout.snapshot, channels, tail)
     }
 

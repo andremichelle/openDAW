@@ -27,7 +27,7 @@ export namespace AudioUnitFactory {
         const boxes = AudioUnitGroups.ordered(rootBox)
         const order = AudioUnitOrdering[type]
         let index = boxes.findIndex(box => !isDefined(AudioUnitGroups.parent(box).unwrapOrUndefined())
-            && (box.isGroup.getValue() ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[box.type.getValue()]) > order)
+            && (AudioUnitGroups.isGroup(box) ? AudioUnitOrdering[AudioUnitType.Instrument] : AudioUnitOrdering[box.type.getValue()]) > order)
         if (index < 0) {index = boxes.length}
         const insertIndex = index < boxes.length ? boxes[index].index.getValue()
             : Math.max(-1, ...boxes.map(box => box.index.getValue())) + 1

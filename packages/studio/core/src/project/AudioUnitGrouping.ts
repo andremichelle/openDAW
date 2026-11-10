@@ -1,4 +1,4 @@
-import {asDefined, asInstanceOf, isDefined, Option, Optional} from "@opendaw/lib-std"
+import {Arrays, asDefined, asInstanceOf, isDefined, Option, Optional} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitGroups, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {AudioBusBox, AuxSendBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -9,7 +9,7 @@ export class AudioUnitGrouping {
 
     canMove(units: ReadonlyArray<AudioUnitBox>, parent?: AudioUnitBox, before?: AudioUnitBox): boolean {
         if (units.length === 0 || units.some(unit => !unit.isAttached() || unit.type.getValue() === AudioUnitType.Output)) {return false}
-        if (isDefined(parent) && (!parent.isAttached() || !parent.isGroup.getValue())) {return false}
+        if (isDefined(parent) && (!parent.isAttached() || !AudioUnitGroups.isGroup(parent))) {return false}
         const roots = AudioUnitGroups.roots(units)
         if (isDefined(before) && (!before.isAttached() || AudioUnitGroups.parent(before).unwrapOrUndefined() !== parent || roots.includes(before))) {return false}
         if (isDefined(parent) && roots.some(unit => unit === parent || AudioUnitGroups.ancestors(parent).includes(unit))) {return false}
@@ -69,7 +69,6 @@ export class AudioUnitGrouping {
         const bus = AudioBusFactory.create(skeleton, this.#uniqueGroupName("Group Bus"), IconSymbol.Merge, AudioUnitType.Bus, Colors.orange,
             isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined)
         const group = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
-        group.isGroup.setValue(true)
         group.volume.setValue(0) // unity gain: grouping alone must not change the level
         this.move([group], parent, anchor)
         this.move(selected, group)
@@ -92,22 +91,21 @@ export class AudioUnitGrouping {
         moving.forEach(unit => {
             if (AudioUnitGroups.parent(unit).unwrapOrUndefined() !== parent) {unit.output.refer(destination.input)}
         })
-        const ordered: AudioUnitBox[] = []
+        const ordered: Array<AudioUnitBox> = []
         AudioUnitGroups.visit(rootBox, unit => ordered.push(unit), new Map([[parent, siblings]]))
         ordered.forEach((unit, index) => unit.index.setValue(index))
         return true
     }
 
-    duplicate(units: ReadonlyArray<AudioUnitBox>): AudioUnitBox[] {
+    duplicate(units: ReadonlyArray<AudioUnitBox>): ReadonlyArray<AudioUnitBox> {
         const {rootBox, skeleton} = this.project
         const ordered = AudioUnitGroups.ordered(rootBox)
         const selected = new Set(AudioUnitGroups.roots(units))
         const roots = ordered.filter(unit => selected.has(unit) && unit.type.getValue() !== AudioUnitType.Output)
-        if (roots.length === 0) {return []}
-        const children = new Map<Optional<AudioUnitBox>, AudioUnitBox[]>([
-            [undefined, AudioUnitGroups.children(rootBox)],
-            ...ordered.map(unit => [unit, AudioUnitGroups.children(rootBox, unit)] as [AudioUnitBox, AudioUnitBox[]])
-        ])
+        if (roots.length === 0) {return Arrays.empty()}
+        const children = new Map<Optional<AudioUnitBox>, Array<AudioUnitBox>>()
+        children.set(undefined, [...AudioUnitGroups.children(rootBox)])
+        ordered.forEach(unit => children.set(unit, [...AudioUnitGroups.children(rootBox, unit)]))
         const expanded = roots.flatMap(unit => AudioUnitGroups.subtree(rootBox, unit))
         const copies = TransferAudioUnits.transfer(roots, skeleton, {preserveExternalConnections: true, includeGroupDescendants: true, layoutOrder: true})
         const mapping = new Map(expanded.map((source, index) => [source, copies[index]]))
@@ -128,14 +126,14 @@ export class AudioUnitGrouping {
             walk(unit)
         })
         walk()
-        copies.filter(copy => copy.isGroup.getValue()).forEach(copy => AudioUnitGroups.bus(copy)
+        copies.filter(copy => AudioUnitGroups.isGroup(copy)).forEach(copy => AudioUnitGroups.bus(copy)
             .ifSome(bus => bus.label.setValue(this.#uniqueGroupName(bus.label.getValue(), bus))))
         return roots.map(unit => asDefined(mapping.get(unit)))
     }
 
     #uniqueGroupName(name: string, renamed?: AudioBusBox): string {
         const taken = new Set(AudioUnitGroups.all(this.project.rootBox)
-            .filter(unit => unit.isGroup.getValue())
+            .filter(unit => AudioUnitGroups.isGroup(unit))
             .flatMap(unit => AudioUnitGroups.bus(unit).mapOr(bus => bus === renamed ? [] : [bus.label.getValue()], [])))
         if (!taken.has(name)) {return name}
         const numbered = name.replace(/ \d+$/, "")
@@ -156,7 +154,7 @@ export class AudioUnitGrouping {
     }
 
     deleteGroup(group: AudioUnitBox): void {
-        if (!group.isAttached() || !group.isGroup.getValue()) {return}
+        if (!group.isAttached() || !AudioUnitGroups.isGroup(group)) {return}
         const {rootBox} = this.project
         // Delete leaves before their parents so folder membership cannot promote surviving children.
         AudioUnitGroups.subtree(rootBox, group).toReversed().forEach(unit => unit.delete())
@@ -164,7 +162,7 @@ export class AudioUnitGrouping {
     }
 
     ungroup(group: AudioUnitBox): void {
-        if (!group.isAttached() || !group.isGroup.getValue()) {return}
+        if (!group.isAttached() || !AudioUnitGroups.isGroup(group)) {return}
         const {rootBox} = this.project
         const parent = AudioUnitGroups.parent(group).unwrapOrUndefined()
         this.move(AudioUnitGroups.children(rootBox, group), parent, group)

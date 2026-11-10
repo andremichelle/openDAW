@@ -2,7 +2,7 @@ import {describe, expect, it, vi} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {NoteEventCollectionBox, NoteRegionBox} from "@opendaw/studio-boxes"
-import {subscribeGroupOverview} from "./GroupOverviewUpdates"
+import {GroupOverviewUpdates} from "./GroupOverviewUpdates"
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -35,9 +35,9 @@ describe("folded group redraws", () => {
                 box.loopDuration.setValue(960)
             })
         })).unwrap()
-        project.editing.modify(() => group.groupCollapsed.setValue(true))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(group).setValue(true))
         const redraw = vi.fn()
-        const subscription = subscribeGroupOverview(project, group, redraw)
+        const subscription = GroupOverviewUpdates.subscribe(project, group, redraw)
         redraw.mockClear()
         project.editing.modify(() => regions[1].position.setValue(100))
         expect(redraw).not.toHaveBeenCalled()
@@ -50,7 +50,7 @@ describe("folded group redraws", () => {
         redraw.mockClear()
         project.editing.modify(() => regions[1].position.setValue(200))
         expect(redraw).toHaveBeenCalled()
-        project.editing.modify(() => group.groupCollapsed.setValue(false))
+        project.editing.modify(() => project.userEditingManager.viewStates.groupCollapsed(group).setValue(false))
         redraw.mockClear()
         project.editing.modify(() => regions[0].position.setValue(200))
         expect(redraw).not.toHaveBeenCalled()
