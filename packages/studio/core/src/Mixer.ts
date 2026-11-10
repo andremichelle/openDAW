@@ -1,6 +1,6 @@
 import {Arrays, asDefined, EmptyExec, panic, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioSinkDeviceBox, AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
+import {AudioBusBox, AudioSinkDeviceBox, AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
 import {AudioSinkDeviceBoxAdapter, AudioUnitBoxAdapter, BoxAdapters, IndexedBoxAdapterCollection} from "@opendaw/studio-adapters"
 import {DeferExec, deferNextFrame} from "@opendaw/lib-dom"
 import {Box} from "@opendaw/lib-box"
@@ -119,9 +119,33 @@ export class Mixer implements Terminable {
                 }
             })
         }
+        const visited = new Set<AudioUnitBoxAdapter>()
+        const processDownstreamChannels = (adapter: AudioUnitBoxAdapter) => {
+            if (visited.has(adapter)) {return}
+            visited.add(adapter)
+            this.#outputTargets(adapter).forEach(target => {
+                if (target.namedParameter.solo.getControlledValue()) {return}
+                this.#virtualSolo.add(target)
+                processDownstreamChannels(target)
+            })
+        }
         this.#states.forEach(({adapter}) => {
             const {namedParameter: {solo}} = adapter
-            if (solo.getControlledValue()) {processUpstreamChannels(adapter)}
+            if (solo.getControlledValue()) {
+                processUpstreamChannels(adapter)
+                processDownstreamChannels(adapter)
+            }
+        })
+    }
+
+    #outputTargets(adapter: AudioUnitBoxAdapter): ReadonlyArray<AudioUnitBoxAdapter> {
+        const sinks = adapter.box.audioEffects.pointerHub.incoming().map(pointer => pointer.box)
+            .filter((box): box is AudioSinkDeviceBox => box instanceof AudioSinkDeviceBox)
+        return [adapter.box.output, ...sinks.map(sink => sink.targetBus)].flatMap(pointer => {
+            const bus = pointer.targetVertex.unwrapOrNull()?.box
+            if (!(bus instanceof AudioBusBox)) {return []}
+            const unit = bus.output.targetVertex.unwrapOrNull()?.box
+            return unit instanceof AudioUnitBox ? this.#states.opt(unit.address.uuid).mapOr(state => [state.adapter], []) : []
         })
     }
 

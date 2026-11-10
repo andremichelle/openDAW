@@ -59,7 +59,8 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             project.editing.modify(() => audioUnitBoxAdapter.box.groupCollapsed.toggle())
             TrackGrouping.selectTracks(project, [audioUnitBoxAdapter.box])
         }
-        const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group bus" onclick={toggle}/>
+        const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group bus" onclick={toggle}
+                                                  onpointerdown={(event: PointerEvent) => event.preventDefault()}/>
         lifecycle.own(audioUnitBoxAdapter.box.groupCollapsed.catchupAndSubscribe(field => {
             button.textContent = field.getValue() ? "▸" : "▾"
             button.setAttribute("aria-expanded", String(!field.getValue()))
