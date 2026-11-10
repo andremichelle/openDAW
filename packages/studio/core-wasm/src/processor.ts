@@ -295,6 +295,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.click_allocate(numberOfFrames, channels)
+                    if (pcm === 0) {
+                        this.#engineToClient.log(`click sound not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
@@ -310,7 +314,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.frozen_allocate(numberOfFrames, channels)
-                    if (pcm === 0) {return} // no engine instance: writing at 0 would corrupt memory (see boot.ts)
+                    if (pcm === 0) { // no engine instance or no room: writing at 0 would corrupt memory (see boot.ts)
+                        this.#engineToClient.log(`frozen audio not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])

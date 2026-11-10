@@ -9,7 +9,6 @@
 //! at `frames_ptr + c * frame_count * 4`. The PCM storage is talc-owned and kept alive in the slot, so the
 //! pointer is stable until the sample is freed (its box removed).
 
-use alloc::vec;
 use alloc::vec::Vec;
 use abi::SampleRef;
 use boxgraph::address::Uuid;
@@ -46,6 +45,14 @@ pub(crate) fn encode_handle(index: u32, generation: u32) -> u32 {
 
 pub(crate) fn decode_handle(handle: u32) -> (u32, u32) {
     (handle & HANDLE_INDEX_MASK, handle >> HANDLE_INDEX_BITS)
+}
+
+// `vec![0; n]` aborts the engine when the memory cannot grow, this returns `None` instead
+pub(crate) fn try_filled<T: Clone>(len: usize, value: T) -> Option<Vec<T>> {
+    let mut storage = Vec::new();
+    storage.try_reserve_exact(len).ok()?;
+    storage.resize(len, value);
+    Some(storage)
 }
 
 // One slot table entry: the slot payload plus the generation its CURRENT handles carry (bumped at free).
@@ -140,7 +147,10 @@ impl SampleResource {
         if slot.state != State::Requested {
             return 0;
         }
-        slot.storage = vec![0u8; byte_len];
+        let Some(storage) = try_filled(byte_len, 0u8) else {
+            return 0;
+        };
+        slot.storage = storage;
         slot.state = State::Allocated;
         slot.storage.as_ptr() as u32
     }
@@ -248,6 +258,20 @@ mod tests {
         let sample = resource.resolve(handle).expect("ready resolves");
         assert_eq!(sample.frames_ptr, pointer, "the first storage stays in place");
         assert_eq!(sample.frame_count, 100);
+    }
+
+    #[test]
+    fn a_refused_allocation_returns_zero_and_keeps_the_slot_requested() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(10));
+        assert_eq!(resource.allocate(handle, usize::MAX), 0, "an allocation that cannot be satisfied returns 0");
+        assert!(resource.resolve(handle).is_none());
+        resource.set_ready(handle, 1, 1, 48_000.0);
+        assert!(resource.resolve(handle).is_none(), "set_ready after a refused allocation is ignored");
+        let pointer = resource.allocate(handle, 4);
+        assert_ne!(pointer, 0, "the slot still takes a smaller allocation");
+        resource.set_ready(handle, 1, 1, 48_000.0);
+        assert_eq!(resource.resolve(handle).map(|sample| sample.frames_ptr), Some(pointer));
     }
 
     #[test]

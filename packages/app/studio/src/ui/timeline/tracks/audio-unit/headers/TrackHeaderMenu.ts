@@ -1,3 +1,4 @@
+import {TrackGrouping} from "../TrackGrouping"
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {Browser} from "@opendaw/lib-dom"
@@ -28,9 +29,10 @@ export const installTrackHeaderMenu = (service: StudioService,
     const accepts: DeviceAccepts = inputAdapter.unwrap("Cannot unwrap input adapter").accepts
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)
     // An input that accepts neither (a Playfield slot) has no track type to offer.
-    const optTrackType = accepts === false ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
+    const optTrackType = accepts === false || audioUnitBoxAdapter.box.isGroup.getValue() ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
     const {project} = service
-    const {audioUnitFreeze, captureDevices, editing, userEditingManager, selection} = project
+    TrackGrouping.selectForMenu(project, audioUnitBoxAdapter.box)
+    const {audioUnitFreeze, captureDevices, editing, selection} = project
     const isFrozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
     // the open menu outlives graph changes (undo, a live-room update), so every action re-checks its boxes
     const guarded = (procedure: Procedure<MenuItem>): Procedure<MenuItem> => item => {
@@ -39,6 +41,7 @@ export const installTrackHeaderMenu = (service: StudioService,
         procedure(item)
     }
     return parent.addMenuItem(
+        ...TrackGrouping.groupingMenuItems(project, audioUnitBoxAdapter.box),
         MenuItem.default({
             label: "Enabled",
             checked: optTrackBoxAdapter.mapOr(track => track.enabled.getValue(), false),
@@ -71,14 +74,9 @@ export const installTrackHeaderMenu = (service: StudioService,
             label: "Duplicate AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
             separatorBefore: true,
-            hidden: audioUnitBoxAdapter.isOutput
-        }).setTriggerProcedure(guarded(() => {
-            const copies = editing.modify(() => TransferAudioUnits
-                .transfer([audioUnitBoxAdapter.box], project.skeleton, {
-                    insertIndex: audioUnitBoxAdapter.indexField.getValue() + 1
-                }), false).unwrap("copyUnit")
-            Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
-        })),
+            hidden: audioUnitBoxAdapter.isOutput,
+            selectable: project.audioUnitSelection.nonEmpty()
+        }).setTriggerProcedure(guarded(() => TrackGrouping.duplicateSelectedTracks(project))),
         MenuItems.copyAudioUnit(audioUnitBoxAdapter),
         MenuItem.default({
             label: "Freeze AudioUnit",
@@ -97,7 +95,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             editing.modify(() => {
                 const {boxGraph, skeleton} = newProject
                 boxGraph.beginTransaction()
-                TransferAudioUnits.transfer([audioUnitBoxAdapter.box], skeleton)
+                TransferAudioUnits.transfer([audioUnitBoxAdapter.box], skeleton, {includeGroupDescendants: true, layoutOrder: true})
                 boxGraph.endTransaction()
             })
             service.projectProfileService.setProject(newProject, "NEW")

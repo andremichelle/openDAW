@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {clamp, DefaultObservableValue, int, isDefined, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -20,7 +20,6 @@ import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {IndexedBox} from "@opendaw/lib-box"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
@@ -31,6 +30,7 @@ import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -43,15 +43,22 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters, api} = service.project
     const scrollModel = new ScrollModel()
+    const createButtons: HTMLElement = (
+        <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
+            <CreateTrackButtons lifecycle={lifecycle} service={service}/>
+        </div>
+    )
+    const extra: HTMLElement = (
+        <div className="extra">
+            {createButtons}
+            <div className="region-area help-section">Drop instruments or samples here</div>
+        </div>
+    )
+    const scroller: HTMLElement = <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
             <div className="fill"/>
-            <div className="extra">
-                <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
-                    <CreateTrackButtons lifecycle={lifecycle} service={service}/>
-                </div>
-                <div className="region-area help-section">Drop instruments or samples here</div>
-            </div>
+            {extra}
         </div>
     )
     const factory: TrackFactory = {
@@ -89,7 +96,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         return before === -1 ? members.length : before
     }
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-group-surface="timeline">
             <HeadersArea lifecycle={lifecycle}
                          service={service}
                          manager={manager}
@@ -106,7 +113,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                          scrollContainer={scrollContainer}
                          range={range}/>
             {scrollContainer}
-            <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
+            {scroller}
         </div>
     )
     const unitInsertion = new UnitInsertion(element, manager, rootBoxAdapter)
@@ -130,22 +137,21 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
                     editing.modify(() => {
-                        const {audioUnitBox} = api.createAnyInstrument(factory)
-                        api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        const {audioUnitBox} = api.createInstrumentAt(factory, api.insertionBefore(anchor))
                         NewInstrumentRegion.create(service.project, service.timeline.snapping, audioUnitBox)
                     })
                 } else if (dragData.type === "preset") {
                     if (dragData.category === "audio-unit") {
-                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, anchor)
+                        PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, api.insertionBefore(anchor))
                             .catch(console.warn)
                     } else if (isNotNull(dragData.device)) {
                         PresetApplication.createNewAudioUnitFromInstrument(
-                            service, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
+                            service, dragData.uuid, dragData.device, dragData.source, api.insertionBefore(anchor)).catch(console.warn)
                     }
                 } else if (dragData.type === "script") {
                     SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
-                        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(SpotlightCreate.ScriptHosts.apparat)
-                        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
+                        const {audioUnitBox, instrumentBox} = project.api.createInstrumentAt(
+                            SpotlightCreate.ScriptHosts.apparat, project.api.insertionBefore(anchor))
                         NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
                         return Option.wrap(instrumentBox)
                     }))
@@ -174,28 +180,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                     }
                     return true
                 }
-                if (dragData.type !== "channelstrip") {return false}
-                const optAdapter = boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                if (optAdapter.isEmpty()) {return false}
-                const limit = optAdapter.unwrap().indicesLimit()
-                const [index, successor] = DragAndDrop.findInsertLocationVertical(event, scrollContainer, limit)
-                const delta = index - dragData.start_index
-                if (delta < 0 || delta > 1) {
-                    // The line is anchored to the component (the scrollable must stay position-static: an
-                    // absolutely positioned child would inflate its scrollHeight and re-parent div.fill).
-                    const componentRect = element.getBoundingClientRect()
-                    const anchorY = isDefined(successor)
-                        ? successor.getBoundingClientRect().top
-                        : Array.from(scrollContainer.querySelectorAll("[data-drag]"))
-                            .reduce((bottom, unit) => Math.max(bottom, unit.getBoundingClientRect().bottom),
-                                scrollContainer.getBoundingClientRect().top)
-                    insertLine.style.top = `${anchorY - componentRect.top - 1}px`
-                    if (!insertLine.isConnected) {element.appendChild(insertLine)}
-                } else if (insertLine.isConnected) {
-                    insertLine.remove()
-                }
-                return true
+                return false
             },
             drop: (event: DragEvent, dragData: AnyDragData) => {
                 if (insertLine.isConnected) {insertLine.remove()}
@@ -214,17 +199,6 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                         trackBoxAdapter.indexField.setValue(indexValues[order])))
                     return
                 }
-                if (dragData.type !== "channelstrip") {return}
-                const optAdapter = boxGraph.findBox(UUID.parse(dragData.uuid))
-                    .map(box => boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                const [min, max] = optAdapter.unwrap("optAdapter").indicesLimit()
-                if (min === max) {return}
-                const [index] = DragAndDrop.findInsertLocationVertical(event, scrollContainer)
-                const delta = clamp(index, min, max) - dragData.start_index
-                if (delta < 0 || delta > 1) { // zero or one has no effect on the order
-                    editing.modify(() =>
-                        IndexedBox.moveIndex(service.project.rootBox.audioUnits, dragData.start_index, delta))
-                }
             },
             enter: () => {},
             leave: () => {
@@ -242,7 +216,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                     return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
                 }
                 return Option.None
-            })
+            }),
+            placePasted: unit => TrackGrouping.placePasted(service.project, unit)
         })),
         AnimationFrame.add(() => {
             // The ResizeObserver only tracks the visible size changes, not off-screen content,
@@ -254,7 +229,13 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             element.style.setProperty("--rest-top", `${contentSize === 0 ? 0 : contentSize}px`)
             element.style.setProperty("--rest-height", `${element.clientHeight - contentSize}px`)
         }),
-        Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            if (event.button !== 0 || event.clientY < extra.getBoundingClientRect().top) {return}
+            if (!(event.target instanceof Node) || createButtons.contains(event.target) || scroller.contains(event.target)) {return}
+            if (event.target instanceof Element && isNotNull(event.target.closest("button"))) {return}
+            service.project.audioUnitSelection.deselectAll()
+        }, {capture: true}),
+        Events.subscribe(element, "wheel",(event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
         scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
         Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop),
         installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY,

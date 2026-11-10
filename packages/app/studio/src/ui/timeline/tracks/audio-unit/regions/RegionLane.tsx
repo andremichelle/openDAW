@@ -31,7 +31,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         updated = false
         painter.requestUpdate()
     }
-    const {timelineFocus, rootBoxAdapter} = trackManager.service.project
+    const {trackFocus, rootBoxAdapter} = trackManager.service.project
     const grooveLabels = UUID.newSet<{uuid: UUID.Bytes, subscription: Subscription}>(entry => entry.uuid)
     lifecycle.ownAll(
         rootBoxAdapter.grooves.catchupAndSubscribe({
@@ -44,7 +44,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),
         trackManager.service.project.timelineBoxAdapter.signatureTrack.subscribe(requestUpdate),
-        timelineFocus.track.catchupAndSubscribe(owner =>
+        trackFocus.track.catchupAndSubscribe(owner =>
             element.classList.toggle("focused", owner.contains(adapter))),
         Html.watchIntersection(element, entries => entries
                 .forEach(({isIntersecting}) => {

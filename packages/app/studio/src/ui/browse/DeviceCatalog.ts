@@ -88,6 +88,8 @@ export namespace DeviceCatalog {
     }
 
     export const compare = (left: DeviceEntry, right: DeviceEntry): int => {
+        const stock = Number(right.kind === "device") - Number(left.kind === "device")
+        if (stock !== 0) {return stock}
         const order = StringComparator(left.name.toLowerCase(), right.name.toLowerCase())
         return order !== 0 ? order : rankOf[left.kind] - rankOf[right.kind]
     }

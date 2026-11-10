@@ -5,6 +5,7 @@ import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {TracksFooterHeader} from "@/ui/timeline/tracks/footer/TracksFooterHeader.tsx"
 import {Html} from "@opendaw/lib-dom"
+import {ClipsScroller} from "@/ui/timeline/tracks/audio-unit/clips/ClipsScroller"
 
 const className = Html.adoptStyleSheet(css, "TracksFooter")
 
@@ -17,7 +18,7 @@ export const TracksFooter = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <TracksFooterHeader/>
-            <div className="void"/>
+            <ClipsScroller lifecycle={lifecycle} service={service}/>
             <TimelineRangeSlider lifecycle={lifecycle}
                                  range={service.timeline.range}
                                  className="clips-aware"/>

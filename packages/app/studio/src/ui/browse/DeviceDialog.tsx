@@ -132,7 +132,8 @@ const relevanceOf = (entry: DeviceEntry, query: string): int => {
 }
 
 const byRelevance = (query: string) => (left: DeviceEntry, right: DeviceEntry): int =>
-    relevanceOf(left, query) - relevanceOf(right, query)
+    Number(right.kind === "device") - Number(left.kind === "device")
+    || relevanceOf(left, query) - relevanceOf(right, query)
     || DeviceCatalog.rankOf[left.kind] - DeviceCatalog.rankOf[right.kind]
     || DeviceCatalog.compare(left, right)
 

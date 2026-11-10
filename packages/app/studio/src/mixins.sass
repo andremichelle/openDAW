@@ -396,3 +396,11 @@ $library-guide-left: 2.5px
   &::after
     background-size: 1px 2px, 3px 1px, 1px 2px, 3px 1px
     background-position: 100% 1px, 100% 0, 0 calc(100% - 1px), 0 100%
+
+@mixin drop-corners($color: var(--color-blue))
+  $horizontal: linear-gradient(to right, $color 8px, transparent 8px, transparent calc(100% - 8px), $color 0)
+  $vertical: linear-gradient(to bottom, $color 8px, transparent 8px, transparent calc(100% - 8px), $color 0)
+  background-image: $horizontal, $horizontal, $vertical, $vertical
+  background-position: top, bottom, left, right
+  background-size: 100% 2px, 100% 2px, 2px 100%, 2px 100%
+  background-repeat: no-repeat

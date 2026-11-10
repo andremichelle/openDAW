@@ -146,10 +146,11 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             onDeselected: (selectable: AnyClipBoxAdapter) => selectable.onDeselected()
         }),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            manager.groupClipSelection.clear()
             const target = capturing.captureEvent(event)
             if (target === null || target.type !== "clip") {return}
             const {trackBoxAdapter} = target.track
-            project.timelineFocus.focusTrack(trackBoxAdapter)
+            project.trackFocus.focus(trackBoxAdapter)
             const deviceChain = trackBoxAdapter.optAudioUnit.map(unit => unit.editing)
             const switchDeviceChain = deviceChain.mapOr(chain =>
                 !userEditingManager.audioUnit.isEditing(chain), false)
@@ -194,6 +195,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         }),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (Keyboard.isDeselectAll(event)) {
+                manager.groupClipSelection.clear()
                 clipSelection.deselectAll()
             } else if (Keyboard.isSelectAll(event)) {
                 clipSelection.select(...manager.tracks()

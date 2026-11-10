@@ -1,3 +1,4 @@
+import {AudioUnitLayoutState} from "./AudioUnitLayoutState"
 import {
     asInstanceOf,
     Editing,
@@ -19,6 +20,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate, PrimitiveUpdate} from "@opendaw/lib-box"
 import type {YSync} from "../ysync/YSync"
 import {RoomOverlaps} from "../ysync/RoomOverlaps"
@@ -81,6 +83,7 @@ import {ProjectEnv} from "./ProjectEnv"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
+import {AudioUnitGrouping} from "./AudioUnitGrouping"
 import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
 import {CaptureDevices, CaptureMidi, Recording, RecordingSession, ResolvedNote} from "../capture"
@@ -91,7 +94,7 @@ import {ProjectValidation} from "./ProjectValidation"
 import {ppqn, TempoMap} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
-import {RegionOverlapResolver, TimelineFocus} from "../ui"
+import {RegionOverlapResolver, TrackFocus} from "../ui"
 import {SampleGarbage} from "../samples"
 import {AudioUnitFreeze} from "../AudioUnitFreeze"
 import {AutomationSuspension} from "./AutomationSuspension"
@@ -157,6 +160,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly primaryAudioUnitBox: AudioUnitBox
     readonly timelineBox: TimelineBox
 
+    readonly grouping: AudioUnitGrouping
+    readonly audioUnitLayout: AudioUnitLayoutState
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
     readonly recordingSession: RecordingSession
@@ -165,6 +170,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
     readonly modulatorSelection: FilteredSelection<ModulatorBoxAdapter>
     readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
+    readonly audioUnitSelection: FilteredSelection<AudioUnitBox>
     readonly remoteSelections: RemoteSelections
     readonly remoteDeviceSelection: FilteredRemoteSelection<DeviceBoxAdapter>
     readonly remoteRegionSelection: FilteredRemoteSelection<AnyRegionBoxAdapter>
@@ -176,7 +182,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly mixer: Mixer
     readonly tempoMap: TempoMap
     readonly overlapResolver: RegionOverlapResolver
-    readonly timelineFocus: TimelineFocus
+    readonly trackFocus: TrackFocus
     readonly engine = new EngineFacade()
     readonly audioUnitFreeze: AudioUnitFreeze
 
@@ -203,6 +209,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
+        this.grouping = new AudioUnitGrouping(this)
         this.editing = env.createEditing?.(this.boxGraph)
             ?? new BoxEditing(this.boxGraph, box => box instanceof WclapParameterBox)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
@@ -232,6 +239,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => RegionAdapters.for(this.boxAdapters, vertex.box)
             }
         ))
+        this.audioUnitSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(box => isInstanceOf(box, AudioUnitBox) && box.type.getValue() !== AudioUnitType.Output),
+            {fx: (unit: AudioUnitBox) => unit, fy: vertex => asInstanceOf(vertex.box, AudioUnitBox)}
+        ))
         this.remoteSelections = this.#terminator.own(new RemoteSelections(this.rootBox, this.selection.user))
         this.remoteDeviceSelection = this.#terminator.own(this.remoteSelections.createFilteredSelection(
             isVertexOfBox(DeviceBoxUtils.isDeviceBox),
@@ -253,9 +264,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
+        this.audioUnitLayout = this.#terminator.own(new AudioUnitLayoutState(this))
         this.mixer = this.#terminator.own(new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters))
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
-        this.timelineFocus = this.#terminator.own(new TimelineFocus())
+        this.trackFocus = this.#terminator.own(new TrackFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
         this.#terminator.own(AutomationSuspension.start(this))
 
@@ -380,7 +392,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         const armed = this.captureDevices.filterArmed()
             .filter((capture): capture is CaptureMidi => isInstanceOf(capture, CaptureMidi))
         if (armed.length === 0) {return}
-        const focusedTrack = this.timelineFocus.track
+        const focusedTrack = this.trackFocus.track
         const target = focusedTrack
             .flatMap(track => track.optAudioUnit)
             .map(unit => unit.address.uuid)

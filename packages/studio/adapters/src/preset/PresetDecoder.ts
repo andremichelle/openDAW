@@ -17,6 +17,7 @@ import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/
 import {EffectPointerType} from "../DeviceAdapter"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
+    AudioBusBox,
     AudioFileBox,
     AudioUnitBox,
     BoxIO,
@@ -39,7 +40,7 @@ import {InstrumentFactories} from "../factories/InstrumentFactories"
 export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike,
                            target: ProjectSkeleton,
-                           insertIndex?: int): ReadonlyArray<AudioUnitBox> => {
+                           insertIndex?: int, destination?: AudioBusBox): ReadonlyArray<AudioUnitBox> => {
         const header = new ByteArrayInput(bytes.slice(0, 8))
         if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             RuntimeNotifier.notify({message: "Invalid preset file.", icon: "Warning"})
@@ -76,7 +77,7 @@ export namespace PresetDecoder {
         }).boxes))
         const {mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
         const uuidMap = TransferUtils.generateMap(
-            sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
+            sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, (destination ?? primaryAudioBusBox).address.uuid)
         const present = TransferUtils.presentIn(uuidMap, target.boxGraph)
         TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
         // A slot is a place among the instruments; a rack that carries buses keeps the by-type placement.
