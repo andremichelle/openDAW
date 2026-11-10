@@ -73,7 +73,8 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         lifecycle.ownAll(
             Events.subscribeDblDwn(nameLabel, event => rename(event, false)),
             TrackGrouping.subscribeGroupRename(audioUnitBoxAdapter.box, () => {
-                const {left, top, height} = nameLabel.getBoundingClientRect()
+                const {left, top, width, height} = nameLabel.getBoundingClientRect()
+                if (width === 0 || height === 0) {return}
                 return rename({clientX: left, clientY: top + height / 2}, true)
             })
         )
