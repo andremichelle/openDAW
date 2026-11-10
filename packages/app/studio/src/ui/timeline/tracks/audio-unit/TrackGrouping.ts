@@ -27,7 +27,7 @@ export namespace TrackGrouping {
             const layout = project.audioUnitLayout.snapshot
             const hidden = project.audioUnitSelection.selected()
                 .filter(unit => layout.row(unit).mapOr(row => row.visibleIndex === -1, false))
-            if (hidden.length > 0) {project.audioUnitSelection.deselect(...hidden)}
+            if (hidden.length > 0) {project.editing.append(() => project.audioUnitSelection.deselect(...hidden))}
         }))
         return Terminable.many(subscription, {terminate: () => alive = false})
     }
