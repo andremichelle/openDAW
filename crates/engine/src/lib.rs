@@ -2127,6 +2127,14 @@ impl Engine {
         self.schedule_midi_transport(midi_output::start_message());
         self.transport.play()
     }
+    fn suspend_automation(&self, uuid: [u8; 16]) {
+        if !self.transport.is_playing() {return}
+        let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+        if !suspended.contains(&uuid) {
+            suspended.push(uuid);
+        }
+    }
+
 
     /// Schedule a MIDI transport message for the next quantum (TS `midiTransportClock.schedule`).
     fn schedule_midi_transport(&mut self, message: ([u8; 3], u8)) {
@@ -3371,9 +3379,8 @@ pub extern "C" fn ignore_note_region() {
 pub extern "C" fn suspend_automation() {
     let mut uuid = [0u8; 16];
     uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
-    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
-    if !suspended.contains(&uuid) {
-        suspended.push(uuid);
+    if let Some(engine) = unsafe { ENGINE.get().as_ref() } {
+        engine.suspend_automation(uuid)
     }
 }
 

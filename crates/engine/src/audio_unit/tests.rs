@@ -2823,6 +2823,23 @@ fn every_transport_exit_drops_the_manual_control() {
     assert!(!suspended(), "ending a recording drops it");
 }
 
+// #537: the UI sees the engine stop only a frame later, so a write in between still sends a suspension. The
+// stopped engine must refuse it, else the lane would ignore its curve through the whole next playback.
+#[test]
+fn a_suspension_reaching_the_stopped_engine_is_ignored() {
+    let mut engine = engine_with_devices();
+    let suspended = || !unsafe { crate::SUSPENDED_AUTOMATION.get() }.is_empty();
+    engine.play();
+    engine.stop();
+    engine.suspend_automation(TRACK);
+    assert!(!suspended(), "a write after stop leaves the curve in charge");
+    engine.play();
+    assert!(!suspended(), "and the next playback reads the curve");
+    engine.suspend_automation(TRACK);
+    assert!(suspended(), "a write while playing still takes over");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+}
+
 #[test]
 fn build_param_track_resolves_only_the_targeting_track_among_unrelated_ones() {
     // Two automation chains on ONE device at DIFFERENT parameter paths. The targeted (incoming-pointer)
