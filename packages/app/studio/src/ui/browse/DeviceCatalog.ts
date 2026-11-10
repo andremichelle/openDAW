@@ -226,7 +226,8 @@ export namespace DeviceCatalog {
             {label: "Size", value: wclap.size > 0 ? Bytes.toString(wclap.size) : "-"},
             {label: "Stored", value: wclap.local ? "On this device" : "openDAW cloud"}
         ],
-        tags: wclap.info.features, preset: Option.None, bundle: Option.None,
+        // openDAW's own features (the device panel, its width) are for the studio, not tags
+        tags: wclap.info.features.filter(feature => !feature.startsWith("opendaw:")), preset: Option.None, bundle: Option.None,
         prepare: async () => {
             const url = await SpotlightCreate.storeWclap(wclap)
             const {clapId, name} = wclap.info
