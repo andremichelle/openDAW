@@ -14,7 +14,7 @@ export namespace GroupDropLayout {
         readonly indent: number
     }
     export const resolve = (layout: AudioUnitLayout, rows: ReadonlyArray<Row>, pointer: Client,
-                            horizontal: boolean): Option<Target> => {
+                            horizontal: boolean, originX?: number): Option<Target> => {
         const coordinate = horizontal ? pointer.clientX : pointer.clientY
         const start = (bounds: Rect): number => horizontal ? bounds.x : bounds.y
         const size = (bounds: Rect): number => horizontal ? bounds.width : bounds.height
@@ -40,8 +40,8 @@ export namespace GroupDropLayout {
         const bounds = model.isGroup ? hit.header : hit.bounds
         const after = coordinate >= start(bounds) + size(bounds) / 2
         let parent = model.parent
-        if (!horizontal) {
-            const depth = Math.max(0, Math.floor((pointer.clientX - hit.bounds.x - 12) / DepthStep))
+        if (!horizontal && isDefined(originX)) {
+            const depth = model.depth - Math.max(0, Math.floor((originX - pointer.clientX) / DepthStep))
             while (isDefined(parent) && layout.row(parent).unwrap().depth >= depth) {
                 parent = layout.row(parent).unwrap().parent
             }

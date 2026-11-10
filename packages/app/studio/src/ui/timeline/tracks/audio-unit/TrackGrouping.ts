@@ -1,4 +1,4 @@
-import {asDefined, Exec, isDefined, Lifecycle, Notifier, Nullable, Option, Optional, Procedure, Subscription, UUID, Terminable} from "@opendaw/lib-std"
+import {asDefined, Client, Exec, isDefined, Lifecycle, Notifier, Nullable, Option, Optional, Procedure, Subscription, UUID, Terminable} from "@opendaw/lib-std"
 import {AnimationFrame, Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
 import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -177,7 +177,7 @@ export namespace TrackGrouping {
 
     export type GroupDrop = {parent?: AudioUnitBox, before?: AudioUnitBox, row: HTMLElement, inside: boolean, after: boolean, indent: number, headerHeight: number}
 
-    export const resolveGroupDrop = (project: Project, container: HTMLElement, event: {clientX: number, clientY: number}, horizontal = false): Option<GroupDrop> => {
+    export const resolveGroupDrop = (project: Project, container: HTMLElement, event: Client, horizontal = false, originX?: number): Option<GroupDrop> => {
         const elements = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-unit]"))
             .map(row => [row.dataset.unit, row]))
         const headers = new Map(Array.from(container.querySelectorAll<HTMLElement>("[data-group-header]"))
@@ -190,7 +190,7 @@ export namespace TrackGrouping {
             return [{unit: row.unit, bounds: element.getBoundingClientRect(),
                 header: (headers.get(uuid) ?? element).getBoundingClientRect()}]
         })
-        return GroupDropLayout.resolve(layout, rows, event, horizontal).map(target => ({
+        return GroupDropLayout.resolve(layout, rows, event, horizontal, originX).map(target => ({
             parent: target.parent, before: target.before,
             row: asDefined(elements.get(UUID.toString(target.row.unit.address.uuid))),
             inside: target.inside, after: target.after, indent: target.indent, headerHeight: target.row.header.height
@@ -207,7 +207,7 @@ export namespace TrackGrouping {
     }
 
     export const installGroupTrackDrag = (handle: HTMLElement, project: Project, unit: AudioUnitBox,
-                                          laneDrag: (target: EventTarget | null) => boolean = () => false): Terminable => {
+                                          laneDrag: (target: Nullable<EventTarget>) => boolean = () => false): Terminable => {
         handle.dataset.groupHeader = UUID.toString(unit.address.uuid)
         handle.draggable = false
         handle.title = "Drag to move track; drop on a group or between tracks. Drag left to move out."
@@ -229,7 +229,7 @@ export namespace TrackGrouping {
                     }
                     clear()
                     surface = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-group-surface]") ?? undefined
-                    target = isDefined(surface) ? resolveGroupDrop(project, surface, event, surface.dataset.groupSurface === "mixer").unwrapOrUndefined() : undefined
+                    target = isDefined(surface) ? resolveGroupDrop(project, surface, event, surface.dataset.groupSurface === "mixer", start.clientX).unwrapOrUndefined() : undefined
                     if (isDefined(target) && !(target.inside
                         ? project.grouping.canMove(units, target.parent)
                         : project.grouping.canDrop(units, target.parent, target.before))) {target = undefined}

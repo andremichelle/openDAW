@@ -44,8 +44,8 @@ const fixture = ({firstHeight = 48, groupHeight = 48, automationHeight = 0, hori
             return {unit, bounds, header}
         })
         const row = (unit: AudioUnitBox) => asDefined(rows.find(row => row.unit === unit))
-        const resolve = (coordinate: number, cross = 360) => GroupDropLayout.resolve(layout, rows,
-            horizontal ? {clientX: coordinate, clientY: cross} : {clientX: cross, clientY: coordinate}, horizontal).unwrap()
+        const resolve = (coordinate: number, cross = 360, originX?: number) => GroupDropLayout.resolve(layout, rows,
+            horizontal ? {clientX: coordinate, clientY: cross} : {clientX: cross, clientY: coordinate}, horizontal, originX).unwrap()
         return {layout, rows, row, resolve}
     }
     return {first, group, child, inner, leaf, lastChild, after, last, output, graph, build}
@@ -81,7 +81,7 @@ describe("track drop layout", () => {
         const {row, resolve} = build()
         const headerBottom = resolve(row(group).header.y + row(group).header.height - 1,
             row(group).header.x + row(group).header.width + 10)
-        const childBottom = resolve(row(lastChild).bounds.y + row(lastChild).bounds.height - 1, 304)
+        const childBottom = resolve(row(lastChild).bounds.y + row(lastChild).bounds.height - 1, 304, 304 + GroupDropLayout.DepthStep)
         const nextTop = resolve(row(after).bounds.y + 1)
         expect([headerBottom.before, childBottom.before, nextTop.before]).toEqual([after, after, after])
         expect(headerBottom.row).toBe(row(after))
@@ -213,15 +213,19 @@ describe("track drop layout", () => {
         expect(right.inside).toBe(false)
         expect(right.before).toBe(after)
     })
-    it("leaves one folder level per depth step when dragging left at a nested edge", () => {
+    it("leaves one folder level per depth step dragged left of the drag start at a nested edge", () => {
         const {group, inner, lastChild, after, leaf, build} = fixture()
         const {row, resolve} = build()
-        const {x, y, height} = row(leaf).bounds
-        const at = (step: number) => resolve(y + height - 1, x + 12 + step * GroupDropLayout.DepthStep + 1)
-        expect([at(0).parent, at(0).before]).toEqual([undefined, after])
+        const {y, height} = row(leaf).bounds
+        const origin = 320
+        const at = (steps: number) => resolve(y + height - 1, origin - steps * GroupDropLayout.DepthStep, origin)
+        expect(at(0).parent).toBe(inner)
+        expect(at(0).before).toBeUndefined()
+        expect(resolve(y + height - 1, origin - GroupDropLayout.DepthStep + 1, origin).parent).toBe(inner)
         expect([at(1).parent, at(1).before]).toEqual([group, lastChild])
-        expect(at(2).parent).toBe(inner)
-        expect(at(2).before).toBeUndefined()
+        expect([at(2).parent, at(2).before]).toEqual([undefined, after])
+        expect([at(5).parent, at(5).before]).toEqual([undefined, after])
+        expect(resolve(y + height - 1, origin + 200, origin).parent).toBe(inner)
     })
     it("returns no target for an empty visible list", () => {
         const {build} = fixture()
