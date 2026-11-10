@@ -184,10 +184,14 @@ export class ProjectApi {
     }
 
     createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
+        return this.createInstrumentAt(factory, this.insertionAfterSelection())
+    }
+
+    insertionAfterSelection(): AudioUnitInsertion {
         const {audioUnitSelection, audioUnitLayout} = this.#project
         const selected = AudioUnitGroups.roots(audioUnitSelection.selected())
         const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
-        return this.createInstrumentAt(factory, this.insertionAfter(Option.wrap(anchor)))
+        return this.insertionAfter(Option.wrap(anchor))
     }
 
     insertionAfterEditing(): AudioUnitInsertion {

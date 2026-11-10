@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Procedure, Provider, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -38,6 +38,7 @@ export namespace AudioUnitsClipboard {
         readonly rootBoxAdapter: RootBoxAdapter
         readonly audioUnitEditing: UserEditing
         readonly getEditedAudioUnit: Provider<Option<AudioUnitBoxAdapter>>
+        readonly placePasted?: Procedure<AudioUnitBox>
     }
 
     const encodeMetadata = (metadata: AudioUnitMetadata): ArrayBufferLike => {
@@ -113,7 +114,8 @@ export namespace AudioUnitsClipboard {
                                       boxGraph,
                                       rootBoxAdapter,
                                       audioUnitEditing,
-                                      getEditedAudioUnit
+                                      getEditedAudioUnit,
+                                      placePasted
                                   }: Context): ClipboardHandler<ClipboardAudioUnits> => {
         const copyAudioUnit = (): Option<ClipboardAudioUnits> => getEditedAudioUnit().flatMap(copyEntry)
         return {
@@ -159,6 +161,7 @@ export namespace AudioUnitsClipboard {
                     editing.modify(() => {
                         const pastedBox = pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())
                         if (pastedBox) {
+                            placePasted?.(pastedBox)
                             audioUnitEditing.edit(pastedBox.editing)
                         }
                     })

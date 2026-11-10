@@ -211,7 +211,12 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                     return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
                 }
                 return Option.None
-            })
+            }),
+            placePasted: unit => {
+                api.placeAudioUnitsAt([unit], api.insertionAfterSelection())
+                service.project.audioUnitSelection.deselectAll()
+                service.project.audioUnitSelection.select(unit)
+            }
         })),
         AnimationFrame.add(() => {
             // The ResizeObserver only tracks the visible size changes, not off-screen content,

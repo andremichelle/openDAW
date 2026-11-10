@@ -347,6 +347,33 @@ describe("track folders", () => {
         expectOrder(AudioUnitGroups.children(project.rootBox, folder), [second, fx, first, copies[0], copies[1], third])
         project.terminate()
     })
+    it("pastes a channel after the selected track inside its group, routed to that group", async () => {
+        const {project, units: [first, second, outside]} = await setup()
+        const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap())
+        const handler = AudioUnitsClipboard.createHandler({
+            getEnabled: () => true, editing: project.editing, boxGraph: project.boxGraph,
+            rootBoxAdapter: project.rootBoxAdapter, audioUnitEditing: project.userEditingManager.audioUnit,
+            getEditedAudioUnit: () => Option.wrap(project.boxAdapters.adapterFor(outside, AudioUnitBoxAdapter)),
+            placePasted: unit => {
+                project.api.placeAudioUnitsAt([unit], project.api.insertionAfterSelection())
+                select(project, [unit])
+            }
+        })
+        const entry = handler.copy().unwrap()
+        select(project, [first])
+        handler.paste(entry)
+        const [pasted] = project.audioUnitSelection.selected()
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [first, pasted, second])
+        expect(AudioUnitGroups.parent(pasted).unwrapOrUndefined()).toBe(folder)
+        handler.paste(entry)
+        const [next] = project.audioUnitSelection.selected()
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [first, pasted, next, second])
+        project.editing.undo()
+        project.editing.undo()
+        expectOrder(AudioUnitGroups.children(project.rootBox, folder), [first, second])
+        project.boxGraph.verifyPointers()
+        project.terminate()
+    })
     it("preserves existing hierarchy when pasting a channel and disables folder copy/cut", async () => {
         const {project, units: [first, second, outside]} = await setup()
         const folder = asDefined(project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap())
