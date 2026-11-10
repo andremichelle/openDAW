@@ -231,3 +231,11 @@ Feature framing (Grooves)
 • Education angle: the same pattern played straight and through different grooves, the written notes
   stay unchanged.
 • Manual: https://opendaw.studio/manuals/grooves
+
+Feature framing (Key and Chords)
+• Project key, key track and chord track describe the harmony of a song, they make no sound. MIDI devices
+  follow them (Scale Matrix, Arpeggio, Autotune, Cubed randomizer, scripts).
+• Chords are steps of the key, 1 to 7. Change the key and every chord moves along.
+• Headline: "Learn and Use Scales and Harmony in openDAW" (Discord with "Update: " in front). Say harmony, not harmonics
+  (harmonics are overtones).
+• Manual: https://opendaw.studio/manuals/key-and-chords
