@@ -22,12 +22,17 @@ component
     height: 100%
     grid-column: 1 / 2
     position: absolute
-    border-radius: 0
-    background-image: linear-gradient(var(--unit-line-color), var(--unit-line-color))
-    background-position: var(--folder-offset, 0px) 0
-    background-size: var(--unit-line-width, 4px) 100%
-    background-repeat: no-repeat
     @include colors.panel-background
+
+  > div.unit-line
+    position: absolute
+    grid-column: 1 / 2
+    left: var(--folder-offset, 0px)
+    width: var(--unit-line-width, 4px)
+    height: 100%
+    border-radius: 2px
+    background-color: var(--unit-line-color)
+
   &.folder-hidden
     display: none
 

@@ -135,6 +135,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     const peakMeter: DomElement = (<PeakMeter lifecycle={lifecycle} peaks={peaks}/>)
     const element: HTMLElement = (
         <div className={classList} data-drag>
+            <div className="unit-line"/>
             {!compact && (
                 <Frag>
                     {iconElement}
