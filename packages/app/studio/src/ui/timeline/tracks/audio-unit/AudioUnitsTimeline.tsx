@@ -43,14 +43,18 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters, api} = service.project
     const scrollModel = new ScrollModel()
+    const createButtons: HTMLElement = (
+        <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
+            <CreateTrackButtons lifecycle={lifecycle} service={service}/>
+        </div>
+    )
     const extra: HTMLElement = (
         <div className="extra">
-            <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
-                <CreateTrackButtons lifecycle={lifecycle} service={service}/>
-            </div>
+            {createButtons}
             <div className="region-area help-section">Drop instruments or samples here</div>
         </div>
     )
+    const scroller: HTMLElement = <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
             <div className="fill"/>
@@ -109,7 +113,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                          scrollContainer={scrollContainer}
                          range={range}/>
             {scrollContainer}
-            <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
+            {scroller}
         </div>
     )
     const unitInsertion = new UnitInsertion(element, manager, rootBoxAdapter)
@@ -227,6 +231,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         }),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             if (event.button !== 0 || event.clientY < extra.getBoundingClientRect().top) {return}
+            if (!(event.target instanceof Node) || createButtons.contains(event.target) || scroller.contains(event.target)) {return}
             if (event.target instanceof Element && isNotNull(event.target.closest("button"))) {return}
             service.project.audioUnitSelection.deselectAll()
         }, {capture: true}),
