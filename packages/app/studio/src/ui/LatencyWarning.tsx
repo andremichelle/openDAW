@@ -9,10 +9,13 @@ const className = Html.adoptStyleSheet(css, "LatencyWarning")
 
 type Construct = {
     anchor: HTMLElement
+    message: string
+    href: string
+    label: string
     dismiss: Exec
 }
 
-export const LatencyWarning = ({anchor, dismiss}: Construct) => {
+export const LatencyWarning = ({anchor, message, href, label, dismiss}: Construct) => {
     const rect = anchor.getBoundingClientRect()
     return (
         <div className={className} style={{
@@ -21,9 +24,9 @@ export const LatencyWarning = ({anchor, dismiss}: Construct) => {
             backgroundColor: Colors.black.toString()
         }}>
             <Icon symbol={IconSymbol.Warning}/>
-            <span>High output latency</span>
+            <span>{message}</span>
             <span onclick={dismiss}>
-                <a href="/manuals/latency" target="manuals">How to reduce it</a>
+                <a href={href} target="manuals">{label}</a>
             </span>
             <div className="close" onclick={dismiss}>✕</div>
         </div>

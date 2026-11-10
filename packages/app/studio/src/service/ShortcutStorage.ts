@@ -1,5 +1,5 @@
 import {isAbsent, isDefined, JSONValue, Objects, tryCatch} from "@opendaw/lib-std"
-import {ShortcutDefinitions} from "@opendaw/lib-dom"
+import {Key, Shortcut, ShortcutDefinitions} from "@opendaw/lib-dom"
 
 export type ShortcutContexts = Record<string, Readonly<{ factory: ShortcutDefinitions, workingDefinition: ShortcutDefinitions }>>
 export type ShortcutStore = Pick<Storage, "getItem" | "setItem" | "removeItem">
@@ -16,6 +16,11 @@ export namespace ShortcutStorage {
         ]
     }
 
+    // legacy snapshots hold every shortcut: an entry still at a default that moved later is no custom choice
+    const LegacyDefaults: Readonly<Record<string, Readonly<Record<string, JSONValue>>>> = {
+        global: {"toggle-clips": Shortcut.of(Key.KeyC, {shift: true}).toJSON()}
+    }
+
     const isRecord = (value: JSONValue | undefined): value is Record<string, JSONValue> =>
         typeof value === "object" && !isAbsent(value) && !Array.isArray(value)
 
@@ -25,7 +30,9 @@ export namespace ShortcutStorage {
         if (!isRecord(values)) {return null}
         if (!legacy) {return values}
         const moved = LegacyMoved[name] ?? []
-        return Object.fromEntries(Object.entries(values).filter(([key]) => !moved.includes(key)))
+        const defaults = LegacyDefaults[name] ?? {}
+        return Object.fromEntries(Object.entries(values).filter(([key, value]) => !moved.includes(key)
+            && !(isDefined(defaults[key]) && JSON.stringify(defaults[key]) === JSON.stringify(value))))
     }
 
     export const customized = (contexts: ShortcutContexts): Record<string, JSONValue> =>

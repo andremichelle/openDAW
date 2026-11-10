@@ -123,6 +123,7 @@ fn render_with(config: &Config, pitch: u32, velocity: f32, seconds: f32, held_se
     let frequency = 440.0 * libm::powf(2.0, (pitch as f32 - 69.0) / 12.0);
     voice.start(&note_on(pitch, velocity), frequency, 1.0, 0.0, 1, &shared);
     let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0,
+        anchor: 0.0, anchor_frame: 0,
         s0: 0, s1: 0};
     let total = (seconds * SAMPLE_RATE) as usize;
     let held = (held_seconds * SAMPLE_RATE) as usize;
@@ -662,7 +663,7 @@ fn wind_chromatic_runs_land_each_semitone() {
         shared.sample_rate = SAMPLE_RATE;
         let mut voice = KorpusVoice::default();
         let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0,
-            p1: 0.0, s0: 0, s1: 0};
+            p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0};
         let pitches: Vec<u32> = (57..=69).collect();
         let total = ((pitches.len() as f32 * spacing + 1.0) * SAMPLE_RATE) as usize;
         let mut left_all = vec![0.0f32; total];
@@ -807,7 +808,7 @@ fn pick_release_is_click_free() {
 // A stolen voice fades out within a few ms (the pool keeps rendering it) instead of being cut mid-wave.
 #[test]
 fn stolen_voice_fades_out() {
-    let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0, s0: 0, s1: 0};
+    let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0};
     let steal_at = (0.3 * SAMPLE_RATE) as usize / CHUNK_MAX * CHUNK_MAX;
     let total = steal_at + (0.1 * SAMPLE_RATE) as usize;
     let max_step = |samples: &[f32]| (steal_at - 64..steal_at + 512)
@@ -1167,7 +1168,7 @@ fn melody_over_held_chord() {
     let shared = shared_for(&config);
     let mut voicing: Voicing<KorpusVoice, 16, 16> = Voicing::new();
     voicing.set_mode(VoicingMode::Polyphonic);
-    let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0, s0: 0, s1: 0};
+    let block = abi::Block {index: 0, flags: abi::BlockFlags(0), bpm: 120.0, p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0};
     let chord: [u32; 6] = [40, 47, 52, 56, 59, 64];
     let melody: [u32; 8] = [76, 74, 72, 71, 69, 67, 66, 68];
     let total = (6.0 * SAMPLE_RATE) as usize;

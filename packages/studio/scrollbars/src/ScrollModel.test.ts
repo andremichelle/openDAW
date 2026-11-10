@@ -78,4 +78,57 @@ describe("ScrollModel", () => {
         model.moveBy(25)
         expect(model.position).toBe(125)
     })
+    describe("non-finite input (live errors 1202-1204: too much recursion in PitchPositioner)", () => {
+        // PitchPositioner wrote the position back on every change; a NaN never equals itself and recursed forever
+        const withWriteBack = (model: ScrollModel): ScrollModel => {
+            model.subscribe(() => model.position = model.position)
+            return model
+        }
+        it("moveTo on a track as small as the minimum thumb keeps the position", () => {
+            const model = create(400, 1000)
+            model.trackSize = 16
+            model.position = 100
+            withWriteBack(model)
+            expect(() => model.moveTo(0)).not.toThrow()
+            expect(model.position).toBe(100)
+            model.trackSize = 10
+            model.moveTo(5)
+            expect(model.position).toBe(100)
+        })
+        it("clamps infinite input to the start or the end", () => {
+            const model = withWriteBack(create(400, 1000))
+            model.position = 100
+            model.moveBy(Infinity)
+            expect(model.position).toBe(600)
+            model.position = -Infinity
+            expect(model.position).toBe(0)
+            model.normalized = Infinity
+            expect(model.position).toBe(600)
+        })
+        it("moveTo ignores a NaN track", () => {
+            const model = withWriteBack(create(400, 1000))
+            model.position = 100
+            model.trackSize = NaN
+            model.moveTo(5)
+            expect(model.position).toBe(100)
+        })
+        it("moveBy with NaN keeps the position", () => {
+            const model = withWriteBack(create(400, 1000))
+            model.position = 100
+            expect(() => model.moveBy(NaN)).not.toThrow()
+            expect(model.position).toBe(100)
+        })
+        it("setting position to NaN keeps the position", () => {
+            const model = withWriteBack(create(400, 1000))
+            model.position = 100
+            expect(() => model.position = NaN).not.toThrow()
+            expect(model.position).toBe(100)
+        })
+        it("setting normalized to NaN keeps the position", () => {
+            const model = withWriteBack(create(400, 1000))
+            model.position = 100
+            expect(() => model.normalized = NaN).not.toThrow()
+            expect(model.position).toBe(100)
+        })
+    })
 })

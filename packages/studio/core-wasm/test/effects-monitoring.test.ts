@@ -51,7 +51,7 @@ const setup = async (fxVolumeDb: number | null) => {
         view.setInt32(20, channels[1], true)
         engine.set_monitoring_map(1)
     }
-    const renderMonitored = (): {monitorPeak: number} => {
+    const renderMonitored = (): {monitorPeak: number, mainPeak: number} => {
         // Stage a constant 0.5 on channels 0/1 (the worklet writes fresh input each quantum), then render.
         const enginePtr = engine.monitor_input_ptr()
         const staging = new Float32Array(memory.buffer, enginePtr, 8 * QUANTUM)
@@ -62,7 +62,9 @@ const setup = async (fxVolumeDb: number | null) => {
         const staged = new Float32Array(memory.buffer, enginePtr2, 8 * QUANTUM)
         let monitorPeak = 0
         for (let index = 0; index < QUANTUM * 2; index++) {monitorPeak = Math.max(monitorPeak, Math.abs(staged[index]))}
-        return {monitorPeak}
+        const main = new Float32Array(memory.buffer, engine.output_ptr(), engine.output_len() >>> 0)
+        const mainPeak = main.reduce((peak, sample) => Math.max(peak, Math.abs(sample)), 0)
+        return {monitorPeak, mainPeak}
     }
     return {engine, memory, mapUnit, renderMonitored}
 }
@@ -75,9 +77,11 @@ describe("effects monitoring", () => {
         // Mapped stereo on channels 0/1: the input passes the (fx-less) chain to the strip at unity.
         mapUnit([0, 1])
         for (let warm = 0; warm < 4; warm++) {renderMonitored()} // let the strip ramps settle
-        const {monitorPeak} = renderMonitored()
+        const {monitorPeak, mainPeak} = renderMonitored()
         expect(monitorPeak, "the live input returns through the unit").toBeGreaterThan(0.4)
         expect(monitorPeak).toBeLessThan(0.6)
+        // #528: the monitored input returns through the monitor output only, never the main mix.
+        expect(mainPeak, "the live input stays out of the main mix").toBe(0)
         // Unmapping silences the return again.
         mapUnit(null)
         expect(renderMonitored().monitorPeak).toBe(0)

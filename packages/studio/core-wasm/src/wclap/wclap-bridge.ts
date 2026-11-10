@@ -690,7 +690,10 @@ export class WclapBridges {
             [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt], [ClapAbi.Ext.GUI, guiExt]
         ])
         this.#setFn(loaded, hoveredExt + ClapAbi.HostParamHovered.UPDATE, trampoline(["i32", "i32"], [],
-            (_host: number, paramId: number) => this.#host.sendHovered(plugin.uuid, paramId === ClapAbi.INVALID_ID ? -1 : paramId)))
+            (_host: number, paramId: number) => { // u32 arrives signed: ids from 2^31 (Signalsmith's) were lost
+                const id = paramId >>> 0
+                this.#host.sendHovered(plugin.uuid, id === ClapAbi.INVALID_ID ? -1 : id)
+            }))
         this.#setFn(loaded, samplesExt + ClapAbi.HostSamples.AVAILABLE, trampoline(["i32"], ["i32"], () => 1))
         this.#setFn(loaded, guiExt + ClapAbi.HostGui.RESIZE_HINTS_CHANGED, trampoline(["i32"], [], () => {}))
         this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_RESIZE, trampoline(["i32", "i32", "i32"], ["i32"],

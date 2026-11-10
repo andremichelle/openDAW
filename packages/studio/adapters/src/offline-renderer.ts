@@ -13,6 +13,7 @@ export interface OfflineEngineInitializeConfig {
 export interface OfflineEngineRenderConfig {
     silenceThresholdDb?: number
     silenceDurationSeconds?: number
+    minDurationSeconds?: number
     maxDurationSeconds?: number
 }
 

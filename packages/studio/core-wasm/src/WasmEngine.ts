@@ -8,10 +8,11 @@ import {MutableObservableOption, Terminable} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
+import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project, SampleLoadEvent} from "@opendaw/studio-core"
 import {EngineModules, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createSyncLoopback} from "./sync/loopback"
+import {UpdateHistory} from "./sync/update-history"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
     WASM_SYNC_CHANNEL,
@@ -32,6 +33,10 @@ export type WasmEngineUrls = {
 export namespace WasmEngine {
     const modules = new MutableObservableOption<EngineModules>()
     const config = new MutableObservableOption<WasmEngineUrls>()
+    const history = new UpdateHistory()
+
+    // The last update ops sent to the realtime engine (box types and field keys, no values), for trap reports.
+    export const recentUpdates = (): ReadonlyArray<string> => history.entries()
 
     // Whether the wasm modules are compiled and the processor is registered (i.e. `ensureReady` succeeded).
     export const isReady = (): boolean => modules.nonEmpty()
@@ -67,7 +72,8 @@ export namespace WasmEngine {
             return {
                 processorName: WASM_ENGINE_PROCESSOR_NAME,
                 attachment,
-                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project)
+                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project),
+                recordSampleLoad: (event: SampleLoadEvent): void => history.recordSample(event)
                 // No connectFrozenAudio: the memory is worklet-owned (non-shared), so frozen PCM travels
                 // through the `setFrozenAudio` engine command and is copied worklet-side.
             }
@@ -92,6 +98,7 @@ export namespace WasmEngine {
                 }
             })
         const throttle = {next: 0}
+        history.reset()
         const verifyChecksum = (): void => {
             const now = performance.now()
             if (now < throttle.next) {return}
@@ -101,6 +108,7 @@ export namespace WasmEngine {
         }
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates: (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void => {
+                history.record(tasks)
                 sender.applyUpdates(serializeUpdateTasks(tasks))
                 verifyChecksum()
             },

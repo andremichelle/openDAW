@@ -100,7 +100,7 @@ pub fn render_baseline(spec: &RenderSpec) -> (Vec<f32>, Vec<f32>) {
         let start = block_index * RENDER_QUANTUM;
         let p0 = samples_to_pulses(start as f64, BPM, ENGINE_RATE);
         let p1 = samples_to_pulses((start + RENDER_QUANTUM) as f64, BPM, ENGINE_RATE);
-        let block = Block {index: block_index as u32, flags, p0, p1, s0: 0, s1: RENDER_QUANTUM as u32, bpm: BPM};
+        let block = Block {index: block_index as u32, flags, p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: BPM};
         buffer.clear();
         sequencer.process(&mut buffer, &source, spec.file_rate, spec.transients, &config, 0.0, &block, 0.0, p0, p1, &fading_gain, ENGINE_RATE);
         out_left[start..start + RENDER_QUANTUM].copy_from_slice(&buffer.left);

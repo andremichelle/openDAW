@@ -43,6 +43,7 @@ pub(crate) fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Ve
     unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
     unsafe { SIDECHAIN_BIND.get() }.clear();
+    unsafe { GROOVE_BINDS.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }
@@ -194,6 +195,7 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
             position: spec.position, duration: spec.duration,
             loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
             mute: spec.mute,
+            groove: spec.groove,
             curve: collection.curve()
         });
         collections.push(collection);
@@ -204,7 +206,8 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
     let mut clips = Vec::new();
     for spec in value_clips_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
-        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute, curve: collection.curve()});
+        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute,
+            groove: spec.groove, curve: collection.curve()});
         collections.push(collection);
         rebind_uuids.push(spec.clip);
     }
@@ -378,11 +381,25 @@ impl Engine {
             }
             broadcast_slots.push((id, slot));
         }
+        // The device's groove pointers (`host_observe_groove` during init): each slot follows its pointer's target
+        let groove_binds = core::mem::take(unsafe { GROOVE_BINDS.get() });
+        let mut groove_slots = Vec::with_capacity(groove_binds.len());
+        let mut groove_subs = Vec::with_capacity(groove_binds.len());
+        for (slot, path) in groove_binds {
+            let pointer = Address::of(device_uuid, path);
+            crate::follow_groove(slot, &self.graph, self.graph.target_of(&pointer).map(|address| address.uuid));
+            let watched = pointer.clone();
+            groove_subs.push(self.graph.subscribe_vertex(Propagation::This, pointer, Box::new(move |graph, _update| {
+                crate::follow_groove(slot, graph, graph.target_of(&watched).map(|address| address.uuid));
+            })));
+            groove_slots.push(slot);
+        }
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let (mut observe_subs, pointer_field_subs) = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
         self.field_overrides.insert(device_uuid,
             (reg.field_changed_index, state_ptr, field_paths.iter().map(|obs| obs.path.clone()).collect()));
+        observe_subs.extend(groove_subs);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
         observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
@@ -414,7 +431,7 @@ impl Engine {
             None
         };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots, groove_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -756,6 +773,7 @@ impl Engine {
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
+            params.groove_slots.into_iter().for_each(crate::release_groove_slot);
             for (id, slot) in params.broadcast_slots {
                 if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
                     *entry = (0, false);

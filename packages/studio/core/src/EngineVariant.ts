@@ -1,10 +1,16 @@
-import {Func, Nullable, Option, Provider, Terminable, UUID} from "@opendaw/lib-std"
+import {Func, int, Nullable, Option, Procedure, Provider, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Messenger} from "@opendaw/lib-runtime"
 import type {Project} from "./project"
 
 // A main-thread replacement for the `EngineCommands.setFrozenAudio` transfer (null = unfreeze).
 export type FrozenAudioWriter = (uuid: UUID.Bytes, audioData: Nullable<AudioData>) => void
+
+// A sample the engine asked for, and how its delivery ended (main-thread order, same port as the sync).
+export type SampleLoadEvent =
+    | { type: "requested", uuid: UUID.Bytes }
+    | { type: "delivered", uuid: UUID.Bytes, numberOfFrames: int, numberOfChannels: int, sampleRate: number }
+    | { type: "failed", uuid: UUID.Bytes }
 
 // An alternative engine AudioWorkletProcessor (e.g. the WASM engine). It must speak the exact same message
 // contract as "engine-processor" (engine-commands, engine-to-client, EngineState SyncStream, engine-live-data,
@@ -20,6 +26,8 @@ export type EngineWorkletVariant = {
     // freeze PCM itself (the wasm engine writes it into its shared memory from the MAIN thread — bulk
     // copying inside the worklet's message handler would stall the audio thread).
     readonly connectFrozenAudio?: Func<Messenger, FrozenAudioWriter>
+    // Optional: observes every sample request of the engine and its outcome.
+    readonly recordSampleLoad?: Procedure<SampleLoadEvent>
 }
 
 // The injection point for THE engine. studio-core cannot import studio-core-wasm (that package depends on this

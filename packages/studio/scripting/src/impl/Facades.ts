@@ -1,10 +1,10 @@
+import {isGrooveBox} from "@opendaw/studio-adapters"
 import {Box, Field, PointerField, Vertex} from "@opendaw/lib-box"
 import {
     AudioBusBox,
     AudioEffectCompositeCellBox,
     AudioUnitBox,
     AuxSendBox,
-    GrooveShuffleBox,
     InstrumentCompositeCellBox,
     LfoModulatorBox,
     MacroModulatorBox,
@@ -30,7 +30,7 @@ import {InstrumentCompositeLayerImpl, InstrumentImpls, MIDIOutputParameterImpl, 
 import {ScriptParameterImpl, ScriptSampleImpl} from "./devices/ScriptDevices"
 import {AudioUnitImpls} from "./AudioUnits"
 import {SendImpl} from "./Sends"
-import {GrooveShuffleImpl} from "./GrooveShuffleImpl"
+import {GrooveImpls} from "./Grooves"
 import {ModulationImpl, ModulatorImpls} from "./Modulators"
 import {TrackImpls} from "./timeline/Tracks"
 import {MarkerImpl} from "./timeline/Markers"
@@ -75,7 +75,7 @@ export namespace Facades {
         if (box instanceof WerkstattParameterBox) {return ScriptParameterImpl.wrap(context, box)}
         if (box instanceof WerkstattSampleBox) {return ScriptSampleImpl.wrap(context, box)}
         if (box instanceof MIDIOutputParameterBox) {return MIDIOutputParameterImpl.wrap(context, box)}
-        if (box instanceof GrooveShuffleBox) {return GrooveShuffleImpl.wrap(context, box)}
+        if (isGrooveBox(box)) {return GrooveImpls.wrap(context, box)}
         if (box instanceof LfoModulatorBox || box instanceof StepsModulatorBox
             || box instanceof MacroModulatorBox || box instanceof RandomModulatorBox) {
             return ModulatorImpls.wrap(context, box)

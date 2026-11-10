@@ -11,7 +11,7 @@ import {
     NoteMidiExport,
     TimelineRange
 } from "@opendaw/studio-core"
-import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, AudioRegionBoxAdapter, Grooves} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -27,6 +27,9 @@ import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
 import {MonoConversions} from "@/service/MonoConversions"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {HarmonyDetection} from "@/service/HarmonyDetection"
+import {Dialogs} from "@/ui/components/dialogs"
 
 type Construct = {
     element: Element
@@ -60,7 +63,7 @@ export const installRegionContextMenu =
     ({element, service, capturing, selection, timelineBox, range}: Construct): Terminable => {
         const {project} = service
         const {editing, selection: vertexSelection} = project
-        return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
+        return ContextMenu.subscribe(element, ({addItems, closeWhen, client}: ContextMenu.Collector) => {
             const target = capturing.captureEvent(client)
             if (target === null || target.type === "track") {return}
             if (!selection.isSelected(target.region)) {
@@ -68,6 +71,7 @@ export const installRegionContextMenu =
                 selection.select(target.region)
             }
             const region = target.region
+            closeWhen(close => region.box.subscribeDeletion(close))
             addItems(
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
@@ -90,6 +94,7 @@ export const installRegionContextMenu =
                 })),
                 ColorMenu.createItem(hue => editing.modify(() =>
                     selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
+                GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Rename"})
                     .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label)
                         .then(value => NameValidator.validate(value, {
@@ -121,10 +126,41 @@ export const installRegionContextMenu =
                                 .then(EmptyExec, console.warn)
                         } else {
                             const {truncateNotesAtRegionEnd} = service.engine.preferences.settings.playback
-                            editing.modify(() => region.flatten(selection.selected(), truncateNotesAtRegionEnd)
-                                .ifSome(box => project.selection.select(box)))
+                            const regions = selection.selected().slice()
+                            const flatten = (groove: Grooves.FlattenGroove) => editing.modify(() =>
+                                region.flatten(regions, truncateNotesAtRegionEnd, groove)
+                                    .ifSome(box => project.selection.select(box)))
+                            const grooved = regions.some(adapter =>
+                                Grooves.pointerOf(adapter.box).flatMap(pointer => pointer.targetVertex).nonEmpty())
+                            if (!grooved) {
+                                flatten("keep")
+                                return
+                            }
+                            // a region deleted meanwhile (undo, a peer) closes the dialog and nothing is flattened
+                            const deleted = new AbortController()
+                            const watches = [...regions, region].map(adapter => adapter.box.subscribeDeletion(() => deleted.abort()))
+                            Dialogs.choose<Grooves.FlattenGroove | "cancel">({
+                                headline: "Flatten Grooved Regions",
+                                message: "Apply Groove moves the notes and automation points to where the groove plays them, the region sounds the same. Keep Groove leaves them in place and keeps the groove only when all regions share it, it then starts at the new region start.",
+                                choices: [
+                                    {text: "Cancel", value: "cancel"},
+                                    {text: "Keep Groove", value: "keep"},
+                                    {text: "Apply Groove", value: "apply"}
+                                ],
+                                origin: element,
+                                abortSignal: deleted.signal
+                            }).then(choice => {
+                                watches.forEach(watch => watch.terminate())
+                                choice.ifSome(groove => {if (groove !== "cancel") {flatten(groove)}})
+                            }, EmptyExec)
                         }
                     }),
+                MenuItem.default({label: "Detect Chords", hidden: region.type !== "note-region"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectChords(service,
+                        HarmonyDetection.fromRegions(selection.selected()))),
+                MenuItem.default({label: "Detect Key", hidden: region.type !== "note-region"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
+                        HarmonyDetection.fromRegions(selection.selected()))),
                 MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounce(selection.selected())})
                     .setTriggerProcedure(() => Bounces.bounceRegions(service, selection.selected().slice())
                         .then(EmptyExec, console.warn)),

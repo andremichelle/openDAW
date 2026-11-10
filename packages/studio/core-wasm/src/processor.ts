@@ -21,6 +21,7 @@ import {
     EngineSettingsSchema,
     EngineStateSchema,
     PERF_BUFFER_SIZE,
+    EngineNotice,
     EngineToClient,
     MonitoringMapEntry,
     NoteSignal,
@@ -41,7 +42,7 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, FieldKind, readSignalGraph, takeReportMessage} from "./engine-exports"
+import {EngineExports, FieldKind, readSignalGraph, takeNotices, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
@@ -118,6 +119,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             dispatcher => new class implements EngineToClient {
                 log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                 error(reason: unknown): void {dispatcher.dispatchAndForget(this.error, reason)}
+                notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                 deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                 fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
@@ -174,6 +176,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.isRecording = view.getUint8(18) === 1
             state.recordingStopTime = this.#recordingStopTime
             state.compensationLatency = engine.compensation_latency() / sampleRate
+            state.compensationExceeded = engine.compensation_exceeded() !== 0
             if (this.#measureLoad) {
                 state.perfBuffer.set(this.#perfBuffer)
                 state.perfIndex = this.#perfWriteIndex
@@ -292,6 +295,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.click_allocate(numberOfFrames, channels)
+                    if (pcm === 0) {
+                        this.#engineToClient.log(`click sound not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
@@ -307,7 +314,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.frozen_allocate(numberOfFrames, channels)
-                    if (pcm === 0) {return} // no engine instance: writing at 0 would corrupt memory (see boot.ts)
+                    if (pcm === 0) { // no engine instance or no room: writing at 0 would corrupt memory (see boot.ts)
+                        this.#engineToClient.log(`frozen audio not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
@@ -438,6 +448,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#announceRecordingEdges(engine)
         this.#announceTransportAnchors(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
+        takeNotices(engine, this.#memory).forEach(notice => this.#engineToClient.notice(notice))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
             const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)

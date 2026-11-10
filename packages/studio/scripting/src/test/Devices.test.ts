@@ -7,7 +7,7 @@ describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach((key, index) => {
             const effect = unit.addMIDIEffect(key)
             expect(effect.key).toBe(key)
@@ -17,6 +17,22 @@ describe("Devices", () => {
         })
         expect(unit.midiEffects.map(effect => effect.key)).toEqual(keys)
         expect(() => unit.addMIDIEffect("Delay" as any)).toThrow(RangeError)
+    })
+
+    it("edits the Scale Matrix grid", () => {
+        const {project} = createFixture()
+        const matrix = project.addInstrumentUnit("Vaporisateur").addMIDIEffect("ScaleMatrix")
+        expect([matrix.root, matrix.scale, matrix.follow]).toEqual([0, 0, false])
+        expect(matrix.custom).toEqual(new Array(12).fill(0))
+        matrix.scale = 15
+        matrix.follow = true
+        matrix.setCustom([0, -1, 0, 1, 0, 0, 12])
+        expect(matrix.custom.slice(0, 7)).toEqual([0, -1, 0, 1, 0, 0, 12])
+        matrix.setCustom([20])
+        expect(matrix.custom[0]).toBe(12)
+        expect(() => matrix.setCustom(new Array(13).fill(0))).toThrow(RangeError)
+        matrix.root = 14
+        expect(matrix.root).toBe(11)
     })
 
     it("adds every audio effect with defaults", () => {

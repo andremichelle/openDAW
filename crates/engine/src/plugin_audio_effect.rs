@@ -61,6 +61,7 @@ pub(crate) struct PluginAudioEffect {
     uuid: Uuid,
     type_name: String,
     reported_non_finite: bool,
+    in_feedback: bool,
     in_offsets: Box<[u32]>,
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
@@ -111,6 +112,7 @@ impl PluginAudioEffect {
             uuid,
             type_name,
             reported_non_finite: false,
+            in_feedback: false,
             events: EventBuffer::new(),
             params: Vec::new(),
             clock_armed: false,
@@ -215,6 +217,10 @@ impl Drop for PluginAudioEffect {
 }
 
 impl Processor for PluginAudioEffect {
+    fn set_feedback(&mut self, in_loop: bool) {
+        self.in_feedback = in_loop;
+    }
+
     fn latency(&self) -> u32 {
         self.latency.get()
     }
@@ -295,18 +301,25 @@ impl Processor for PluginAudioEffect {
             core::mem::swap(&mut self.params, &mut pull.params);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
+        if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
+            if self.in_feedback {
+                self.device_output.iter_mut().for_each(|samples| samples.fill(0.0));
+                self.reset();
+                if !self.reported_non_finite {
+                    self.reported_non_finite = true;
+                    crate::notice(format_args!("non-finite\t{}", boxgraph::address::uuid_to_string(&self.uuid)));
+                }
+            } else if !self.reported_non_finite {
+                self.reported_non_finite = true;
+                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
+                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
+            }
+        }
         {
             let mut output = self.output.borrow_mut();
             for index in 0..RENDER_QUANTUM {
                 output.left[index] = self.device_output[0][index];
                 output.right[index] = self.device_output[1][index];
-            }
-        }
-        if !self.reported_non_finite {
-            if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
-                self.reported_non_finite = true;
-                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
-                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
             }
         }
         self.meter.process(&self.device_output[0], &self.device_output[1]);

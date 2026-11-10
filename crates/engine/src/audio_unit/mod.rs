@@ -18,7 +18,7 @@
 //! `params` (device parameter automation) + `tests` (the whole suite, whitebox over every submodule).
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
@@ -65,7 +65,7 @@ use crate::audio_region_player::AudioRegionPlayer;
 use crate::midi_output::{self, CcBinding, MidiOutControls, MidiOutProcessor};
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, GROOVE_BINDS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 mod wiring;
 mod routing;
@@ -121,6 +121,7 @@ const MIDI_OUT_PARAM_VALUE_KEY: u16 = 4;
 // AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), routing (4, Int32: AudioSendRouting Pre=0 /
 // Post=1), sendGain (5, dB), sendPan (6, bipolar).
 const SEND_TARGET_KEY: u16 = 2;
+const SEND_INDEX_KEY: u16 = 3;
 const SEND_ROUTING_KEY: u16 = 4;
 const SEND_GAIN_KEY: u16 = 5;
 const SEND_PAN_KEY: u16 = 6;
@@ -567,7 +568,9 @@ pub(crate) struct DeviceParams {
     pub(crate) records: Option<crate::script_device::RecordBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
-    pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
+    pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>,
+    // the groove slots the device observed (`observe_groove`), freed on teardown
+    pub(crate) groove_slots: Vec<u32>
 }
 
 /// A device node that takes resolved sidechain buffers: an audio effect, or an instrument with an audio input.
@@ -860,6 +863,7 @@ impl Engine {
             self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
             self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
             self.resolve_sinks();   // wire each audio sink's tap -> target bus (no master fallback)
+            self.resolve_feedback();
             self.broadcasts.sweep(); // drop telemetry entries whose processor was torn down (generation bump)
             self.solo_dirty.set(true); // routing may have changed: the solo walk must re-resolve
         }
@@ -1287,7 +1291,7 @@ impl Engine {
         // SEND/RETURN: the `auxSends` (24) collection (parallel sends, ordered by index but order is not audible)
         // + a monitor on `output` (25) so a re-point of the unit's destination bus enqueues it. Both wired AFTER
         // observe so the catch-up members / value do not fire (the new unit enqueues itself once below).
-        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), EFFECT_INDEX_KEY);
+        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), SEND_INDEX_KEY);
         aux_sends.set_on_dirty(mark.signal());
         let output_mark = mark.clone();
         let output_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![UNIT_OUTPUT_KEY]),

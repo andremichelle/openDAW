@@ -20,6 +20,7 @@ import {
     EngineCommands,
     EngineState,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
@@ -90,6 +91,7 @@ export class OfflineEngineRenderer {
         Communicator.executor<EngineToClient>(engineMessenger.channel("engine-to-client"), {
             log: (message: string): void => console.log("OFFLINE-ENGINE", message),
             error: (reason: unknown) => console.error("OFFLINE-ENGINE", reason),
+            notice: (notice: EngineNotice): void => console.warn("OFFLINE-ENGINE", notice),
             ready: (): void => {},
             fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => new Promise((resolve, reject) => {
                 const handler = source.sampleManager.getOrCreate(uuid)
@@ -273,10 +275,11 @@ export class OfflineEngineRenderer {
                 ? {startPosition: 0 as ppqn, endPosition: source.lastRegionAction()}
                 : {startPosition: r.start, endPosition: r.end}
         })
-        const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
+        const minDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition)
+        const maxDurationSeconds = minDurationSeconds + 30
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer =>
-                renderer.render({maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
+                renderer.render({minDurationSeconds, maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
         boxGraph.endTransaction()
@@ -309,7 +312,7 @@ export class OfflineEngineRenderer {
         const numFrames = Math.round(seconds * sampleRate)
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer => tail
-                ? renderer.render({maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
+                ? renderer.render({minDurationSeconds: seconds, maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
                 : renderer.#renderFrames(start, numFrames, passes, progress, abortSignal)))
         boxGraph.beginTransaction()
         loopArea.enabled.setValue(was.loopEnabled)
@@ -404,7 +407,6 @@ export class OfflineEngineRenderer {
             let rendered = 0
             while (rendered < totalFrames) {
                 if (isDefined(abortSignal) && abortSignal.aborted) {return Promise.reject(Errors.AbortError)}
-                // chunks must be quantum multiples: a step discards the rest of its last quantum
                 const numSamples = Math.min(RenderQuantum * 375, totalFrames - rendered)
                 const channels = await this.step(numSamples)
                 const sourceOffset = Math.max(0, skipFrames - rendered)

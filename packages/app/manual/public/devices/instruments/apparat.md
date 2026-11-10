@@ -284,6 +284,20 @@ The host clears the output buffer before each block. You write to it with `=` or
 | `p1`     | `number` | End position in ppqn                                   |
 | `flags`  | `number` | Bitmask: 1=transporting, 2=discontinuous, 4=playing, 8=bpmChanged |
 
+### Key and chord
+
+`this.keyAt(position)` and `this.chordAt(position)` read the harmony of the song at a position in ppqn, the same
+[key and chord](/manuals/key-and-chords) Scale Matrix and Arpeggio follow. Call them in `process`, they are not
+available in the constructor.
+
+| Call | Returns |
+|------|---------|
+| `this.keyAt(block.p0)` | `{root, steps}`: `root` the pitch class 0 to 11 (0 = C), `steps` the scale's notes in semitones above the root, `[0, 2, 4, 5, 7, 9, 11]` for major |
+| `this.chordAt(block.p0)` | `null` where no chord sits, else `{root, notes}`: `notes` the semitones above the root as voiced, inversion included, `[0, 4, 7]` for a major triad |
+
+A chord note plays as `60 + root + note`. Both return frozen objects shared between calls, so asking every block
+allocates nothing.
+
 ---
 
 ## 8. Custom Views

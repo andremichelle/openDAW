@@ -76,6 +76,8 @@ export interface Engine extends Terminable {
     get countInBeatsRemaining(): ObservableValue<number>
     /** seconds the heard output lags the timeline through plugin delay compensation */
     get compensationLatency(): ObservableValue<number>
+    /** true when a path needs more delay compensation than the 100 ms cap and stays unaligned */
+    get compensationExceeded(): ObservableValue<boolean>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
     get cpuLoad(): ObservableValue<number>
     get project(): Project

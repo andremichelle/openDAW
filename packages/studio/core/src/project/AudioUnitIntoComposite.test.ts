@@ -1,9 +1,9 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {InstrumentCompositeBoxAdapter, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Grooves, InstrumentCompositeBoxAdapter, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {EffectFactories} from "../EffectFactories"
 import {
-    AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox,
+    AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, GrooveStackBox, InstrumentCompositeBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox,
     NoteRegionBox, PitchDeviceBox, TrackBox, VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -333,6 +333,30 @@ describe("wrap effects into an FX Composite", () => {
         expect(project.editing.modify(() => api.wrapEffectsIntoComposite([]).isFailure()).unwrap()).toBe(true)
         expect(chain()[0]).toBe(outer)
         expect(pitch.host.targetVertex.unwrap().box.name, "untouched").toBe("AudioUnitBox")
+        project.terminate()
+    })
+})
+
+describe("paste an audio unit as a layer with grooves", () => {
+    it("a stack the project already has keeps its members once", async () => {
+        const project = await createProject()
+        const {api, boxAdapters} = project
+        const {sourceUnit, composite, stack} = project.editing.modify(() => {
+            const source = api.createAnyInstrument(InstrumentFactories.Nano)
+            const track = source.audioUnitBox.tracks.pointerHub.incoming()[0].box as TrackBox
+            const region = api.createNoteRegion({trackBox: track, position: 0, duration: 3840})
+            const stack = Grooves.create(project, "stack") as GrooveStackBox
+            Grooves.addToStack(project, stack, Grooves.create(project, "power"))
+            Grooves.addToStack(project, stack, Grooves.create(project, "s-curve"))
+            region.groove.refer(stack)
+            const target = api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            return {sourceUnit: source.audioUnitBox, composite: target.instrumentBox as InstrumentCompositeBox, stack}
+        }).unwrap()
+        const entry = AudioUnitsClipboard.copyEntry(boxAdapters.adapterFor(sourceUnit, AudioUnitBoxAdapter)).unwrap("copy")
+        const grooves = project.rootBox.grooves.pointerHub.incoming().length
+        project.editing.modify(() => project.api.pasteAudioUnitAsLayer(composite, entry.data, "append").result()).unwrap()
+        expect(Grooves.entriesOf(stack).length).toBe(2)
+        expect(project.rootBox.grooves.pointerHub.incoming().length).toBe(grooves)
         project.terminate()
     })
 })

@@ -187,10 +187,10 @@ describe("MIDI output instrument (wasm engine)", () => {
         expect(anyBit(bits)).toBe(0)
         engine.play()
         const records: Array<MidiRecord> = []
-        const positions: Array<number> = [] // p0 per rendered quantum, mirroring the transport accumulation
+        const positions: Array<number> = [] // p0 per rendered quantum, the frame count converted once (#533)
         const bitWhileHeld: Array<number> = []
-        for (let quantum = 0, p0 = 0.0; quantum < 200; quantum++, p0 += pulsesPerQuantum) {
-            positions.push(p0)
+        for (let quantum = 0; quantum < 200; quantum++) {
+            positions.push(quantum * 128 * BPM * 960 / (60 * SAMPLE_RATE))
             engine.render()
             records.push(...drainMIDI(engine, memory))
             if (quantum === 100) {bitWhileHeld.push(anyBit(bits))} // note (0..960 pulses) still held here
@@ -223,8 +223,8 @@ describe("MIDI output instrument (wasm engine)", () => {
         engine.play()
         const records: Array<MidiRecord> = []
         const positions: Array<number> = []
-        for (let quantum = 0, p0 = 0.0; quantum < 16; quantum++, p0 += pulsesPerQuantum) {
-            positions.push(p0)
+        for (let quantum = 0; quantum < 16; quantum++) {
+            positions.push(quantum * 128 * BPM * 960 / (60 * SAMPLE_RATE))
             engine.render()
             records.push(...drainMIDI(engine, memory))
         }

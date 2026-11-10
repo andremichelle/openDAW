@@ -42,6 +42,7 @@ export const ArpeggioDeviceBox: BoxSchema<Pointers> = DeviceFactory.createMidiEf
         value: 0, constraints: {min: 0, max: 15}, unit: ""
     },
     20: {type: "int32", name: "seed", value: 0, constraints: {min: 0, max: 999999}, unit: ""},
+    21: {type: "boolean", name: "follow-chords", pointerRules: ParameterPointerRules, value: false},
     30: {type: "array", name: "step-kinds", length: 64, element: {type: "int32", value: 0, constraints: {length: 4}, unit: ""}},
     31: {type: "array", name: "step-velocities", length: 64, element: {type: "int32", value: 100, constraints: {min: 0, max: 100}, unit: "%"}},
     32: {type: "array", name: "step-gates", length: 64, element: {type: "int32", value: 100, constraints: {min: 0, max: 200}, unit: "%"}},

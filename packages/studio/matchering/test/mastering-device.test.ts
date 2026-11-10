@@ -58,9 +58,10 @@ const toneAmplitude = (signal: Float32Array, frequency: number, from: number): n
 
 const FIELD_KIND_BOOL = 2
 const COMPARE_KEY = 15
+const MONO_KEY = 16
 
 const render = async (mastering?: Mastering, linked: boolean = true, compareFromQuantum: number = -1,
-                      quanta: number = QUANTA): Promise<[Float32Array, Float32Array]> => {
+                      quanta: number = QUANTA, overrideKey: number = COMPARE_KEY): Promise<[Float32Array, Float32Array]> => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, primaryAudioUnitBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -125,7 +126,7 @@ const render = async (mastering?: Mastering, linked: boolean = true, compareFrom
         if (quantum === compareFromQuantum) {
             const pointer = engine.input_reserve(16)
             new Uint8Array(memory.buffer, pointer, 16).set(masteringUuid)
-            expect(engine.override_device_field(pointer, COMPARE_KEY, FIELD_KIND_BOOL, 1)).toBe(1)
+            expect(engine.override_device_field(pointer, overrideKey, FIELD_KIND_BOOL, 1)).toBe(1)
         }
         engine.render()
         const output = new Float32Array(memory.buffer, engine.output_ptr(), length)
@@ -184,6 +185,17 @@ describe("device_mastering.wasm in the engine", async () => {
     it("width zero folds to mono", async () => {
         const [left, right] = await render({curve: 1.0, width: 0.0})
         expect(deviation(left, right, 1.0, 0)).toBeLessThan(1e-6)
+    }, 60000)
+    it("mono folds the output to the mid of both channels", async () => {
+        const [stereoLeft, stereoRight] = await render({curve: 1.0})
+        expect(deviation(stereoLeft, stereoRight, 1.0, 0)).toBeGreaterThan(1e-2)
+        const [left, right] = await render({curve: 1.0}, true, 0, QUANTA, MONO_KEY)
+        expect(deviation(left, right, 1.0, 0)).toBe(0)
+        let worst = 0.0
+        for (let index = STEADY; index < left.length; index++) {
+            worst = Math.max(worst, Math.abs(left[index] - (stereoLeft[index] + stereoRight[index]) * 0.5))
+        }
+        expect(worst).toBeLessThan(1e-6)
     }, 60000)
     it("compare plays the original at the mastered loudness without changing the delay", async () => {
         const compareAt = 1500 // 4 s of playback, the loudness window is full

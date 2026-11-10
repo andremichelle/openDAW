@@ -195,6 +195,15 @@ impl NoteEventSource for NoteSequencer {
                         if region.mute {
                             return; // TS `#processRegions`: `region.mute -> continue` — a muted region emits no notes
                         }
+                        if let Some(groove) = region.groove {
+                            // the groove runs on from where the region's loop starts
+                            let origin = region.position - region.loop_offset;
+                            let grooved = Grooved {access, groove, origin, length: region.loop_duration,
+                                low: region.position - origin, high: region.complete() - origin, truncate};
+                            process_grooved(notes, &grooved, section.from.max(region.position), section.to.min(region.complete()),
+                                retainer, random, next_id, sink);
+                            return;
+                        }
                         for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, section.from, section.to) {
                             // TS: `end = truncateNotesAtRegionEnd ? min(rawEnd, region.complete) : Infinity` — by
                             // default a note keeps its FULL duration and rings past the region / cycle end.
@@ -207,7 +216,14 @@ impl NoteEventSource for NoteSequencer {
                     // A launched clip: its collection cycles at the CLIP duration (TS `#processClip`).
                     Some(clip) => {
                         let Some((clip_duration, _)) = access.clip_info(&clip) else { return };
+                        // the groove runs on the timeline grid the clip cycles on
+                        let groove = access.clip_groove(&clip).map(|groove| Grooved {access, groove, origin: 0.0,
+                            length: clip_duration, low: f64::NEG_INFINITY, high: f64::INFINITY, truncate});
                         access.clip_events(&clip, &mut |notes| {
+                            if let Some(grooved) = &groove {
+                                process_grooved(notes, grooved, section.from, section.to, retainer, random, next_id, sink);
+                                return;
+                            }
                             let clip_start = quantize_floor(section.from, clip_duration);
                             let clip_end = clip_start + clip_duration;
                             let truncate_end = if truncate { clip_duration } else { f64::INFINITY };
@@ -339,6 +355,86 @@ fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local
                 velocity: note.velocity
             });
             retainer.add_and_retain(RetainedNote {position: global, duration, id, pitch: note.pitch});
+        }
+    }
+}
+
+struct Grooved<'a> {
+    access: &'a dyn NoteTrackAccess,
+    groove: [u8; 16],
+    origin: f64,
+    length: f64,
+    low: f64,
+    high: f64,
+    truncate: bool
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_grooved(notes: &EventCollection<NoteEvent>, grooved: &Grooved, from: f64, to: f64,
+                   retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Mulberry32, next_id: &mut u64,
+                   sink: &mut dyn FnMut(Event)) {
+    let Grooved {access, groove, origin, length, low, high, truncate} = grooved;
+    let inside = |position: f64| clamp(position, *low, *high);
+    let first = inside(access.unwarp(groove, from - origin));
+    let last = inside(access.unwarp(groove, to - origin));
+    if first >= last {
+        return;
+    }
+    let length = if *length > 0.0 {*length} else {f64::INFINITY};
+    let mut base = if length.is_finite() {math::floor(first / length) * length} else {0.0};
+    while base < last {
+        let local_from = if first > base {first - base} else {0.0};
+        let local_to = if last < base + length {last - base} else {length};
+        if local_from < local_to {
+            let end = if *truncate {access.warp(groove, (base + length).min(*high))} else {f64::INFINITY};
+            play_grooved(notes, &|position: f64| access.warp(groove, base + position), local_from, local_to, *origin, end,
+                retainer, random, next_id, sink);
+        }
+        base += length;
+    }
+}
+
+// One content pass of `process_grooved`: `warp` maps a content position to its grooved position after the origin
+#[allow(clippy::too_many_arguments)]
+fn play_grooved(notes: &EventCollection<NoteEvent>, warp: &dyn Fn(f64) -> f64, from: f64, to: f64, delta: f64, end: f64,
+                retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Mulberry32, next_id: &mut u64,
+                sink: &mut dyn FnMut(Event)) {
+    let mut start = |position: f64, stop: f64, note: &NoteEvent| {
+        let begin = warp(position);
+        let finish = warp(stop);
+        let finish = if finish < end {finish} else {end};
+        let id = *next_id;
+        *next_id += 1;
+        let duration = if finish > begin {finish - begin} else {0.0};
+        sink(Event::NoteStart {id, position: delta + begin, duration, pitch: note.pitch, cent: note.cent, velocity: note.velocity});
+        retainer.add_and_retain(RetainedNote {position: delta + begin, duration, id, pitch: note.pitch});
+    };
+    for note in notes.iterate_range(from - notes.max_duration(), to) {
+        if note.chance < 100.0 && random.next_double(0.0, 100.0) > note.chance as f64 {
+            continue;
+        }
+        if note.play_count > 1 {
+            let duration = note.duration;
+            let count = note.play_count as f64;
+            let curve = note.play_curve as f64;
+            let search_start = inverse_curve_func((from - note.position) / duration, curve);
+            let search_limit = inverse_curve_func((to - note.position) / duration, curve);
+            let mut search_index = math::floor(search_start * count);
+            let mut search_position = search_index / count;
+            while search_position < search_limit {
+                if search_position >= search_start {
+                    let a = curve_func(search_position, curve) * duration;
+                    if a >= duration {
+                        break;
+                    }
+                    let b = curve_func(search_position + 1.0 / count, curve) * duration;
+                    start(note.position + a, note.position + b, note);
+                }
+                search_index += 1.0;
+                search_position = search_index / count;
+            }
+        } else if from <= note.position && note.position < to {
+            start(note.position, note.position + note.duration, note);
         }
     }
 }

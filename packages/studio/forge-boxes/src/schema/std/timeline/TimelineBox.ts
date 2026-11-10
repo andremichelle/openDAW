@@ -92,6 +92,36 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     }
                 }
             },
+            24: {
+                type: "object",
+                name: "key-track",
+                class: {
+                    name: "KeyTrack",
+                    fields: {
+                        1: {
+                            type: "field", name: "events",
+                            pointerRules: {mandatory: false, accepts: [Pointers.KeyTrack]}
+                        },
+                        10: {type: "int32", name: "root", value: 0, constraints: {min: 0, max: 11}, unit: ""},
+                        11: {type: "int32", name: "scale", value: 0b101010110101, constraints: {min: 1, max: 4095}, unit: ""},
+                        20: {type: "boolean", name: "enabled", value: true}
+                    }
+                }
+            },
+            25: {
+                type: "object",
+                name: "chord-track",
+                class: {
+                    name: "ChordTrack",
+                    fields: {
+                        1: {
+                            type: "field", name: "events",
+                            pointerRules: {mandatory: false, accepts: [Pointers.ChordTrack]}
+                        },
+                        20: {type: "boolean", name: "enabled", value: true}
+                    }
+                }
+            },
             30: {
                 type: "int32", name: "durationInPulses",
                 value: PPQN.fromSignature(128, 1), ...PPQNDurationConstraints

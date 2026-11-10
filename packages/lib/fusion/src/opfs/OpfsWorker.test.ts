@@ -7,6 +7,12 @@ type EntryData = FileData | DirData
 
 const createMockFileSystem = () => {
     const root: Map<string, EntryData> = new Map()
+    const log: Array<string> = []
+    const locked: Set<string> = new Set()
+    const failTruncate: Set<string> = new Set()
+    const containsLocked = (name: string, entry: EntryData): boolean => entry.kind === "file"
+        ? locked.has(name)
+        : Array.from(entry.children).some(([childName, child]) => containsLocked(childName, child))
     const resolveDir = (segments: ReadonlyArray<string>, create: boolean): Map<string, EntryData> => {
         let current = root
         for (const segment of segments) {
@@ -24,7 +30,7 @@ const createMockFileSystem = () => {
         }
         return current
     }
-    const createSyncAccessHandle = (fileEntry: FileData): FileSystemSyncAccessHandle => ({
+    const createSyncAccessHandle = (name: string, fileEntry: FileData): FileSystemSyncAccessHandle => ({
         getSize: () => fileEntry.data.length,
         read: (buffer: Uint8Array) => {
             buffer.set(fileEntry.data.subarray(0, buffer.length))
@@ -41,7 +47,11 @@ const createMockFileSystem = () => {
             fileEntry.data.set(src, at)
             return src.length
         },
-        truncate: (size: number) => {fileEntry.data = new Uint8Array(size)},
+        truncate: (size: number) => {
+            if (failTruncate.has(name)) {throw new DOMException("Broken", "InvalidStateError")}
+            log.push(`truncate ${name} ${size}`)
+            fileEntry.data = new Uint8Array(size)
+        },
         flush: () => {},
         close: () => {}
     } as unknown as FileSystemSyncAccessHandle)
@@ -50,7 +60,10 @@ const createMockFileSystem = () => {
         name,
         isSameEntry: async (_other: FileSystemHandle) => false,
         getFile: async () => new File([fileEntry.data.slice()], name),
-        createSyncAccessHandle: async () => createSyncAccessHandle(fileEntry)
+        createSyncAccessHandle: async () => {
+            if (locked.has(name)) {throw new DOMException("Locked", "NoModificationAllowedError")}
+            return createSyncAccessHandle(name, fileEntry)
+        }
     } as unknown as FileSystemFileHandle)
     const createDirectoryHandle = (children: Map<string, EntryData>, dirName: string = ""): FileSystemDirectoryHandle => {
         const handle: FileSystemDirectoryHandle = {
@@ -79,6 +92,11 @@ const createMockFileSystem = () => {
                 return createFileHandle(name, entry)
             },
             async removeEntry(name: string, _options?: FileSystemRemoveOptions) {
+                const entry = children.get(name)
+                if (entry === undefined) {throw new DOMException("Not found", "NotFoundError")}
+                // like OPFS: an entry with an open sync access handle cannot be removed
+                if (containsLocked(name, entry)) {throw new DOMException("Locked", "NoModificationAllowedError")}
+                log.push(`remove ${name}`)
                 children.delete(name)
             },
             async *values() {
@@ -90,9 +108,10 @@ const createMockFileSystem = () => {
             },
             async *entries() {
                 for (const [name, entry] of children) {
-                    yield [name, entry.kind === "file"
+                    const pair: [string, FileSystemHandle] = [name, entry.kind === "file"
                         ? createFileHandle(name, entry)
-                        : createDirectoryHandle(entry.children)] as any
+                        : createDirectoryHandle(entry.children, name)]
+                    yield pair
                 }
             },
             async *keys() {
@@ -102,7 +121,7 @@ const createMockFileSystem = () => {
         } as unknown as FileSystemDirectoryHandle
         return handle
     }
-    return {root, createDirectoryHandle: () => createDirectoryHandle(root)}
+    return {root, log, locked, failTruncate, createDirectoryHandle: () => createDirectoryHandle(root)}
 }
 
 let protocol: OpfsProtocol
@@ -225,6 +244,79 @@ describe("OpfsWorker", () => {
             await protocol.write("b.bin", new Uint8Array([2]))
             await protocol.delete("")
             expect(mockFs.root.size).toBe(0)
+        })
+    })
+
+    // Chrome adds nothing to the saved usage for sync-handle writes but subtracts a removed file's size,
+    // unless the file was truncated to 0 first (issue #527, Chromium 436552046 / 401692415)
+    describe("truncate before remove (issue #527)", () => {
+        it("truncates a file to 0 before removing it", async () => {
+            await protocol.write("doomed.bin", new Uint8Array([1, 2, 3]))
+            mockFs.log.length = 0
+            await protocol.delete("doomed.bin")
+            expect(mockFs.log).toEqual(["truncate doomed.bin 0", "remove doomed.bin"])
+        })
+        it("truncates a nested file before removing it", async () => {
+            await protocol.write("x/y/z.bin", new Uint8Array([1]))
+            mockFs.log.length = 0
+            await protocol.delete("x/y/z.bin")
+            expect(mockFs.log).toEqual(["truncate z.bin 0", "remove z.bin"])
+        })
+        it("truncates every file of a directory before removing it", async () => {
+            await protocol.write("rm/a.bin", new Uint8Array([1]))
+            await protocol.write("rm/sub/b.bin", new Uint8Array([2]))
+            mockFs.log.length = 0
+            await protocol.delete("rm")
+            expect(mockFs.log).toEqual([
+                "truncate a.bin 0", "remove a.bin", "truncate b.bin 0", "remove b.bin", "remove sub", "remove rm"])
+            expect(mockFs.root.has("rm")).toBe(false)
+        })
+        it("truncates every file before clearing the root", async () => {
+            await protocol.write("file1.bin", new Uint8Array([1]))
+            await protocol.write("dir/file2.bin", new Uint8Array([2]))
+            mockFs.log.length = 0
+            await protocol.delete("")
+            expect(mockFs.log).toEqual(["truncate file1.bin 0", "remove file1.bin", "truncate file2.bin 0", "remove file2.bin", "remove dir"])
+            expect(mockFs.root.size).toBe(0)
+        })
+        it("never leaves an emptied file behind when a directory cannot be removed", async () => {
+            await protocol.write("rm/open.bin", new Uint8Array([1]))
+            await protocol.write("rm/busy.bin", new Uint8Array([2, 3]))
+            mockFs.locked.add("busy.bin")
+            mockFs.log.length = 0
+            await protocol.delete("rm")
+            expect(mockFs.log).toEqual(["truncate open.bin 0", "remove open.bin"])
+            const dir = mockFs.root.get("rm") as DirData
+            expect(Array.from(dir.children.keys())).toEqual(["busy.bin"])
+            expect(Array.from((dir.children.get("busy.bin") as FileData).data)).toEqual([2, 3])
+        })
+        it("leaves a locked file intact and warns", async () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("busy.bin", new Uint8Array([4, 5]))
+            mockFs.locked.add("busy.bin")
+            mockFs.log.length = 0
+            await expect(protocol.delete("busy.bin")).resolves.toBeUndefined()
+            expect(mockFs.log).toEqual([])
+            expect(Array.from((mockFs.root.get("busy.bin") as FileData).data)).toEqual([4, 5])
+            expect(warn.mock.calls[0][0]).toBe("[OPFS] could not open 'busy.bin' to empty it before removal")
+            warn.mockRestore()
+        })
+        it("warns and still removes a file that cannot be truncated", async () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("stubborn.bin", new Uint8Array([1]))
+            mockFs.failTruncate.add("stubborn.bin")
+            mockFs.log.length = 0
+            await protocol.delete("stubborn.bin")
+            expect(mockFs.log).toEqual(["remove stubborn.bin"])
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toBe("[OPFS] could not empty 'stubborn.bin' before removal")
+            warn.mockRestore()
+        })
+        it("does not truncate when the path does not exist", async () => {
+            mockFs.log.length = 0
+            await expect(protocol.delete("nope/nothing")).resolves.toBeUndefined()
+            await expect(protocol.delete("nothing.bin")).resolves.toBeUndefined()
+            expect(mockFs.log.filter(entry => entry.startsWith("truncate"))).toEqual([])
         })
     })
 

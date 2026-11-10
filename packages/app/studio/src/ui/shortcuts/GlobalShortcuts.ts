@@ -53,7 +53,7 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     },
     "start-recording-direct": {
         shortcut: Shortcut.of(Key.KeyR, {shift}),
-        description: "Start reocrding without count-in"
+        description: "Start recording without count-in"
     },
     "toggle-software-keyboard": {
         shortcut: Shortcut.of(Key.KeyK, {ctrl}),
@@ -83,8 +83,16 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyS, {shift}),
         description: "Show or hide signature track"
     },
-    "toggle-clips": {
+    "toggle-key-track": {
+        shortcut: Shortcut.of(Key.KeyK, {shift}),
+        description: "Show or hide key track"
+    },
+    "toggle-chord-track": {
         shortcut: Shortcut.of(Key.KeyC, {shift}),
+        description: "Show or hide chord track"
+    },
+    "toggle-clips": {
+        shortcut: Shortcut.of(Key.KeyG, {shift}),
         description: "Show or hide clips"
     },
     "toggle-follow-cursor": {

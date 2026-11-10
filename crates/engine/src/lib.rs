@@ -19,7 +19,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
@@ -44,7 +44,7 @@ use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
 use engine_env::note_event_instrument::SharedNoteEventSource;
-use engine_env::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use engine_env::ppqn::{first_update_position, UPDATE_CLOCK_RATE};
 use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
 use transport::transport::{Marker, Transport, RENDER_QUANTUM};
@@ -395,14 +395,20 @@ const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits p
 const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
+#[cfg(all(target_family = "wasm", feature = "heap-guard"))]
+mod heap_guard;
 mod playhead_history;
 mod monitor;
 mod frozen;
 use metronome::Metronome;
 mod signature_track;
+mod groove_registry;
+use groove_registry::GrooveRegistry;
 use signature_track::{SignatureEvent, SignatureEvents, SignatureTrack};
 mod marker_track;
 use marker_track::MarkerTrack;
+mod harmony_track;
+use harmony_track::{HarmonyEvents, HarmonyTrack};
 mod plugin_instrument;
 mod plugin_audio_effect;
 mod plugin_midi_effect;
@@ -637,6 +643,53 @@ shared_static! {
 // The signature track for `host_bar_at`, its OWN cell like `BASE_FREQUENCY`. 4/4 before bind.
 shared_static! {
     static SIGNATURES: Option<SignatureEvents> = None;
+}
+// The key and chord tracks for `host_harmony_at`, its OWN cell like `SIGNATURES`. C major before bind.
+shared_static! {
+    static HARMONY: Option<HarmonyEvents> = None;
+}
+// The project's grooves for `host_groove_warp` / `host_groove_unwarp`, its OWN cell like `SIGNATURES`.
+shared_static! {
+    static GROOVES: Option<GrooveRegistry> = None;
+}
+// The loop area the transport wraps at for `host_loop_area`, set per quantum by the render.
+shared_static! {
+    static LOOP_AREA: Option<(f64, f64)> = None;
+}
+// Every observed groove pointer's current target by GLOBAL slot id, plus the free ids for reuse. Written only
+// by `bind_device` and the pointer watchers (off render), read by the warp imports during render.
+shared_static! {
+    static GROOVE_SLOTS: Vec<Option<Uuid>> = Vec::new();
+}
+shared_static! {
+    static GROOVE_FREE: Vec<u32> = Vec::new();
+}
+// The groove-observe recorder `host_observe_groove` appends to during `init`: (slot, pointer path).
+shared_static! {
+    pub(crate) static GROOVE_BINDS: Vec<(u32, Vec<u16>)> = Vec::new();
+}
+
+fn set_groove_slot(slot: u32, target: Option<Uuid>) {
+    if let Some(entry) = unsafe { GROOVE_SLOTS.get() }.get_mut(slot as usize) {
+        *entry = target;
+    }
+}
+
+/// Point a slot at its pointer's target, the registry follows that groove even outside the list.
+pub(crate) fn follow_groove(slot: u32, graph: &BoxGraph, target: Option<Uuid>) {
+    set_groove_slot(slot, target);
+    if let Some(target) = target {follow_unlisted_groove(graph, target)}
+}
+
+pub(crate) fn follow_unlisted_groove(graph: &BoxGraph, groove: Uuid) {
+    if let Some(registry) = unsafe { GROOVES.get() }.as_ref() {
+        registry.ensure(graph, groove);
+    }
+}
+
+pub(crate) fn release_groove_slot(slot: u32) {
+    set_groove_slot(slot, None);
+    unsafe { GROOVE_FREE.get() }.push(slot);
 }
 // The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
 // range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
@@ -1164,6 +1217,68 @@ pub extern "C" fn host_base_frequency() -> f32 {
     unsafe { *BASE_FREQUENCY.get() }
 }
 
+/// Host import a device calls from its `init` to follow the groove its pointer field at PATH targets. Only
+/// RECORDS the path and returns a GLOBAL slot id, `bind_device` keeps the slot on the pointer's target.
+#[no_mangle]
+pub extern "C" fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let slots = unsafe { GROOVE_SLOTS.get() };
+    let slot = match unsafe { GROOVE_FREE.get() }.pop() {
+        Some(slot) => { slots[slot as usize] = None; slot }
+        None => { slots.push(None); (slots.len() - 1) as u32 }
+    };
+    unsafe { GROOVE_BINDS.get() }.push((slot, path.to_vec()));
+    slot
+}
+
+fn slot_target(slot: u32) -> Option<Uuid> {
+    *unsafe { GROOVE_SLOTS.get() }.get(slot as usize)?
+}
+
+/// The grooved position of a straight `pulse` through `groove` (unchanged when the registry is not bound).
+pub(crate) fn warp_through(groove: &Uuid, pulse: f64) -> f64 {
+    unsafe { GROOVES.get() }.as_ref().map_or(pulse, |registry| registry.warp(groove, pulse))
+}
+
+/// The straight position of a grooved `pulse` through `groove` (unchanged when the registry is not bound).
+pub(crate) fn unwarp_through(groove: &Uuid, pulse: f64) -> f64 {
+    unsafe { GROOVES.get() }.as_ref().map_or(pulse, |registry| registry.unwarp(groove, pulse))
+}
+
+/// Host import: the grooved position of a straight `pulse` through the slot's groove (unchanged without one).
+#[no_mangle]
+pub extern "C" fn host_groove_warp(slot: u32, pulse: f64) -> f64 {
+    slot_target(slot).map_or(pulse, |groove| warp_through(&groove, pulse))
+}
+
+/// Host import: the straight position of a grooved `pulse` through the slot's groove (unchanged without one).
+#[no_mangle]
+pub extern "C" fn host_groove_unwarp(slot: u32, pulse: f64) -> f64 {
+    slot_target(slot).map_or(pulse, |groove| unwarp_through(&groove, pulse))
+}
+
+/// Host import: writes the loop area the transport wraps at (2 x f64) and returns 1, or 0 when it does not wrap.
+#[no_mangle]
+pub extern "C" fn host_loop_area(out_ptr: u32) -> u32 {
+    let Some((from, to)) = *(unsafe { LOOP_AREA.get() }) else {return 0};
+    unsafe { *(out_ptr as usize as *mut [f64; 2]) = [from, to]; }
+    1
+}
+
+/// Host import a device calls for the harmony at `pulse`: writes key root, key scale mask, chord root
+/// (-1 without a chord) and chord mask (4 x i32).
+#[no_mangle]
+pub extern "C" fn host_harmony_at(pulse: f64, out_ptr: u32) {
+    // While PAUSED the caller's `pulse` is free-running, live notes follow the frozen song position.
+    let position = if quantum_transporting() {pulse} else {song_position()};
+    let harmony = match unsafe { HARMONY.get() }.as_ref() {
+        Some(events) => events.harmony_at(position),
+        None => harmony_track::Harmony {root: 0, bits: math::harmony::MAJOR_BITS, chord: None}
+    };
+    let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
+    unsafe { *(out_ptr as usize as *mut [i32; 4]) = [harmony.root, harmony.bits, chord_root, chord_bits]; }
+}
+
 /// Host import a device calls for the bar holding `pulse`: writes its start, length and beat length (3 x f64).
 #[no_mangle]
 pub extern "C" fn host_bar_at(pulse: f64, out_ptr: u32) {
@@ -1411,14 +1526,7 @@ struct TempoStamp {
 
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
-    let pulses = position - block.p0;
-    let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-    let raw = if pulses.abs() < 1.0e-7 {
-        s0
-    } else {
-        s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
-    };
-    raw.clamp(s0, s1)
+    engine_env::block::frame_of(block, position, sample_rate)
 }
 
 struct Engine {
@@ -1469,6 +1577,8 @@ struct Engine {
     // The MARKER TRACK (TS `MarkerTrackAdapter`): the position-sorted markers the transport's block
     // loop follows (a section repeats `plays` times before falling through).
     marker_track: Option<MarkerTrack>,
+    // The KEY and CHORD TRACKS (TS `KeyTrackAdapter` / `ChordTrackAdapter`), read by devices via `host_harmony_at`.
+    harmony: Option<HarmonyTrack>,
     // Queued marker-state notifications for `marker_changes_take` (uuid + plays-so-far, or the null
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
@@ -1509,6 +1619,9 @@ struct Engine {
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
     output_registry: AudioOutputBufferRegistry<NodeId>,
+    // every resolved sidechain as (consumer node, consumer device, source node, source box), rebuilt per resolve
+    sidechain_links: Vec<(NodeId, Uuid, NodeId, Uuid)>,
+    looped_sidechains: BTreeSet<Uuid>,
     // The SEND/RETURN bus registry: each non-primary `AudioBusBox`'s summing bus (`AudioBusProcessor`), keyed
     // by the bus box uuid, built when its bus-type audio unit is wired. A unit's `output` (25) or an
     // `AuxSendBox`'s `targetBus` resolves through this to the sum node to feed; the PRIMARY bus is ABSENT (it
@@ -1569,6 +1682,7 @@ impl Engine {
             tempo: None,
             signature: None,
             marker_track: None,
+            harmony: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
             transport_jumps: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM),
             transport_pause_sample: -1,
@@ -1592,6 +1706,8 @@ impl Engine {
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             field_overrides: BTreeMap::new(),
             output_registry: AudioOutputBufferRegistry::new(),
+            sidechain_links: Vec::new(),
+            looped_sidechains: BTreeSet::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
@@ -1777,7 +1893,7 @@ impl Engine {
         let fade_frames = (COMPENSATION_CROSSFADE_SECONDS * self.sample_rate) as u32;
         let limits = CompensationLimits {max_frames: max_compensation_frames(self.sample_rate), fade_frames};
         self.context.compensate(limits);
-        self.output_latency = self.context.arrival_of(self.output_node);
+        self.output_latency = self.context.landing_of(self.output_node);
         if self.output_latency > 0 || self.metronome_delay.is_some() {
             self.metronome_delay.get_or_insert_with(engine_env::compensation::CompensatedInput::new)
                 .set_delay(self.output_latency, limits);
@@ -1786,7 +1902,7 @@ impl Engine {
         for (index, entry) in self.stem_exports.iter().enumerate() {
             let arrival = self.audio_units.iter().find(|unit| unit.unit == entry.uuid)
                 .and_then(|unit| unit.stem_tap(entry))
-                .map_or(self.output_latency, |(node, _)| self.context.arrival_of(node));
+                .map_or(self.output_latency, |(node, _)| self.context.landing_of(node));
             let frames = self.output_latency.saturating_sub(arrival);
             let slot = &mut self.stem_compensation[index];
             if frames > 0 || slot.is_some() {
@@ -1812,6 +1928,10 @@ impl Engine {
         self.transport.set_loop_pause(self.pause_on_loop_disabled);
         self.transport.set_loop_from(self.controls.loop_from.get());
         self.transport.set_loop_to(self.controls.loop_to.get());
+        let (loop_from, loop_to) = (self.controls.loop_from.get(), self.controls.loop_to.get());
+        *unsafe { LOOP_AREA.get() } = if loop_gate && !self.pause_on_loop_disabled && loop_from < loop_to {
+            Some((loop_from, loop_to))
+        } else {None};
         self.refresh_tempo_map();
         // The count-in flip (TS `renderer.setCallback(recordingStartTime, ...)`): once the playhead reaches
         // the recording start, counting-in becomes recording and the metronome returns to its preference.
@@ -1880,6 +2000,8 @@ impl Engine {
                     flags: BlockFlags::create(true, block.discontinuous, true, false),
                     p0: block.p0,
                     p1: block.p1,
+                    anchor: block.anchor,
+                    anchor_frame: block.anchor_frame,
                     s0: block.s0 as u32,
                     s1: block.s1 as u32,
                     bpm: block.bpm
@@ -1902,6 +2024,8 @@ impl Engine {
                         flags: BlockFlags::create(false, false, false, false),
                         p0: paused.p0,
                         p1: paused.p1,
+                        anchor: paused.anchor,
+                        anchor_frame: covered as i64,
                         s0: covered as u32,
                         s1: RENDER_QUANTUM as u32,
                         bpm: paused.bpm
@@ -1920,6 +2044,8 @@ impl Engine {
                 flags: BlockFlags::create(false, false, false, false),
                 p0: paused.p0,
                 p1: paused.p1,
+                anchor: paused.anchor,
+                anchor_frame: paused.anchor_frame,
                 s0: paused.s0 as u32,
                 s1: paused.s1 as u32,
                 bpm: paused.bpm
@@ -1999,6 +2125,14 @@ impl Engine {
         // which the worklet's play command issues first when timestamp playback is enabled).
         self.schedule_midi_transport(midi_output::start_message());
         self.transport.play()
+    }
+
+    fn suspend_automation(&self, uuid: [u8; 16]) {
+        if !self.transport.is_playing() {return}
+        let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+        if !suspended.contains(&uuid) {
+            suspended.push(uuid);
+        }
     }
 
     /// Schedule a MIDI transport message for the next quantum (TS `midiTransportClock.schedule`).
@@ -2185,6 +2319,13 @@ impl Engine {
         self.monitoring_map.iter().find(|entry| &entry.uuid == unit).map(|entry| (entry.left, entry.right))
     }
 
+    /// Whether `unit` is heard through the monitor output only (EFFECTS monitoring), so its output bus, aux sends
+    /// and sinks stay out of the mix (#528, TS `monitoringActive`). A frozen unit keeps its routes like in TS.
+    pub(crate) fn returns_through_monitor(&self, unit: &[u8; 16]) -> bool {
+        self.frozen_of(unit).is_none() && self.monitor_channels_of(unit)
+            .is_some_and(|(left, _)| (0..monitor::MONITOR_CHANNELS as i32).contains(&left))
+    }
+
     /// Copy each mapped unit's STRIP output (TS `unit.audioOutput()`) into the monitor OUTPUT staging, for
     /// the worklet's second output (the MonitoringRouter return). Runs right after `render`.
     fn copy_monitor_outputs(&mut self) {
@@ -2283,6 +2424,10 @@ impl Engine {
         // `EngineContext.baseFrequency`). Catch-up delivers the loaded value; live edits retune NEW notes
         // only (the TS voicing strategies call `computeFrequency` at note-on, never mid-voice).
         // WASM CONTRACT: RootBox.baseFrequency = field key 5 (Float32, default 440, boxes RootBox.ts).
+        if let Some(root) = self.graph.find_by_name("RootBox").map(|root| root.uuid) {
+            let (grooves, _subscription) = GrooveRegistry::observe(&mut self.graph, root);
+            unsafe { *GROOVES.get() = Some(grooves); }
+        }
         if let Some(root) = self.graph.find_by_name("RootBox") {
             self.graph.catchup_and_subscribe(Address::of(root.uuid, vec![5]), |value| {
                 if let Some(value) = value.as_float32() {
@@ -2303,6 +2448,9 @@ impl Engine {
         // marker track: TimelineBox.markerTrack (21) = {markers (1, hub), enabled (20)} — the sorted
         // markers the transport's block loop follows and the switchMarkerState notifications feed from.
         self.marker_track = Some(MarkerTrack::observe(&mut self.graph, uuid));
+        let harmony = HarmonyTrack::observe(&mut self.graph, uuid);
+        unsafe { *HARMONY.get() = Some(harmony.handle()); }
+        self.harmony = Some(harmony);
         // Populate the tempo map BEFORE reconcile reads region spans: a seconds-based audio region's duration /
         // loop-duration are converted tempo-aware at the region position, so the map must reflect the loaded
         // tempo (nominal bpm + automation curve) already at bind, not only from the first render.
@@ -2910,6 +3058,12 @@ pub extern "C" fn compensation_latency() -> u32 {
     unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.output_latency) }
 }
 
+/// 1 when a path needs more compensation than the cap, so it stays unaligned.
+#[no_mangle]
+pub extern "C" fn compensation_exceeded() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.context.compensation_exceeded() as u32) }
+}
+
 /// Refresh the 32-byte checksum buffer from the current graph and return its pointer. Computing the
 /// checksum is a full-graph walk (O(all boxes)), so it runs ONLY here — on the throttled verification
 /// round-trip (~1/s), never per transaction. Called from the worklet's checksum-verify path.
@@ -2961,6 +3115,10 @@ pub extern "C" fn reset() {
         CHECKSUM.get().fill(0);
         *BASE_FREQUENCY.get() = 440.0; // back to the default until the next session's `bind` catches up
         *SIGNATURES.get() = None;
+        *HARMONY.get() = None;
+        *GROOVES.get() = None;
+        GROOVE_SLOTS.get().clear();
+        GROOVE_FREE.get().clear();
     }
 }
 
@@ -3055,8 +3213,14 @@ pub extern "C" fn frozen_allocate(frame_count: u32, _channels: u32) -> *mut f32 
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.frozen_pending = alloc::vec![0.0; frame_count as usize * 2];
-                engine.frozen_pending.as_mut_ptr()
+                engine.frozen_pending = Vec::new();
+                match (frame_count as usize).checked_mul(2).and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.frozen_pending = pending;
+                        engine.frozen_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }
@@ -3220,9 +3384,8 @@ pub extern "C" fn ignore_note_region() {
 pub extern "C" fn suspend_automation() {
     let mut uuid = [0u8; 16];
     uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
-    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
-    if !suspended.contains(&uuid) {
-        suspended.push(uuid);
+    if let Some(engine) = unsafe { ENGINE.get().as_ref() } {
+        engine.suspend_automation(uuid)
     }
 }
 
@@ -3516,8 +3679,15 @@ pub extern "C" fn click_allocate(frame_count: u32, channels: u32) -> *mut f32 {
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.click_pending = alloc::vec![0.0; frame_count as usize * channels.clamp(1, 2) as usize];
-                engine.click_pending.as_mut_ptr()
+                engine.click_pending = Vec::new();
+                match (frame_count as usize).checked_mul(channels.clamp(1, 2) as usize)
+                    .and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.click_pending = pending;
+                        engine.click_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }
@@ -3786,12 +3956,23 @@ mod heap {
     // memory lets the main thread write sample data, but it never executes the engine).
     unsafe impl Sync for EngineAlloc {}
 
+    #[cfg(not(feature = "heap-guard"))]
     unsafe impl GlobalAlloc for EngineAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {self.0.alloc(layout)}
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {self.0.dealloc(ptr, layout)}
         unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {self.0.alloc_zeroed(layout)}
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
             self.0.realloc(ptr, layout, new_size)
+        }
+    }
+
+    #[cfg(feature = "heap-guard")]
+    unsafe impl GlobalAlloc for EngineAlloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            crate::heap_guard::alloc(layout, |outer| self.0.alloc(outer))
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            crate::heap_guard::dealloc(ptr, layout, |base, outer| self.0.dealloc(base, outer))
         }
     }
 
@@ -3889,6 +4070,38 @@ pub extern "C" fn report_message_len() -> usize {
 #[no_mangle]
 pub extern "C" fn report_message_clear() {
     unsafe { REPORT_MESSAGE.get() }.1 = 0;
+}
+
+const NOTICE_MESSAGE_CAPACITY: usize = 1024;
+const NOTICE_LINE_RESERVE: usize = 128;
+shared_static! {
+    static NOTICE_MESSAGE: ([u8; NOTICE_MESSAGE_CAPACITY], usize) = ([0; NOTICE_MESSAGE_CAPACITY], 0);
+}
+
+// a non-fatal line for the user (tab-separated, kind first), read and cleared after `render`
+pub(crate) fn notice(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    let (buffer, written) = unsafe { NOTICE_MESSAGE.get() };
+    if NOTICE_MESSAGE_CAPACITY - *written < NOTICE_LINE_RESERVE {return}
+    let mut writer = BufferWriter {buffer, written: *written};
+    if writer.written > 0 {let _ = writer.write_str("\n");}
+    let _ = writer.write_fmt(args);
+    *written = writer.written;
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_ptr() -> *const u8 {
+    unsafe { NOTICE_MESSAGE.get() }.0.as_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_len() -> usize {
+    unsafe { NOTICE_MESSAGE.get() }.1
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_clear() {
+    unsafe { NOTICE_MESSAGE.get() }.1 = 0;
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.

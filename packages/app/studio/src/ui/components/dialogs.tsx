@@ -160,9 +160,9 @@ export namespace Dialogs {
 
     export type Choice<T> = { text: string, value: T }
 
-    // resolves None when dismissed
-    export const choose = <T,>({headline, message, choices, origin}: {
-        headline: string, message: string, choices: ReadonlyArray<Choice<T>>, origin?: Element
+    // resolves None when dismissed or aborted
+    export const choose = <T,>({headline, message, choices, origin, abortSignal}: {
+        headline: string, message: string, choices: ReadonlyArray<Choice<T>>, origin?: Element, abortSignal?: AbortSignal
     }): Promise<Option<T>> => {
         const {resolve, promise} = Promise.withResolvers<Option<T>>()
         const buttons: ReadonlyArray<Button> = choices.map(({text, value}, index) => ({
@@ -181,6 +181,7 @@ export namespace Dialogs {
             </Dialog>
         )
         dialog.addEventListener("close", () => resolve(Option.None), {once: true})
+        abortSignal?.addEventListener("abort", () => dialog.close(), {once: true})
         Surface.get(origin).body.appendChild(dialog)
         dialog.showModal()
         return promise

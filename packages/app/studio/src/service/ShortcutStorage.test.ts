@@ -79,6 +79,21 @@ describe("ShortcutStorage", () => {
         })
     })
 
+    it("drops a legacy entry that still holds a default which moved, keeps a remapped one", () => {
+        const factory: ShortcutDefinitions = {
+            "toggle-clips": {shortcut: Shortcut.of(Key.KeyG, {shift}), description: ""},
+            "toggle-chord-track": {shortcut: Shortcut.of(Key.KeyC, {shift}), description: ""}
+        }
+        const load = (clips: Shortcut): Shortcut => {
+            const contexts: ShortcutContexts = {global: {factory, workingDefinition: ShortcutDefinitions.copy(factory)}}
+            const {store} = createStore({[ShortcutStorage.LegacyStorageKey]: JSON.stringify({global: {"toggle-clips": clips.toJSON()}})})
+            ShortcutStorage.load(contexts, store)
+            return working(contexts, "toggle-clips")
+        }
+        expect(load(Shortcut.of(Key.KeyC, {shift})).equals(Shortcut.of(Key.KeyG, {shift}))).toBe(true)
+        expect(load(Shortcut.of(Key.KeyX, {shift})).equals(Shortcut.of(Key.KeyX, {shift}))).toBe(true)
+    })
+
     it("prefers the new key and still removes a leftover legacy snapshot", () => {
         const contexts = createContexts()
         const {items, store} = createStore({

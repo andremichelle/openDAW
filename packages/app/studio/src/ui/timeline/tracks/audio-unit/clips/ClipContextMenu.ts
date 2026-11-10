@@ -9,6 +9,9 @@ import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-box
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleEditorService} from "@/service/SampleEditorService"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {HarmonyDetection} from "@/service/HarmonyDetection"
+import {StudioService} from "@/service/StudioService"
 
 type Creation = {
     element: HTMLElement
@@ -16,9 +19,10 @@ type Creation = {
     capturing: ElementCapturing<ClipCaptureTarget>
     selection: Selection<AnyClipBoxAdapter>
     sampleEditor: SampleEditorService
+    service: StudioService
 }
 
-export const installClipContextMenu = ({element, project, selection, capturing, sampleEditor}: Creation) =>
+export const installClipContextMenu = ({element, project, selection, capturing, sampleEditor, service}: Creation) =>
     ContextMenu.subscribe(element, collector => {
         const client = collector.client
         const target = capturing.captureEvent(client)
@@ -31,6 +35,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                 selection.deselectAll()
                 selection.select(clip)
             }
+            collector.closeWhen(close => clip.box.subscribeDeletion(close))
             const modify = <T extends AnyClipBoxAdapter>(procedure: Procedure<T>) =>
                 editing.modify(() => selection.selected().forEach(adapter => procedure(adapter as T)))
             collector.addItems(
@@ -51,9 +56,16 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                         modify(({box: {mute}}) => mute.setValue(newValue))
                     }),
                 ColorMenu.createItem(hue => modify(adapter => adapter.box.hue.setValue(hue))),
+                GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Consolidate", selectable: clip.isMirrowed})
                     .setTriggerProcedure(() => editing.modify(() =>
                         selection.selected().forEach(clip => clip.consolidate()))),
+                MenuItem.default({label: "Detect Chords", hidden: clip.type !== "note-clip"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectChords(service,
+                        HarmonyDetection.fromClips(selection.selected(), Math.round(project.engine.position.getValue())))),
+                MenuItem.default({label: "Detect Key", hidden: clip.type !== "note-clip"})
+                    .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
+                        HarmonyDetection.fromClips(selection.selected(), 0))),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: clip.type !== "audio-clip"})
                     .setTriggerProcedure(() => {
                         if (clip.type === "audio-clip") {sampleEditor.openFile(clip.file).then(EmptyExec, console.warn)}
@@ -130,6 +142,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
+                                clip.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                                 box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })
@@ -157,6 +170,7 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
+                                clip.box.groove.ifVertex(vertex => box.groove.refer(vertex))
                                 box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })

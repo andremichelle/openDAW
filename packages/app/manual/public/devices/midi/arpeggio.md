@@ -164,6 +164,9 @@ Pick a lane on the left and drag the bars to edit it:
 - **< >**: Shift all steps one step left or right within the length.
 - **Clear**: Reset every step to a plain note and every lane to its default.
 - **Seed** and the dice: the seed of all random decisions. Type a number or roll a new one.
+- **Chords**: While the transport runs, the chord on the project's [chord track](/manuals/key-and-chords)
+  replaces the held keys, so the arpeggio plays your chord progression without holding anything. Held keys set
+  the octave, without them the chord starts at C3. Where no chord sits, the held keys play as usual.
 
 ---
 

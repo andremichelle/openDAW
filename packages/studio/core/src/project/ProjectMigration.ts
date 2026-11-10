@@ -3,6 +3,7 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioRegionBox,
+    AudioSignalsmithBox,
     AudioTimeStretchBox,
     AudioUnitBox,
     BoxVisitor,
@@ -18,9 +19,9 @@ import {
     WclapInstrumentBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {asInstanceOf, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {panic, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
-import {DeviceMigration, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, isGrooveBox, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectEnv} from "./ProjectEnv"
 import {
@@ -43,6 +44,8 @@ import {
     migrateWarpMarkers,
     migrateWclapState,
     migrateZeitgeistDeviceBox,
+    GlobalGrooveLabel,
+    migrateGrooveCollection,
     migrateZeroDurationRegions
 } from "./migration"
 
@@ -60,12 +63,14 @@ export class ProjectMigration {
             rootBox.groove.refer(GrooveShuffleBox.create(boxGraph, UUID.generate()))
             boxGraph.endTransaction()
         }
-        const globalShuffle = asInstanceOf(rootBox.groove.targetVertex.unwrap("groove.target"), GrooveShuffleBox).label
-        if (globalShuffle.getValue() !== "Groove Shuffle") {
+        const globalGroove = rootBox.groove.targetVertex.unwrap("groove.target").box
+        const globalShuffle = isGrooveBox(globalGroove) ? globalGroove.label : panic("The global groove is no groove")
+        if (globalShuffle.getValue() !== GlobalGrooveLabel) {
             boxGraph.beginTransaction()
-            globalShuffle.setValue("Groove Shuffle")
+            globalShuffle.setValue(GlobalGrooveLabel)
             boxGraph.endTransaction()
         }
+        const beforeGrooveList = migrateGrooveCollection(boxGraph, rootBox)
         const loadAudioData = (uuid: Uint8Array): Promise<AudioData> => {
             const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
             const loader = env.sampleManager.getOrCreate(uuid)
@@ -120,9 +125,10 @@ export class ProjectMigration {
             visitAudioClipBox: (box: AudioClipBox) => migrateAudioClipBox(boxGraph, box),
             visitAudioPitchStretchBox: (box: AudioPitchStretchBox) => migrateWarpMarkers(boxGraph, box),
             visitAudioTimeStretchBox: (box: AudioTimeStretchBox) => migrateWarpMarkers(boxGraph, box),
+            visitAudioSignalsmithBox: (box: AudioSignalsmithBox) => migrateWarpMarkers(boxGraph, box),
             visitTimelineBox: (box: TimelineBox) => migrateTimelineBox(boxGraph, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => migrateMIDIOutputDeviceBox(boxGraph, box, outputMidiDevices),
-            visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => migrateZeitgeistDeviceBox(boxGraph, box, grooveTarget),
+            visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => migrateZeitgeistDeviceBox(boxGraph, box, grooveTarget, beforeGrooveList),
             visitValueEventBox: (box: ValueEventBox) => migrateValueEventBox(boxGraph, box),
             visitAudioUnitBox: (box: AudioUnitBox) => migrateAudioUnitBox(boxGraph, box),
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),

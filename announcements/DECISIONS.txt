@@ -217,3 +217,25 @@ Feature framing (Community Scripts)
   run to hundreds of lines (Deminix 3 is over a thousand). Say the devices run your own JavaScript.
 • Manual: https://opendaw.studio/manuals/community-scripts
 • Repository: https://github.com/andremichelle/opendaw-commons
+
+Feature framing (Grooves)
+• Zeitgeist is not new. It used to play one shuffle, it now plays grooves from the project's groove list.
+• A groove moves notes in time without changing them. Six types: Shuffle, Power, S-Curve, Random, Offset,
+  Stack (chains other grooves). One groove drives many places, a change reaches all of them.
+• Note and automation regions and clips take a groove from their context menu, starting at the region's
+  loop start. Audio regions do not take one yet, do not claim it.
+• The Global Shuffle is always in the list, its amount sits next to the tempo.
+• Grooves bend automation too, never announce them as notes only. A groove maps time to time.
+• Tone: sober and a bit technical (types, amount, duration range, loop behaviour), no ad sentences
+  (2026-11-05 correction "stop writing ads").
+• Education angle: the same pattern played straight and through different grooves, the written notes
+  stay unchanged.
+• Manual: https://opendaw.studio/manuals/grooves
+
+Feature framing (Key and Chords)
+• Project key, key track and chord track describe the harmony of a song, they make no sound. MIDI devices
+  follow them (Scale Matrix, Arpeggio, Autotune, Cubed randomizer, scripts).
+• Chords are steps of the key, 1 to 7. Change the key and every chord moves along.
+• Headline: "Learn and Use Scales and Harmony in openDAW" (Discord with "Update: " in front). Say harmony, not harmonics
+  (harmonics are overtones).
+• Manual: https://opendaw.studio/manuals/key-and-chords

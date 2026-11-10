@@ -63,7 +63,6 @@ import {
     InstrumentOptions,
     InstrumentProduct,
     InterpolationFieldAdapter,
-    isModulatorBox,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     PresetDecoder,
@@ -414,7 +413,7 @@ export class ProjectApi {
                 }
                 return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
             },
-            keepUuid: isModulatorBox,
+            keepUuid: DevicesClipboard.keepUuid,
             excludeBox: box => DevicesClipboard.excludeExistingModulator(box, boxGraph)
         })
         const topLevel = copies

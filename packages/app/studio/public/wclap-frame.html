@@ -136,6 +136,40 @@
         }
     }
 
+    // Chrome stops sending a mouse drag to the frame once it leaves it, unless the page holds pointer capture. A page
+    // that follows its drags on `window` without capturing (Cmajor's knobs) would freeze at the frame's edge: when such
+    // a drag leaves the page, capture the pointer on the element it started at. Inside the page nothing changes (a
+    // drag across piano keys still moves from key to key).
+    const captureLeavingDrags = inner => {
+        const target = inner.contentWindow
+        if (target === null) {return}
+        const setPointerCapture = target.Element.prototype.setPointerCapture
+        const drag = {pointerId: -1, element: null, captured: false}
+        target.Element.prototype.setPointerCapture = function (pointerId) {
+            if (pointerId === drag.pointerId) {drag.captured = true}
+            return setPointerCapture.call(this, pointerId)
+        }
+        target.addEventListener("pointerdown", event => {
+            if (event.pointerType !== "mouse") {return}
+            drag.pointerId = event.pointerId
+            drag.element = event.target
+            drag.captured = false
+        }, {capture: true})
+        target.addEventListener("pointerout", event => {
+            if (event.pointerId !== drag.pointerId || event.relatedTarget !== null || event.buttons === 0
+                || drag.captured || drag.element === null || !drag.element.isConnected) {return}
+            drag.captured = true
+            try {setPointerCapture.call(drag.element, event.pointerId)} catch {}
+        }, {capture: true})
+        for (const kind of ["pointerup", "pointercancel"]) {
+            target.addEventListener(kind, event => {
+                if (event.pointerId !== drag.pointerId) {return}
+                drag.pointerId = -1
+                drag.element = null
+            }, {capture: true})
+        }
+    }
+
     // a transparent frame (the device panel) shows the studio where the page draws nothing, the page's colour scheme
     // must match the frame's or the browser paints an opaque backdrop
     const matchColorScheme = inner => {
@@ -180,6 +214,7 @@
             matchColorScheme(inner)
             forwardInput(inner)
             releaseLostButtons(inner)
+            captureLeavingDrags(inner)
             forwardPointer()
         })
         inner.src = `./wclap/${uuid}/${page}`

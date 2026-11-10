@@ -47,6 +47,7 @@ type Construct = {
 }
 
 const scale = new ScaleConfig()
+const followKey = new DefaultObservableValue(false)
 const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
@@ -105,6 +106,18 @@ export const NoteEditor =
         lifecycle.own(reader.subscribeTrackChange(() => {
             if (reader.trackBoxAdapter.nonEmpty()) {bindToTrack()}
         }))
+        const {keyTrack} = project.timelineBoxAdapter
+        const applyProjectKey = () => {
+            if (!followKey.getValue()) {return}
+            const {root, bits} = keyTrack.keyAt(engine.position.getValue())
+            scale.key = root
+            scale.setBits(bits)
+        }
+        lifecycle.ownAll(
+            followKey.catchupAndSubscribe(applyProjectKey),
+            engine.position.subscribe(applyProjectKey),
+            keyTrack.subscribe(applyProjectKey)
+        )
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
@@ -121,7 +134,8 @@ export const NoteEditor =
                                    selection={selection}
                                    editing={editing}
                                    modifyContext={modifyContext}
-                                   scale={scale}/>
+                                   scale={scale}
+                                   followKey={followKey}/>
                 <PianoRoll lifecycle={lifecycle}
                            positioner={pitchPositioner}
                            scale={scale}
@@ -160,7 +174,8 @@ export const NoteEditor =
                 selection: selection,
                 events: reader.content.events,
                 stepRecording,
-                api: project.api
+                api: project.api,
+                keyAt: position => keyTrack.keyAt(position + reader.offset)
             })),
             installEditorBody({element: pitchBody, range, reader}),
             Html.watchResize(pitchBody, (() => {

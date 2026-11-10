@@ -15,6 +15,7 @@ pub mod fast_math;
 pub mod ctagdrc;
 pub mod freeverb;
 pub mod glide;
+pub mod groove;
 pub mod lfo;
 pub mod low_band_analyser;
 pub mod meter;

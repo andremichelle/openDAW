@@ -95,9 +95,15 @@ export type TransportAnchor = {
     readonly recording: boolean
 }
 
+// a non-fatal engine event for the user: a sidechain closed a feedback loop, or a device in one overflowed and was reset
+export type EngineNotice =
+    | { readonly type: "sidechain-loop", readonly device: string, readonly source: string }
+    | { readonly type: "non-finite", readonly device: string }
+
 export interface EngineToClient {
     log(message: string): void
     error(reason: unknown): void
+    notice(notice: EngineNotice): void
     deviceMessage(uuid: string, message: string): void
     fetchAudio(uuid: UUID.Bytes): Promise<AudioData>
     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2>

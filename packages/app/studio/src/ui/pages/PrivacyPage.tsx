@@ -45,6 +45,13 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             24 hours, after which the identifier cannot be recreated. Nothing is stored on or read from your device,
             and no data is shared with anyone. This counting complies with the GDPR (DSGVO) and §25 TDDDG and
             therefore requires no consent banner.</p>
+        <h3>Error reports</h3>
+        <p>When openDAW or its audio engine runs into an error, a report is sent to our server so we can fix it. It
+            contains the error, the openDAW version, your browser signature (browser name, version and operating
+            system) and a technical log of the last steps before the error. Before it is sent, every name is blanked
+            in it, such as the names of your projects, tracks, samples, soundfonts and presets, the room name and the
+            names of everyone in a live room. A report contains no personal data, no audio and no project content, and
+            it is used for nothing else.</p>
         <h3>Contact</h3>
         <p>For questions about this policy, contact: <a style={{color: Colors.blue}}
                                                         href="mailto:hello@opendaw.org">hello@opendaw.org</a>

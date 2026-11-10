@@ -125,3 +125,55 @@ fn loop_pause_stops_at_the_loop_end_instead_of_wrapping() {
     assert_eq!(tail.s1, 128 - last_s1, "the caller renders the remainder as a free-running tail");
     assert!(tail.p1 > tail.p0, "the tail's pulse range advances (voices flush)");
 }
+
+// #533: renders `passes` loop passes and returns each pass's length in frames.
+fn pass_lengths(sample_rate: f32, bpm: f32, loop_to: f64, passes: usize) -> Vec<usize> {
+    let mut transport = Transport::new(sample_rate, bpm);
+    transport.set_loop_enabled(true);
+    transport.set_loop_from(0.0);
+    transport.set_loop_to(loop_to);
+    transport.play();
+    let (mut lengths, mut frame, mut pass_start) = (Vec::new(), 0usize, 0usize);
+    while lengths.len() < passes {
+        for block in render(&mut transport, None) {
+            if block.discontinuous && block.p0 == 0.0 && frame + block.s0 > 0 {
+                lengths.push(frame + block.s0 - pass_start);
+                pass_start = frame + block.s0;
+            }
+        }
+        frame += RENDER_QUANTUM;
+    }
+    lengths
+}
+
+#[test]
+fn whole_frame_loop_passes_keep_their_length() {
+    // 4 s loops: 8768 pulses at 137 bpm, 7680 pulses at 120 bpm
+    for (sample_rate, bpm, loop_to) in [(48_000.0, 137.0, 8768.0), (44_100.0, 120.0, 7680.0), (44_100.0, 137.0, 8768.0),
+                                        (48_000.0, 120.0, 7680.0), (44_100.0, 120.0, 3840.0), (48_000.0, 137.0, 4384.0)] {
+        let expected = (4.0 * loop_to / 7680.0 * 120.0 / bpm as f64 * sample_rate as f64).round() as usize;
+        assert_eq!(pass_lengths(sample_rate, bpm, loop_to, 8), vec![expected; 8], "{sample_rate} Hz, {bpm} bpm, {loop_to} pulses");
+    }
+}
+
+#[test]
+fn fractional_frame_loop_passes_drop_the_fraction_every_pass() {
+    // 1000 pulses at 120 bpm / 44.1k = 22968.75 frames: each pass restarts on the loop start, so every pass is 22968
+    assert_eq!(pass_lengths(44_100.0, 120.0, 1000.0, 6), vec![22968; 6]);
+}
+
+#[test]
+fn a_wrap_on_the_quantum_boundary_flags_the_next_quantum_discontinuous() {
+    // 128 frames @ 120 bpm / 48k = 5.12 pulses: the loop end falls exactly on the first quantum's end
+    let mut transport = Transport::new(48_000.0, 120.0);
+    transport.set_loop_enabled(true);
+    transport.set_loop_from(0.0);
+    transport.set_loop_to(5.12);
+    transport.play();
+    let first = render(&mut transport, None);
+    assert_eq!(first.len(), 1);
+    assert!(!first[0].discontinuous);
+    let second = render(&mut transport, None);
+    assert_eq!(second[0].p0, 0.0, "resumes at the loop start");
+    assert!(second[0].discontinuous, "the block resuming at the loop start is discontinuous");
+}

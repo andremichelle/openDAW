@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.24](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.23...@opendaw/lib-inference@0.0.24) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
 ## [0.0.23](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.22...@opendaw/lib-inference@0.0.23) (2026-11-03)
 
 **Note:** Version bump only for package @opendaw/lib-inference

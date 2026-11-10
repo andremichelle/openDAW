@@ -25,6 +25,7 @@ import {
     WclapInstrumentBox,
     WclapMidiEffectBox,
     NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -79,6 +80,7 @@ import {
     WclapInstrumentBoxAdapter,
     WclapMidiEffectBoxAdapter,
     NoteFilterDeviceBoxAdapter,
+    ScaleMatrixDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -111,6 +113,7 @@ import {asDefined, Lifecycle} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
 import {NoteFilterDeviceEditor} from "./midi-effects/NoteFilterDeviceEditor"
+import {ScaleMatrixDeviceEditor} from "./midi-effects/ScaleMatrixDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"
 import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
@@ -174,6 +177,12 @@ export namespace DeviceEditorFactory {
                                         service={service}
                                         adapter={service.project.boxAdapters.adapterFor(box, NoteFilterDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
+            ),
+            visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => (
+                <ScaleMatrixDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, ScaleMatrixDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
             ),
             visitVelocityDeviceBox: (box: VelocityDeviceBox) => (
                 <VelocityDeviceEditor lifecycle={lifecycle}

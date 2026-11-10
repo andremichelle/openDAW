@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Groove Editor Preview</title>
+<style>
+    :root {
+        --color-blue: hsl(189, 100%, 65%);
+        --color-orange: hsl(31, 100%, 73%);
+        --color-green: hsl(150, 77%, 69%);
+        --color-purple: hsl(314, 100%, 78%);
+        --color-cream: hsl(65, 37%, 83%);
+        --color-gray: hsl(197, 10%, 60%);
+        --color-dark: hsl(197, 10%, 40%);
+        --color-bright: hsl(197, 10%, 85%);
+        --color-background: hsl(197, 12%, 8%);
+        --color-panel-background: hsl(197, 12%, 13%);
+        --color-panel-background-bright: hsl(197, 12%, 17%);
+        --display-grid: hsl(197, 10%, 60%);
+        --display-stroke: hsl(189, 100%, 65%);
+        --color: var(--color-orange);
+    }
+    * {box-sizing: border-box}
+    body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--color-background);
+        color: var(--color-gray);
+        font: 11px/1.2 "Open Sans", system-ui, sans-serif;
+        display: grid;
+        row-gap: 32px;
+        justify-items: start;
+        user-select: none;
+    }
+    h2 {margin: 0 0 8px; font-size: 12px; color: var(--color-cream); font-weight: normal}
+    .note {max-width: 760px; color: var(--color-dark); line-height: 1.5; margin: 0}
+    .device {
+        display: grid;
+        background: var(--color-panel-background);
+        border-radius: 3px;
+        height: 176px;
+        overflow: hidden;
+    }
+    .groove-editor {
+        display: grid;
+        grid-template-columns: 11.5em 8.5em 15em;
+        column-gap: 0.75em;
+        padding: 0.5em 0.75em;
+        align-items: stretch;
+    }
+    .column {display: grid; grid-auto-rows: min-content; row-gap: 0.5em; align-content: start}
+    .field {display: grid; row-gap: 3px}
+    .field > h5 {margin: 0; font-size: 8px; font-weight: normal; color: var(--color-dark); text-transform: none}
+    .select {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        column-gap: 0.5em;
+        padding: 0.2em 0.5em;
+        border-radius: 2px;
+        background: rgba(0, 0, 0, 0.12);
+        box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+        color: var(--color-gray);
+        cursor: pointer;
+        position: relative;
+    }
+    .select > select {
+        position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .select > .sizer {display: grid}
+    .select > .sizer > span {grid-area: 1 / 1; visibility: hidden; white-space: nowrap}
+    .select > .sizer > span.value {visibility: visible}
+    .select > .triangle {
+        width: 0; height: 0;
+        border-left: 3px solid transparent; border-right: 3px solid transparent;
+        border-top: 4px solid currentColor; opacity: 0.6;
+    }
+    .shared {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        column-gap: 0.5em;
+        font-size: 9px;
+        color: var(--color-dark);
+        height: 1.6em;
+    }
+    .shared > .badge {color: var(--color-orange)}
+    .shared > button {
+        font: inherit;
+        color: var(--color-gray);
+        background: rgba(255, 255, 255, 0.04);
+        border: none;
+        border-radius: 2px;
+        padding: 0.15em 0.5em;
+        cursor: pointer;
+    }
+    .shared.unique > .badge {color: var(--color-dark)}
+    .shared.unique > button {visibility: hidden}
+    .knobs {display: grid; grid-template-columns: repeat(2, 4.25em); grid-auto-rows: min-content; row-gap: 0.75em; align-content: start; padding-top: 0.25em}
+    .invisible, .invisible * {visibility: hidden !important}
+    .knobs > [data-slot=amount] {grid-area: 1 / 1}
+    .knobs > [data-slot=shape], .knobs > [data-slot=roughness] {grid-area: 1 / 2}
+    .knobs > [data-slot=steps] {grid-area: 2 / 1}
+    .seed {
+        display: grid; grid-template-columns: 1fr auto; align-items: center;
+        padding: 0.2em 0.5em; border-radius: 2px;
+        background: rgba(0, 0, 0, 0.12); box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+    }
+    .seed > .value {color: var(--color-blue)}
+    .seed > .dice {font-size: 14px; line-height: 1; color: var(--color-gray); cursor: pointer}
+    .knob {display: grid; justify-items: center; align-content: start; row-gap: 1px; cursor: ns-resize}
+    .knob.off {opacity: 0.15; pointer-events: none}
+    .knob > h6 {margin: 0; font-size: 8px; font-weight: normal; color: var(--color-dark)}
+    .knob > svg {width: 2.25em; height: 2.25em; overflow: visible}
+    .knob > span {font-size: 9px; color: var(--color-blue)}
+    .knob > .dice {font-size: 9px; color: var(--color-gray); cursor: pointer}
+    .stack-list {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-auto-rows: min-content;
+        row-gap: 2px;
+        font-size: 9px;
+    }
+    .stack-list > div {
+        display: grid; grid-template-columns: auto 1fr; column-gap: 0.5em;
+        padding: 0.15em 0.4em; background: rgba(255, 255, 255, 0.03); border-radius: 2px;
+    }
+    .stack-list > div > span:first-child {color: var(--color-dark)}
+    .display {display: grid; grid-template-rows: 1fr auto; row-gap: 0.375em}
+    .display > header {
+        position: relative;
+        padding: 2px;
+        border-radius: 6px;
+        outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.08);
+    }
+    .display canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border-radius: 3px;
+        box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset;
+    }
+    .display > header.curve {height: 100%}
+    .display > header.strip {height: 3em}
+    .list {
+        width: 560px;
+        background: var(--color-panel-background);
+        border-radius: 3px;
+        padding: 0 0.5em 0.5em;
+    }
+    .tabs {display: grid; grid-auto-flow: column; justify-content: start; column-gap: 1em; padding: 0.5em 0.25em; border-bottom: 1px solid rgba(255, 255, 255, 0.06)}
+    .tabs > span {color: var(--color-dark); cursor: pointer; padding-bottom: 2px}
+    .tabs > span.active {color: var(--color-cream); box-shadow: 0 1px 0 0 var(--color-cream)}
+    .entry > header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        margin-top: 0.75em;
+        padding: 0.25em;
+        border-radius: 3px;
+        color: var(--color-cream);
+        background: rgba(255, 255, 255, 0.04);
+    }
+    .entry > header > span {font-size: 9px; color: var(--color-dark)}
+    .entry > .body {display: grid; grid-template-columns: auto 9em; column-gap: 0.5em}
+    .entry .groove-editor {padding: 0.5em 0; height: 176px}
+    .targets {display: grid; grid-auto-rows: min-content; row-gap: 2px; padding-top: 0.5em; font-size: 9px}
+    .targets > h5 {margin: 0 0 2px; font-size: 8px; font-weight: normal; color: var(--color-dark)}
+    .targets > div {padding: 0.15em 0.4em; background: rgba(255, 255, 255, 0.03); border-radius: 2px; color: var(--color-gray)}
+    .global-amount {
+        display: grid; grid-auto-flow: column; column-gap: 0.75em; align-items: center;
+        background: var(--color-panel-background); padding: 0.4em 0.75em; border-radius: 3px;
+    }
+    .global-amount > span.value {color: var(--color-blue)}
+</style>
+</head>
+<body>
+<p class="note">Rough preview of the groove editor, not studio styling to the pixel. The editor is one component,
+    shown in the Zeitgeist panel and in the Grooves tab. Drag the knobs vertically, switch the type and the
+    duration. The curve shows one cell, the strip below shows one bar of 16ths, straight on top, warped below.</p>
+
+<section>
+    <h2>Zeitgeist device panel</h2>
+    <div class="device" id="device"></div>
+</section>
+
+<section>
+    <h2>Grooves tab in the modulation panel</h2>
+    <div class="list" id="list">
+        <div class="tabs"><span>Modulators</span><span class="active">Grooves</span></div>
+    </div>
+</section>
+
+<section>
+    <h2>Header, next to the tempo</h2>
+    <div class="global-amount"><span>120 BPM</span><span>Shuffle</span><span class="value" id="global">60%</span></div>
+</section>
+
+<template id="editor">
+    <div class="groove-editor">
+        <div class="column">
+            <div class="field"><h5>Groove</h5>
+                <div class="select" data-select="groove"></div>
+            </div>
+            <div class="shared"><span class="badge"></span><button>Make unique</button></div>
+            <div class="field"><h5>Type</h5>
+                <div class="select" data-select="type"></div>
+            </div>
+            <div class="field" data-field="duration"><h5>Duration</h5>
+                <div class="select" data-select="duration"></div>
+            </div>
+            <div class="field" data-field="seed"><h5>Seed</h5>
+                <div class="seed"><span class="value"></span><span class="dice">⚄</span></div>
+            </div>
+        </div>
+        <div class="knobs"></div>
+        <div class="display">
+            <header class="curve"><canvas data-canvas="curve"></canvas></header>
+            <header class="strip"><canvas data-canvas="strip"></canvas></header>
+        </div>
+    </div>
+</template>
+
+<script>
+    const Durations = [["1/16", 0.25], ["1/8", 0.5], ["1/4", 1], ["1/2", 2], ["1 bar", 4],
+        ["2 bars", 8], ["4 bars", 16], ["8 bars", 32], ["16 bars", 64]]
+    const Types = ["Shuffle", "Power", "S-Curve", "Random", "Stack"]
+    const Grooves = [
+        {name: "Global Shuffle", type: "Shuffle", duration: 0.5, amount: 0.6, users: 4, roughness: 0.5, steps: 8, seed: 1, shape: 0.5},
+        {name: "Lazy Hats", type: "Power", duration: 2, amount: 0.7, users: 2, roughness: 0.5, steps: 8, seed: 1, shape: 0.6},
+        {name: "Drunk Snare", type: "Random", duration: 4, amount: 0.75, users: 1, roughness: 0.6, steps: 8, seed: 7, shape: 0.5},
+        {name: "Pocket", type: "Stack", duration: 4, amount: 0.5, users: 1, roughness: 0.5, steps: 8, seed: 1, shape: 0.5}
+    ]
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+    const moebius = (x, h) => (x * h) / ((2.0 * h - 1.0) * (x - 1.0) + h)
+    const squash = value => 0.01 + value * 0.98
+    const rng = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647
+    const randomTable = groove => {
+        const random = rng(groove.seed * 7919 + 1)
+        const n = groove.steps, roughness = 1 + groove.roughness * 15, values = [0]
+        let sum = 0
+        const deltas = []
+        for (let i = 0; i < n; i++) {
+            const delta = Math.floor(random() * roughness) + 1
+            deltas.push(delta)
+            sum += delta
+        }
+        let acc = 0
+        deltas.forEach(delta => values.push((acc += delta) / sum))
+        return values
+    }
+    const tableFx = (values, x) => {
+        if (x >= 1) {return 1}
+        const n = values.length - 1, xd = x * n, xi = Math.floor(xd)
+        return values[xi] + (xd - xi) * (values[xi + 1] - values[xi])
+    }
+    const tableFy = (values, y) => {
+        if (y >= 1) {return 1}
+        const n = values.length - 1
+        let i = 0
+        while (i < n - 1 && values[i + 1] <= y) {i++}
+        return (i + (y - values[i]) / (values[i + 1] - values[i])) / n
+    }
+    const baseFunction = groove => {
+        const k = 1 + groove.shape * 3
+        switch (groove.type) {
+            case "Power":
+                return [x => Math.pow(x, k), y => Math.pow(y, 1 / k)]
+            case "S-Curve": {
+                const fx = x => x < 0.5 ? 0.5 * Math.pow(2 * x, k) : 1 - 0.5 * Math.pow(2 - 2 * x, k)
+                const fy = y => y < 0.5 ? 0.5 * Math.pow(2 * y, 1 / k) : 1 - 0.5 * Math.pow(2 - 2 * y, 1 / k)
+                return [fx, fy]
+            }
+            case "Random": {
+                const table = randomTable(groove)
+                return [x => tableFx(table, x), y => tableFy(table, y)]
+            }
+            case "Stack": {
+                const member = entry => entry.type === "Stack" ? x => x : warpOf(entry)
+                const fa = member(Grooves[0]), fb = member(Grooves[2])
+                return [x => fb(fa(x)), x => x]
+            }
+        }
+        return [x => x, y => y]
+    }
+    const warpOf = groove => {
+        if (groove.type === "Shuffle") {return x => moebius(x, squash(groove.amount))}
+        const [fx, fy] = baseFunction(groove)
+        if (groove.type === "Stack") {return fx}
+        const a = groove.amount
+        return a >= 0.5 ? x => x + (2 * a - 1) * (fx(x) - x) : x => x + (1 - 2 * a) * (fy(x) - x)
+    }
+    const prepare = canvas => {
+        const ratio = devicePixelRatio
+        const {width, height} = canvas.getBoundingClientRect()
+        canvas.width = width * ratio
+        canvas.height = height * ratio
+        const context = canvas.getContext("2d")
+        context.scale(ratio, ratio)
+        return [context, width, height]
+    }
+    const css = name => getComputedStyle(document.documentElement).getPropertyValue(name)
+    const drawCurve = (canvas, groove) => {
+        const [context, width, height] = prepare(canvas)
+        const warp = warpOf(groove)
+        const pad = 6, w = width - pad * 2, h = height - pad * 2
+        const sixteenths = Math.round(groove.duration * 4)
+        context.strokeStyle = "rgba(255,255,255,0.05)"
+        context.lineWidth = 1
+        const lines = Math.min(sixteenths, 16)
+        for (let i = 0; i <= lines; i++) {
+            const t = i / lines
+            context.beginPath()
+            context.moveTo(pad + t * w, pad)
+            context.lineTo(pad + t * w, pad + h)
+            context.moveTo(pad, pad + t * h)
+            context.lineTo(pad + w, pad + t * h)
+            context.stroke()
+        }
+        context.strokeStyle = "rgba(255,255,255,0.12)"
+        context.setLineDash([2, 2])
+        context.beginPath()
+        context.moveTo(pad, pad + h)
+        context.lineTo(pad + w, pad)
+        context.stroke()
+        context.setLineDash([])
+        context.strokeStyle = css("--color-blue")
+        context.lineWidth = 1.5
+        context.beginPath()
+        for (let i = 0; i <= 200; i++) {
+            const x = i / 200, y = warp(x)
+            const px = pad + x * w, py = pad + (1 - y) * h
+            i === 0 ? context.moveTo(px, py) : context.lineTo(px, py)
+        }
+        context.stroke()
+    }
+    const drawStrip = (canvas, groove) => {
+        const [context, width, height] = prepare(canvas)
+        const warp = warpOf(groove)
+        const pad = 6, w = width - pad * 2
+        const barQuarters = 4, cell = groove.duration
+        const span = Math.max(barQuarters, cell)
+        const count = Math.round(span * 4)
+        const top = pad, bottom = height - pad
+        context.strokeStyle = "rgba(255,255,255,0.08)"
+        for (let start = 0; start < span; start += cell) {
+            const px = pad + start / span * w
+            context.beginPath()
+            context.moveTo(px, 2)
+            context.lineTo(px, height - 2)
+            context.stroke()
+        }
+        for (let i = 0; i < count; i++) {
+            const position = i / 4
+            const start = Math.floor(position / cell) * cell
+            const warped = start + warp((position - start) / cell) * cell
+            const x0 = pad + position / span * w, x1 = pad + warped / span * w
+            const accent = i % 4 === 0
+            context.strokeStyle = "rgba(255,255,255,0.15)"
+            context.beginPath()
+            context.moveTo(x0, top + 4)
+            context.lineTo(x1, bottom - 4)
+            context.stroke()
+            context.fillStyle = accent ? css("--color-cream") : css("--color-gray")
+            context.fillRect(x0 - 1, top, 2, 4)
+            context.fillStyle = css("--color-blue")
+            context.fillRect(x1 - 1, bottom - 4, 2, 4)
+        }
+    }
+    const createSelect = (element, options, value, onChange) => {
+        element.innerHTML = ""
+        const sizer = document.createElement("div")
+        sizer.className = "sizer"
+        options.forEach(option => {
+            const span = document.createElement("span")
+            span.textContent = option
+            sizer.appendChild(span)
+        })
+        const update = current => sizer.querySelectorAll("span")
+            .forEach(span => span.classList.toggle("value", span.textContent === current))
+        update(value)
+        const triangle = document.createElement("div")
+        triangle.className = "triangle"
+        const select = document.createElement("select")
+        options.forEach(option => select.appendChild(new Option(option, option, false, option === value)))
+        select.addEventListener("change", () => {
+            update(select.value)
+            onChange(select.value)
+        })
+        element.append(sizer, triangle, select)
+    }
+    const createKnob = (label, get, set, format, anchor = 0) => {
+        const element = document.createElement("div")
+        element.className = "knob"
+        element.innerHTML = `<h6>${label}</h6><svg viewBox="-12 -12 24 24"><circle r="9" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/><path fill="none" stroke-width="2" stroke-linecap="round"/><line stroke-width="1.5" stroke-linecap="round"/></svg><span></span>`
+        const path = element.querySelector("path"), line = element.querySelector("line"), text = element.querySelector("span")
+        const angle = value => (-225 + value * 270) * Math.PI / 180
+        const point = value => [Math.cos(angle(value)) * 9, Math.sin(angle(value)) * 9]
+        const render = () => {
+            const value = get()
+            const [ax, ay] = point(anchor), [vx, vy] = point(value)
+            const large = Math.abs(value - anchor) * 270 > 180 ? 1 : 0
+            const sweep = value > anchor ? 1 : 0
+            path.setAttribute("d", `M${ax},${ay} A9,9 0 ${large} ${sweep} ${vx},${vy}`)
+            path.setAttribute("stroke", css("--color-blue"))
+            line.setAttribute("x1", vx * 0.4)
+            line.setAttribute("y1", vy * 0.4)
+            line.setAttribute("x2", vx)
+            line.setAttribute("y2", vy)
+            line.setAttribute("stroke", css("--color-bright"))
+            text.textContent = format(value)
+        }
+        element.addEventListener("pointerdown", event => {
+            element.setPointerCapture(event.pointerId)
+            const startY = event.clientY, startValue = get()
+            const move = moveEvent => {
+                set(clamp(startValue + (startY - moveEvent.clientY) / 150, 0, 1))
+            }
+            const up = () => {
+                element.removeEventListener("pointermove", move)
+                element.removeEventListener("pointerup", up)
+            }
+            element.addEventListener("pointermove", move)
+            element.addEventListener("pointerup", up)
+        })
+        element.render = render
+        render()
+        return element
+    }
+    const instances = []
+    const refreshAll = () => instances.forEach(instance => instance.refresh())
+    const mountEditor = (parent, initialGroove, inDevice) => {
+        const fragment = document.getElementById("editor").content.cloneNode(true)
+        const root = fragment.querySelector(".groove-editor")
+        parent.appendChild(root)
+        let groove = initialGroove
+        const shared = root.querySelector(".shared")
+        const knobs = root.querySelector(".knobs")
+        const curve = root.querySelector("[data-canvas=curve]")
+        const strip = root.querySelector("[data-canvas=strip]")
+        const grooveField = root.querySelector("[data-select=groove]").parentElement
+        if (!inDevice) {grooveField.remove()}
+        const percent = value => `${Math.round(value * 100)}%`
+        const buildKnobs = () => {
+            knobs.innerHTML = ""
+            const amount = createKnob("Amount", () => groove.amount, value => {
+                groove.amount = value
+                refreshAll()
+            }, percent, 0.5)
+            const shape = createKnob("Shape", () => groove.shape, value => {
+                groove.shape = value
+                refreshAll()
+            }, percent)
+            const roughness = createKnob("Roughness", () => groove.roughness, value => {
+                groove.roughness = value
+                refreshAll()
+            }, percent)
+            const steps = createKnob("Steps", () => (groove.steps - 2) / 30, value => {
+                groove.steps = Math.round(2 + value * 30)
+                refreshAll()
+            }, () => `${groove.steps}`)
+            const isRandom = groove.type === "Random", isFunction = groove.type === "Power" || groove.type === "S-Curve"
+            const isStack = groove.type === "Stack"
+            root.querySelector("[data-field=seed]").classList.toggle("invisible", !isRandom)
+            root.querySelector("[data-field=duration]").classList.toggle("invisible", isStack)
+            amount.dataset.slot = "amount"
+            shape.dataset.slot = "shape"
+            roughness.dataset.slot = "roughness"
+            steps.dataset.slot = "steps"
+            if (isStack) {
+                const list = document.createElement("div")
+                list.className = "stack-list"
+                list.innerHTML = `<div><span>1</span><span>Global Shuffle</span></div><div><span>2</span><span>Drunk Snare</span></div><div><span>+</span><span>Add groove</span></div>`
+                knobs.append(list)
+                return []
+            }
+            knobs.append(amount)
+            if (isFunction) {knobs.append(shape)}
+            if (isRandom) {knobs.append(roughness, steps)}
+            return [amount, shape, roughness, steps]
+        }
+        let knobElements = []
+        const rebuild = () => {
+            if (inDevice) {
+                createSelect(root.querySelector("[data-select=groove]"),
+                    [...Grooves.map(entry => entry.name), "New Groove"], groove.name, name => {
+                        const found = Grooves.find(entry => entry.name === name)
+                        if (found) {groove = found}
+                        rebuild()
+                    })
+            }
+            createSelect(root.querySelector("[data-select=type]"), Types, groove.type, type => {
+                groove.type = type
+                refreshAll()
+                instances.forEach(instance => instance.rebuild())
+            })
+            createSelect(root.querySelector("[data-select=duration]"), Durations.map(([label]) => label),
+                Durations.find(([, quarters]) => quarters === groove.duration)[0], label => {
+                    groove.duration = Durations.find(([name]) => name === label)[1]
+                    refreshAll()
+                })
+            knobElements = buildKnobs()
+            refresh()
+        }
+        const refresh = () => {
+            shared.classList.toggle("unique", groove.users < 2)
+            shared.querySelector(".badge").textContent = groove.users < 2 ? "Not shared" : `Shared by ${groove.users}`
+            knobElements.forEach(knob => knob.render())
+            root.querySelector(".seed > .value").textContent = `${groove.seed}`
+            drawCurve(curve, groove)
+            drawStrip(strip, groove)
+            if (groove === Grooves[0]) {document.getElementById("global").textContent = `${Math.round(groove.amount * 100)}%`}
+        }
+        root.querySelector(".seed > .dice").addEventListener("click", () => {
+            groove.seed = 1 + Math.floor(Math.random() * 9999)
+            refreshAll()
+        })
+        shared.querySelector("button").addEventListener("click", () => {
+            const copy = {...groove, name: `${groove.name} Copy`, users: 1}
+            groove.users -= 1
+            Grooves.push(copy)
+            groove = copy
+            instances.forEach(instance => instance.rebuild())
+        })
+        const instance = {refresh, rebuild}
+        instances.push(instance)
+        rebuild()
+        return root
+    }
+    mountEditor(document.getElementById("device"), Grooves[0], true)
+    const list = document.getElementById("list")
+    const targets = [["Zeitgeist on Bass", "Zeitgeist on Keys", "Zeitgeist on Pad", "Zeitgeist on Lead"],
+        ["Zeitgeist on Hats", "Zeitgeist on Shaker"], ["Zeitgeist on Snare"], ["Zeitgeist on Drums"]]
+    Grooves.forEach((groove, index) => {
+        const entry = document.createElement("div")
+        entry.className = "entry"
+        entry.innerHTML = `<header><div>${groove.name}</div><span>${groove.type}</span></header><div class="body"></div>`
+        const body = entry.querySelector(".body")
+        list.appendChild(entry)
+        const editorHost = document.createElement("div")
+        body.appendChild(editorHost)
+        mountEditor(editorHost, groove, false)
+        const target = document.createElement("div")
+        target.className = "targets"
+        target.innerHTML = `<h5>Used by</h5>${targets[index].map(name => `<div>${name}</div>`).join("")}`
+        body.appendChild(target)
+    })
+</script>
+</body>
+</html>

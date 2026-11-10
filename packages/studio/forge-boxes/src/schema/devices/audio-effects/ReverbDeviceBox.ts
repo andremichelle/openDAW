@@ -10,7 +10,7 @@ export const ReverbDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEff
     },
     11: {
         type: "float32", name: "pre-delay", pointerRules: ParameterPointerRules,
-        value: 0.0, constraints: {min: 0.001, max: 0.500, scaling: "exponential"}, unit: "s"
+        value: 0.001, constraints: {min: 0.001, max: 0.500, scaling: "exponential"}, unit: "s"
     },
     12: {
         type: "float32", name: "damp", pointerRules: ParameterPointerRules,

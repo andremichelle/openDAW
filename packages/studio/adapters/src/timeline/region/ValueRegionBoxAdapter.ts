@@ -27,6 +27,7 @@ import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"
 import {MutableRegion} from "./MutableRegion"
 import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
 import {NoteRegionBoxAdapter} from "./NoteRegionBoxAdapter"
+import {Grooves} from "../../grooves/Grooves"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -209,6 +210,7 @@ export class ValueRegionBoxAdapter
             box.hue.setValue(this.hue)
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
+            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
             box.events.refer(eventTarget)
             box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
         }), ValueRegionBoxAdapter)
@@ -230,7 +232,10 @@ export class ValueRegionBoxAdapter
             && regions.every(region => region.isSelected && region instanceof ValueRegionBoxAdapter)
     }
 
-    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<ValueRegionBox> {
+    // the note regions' truncate preference does not apply to automation
+    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>,
+            _truncateNotesAtRegionEnd: boolean = false,
+            groove: Grooves.FlattenGroove = "keep"): Option<ValueRegionBox> {
         if (!this.canFlatten(regions)) {return Option.None}
         const graph = this.#context.boxGraph
         const sorted = regions.toSorted(RegionCollection.Comparator)
@@ -242,10 +247,13 @@ export class ValueRegionBoxAdapter
         const overlapping = Array.from(trackBoxAdapter.regions.collection.iterateRange(rangeMin, rangeMax))
         type Entry = { position: ppqn, value: unitValue, interpolation: Interpolation }
         const entries: Array<Entry> = []
-        overlapping
-            .filter(region => region.isSelected)
+        const selected = overlapping.filter(region => region.isSelected)
+        selected
             .forEach(anyRegion => {
                 const region = anyRegion as ValueRegionBoxAdapter
+                const played = groove === "apply"
+                    ? Grooves.playedAt(this.#context, region.box, region.position - region.loopOffset) : Option.None
+                const place = (position: ppqn): ppqn => played.mapOr(play => Math.round(play(position)), position)
                 const collection = region.optCollection.unwrap("optCollection")
                 const events = collection.events
                 for (const {
@@ -260,7 +268,7 @@ export class ValueRegionBoxAdapter
                         const lowerEvent = events.lowerEqual(searchMin)
                         if (isDefined(lowerEvent)) {
                             entries.push({
-                                position: regionStart - rangeMin,
+                                position: place(regionStart) - rangeMin,
                                 value: collection.valueAt(searchMin, 0),
                                 interpolation: lowerEvent.interpolation
                             })
@@ -271,13 +279,13 @@ export class ValueRegionBoxAdapter
                         const globalPos = event.position + rawStart
                         if (globalPos < regionEnd) {
                             entries.push({
-                                position: globalPos - rangeMin,
+                                position: place(globalPos) - rangeMin,
                                 value: event.value,
                                 interpolation: event.interpolation
                             })
                         } else if (globalPos === regionEnd) {
                             entries.push({
-                                position: globalPos - rangeMin,
+                                position: place(globalPos) - rangeMin,
                                 value: event.value,
                                 interpolation: Interpolation.None
                             })
@@ -285,7 +293,7 @@ export class ValueRegionBoxAdapter
                             break
                         } else {
                             entries.push({
-                                position: regionEnd - rangeMin,
+                                position: place(regionEnd) - rangeMin,
                                 value: collection.valueAt(searchMax, 0),
                                 interpolation: Interpolation.None
                             })
@@ -295,13 +303,14 @@ export class ValueRegionBoxAdapter
                     }
                     if (!addedBoundary) {
                         entries.push({
-                            position: regionEnd - rangeMin,
+                            position: place(regionEnd) - rangeMin,
                             value: collection.valueAt(searchMax, 0),
                             interpolation: Interpolation.None
                         })
                     }
                 }
             })
+        if (groove === "apply") {entries.sort((left, right) => left.position - right.position)}
         const cleaned: Array<Entry> = []
         for (const entry of entries) {
             const prev = cleaned.length > 0 ? cleaned[cleaned.length - 1] : undefined
@@ -336,6 +345,7 @@ export class ValueRegionBoxAdapter
             }
             idx = end
         }
+        const shared = groove === "apply" ? Option.None : Grooves.sharedOf(selected.map(region => region.box))
         overlapping.forEach(({box}) => box.delete())
         return Option.wrap(ValueRegionBox.create(graph, UUID.generate(), box => {
             box.position.setValue(rangeMin)
@@ -344,6 +354,7 @@ export class ValueRegionBoxAdapter
             box.loopOffset.setValue(0)
             box.hue.setValue(this.hue)
             box.mute.setValue(this.mute)
+            shared.ifSome(groove => box.groove.refer(groove))
             box.label.setValue(this.label)
             box.events.refer(collectionBox.owners)
             box.regions.refer(trackBoxAdapter.box.regions)

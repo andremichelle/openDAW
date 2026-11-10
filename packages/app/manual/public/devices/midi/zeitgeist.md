@@ -10,53 +10,47 @@ A groove/shuffle effect that applies swing timing to MIDI notes.
 
 ## 0. Overview
 
-_Zeitgeist_ applies shuffle or swing feel to MIDI notes by time-warping their positions. Offbeat notes are pushed later in time, creating the characteristic "swing" or "groove" feel found in jazz, funk, and electronic music.
+_Zeitgeist_ moves the notes of an instrument in time through a [groove](/manuals/grooves). Offbeats can swing,
+a phrase can speed up, notes can wobble at random or all sit a little late. The groove itself lives in the
+project's groove list, so several instruments can share one and follow every change to it.
+
+A new Zeitgeist uses the **Global Shuffle**, whose amount sits next to the tempo in the header.
 
 Example uses:
 
 - Adding swing to quantized drums
 - Creating shuffle feel on hi-hats
 - Humanizing rigid sequences
-- Genre-specific groove patterns
+- Pushing a part slightly behind the beat
 
 ---
 
-## 1. Amount
+## 1. Groove
 
-Shuffle intensity. Range: **0% to 100%**.
+Picks the groove this Zeitgeist plays through.
 
-Controls the timing shift of offbeat notes:
+- **Go to** opens the Grooves list and highlights the current groove
+- **None** turns it off, notes pass through unchanged
+- **New** creates a groove of any type and uses it
+- **Make Unique** gives this Zeitgeist its own copy when the groove is shared
 
-- **0%**: Maximum pull (offbeats shifted earlier)
-- **50%**: No change (straight timing)
-- **60-70%**: Classic shuffle/swing feel
-- **100%**: Maximum push (offbeats delayed toward the following beat)
-
-Values below 50% pull offbeats earlier, values above 50% push them later. The timing curve uses smooth easing for natural-feeling grooves.
+**shared ×** and a number next to the label tell how many users the groove has.
 
 ---
 
-## 2. Duration
+## 2. Type, Duration and Amount
 
-Grid size for the shuffle pattern. Available values:
+The rest of the editor edits the groove itself: its **Type** (Shuffle, Power, S-Curve, Random, Offset or
+Stack), its **Duration** and its **Amount**, plus the controls of the type. The same editor sits in the Grooves
+list. See [Grooves](/manuals/grooves) for what each type and control does.
 
-**1/8**, **1/4**, **1/2**, **1/1**, **2/1**, **4/1**, **8/1**, **16/1**
-
-Determines which notes are considered "offbeats":
-
-- **1/8**: Shuffles eighth notes (most common for swing)
-- **1/4**: Shuffles quarter notes
-- **1/2**: Shuffles half notes
-- **Larger values**: Affects longer time spans
-
-For example, with Duration set to 1/8, the offbeat semiquaver (16th note) within each eighth note gets shifted.
+**Amount** at **50%** keeps time straight. Above 50% the groove takes over, below it turns the other way.
 
 ---
 
 ## 3. Technical Notes
 
-- Uses Möbius easing function for smooth time warping
 - Warps time itself: note-ons and note-offs both move, so a note's duration stretches or shrinks with its place in the groove cell
 - The automation clock of the devices after Zeitgeist is warped the same way
 - Works with any MIDI source (clips, live input, other MIDI effects)
-- Groove is applied in real-time during playback
+- While the transport loops, every pass plays as if it started at the loop start, see [Grooves](/manuals/grooves)

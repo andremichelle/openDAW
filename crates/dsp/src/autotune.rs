@@ -141,6 +141,8 @@ impl Autotune {
 
     pub fn set_scale(&mut self, scale: i32) {self.mask = SCALE_MASKS[math::clamp(scale, 0, 7) as usize]}
 
+    pub fn set_mask(&mut self, mask: u32) {self.mask = if mask & 0xFFF == 0 {SCALE_MASKS[0]} else {mask & 0xFFF}}
+
     /// Correction depth. The knob is SQUARE-LAW tapered — the stored depth is `knob²` — so the lower half
     /// of the travel gives fine, gradual control over light correction (where an in-tune voice actually
     /// sits), while 100% still reaches full strength. 0 and 1 are unchanged fixed points.

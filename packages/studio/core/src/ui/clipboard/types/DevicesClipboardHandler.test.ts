@@ -7,6 +7,7 @@ import {
     AudioUnitBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
+    GrooveOffsetBox,
     MIDIOutputBox,
     MIDIOutputDeviceBox,
     ModulationBox,
@@ -1015,6 +1016,23 @@ describe("DevicesClipboardHandler", () => {
             addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 1)
             const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
             expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+        })
+        it("carries the groove of a region with the timeline, not the global one", () => {
+            const audioUnit = createAudioUnit(source)
+            const noteTrack = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const region = addNoteRegion(source, noteTrack, 0, 480)
+            const {boxGraph, mandatoryBoxes: {rootBox}} = source
+            boxGraph.beginTransaction()
+            const groove = GrooveOffsetBox.create(boxGraph, UUID.generate(), box => {
+                box.collection.refer(rootBox.grooves)
+                box.index.setValue(1)
+            })
+            region.groove.refer(groove)
+            boxGraph.endTransaction()
+            const content = DevicesClipboard.collectTimeline(audioUnit.tracks, boxGraph)
+            expect(content).toContain(groove)
+            expect(content.some(box => isInstanceOf(box, RootBox))).toBe(false)
+            expect(content.filter(box => box.name === groove.name).length).toBe(1)
         })
         it("collects complete instrument with 2 tracks, 4 regions, 4 event collections", () => {
             const audioUnit = createAudioUnit(source)

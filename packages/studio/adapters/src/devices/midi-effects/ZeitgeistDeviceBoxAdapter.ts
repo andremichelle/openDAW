@@ -1,5 +1,5 @@
 import {Pointers} from "@opendaw/studio-enums"
-import {Observer, Subscription, UUID} from "@opendaw/lib-std"
+import {Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {ZeitgeistDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
@@ -19,8 +19,6 @@ export class ZeitgeistDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     constructor(context: BoxAdaptersContext, box: ZeitgeistDeviceBox) {
         this.#context = context
         this.#box = box
-
-        this.groove() // force creation of GrooveAdapter
     }
 
     get box(): ZeitgeistDeviceBox {return this.#box}
@@ -37,14 +35,14 @@ export class ZeitgeistDeviceBoxAdapter implements MidiEffectDeviceAdapter {
             .adapterFor(this.#box.host.targetVertex.unwrap("no device-host").box, Devices.isHost)
     }
 
-    groove(): GrooveAdapter {
-        return this.#context.boxAdapters
-            .adapterFor(this.#box.groove.targetVertex.unwrap("no groove").box, GrooveAdapter.checkType)
+    // A Zeitgeist may have no groove, it then passes its notes through
+    groove(): Option<GrooveAdapter> {
+        return this.#box.groove.targetVertex
+            .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, GrooveAdapter.checkType))
     }
 
-    catchupAndSubscribeGroove(observer: Observer<GrooveAdapter>): Subscription {
-        return this.#box.groove.catchupAndSubscribe(pointer => observer(this.#context.boxAdapters
-            .adapterFor(pointer.targetVertex.unwrap("No groove found").box, GrooveAdapter.checkType)))
+    catchupAndSubscribeGroove(observer: Observer<Option<GrooveAdapter>>): Subscription {
+        return this.#box.groove.catchupAndSubscribe(() => observer(this.groove()))
     }
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}

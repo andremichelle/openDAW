@@ -4,7 +4,9 @@ import {
     isDefined,
     isUndefined,
     MutableObservableOption,
+    Notifier,
     Nullable,
+    Observer,
     Option,
     int,
     Optional,
@@ -54,6 +56,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
     readonly #request: Provider<Option<AudioInputRequest>>
     readonly #stream: MutableObservableOption<MediaStream>
     readonly #monitor: BrowserMonitor
+    readonly #outputNodeNotifier: Notifier<Option<AudioNode>>
     readonly #lifecycle: Terminator = new Terminator()
 
     #gainDb: number = 0.0
@@ -73,6 +76,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         this.#request = request
         this.#stream = new MutableObservableOption<MediaStream>()
         this.#monitor = new BrowserMonitor(project.env.audioContext, project.engine, uuid)
+        this.#outputNodeNotifier = new Notifier<Option<AudioNode>>()
         // a live source reads ~24 ms late for good after another stream opened or closed, the device list changed
         // or the context paused: a fresh source node on the same stream reads in time again
         const {audioContext} = project.env
@@ -85,7 +89,8 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
             AudioDevices.subscribeStreamsChanged(() => {if (!this.#changingStreams) {this.#scheduleFreshSource()}}),
             listen(Reflect.get(navigator, "mediaDevices"), "devicechange", () => this.#scheduleFreshSource()),
             listen(audioContext, "statechange", () => {if (audioContext.state === "running") {this.#scheduleFreshSource()}}),
-            Terminable.create(() => this.#freshSource?.terminate())
+            Terminable.create(() => this.#freshSource?.terminate()),
+            this.#outputNodeNotifier
         )
     }
 
@@ -96,6 +101,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         return this.#stream.flatMap(stream => Option.wrap(stream.getAudioTracks().at(0)))
     }
     get outputNode(): Option<AudioNode> {return Option.wrap(this.#audioChain?.recordGainNode)}
+    subscribeOutputNode(observer: Observer<Option<AudioNode>>): Subscription {return this.#outputNodeNotifier.subscribe(observer)}
     get monitorGainNode(): GainNode {return this.#monitor.gainNode}
     get monitorPanNode(): StereoPannerNode {return this.#monitor.panNode}
     get deviceId(): Option<string> {return this.streamMediaTrack.map(track => track.getSettings().deviceId ?? "")}
@@ -390,6 +396,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         keepAliveSink.connect(audioContext.destination)
         this.#audioChain = {sourceNode, recordGainNode, monitorMixdown, keepAliveSink, mappingNodes, channelCount}
         this.#monitor.bind({sourceNode: mappedNode, monitorMixdown, channelCount})
+        this.#outputNodeNotifier.notify(Option.wrap(recordGainNode))
     }
 
     // each side averages its inputs, like the speakers downmix of a forced mono
@@ -432,6 +439,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
             monitorMixdown.disconnect()
             keepAliveSink.disconnect()
             this.#audioChain = null
+            this.#outputNodeNotifier.notify(Option.None)
         }
     }
 }

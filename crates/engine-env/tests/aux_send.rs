@@ -47,7 +47,7 @@ fn automated_send_gain_retargets_at_the_update_clock_inside_the_quantum() {
     let automation = Rc::new(StripAutomation::new());
     *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool, _lag: u32| if position < 10.0 {0.0} else {-72.0}));
     let mut send = send_with_input(automation);
-    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, anchor: 8.0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
     send.process(&ProcessInfo {blocks: &[block]});
     let output = send.audio_output();
     let buffer = output.borrow();

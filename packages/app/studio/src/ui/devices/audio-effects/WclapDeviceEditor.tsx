@@ -65,6 +65,8 @@ type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins:
 
 const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
 const DEVICE_PANEL_FEATURE = "opendaw:device-panel"
+// the panel's width at the device body's height, so the panel opens at its size before the plugin loads
+const DEVICE_PANEL_WIDTH_FEATURE = "opendaw:device-panel-width:"
 // the device body's content height (mixins.Control: 192px minus its 0.5em padding)
 const PANEL_HEIGHT = 176
 
@@ -78,9 +80,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
     const state: {
-        info: Optional<WclapPluginInfo>, ready: boolean, failed: boolean, editor: boolean, panel: boolean,
-        inputs: ReadonlyArray<WclapAudioPort>, credits: string
-    } = {info: undefined, ready: false, failed: false, editor: false, panel: false, inputs: [], credits: ""}
+        info: Optional<WclapPluginInfo>, catalog: Optional<WclapPluginInfo>, ready: boolean, failed: boolean,
+        editor: boolean, panel: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
+    } = {info: undefined, catalog: undefined, ready: false, failed: false, editor: false, panel: false, inputs: [], credits: ""}
     const pluginBox: HTMLElement = (
         <div className="plugin" onclick={() => {
             if (state.credits.length > 0) {window.open(state.credits, "_blank", "noopener")}
@@ -96,6 +98,16 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             state.credits = credits
             pluginBox.classList.add("linked")
             pluginBox.title = credits
+        }))
+    }
+    // the cloud index carries the descriptor, known before the bundle is booted to describe it
+    const showCatalog = (url: string, clapId: string): void => {
+        state.catalog = undefined
+        if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
+        WclapCatalog.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({plugins}) => {
+            if (adapter.urlField.getValue() !== url || adapter.clapIdField.getValue() !== clapId) {return}
+            state.catalog = plugins.find(plugin => plugin.clapId === clapId)
+            showStrategy()
         }))
     }
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
@@ -147,6 +159,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         showName()
         showCredits(url)
         showUpdate(url, clapId)
+        showCatalog(url, clapId)
         showStrategy()
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
@@ -478,7 +491,13 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     // panel strategy: the plugin's own page fills the device body, the device controls move into the menu
     const panel = {active: false, framed: false, generation: 0}
     const panelSession = lifecycle.own(new Terminator())
-    const wantsPanel = (): boolean => isDefined(state.info) && state.info.features.includes(DEVICE_PANEL_FEATURE)
+    const features = (): ReadonlyArray<string> => (state.info ?? state.catalog)?.features ?? []
+    const wantsPanel = (): boolean => features().includes(DEVICE_PANEL_FEATURE)
+    const declaredWidth = (): number => {
+        const feature = features().find(feature => feature.startsWith(DEVICE_PANEL_WIDTH_FEATURE))
+        const width = isDefined(feature) ? parseInt(feature.slice(DEVICE_PANEL_WIDTH_FEATURE.length), 10) : NaN
+        return Number.isFinite(width) && width > 0 ? width : PANEL_HEIGHT
+    }
     const dropPanel = (): void => {
         state.panel = false
         showStrategy()
@@ -518,7 +537,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             })),
             transparent: true
         }))
-        panelArea.style.width = `${opened.width > 0 ? opened.width : PANEL_HEIGHT}px`
+        panelArea.style.width = `${opened.width > 0 ? opened.width : declaredWidth()}px`
         panelArea.appendChild(frame.iframe)
         panelSession.own(frame.listen(window))
     }
@@ -530,13 +549,14 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             for (const element of [pluginBox, buttonsRow, aboutText]) {element.classList.toggle("hidden", active)}
             panelArea.classList.toggle("hidden", !active)
         }
+        if (!panel.framed) {panelArea.style.width = `${declaredWidth()}px`}
         const framed = active && state.ready && !minimized
         if (framed === panel.framed) {return}
         panel.framed = framed
         panel.generation++
         panelSession.terminate()
         panelArea.replaceChildren()
-        panelArea.style.width = `${PANEL_HEIGHT}px`
+        panelArea.style.width = `${declaredWidth()}px`
         if (framed) {
             openPanelFrame(panel.generation)
                 .catch(error => RuntimeNotifier.notify({message: `Could not open the plugin panel: ${error}`, icon: "Warning"}))

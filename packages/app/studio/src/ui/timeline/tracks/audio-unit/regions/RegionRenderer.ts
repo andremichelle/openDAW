@@ -94,8 +94,17 @@ export namespace RegionRenderer {
                 } else {
                     context.font = `${fontSize}px ${fontFamily}`
                 }
-                const text = TimelineLabels.forRegion(region)
-                context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 3 * dpr, 1 + labelHeight / 2)
+                const textX = x0Int + 3 * dpr
+                const textY = 1 + labelHeight / 2
+                const name = Context2d.truncateText(context, TimelineLabels.forRegion(region), maxTextWidth)
+                context.fillText(name.text, textX, textY)
+                TimelineLabels.grooveOf(region.box).ifSome(groove => {
+                    const space = name.text.length === 0 ? 0 : context.measureText(" ").width
+                    const remaining = maxTextWidth - name.width - space
+                    if (remaining <= 0) {return}
+                    context.font = `italic ${fontSize}px ${fontFamily}`
+                    context.fillText(Context2d.truncateText(context, groove, remaining).text, textX + name.width + space, textY)
+                })
                 if (region.hasCollection) {
                     const loops = Array.from(LoopableRegion.locateLoops({
                         position, complete,

@@ -36,7 +36,7 @@ export const parameterContextItems = <T extends PrimitiveValues>(editing: Editin
             : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
                 .setTriggerProcedure(() => editing.modify(() =>
                     parameter.track.ifSome(track => tracks.delete(track)))),
-        modulationMenu(editing, parameter),
+        modulationMenu(editing, parameter, disableAutomation),
         MenuItem.default({
             label: midiDevices.hasMidiConnection(field.address)
                 ? "Forget Midi"
@@ -48,7 +48,7 @@ export const parameterContextItems = <T extends PrimitiveValues>(editing: Editin
                 midiDevices.learnMIDIControls(field).then()
             }
         }),
-        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+        MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
 }
@@ -77,7 +77,7 @@ const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,
                 midiDevices.learnMIDIControls(field).then()
             }
         }),
-        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+        MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
 }
@@ -101,8 +101,9 @@ export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
     ))
 
 const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
-                                                   parameter: AutomatableParameterFieldAdapter<T>) =>
-    MenuItem.default({label: "Modulate"}).setRuntimeChildrenProcedure(parent => {
+                                                   parameter: AutomatableParameterFieldAdapter<T>,
+                                                   hidden?: boolean) =>
+    MenuItem.default({label: "Modulate", hidden}).setRuntimeChildrenProcedure(parent => {
         const context = parameter.context
         const target = parameter.modulationTarget
         const assignments = new Map(parameter.modulations

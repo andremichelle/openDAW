@@ -22,6 +22,7 @@ import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsS
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
 import {duplicateSelectedTracks, groupSelectedTracks, ungroupSelectedTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {ChordTrackShortcuts, ChordTrackShortcutsFactory} from "@/ui/shortcuts/ChordTrackShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 import {ShortcutStorage} from "@/service/ShortcutStorage"
@@ -32,6 +33,7 @@ export namespace StudioShortcutManager {
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, workingDefinition: GlobalShortcuts},
         "regions": {factory: RegionsShortcutsFactory, workingDefinition: RegionsShortcuts},
+        "chord-track": {factory: ChordTrackShortcutsFactory, workingDefinition: ChordTrackShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, workingDefinition: NoteEditorShortcuts},
         "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},
         "device-panel": {factory: DevicePanelShortcutsFactory, workingDefinition: DevicePanelShortcuts},
@@ -67,7 +69,7 @@ export namespace StudioShortcutManager {
             timeline: {
                 clips: {visible: clipsVisibility},
                 followCursor,
-                primaryVisibility: {markers, tempo, signature},
+                primaryVisibility: {markers, tempo, signature, key: keyTrack, chords: chordTrack},
                 snapping
             }
         } = service
@@ -128,6 +130,8 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-tempo-track"].shortcut, () => tempo.setValue(!tempo.getValue())),
             gc.register(gs["toggle-markers-track"].shortcut, () => markers.setValue(!markers.getValue())),
             gc.register(gs["toggle-signature-track"].shortcut, () => signature.setValue(!signature.getValue())),
+            gc.register(gs["toggle-key-track"].shortcut, () => keyTrack.setValue(!keyTrack.getValue())),
+            gc.register(gs["toggle-chord-track"].shortcut, () => chordTrack.setValue(!chordTrack.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].shortcut, () => metronome.enabled = !metronome.enabled),

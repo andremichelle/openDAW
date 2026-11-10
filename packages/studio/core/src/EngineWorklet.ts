@@ -13,6 +13,7 @@ import {
     Observer,
     Option,
     Procedure,
+    RuntimeNotifier,
     SetMultimap,
     Subscription,
     SyncStream,
@@ -24,7 +25,9 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
     ClipSequencingUpdates,
+    DeviceBoxUtils,
     EngineCommands,
+    EngineNotice,
     EngineProcessorAttachment,
     EngineSettings,
     EngineSettingsSchema,
@@ -32,6 +35,7 @@ import {
     EngineStateSchema,
     EngineToClient,
     ExportConfiguration,
+    LabeledAudioOutput,
     MonitoringMapEntry,
     NoteSignal,
     PERF_BUFFER_SIZE,
@@ -53,7 +57,7 @@ import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine, RecordingStart, RecordingStop} from "./Engine"
-import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
+import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, SampleLoadEvent} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
@@ -77,6 +81,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #compensationExceeded: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
@@ -121,6 +126,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
             this.#compensationLatency.setValue(state.compensationLatency)
+            this.#compensationExceeded.setValue(state.compensationExceeded)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
@@ -235,6 +241,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
                 error: (reason: unknown) => this.dispatchEvent(new ErrorEvent("error", {error: reason})),
+                notice: (notice: EngineNotice): void => RuntimeNotifier.notify({message: this.#describeNotice(notice)}),
                 deviceMessage: (uuid: string, message: string): void => {
                     for (const listener of this.#deviceMessageListeners.get(uuid)) {
                         listener(message)
@@ -242,14 +249,20 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 ready: (): void => resolve(),
                 fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
+                    const record = (event: SampleLoadEvent): void => variant.recordSampleLoad?.(event)
+                    record({type: "requested", uuid})
                     return new Promise((resolve, reject) => {
                         const handler = project.sampleManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {
                             if (state.type === "error") {
+                                record({type: "failed", uuid})
                                 reject(new Error(state.reason))
                                 subscription.terminate()
                             } else if (state.type === "loaded") {
-                                resolve(handler.data.unwrap("handler.data"))
+                                const data = handler.data.unwrap("handler.data")
+                                const {numberOfFrames, numberOfChannels, sampleRate} = data
+                                record({type: "delivered", uuid, numberOfFrames, numberOfChannels, sampleRate})
+                                resolve(data)
                                 subscription.terminate()
                             }
                         })
@@ -381,6 +394,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
+    get compensationExceeded(): ObservableValue<boolean> {return this.#compensationExceeded}
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
     get recordingStop(): Option<RecordingStop> {return this.#recordingStop}
@@ -388,6 +402,32 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
+
+    #describeNotice(notice: EngineNotice): string {
+        const device = this.#labelOf(notice.device)
+        switch (notice.type) {
+            case "sidechain-loop":
+                return `${device} listens to ${this.#labelOf(notice.source)}, which it feeds. This sidechain is a feedback loop.`
+            case "non-finite":
+                return `${device} was reset because its output overflowed in a feedback loop.`
+        }
+    }
+
+    #labelOf(uuid: string): string {
+        const bytes = UUID.parse(uuid)
+        const device = this.#project.boxGraph.findBox(bytes).flatMap(box => DeviceBoxUtils.isDeviceBox(box)
+            ? Option.wrap(DeviceBoxUtils.lookupLabelField(box).getValue()) : Option.None)
+        if (device.nonEmpty()) {return device.unwrap()}
+        const find = (outputs: Iterable<LabeledAudioOutput>): Option<string> => {
+            for (const output of outputs) {
+                if (UUID.equals(output.address.uuid, bytes)) {return Option.wrap(output.label)}
+                const nested = output.children().flatMap(children => find(children))
+                if (nested.nonEmpty()) {return nested}
+            }
+            return Option.None
+        }
+        return find(this.#project.rootBoxAdapter.labeledAudioOutputs()).unwrapOrElse("A device")
+    }
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get perfBuffer(): Float32Array {return this.#perfBuffer}

@@ -131,6 +131,8 @@ impl BlockFlags {
 /// `f64`s so `p0`/`p1` stay 8-aligned (no implicit padding mid-struct); `s0`/`s1` are sample indices as
 /// `u32` (the host casts to `usize` to slice). A device pulls each block's events with
 /// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
+/// `anchor` is the pulse the transport counts this block's frames from and `anchor_frame` its frame in the
+/// same coordinates as `s0`, so `dsp::ppqn::frame_at` places a pulse exactly (#536).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Block {
@@ -138,6 +140,8 @@ pub struct Block {
     pub flags: BlockFlags,
     pub p0: f64,
     pub p1: f64,
+    pub anchor: f64,
+    pub anchor_frame: i64,
     pub s0: u32,
     pub s1: u32,
     pub bpm: f32
@@ -170,6 +174,11 @@ extern "C" {
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
     fn host_bar_at(pulse: f64, out_ptr: u32);
+    fn host_harmony_at(pulse: f64, out_ptr: u32);
+    fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32;
+    fn host_groove_warp(slot: u32, pulse: f64) -> f64;
+    fn host_groove_unwarp(slot: u32, pulse: f64) -> f64;
+    fn host_loop_area(out_ptr: u32) -> u32;
     fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
@@ -267,7 +276,7 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
 pub fn block_at(pulse: f64) -> Option<(Block, u32)> {
     #[cfg(target_family = "wasm")]
     {
-        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0};
+        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0, bpm: 0.0};
         let serial = unsafe { host_block_at(pulse, &mut block as *mut Block as u32) };
         if serial == 0 { None } else { Some((block, serial)) }
     }
@@ -325,6 +334,138 @@ pub fn bar_at(pulse: f64) -> Bar {
     {
         Bar {start: math::floor(pulse / 3840.0) * 3840.0, length: 3840.0, beat: 960.0}
     }
+}
+
+/// The project's harmony at a pulse: the key (root pitch class + 12-bit scale mask) and, when the chord
+/// track has a chord there, its root pitch class and voicing (a mask of semitones 0..31 above that root).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Harmony {
+    pub root: i32,
+    pub bits: i32,
+    pub chord: Option<(i32, i32)>
+}
+
+// The native harmony behind `harmony_at` (root, bits, chord root or -1, chord bits); wasm builds ask the engine.
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_HARMONY: [core::sync::atomic::AtomicI32; 4] = [
+    core::sync::atomic::AtomicI32::new(0), core::sync::atomic::AtomicI32::new(math::harmony::MAJOR_BITS),
+    core::sync::atomic::AtomicI32::new(-1), core::sync::atomic::AtomicI32::new(0)];
+
+/// Native TEST SEAM: set what [`harmony_at`] returns (C major without a chord by default).
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_harmony(harmony: Harmony) {
+    let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
+    for (cell, value) in NATIVE_HARMONY.iter().zip([harmony.root, harmony.bits, chord_root, chord_bits]) {
+        cell.store(value, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The harmony at `pulse` on the project's key and chord tracks. Native builds return `set_native_harmony` (C major).
+#[inline]
+pub fn harmony_at(pulse: f64) -> Harmony {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0i32; 4];
+        unsafe { host_harmony_at(pulse, out.as_mut_ptr() as u32) };
+        Harmony {root: out[0], bits: out[1], chord: if out[2] < 0 {None} else {Some((out[2], out[3]))}}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = pulse;
+        let [root, bits, chord_root, chord_bits] = NATIVE_HARMONY.each_ref().map(|cell| cell.load(core::sync::atomic::Ordering::Relaxed));
+        Harmony {root, bits, chord: if chord_root < 0 {None} else {Some((chord_root, chord_bits))}}
+    }
+}
+
+/// Follow the groove THIS device's pointer field at PATH targets (e.g. `[10]` for Zeitgeist's `groove`),
+/// returning a slot for [`groove_warp`] / [`groove_unwarp`]. The host keeps the slot on the pointer's current
+/// target, an unbound pointer passes positions through. A device calls this from `init`. Native stub returns 0.
+#[inline]
+pub fn observe_groove(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_groove(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
+}
+
+/// The grooved position of a straight `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_warp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_warp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
+}
+
+/// The straight position of a grooved `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_unwarp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_unwarp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
+}
+
+/// The loop area `(from, to)` the transport wraps at, or `None` when playback does not wrap. Native stub: `None`.
+#[inline]
+pub fn loop_area() -> Option<(f64, f64)> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0.0f64; 2];
+        if unsafe { host_loop_area(out.as_mut_ptr() as u32) } == 0 { None } else { Some((out[0], out[1])) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { None }
+}
+
+// block ends drift from the loop end by accumulated float error (1e-10 after a bar)
+const GROOVE_WRAP_TOLERANCE: f64 = 1e-3;
+
+/// A device's groove pointer, followed block by block: which straight range sounds in a block, kept inside the
+/// loop, and where a straight position sounds. An unbound pointer passes every position through.
+#[derive(Clone, Copy)]
+pub struct GrooveFollower {
+    slot: u32,
+    last_to: f64,
+    wrapped: bool
+}
+
+impl GrooveFollower {
+    /// Call from `init`, PATH is the device's groove pointer field.
+    pub fn observe(path: &[u16]) -> Self {
+        Self {slot: observe_groove(path), last_to: f64::NAN, wrapped: false}
+    }
+
+    /// The straight range whose positions the groove moves into `[from, to)`.
+    pub fn straight(&mut self, from: f64, to: f64, discontinuous: bool) -> (f64, f64) {
+        let area = loop_area();
+        if discontinuous {
+            self.wrapped = area.is_some_and(|(loop_from, loop_to)|
+                from == loop_from && (self.last_to - loop_to).abs() < GROOVE_WRAP_TOLERANCE);
+        }
+        self.wrapped = groove_still_wrapped(self.wrapped, area, from);
+        self.last_to = to;
+        groove_clip(groove_unwarp(self.slot, from), groove_unwarp(self.slot, to), area, from, self.wrapped)
+    }
+
+    /// Where the straight `pulse` sounds.
+    pub fn warp(&self, pulse: f64) -> f64 {groove_warp(self.slot, pulse)}
+}
+
+/// A wrap holds while the block lies inside the loop, a loop moved away from the playhead ends it.
+pub fn groove_still_wrapped(wrapped: bool, area: Option<(f64, f64)>, from: f64) -> bool {
+    wrapped && area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to)
+}
+
+/// Limits the straight range `[u0, u1]` to the loop `area`: never past its end while the block lies before it,
+/// never before its start after a wrap.
+pub fn groove_clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool) -> (f64, f64) {
+    let Some((loop_from, loop_to)) = area else {return (u0, u1)};
+    let limit = |position: f64| {
+        let position = if from < loop_to && position > loop_to {loop_to} else {position};
+        if wrapped && position < loop_from {loop_from} else {position}
+    };
+    (limit(u0), limit(u1))
 }
 
 /// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
@@ -1572,7 +1713,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     for event in events {
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, anchor: block.anchor,
+                anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
             CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
@@ -1587,7 +1729,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         }
     }
     if cursor < s1 {
-        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, anchor: block.anchor,
+            anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
         CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
@@ -1713,7 +1856,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, bpm: block.bpm};
+                let sub = Block {p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, flags, ..*block};
                 E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
                 cursor = offset;
                 chunk_p0 = position;
@@ -1723,7 +1866,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             position = next_update_position(position);
         }
         if cursor < s1 {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor as u32, s1: s1 as u32, bpm: block.bpm};
+            let sub = Block {p0: chunk_p0, s0: cursor as u32, s1: s1 as u32, flags, ..*block};
             E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
         }
     }
@@ -1849,7 +1992,7 @@ mod tests {
     }
 
     fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: BlockFlags(0), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]
@@ -1897,7 +2040,7 @@ mod tests {
         let mut state = Recorder::default();
         let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
         let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::DISCONTINUOUS);
-        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[note_on(64, 64.0, 60)], &block);
         assert_eq!(state.chunks.len(), 2);
         assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");
@@ -1969,5 +2112,39 @@ mod modulation_tests {
         assert_eq!(unit_value(ParamValue::Float(LINEAR.y(0.75)), &LINEAR), 0.75);
         let modulated = unit_value(ParamValue::Modulated {base: LINEAR.y(0.25), kind: PARAM_KIND_FLOAT, sum: 0.5}, &LINEAR);
         assert!((modulated - 0.75).abs() < 1.0e-5, "normalize, add, clamp; got {modulated}");
+    }
+}
+
+#[cfg(test)]
+mod groove_tests {
+    use super::{groove_clip, groove_still_wrapped};
+
+    #[test]
+    fn without_a_loop_the_range_stays() {
+        assert_eq!(groove_clip(-240.0, 4000.0, None, 0.0, true), (-240.0, 4000.0));
+    }
+
+    #[test]
+    fn nothing_after_the_loop_end_is_read_while_the_block_lies_before_it() {
+        let area = Some((0.0, 3840.0));
+        assert_eq!(groove_clip(3800.0, 4100.0, area, 3500.0, false), (3800.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3600.0, false), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3840.0, false), (3900.0, 4100.0));
+    }
+
+    #[test]
+    fn nothing_before_the_loop_start_is_read_after_a_wrap() {
+        let area = Some((3840.0, 7680.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, true), (3840.0, 3900.0));
+        assert_eq!(groove_clip(3600.0, 3700.0, area, 3840.0, true), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, false), (3600.0, 3900.0));
+    }
+
+    #[test]
+    fn a_loop_moved_away_from_the_playhead_ends_the_wrap() {
+        // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
+        assert!(!groove_still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
+        assert!(groove_still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
+        assert!(!groove_still_wrapped(true, None, 8000.0));
     }
 }

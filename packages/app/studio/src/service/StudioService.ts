@@ -30,6 +30,8 @@ import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
+import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
+import {panelTab} from "@/ui/grooves/PanelTabs"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
@@ -120,7 +122,9 @@ export class StudioService implements ProjectEnv {
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
             tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),
-            signature: StudioPreferences.createMutableObservableValue("timeline", "signature")
+            signature: StudioPreferences.createMutableObservableValue("timeline", "signature"),
+            key: StudioPreferences.createMutableObservableValue("timeline", "key"),
+            chords: StudioPreferences.createMutableObservableValue("timeline", "chords")
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -130,6 +134,7 @@ export class StudioService implements ProjectEnv {
     readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
+    readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
 
@@ -173,8 +178,16 @@ export class StudioService implements ProjectEnv {
         }))
         this.samplePlayback = new SamplePlayback()
         this.sampleEditor = new SampleEditorService(this)
-        ModulatorReveal.requested.subscribe(option =>
-            option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
+        ModulatorReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("modulators")
+            this.switchScreen("modulation")
+        }))
+        GrooveReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("grooves")
+            this.switchScreen("modulation")
+        }))
         this.#projectProfileService = new ProjectProfileService({
             env: this,
             sampleService: this.#sampleService, sampleManager: this.sampleManager,
@@ -476,6 +489,9 @@ export class StudioService implements ProjectEnv {
                 if (timelineBoxAdapter.signatureTrack.size > 0) {
                     this.timeline.primaryVisibility.signature.setValue(true)
                 }
+                // Key + Chords
+                this.timeline.primaryVisibility.key.setValue(!timelineBoxAdapter.keyTrack.events.isEmpty())
+                this.timeline.primaryVisibility.chords.setValue(!timelineBoxAdapter.chordTrack.events.isEmpty())
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
@@ -492,6 +508,7 @@ export class StudioService implements ProjectEnv {
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {
                     unload: async (event: unknown) => {
+                        if (event instanceof Event) {this.engineErrors.notify(event)}
                         screen = this.layout.screen.getValue()
                         // we need to restart the screen to subscribe to new broadcaster instances
                         this.switchScreen(null)

@@ -13,7 +13,6 @@ import {
     FoldDeviceBox,
     FrequencySplitBox,
     GateDeviceBox,
-    GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -22,6 +21,7 @@ import {
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -85,6 +85,24 @@ export namespace EffectFactories {
             })
     }
 
+    export const ScaleMatrix: EffectFactory = {
+        defaultName: "Scale Matrix",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Scale Quantiser",
+        description: "Moves every note onto the nearest key of a scale",
+        manualPage: DeviceManualUrls.ScaleMatrix,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "ScaleMatrixDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Scale Matrix")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Pitch: EffectFactory = {
         defaultName: "Pitch",
         defaultIcon: IconSymbol.Note,
@@ -136,13 +154,7 @@ export namespace EffectFactories {
             hostField,
             index
         ): ZeitgeistDeviceBox => {
-            const useGlobal = false // TODO First Zeitgeist should be true
-            const shuffleBox = useGlobal
-                ? rootBoxAdapter.groove.box
-                : GrooveShuffleBox.create(boxGraph, UUID.generate(), (box) => {
-                    box.label.setValue("Shuffle")
-                    box.duration.setValue(480)
-                })
+            const shuffleBox = rootBoxAdapter.groove.box
             return ZeitgeistDeviceBox.create(
                 boxGraph,
                 UUID.generate(),
@@ -666,6 +678,7 @@ export namespace EffectFactories {
         Arpeggio,
         NoteFilter,
         Pitch,
+        ScaleMatrix,
         Spielwerk,
         Velocity,
         WclapMidi,       // WebCLAP

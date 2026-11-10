@@ -103,7 +103,11 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
             offset: this.#parametric.createParameter(
                 box.offset,
                 ValueMapping.linearInteger(0, 15),
-                StringMapping.numeric({fractionDigits: 0}), "Offset")
+                StringMapping.numeric({fractionDigits: 0}), "Offset"),
+            followChords: this.#parametric.createParameter(
+                box.followChords,
+                ValueMapping.bool,
+                StringMapping.bool, "Chords")
         } as const
     }
 }

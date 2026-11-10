@@ -433,7 +433,7 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     // A live note-on becomes a timed note-on record AND sets the unit's note-indicator bit.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 60, velocity: 0.9});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -448,7 +448,7 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // The note-off releases the bit and emits the note-off record.
     super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 60});
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, anchor: 5.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -470,7 +470,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     // Hold a note, then edit the channel: the subscription flushes a note-off ON THE OLD channel.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 64, velocity: 1.0});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     engine.midi_out.borrow_mut().drain_queue(|_| {}); // drop the note-on
     engine.graph.transaction(&[Update::Primitive {
@@ -664,7 +664,7 @@ fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_de
             device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
             paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
             observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(), sample_subs: Vec::new(),
-            param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new()
+            param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
         }),
         _ => panic!("expected a leaf chain")
     }
@@ -1173,6 +1173,92 @@ fn arming_a_tape_drops_the_old_player_so_its_meter_re_registers() {
     assert_eq!(alive_meters, 1, "exactly one alive tape-device meter after arming (the fresh one, not the frozen old)");
 }
 
+#[test]
+fn effects_monitoring_keeps_the_unit_out_of_the_main_mix_and_its_sends() {
+    // #528: an EFFECTS-monitored unit returns through the monitor output only (plans/done/advanced-monitoring.md,
+    // TS AudioDeviceChain skipped the output bus and the aux sends while monitoring). It must neither sum into
+    // its output bus nor feed its aux sends, and both come back when monitoring ends.
+    use crate::monitor::MonitorEntry;
+    const SEND: Uuid = [56u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(SEND, "AuxSendBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+            (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+            (3, FieldValue::Int32(0)),
+            (super::SEND_ROUTING_KEY, FieldValue::Int32(super::SEND_ROUTING_POST)),
+            (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+            (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+        ])
+    ]);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let routing = |engine: &Engine| {
+        let unit = engine.audio_units.iter().find(|unit| unit.unit == UNIT).expect("unit");
+        (unit.routed.is_some(), unit.sends.iter().map(|send| send.source.is_some()).collect::<Vec<_>>())
+    };
+    assert_eq!(routing(&engine), (true, vec![true]), "unmonitored: routed to the master and feeding its send");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    assert_eq!(routing(&engine), (false, vec![false]), "monitored with effects: no output bus, no aux send");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(routing(&engine), (true, vec![true]), "monitoring ends: output and send come back");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: -1, right: -1}]);
+    assert_eq!(routing(&engine), (true, vec![true]), "an entry without a valid channel returns nothing, so the unit stays in the mix");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    engine.set_frozen_audio(UNIT, Rc::new(crate::frozen::FrozenData {frames: vec![0.0; 2], frame_count: 1, sample_rate: 48_000.0}));
+    assert_eq!(routing(&engine), (true, vec![true]), "a frozen unit keeps its routes while monitored (TS)");
+}
+
+#[test]
+fn aux_sends_follow_their_index_field() {
+    // An AuxSendBox stores its position in `index` (3); field 2 is its `target-bus` pointer.
+    const SEND_A: Uuid = [57u8; 16];
+    const SEND_B: Uuid = [58u8; 16];
+    let send = |uuid: Uuid, index: i32| graph_box(uuid, "AuxSendBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+        (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+        (super::SEND_INDEX_KEY, FieldValue::Int32(index)),
+        (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+        (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        send(SEND_A, 1),
+        send(SEND_B, 0)
+    ]);
+    let unit = engine.build_unit(UNIT);
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_B, SEND_A], "sends are ordered by their index field");
+    engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(SEND_A, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(1), new: FieldValue::Int32(0)},
+        Update::Primitive {address: Address::of(SEND_B, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(0), new: FieldValue::Int32(1)}
+    ], &engine.registry).expect("reorder");
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_A, SEND_B], "a reorder follows the index field");
+    engine.teardown_unit(unit);
+}
+
+#[test]
+fn effects_monitoring_detaches_the_units_audio_sinks() {
+    use crate::monitor::MonitorEntry;
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)]);
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: SINK_UNIT, left: 0, right: 1}]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![None],
+        "a monitored unit's sink does not feed its bus (#528)");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)],
+        "monitoring ends: the sink feeds its bus again");
+}
+
 // ---- Composite per-child lifecycle ----
 // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
 // identity-by-NodeId proof as the leaf case, one level down.
@@ -1401,7 +1487,7 @@ fn cell_composite_layers_share_one_clip_advance() {
         count
     };
     let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
-    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, s0: 0, s1: 128, bpm: 120.0};
+    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     let pull = |source: &engine_env::note_event_instrument::SharedNoteEventSource, from: f64, to: f64| {
         let mut starts: Vec<f64> = Vec::new();
         source.borrow_mut().process_notes(from, to, flags, &mut |event| {
@@ -1421,7 +1507,7 @@ fn cell_composite_layers_share_one_clip_advance() {
     assert_eq!(started(&mut engine), 1, "exactly one started notification for two layers");
     // A paused (non-transporting) block advances nothing.
     let paused = engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 3860.0, p1: 3890.0, s0: 0, s1: 128, bpm: 120.0};
+        p0: 3860.0, p1: 3890.0, anchor: 3860.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     engine.advance_shared_clips(&[paused]);
     assert!(pull(&sources[0], 4790.0, 4810.0) == [4800.0], "ahead of the cursor the looping clip is predicted");
 }
@@ -2539,7 +2625,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");
@@ -2735,6 +2821,23 @@ fn every_transport_exit_drops_the_manual_control() {
     engine.is_recording = true;
     engine.stop_recording();
     assert!(!suspended(), "ending a recording drops it");
+}
+
+// #537: the UI sees the engine stop only a frame later, so a write in between still sends a suspension. The
+// stopped engine must refuse it, else the lane would ignore its curve through the whole next playback.
+#[test]
+fn a_suspension_reaching_the_stopped_engine_is_ignored() {
+    let mut engine = engine_with_devices();
+    let suspended = || !unsafe { crate::SUSPENDED_AUTOMATION.get() }.is_empty();
+    engine.play();
+    engine.stop();
+    engine.suspend_automation(TRACK);
+    assert!(!suspended(), "a write after stop leaves the curve in charge");
+    engine.play();
+    assert!(!suspended(), "and the next playback reads the curve");
+    engine.suspend_automation(TRACK);
+    assert!(suspended(), "a write while playing still takes over");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
 }
 
 #[test]
@@ -3248,9 +3351,9 @@ fn update_positions_gate_on_transporting_blocks() {
     // positions, so automated parameters HOLD their last value and the UI broadcast stays still (BUG:
     // paused automation kept executing and animating the knobs).
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     let playing = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(true, false, true, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3278,7 +3381,7 @@ fn update_positions_gate_on_transporting_blocks() {
 #[test]
 fn a_paused_locate_opens_the_update_clock_for_one_quantum() {
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3354,7 +3457,7 @@ fn a_paused_locate_delivers_the_automated_value_at_the_new_song_position() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.params = handles;
@@ -3665,7 +3768,7 @@ fn render_mix(engine: &mut Engine, unit: &AudioUnitBinding) -> (f32, f32) {
     }
     composite_of(unit).set_audio_source(dc);
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3699,7 +3802,7 @@ fn render_mix_live(engine: &mut Engine, unit_uuid: Uuid) -> (f32, f32) {
         composite.mix_output.clone()
     };
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3824,7 +3927,7 @@ fn frequency_sine_rms_ratio(engine: &mut Engine, unit: &AudioUnitBinding, freq: 
     let src = shared_audio_buffer();
     composite_of(unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let step = 2.0 * core::f32::consts::PI * freq / 48_000.0;
     let mut phase = 0.0f32;
     let (mut energy_in, mut energy_out) = (0.0f64, 0.0f64);
@@ -3860,7 +3963,7 @@ fn dragging_a_low_crossover_through_the_engine_stays_bounded() {
     let src = shared_audio_buffer();
     composite_of(&unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let mut seed = 0x9e37_79b9u32;
     let mut current = 200.0f32;
     let mut peak = 0.0f32;

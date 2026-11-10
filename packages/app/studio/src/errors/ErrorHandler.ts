@@ -1,6 +1,7 @@
 import {EmptyExec, Errors, isDefined, Option, Provider, Terminable, Terminator} from "@opendaw/lib-std"
 import {AnimationFrame, Browser, Events} from "@opendaw/lib-dom"
 import {LogBuffer} from "@/errors/LogBuffer.ts"
+import {ReportScrubber} from "@/errors/ReportScrubber"
 import {ErrorLog} from "@/errors/ErrorLog.ts"
 import {ErrorInfo} from "@/errors/ErrorInfo.ts"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -40,15 +41,18 @@ export class ErrorHandler {
     readonly #terminator = new Terminator()
     readonly #buildInfo: BuildInfo
     readonly #recover: Provider<Option<Provider<Promise<void>>>>
+    readonly #names: Provider<Promise<ReadonlyArray<string>>>
 
     #errorThrown: boolean = false
     #rejectionReported: boolean = false
     #chunkLoadDialogOpen: boolean = false
     #browserInternalNotified: boolean = false
 
-    constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
+    constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>,
+                names: Provider<Promise<ReadonlyArray<string>>>) {
         this.#buildInfo = buildInfo
         this.#recover = recover
+        this.#names = names
     }
 
     #looksLikeExtension(error: ErrorInfo): boolean {
@@ -302,22 +306,40 @@ export class ErrorHandler {
         return true
     }
 
-    #report(scope: string, error: ErrorInfo): void {
+    // An engine trap restarts the worklet behind its own dialog, so it is reported without the fatal path.
+    reportEngineError(event: Event, recentUpdates: ReadonlyArray<string>): void {
+        const error = ErrorInfo.extract(event)
+        if (error.message === "Restart requested") {return}
+        const time = Date.now()
+        this.#report("audio-engine", error, recentUpdates.map(update => ({time, level: "info", args: [`engine update ${update}`]})))
+    }
+
+    #report(scope: string, error: ErrorInfo, extraLogs: ReadonlyArray<LogBuffer.Entry> = []): void {
         console.error(scope, error.name, error.message, error.stack)
         if (!import.meta.env.PROD) {return}
-        const maxStackSize = 2000
-        const body = JSON.stringify({
-            date: new Date().toISOString(),
-            agent: Browser.userAgent,
-            build: this.#buildInfo,
-            scripts: document.scripts.length,
-            error: {...error, stack: error.stack?.slice(0, maxStackSize)},
-            logs: LogBuffer.get()
-        } satisfies ErrorLog)
-        fetch("https://logs.opendaw.studio/log.php", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body
+        const date = new Date().toISOString()
+        const logs = [...LogBuffer.get(), ...extraLogs]
+        this.#names().then(names => ReportScrubber.scrubber(names), () => null).then(scrub => {
+            const maxStackSize = 2000
+            const body = JSON.stringify({
+                date,
+                agent: Browser.userAgent,
+                build: this.#buildInfo,
+                scripts: document.scripts.length,
+                error: isDefined(scrub)
+                    ? {
+                        name: scrub(error.name),
+                        message: isDefined(error.message) ? scrub(error.message) : undefined,
+                        stack: isDefined(error.stack) ? scrub(error.stack).slice(0, maxStackSize) : undefined
+                    }
+                    : {name: error.name, stack: error.stack?.slice(0, maxStackSize)},
+                logs: isDefined(scrub) ? logs.map(entry => ({...entry, args: entry.args.map(scrub)})) : []
+            } satisfies ErrorLog)
+            return fetch("https://logs.opendaw.studio/log.php", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body
+            })
         }).then(console.info, console.warn)
     }
 

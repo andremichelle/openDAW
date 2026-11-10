@@ -29,12 +29,16 @@ export const StudioSettingsSchema = z.object({
         "markers": z.boolean(),
         "tempo": z.boolean(),
         "signature": z.boolean(),
+        "key": z.boolean().catch(false),
+        "chords": z.boolean().catch(false),
         "clips": z.boolean(),
         "follow-cursor": z.boolean()
     }).default({
         "markers": true,
         "tempo": false,
         "signature": false,
+        "key": false,
+        "chords": false,
         "clips": true,
         "follow-cursor": false
     }),

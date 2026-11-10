@@ -12,6 +12,7 @@ impl Engine {
     /// source unit (re)building with a new buffer, and load build order uniformly. Run only when a reconcile
     /// did work (a membership change or an enqueued unit), so an idle transaction does nothing here.
     pub(crate) fn resolve_sidechains(&mut self) {
+        self.sidechain_links.clear();
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             match &mut unit.wired {
@@ -59,6 +60,7 @@ impl Engine {
         let mut sources: Vec<(u32, NodeId, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
             let target = self.graph.target_of(&port.address).cloned();
+            let target_uuid = target.as_ref().map(|address| address.uuid);
             let resolution = target.and_then(|target| {
                 // A pointer at a FIELD of a box resolves by its FULL address first: that is how a device nested
                 // in an effect composite taps the composite's INPUT (its `input` vertex, registered to the
@@ -94,12 +96,32 @@ impl Engine {
                 changed = true;
             }
             if let Some((node, buffer)) = resolution {
+                if let Some(target_uuid) = target_uuid {
+                    self.sidechain_links.push((binding.node_id, binding.device_uuid, node, target_uuid));
+                }
                 sources.push((port.port_id, node, buffer));
             }
         }
         if changed {
             binding.sink.borrow_mut().set_sidechains(&sources);
         }
+    }
+
+    /// Flag every node on a sidechain feedback loop and tell the user once about each newly looped device.
+    pub(crate) fn resolve_feedback(&mut self) {
+        let mut nodes = BTreeSet::new();
+        let mut looped = BTreeSet::new();
+        for (consumer, device, source, target) in &self.sidechain_links {
+            let cycle = self.context.feedback_nodes(*source, *consumer);
+            if cycle.is_empty() {continue}
+            nodes.extend(cycle);
+            if looped.insert(*device) && !self.looped_sidechains.contains(device) {
+                crate::notice(format_args!("sidechain-loop\t{}\t{}",
+                    boxgraph::address::uuid_to_string(device), boxgraph::address::uuid_to_string(target)));
+            }
+        }
+        self.looped_sidechains = looped;
+        self.context.set_feedback(nodes);
     }
 
     /// The summing bus of a route: a REGISTERED (non-primary) bus's sum, or the master fallback (`None` =
@@ -147,6 +169,10 @@ impl Engine {
             self.unwire_output_route(unit); // no wired chain: drop any stale route
             return;
         };
+        if self.returns_through_monitor(&unit.unit) {
+            self.unwire_output_route(unit);
+            return;
+        }
         let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(unit.unit, vec![UNIT_OUTPUT_KEY]))
             .map(|target| target.uuid)
             .filter(|uuid| self.bus_registry.contains_key(uuid));
@@ -281,7 +307,8 @@ impl Engine {
     pub(crate) fn resolve_sinks(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding));
+            let monitored = self.returns_through_monitor(&unit.unit);
+            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding, monitored));
         }
         self.audio_units = units;
     }
@@ -290,8 +317,8 @@ impl Engine {
     /// otherwise the tap stays unwired (no master fallback, unlike an output route or a send: an unassigned
     /// sink is silent by design). A disabled sink is bypassed in the chain (never processed), so its tap is
     /// detached here rather than summed stale. A feedback loop is left unrouted.
-    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding) {
-        let wanted = if self.device_enabled(sink.device_uuid) {
+    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding, monitored: bool) {
+        let wanted = if !monitored && self.device_enabled(sink.device_uuid) {
             self.graph.target_of(&Address::of(sink.device_uuid, vec![SINK_TARGET_KEY]))
                 .map(|target| target.uuid)
                 .filter(|uuid| self.bus_registry.contains_key(uuid))
@@ -366,8 +393,8 @@ impl Engine {
     pub(crate) fn resolve_sends(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
-            let include_sends = self.unit_options(&unit.unit).include_sends;
+            // A STEM export with includeSends=false or EFFECTS monitoring leaves this unit's aux sends unwired (TS skips them).
+            let include_sends = self.unit_options(&unit.unit).include_sends && !self.returns_through_monitor(&unit.unit);
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
                 let tap = match (&unit.wired, include_sends) {

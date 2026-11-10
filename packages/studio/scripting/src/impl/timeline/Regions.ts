@@ -10,8 +10,9 @@ import {Box} from "@opendaw/lib-box"
 import {PPQN, ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
 import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
 import {TransientPlayMode} from "@opendaw/studio-enums"
-import {asInstanceOf, float, int, isDefined, panic, Procedure, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, float, int, isDefined, Nullable, panic, Procedure, UUID} from "@opendaw/lib-std"
 import {
+    AnyGroove,
     AudioFading,
     AudioPlayback,
     AudioRegion,
@@ -30,6 +31,7 @@ import {
     ValueTrack
 } from "../../Api"
 import {Context} from "../Context"
+import {GrooveImpls} from "../Grooves"
 import {Facade, Props} from "../Common"
 import {Guard} from "../Guard"
 import {NoteEvents, ValueEvents} from "./Events"
@@ -71,6 +73,8 @@ export class NoteRegionImpl extends RegionFacade<NoteRegionBox> implements NoteR
 
     private constructor(context: Context, box: NoteRegionBox) {super(context, box)}
 
+    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
+    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
     get track(): NoteTrack {return TrackImpls.wrap(this.context, this.trackBox) as NoteTrack}
     get noteEvents(): NoteEvents {
         return new NoteEvents(this.context, asInstanceOf(this.box.events.targetVertex.unwrap("region has no events").box, NoteEventCollectionBox))
@@ -88,6 +92,8 @@ export class ValueRegionImpl extends RegionFacade<ValueRegionBox> implements Val
 
     private constructor(context: Context, box: ValueRegionBox) {super(context, box)}
 
+    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
+    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
     get track(): ValueTrack {return TrackImpls.wrap(this.context, this.trackBox) as ValueTrack}
     get valueEvents(): ValueEvents {
         return new ValueEvents(this.context, asInstanceOf(this.box.events.targetVertex.unwrap("region has no events").box, ValueEventCollectionBox))

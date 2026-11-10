@@ -1,4 +1,4 @@
-import {Arrays, asDefined, clamp, int, isDefined, Option, panic, RuntimeNotifier, Selection, ValueAxis} from "@opendaw/lib-std"
+import {Arrays, asDefined, clamp, int, isDefined, Option, RuntimeNotifier, Selection, ValueAxis} from "@opendaw/lib-std"
 import {Dragging} from "@opendaw/lib-dom"
 import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
@@ -6,6 +6,7 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {GroupClipColumnMoves} from "./GroupClipColumnMoves"
 import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
+import {ListedTracks} from "@/ui/timeline/tracks/audio-unit/ListedTracks.ts"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier
@@ -91,16 +92,14 @@ export class ClipMoveModifier implements ClipModifier {
     update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
         const clipIndex: int = this.#xAxis.axisToValue(clientX)
         const trackIndex: int = this.#yAxis.axisToValue(clientY)
-        const maxTrackIndex = this.#manager.numTracks() - 1
-        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
-        const clipDelta = adapters.reduce((delta, adapter) => {
+        const listed = this.#listedClips()
+        if (listed.length === 0) {return}
+        const clipDelta = listed.reduce((delta, [adapter]) => {
             const listIndex = adapter.indexField.getValue()
             return clamp(delta, -listIndex, this.#manager.maxClipsIndex.getValue() + 1)
         }, clipIndex - this.#pointerClipIndex)
-        const trackDelta = adapters.reduce((delta, adapter) => {
-            const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
-            return clamp(delta, -listIndex, maxTrackIndex - listIndex)
-        }, trackIndex - this.#pointerTrackIndex)
+        const trackDelta = ListedTracks.clampDelta(trackIndex - this.#pointerTrackIndex,
+            listed.map(([, index]) => index), this.#manager.numTracks() - 1)
         let change = false
         if (clipDelta !== this.#clipDelta) {
             this.#clipDelta = clipDelta
@@ -130,28 +129,20 @@ export class ClipMoveModifier implements ClipModifier {
         }
         if (this.#trackDelta === 0 && this.#clipDelta === 0) {return}
         const tracks = this.#manager.tracks()
-        const maxTrackIndex = tracks.length - 1
-        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false))
-        const trackDelta = adapters.reduce((delta, adapter) => {
-            const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
-            return clamp(delta, -listIndex, maxTrackIndex - listIndex)
-        }, this.#trackDelta)
-        if (!adapters.every(adapter => {
-            const trackIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + trackDelta
-            const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap("track@idx").trackBoxAdapter
-            return trackAdapter.accepts(adapter)
-        })) {
+        const listed = this.#listedClips()
+        if (listed.length === 0) {return}
+        const adapters = listed.map(([adapter]) => adapter)
+        const trackDelta = ListedTracks.clampDelta(this.#trackDelta, listed.map(([, index]) => index), tracks.length - 1)
+        if (!listed.every(([adapter, trackIndex]) =>
+            asDefined(tracks[trackIndex + trackDelta], "track@idx").trackBoxAdapter.accepts(adapter))) {
             this.cancel()
             RuntimeNotifier.notify({message: "Cannot move clip to different track type.", icon: "Info"})
             return
         }
         const occupied: ReadonlyArray<Array<true>> = Arrays.create(() => [], tracks.length)
-        const moveTasks = adapters
-            .map((adapter) => {
-                const {indexField, trackBoxAdapter: optTrackBoxAdapter} = adapter
-                const trackBoxAdapter = optTrackBoxAdapter.unwrap("trackBoxAdapter")
-                const trackIndex = tracks.findIndex(({trackBoxAdapter: adapter}) => adapter === trackBoxAdapter)
-                const newClipIndex = Math.max(0, indexField.getValue() + this.#clipDelta)
+        const moveTasks = listed
+            .map(([adapter, trackIndex]) => {
+                const newClipIndex = Math.max(0, adapter.indexField.getValue() + this.#clipDelta)
                 const newTrackIndex = trackIndex + trackDelta
                 const newTrack = asDefined(tracks[newTrackIndex], "moved outside valid area")
                 occupied[newTrackIndex][newClipIndex] = true
@@ -176,11 +167,8 @@ export class ClipMoveModifier implements ClipModifier {
         this.#project.editing.modify(() => {
             moveNames()
             if (this.#copy) {
-                adapters.forEach((adapter) => {
-                    const track = adapter.trackBoxAdapter.unwrap("trackBoxAdapter")
+                listed.forEach(([adapter, trackIndex]) => {
                     const clipIndex = adapter.indexField.getValue()
-                    const trackIndex = this.#manager.tracks().findIndex(({trackBoxAdapter}) => trackBoxAdapter === track)
-                    if (trackIndex === -1) {return panic(`Could not find track for ${adapter}`)}
                     if (!occupied[trackIndex][clipIndex]) {
                         adapter.clone(false)
                     }
@@ -212,13 +200,17 @@ export class ClipMoveModifier implements ClipModifier {
         }
     }
 
+    #listedClips(): ReadonlyArray<[AnyClipBoxAdapter, int]> {
+        return ListedTracks.withIndices(this.#manager, this.#selection.selected(), adapter => adapter.trackBoxAdapter)
+    }
+
     #dispatchSameTrackChange(): void {
-        this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false)).forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap("trackBoxAdapter").clips.dispatchChange())
+        this.#selection.selected().forEach(({trackBoxAdapter}) =>
+            trackBoxAdapter.ifSome(adapter => adapter.clips.dispatchChange()))
     }
 
     #dispatchShiftedTrackChange(deltaIndex: int): void {
-        this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.mapOr(track => track.listIndex >= 0, false)).forEach(({trackBoxAdapter}) => this.#manager
-            .getByIndex(trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex)
-            .unwrapOrNull()?.trackBoxAdapter?.clips?.dispatchChange())
+        this.#listedClips().forEach(([, index]) => this.#manager
+            .getByIndex(index + deltaIndex).unwrapOrNull()?.trackBoxAdapter?.clips?.dispatchChange())
     }
 }

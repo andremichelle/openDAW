@@ -57,11 +57,28 @@ component
         pointer-events: none
         background: linear-gradient(to bottom, var(--color-panel-background), transparent)
 
+      .tabs
+        display: grid
+        grid-auto-flow: column
+        column-gap: 1em
+
+        > .tab
+          cursor: pointer
+          color: rgba(white, 0.3)
+
+          &.active
+            cursor: default
+            color: var(--color-orange)
+
       &.modulators
         grid-column: 1 / -2
-        color: var(--color-cream)
-        border-top: 1px var(--color-cream) solid
-        background-image: linear-gradient(to bottom, var(--color-cream) -2000%, transparent 100%)
+        color: var(--color-orange)
+        border-top: 1px var(--color-orange) solid
+        background-image: linear-gradient(to bottom, var(--color-orange) -2000%, transparent 100%)
+
+        > button
+          position: relative
+          top: -0.5px
 
       &.targets
         grid-column: -2 / -1

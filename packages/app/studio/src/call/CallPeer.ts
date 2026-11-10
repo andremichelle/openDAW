@@ -48,7 +48,7 @@ export class CallPeer implements Terminable {
         this.#send = send
         this.#onChange = onChange
         this.#connection = new RTCPeerConnection(RTC_CONFIG)
-        this.#connection.onnegotiationneeded = () => this.#negotiate()
+        this.#connection.onnegotiationneeded = () => this.#enqueue(() => this.#negotiate())
         this.#connection.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
             if (!isDefined(event.candidate)) {return}
             this.#send({
@@ -119,10 +119,10 @@ export class CallPeer implements Terminable {
         sender.setParameters(parameters).catch(console.warn)
     }
 
-    handle(signal: CallSignal): void {
-        this.#queue = this.#queue
-            .then(() => this.#process(signal))
-            .catch(error => console.warn("[Call] signal failed", error))
+    handle(signal: CallSignal): void {this.#enqueue(() => this.#process(signal))}
+
+    #enqueue(task: () => Promise<void>): void {
+        this.#queue = this.#queue.then(task).catch(error => console.warn("[Call] signal failed", error))
     }
 
     async #process(signal: CallSignal): Promise<void> {

@@ -1,8 +1,11 @@
+import {Option} from "@opendaw/lib-std"
+import {Box} from "@opendaw/lib-box"
 import {
     AnyClipBoxAdapter,
     AnyRegionBoxAdapter,
     AudioClipBoxAdapter,
     AudioRegionBoxAdapter,
+    Grooves,
     NoteClipBoxAdapter,
     NoteRegionBoxAdapter,
     ValueClipBoxAdapter,
@@ -30,7 +33,11 @@ export namespace TimelineLabels {
         }
     }) ?? adapter.label
 
-    export const forClip = (adapter: AnyClipBoxAdapter): string => adapter.accept({
+    export const grooveOf = (box: Box): Option<string> => Grooves.pointerOf(box)
+        .flatMap(pointer => pointer.targetVertex)
+        .map(({box}) => Grooves.asGrooveBox(box).label.getValue())
+
+    export const forClip =(adapter: AnyClipBoxAdapter): string => adapter.accept({
         visitNoteClipBoxAdapter: ({label}: NoteClipBoxAdapter): string => label,
         visitAudioClipBoxAdapter: ({label}: AudioClipBoxAdapter): string => orPlaceholder(label),
         visitValueClipBoxAdapter: ({label}: ValueClipBoxAdapter): string => label

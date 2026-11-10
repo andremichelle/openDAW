@@ -284,7 +284,7 @@ pub fn render(state: &mut PlayfieldSlotState, events: &[EventRecord], out_left: 
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
     abi::dispatch_range::<PlayfieldSlot>(state, [&mut *out_left, &mut *out_right], events, &block);
     PlayfieldSlot::finish(state, [out_left, out_right]);
 }

@@ -79,6 +79,7 @@ pub(crate) struct BoundNoteClip {
     pub(crate) duration: f64,
     pub(crate) looped: bool,
     pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>,
     pub(crate) collection: NoteCollection
 }
 
@@ -105,6 +106,11 @@ impl NoteTrackAccess for NoteTrackContent {
             visit(&bound.collection.events());
         }
     }
+    fn clip_groove(&self, clip: &[u8; 16]) -> Option<[u8; 16]> {
+        self.clips.iter().find(|bound| &bound.clip_uuid == clip).and_then(|bound| bound.groove)
+    }
+    fn warp(&self, groove: &[u8; 16], position: f64) -> f64 {crate::warp_through(groove, position)}
+    fn unwarp(&self, groove: &[u8; 16], position: f64) -> f64 {crate::unwarp_through(groove, position)}
 }
 
 pub(crate) type SharedNoteTrack = Rc<RefCell<NoteTrackContent>>;
@@ -292,7 +298,8 @@ pub(crate) fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collec
     let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![EVENTS_POINTER_KEY]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
     let (duration, looped, mute) = read_clip_playback(graph, clip_uuid);
-    content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, mute, collection});
+    let groove = groove_of(graph, clip_uuid, NOTE_CLIP_GROOVE_KEY);
+    content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, mute, groove, collection});
     let edit_content = content.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid), Box::new(move |graph, _update| {
         let (duration, looped, mute) = read_clip_playback(graph, clip_uuid);
@@ -301,6 +308,7 @@ pub(crate) fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collec
                 bound.duration = duration;
                 bound.looped = looped;
                 bound.mute = mute;
+                bound.groove = groove_of(graph, clip_uuid, NOTE_CLIP_GROOVE_KEY);
             }
         }
     }));
@@ -369,6 +377,16 @@ pub(crate) fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, coll
 // NoteRegionBox `mute` (WASM CONTRACT: mirror the TS NoteRegionBox schema — note regions carry mute at 15,
 // audio and value regions at 14).
 pub(crate) const NOTE_REGION_MUTE_KEY: u16 = 15;
+// WASM CONTRACT: the `groove` pointer keys of NoteRegionBox and NoteClipBox
+pub(crate) const NOTE_REGION_GROOVE_KEY: u16 = 18;
+pub(crate) const NOTE_CLIP_GROOVE_KEY: u16 = 14;
+
+/// The groove a region's or clip's `groove` pointer at `key` targets, the registry follows it even outside the list.
+pub(crate) fn groove_of(graph: &BoxGraph, uuid: Uuid, key: u16) -> Option<Uuid> {
+    let groove = graph.target_of(&Address::of(uuid, vec![key])).map(|address| address.uuid);
+    if let Some(groove) = groove {crate::follow_unlisted_groove(graph, groove)}
+    groove
+}
 
 /// Read a region's loopable span from the box graph (position 10, duration 11, loopOffset 12, loopDuration 13)
 /// plus its `mute` (15) — the sequencer skips a muted region (TS `NoteSequencer.#processRegions`).
@@ -378,6 +396,7 @@ pub(crate) fn read_note_region(graph: &BoxGraph, region_uuid: Uuid) -> NoteRegio
         duration: region_pulses(graph, region_uuid, 11),
         loop_offset: region_pulses(graph, region_uuid, 12),
         loop_duration: region_pulses(graph, region_uuid, 13),
-        mute: graph.field_value(&Address::of(region_uuid, vec![NOTE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
+        mute: graph.field_value(&Address::of(region_uuid, vec![NOTE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
+        groove: groove_of(graph, region_uuid, NOTE_REGION_GROOVE_KEY)
     }
 }

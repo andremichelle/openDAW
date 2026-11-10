@@ -205,7 +205,7 @@ mod tests {
     }
 
     fn block(frames: usize) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: frames as u32, bpm: 120.0}
+        Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: frames as u32, bpm: 120.0}
     }
 
     // Drive the DSP directly over an input by calling `process_audio` (via a fake resolve is unavailable natively,

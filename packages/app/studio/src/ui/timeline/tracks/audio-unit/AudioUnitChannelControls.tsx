@@ -1,5 +1,5 @@
 import css from "./AudioUnitChannelControls.sass?inline"
-import {Arrays, isInstanceOf, Lifecycle, Terminable, Terminator} from "@opendaw/lib-std"
+import {Arrays, isDefined, isInstanceOf, Lifecycle, Nullable, Terminable, Terminator, tryCatch} from "@opendaw/lib-std"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {Knob} from "@/ui/components/Knob.tsx"
@@ -85,25 +85,31 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
             some: capture => {
                 if (!isInstanceOf(capture, CaptureAudio)) {return Terminable.Empty}
                 const meterLifeCycle = lifecycle.own(new Terminator())
+                let metered: Nullable<{ node: AudioNode, channels: number }> = null
                 const connectMeter = () => {
+                    const next = capture.outputNode.unwrapOrNull()
+                    const numberOfChannels = capture.effectiveChannelCount
+                    if (isDefined(metered) && metered.node === next && metered.channels === numberOfChannels) {return}
                     streamRunning = false
+                    metered = null
                     meterLifeCycle.terminate()
-                    capture.outputNode.ifSome(outputNode => {
-                        const numberOfChannels = capture.effectiveChannelCount
-                        const meterWorklet = service.audioWorklets.createMeter(numberOfChannels)
-                        outputNode.connect(meterWorklet)
-                        streamRunning = true
-                        meterLifeCycle.ownAll(
-                            meterWorklet.subscribe(({peak}) => {
-                                peaksInDb[0] = gainToDb(peak[0])
-                                peaksInDb[1] = gainToDb(peak[1] ?? peak[0])
-                            }),
-                            meterWorklet
-                        )
-                    })
+                    if (!isDefined(next)) {return}
+                    const meterWorklet = service.audioWorklets.createMeter(numberOfChannels)
+                    next.connect(meterWorklet)
+                    streamRunning = true
+                    metered = {node: next, channels: numberOfChannels}
+                    meterLifeCycle.ownAll(
+                        meterWorklet.subscribe(({peak}) => {
+                            peaksInDb[0] = gainToDb(peak[0])
+                            peaksInDb[1] = gainToDb(peak[1] ?? peak[0])
+                        }),
+                        Terminable.create(() => tryCatch(() => next.disconnect(meterWorklet))),
+                        meterWorklet
+                    )
                 }
                 return Terminable.many(
                     capture.stream.catchupAndSubscribe(() => connectMeter()),
+                    capture.subscribeOutputNode(() => connectMeter()),
                     capture.captureBox.requestChannels.subscribe(() => connectMeter()),
                     capture.captureBox.leftInputs.subscribe(() => connectMeter()),
                     capture.captureBox.rightInputs.subscribe(() => connectMeter())

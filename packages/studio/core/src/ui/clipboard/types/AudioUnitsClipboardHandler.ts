@@ -15,7 +15,6 @@ import {
     AudioUnitBoxAdapter,
     AudioUnitGroups,
     AudioUnitOrdering,
-    isModulatorBox,
     RootBoxAdapter,
     TransferUtils,
     UserEditing
@@ -104,7 +103,7 @@ export namespace AudioUnitsClipboard {
             }
             return DevicesClipboard.mapModulationPointer(pointer, address, rootBox.graph)
         },
-        keepUuid: isModulatorBox,
+        keepUuid: DevicesClipboard.keepUuid,
         excludeBox: box => DevicesClipboard.excludeExistingModulator(box, rootBox.graph)
     })
 
@@ -214,7 +213,7 @@ export namespace AudioUnitsClipboard {
                     }
                     return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
                 },
-                keepUuid: isModulatorBox,
+                keepUuid: DevicesClipboard.keepUuid,
                 excludeBox: box => box.name === AudioUnitBox.ClassName
                     || box.name === AudioBusBox.ClassName
                     || box.name === RootBox.ClassName
@@ -222,6 +221,7 @@ export namespace AudioUnitsClipboard {
             }
         )
         DevicesClipboard.reindexModulatorLanes(boxes)
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
     }
 
     const pasteNewAudioUnit = (data: ArrayBufferLike,
@@ -236,6 +236,7 @@ export namespace AudioUnitsClipboard {
         const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox | undefined
         if (!pastedAudioUnit) {return undefined}
         DevicesClipboard.reindexModulatorLanes(boxes)
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.among(boxes))
         const insertAfterIndex = currentAudioUnit
             .map(adapter => adapter.indexField.getValue())
             .unwrapOrElse(() => -1)

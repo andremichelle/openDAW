@@ -1,7 +1,7 @@
-import {AudioUnitBox, GrooveShuffleBox, ProjectMetaBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ProjectMetaBox} from "@opendaw/studio-boxes"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
-import {ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
+import {Grooves, ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
 import {asInstanceOf, clamp, float, isDefined, isNull, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioUnit,
@@ -10,7 +10,7 @@ import {
     AuxAudioUnit,
     BusAudioUnitProps,
     DeepPartial,
-    GrooveShuffle,
+    AnyGroove,
     GroupAudioUnit,
     InstrumentAudioUnit,
     Instruments,
@@ -23,6 +23,8 @@ import {
     Project,
     ProjectMeta,
     SignatureTrack,
+    KeyTrack,
+    ChordTrack,
     TempoTrack,
     TimeSignature
 } from "../Api"
@@ -31,10 +33,12 @@ import {Props} from "./Common"
 import {Fields} from "./Fields"
 import {Guard} from "./Guard"
 import {AudioUnitImpls, AuxAudioUnitImpl, GroupAudioUnitImpl, InstrumentAudioUnitImpl} from "./AudioUnits"
-import {GrooveShuffleImpl} from "./GrooveShuffleImpl"
+import {GrooveImpls} from "./Grooves"
 import {MarkerImpl, Markers} from "./timeline/Markers"
 import {TempoTrackImpl} from "./timeline/TempoTrackImpl"
 import {SignatureTrackImpl} from "./timeline/SignatureTrackImpl"
+import {KeyTrackImpl} from "./timeline/KeyTrackImpl"
+import {ChordTrackImpl} from "./timeline/ChordTrackImpl"
 import {ModulatorImpls} from "./Modulators"
 import {Regions} from "./timeline/Regions"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
@@ -113,6 +117,8 @@ export class ProjectImpl implements Project {
     readonly #meta: ProjectMetaImpl
     readonly #tempoTrack: TempoTrackImpl
     readonly #signatureTrack: SignatureTrackImpl
+    readonly #keyTrack: KeyTrackImpl
+    readonly #chordTrack: ChordTrackImpl
     #name: string
 
     declare bpm: number
@@ -129,6 +135,8 @@ export class ProjectImpl implements Project {
         const {timelineBox, rootBox} = skeleton.mandatoryBoxes
         this.#tempoTrack = new TempoTrackImpl(this.#context, timelineBox)
         this.#signatureTrack = new SignatureTrackImpl(this.#context, timelineBox)
+        this.#keyTrack = new KeyTrackImpl(this.#context, timelineBox)
+        this.#chordTrack = new ChordTrackImpl(this.#context, timelineBox, this.#keyTrack)
         Fields.bind(this.#context, this, {
             bpm: timelineBox.bpm,
             baseFrequency: rootBox.baseFrequency,
@@ -157,9 +165,17 @@ export class ProjectImpl implements Project {
 
     get meta(): ProjectMeta {return this.#meta}
 
-    get groove(): GrooveShuffle {
+    get groove(): AnyGroove {
         const {rootBox} = this.#context.skeleton.mandatoryBoxes
-        return GrooveShuffleImpl.wrap(this.#context, asInstanceOf(rootBox.groove.targetVertex.unwrap("project has no groove").box, GrooveShuffleBox))
+        return GrooveImpls.wrap(this.#context, rootBox.groove.targetVertex.unwrap("project has no groove").box)
+    }
+
+    get grooves(): ReadonlyArray<AnyGroove> {
+        const {rootBox} = this.#context.skeleton.mandatoryBoxes
+        return rootBox.grooves.pointerHub.incoming()
+            .map(pointer => Grooves.asGrooveBox(pointer.box))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+            .map(box => GrooveImpls.wrap(this.#context, box))
     }
 
     get output(): OutputAudioUnit {
@@ -218,6 +234,8 @@ export class ProjectImpl implements Project {
 
     get tempoTrack(): TempoTrack {return this.#tempoTrack}
     get signatureTrack(): SignatureTrack {return this.#signatureTrack}
+    get keyTrack(): KeyTrack {return this.#keyTrack}
+    get chordTrack(): ChordTrack {return this.#chordTrack}
 
     get modulators(): ReadonlyArray<AnyModulator> {return ModulatorImpls.list(this.#context)}
 

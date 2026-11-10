@@ -260,7 +260,7 @@ export namespace AudioBounce {
 
     export type Step = (count: int) => Promise<ReadonlyArray<Float32Array>>
 
-    // Steps in whole chunks (a step drops the rest of its last quantum) and cuts to the exact span or the audible tail.
+    // Steps in whole chunks and cuts to the exact span or the audible tail.
     export const renderFrames = async (step: Step, {skipFrames, numFrames, tail}: Span, sampleRate: int,
                                        onProgress: Procedure<unitValue> = EmptyProcedure,
                                        abortSignal?: AbortSignal): Promise<AudioData> => {
