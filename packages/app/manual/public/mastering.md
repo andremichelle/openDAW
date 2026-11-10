@@ -63,6 +63,8 @@ The display shows the correction for the middle of the stereo image (solid line)
 
 **Width** narrows (below 100 %) or widens (above 100 %) the stereo image.
 
+**Test Mono** lets you listen to the master in mono, to check how it sounds on a single speaker. The meters keep measuring the stereo master. Test Mono is never stored in the project and exports stay stereo.
+
 ---
 
 ## 6. Meters
