@@ -22,7 +22,7 @@ const editedTrack = (project: Project): Option<AudioUnitBox> => project.userEdit
 export const deselectHiddenTracks = (project: Project): Terminable => {
     let alive = true
     const subscription = project.audioUnitLayout.value.subscribe(() => queueMicrotask(() => {
-        if (!alive) {return}
+        if (!alive || project.editing.canRedo()) {return}
         const layout = project.audioUnitLayout.snapshot
         const hidden = project.audioUnitSelection.selected()
             .filter(unit => layout.row(unit).mapOr(row => row.visibleIndex === -1, false))
