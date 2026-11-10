@@ -7,7 +7,7 @@
 //! Mirrors core-processors `BlockRenderer`, including its action precedence: markers are evaluated
 //! first, the loop takes over only when strictly earlier, tempo only when strictly earlier than both.
 
-use engine_env::ppqn::{samples_to_pulses, QUARTER};
+use engine_env::ppqn::{pulses_to_frames, samples_to_pulses, QUARTER};
 use value::event::EventCollection;
 use value::value::{value_at, ValueEvent};
 
@@ -16,13 +16,9 @@ pub const RENDER_QUANTUM: usize = 128;
 /// Tempo is re-evaluated on this pulse grid (`PPQN.fromSignature(1, 48)` = 80, a ~10 ms window).
 pub const TEMPO_CHANGE_GRID: f64 = 80.0;
 
-// One division each, so a whole frame or pulse count converts exactly.
+// One division, so a whole frame count converts exactly (the inverse is `ppqn::pulses_to_frames`).
 fn frames_to_pulses(frames: f64, bpm: f32, sample_rate: f32) -> f64 {
     frames * bpm as f64 * QUARTER / (60.0 * sample_rate as f64)
-}
-
-fn pulses_to_frames(pulses: f64, bpm: f32, sample_rate: f32) -> f64 {
-    pulses * 60.0 * sample_rate as f64 / (QUARTER * bpm as f64)
 }
 
 fn quantize_ceil(position: f64, grid: f64) -> f64 {
@@ -37,10 +33,13 @@ fn quantize_ceil(position: f64, grid: f64) -> f64 {
 /// A processed slice of one quantum: pulse range `[p0, p1)` over sample range `[s0, s1)` at `bpm`.
 /// `discontinuous` is true for the first block after a position jump (a loop wrap), the Rust analog
 /// of the TS `BlockFlag.discontinuous`, so consumers can release state held across the jump.
+/// `anchor` is the pulse the frames are counted from and `anchor_frame` its frame in the quantum.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Block {
     pub p0: f64,
     pub p1: f64,
+    pub anchor: f64,
+    pub anchor_frame: i64,
     pub s0: usize,
     pub s1: usize,
     pub bpm: f32,
@@ -188,7 +187,7 @@ impl Transport {
         let p0 = self.free_running;
         let p1 = p0 + samples_to_pulses(RENDER_QUANTUM as f64, self.bpm, self.sample_rate);
         self.free_running = p1;
-        Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
+        Block {p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
     }
 
     /// The free-running pulse range for a PARTIAL paused tail of `samples` (a `pauseOnLoopDisabled`
@@ -197,7 +196,7 @@ impl Transport {
         let p0 = self.free_running;
         let p1 = p0 + samples_to_pulses(samples as f64, self.bpm, self.sample_rate);
         self.free_running = p1;
-        Block {p0, p1, s0: 0, s1: samples, bpm: self.bpm, discontinuous: false}
+        Block {p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: samples, bpm: self.bpm, discontinuous: false}
     }
 
     /// Advance one 128-sample quantum and return its block. Fixed bpm with no events → exactly one
@@ -209,9 +208,10 @@ impl Transport {
             self.reanchor(p0, 0);
         }
         let p1 = self.pulse_at(RENDER_QUANTUM);
+        let anchor_frame = -self.anchor_offset;
         self.position = p1;
         self.anchor_offset += RENDER_QUANTUM as i64;
-        Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
+        Block {p0, p1, anchor: self.anchor, anchor_frame, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
     }
 
     /// Render one quantum into `emit`, splitting at the nearest action: a marker boundary (when the
@@ -305,7 +305,7 @@ impl Transport {
             }
             match action {
                 Action::None => {
-                    emit(&Block {p0, p1, s0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous});
+                    emit(&Block {p0, p1, anchor: self.anchor, anchor_frame: -self.anchor_offset, s0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous});
                     discontinuous = false;
                     p0 = p1;
                     s0 = RENDER_QUANTUM;
@@ -378,7 +378,7 @@ impl Transport {
         let frames = pulses_to_frames(action_position - self.anchor, self.bpm, self.sample_rate) as i64;
         let s1 = (frames - self.anchor_offset).clamp(s0 as i64, RENDER_QUANTUM as i64) as usize;
         if s1 > s0 {
-            emit(&Block {p0, p1: action_position, s0, s1, bpm: self.bpm, discontinuous});
+            emit(&Block {p0, p1: action_position, anchor: self.anchor, anchor_frame: -self.anchor_offset, s0, s1, bpm: self.bpm, discontinuous});
         }
         s1
     }

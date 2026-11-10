@@ -135,7 +135,7 @@ mod tests {
     use super::*;
 
     fn block(p0: f64, p1: f64, s0: u32, s1: u32) -> Block {
-        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0, p1, s0, s1, bpm: 120.0}
+        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm: 120.0}
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
     fn a_paused_block_reads_the_frozen_song_position() {
         let mut history = PlayheadHistory::new();
         history.reserve(8, 4);
-        let paused = Block {index: 0, flags: BlockFlags::create(false, false, false, false), p0: 5000.0, p1: 5128.0, s0: 0, s1: 128, bpm: 120.0};
+        let paused = Block {index: 0, flags: BlockFlags::create(false, false, false, false), p0: 5000.0, p1: 5128.0, anchor: 5000.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         history.record_quantum(&[paused], 777.0, 128);
         history.record_quantum(&[block(777.0, 905.0, 0, 128)], 777.0, 128);
         let lagged = history.lagged(777.0, 64).unwrap();

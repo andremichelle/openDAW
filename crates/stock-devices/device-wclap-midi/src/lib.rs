@@ -12,7 +12,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{Block, BlockFlags, EventRecord, FieldValue, ParamValue, EVENT_NOTE_OFF, EVENT_NOTE_ON};
-use dsp::ppqn::{pulses_to_samples, samples_to_pulses};
+use dsp::ppqn::{frame_at, pulses_to_samples, samples_to_pulses};
 use wclap_common::WclapLink;
 
 #[cfg(target_family = "wasm")]
@@ -48,9 +48,9 @@ fn span_frames(pulses: f64, bpm: f32, sample_rate: f32, carry: f64) -> (usize, f
 
 /// The engine's `sample_offset`: the sample of `position` in `block`, clamped to the block.
 fn sample_of(position: f64, block: &Block, sample_rate: f32) -> u32 {
-    let pulses = position - block.p0;
-    let raw = if pulses.abs() < 1.0e-7 {block.s0} else {block.s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as u32};
-    raw.clamp(block.s0, block.s1)
+    if position <= block.p0 {return block.s0}
+    if position >= block.p1 {return block.s1}
+    frame_at(position, block.anchor, block.anchor_frame, block.bpm, sample_rate).clamp(block.s0 as i64, block.s1 as i64) as u32
 }
 
 /// The pulse position of the middle of `sample`, so the consumer's `sample_of` lands on it, inside `[from, to)`.
@@ -310,7 +310,7 @@ mod tests {
     const RATE: f32 = 48_000.0;
 
     fn block() -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0: 1920.0, p1: 1920.0 + 128.0 * 960.0 * 2.0 / RATE as f64, s0: 0, s1: 128, bpm: 120.0}
+        Block {index: 0, flags: BlockFlags(0), p0: 1920.0, p1: 1920.0 + 128.0 * 960.0 * 2.0 / RATE as f64, anchor: 1920.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}
     }
 
     #[test]

@@ -131,6 +131,8 @@ impl BlockFlags {
 /// `f64`s so `p0`/`p1` stay 8-aligned (no implicit padding mid-struct); `s0`/`s1` are sample indices as
 /// `u32` (the host casts to `usize` to slice). A device pulls each block's events with
 /// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
+/// `anchor` is the pulse the transport counts this block's frames from and `anchor_frame` its frame in the
+/// same coordinates as `s0`, so `dsp::ppqn::frame_at` places a pulse exactly (#536).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Block {
@@ -138,6 +140,8 @@ pub struct Block {
     pub flags: BlockFlags,
     pub p0: f64,
     pub p1: f64,
+    pub anchor: f64,
+    pub anchor_frame: i64,
     pub s0: u32,
     pub s1: u32,
     pub bpm: f32
@@ -272,7 +276,7 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
 pub fn block_at(pulse: f64) -> Option<(Block, u32)> {
     #[cfg(target_family = "wasm")]
     {
-        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0};
+        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0, bpm: 0.0};
         let serial = unsafe { host_block_at(pulse, &mut block as *mut Block as u32) };
         if serial == 0 { None } else { Some((block, serial)) }
     }
@@ -1709,7 +1713,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     for event in events {
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, anchor: block.anchor,
+                anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
             CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
@@ -1724,7 +1729,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         }
     }
     if cursor < s1 {
-        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, anchor: block.anchor,
+            anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
         CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
@@ -1850,7 +1856,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, bpm: block.bpm};
+                let sub = Block {p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, flags, ..*block};
                 E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
                 cursor = offset;
                 chunk_p0 = position;
@@ -1860,7 +1866,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             position = next_update_position(position);
         }
         if cursor < s1 {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor as u32, s1: s1 as u32, bpm: block.bpm};
+            let sub = Block {p0: chunk_p0, s0: cursor as u32, s1: s1 as u32, flags, ..*block};
             E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
         }
     }
@@ -1986,7 +1992,7 @@ mod tests {
     }
 
     fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: BlockFlags(0), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]
@@ -2034,7 +2040,7 @@ mod tests {
         let mut state = Recorder::default();
         let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
         let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::DISCONTINUOUS);
-        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[note_on(64, 64.0, 60)], &block);
         assert_eq!(state.chunks.len(), 2);
         assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");

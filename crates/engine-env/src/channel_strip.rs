@@ -9,7 +9,6 @@ use core::cell::{Cell, RefCell};
 use math::db_to_gain;
 use crate::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
 use crate::block::Block;
-use crate::ppqn::pulses_to_samples;
 use crate::audio_generator::AudioGenerator;
 use crate::audio_input::AudioInput;
 use crate::event_buffer::EventBuffer;
@@ -176,14 +175,7 @@ impl ChannelStripProcessor {
 
     // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
-        let pulses = position - block.p0;
-        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-        let raw = if pulses.abs() < 1.0e-7 {
-            s0
-        } else {
-            s0 + pulses_to_samples(pulses, block.bpm, self.sample_rate) as usize
-        };
-        raw.clamp(s0, s1)
+        crate::block::frame_of(block, position, self.sample_rate)
     }
 }
 
@@ -287,7 +279,7 @@ mod tests {
 
     fn block(transporting: bool, p0: f64) -> Block {
         Block {index: 0, flags: BlockFlags::create(transporting, false, transporting, false),
-            p0, p1: p0 + 5.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0}
+            p0, p1: p0 + 5.12, anchor: p0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0}
     }
 
     #[test]

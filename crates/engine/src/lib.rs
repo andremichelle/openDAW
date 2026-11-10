@@ -44,7 +44,7 @@ use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
 use engine_env::note_event_instrument::SharedNoteEventSource;
-use engine_env::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use engine_env::ppqn::{first_update_position, UPDATE_CLOCK_RATE};
 use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
 use transport::transport::{Marker, Transport, RENDER_QUANTUM};
@@ -1526,14 +1526,7 @@ struct TempoStamp {
 
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
-    let pulses = position - block.p0;
-    let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-    let raw = if pulses.abs() < 1.0e-7 {
-        s0
-    } else {
-        s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
-    };
-    raw.clamp(s0, s1)
+    engine_env::block::frame_of(block, position, sample_rate)
 }
 
 struct Engine {
@@ -2007,6 +2000,8 @@ impl Engine {
                     flags: BlockFlags::create(true, block.discontinuous, true, false),
                     p0: block.p0,
                     p1: block.p1,
+                    anchor: block.anchor,
+                    anchor_frame: block.anchor_frame,
                     s0: block.s0 as u32,
                     s1: block.s1 as u32,
                     bpm: block.bpm
@@ -2029,6 +2024,8 @@ impl Engine {
                         flags: BlockFlags::create(false, false, false, false),
                         p0: paused.p0,
                         p1: paused.p1,
+                        anchor: paused.anchor,
+                        anchor_frame: covered as i64,
                         s0: covered as u32,
                         s1: RENDER_QUANTUM as u32,
                         bpm: paused.bpm
@@ -2047,6 +2044,8 @@ impl Engine {
                 flags: BlockFlags::create(false, false, false, false),
                 p0: paused.p0,
                 p1: paused.p1,
+                anchor: paused.anchor,
+                anchor_frame: paused.anchor_frame,
                 s0: paused.s0 as u32,
                 s1: paused.s1 as u32,
                 bpm: paused.bpm
@@ -2127,6 +2126,7 @@ impl Engine {
         self.schedule_midi_transport(midi_output::start_message());
         self.transport.play()
     }
+
     fn suspend_automation(&self, uuid: [u8; 16]) {
         if !self.transport.is_playing() {return}
         let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
@@ -2134,7 +2134,6 @@ impl Engine {
             suspended.push(uuid);
         }
     }
-
 
     /// Schedule a MIDI transport message for the next quantum (TS `midiTransportClock.schedule`).
     fn schedule_midi_transport(&mut self, message: ([u8; 3], u8)) {

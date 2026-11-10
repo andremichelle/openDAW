@@ -161,7 +161,7 @@ pub extern "C" fn process(desc_ptr: u32) {
             let offset = abi::pulse_to_offset(position).clamp(block.s0, block.s1);
             if offset > sub_s0 {
                 abi::script_audio(handle, src_l, src_r, out_l, out_r,
-                    &Block {index: block.index, flags, p0: sub_p0, p1: position, s0: sub_s0, s1: offset, bpm: block.bpm});
+                    &Block {index: block.index, flags, p0: sub_p0, p1: position, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: sub_s0, s1: offset, bpm: block.bpm});
                 sub_s0 = offset;
                 sub_p0 = position;
                 flags.clear_event_flags();
@@ -170,7 +170,7 @@ pub extern "C" fn process(desc_ptr: u32) {
             position = abi::next_update_position(position);
         }
         abi::script_audio(handle, src_l, src_r, out_l, out_r,
-            &Block {index: block.index, flags, p0: sub_p0, p1: block.p1, s0: sub_s0, s1: block.s1, bpm: block.bpm});
+            &Block {index: block.index, flags, p0: sub_p0, p1: block.p1, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: sub_s0, s1: block.s1, bpm: block.bpm});
     }
     let latency = abi::script_latency(handle);
     if latency != state.latency {

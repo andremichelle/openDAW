@@ -433,7 +433,7 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     // A live note-on becomes a timed note-on record AND sets the unit's note-indicator bit.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 60, velocity: 0.9});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -448,7 +448,7 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // The note-off releases the bit and emits the note-off record.
     super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 60});
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, anchor: 5.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -470,7 +470,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     // Hold a note, then edit the channel: the subscription flushes a note-off ON THE OLD channel.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 64, velocity: 1.0});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     engine.midi_out.borrow_mut().drain_queue(|_| {}); // drop the note-on
     engine.graph.transaction(&[Update::Primitive {
@@ -1487,7 +1487,7 @@ fn cell_composite_layers_share_one_clip_advance() {
         count
     };
     let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
-    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, s0: 0, s1: 128, bpm: 120.0};
+    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     let pull = |source: &engine_env::note_event_instrument::SharedNoteEventSource, from: f64, to: f64| {
         let mut starts: Vec<f64> = Vec::new();
         source.borrow_mut().process_notes(from, to, flags, &mut |event| {
@@ -1507,7 +1507,7 @@ fn cell_composite_layers_share_one_clip_advance() {
     assert_eq!(started(&mut engine), 1, "exactly one started notification for two layers");
     // A paused (non-transporting) block advances nothing.
     let paused = engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 3860.0, p1: 3890.0, s0: 0, s1: 128, bpm: 120.0};
+        p0: 3860.0, p1: 3890.0, anchor: 3860.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     engine.advance_shared_clips(&[paused]);
     assert!(pull(&sources[0], 4790.0, 4810.0) == [4800.0], "ahead of the cursor the looping clip is predicted");
 }
@@ -3351,9 +3351,9 @@ fn update_positions_gate_on_transporting_blocks() {
     // positions, so automated parameters HOLD their last value and the UI broadcast stays still (BUG:
     // paused automation kept executing and animating the knobs).
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     let playing = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(true, false, true, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3381,7 +3381,7 @@ fn update_positions_gate_on_transporting_blocks() {
 #[test]
 fn a_paused_locate_opens_the_update_clock_for_one_quantum() {
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3457,7 +3457,7 @@ fn a_paused_locate_delivers_the_automated_value_at_the_new_song_position() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.params = handles;
@@ -3768,7 +3768,7 @@ fn render_mix(engine: &mut Engine, unit: &AudioUnitBinding) -> (f32, f32) {
     }
     composite_of(unit).set_audio_source(dc);
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3802,7 +3802,7 @@ fn render_mix_live(engine: &mut Engine, unit_uuid: Uuid) -> (f32, f32) {
         composite.mix_output.clone()
     };
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3927,7 +3927,7 @@ fn frequency_sine_rms_ratio(engine: &mut Engine, unit: &AudioUnitBinding, freq: 
     let src = shared_audio_buffer();
     composite_of(unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let step = 2.0 * core::f32::consts::PI * freq / 48_000.0;
     let mut phase = 0.0f32;
     let (mut energy_in, mut energy_out) = (0.0f64, 0.0f64);
@@ -3963,7 +3963,7 @@ fn dragging_a_low_crossover_through_the_engine_stays_bounded() {
     let src = shared_audio_buffer();
     composite_of(&unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let mut seed = 0x9e37_79b9u32;
     let mut current = 200.0f32;
     let mut peak = 0.0f32;
