@@ -3213,8 +3213,14 @@ pub extern "C" fn frozen_allocate(frame_count: u32, _channels: u32) -> *mut f32 
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.frozen_pending = alloc::vec![0.0; frame_count as usize * 2];
-                engine.frozen_pending.as_mut_ptr()
+                engine.frozen_pending = Vec::new();
+                match (frame_count as usize).checked_mul(2).and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.frozen_pending = pending;
+                        engine.frozen_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }
@@ -3673,8 +3679,15 @@ pub extern "C" fn click_allocate(frame_count: u32, channels: u32) -> *mut f32 {
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.click_pending = alloc::vec![0.0; frame_count as usize * channels.clamp(1, 2) as usize];
-                engine.click_pending.as_mut_ptr()
+                engine.click_pending = Vec::new();
+                match (frame_count as usize).checked_mul(channels.clamp(1, 2) as usize)
+                    .and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.click_pending = pending;
+                        engine.click_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }

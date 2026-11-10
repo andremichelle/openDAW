@@ -93,12 +93,17 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         track(engineToClient.fetchAudio(uuid).then(data => {
             const {numberOfFrames, numberOfChannels, sampleRate: dataRate, frames} = data
             const bytesPerChannel = numberOfFrames * Float32Array.BYTES_PER_ELEMENT
-            const pointer = engine.sample_allocate(handle, numberOfChannels * bytesPerChannel)
+            const byteLength = numberOfChannels * bytesPerChannel
+            const pointer = byteLength <= 0xFFFFFFFF ? engine.sample_allocate(handle, byteLength) : 0
             // A dead handle (its slot was freed + generation-bumped between the request and this async
             // delivery — e.g. the AudioFileBox delete/recreate churn when a recorded take is finalized)
             // returns 0. Writing the frames at address 0 would corrupt the engine's own memory, so skip:
             // the engine re-requests against the fresh handle when the new box syncs.
-            if (pointer === 0) {return}
+            // The same 0 comes back when the frames do not fit, the slot then never resolves and plays silence.
+            if (pointer === 0) {
+                engineToClient.log(`sample not loaded: removed or does not fit into the engine memory (${byteLength} bytes)`)
+                return
+            }
             for (let channel = 0; channel < numberOfChannels; channel++) {
                 new Float32Array(memory.buffer, pointer + channel * bytesPerChannel, numberOfFrames)
                     .set(frames[channel])
@@ -118,7 +123,10 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         track(engineToClient.fetchSoundfont(uuid).then(soundfont => {
             const blob = new Uint8Array(simplifySoundfont(soundfont))
             const pointer = engine.soundfont_allocate(handle, blob.byteLength)
-            if (pointer === 0) {return} // dead handle (see the sample path): writing at 0 would corrupt memory
+            if (pointer === 0) { // dead handle or no room (see the sample path): writing at 0 would corrupt memory
+                engineToClient.log(`soundfont not loaded: no allocation for ${blob.byteLength} bytes`)
+                return
+            }
             new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
             engine.soundfont_set_ready(handle)
         }, (reason: unknown) => engineToClient.log(`soundfont load failed: ${reason}`)))
