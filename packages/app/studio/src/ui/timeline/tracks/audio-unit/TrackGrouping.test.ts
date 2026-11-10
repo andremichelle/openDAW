@@ -181,6 +181,33 @@ describe("track selection", () => {
         deselecting.terminate()
         project.terminate()
     })
+    it("deselects regions and clips that a collapse hides, in the same undo step", async () => {
+        const project = await setup()
+        const deselecting = TrackGrouping.deselectHiddenTracks(project)
+        const settle = () => Promise.resolve()
+        const [inside, outside] = project.editing.modify(() => Array.from({length: 2}, () =>
+            project.api.createAnyInstrument(InstrumentFactories.Neon))).unwrap()
+        const group = project.editing.modify(() => project.grouping.create([inside.audioUnitBox]).unwrap()).unwrap()
+        const [hiddenRegion, visibleRegion, hiddenClip] = project.editing.modify(() => [
+            project.api.createNoteRegion({trackBox: inside.trackBox, position: 0, duration: 960}),
+            project.api.createNoteRegion({trackBox: outside.trackBox, position: 0, duration: 960}),
+            project.api.createNoteClip(inside.trackBox, 0)
+        ]).unwrap()
+        project.selection.select(hiddenRegion, visibleRegion, hiddenClip)
+        project.editing.modify(() => outside.audioUnitBox.volume.setValue(-3))
+        project.editing.modify(() => group.groupCollapsed.setValue(true))
+        await settle()
+        expect(project.selection.isSelected(hiddenRegion)).toBe(false)
+        expect(project.selection.isSelected(hiddenClip)).toBe(false)
+        expect(project.selection.isSelected(visibleRegion)).toBe(true)
+        expect(project.editing.undo()).toBe(true)
+        await settle()
+        expect(group.groupCollapsed.getValue()).toBe(false)
+        expect(project.selection.isSelected(hiddenRegion)).toBe(true)
+        expect(project.selection.isSelected(hiddenClip)).toBe(true)
+        deselecting.terminate()
+        project.terminate()
+    })
     it("keeps the redo history when an undo hides a selected track", async () => {
         const project = await setup()
         const deselecting = TrackGrouping.deselectHiddenTracks(project)

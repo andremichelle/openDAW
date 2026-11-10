@@ -1,7 +1,7 @@
 import {asDefined, Client, Exec, isDefined, Lifecycle, Notifier, Nullable, Option, Optional, Procedure, Subscription, UUID, Terminable} from "@opendaw/lib-std"
 import {AnimationFrame, Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
-import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitGroups, Devices, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {GroupDropLayout} from "./GroupDropLayout"
@@ -25,9 +25,21 @@ export namespace TrackGrouping {
         const subscription = project.audioUnitLayout.value.subscribe(() => queueMicrotask(() => {
             if (!alive || project.editing.canRedo()) {return}
             const layout = project.audioUnitLayout.snapshot
-            const hidden = project.audioUnitSelection.selected()
-                .filter(unit => layout.row(unit).mapOr(row => row.visibleIndex === -1, false))
-            if (hidden.length > 0) {project.editing.append(() => project.audioUnitSelection.deselect(...hidden))}
+            const isHidden = (unit: AudioUnitBox): boolean => layout.row(unit).mapOr(row => row.visibleIndex === -1, false)
+            const hidden = project.audioUnitSelection.selected().filter(isHidden)
+            const hiddenContent = project.selection.selected().filter(vertex => {
+                const {box} = vertex
+                const pointer = UnionBoxTypes.isRegionBox(box) ? box.regions : UnionBoxTypes.isClipBox(box) ? box.clips : null
+                const track = pointer?.targetVertex.unwrapOrNull()?.box
+                const unit = track instanceof TrackBox ? track.tracks.targetVertex.unwrapOrNull()?.box : undefined
+                return unit instanceof AudioUnitBox && isHidden(unit)
+            })
+            if (hidden.length > 0 || hiddenContent.length > 0) {
+                project.editing.append(() => {
+                    project.audioUnitSelection.deselect(...hidden)
+                    project.selection.deselect(...hiddenContent)
+                })
+            }
         }))
         return Terminable.many(subscription, {terminate: () => alive = false})
     }
