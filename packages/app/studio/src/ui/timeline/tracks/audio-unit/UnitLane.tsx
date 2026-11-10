@@ -18,7 +18,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Surface} from "@/ui/surface/Surface"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
-import {installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {editsOnPress, installTrackSelection, installGroupTrackDrag, selectTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {
     ClipLaneClassName,
     RegionLaneClassName,
@@ -51,7 +51,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
     if (audioUnitBoxAdapter.box.isGroup.getValue()) {
         const toggle = () => {
             project.editing.modify(() => audioUnitBoxAdapter.box.groupCollapsed.toggle())
-            project.trackSelection.set([audioUnitBoxAdapter.box])
+            selectTracks(project, [audioUnitBoxAdapter.box])
         }
         const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group" onclick={toggle}/>
         lifecycle.own(audioUnitBoxAdapter.box.groupCollapsed.catchupAndSubscribe(field => {
@@ -181,8 +181,8 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             }
         }),
         installGroupTrackDrag(header, project, audioUnitBoxAdapter.box),
-        Events.subscribe(header, "pointerdown", () => {
-            if (!audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
+        Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
+            if (editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }
         }),

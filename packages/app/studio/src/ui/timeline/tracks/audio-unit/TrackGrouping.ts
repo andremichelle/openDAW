@@ -1,22 +1,40 @@
-import {asDefined, isDefined, Lifecycle, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
-import {Browser, Dragging, Events} from "@opendaw/lib-dom"
-import {AudioUnitGroups} from "@opendaw/studio-adapters"
+import {asDefined, Exec, isDefined, Lifecycle, Nullable, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
+import {Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
+import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {GroupDropLayout} from "./GroupDropLayout"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
+const isSelectable = (unit: AudioUnitBox): boolean => unit.isAttached() && unit.type.getValue() !== AudioUnitType.Output
+
+export const selectTracks = (project: Project, units: ReadonlyArray<AudioUnitBox>): void => {
+    const {audioUnitSelection} = project
+    const next = units.filter(isSelectable)
+    audioUnitSelection.deselect(...audioUnitSelection.selected().filter(unit => !next.includes(unit)))
+    audioUnitSelection.select(...next)
+}
+
+const editedTrack = (project: Project): Option<AudioUnitBox> => project.userEditingManager.audioUnit.get()
+    .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box)
+
+export const isTrackEdited = (project: Project, unit: AudioUnitBox): boolean =>
+    editedTrack(project).mapOr(edited => edited === unit, false)
+
+export const isTrackLineActive = (project: Project, unit: AudioUnitBox): boolean =>
+    editedTrack(project).mapOr(edited => edited === unit
+        || project.audioUnitLayout.snapshot.row(edited).mapOr(row => row.ancestors.includes(unit), false), false)
+
 export const groupSelectedTracks = (project: Project): void => {
-    const group = project.editing.modify(() => project.grouping.create(project.trackSelection.commandTargets)).unwrapOrElse(Option.None)
-    if (group.isEmpty()) {return}
-    const unit = group.unwrap()
-    project.trackSelection.set([unit])
-    project.userEditingManager.audioUnit.edit(unit.editing)
+    project.editing.modify(() => project.grouping.create(project.audioUnitSelection.selected()).ifSome(group => {
+        project.userEditingManager.audioUnit.edit(group.editing)
+        selectTracks(project, [group])
+    }))
 }
 
 export const ungroupSelectedTracks = (project: Project): void => {
-    const groups = project.trackSelection.commandTargets.filter(unit => unit.isGroup.getValue())
+    const groups = project.audioUnitSelection.selected().filter(unit => unit.isGroup.getValue())
         .toSorted((left, right) => AudioUnitGroups.depth(right) - AudioUnitGroups.depth(left))
     if (groups.length === 0) {return}
     const members = new Set(groups.flatMap(group => AudioUnitGroups.children(project.rootBox, group)))
@@ -25,56 +43,91 @@ export const ungroupSelectedTracks = (project: Project): void => {
     project.editing.modify(() => {
         groups.forEach(group => project.grouping.ungroup(group))
         if (promoted.length > 0) {project.userEditingManager.audioUnit.edit(promoted[0].editing)}
+        selectTracks(project, promoted)
     })
-    project.trackSelection.set(promoted)
 }
 
 export const duplicateSelectedTracks = (project: Project): void => {
-    const copies = project.editing.modify(() => project.grouping.duplicate(project.trackSelection.commandTargets)).unwrapOrElse([])
-    if (copies.length === 0) {return}
-    project.trackSelection.set(copies)
-    project.userEditingManager.audioUnit.edit(copies[0].editing)
+    project.editing.modify(() => {
+        const copies = project.grouping.duplicate(project.audioUnitSelection.selected())
+        if (copies.length === 0) {return}
+        project.userEditingManager.audioUnit.edit(copies[0].editing)
+        selectTracks(project, copies)
+    })
 }
 
 export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuItem[] => {
+    const {audioUnitSelection} = project
     return [
-        MenuItem.default({label: "Group Tracks", shortcut: GlobalShortcuts["group-tracks"].shortcut.format(), selectable: unit.type.getValue() !== AudioUnitType.Output})
-            .setTriggerProcedure(() => {
-                if (!project.trackSelection.has(unit)) {project.trackSelection.set([unit])}
-                groupSelectedTracks(project)
-            }),
-        MenuItem.default({label: "Ungroup (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(), hidden: !unit.isGroup.getValue()})
-            .setTriggerProcedure(() => {
-                if (!project.trackSelection.has(unit)) {project.trackSelection.set([unit])}
-                ungroupSelectedTracks(project)
-            }),
+        MenuItem.default({label: "Group Tracks", shortcut: GlobalShortcuts["group-tracks"].shortcut.format(),
+            selectable: audioUnitSelection.nonEmpty()})
+            .setTriggerProcedure(() => groupSelectedTracks(project)),
+        MenuItem.default({label: "Ungroup (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(),
+            hidden: !unit.isGroup.getValue(), selectable: audioUnitSelection.nonEmpty()})
+            .setTriggerProcedure(() => ungroupSelectedTracks(project)),
         MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
             .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,
-                project.trackSelection.has(unit) ? project.trackSelection.selected : [unit])))
+                audioUnitSelection.isSelected(unit) ? audioUnitSelection.selected() : [unit])))
     ]
+}
+
+export type TrackPress = "replace" | "range" | "toggle"
+
+export const trackPressOf = (event: PointerEvent): TrackPress =>
+    event.shiftKey ? "range" : Keyboard.isControlKey(event) ? "toggle" : "replace"
+
+// The edited track stays the range anchor, a toggle that just deselected the unit does not edit it
+export const editsOnPress = (project: Project, unit: AudioUnitBox, event: PointerEvent): boolean => {
+    const press = trackPressOf(event)
+    return press === "replace" || press === "toggle" && project.audioUnitSelection.isSelected(unit)
+}
+
+const visibleRange = (project: Project, from: AudioUnitBox, to: AudioUnitBox): ReadonlyArray<AudioUnitBox> => {
+    const rows = project.audioUnitLayout.snapshot.visibleRows
+    const start = rows.findIndex(row => row.unit === from)
+    const end = rows.findIndex(row => row.unit === to)
+    if (start === -1 || end === -1) {return [to]}
+    return rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.unit)
+}
+
+// Returns what a release without a drag still has to do
+export const pressTrack = (project: Project, unit: AudioUnitBox, press: TrackPress): Nullable<Exec> => {
+    const {audioUnitSelection} = project
+    const selected = audioUnitSelection.isSelected(unit)
+    if (press === "range") {
+        selectTracks(project, editedTrack(project).mapOr(anchor => visibleRange(project, anchor, unit), [unit]))
+    } else if (press === "toggle") {
+        if (selected) {audioUnitSelection.deselect(unit)}
+        else {selectTracks(project, [...audioUnitSelection.selected(), unit])}
+    } else if (!selected) {
+        selectTracks(project, [unit])
+    } else if (audioUnitSelection.count() > 1) {
+        return () => selectTracks(project, [unit])
+    }
+    return null
 }
 
 export const installTrackSelection = (lifecycle: Lifecycle, project: Project, header: HTMLElement, unit: AudioUnitBox,
                                       populateMenu?: Procedure<MenuItem>): void => {
-    let pendingSingle = false
+    const {audioUnitSelection} = project
+    let onRelease: Nullable<Exec> = null
     let dragged = false
     lifecycle.ownAll(
         Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
             dragged = false
-            pendingSingle = false
+            onRelease = null
             if (event.target instanceof Element && event.target.closest("button,input,select,svg.collapse-automation")) {return}
             if (event.button === 2 || Browser.isMacOS() && event.ctrlKey) {
-                if (!project.trackSelection.has(unit)) {project.trackSelection.set([unit])}
+                if (!audioUnitSelection.isSelected(unit)) {selectTracks(project, [unit])}
             } else if (event.button === 0) {
-                pendingSingle = !event.shiftKey && !event.metaKey && !event.ctrlKey && project.trackSelection.has(unit)
-                if (!pendingSingle) {project.trackSelection.click(unit, event)}
+                onRelease = pressTrack(project, unit, trackPressOf(event))
             }
         }),
-        Events.subscribe(header, "dragstart", () => dragged = true),
+        Events.subscribe(header, "dragstart", (event: DragEvent) => {if (!event.defaultPrevented) {dragged = true}}),
         Events.subscribeAny(header, "--track-drag-start", () => dragged = true),
         Events.subscribe(header, "pointerup", (event: PointerEvent) => {
-            if (pendingSingle && !dragged && event.button === 0) {project.trackSelection.click(unit, event)}
-            pendingSingle = false
+            if (isDefined(onRelease) && !dragged && event.button === 0) {onRelease()}
+            onRelease = null
         }),
         ContextMenu.subscribe(header, collector => {
             if (isDefined(populateMenu)) {
@@ -128,7 +181,7 @@ export const installGroupTrackDrag = (handle: HTMLElement, project: Project, uni
         if (laneDrag(start.target)) {return Option.None}
         if (start.target instanceof Element && start.target.closest("button,input,select,textarea,a,[contenteditable],.track-resizer,[data-track-controls],svg.collapse-automation")) {return Option.None}
         if (!unit.isAttached() || unit.type.getValue() === AudioUnitType.Output) {return Option.None}
-        const units = project.trackSelection.has(unit) ? [...project.trackSelection.selected] : [unit]
+        const units = project.audioUnitSelection.isSelected(unit) ? [...project.audioUnitSelection.selected()] : [unit]
         let moved = false
         let surface: Optional<HTMLElement>
         let target: Optional<GroupDrop>

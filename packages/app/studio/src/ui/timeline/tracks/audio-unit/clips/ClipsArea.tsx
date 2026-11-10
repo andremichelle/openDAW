@@ -150,7 +150,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             const target = capturing.captureEvent(event)
             if (target === null || target.type !== "clip") {return}
             const {trackBoxAdapter} = target.track
-            project.timelineFocus.focusTrack(trackBoxAdapter)
+            project.trackFocus.focus(trackBoxAdapter)
             const deviceChain = trackBoxAdapter.optAudioUnit.map(unit => unit.editing)
             const switchDeviceChain = deviceChain.mapOr(chain =>
                 !userEditingManager.audioUnit.isEditing(chain), false)

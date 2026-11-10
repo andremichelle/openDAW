@@ -17,6 +17,9 @@ component
   // the unit's left border: the unit color while editing (--wash-color, set on AudioUnitTracks), else grey.
   background: linear-gradient(to right, var(--wash-color, var(--color-black)) -500%, transparent 24px)
 
+  .selected &
+    background-color: color-mix(in srgb, var(--color) 2%, transparent)
+
   &.accept-drop
     background-color: rgba(white, 0.04)
 
@@ -107,7 +110,7 @@ component
       padding-left: 1.2em
       margin-top: 2px
 
-  .modulator &.focused > div.labels > h5.control-label, .editing & > div.labels > h5.control-label
+  &.focused > div.labels > h5.control-label
     color: var(--color-cream) !important
 
 // Header dedup (classes set by TracksManager). The repeated device name is removed from the flow

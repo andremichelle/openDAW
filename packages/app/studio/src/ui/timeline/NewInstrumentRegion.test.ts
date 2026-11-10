@@ -69,10 +69,10 @@ describe("NewInstrumentRegion", () => {
         const project = await setup(PPQN.Bar)
         const first = project.editing.modify(() => project.api.createAnyInstrument(InstrumentFactories.Vaporisateur).audioUnitBox).unwrap()
         const group = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
-        project.trackSelection.set([first])
+        project.audioUnitSelection.select(first)
         const service = {project, timeline: {snapping: barSnapping(project)}} as StudioService
         project.editing.modify(() => DefaultInstrumentFactory.create(service, InstrumentFactories.Neon))
-        const [added] = project.trackSelection.selected
+        const [added] = project.audioUnitSelection.selected()
         expect(AudioUnitGroups.children(project.rootBox, group)).toEqual([first, added])
         expect(added.output.targetVertex.unwrap().box).toBe(AudioUnitGroups.bus(group).unwrapOrUndefined())
         expect(regionsOf(added).map(region => region.position.getValue())).toEqual([PPQN.Bar])

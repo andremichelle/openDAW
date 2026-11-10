@@ -77,7 +77,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(element, "Regions")
-    const {engine, boxGraph, overlapResolver, timelineFocus} = project
+    const {engine, boxGraph, overlapResolver, trackFocus} = project
     const clipboardHandler = RegionsClipboard.createHandler({
         getEnabled: () => !engine.isPlaying.getValue(),
         getPosition: () => engine.position.getValue(),
@@ -87,7 +87,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         boxGraph,
         boxAdapters,
         getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
-        getFocusedTrack: () => timelineFocus.track,
+        getFocusedTrack: () => trackFocus.track,
         overlapResolver
     })
 
@@ -123,10 +123,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             const target = capturing.captureEvent(event)
-            timelineFocus.clear()
+            trackFocus.clear()
             if (target === null) {return}
             if (target.type === "region") {
-                timelineFocus.focusRegion(target.region)
+                target.region.trackBoxAdapter.ifSome(track => trackFocus.focus(track))
                 const optDeviceChain = target.region.trackBoxAdapter
                     .flatMap(track => track.optAudioUnit)
                     .map(unit => unit.editing)
@@ -148,7 +148,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     })
                 }
             } else if (target.type === "track") {
-                timelineFocus.focusTrack(target.track.trackBoxAdapter)
+                trackFocus.focus(target.track.trackBoxAdapter)
             }
         }),
         Events.subscribeDblDwn(element, event => {

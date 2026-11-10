@@ -1,4 +1,4 @@
-import {installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {editsOnPress, installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -107,7 +107,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
             trackManager.groupMembers(trackBoxAdapter.uuid).length < 2
                 ? null // a single-lane group has nowhere to go: veto, no ghost
                 : {uuid: UUID.toString(trackBoxAdapter.uuid), type: "track"}, element),
-        project.timelineFocus.track.catchupAndSubscribe(optTrack =>
+        project.trackFocus.track.catchupAndSubscribe(optTrack =>
             element.classList.toggle("focused", optTrack.mapOr(track => track === trackBoxAdapter, false))),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
@@ -118,9 +118,9 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
                 project.editing.modify(() => trackBoxAdapter.targetName = value)
             }
         }),
-        Events.subscribe(element, "pointerdown", () => {
-            project.timelineFocus.focusTrack(trackBoxAdapter)
-            if (!audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            project.trackFocus.focus(trackBoxAdapter)
+            if (editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }
         }),

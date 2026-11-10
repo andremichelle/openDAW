@@ -109,7 +109,7 @@ describe("DeviceSlot", () => {
         const inner = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
         const selected = lastChild ? second : first
         project.userEditingManager.audioUnit.edit(selected.editing)
-        project.trackSelection.set([])
+        project.audioUnitSelection.deselectAll()
         const insertion = project.api.insertionAfterEditing()
         project.userEditingManager.audioUnit.edit(outer.editing)
         const instrument = project.editing.modify(() => DeviceSlot.placeInstrument(project,

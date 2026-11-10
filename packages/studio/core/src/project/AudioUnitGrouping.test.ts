@@ -39,7 +39,6 @@ const createProject = async (): Promise<Project> => {
     return Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
 }
 
-
 const setup = async () => {
     const project = await createProject()
     const units = project.editing.modify(() => [0, 1, 2, 3].map(() =>
@@ -49,6 +48,16 @@ const setup = async () => {
 
 const expectOrder = (actual: ReadonlyArray<AudioUnitBox>, expected: ReadonlyArray<AudioUnitBox>): void => {
     expect(actual.map(unit => UUID.toString(unit.address.uuid))).toEqual(expected.map(unit => UUID.toString(unit.address.uuid)))
+}
+
+const select = (project: Project, units: ReadonlyArray<AudioUnitBox>): void => {
+    project.audioUnitSelection.deselectAll()
+    project.audioUnitSelection.select(...units)
+}
+
+const expectSelected = (project: Project, expected: ReadonlyArray<AudioUnitBox>): void => {
+    const toKeys = (units: ReadonlyArray<AudioUnitBox>) => units.map(unit => UUID.toString(unit.address.uuid)).toSorted()
+    expect(toKeys(project.audioUnitSelection.selected())).toEqual(toKeys(expected))
 }
 
 describe("track folders", () => {
@@ -98,18 +107,18 @@ describe("track folders", () => {
     })
     it("inserts browser instruments after the selected track and advances selection for repeated additions", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
-        project.trackSelection.set([second])
+        select(project, [second])
         const added = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
         const next = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Cubed)).unwrap().audioUnitBox
         expectOrder(AudioUnitGroups.children(project.rootBox), [first, second, added, next, third, fourth, project.primaryAudioUnitBox])
-        expectOrder(project.trackSelection.selected, [next])
+        expectSelected(project, [next])
         project.terminate()
     })
     it("inserts a browser instrument inside the selected track's nested group with the matching audio route", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const outer = asDefined(project.editing.modify(() => project.grouping.create([first, second, third]).unwrap()).unwrap())
         const inner = asDefined(project.editing.modify(() => project.grouping.create([second, third]).unwrap()).unwrap())
-        project.trackSelection.set([second])
+        select(project, [second])
         const before = AudioUnitGroups.ordered(project.rootBox)
         const added = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
         expectOrder(AudioUnitGroups.children(project.rootBox, inner), [second, added, third])
@@ -129,44 +138,25 @@ describe("track folders", () => {
     it("inserts after the last selected root in visible order and after a selected folder's whole subtree", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const group = asDefined(project.editing.modify(() => project.grouping.create([second, third]).unwrap()).unwrap())
-        project.trackSelection.set([third, group])
+        select(project, [third, group])
         const added = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
         expectOrder(AudioUnitGroups.children(project.rootBox), [first, group, added, fourth, project.primaryAudioUnitBox])
-        project.trackSelection.set([fourth, first])
+        select(project, [fourth, first])
         const last = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
         expectOrder(AudioUnitGroups.children(project.rootBox), [first, group, added, fourth, last, project.primaryAudioUnitBox])
         project.terminate()
     })
-    it("uses the active editor after clearing or deleting selection", async () => {
+    it("ignores the edited unit when nothing is selected", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         project.userEditingManager.audioUnit.edit(first.editing)
         const added = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
-        expectOrder(AudioUnitGroups.children(project.rootBox), [first, added, second, third, fourth, project.primaryAudioUnitBox])
-        project.trackSelection.set([second])
+        expectOrder(AudioUnitGroups.children(project.rootBox), [first, second, third, fourth, added, project.primaryAudioUnitBox])
+        expectSelected(project, [added])
+        select(project, [second])
         project.editing.modify(() => second.delete())
-        project.userEditingManager.audioUnit.edit(first.editing)
+        expectSelected(project, [])
         const last = project.editing.modify(() => project.api.createInstrumentAfterSelection(InstrumentFactories.Neon)).unwrap().audioUnitBox
-        expectOrder(AudioUnitGroups.children(project.rootBox), [first, last, added, third, fourth, project.primaryAudioUnitBox])
-        project.terminate()
-    })
-    it.each([false, true])("groups at the first selected sibling without promoting the folder (nested=%s)", async nested => {
-        const {project, units: [first, second, third, fourth]} = await setup()
-        const parent = nested ? asDefined(project.editing.modify(() => project.grouping.create([first, second, third, fourth]).unwrap()).unwrap()) : undefined
-        const before = AudioUnitGroups.ordered(project.rootBox)
-        const group = asDefined(project.editing.modify(() => project.grouping.create([fourth, second]).unwrap()).unwrap())
-        expectOrder(AudioUnitGroups.children(project.rootBox, parent), nested
-            ? [first, group, third] : [first, group, third, project.primaryAudioUnitBox])
-        expectOrder(AudioUnitGroups.children(project.rootBox, group), [second, fourth])
-        expectOrder(project.audioUnitLayout.snapshot.visibleRows.map(row => row.unit), nested
-            ? [asDefined(parent), first, group, second, fourth, third, project.primaryAudioUnitBox]
-            : [first, group, second, fourth, third, project.primaryAudioUnitBox])
-        const after = AudioUnitGroups.ordered(project.rootBox)
-        const loaded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
-        expectOrder(AudioUnitGroups.ordered(loaded.mandatoryBoxes.rootBox), after)
-        expect(project.editing.undo()).toBe(true)
-        expectOrder(AudioUnitGroups.ordered(project.rootBox), before)
-        expect(project.editing.redo()).toBe(true)
-        expectOrder(AudioUnitGroups.ordered(project.rootBox), after)
+        expectOrder(AudioUnitGroups.children(project.rootBox), [first, third, fourth, added, last, project.primaryAudioUnitBox])
         project.terminate()
     })
     it("keeps a single selected track and an existing folder at their original sibling slots", async () => {
@@ -248,44 +238,28 @@ describe("track folders", () => {
         expect(project.editing.modify(() => project.grouping.move([group], undefined, group)).unwrap()).toBe(false)
         project.terminate()
     })
-    it("highlights the edited unit and its routed ancestors without changing explicit track selection", async () => {
-        const {project, units: [first, second, outside]} = await setup()
-        const parent = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
-        const nested = project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap()
-        const selection = project.trackSelection
-        project.userEditingManager.audioUnit.edit(first.editing)
-        selection.set([second])
-        const units = [parent, nested, first, second, outside]
-        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, true, false, false])
-        expect(units.map(unit => selection.isHighlighted(unit))).toEqual([false, false, false, true, false])
-        project.editing.modify(() => {nested.groupCollapsed.setValue(true); parent.groupCollapsed.setValue(true)})
-        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, true, false, false])
-        project.editing.modify(() => project.grouping.move([first]))
-        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([false, false, true, false, false])
-        project.userEditingManager.audioUnit.edit(nested.editing)
-        expect(units.map(unit => selection.isLineHighlighted(unit))).toEqual([true, true, false, false, false])
+
+    it("keeps selection and the edited unit independent", async () => {
+        const {project, units: [first, second, third]} = await setup()
+        const edit = (unit: AudioUnitBox) => project.userEditingManager.audioUnit.edit(unit.editing)
+        select(project, [first, second])
+        edit(third)
+        expectSelected(project, [first, second])
+        edit(project.primaryAudioUnitBox)
+        expectSelected(project, [first, second])
         project.userEditingManager.audioUnit.clear()
-        expect(units.some(unit => selection.isLineHighlighted(unit))).false
+        expectSelected(project, [first, second])
+        select(project, [])
+        edit(first)
+        expectSelected(project, [])
+        expect(project.userEditingManager.audioUnit.isEditing(first.editing)).toBe(true)
         project.terminate()
     })
-    it("falls back to the active editor highlight after clearing the selection", async () => {
-        const {project, units: [first, second, third]} = await setup()
-        const selection = project.trackSelection
-        project.userEditingManager.audioUnit.edit(third.editing)
-        selection.set([first, second])
-        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([true, true, false])
-        expect([first, second, third].map(unit => selection.isEdited(unit))).toEqual([false, false, true])
-        selection.set([])
-        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([false, false, true])
-        expect(selection.hasExplicitSelection).toBe(false)
-        const parent = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()
-        const nested = project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap()
-        project.userEditingManager.audioUnit.edit(first.editing)
-        expect([parent, nested, first, second].map(unit => selection.isEdited(unit))).toEqual([false, false, true, false])
-        expect([first, second, third].map(unit => selection.isHighlighted(unit))).toEqual([true, false, false])
-        project.userEditingManager.audioUnit.clear()
-        expect([first, second, third].some(unit => selection.isHighlighted(unit))).toBe(false)
-        expect([first, second, third].some(unit => selection.isEdited(unit))).toBe(false)
+    it("never lists the Output unit as selected", async () => {
+        const {project, units: [first]} = await setup()
+        project.audioUnitSelection.select(project.primaryAudioUnitBox, first)
+        expectSelected(project, [first])
+        expect(project.audioUnitSelection.isSelected(project.primaryAudioUnitBox)).toBe(false)
         project.terminate()
     })
     it("moves out only the selected members of the chosen folder", async () => {
@@ -441,21 +415,30 @@ describe("track folders", () => {
         subscriptions.forEach(subscription => subscription.terminate())
         project.terminate()
     })
-    it("clears a deleted shift anchor and restores command fallback after deselection", async () => {
-        const {project, units: [first, second, third]} = await setup()
-        const selection = project.trackSelection
-        const plain = {shiftKey: false, ctrlKey: false, metaKey: false}
-        selection.click(first, plain)
-        selection.click(second, {...plain, metaKey: true})
+    it("drops a deleted track from the selection and groups nothing without a selection", async () => {
+        const {project, units: [first, second]} = await setup()
+        select(project, [first, second])
         project.editing.modify(() => second.delete())
+        expectSelected(project, [first])
         expect(project.editing.undo()).toBe(true)
-        selection.click(third, {...plain, shiftKey: true})
-        expect(selection.selected).toEqual([third])
-        selection.click(third, {...plain, metaKey: true})
+        expect(project.boxGraph.findBox(second.address.uuid).nonEmpty()).toBe(true)
+        select(project, [])
         project.userEditingManager.audioUnit.edit(first.editing)
-        expect(selection.commandTargets).toEqual([first])
-        const group = project.editing.modify(() => project.grouping.create(selection.commandTargets).unwrap()).unwrap()
-        expect(AudioUnitGroups.parent(first).contains(group)).toBe(true)
+        expect(project.grouping.create(project.audioUnitSelection.selected()).isEmpty()).toBe(true)
+        expect(AudioUnitGroups.parent(first).isEmpty()).toBe(true)
+        project.terminate()
+    })
+    it("undoes a selection change together with the grouping that follows it", async () => {
+        const {project, units: [first, second, third]} = await setup()
+        select(project, [first, second])
+        const group = project.editing.modify(() => project.grouping.create(project.audioUnitSelection.selected()).unwrap()).unwrap()
+        expectSelected(project, [first, second])
+        expect(project.editing.undo()).toBe(true)
+        expect(group.isAttached()).toBe(false)
+        expectSelected(project, [])
+        expect(project.editing.redo()).toBe(true)
+        expectSelected(project, [first, second])
+        expect(project.audioUnitSelection.isSelected(third)).toBe(false)
         project.terminate()
     })
     it("expands group transfers only when explicitly requested", async () => {
@@ -466,7 +449,7 @@ describe("track folders", () => {
         expect(AudioUnitGroups.children(project.rootBox, copies[0])).toHaveLength(0)
         expect(project.editing.undo()).toBe(true)
         expect(project.editing.modify(() => project.grouping.duplicate([group])).unwrap()).toHaveLength(1)
-        expect(project.trackSelection.selected).toHaveLength(0)
+        expectSelected(project, [])
         project.terminate()
     })
     it("changes the audio route when moving into and out of a group", async () => {
@@ -770,28 +753,5 @@ describe("track folders", () => {
         expect(project.boxGraph.findBox(group.address.uuid).isEmpty()).toBe(true)
         project.terminate()
     })
-    it("range and toggle selection use visible channel order and clean up deleted tracks", async () => {
-        const {project, units: [a, b, c, d]} = await setup()
-        const selection = project.trackSelection
-        const plain = {shiftKey: false, metaKey: false, ctrlKey: false}
-        selection.click(a, plain)
-        selection.click(c, {...plain, shiftKey: true})
-        expect(selection.selected).toEqual([a, b, c])
-        selection.click(b, {...plain, metaKey: true})
-        expect(selection.selected).toEqual([a, c])
-        selection.click(d, {...plain, ctrlKey: true})
-        expect(selection.selected).toEqual([a, c, d])
-        project.editing.modify(() => project.api.deleteAudioUnit(c))
-        expect(selection.selected).toEqual([a, d])
-        const group = project.editing.modify(() => project.grouping.create([a, b]).unwrap()).unwrap()
-        project.editing.modify(() => group.groupCollapsed.setValue(true))
-        selection.click(group, plain)
-        selection.click(d, {...plain, shiftKey: true})
-        expect(selection.selected).toEqual([group, d])
-        selection.click(d, plain)
-        selection.click(d, {...plain, metaKey: true})
-        expect(selection.selected).toEqual([])
-        expect(selection.hasExplicitSelection).toBe(false)
-        project.terminate()
-    })
+
 })

@@ -6,6 +6,7 @@ import {CanvasPainter, TimeGrid} from "@opendaw/studio-core"
 import {groupOverviewLayout} from "./GroupOverviewLayout"
 import {subscribeGroupOverview} from "./GroupOverviewUpdates"
 import {RegionLaneClassName} from "./TrackStyles"
+import {RegionPaintBucket} from "./regions/RegionPaintBucket"
 import {StudioService} from "@/service/StudioService"
 
 type Construct = {lifecycle: Lifecycle, service: StudioService, unit: AudioUnitBox}
@@ -31,7 +32,7 @@ export const GroupOverview = ({lifecycle, service, unit}: Construct): HTMLElemen
                         mute: region.mute || !track.enabled.getValue()
                     }))))
             for (const line of groupOverviewLayout(lanes, height, width, value => range.unitToX(value))) {
-                context.fillStyle = `hsl(${line.hue}, ${line.muted ? 5 : 75}%, 55%)`
+                context.fillStyle = RegionPaintBucket.create({hue: line.hue, mute: line.muted}, false, false).labelBackground
                 context.fillRect(line.x, line.y, line.width, line.height)
             }
         }

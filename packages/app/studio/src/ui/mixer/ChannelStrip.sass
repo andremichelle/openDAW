@@ -48,8 +48,9 @@ component
     cursor: pointer
     font-size: 18px
 
-  &.editing
+  &.selected
     background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)
+    background-color: color-mix(in srgb, var(--color) 12%, transparent)
 
     > h5.input
       background: color-mix(in srgb, var(--color) 20%, transparent)

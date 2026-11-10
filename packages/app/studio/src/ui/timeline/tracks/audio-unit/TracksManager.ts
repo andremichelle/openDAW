@@ -38,6 +38,7 @@ import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
+import {isTrackEdited} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 
@@ -227,7 +228,10 @@ export class TracksManager implements Terminable {
         const {rootBoxAdapter} = project
         return Terminable.many(
             project.audioUnitLayout.value.subscribe(() => this.#invalidateOrder()),
-            project.trackSelection.value.subscribe(() => this.#refreshSelectionRows()),
+            project.audioUnitSelection.subscribe({
+                onSelected: () => this.#refreshSelectionRows(),
+                onDeselected: () => this.#refreshSelectionRows()
+            }),
             project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelectionRows()),
             rootBoxAdapter.audioUnits.catchupAndSubscribe({
                 onAdd: (audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
@@ -490,9 +494,10 @@ export class TracksManager implements Terminable {
         const {project} = this.#service
         this.#flatLayout().rows.forEach(row => {
             const element = this.#element(row.content)
-            const selected = isDefined(row.unit) && project.trackSelection.isHighlighted(row.unit)
-            element.classList.toggle("editing", selected)
-            if (selected) {element.style.setProperty("--wash-color", "var(--color)")}
+            const selected = isDefined(row.unit) && project.audioUnitSelection.isSelected(row.unit)
+            const edited = isDefined(row.unit) && isTrackEdited(project, row.unit)
+            element.classList.toggle("selected", selected)
+            if (edited) {element.style.setProperty("--wash-color", "var(--color)")}
             else {element.style.removeProperty("--wash-color")}
         })
     }

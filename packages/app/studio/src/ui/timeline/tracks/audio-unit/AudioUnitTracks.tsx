@@ -5,6 +5,7 @@ import {Html} from "@opendaw/lib-dom"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioUnitBoxAdapter} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
+import {isTrackEdited, isTrackLineActive} from "./TrackGrouping"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitTracks")
 
@@ -22,11 +23,12 @@ export const AudioUnitTracks = ({lifecycle, project, adapter}: Construct) => {
         isAux && "aux", isBus && "bus", isOutput && "output")} data-drag data-unit={UUID.toString(adapter.uuid)}/>)
     const audioUnitEditing = project.userEditingManager.audioUnit
     const refreshSelection = () => {
-        element.classList.toggle("editing", project.trackSelection.isHighlighted(adapter.box))
-        element.classList.toggle("line-active", project.trackSelection.isLineHighlighted(adapter.box))
+        element.classList.toggle("selected", project.audioUnitSelection.isSelected(adapter.box))
+        element.classList.toggle("editing", isTrackEdited(project, adapter.box))
+        element.classList.toggle("line-active", isTrackLineActive(project, adapter.box))
     }
     lifecycle.ownAll(
-        project.trackSelection.value.catchupAndSubscribe(refreshSelection),
+        project.audioUnitSelection.catchupAndSubscribe({onSelected: refreshSelection, onDeselected: refreshSelection}),
         audioUnitEditing.catchupAndSubscribe(refreshSelection),
         project.audioUnitLayout.value.subscribe(refreshSelection)
     )

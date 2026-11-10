@@ -73,11 +73,9 @@ export const installTrackHeaderMenu = (service: StudioService,
             label: "Duplicate AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
             separatorBefore: true,
-            hidden: audioUnitBoxAdapter.isOutput
-        }).setTriggerProcedure(guarded(() => {
-            if (!project.trackSelection.has(audioUnitBoxAdapter.box)) {project.trackSelection.set([audioUnitBoxAdapter.box])}
-            duplicateSelectedTracks(project)
-        })),
+            hidden: audioUnitBoxAdapter.isOutput,
+            selectable: project.audioUnitSelection.nonEmpty()
+        }).setTriggerProcedure(guarded(() => duplicateSelectedTracks(project))),
         MenuItems.copyAudioUnit(audioUnitBoxAdapter),
         MenuItem.default({
             label: "Freeze AudioUnit",

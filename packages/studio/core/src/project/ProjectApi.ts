@@ -184,8 +184,8 @@ export class ProjectApi {
     }
 
     createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
-        const {trackSelection, audioUnitLayout} = this.#project
-        const selected = AudioUnitGroups.roots(trackSelection.commandTargets)
+        const {audioUnitSelection, audioUnitLayout} = this.#project
+        const selected = AudioUnitGroups.roots(audioUnitSelection.selected())
         const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
         return this.createInstrumentAt(factory, this.insertionAfter(Option.wrap(anchor)))
     }
@@ -213,7 +213,9 @@ export class ProjectApi {
         const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
         const product = this.createInstrument(factory, {destination})
         this.placeAudioUnitsAt([product.audioUnitBox], insertion)
-        this.#project.trackSelection.set([product.audioUnitBox])
+        const {audioUnitSelection} = this.#project
+        audioUnitSelection.deselectAll()
+        audioUnitSelection.select(product.audioUnitBox)
         return product
     }
 
