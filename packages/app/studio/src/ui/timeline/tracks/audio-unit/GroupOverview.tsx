@@ -1,5 +1,6 @@
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
 import {AudioUnitBoxAdapter, AudioUnitGroups, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {CanvasPainter, TimeGrid} from "@opendaw/studio-core"
@@ -14,7 +15,7 @@ type Construct = {lifecycle: Lifecycle, service: StudioService, unit: AudioUnitB
 export const GroupOverview = ({lifecycle, service, unit}: Construct): HTMLElement => {
     const {project, timeline: {range}} = service
     const canvas: HTMLCanvasElement = <canvas aria-label="Child clip overview"/>
-    const element: HTMLElement = <div className={RegionLaneClassName}>{canvas}</div>
+    const element: HTMLElement = <div className={Html.buildClassList(RegionLaneClassName, "group-preview")}>{canvas}</div>
     element.dataset.groupOverview = ""
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context, width, height, devicePixelRatio: dpr}) => {
         context.clearRect(0, 0, canvas.width, canvas.height)
