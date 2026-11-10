@@ -190,6 +190,45 @@ describe("editing", () => {
         expect(scene.editing.canRedo()).false
     })
 
+    it("keeps unsaved changes after a failed undo drops the step made since saving", (scene: TestScene) => {
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.markSaved()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).true
+    })
+
+    it("stays saved after a failed undo drops the step the save contains", (scene: TestScene) => {
+        scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate()))
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.editing.markSaved()
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).false
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).false
+        expect(scene.editing.undo()).true
+        expect(scene.editing.hasUnsavedChanges()).true
+    })
+
+    it("keeps unsaved changes after a failed redo drops a step the save contained", (scene: TestScene) => {
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.editing.markSaved()
+        scene.editing.undo()
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.redo()).false
+        expect(scene.editing.hasUnsavedChanges()).true
+    })
+
     it("should handle box created and deleted in same transaction", (scene: TestScene) => {
         // In a single transaction: create a box, modify it, and delete it
         scene.editing.modify(() => {

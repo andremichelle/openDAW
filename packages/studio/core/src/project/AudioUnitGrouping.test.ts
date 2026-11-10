@@ -582,6 +582,23 @@ describe("track folders", () => {
         expect(project.grouping.canMove([other], group)).toBe(false)
         project.terminate()
     })
+    it("keeps a group bus whose members cannot move out, so they never point at a deleted bus", async () => {
+        const {project, units: [first]} = await setup()
+        const inner = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
+        const middle = asDefined(project.editing.modify(() => project.grouping.create([inner]).unwrap()).unwrap())
+        const outer = asDefined(project.editing.modify(() => project.grouping.create([middle]).unwrap()).unwrap())
+        project.editing.modify(() => AuxSendBox.create(project.boxGraph, UUID.generate(), send => {
+            send.audioUnit.refer(outer.auxSends)
+            send.targetBus.refer(asDefined(AudioUnitGroups.bus(inner).unwrapOrUndefined()).input)
+        }))
+        project.editing.modify(() => project.grouping.ungroup(middle))
+        expect(middle.isAttached()).toBe(true)
+        expect(AudioUnitGroups.parent(inner).unwrapOrUndefined()).toBe(middle)
+        const plain = asDefined(project.editing.modify(() => project.grouping.create([first]).unwrap()).unwrap())
+        project.editing.modify(() => project.grouping.ungroup(plain))
+        expect(plain.isAttached()).toBe(false)
+        project.terminate()
+    })
     it("keeps existing folder order during transfers and ignores unrelated channels in subtree queries", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const folder = project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap()!

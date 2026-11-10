@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int, isDefined} from "@opendaw/lib-std"
 import {AnyClipBoxAdapter, AudioUnitBoxAdapter, AudioUnitGroups, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import type {Project} from "@opendaw/studio-core"
 import {GroupClipAppearance} from "./GroupClipAppearance"
@@ -17,7 +17,7 @@ export namespace GroupClipColumnMoves {
                 const clips = tracks.flatMap(track => track.clips.collection.getAdapterByIndex(index).mapOr(clip => [clip], []))
                 const targets = clips.map(clip => moved.get(clip.box))
                 const destination = targets[0]?.index
-                if (destination === undefined || destination === index || !targets.every(move => move !== undefined
+                if (!isDefined(destination) || destination === index || !targets.every(move => isDefined(move)
                     && move.index === destination && move.track.optAudioUnit.mapOr(target => target === unit
                         || AudioUnitGroups.ancestors(target).includes(unit), false))) {return []}
                 return [{unit, index, destination, label}]

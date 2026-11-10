@@ -93,7 +93,6 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         }
         updateDom.request()
     }
-
     const updateDom = deferNextFrame(() => {
         channelStripContainer.appendChild(headers)
         const layout = project.audioUnitLayout.snapshot

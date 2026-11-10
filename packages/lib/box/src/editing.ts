@@ -190,6 +190,11 @@ export class BoxEditing implements Editing {
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.forward(this.#graph))
                 this.#marked.splice(this.#historyIndex, 1)
+                if (this.#savedHistoryIndex > this.#historyIndex) {
+                    this.#savedHistoryIndex--
+                } else if (this.#savedHistoryIndex === this.#historyIndex) {
+                    this.#savedHistoryIndex = -1
+                }
                 this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
@@ -213,6 +218,7 @@ export class BoxEditing implements Editing {
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.inverse(this.#graph, this.#outsideHistory))
                 this.#marked.splice(--this.#historyIndex, 1)
+                if (this.#savedHistoryIndex > this.#historyIndex) {this.#savedHistoryIndex = -1}
                 this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false

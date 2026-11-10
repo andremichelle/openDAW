@@ -165,7 +165,8 @@ export class AudioUnitGrouping {
         if (!group.isAttached() || !AudioUnitGroups.isGroup(group)) {return}
         const {rootBox} = this.project
         const parent = AudioUnitGroups.parent(group).unwrapOrUndefined()
-        this.move(AudioUnitGroups.children(rootBox, group), parent, group)
+        const children = AudioUnitGroups.children(rootBox, group)
+        if (children.length > 0 && !this.move(children, parent, group)) {return}
         group.delete()
         AudioUnitGroups.ordered(rootBox).forEach((unit, index) => unit.index.setValue(index))
     }
