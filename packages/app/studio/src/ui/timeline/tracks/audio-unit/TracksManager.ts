@@ -512,7 +512,10 @@ export class TracksManager implements Terminable {
             const wasHidden = track.element.classList.contains("collapsed-away")
             const hidden = !visible.has(track.element)
             track.element.classList.toggle("collapsed-away", hidden)
-            if (wasHidden && !hidden) {track.trackBoxAdapter.regions.dispatchChange()}
+            if (wasHidden && !hidden) {
+                track.trackBoxAdapter.regions.dispatchChange()
+                track.trackBoxAdapter.clips.dispatchChange()
+            }
         })
         this.#audioUnits.values().forEach(entry => entry.synthetic.ifSome(element =>
             element.classList.toggle("collapsed-away", !visible.has(element))))
