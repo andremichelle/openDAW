@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.15...@opendaw/studio-adapters@0.4.0) (2026-11-10)
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
 ## [0.3.15](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.14...@opendaw/studio-adapters@0.3.15) (2026-11-09)
 
 **Note:** Version bump only for package @opendaw/studio-adapters

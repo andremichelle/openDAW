@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.28...@opendaw/studio-core-wasm@0.1.0) (2026-11-10)
+
+### Bug Fixes
+
+- delete group subtrees instead of ungrouping children ([775fa97](https://github.com/andremichelle/openDAW/commit/775fa9767fff9081bc137da8101dddedb8454f4b))
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
 ## [0.0.28](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.27...@opendaw/studio-core-wasm@0.0.28) (2026-11-09)
 
 **Note:** Version bump only for package @opendaw/studio-core-wasm

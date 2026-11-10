@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.8...@opendaw/app-studio@0.4.0) (2026-11-10)
+
+### Bug Fixes
+
+- version realtime offline and stretch engine URLs per build ([e004b6e](https://github.com/andremichelle/openDAW/commit/e004b6e42d7944b0b6856cbd0a0c6036782d84c2))
+
+### Features
+
+- add track group selection, folders and arrangement overview ([98b7ed0](https://github.com/andremichelle/openDAW/commit/98b7ed090f6ce5916bb82371676d85d9530c5499))
+
+### Reverts
+
+- Revert "Restore top selection borders on regular mixer channels" ([6fb52fb](https://github.com/andremichelle/openDAW/commit/6fb52fb34f70ba3fdd3fcc04662acab9640bbbe0))
+
 ## [0.3.8](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.7...@opendaw/app-studio@0.3.8) (2026-11-09)
 
 **Note:** Version bump only for package @opendaw/app-studio

@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-p2p",
-  "version": "0.0.46",
+  "version": "0.0.47",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -25,7 +25,7 @@
     "@opendaw/lib-dsp": "^0.0.102",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
-    "@opendaw/studio-adapters": "^0.3.15",
+    "@opendaw/studio-adapters": "^0.4.0",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
