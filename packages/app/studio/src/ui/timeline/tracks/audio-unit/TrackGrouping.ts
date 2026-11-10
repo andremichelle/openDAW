@@ -19,7 +19,19 @@ export const selectTracks = (project: Project, units: ReadonlyArray<AudioUnitBox
 const editedTrack = (project: Project): Option<AudioUnitBox> => project.userEditingManager.audioUnit.get()
     .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box)
 
-export const isTrackEdited = (project: Project, unit: AudioUnitBox): boolean =>
+export const deselectHiddenTracks = (project: Project): Terminable => {
+    let alive = true
+    const subscription = project.audioUnitLayout.value.subscribe(() => queueMicrotask(() => {
+        if (!alive) {return}
+        const layout = project.audioUnitLayout.snapshot
+        const hidden = project.audioUnitSelection.selected()
+            .filter(unit => layout.row(unit).mapOr(row => row.visibleIndex === -1, false))
+        if (hidden.length > 0) {project.audioUnitSelection.deselect(...hidden)}
+    }))
+    return Terminable.many(subscription, {terminate: () => alive = false})
+}
+
+export const isTrackEdited =(project: Project, unit: AudioUnitBox): boolean =>
     editedTrack(project).mapOr(edited => edited === unit, false)
 
 export const isTrackLineActive = (project: Project, unit: AudioUnitBox): boolean =>
@@ -76,10 +88,15 @@ export type TrackPress = "replace" | "range" | "toggle"
 export const trackPressOf = (event: PointerEvent): TrackPress =>
     event.shiftKey ? "range" : Keyboard.isControlKey(event) ? "toggle" : "replace"
 
-// The edited track stays the range anchor, a toggle that just deselected the unit does not edit it
 export const editsOnPress = (project: Project, unit: AudioUnitBox, event: PointerEvent): boolean => {
     const press = trackPressOf(event)
-    return press === "replace" || press === "toggle" && project.audioUnitSelection.isSelected(unit)
+    return press === "replace"
+        || press === "toggle" && project.audioUnitSelection.isSelected(unit)
+        || press === "range" && editedTrack(project).isEmpty()
+}
+
+export const selectForMenu = (project: Project, unit: AudioUnitBox): void => {
+    if (!project.audioUnitSelection.isSelected(unit)) {selectTracks(project, [unit])}
 }
 
 const visibleRange = (project: Project, from: AudioUnitBox, to: AudioUnitBox): ReadonlyArray<AudioUnitBox> => {
@@ -90,7 +107,6 @@ const visibleRange = (project: Project, from: AudioUnitBox, to: AudioUnitBox): R
     return rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.unit)
 }
 
-// Returns what a release without a drag still has to do
 export const pressTrack = (project: Project, unit: AudioUnitBox, press: TrackPress): Nullable<Exec> => {
     const {audioUnitSelection} = project
     const selected = audioUnitSelection.isSelected(unit)
@@ -109,7 +125,6 @@ export const pressTrack = (project: Project, unit: AudioUnitBox, press: TrackPre
 
 export const installTrackSelection = (lifecycle: Lifecycle, project: Project, header: HTMLElement, unit: AudioUnitBox,
                                       populateMenu?: Procedure<MenuItem>): void => {
-    const {audioUnitSelection} = project
     let onRelease: Nullable<Exec> = null
     let dragged = false
     lifecycle.ownAll(
@@ -118,7 +133,7 @@ export const installTrackSelection = (lifecycle: Lifecycle, project: Project, he
             onRelease = null
             if (event.target instanceof Element && event.target.closest("button,input,select,svg.collapse-automation")) {return}
             if (event.button === 2 || Browser.isMacOS() && event.ctrlKey) {
-                if (!audioUnitSelection.isSelected(unit)) {selectTracks(project, [unit])}
+                selectForMenu(project, unit)
             } else if (event.button === 0) {
                 onRelease = pressTrack(project, unit, trackPressOf(event))
             }

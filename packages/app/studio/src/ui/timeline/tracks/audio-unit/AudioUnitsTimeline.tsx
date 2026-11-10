@@ -42,15 +42,18 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters, api} = service.project
     const scrollModel = new ScrollModel()
+    const extra: HTMLElement = (
+        <div className="extra">
+            <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
+                <CreateTrackButtons lifecycle={lifecycle} service={service}/>
+            </div>
+            <div className="region-area help-section">Drop instruments or samples here</div>
+        </div>
+    )
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
             <div className="fill"/>
-            <div className="extra">
-                <div className="create-buttons" onInit={element => TourAnchors.register(lifecycle, element, "presets")}>
-                    <CreateTrackButtons lifecycle={lifecycle} service={service}/>
-                </div>
-                <div className="region-area help-section">Drop instruments or samples here</div>
-            </div>
+            {extra}
         </div>
     )
     const factory: TrackFactory = {
@@ -220,7 +223,12 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             element.style.setProperty("--rest-top", `${contentSize === 0 ? 0 : contentSize}px`)
             element.style.setProperty("--rest-height", `${element.clientHeight - contentSize}px`)
         }),
-        Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            if (event.button !== 0 || event.clientY < extra.getBoundingClientRect().top) {return}
+            if (event.target instanceof Element && isNotNull(event.target.closest("button"))) {return}
+            service.project.audioUnitSelection.deselectAll()
+        }, {capture: true}),
+        Events.subscribe(element, "wheel",(event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
         scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
         Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop),
         installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY,

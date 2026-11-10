@@ -494,11 +494,8 @@ export class TracksManager implements Terminable {
         const {project} = this.#service
         this.#flatLayout().rows.forEach(row => {
             const element = this.#element(row.content)
-            const selected = isDefined(row.unit) && project.audioUnitSelection.isSelected(row.unit)
-            const edited = isDefined(row.unit) && isTrackEdited(project, row.unit)
-            element.classList.toggle("selected", selected)
-            if (edited) {element.style.setProperty("--wash-color", "var(--color)")}
-            else {element.style.removeProperty("--wash-color")}
+            element.classList.toggle("selected", isDefined(row.unit) && project.audioUnitSelection.isSelected(row.unit))
+            element.classList.toggle("editing", isDefined(row.unit) && isTrackEdited(project, row.unit))
         })
     }
 

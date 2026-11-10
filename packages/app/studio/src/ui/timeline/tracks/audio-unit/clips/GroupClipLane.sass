@@ -90,14 +90,14 @@ component
       filter: saturate(25%)
 
     &.empty
-      @include colors.panel-background-stripes-dark
+      @include colors.panel-background
 
       > button.content
         cursor: default
-        opacity: 0.3
+        visibility: hidden
 
       &:not(.named):not(.selected) > button.label
-        opacity: 0.3
+        visibility: hidden
 
   &.collapsed > div.group-clip > button.content > span.colors
     display: flex

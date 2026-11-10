@@ -46,7 +46,6 @@ import {
 import {
     AnyRegionBoxAdapter,
     AudioUnitBoxAdapter,
-    AudioUnitGroups,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -266,19 +265,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.recordingSession = new RecordingSession(this)
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
         this.audioUnitLayout = this.#terminator.own(new AudioUnitLayoutState(this))
-        const collapseSubscriptions = new Map<AudioUnitBox, Subscription>()
-        this.#terminator.ownAll(this.#rootBoxAdapter.audioUnits.catchupAndSubscribe({
-            onAdd: ({box}) => collapseSubscriptions.set(box, box.groupCollapsed.subscribe(field => {
-                if (!field.getValue()) {return}
-                const hidden = this.audioUnitSelection.selected().filter(unit => AudioUnitGroups.hidden(unit))
-                if (hidden.length > 0) {this.audioUnitSelection.deselect(...hidden)}
-            })),
-            onRemove: ({box}) => {
-                collapseSubscriptions.get(box)?.terminate()
-                collapseSubscriptions.delete(box)
-            },
-            onReorder: () => {}
-        }), {terminate: () => collapseSubscriptions.forEach(subscription => subscription.terminate())})
         this.mixer = this.#terminator.own(new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters))
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.trackFocus = this.#terminator.own(new TrackFocus())

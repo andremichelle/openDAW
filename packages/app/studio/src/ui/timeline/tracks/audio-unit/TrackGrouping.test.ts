@@ -6,7 +6,7 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import {ShortcutStorage, ShortcutStore} from "@/service/ShortcutStorage"
 import {GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
-import {duplicateSelectedTracks, groupSelectedTracks, isTrackLineActive, pressTrack, selectTracks, ungroupSelectedTracks} from "./TrackGrouping"
+import {deselectHiddenTracks, duplicateSelectedTracks, groupSelectedTracks, isTrackLineActive, pressTrack, selectTracks, ungroupSelectedTracks} from "./TrackGrouping"
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -111,7 +111,7 @@ describe("track selection", () => {
         expect(lines()).toEqual([true, true, false, false, false])
         project.userEditingManager.audioUnit.clear()
         expect(lines().some(active => active)).toBe(false)
-        expectSelected(project, [])
+        expectSelected(project, [second])
         project.terminate()
     })
     it("selects the visible range from the edited track with shift", async () => {
@@ -133,19 +133,30 @@ describe("track selection", () => {
         expectSelected(project, [a])
         project.terminate()
     })
-    it("deselects tracks hidden by collapsing and keeps them deselected after expanding", async () => {
+    it("deselects tracks hidden by collapsing, nesting or moving into a collapsed group", async () => {
         const project = await setup()
-        const [a, b, c] = createUnits(project, 3)
+        const deselecting = deselectHiddenTracks(project)
+        const settle = () => Promise.resolve()
+        const [a, b, c, d] = createUnits(project, 4)
         const group = project.editing.modify(() => project.grouping.create([a, b]).unwrap()).unwrap()
         selectTracks(project, [a, b, c])
         project.editing.modify(() => group.groupCollapsed.setValue(true))
+        await settle()
         expectSelected(project, [c])
         project.editing.modify(() => group.groupCollapsed.setValue(false))
+        await settle()
         expectSelected(project, [c])
         selectTracks(project, [a, b])
         const parent = project.editing.modify(() => project.grouping.create([group]).unwrap()).unwrap()
         project.editing.modify(() => parent.groupCollapsed.setValue(true))
+        await settle()
         expectSelected(project, [])
+        selectTracks(project, [c, d])
+        project.editing.modify(() => project.grouping.move([c], parent))
+        await settle()
+        expectSelected(project, [d])
+        expect(project.editing.canUndo()).toBe(true)
+        deselecting.terminate()
         project.terminate()
     })
 })
