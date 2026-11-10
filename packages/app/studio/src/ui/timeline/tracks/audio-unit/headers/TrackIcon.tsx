@@ -31,7 +31,7 @@ export const TrackIcon = ({lifecycle, service, audioUnitBoxAdapter}: Construct) 
                 some: inputAdapter => {
                     const render = () => {
                         const symbol = IconSymbol.fromName(inputAdapter.iconField.getValue())
-                        const color = inputAdapter instanceof AudioBusBoxAdapter
+                        const color = inputAdapter instanceof AudioBusBoxAdapter && !audioUnitBoxAdapter.box.isGroup.getValue()
                             ? inputAdapter.colorField.getValue()
                             : ColorCodes.forAudioType(audioUnitBoxAdapter.type).toString()
                         replaceChildren(element, <Icon symbol={symbol} style={{color}}/>, lockIcon)

@@ -90,13 +90,13 @@ export namespace TrackGrouping {
     export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuItem[] => {
         const {audioUnitSelection} = project
         return [
-            MenuItem.default({label: "Group Tracks", shortcut: GlobalShortcuts["group-tracks"].shortcut.format(),
+            MenuItem.default({label: "Create Group Bus", shortcut: GlobalShortcuts["group-tracks"].shortcut.format(),
                 selectable: audioUnitSelection.nonEmpty()})
                 .setTriggerProcedure(() => groupSelectedTracks(project)),
-            MenuItem.default({label: "Ungroup (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(),
+            MenuItem.default({label: "Remove Group Bus (Keep Tracks)", shortcut: GlobalShortcuts["ungroup-tracks"].shortcut.format(),
                 hidden: !unit.isGroup.getValue(), selectable: audioUnitSelection.nonEmpty()})
                 .setTriggerProcedure(() => ungroupSelectedTracks(project)),
-            MenuItem.default({label: "Move Out of Group", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
+            MenuItem.default({label: "Move Out of Group Bus", hidden: !isDefined(AudioUnitGroups.parent(unit).unwrapOrUndefined())})
                 .setTriggerProcedure(() => project.editing.modify(() => project.grouping.moveOutOfGroup(unit,
                     audioUnitSelection.isSelected(unit) ? audioUnitSelection.selected() : [unit])))
         ]
@@ -215,7 +215,7 @@ export namespace TrackGrouping {
                                           laneDrag: (target: Nullable<EventTarget>) => boolean = () => false): Terminable => {
         handle.dataset.groupHeader = UUID.toString(unit.address.uuid)
         handle.draggable = false
-        handle.title = "Drag to move track; drop on a group or between tracks. Drag left to move out."
+        handle.title = "Drag to move track; drop on a group bus or between tracks. Drag left to move out."
         const dragging = Dragging.attach(handle, start => {
             if (laneDrag(start.target)) {return Option.None}
             if (start.target instanceof Element && start.target.closest("button,input,select,textarea,a,[contenteditable],.track-resizer,[data-track-controls],svg.collapse-automation")) {return Option.None}

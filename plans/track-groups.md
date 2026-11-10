@@ -1,4 +1,4 @@
-# Nested track groups
+# Nested track groups (Group Bus)
 
 ## Behavior
 
@@ -8,10 +8,12 @@ Groups may contain other groups. Membership follows the primary audio output: a 
 folder whose bus receives its output. Changing that route changes its folder in both views.
 
 - Shift-click selects a visible range. Cmd-click on macOS or Ctrl-click elsewhere toggles individual channels.
-- Cmd/Ctrl+G or Group Tracks creates a folder from the selection, including a single channel.
+- Cmd/Ctrl+G or Create Group Bus creates a group bus from the selection, including a single channel.
+  The name input opens right away. New group buses are named "Group Bus", "Group Bus 2", and so on.
+  Group buses show the Merge icon in the timeline, the mixer and the device editor.
 - Drag a primary track header to move selected channels. Buttons, knobs and resize handles retain their gestures.
   Drop in a group header's center to append inside; drop at row edges for a specific position. Move left across
-  indentation at an edge to leave a folder. Move Out of Group is also available in the menu.
+  indentation at an edge to leave a folder. Move Out of Group Bus is also available in the menu.
 - Collapse hides descendants without changing playback. The folded arrangement row shows thin lines for
   descendant note/audio regions at their original times and colors. Group rows resize and retain their height.
 - Double-click a group title to rename it. Right-click and the three-dot button use the same track menu.
@@ -19,7 +21,7 @@ folder whose bus receives its output. Changing that route changes its folder in 
   selected sibling, in display order. Selections across folders create a block in each original folder.
   Selecting a folder and its descendant copies the subtree once. New copies become the track selection.
 - Delete removes the folder and its complete nested subtree in one undoable action.
-- Ungroup (Keep Tracks) promotes the children and removes only the group's processing.
+- Remove Group Bus (Keep Tracks) promotes the children and removes only the group's processing.
 
 ## Model and routing
 

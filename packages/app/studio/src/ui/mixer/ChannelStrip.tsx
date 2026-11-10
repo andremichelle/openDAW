@@ -125,8 +125,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
         lifecycle.own(adapter.box.groupCollapsed.catchupAndSubscribe(field => {
             folderToggle.textContent = field.getValue() ? "▸" : "▾"
             folderToggle.setAttribute("aria-expanded", String(!field.getValue()))
-            folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
-            folderToggle.title = field.getValue() ? "Expand group" : "Collapse group"
+            folderToggle.setAttribute("aria-label", field.getValue() ? "Expand group bus" : "Collapse group bus")
+            folderToggle.title = field.getValue() ? "Expand group bus" : "Collapse group bus"
         }))
         iconElement.appendChild(folderToggle)
     }
@@ -178,7 +178,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
             if (isGroup) {
                 collector.addItems(MenuItem.default({
-                    label: adapter.box.groupCollapsed.getValue() ? "Expand Group" : "Collapse Group"
+                    label: adapter.box.groupCollapsed.getValue() ? "Expand Group Bus" : "Collapse Group Bus"
                 }).setTriggerProcedure(() => editing.modify(() => adapter.box.groupCollapsed.toggle())))
             }
             if (adapter.isInstrument) {

@@ -8,11 +8,11 @@ const alt = true
 export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "group-tracks": {
         shortcut: Shortcut.of(Key.KeyG, {ctrl}),
-        description: "Group selected tracks"
+        description: "Create a group bus from the selected tracks"
     },
     "ungroup-tracks": {
         shortcut: Shortcut.of(Key.KeyG, {ctrl, shift}),
-        description: "Ungroup selected groups (keep tracks)"
+        description: "Remove the selected group buses (keep tracks)"
     },
     "project-undo": {
         shortcut: Shortcut.of(Key.KeyZ, {ctrl}),

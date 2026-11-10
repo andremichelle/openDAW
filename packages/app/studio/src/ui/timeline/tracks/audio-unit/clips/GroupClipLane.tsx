@@ -66,10 +66,10 @@ export const GroupClipLane = ({lifecycle, service, unit, selection}: Construct):
             cell.classList.toggle("muted", launcher.isMuted(index))
             cell.classList.toggle("waiting", state === "waiting")
             cell.classList.toggle("playing", state === "playing")
-            label.setAttribute("aria-label", `Select group scene ${index + 1}${appearance.label === "" ? "" : `: ${appearance.label}`}`)
+            label.setAttribute("aria-label", `Select group bus scene ${index + 1}${appearance.label === "" ? "" : `: ${appearance.label}`}`)
             label.setAttribute("aria-pressed", String(selection.isSelected(unit, index)))
             cell.classList.toggle("selected", selection.isSelected(unit, index))
-            play.setAttribute("aria-label", `${state === "idle" ? "Launch" : "Stop"} group scene ${index + 1}${appearance.label === "" ? "" : `: ${appearance.label}`}`)
+            play.setAttribute("aria-label", `${state === "idle" ? "Launch" : "Stop"} group bus scene ${index + 1}${appearance.label === "" ? "" : `: ${appearance.label}`}`)
             play.setAttribute("aria-pressed", String(state !== "idle"))
             preview.replaceChildren(...contents.map(clip => <span style={{
                 backgroundColor: `hsl(${clip.hue}, ${clip.mute || !clip.trackBoxAdapter.unwrap().enabled.getValue() ? 5 : 60}%, 60%)`

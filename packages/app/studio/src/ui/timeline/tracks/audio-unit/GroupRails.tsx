@@ -43,8 +43,8 @@ export class GroupRails implements Terminable {
                 button.style.setProperty("--color", ColorCodes.forAudioType(adapter.type).toString())
                 lifecycle.ownAll(
                     adapter.input.catchupAndSubscribeLabelChange(label => {
-                        button.setAttribute("aria-label", `Go to group ${label.unwrapOrElse("Group")}`)
-                        button.title = `Go to group ${label.unwrapOrElse("Group")}`
+                        button.setAttribute("aria-label", `Go to group bus ${label.unwrapOrElse("Group Bus")}`)
+                        button.title = `Go to group bus ${label.unwrapOrElse("Group Bus")}`
                     }),
                     Events.subscribe(button, "click", () => {
                         TrackGrouping.selectTracks(this.project, [unit])

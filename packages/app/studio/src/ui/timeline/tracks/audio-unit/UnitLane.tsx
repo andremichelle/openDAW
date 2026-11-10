@@ -48,18 +48,25 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
     const iconHost: HTMLElement = (
         <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
     )
+    const labels: HTMLElement = (
+        <div className="labels">
+            {nameLabel}
+            <h5 className="control-label"/>
+        </div>
+    )
     if (audioUnitBoxAdapter.box.isGroup.getValue()) {
         const toggle = () => {
             project.editing.modify(() => audioUnitBoxAdapter.box.groupCollapsed.toggle())
             TrackGrouping.selectTracks(project, [audioUnitBoxAdapter.box])
         }
-        const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group" onclick={toggle}/>
+        const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group bus" onclick={toggle}/>
         lifecycle.own(audioUnitBoxAdapter.box.groupCollapsed.catchupAndSubscribe(field => {
             button.textContent = field.getValue() ? "▸" : "▾"
             button.setAttribute("aria-expanded", String(!field.getValue()))
-            button.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
+            button.setAttribute("aria-label", field.getValue() ? "Expand group bus" : "Collapse group bus")
         }))
-        iconHost.replaceChildren(button)
+        labels.classList.add("group-labels")
+        labels.prepend(button)
         const rename = async (client: Client, joinCreation: boolean) => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
                 .requestFloatingTextInput(client, audioUnitBoxAdapter.input.label.unwrapOrElse("")))
@@ -80,17 +87,14 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         )
     }
     iconHost.title = "Drag to move this track"
-    nameLabel.title = audioUnitBoxAdapter.box.isGroup.getValue() ? "Double-click to rename; drag to move this group" : ""
+    nameLabel.title = audioUnitBoxAdapter.box.isGroup.getValue() ? "Double-click to rename; drag to move this group bus" : ""
     const header: HTMLElement = (
         <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             {iconHost}
             <CollapseAutomationButton lifecycle={lifecycle} service={service}
                                       audioUnitBoxAdapter={audioUnitBoxAdapter}
                                       head={new DefaultObservableValue<boolean>(true)}/>
-            <div className="labels">
-                {nameLabel}
-                <h5 className="control-label"/>
-            </div>
+            {labels}
             <Group onInit={element => {
                 const controlsLifecycle = lifecycle.own(new Terminator())
                 replaceChildren(element, (

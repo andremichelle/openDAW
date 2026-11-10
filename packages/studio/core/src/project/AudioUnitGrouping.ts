@@ -66,7 +66,7 @@ export class AudioUnitGrouping {
         }
         let anchor = selected[0]
         while (AudioUnitGroups.parent(anchor).unwrapOrUndefined() !== parent) {anchor = asDefined(AudioUnitGroups.parent(anchor).unwrapOrUndefined())}
-        const bus = AudioBusFactory.create(skeleton, this.#uniqueGroupName("Group"), IconSymbol.Folder, AudioUnitType.Bus, Colors.blue,
+        const bus = AudioBusFactory.create(skeleton, this.#uniqueGroupName("Group Bus"), IconSymbol.Merge, AudioUnitType.Bus, Colors.orange,
             isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined)
         const group = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
         group.isGroup.setValue(true)

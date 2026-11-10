@@ -216,7 +216,7 @@ regressions are separate evidence; no live pointer-hold capture is claimed. Scre
 
 ## Configurable ungroup shortcut (2026-10-28)
 
-Shift+Cmd+G on macOS / Shift+Ctrl+G elsewhere invokes Ungroup (Keep Tracks). Its `ungroup-tracks`
+Shift+Cmd+G on macOS / Shift+Ctrl+G elsewhere invokes Remove Group Bus (Keep Tracks). Its `ungroup-tracks`
 action is in the existing Global shortcut definitions, so Preferences > Shortcuts > Global provides
 editing, Apply, reset and JSON import/export alongside Group selected tracks. The track menu displays
 the configured binding and uses the same action. Existing saved shortcut maps retain their choices and
