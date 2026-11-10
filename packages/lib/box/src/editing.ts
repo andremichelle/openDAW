@@ -188,7 +188,8 @@ export class BoxEditing implements Editing {
                     result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.forward(this.#graph))
-                this.#historyIndex++
+                this.#marked.splice(this.#historyIndex, 1)
+                this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }
@@ -210,7 +211,8 @@ export class BoxEditing implements Editing {
                     result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.inverse(this.#graph, this.#outsideHistory))
-                this.#historyIndex--
+                this.#marked.splice(--this.#historyIndex, 1)
+                this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }

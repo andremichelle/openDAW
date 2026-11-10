@@ -171,6 +171,25 @@ describe("editing", () => {
         expect(scene.graph.findBox(barUuid).nonEmpty()).false
     })
 
+    it("drops a step that can no longer be undone so older steps stay reachable", (scene: TestScene) => {
+        const kept = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        // another participant deletes the box outside this history
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.undo()).false
+        expect(scene.editing.canUndo()).true
+        expect(scene.editing.undo()).true
+        expect(scene.graph.findBox(kept.address.uuid).nonEmpty()).false
+        expect(scene.editing.canUndo()).false
+        expect(scene.editing.redo()).true
+        expect(scene.graph.findBox(kept.address.uuid).nonEmpty()).true
+        expect(scene.editing.canRedo()).false
+    })
+
     it("should handle box created and deleted in same transaction", (scene: TestScene) => {
         // In a single transaction: create a box, modify it, and delete it
         scene.editing.modify(() => {
