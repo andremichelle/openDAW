@@ -33,6 +33,7 @@ export const BusOutputSelector = ({lifecycle, project, output, pointer, selectab
         adapter.match({
             none: () => {
                 label.textContent = "No Output"
+                label.style.removeProperty("color")
                 iconCartridge.style.color = Colors.red.toString()
                 symbol.setValue(IconSymbol.NoAudio)
             },
