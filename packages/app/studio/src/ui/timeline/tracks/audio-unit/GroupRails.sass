@@ -1,10 +1,11 @@
+@use "@/colors"
 @use "@/mixins"
 
 component
   @include mixins.audio-unit-line
   padding: 0
   border: none
-  border-radius: 2px
+  border-radius: colors.$LINE_RADIUS
   min-width: 0
   min-height: 0
   background: var(--unit-line-color)
