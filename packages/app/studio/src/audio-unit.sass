@@ -1,0 +1,10 @@
+$EDIT_WASH_START: 12%
+$EDIT_WASH_REST: 3%
+$UNIT_LINE_SATURATION: 13%
+$LINE_RADIUS: 1.5px
+
+@mixin audio-unit-line
+  --unit-line-color: color-mix(in srgb, hsl(from var(--color) h #{$UNIT_LINE_SATURATION} l) 35%, var(--color-panel-background))
+
+  &.line-active, &.selected
+    --unit-line-color: var(--color)

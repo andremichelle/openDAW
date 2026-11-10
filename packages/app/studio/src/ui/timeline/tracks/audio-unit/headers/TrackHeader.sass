@@ -1,4 +1,4 @@
-@use "@/colors"
+@use "@/audio-unit"
 
 $tree-guide-color: var(--color-black)
 
@@ -17,7 +17,7 @@ component
   background: linear-gradient(to right, var(--color-black) -500%, transparent 24px)
 
   .editing &
-    background: linear-gradient(to right, color-mix(in srgb, var(--color) colors.$EDIT_WASH_START, transparent), color-mix(in srgb, var(--color) colors.$EDIT_WASH_REST, transparent) 24px)
+    background: linear-gradient(to right, color-mix(in srgb, var(--color) audio-unit.$EDIT_WASH_START, transparent), color-mix(in srgb, var(--color) audio-unit.$EDIT_WASH_REST, transparent) 24px)
 
   &.accept-drop
     background-color: rgba(white, 0.04)
