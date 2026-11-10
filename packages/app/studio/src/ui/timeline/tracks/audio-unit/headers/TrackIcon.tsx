@@ -1,6 +1,6 @@
 import {Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {AudioBusBoxAdapter, AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {StudioService} from "@/service/StudioService"
@@ -23,24 +23,13 @@ export const TrackIcon = ({lifecycle, service, audioUnitBoxAdapter}: Construct) 
     updateFrozenState()
     const iconLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
-        // The icon keeps the unit's color: an instrument its type color (green), a bus its OWN color field.
         audioUnitBoxAdapter.input.catchupAndSubscribe(optAdapter => {
             iconLifecycle.terminate()
             optAdapter.match({
                 none: () => replaceChildren(element, <Icon symbol={IconSymbol.AudioBus}/>, lockIcon),
-                some: inputAdapter => {
-                    const render = () => {
-                        const symbol = IconSymbol.fromName(inputAdapter.iconField.getValue())
-                        const color = inputAdapter instanceof AudioBusBoxAdapter && !audioUnitBoxAdapter.box.isGroup.getValue()
-                            ? inputAdapter.colorField.getValue()
-                            : ColorCodes.forAudioType(audioUnitBoxAdapter.type).toString()
-                        replaceChildren(element, <Icon symbol={symbol} style={{color}}/>, lockIcon)
-                    }
-                    iconLifecycle.own(inputAdapter.iconField.catchupAndSubscribe(render))
-                    if (inputAdapter instanceof AudioBusBoxAdapter) {
-                        iconLifecycle.own(inputAdapter.colorField.subscribe(render))
-                    }
-                }
+                some: inputAdapter => iconLifecycle.own(inputAdapter.iconField.catchupAndSubscribe(field =>
+                    replaceChildren(element, <Icon symbol={IconSymbol.fromName(field.getValue())}
+                                                   style={{color: ColorCodes.forAudioType(audioUnitBoxAdapter.type).toString()}}/>, lockIcon)))
             })
         }),
         audioUnitFreeze.subscribe((uuid: UUID.Bytes) => {

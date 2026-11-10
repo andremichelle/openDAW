@@ -1,6 +1,6 @@
 import css from "./AuxSend.sass?inline"
 import {asInstanceOf, Color, DefaultObservableValue, Lifecycle, Option, StringComparator} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {AudioBusBoxAdapter, AudioUnitBoxAdapter, AuxSendBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitBox, AuxSendBox} from "@opendaw/studio-boxes"
 import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -37,8 +37,6 @@ export const sendTargets = (project: Project, audioUnitAdapter: AudioUnitBoxAdap
 
 export const AuxSend = ({lifecycle, project, audioUnitAdapter, adapter}: Construct) => {
     const {editing, userEditingManager} = project
-    const tooltip = Inject.attribute(adapter.targetBus.labelField.getValue())
-    lifecycle.own(adapter.targetBus.labelField.subscribe(owner => tooltip.value = owner.getValue()))
     const symbol = lifecycle.own(new DefaultObservableValue(IconSymbol.Rectangle))
     const target: HTMLElement = (
         <div className="target">
@@ -48,12 +46,10 @@ export const AuxSend = ({lifecycle, project, audioUnitAdapter, adapter}: Constru
     lifecycle.own(adapter.catchupAndSubscribeBusChanges(adapter => {
         adapter.match({
             none: () => {
-                tooltip.value = "No Target"
                 target.style.color = Colors.red.toString()
                 symbol.setValue(IconSymbol.NoAudio)
             },
             some: (adapter) => {
-                tooltip.value = adapter.labelField.getValue()
                 busColor(adapter).ifSome(color => target.style.color = color.toString())
                 symbol.setValue(adapter.iconSymbol)
             }
