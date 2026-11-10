@@ -12,7 +12,7 @@ import {installAutoScroll} from "@/ui/AutoScroll"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {editsOnPress, installTrackSelection, isTrackEdited, isTrackLineActive} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
@@ -122,8 +122,8 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     })
     const refreshEditingIndicators = () => audioUnits.values().forEach(({adapter, editor}) => {
         editor.classList.toggle("selected", project.audioUnitSelection.isSelected(adapter.box))
-        editor.classList.toggle("line-active", isTrackLineActive(project, adapter.box))
-        editor.classList.toggle("editing", isTrackEdited(project, adapter.box))
+        editor.classList.toggle("line-active", TrackGrouping.isTrackLineActive(project, adapter.box))
+        editor.classList.toggle("editing", TrackGrouping.isTrackEdited(project, adapter.box))
     })
     let scrollIntoViewEnabled: boolean = true
     const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
@@ -147,11 +147,11 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 const editor: HTMLElement = <ChannelStrip lifecycle={terminator} service={service} adapter={adapter}
                                                           compact={false} mastering={mastering}/>
                 editor.dataset.unit = UUID.toString(adapter.uuid)
-                installTrackSelection(terminator, project, editor, adapter.box, () => {})
+                TrackGrouping.installTrackSelection(terminator, project, editor, adapter.box, () => {})
                 terminator.ownAll(
                     Events.subscribe(editor, "pointerdown", (event: PointerEvent) => {
                         scrollIntoViewEnabled = false
-                        if (editsOnPress(project, adapter.box, event) && !project.userEditingManager.audioUnit.isEditing(adapter.box.editing)) {
+                        if (TrackGrouping.editsOnPress(project, adapter.box, event) && !project.userEditingManager.audioUnit.isEditing(adapter.box.editing)) {
                             project.userEditingManager.audioUnit.edit(adapter.box.editing)
                         }
                     }),

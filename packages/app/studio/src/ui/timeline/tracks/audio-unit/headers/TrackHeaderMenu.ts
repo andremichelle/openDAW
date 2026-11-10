@@ -1,4 +1,4 @@
-import {duplicateSelectedTracks, groupingMenuItems, selectForMenu} from "../TrackGrouping"
+import {TrackGrouping} from "../TrackGrouping"
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {Browser} from "@opendaw/lib-dom"
@@ -31,7 +31,7 @@ export const installTrackHeaderMenu = (service: StudioService,
     // An input that accepts neither (a Playfield slot) has no track type to offer.
     const optTrackType = accepts === false || audioUnitBoxAdapter.box.isGroup.getValue() ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
     const {project} = service
-    selectForMenu(project, audioUnitBoxAdapter.box)
+    TrackGrouping.selectForMenu(project, audioUnitBoxAdapter.box)
     const {audioUnitFreeze, captureDevices, editing, selection} = project
     const isFrozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
     // the open menu outlives graph changes (undo, a live-room update), so every action re-checks its boxes
@@ -41,7 +41,7 @@ export const installTrackHeaderMenu = (service: StudioService,
         procedure(item)
     }
     return parent.addMenuItem(
-        ...groupingMenuItems(project, audioUnitBoxAdapter.box),
+        ...TrackGrouping.groupingMenuItems(project, audioUnitBoxAdapter.box),
         MenuItem.default({
             label: "Enabled",
             checked: optTrackBoxAdapter.mapOr(track => track.enabled.getValue(), false),
@@ -76,7 +76,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             separatorBefore: true,
             hidden: audioUnitBoxAdapter.isOutput,
             selectable: project.audioUnitSelection.nonEmpty()
-        }).setTriggerProcedure(guarded(() => duplicateSelectedTracks(project))),
+        }).setTriggerProcedure(guarded(() => TrackGrouping.duplicateSelectedTracks(project))),
         MenuItems.copyAudioUnit(audioUnitBoxAdapter),
         MenuItem.default({
             label: "Freeze AudioUnit",

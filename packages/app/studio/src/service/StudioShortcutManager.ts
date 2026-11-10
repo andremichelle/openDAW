@@ -21,7 +21,7 @@ import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/Pi
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
-import {duplicateSelectedTracks, groupSelectedTracks, ungroupSelectedTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {ChordTrackShortcuts, ChordTrackShortcutsFactory} from "@/ui/shortcuts/ChordTrackShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
@@ -76,8 +76,8 @@ export namespace StudioShortcutManager {
         const gs = GlobalShortcuts
         if (ShortcutStorage.load(Contexts, localStorage)) {console.debug("Custom shortcuts loaded.")}
         return Terminable.many(
-            gc.register(gs["group-tracks"].shortcut, () => service.runIfProject(groupSelectedTracks)),
-            gc.register(gs["ungroup-tracks"].shortcut, () => service.runIfProject(ungroupSelectedTracks)),
+            gc.register(gs["group-tracks"].shortcut, () => service.runIfProject(TrackGrouping.groupSelectedTracks)),
+            gc.register(gs["ungroup-tracks"].shortcut, () => service.runIfProject(TrackGrouping.ungroupSelectedTracks)),
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo()), {allowRepeat: true}),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo()), {allowRepeat: true}),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
@@ -161,7 +161,7 @@ export namespace StudioShortcutManager {
                     }))),
             gc.register(gs["add-instrument"].shortcut, () => {if (service.hasProfile) {CreateTrack.instrument(service)}}),
             gc.register(gs["add-audio-track"].shortcut, () => {if (service.hasProfile) {CreateTrack.audioTrack(service)}}),
-            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(duplicateSelectedTracks)),
+            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(TrackGrouping.duplicateSelectedTracks)),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
                     const keys: Array<Workspace.ScreenKeys> = Object.entries(DefaultWorkspace)

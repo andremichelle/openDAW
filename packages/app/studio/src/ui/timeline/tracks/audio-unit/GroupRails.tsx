@@ -5,7 +5,7 @@ import {AudioUnitBoxAdapter, AudioUnitLayout, ColorCodes} from "@opendaw/studio-
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {Project} from "@opendaw/studio-core"
 import css from "./GroupRails.sass?inline"
-import {isTrackLineActive, selectTracks} from "./TrackGrouping"
+import {TrackGrouping} from "./TrackGrouping"
 
 const className = Html.adoptStyleSheet(css, "GroupRails")
 
@@ -47,7 +47,7 @@ export class GroupRails implements Terminable {
                         button.title = `Go to group ${label.unwrapOrElse("Group")}`
                     }),
                     Events.subscribe(button, "click", () => {
-                        selectTracks(this.project, [unit])
+                        TrackGrouping.selectTracks(this.project, [unit])
                         this.project.userEditingManager.audioUnit.edit(unit.editing)
                         this.reveal(unit)
                     })
@@ -71,7 +71,7 @@ export class GroupRails implements Terminable {
     }
     #refreshSelection(): void {
         this.#rails.forEach(({button}, unit) => {
-            button.classList.toggle("line-active", isTrackLineActive(this.project, unit))
+            button.classList.toggle("line-active", TrackGrouping.isTrackLineActive(this.project, unit))
             button.classList.toggle("selected", this.project.audioUnitSelection.isSelected(unit))
         })
     }

@@ -1,4 +1,4 @@
-import {deleteSelectedTracks, editsOnPress, installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -90,7 +90,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
             </MenuButton>
         </div>
     )
-    installTrackSelection(lifecycle, project, element, audioUnitBoxAdapter.box, populateMenu)
+    TrackGrouping.installTrackSelection(lifecycle, project, element, audioUnitBoxAdapter.box, populateMenu)
     const audioUnitEditing = project.userEditingManager.audioUnit
     const hoverSwitch = createHoverEditSwitch(lifecycle, project, audioUnitBoxAdapter)
     const dragLifecycle = lifecycle.own(new Terminator())
@@ -99,7 +99,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
             dragLifecycle.terminate()
             iconContainer.draggable = false
             if (owner.getValue() && !audioUnitBoxAdapter.isOutput) {
-                dragLifecycle.own(installGroupTrackDrag(element, project, audioUnitBoxAdapter.box,
+                dragLifecycle.own(TrackGrouping.installGroupTrackDrag(element, project, audioUnitBoxAdapter.box,
                     target => target instanceof Node && labels.contains(target) && trackManager.groupMembers(trackBoxAdapter.uuid).length > 1))
             }
         }),
@@ -120,13 +120,13 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         }),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             project.trackFocus.focus(trackBoxAdapter)
-            if (editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
+            if (TrackGrouping.editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }
         }),
         Events.subscribe(element, "keydown", (event) => {
             if (!Keyboard.isDelete(event)) {return}
-            if (deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
+            if (TrackGrouping.deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
             // Deleting the LAST content track keeps the unit: its synthetic lane takes over (deleting the
             // unit itself is the synthetic lane's / menu's job).
             project.editing.modify(() => audioUnitBoxAdapter.deleteTrack(trackBoxAdapter))

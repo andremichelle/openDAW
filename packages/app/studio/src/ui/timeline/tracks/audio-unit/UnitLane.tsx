@@ -18,7 +18,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Surface} from "@/ui/surface/Surface"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
-import {deleteSelectedTracks, editsOnPress, installTrackSelection, installGroupTrackDrag, selectTracks, subscribeGroupRename} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {
     ClipLaneClassName,
     RegionLaneClassName,
@@ -51,7 +51,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
     if (audioUnitBoxAdapter.box.isGroup.getValue()) {
         const toggle = () => {
             project.editing.modify(() => audioUnitBoxAdapter.box.groupCollapsed.toggle())
-            selectTracks(project, [audioUnitBoxAdapter.box])
+            TrackGrouping.selectTracks(project, [audioUnitBoxAdapter.box])
         }
         const button: HTMLButtonElement = <button className="folder-toggle" title="Collapse or expand group" onclick={toggle}/>
         lifecycle.own(audioUnitBoxAdapter.box.groupCollapsed.catchupAndSubscribe(field => {
@@ -72,7 +72,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
         }
         lifecycle.ownAll(
             Events.subscribeDblDwn(nameLabel, event => rename(event, false)),
-            subscribeGroupRename(audioUnitBoxAdapter.box, () => {
+            TrackGrouping.subscribeGroupRename(audioUnitBoxAdapter.box, () => {
                 const {left, top, height} = nameLabel.getBoundingClientRect()
                 return rename({clientX: left, clientY: top + height / 2}, true)
             })
@@ -125,7 +125,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
     const isSampleDrag = (data: AnyDragData): boolean => data.type === "sample" || data.type === "file"
     const acceptsAudio = () => audioUnitBoxAdapter.input.adapter()
         .mapOr(adapter => !audioUnitBoxAdapter.box.isGroup.getValue() && adapter.accepts === "audio", false)
-    installTrackSelection(lifecycle, project, header, audioUnitBoxAdapter.box, populateMenu)
+    TrackGrouping.installTrackSelection(lifecycle, project, header, audioUnitBoxAdapter.box, populateMenu)
     const audioUnitEditing = project.userEditingManager.audioUnit
     const clipCellsLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
@@ -188,9 +188,9 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
                 }))
             }
         }),
-        installGroupTrackDrag(header, project, audioUnitBoxAdapter.box),
+        TrackGrouping.installGroupTrackDrag(header, project, audioUnitBoxAdapter.box),
         Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
-            if (editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
+            if (TrackGrouping.editsOnPress(project, audioUnitBoxAdapter.box, event) && !audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }
         }),
@@ -198,7 +198,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             if (!Keyboard.isDelete(event)) {return}
             // The output unit is mandatory: never delete it (the engine rejects the transaction and desyncs).
             if (audioUnitBoxAdapter.isOutput) {return}
-            if (deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
+            if (TrackGrouping.deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
             project.editing.modify(() => project.api.deleteAudioUnit(audioUnitBoxAdapter.box))
         })
     )

@@ -38,7 +38,7 @@ import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
-import {isTrackEdited} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 
@@ -495,7 +495,7 @@ export class TracksManager implements Terminable {
         this.#flatLayout().rows.forEach(row => {
             const element = this.#element(row.content)
             element.classList.toggle("selected", isDefined(row.unit) && project.audioUnitSelection.isSelected(row.unit))
-            element.classList.toggle("editing", isDefined(row.unit) && isTrackEdited(project, row.unit))
+            element.classList.toggle("editing", isDefined(row.unit) && TrackGrouping.isTrackEdited(project, row.unit))
         })
     }
 

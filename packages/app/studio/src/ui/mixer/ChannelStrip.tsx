@@ -21,7 +21,7 @@ import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {AutomationControl} from "../components/AutomationControl"
-import {duplicateSelectedTracks, groupingMenuItems, installGroupTrackDrag, selectTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
@@ -173,8 +173,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
         } satisfies ChannelStripView),
         ContextMenu.subscribe(element, collector => {
-            if (!project.audioUnitSelection.isSelected(adapter.box)) {selectTracks(project, [adapter.box])}
-            collector.addItems(...groupingMenuItems(project, adapter.box))
+            if (!project.audioUnitSelection.isSelected(adapter.box)) {TrackGrouping.selectTracks(project, [adapter.box])}
+            collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
             if (isGroup) {
                 collector.addItems(MenuItem.default({
                     label: adapter.box.groupCollapsed.getValue() ? "Expand Group" : "Collapse Group"
@@ -199,7 +199,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             } else {
                 collector.addItems(
                     MenuItem.default({label: "Duplicate AudioUnit", selectable: project.audioUnitSelection.nonEmpty()})
-                        .setTriggerProcedure(() => duplicateSelectedTracks(project)),
+                        .setTriggerProcedure(() => TrackGrouping.duplicateSelectedTracks(project)),
                     MenuItem.default({label: `Delete '${adapter.input.label.unwrapOrElse("Untitled")}'`})
                         .setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(adapter.box))))
             }
@@ -227,7 +227,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
         TextTooltip.default(maxPeakLabel, () => "Click to reset"),
         adapter.isOutput
             ? Terminable.Empty
-            : installGroupTrackDrag(iconElement, project, adapter.box),
+            : TrackGrouping.installGroupTrackDrag(iconElement, project, adapter.box),
         volume.subscribe(updateVolumeLabel),
         adapter.isInstrument
             ? project.audioUnitFreeze.subscribe(uuid => {
