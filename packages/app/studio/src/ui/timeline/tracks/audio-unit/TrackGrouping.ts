@@ -114,6 +114,11 @@ export namespace TrackGrouping {
             || press === "range" && editedTrack(project).isEmpty()
     }
 
+    export const placePasted = (project: Project, unit: AudioUnitBox): void => {
+        project.api.placeAudioUnitsAt([unit], project.api.insertionAfterSelection())
+        selectTracks(project, [unit])
+    }
+
     export const selectForMenu = (project: Project, unit: AudioUnitBox): void => {
         if (!project.audioUnitSelection.isSelected(unit)) {selectTracks(project, [unit])}
     }

@@ -30,6 +30,7 @@ import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -212,11 +213,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 }
                 return Option.None
             }),
-            placePasted: unit => {
-                api.placeAudioUnitsAt([unit], api.insertionAfterSelection())
-                service.project.audioUnitSelection.deselectAll()
-                service.project.audioUnitSelection.select(unit)
-            }
+            placePasted: unit => TrackGrouping.placePasted(service.project, unit)
         })),
         AnimationFrame.add(() => {
             // The ResizeObserver only tracks the visible size changes, not off-screen content,

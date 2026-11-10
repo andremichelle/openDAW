@@ -139,7 +139,8 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                     return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
                 }
                 return Option.None
-            })
+            }),
+            placePasted: unit => TrackGrouping.placePasted(project, unit)
         })),
         project.rootBoxAdapter.audioUnits.catchupAndSubscribe({
             onAdd: (adapter: AudioUnitBoxAdapter) => {

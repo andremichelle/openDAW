@@ -210,6 +210,16 @@ describe("track selection", () => {
 })
 
 describe("group and duplicate commands", () => {
+    it("places a pasted track after the selected track inside its group and selects it", async () => {
+        const project = await setup()
+        const [a, b, pasted] = createUnits(project, 3)
+        const group = project.editing.modify(() => project.grouping.create([a, b]).unwrap()).unwrap()
+        TrackGrouping.selectTracks(project, [a])
+        project.editing.modify(() => TrackGrouping.placePasted(project, pasted))
+        expect(AudioUnitGroups.children(project.rootBox, group)).toEqual([a, pasted, b])
+        expectSelected(project, [pasted])
+        project.terminate()
+    })
     it("deletes every selected track and group subtree in one step when the pressed track is part of a multi-selection", async () => {
         const project = await setup()
         const [a, b, c, d] = createUnits(project, 4)
