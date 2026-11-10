@@ -1,5 +1,5 @@
-import {asDefined, Exec, isDefined, Lifecycle, Nullable, Option, Optional, Procedure, UUID, Terminable} from "@opendaw/lib-std"
-import {Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
+import {asDefined, Exec, isDefined, Lifecycle, Notifier, Nullable, Option, Optional, Procedure, Subscription, UUID, Terminable} from "@opendaw/lib-std"
+import {AnimationFrame, Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
 import {AudioUnitGroups, Devices} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
@@ -31,18 +31,28 @@ export const deselectHiddenTracks = (project: Project): Terminable => {
     return Terminable.many(subscription, {terminate: () => alive = false})
 }
 
-export const isTrackEdited =(project: Project, unit: AudioUnitBox): boolean =>
+export const isTrackEdited = (project: Project, unit: AudioUnitBox): boolean =>
     editedTrack(project).mapOr(edited => edited === unit, false)
 
 export const isTrackLineActive = (project: Project, unit: AudioUnitBox): boolean =>
     editedTrack(project).mapOr(edited => edited === unit
         || project.audioUnitLayout.snapshot.row(edited).mapOr(row => row.ancestors.includes(unit), false), false)
 
+const groupRenameRequests = new Notifier<AudioUnitBox>()
+
+export const subscribeGroupRename = (unit: AudioUnitBox, procedure: Exec): Subscription =>
+    groupRenameRequests.subscribe(requested => {if (requested === unit) {procedure()}})
+
 export const groupSelectedTracks = (project: Project): void => {
-    project.editing.modify(() => project.grouping.create(project.audioUnitSelection.selected()).ifSome(group => {
-        project.userEditingManager.audioUnit.edit(group.editing)
-        selectTracks(project, [group])
-    }))
+    const created = project.editing.modify(() => {
+        const group = project.grouping.create(project.audioUnitSelection.selected()).unwrapOrUndefined()
+        if (isDefined(group)) {
+            project.userEditingManager.audioUnit.edit(group.editing)
+            selectTracks(project, [group])
+        }
+        return group
+    }).unwrapOrUndefined()
+    if (isDefined(created)) {AnimationFrame.once(() => groupRenameRequests.notify(created))}
 }
 
 export const ungroupSelectedTracks = (project: Project): void => {
@@ -68,7 +78,15 @@ export const duplicateSelectedTracks = (project: Project): void => {
     })
 }
 
-export const groupingMenuItems = (project: Project, unit: AudioUnitBox): MenuItem[] => {
+export const deleteSelectedTracks = (project: Project, pressed: AudioUnitBox): boolean => {
+    const {audioUnitSelection} = project
+    if (audioUnitSelection.count() < 2 || !audioUnitSelection.isSelected(pressed)) {return false}
+    const roots = AudioUnitGroups.roots(audioUnitSelection.selected())
+    project.editing.modify(() => roots.forEach(unit => project.api.deleteAudioUnit(unit)))
+    return true
+}
+
+export const groupingMenuItems =(project: Project, unit: AudioUnitBox): MenuItem[] => {
     const {audioUnitSelection} = project
     return [
         MenuItem.default({label: "Group Tracks", shortcut: GlobalShortcuts["group-tracks"].shortcut.format(),

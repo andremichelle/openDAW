@@ -1,4 +1,4 @@
-import {Arrays, DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
+import {Arrays, Client, DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
@@ -18,7 +18,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Surface} from "@/ui/surface/Surface"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
-import {editsOnPress, installTrackSelection, installGroupTrackDrag, selectTracks} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {deleteSelectedTracks, editsOnPress, installTrackSelection, installGroupTrackDrag, selectTracks, subscribeGroupRename} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {
     ClipLaneClassName,
     RegionLaneClassName,
@@ -60,15 +60,23 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             button.setAttribute("aria-label", field.getValue() ? "Expand group" : "Collapse group")
         }))
         iconHost.replaceChildren(button)
-        lifecycle.own(Events.subscribeDblDwn(nameLabel, async event => {
+        const rename = async (client: Client, joinCreation: boolean) => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
-                .requestFloatingTextInput(event, audioUnitBoxAdapter.input.label.unwrapOrElse("")))
+                .requestFloatingTextInput(client, audioUnitBoxAdapter.input.label.unwrapOrElse("")))
             if (status === "rejected") {
                 if (!Errors.isAbort(error)) {return panic(error)}
             } else if (audioUnitBoxAdapter.box.isAttached()) {
-                project.editing.modify(() => audioUnitBoxAdapter.input.label = value)
+                const write = () => {audioUnitBoxAdapter.input.label = value}
+                if (joinCreation) {project.editing.append(write)} else {project.editing.modify(write)}
             }
-        }))
+        }
+        lifecycle.ownAll(
+            Events.subscribeDblDwn(nameLabel, event => rename(event, false)),
+            subscribeGroupRename(audioUnitBoxAdapter.box, () => {
+                const {left, top, height} = nameLabel.getBoundingClientRect()
+                return rename({clientX: left, clientY: top + height / 2}, true)
+            })
+        )
     }
     iconHost.title = "Drag to move this track"
     nameLabel.title = audioUnitBoxAdapter.box.isGroup.getValue() ? "Double-click to rename; drag to move this group" : ""
@@ -190,6 +198,7 @@ export const UnitLane = ({lifecycle, service, trackManager, audioUnitBoxAdapter}
             if (!Keyboard.isDelete(event)) {return}
             // The output unit is mandatory: never delete it (the engine rejects the transaction and desyncs).
             if (audioUnitBoxAdapter.isOutput) {return}
+            if (deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
             project.editing.modify(() => project.api.deleteAudioUnit(audioUnitBoxAdapter.box))
         })
     )

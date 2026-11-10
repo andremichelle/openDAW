@@ -66,7 +66,7 @@ export class AudioUnitGrouping {
         }
         let anchor = selected[0]
         while (AudioUnitGroups.parent(anchor).unwrapOrUndefined() !== parent) {anchor = asDefined(AudioUnitGroups.parent(anchor).unwrapOrUndefined())}
-        const bus = AudioBusFactory.create(skeleton, "Group", IconSymbol.Folder, AudioUnitType.Bus, Colors.blue,
+        const bus = AudioBusFactory.create(skeleton, this.#uniqueGroupName("Group"), IconSymbol.Folder, AudioUnitType.Bus, Colors.blue,
             isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined)
         const group = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
         group.isGroup.setValue(true)
@@ -128,7 +128,20 @@ export class AudioUnitGrouping {
             walk(unit)
         })
         walk()
+        copies.filter(copy => copy.isGroup.getValue()).forEach(copy => AudioUnitGroups.bus(copy)
+            .ifSome(bus => bus.label.setValue(this.#uniqueGroupName(bus.label.getValue(), bus))))
         return roots.map(unit => asDefined(mapping.get(unit)))
+    }
+
+    #uniqueGroupName(name: string, renamed?: AudioBusBox): string {
+        const taken = new Set(AudioUnitGroups.all(this.project.rootBox)
+            .filter(unit => unit.isGroup.getValue())
+            .flatMap(unit => AudioUnitGroups.bus(unit).mapOr(bus => bus === renamed ? [] : [bus.label.getValue()], [])))
+        if (!taken.has(name)) {return name}
+        const stem = name.replace(/ \d+$/, "")
+        let index = 2
+        while (taken.has(`${stem} ${index}`)) {index++}
+        return `${stem} ${index}`
     }
 
     moveOutOfGroup(unit: AudioUnitBox, selection: ReadonlyArray<AudioUnitBox> = [unit]): boolean {

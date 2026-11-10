@@ -6,7 +6,7 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import {ShortcutStorage, ShortcutStore} from "@/service/ShortcutStorage"
 import {GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
-import {deselectHiddenTracks, duplicateSelectedTracks, groupSelectedTracks, isTrackLineActive, pressTrack, selectTracks, ungroupSelectedTracks} from "./TrackGrouping"
+import {deleteSelectedTracks, deselectHiddenTracks, duplicateSelectedTracks, groupSelectedTracks, isTrackLineActive, pressTrack, selectTracks, ungroupSelectedTracks} from "./TrackGrouping"
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -162,6 +162,21 @@ describe("track selection", () => {
 })
 
 describe("group and duplicate commands", () => {
+    it("deletes every selected track and group subtree in one step when the pressed track is part of a multi-selection", async () => {
+        const project = await setup()
+        const [a, b, c, d] = createUnits(project, 4)
+        const group = project.editing.modify(() => project.grouping.create([b, c]).unwrap()).unwrap()
+        selectTracks(project, [a])
+        expect(deleteSelectedTracks(project, a)).toBe(false)
+        selectTracks(project, [a, group, c])
+        expect(deleteSelectedTracks(project, d)).toBe(false)
+        expect(deleteSelectedTracks(project, a)).toBe(true)
+        expect([a, b, c, group].some(unit => unit.isAttached())).toBe(false)
+        expect(d.isAttached()).toBe(true)
+        project.editing.undo()
+        expect([a, b, c, group].every(unit => project.boxGraph.findBox(unit.address.uuid).nonEmpty())).toBe(true)
+        project.terminate()
+    })
     it("groups the selection, selects the group and undoes both in one step", async () => {
         const project = await setup()
         const [a, b, c] = createUnits(project, 3)

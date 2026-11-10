@@ -20,7 +20,11 @@ export class GroupRails implements Terminable {
             container.style.setProperty("--unit-line-width", `${AudioUnitLayout.RailWidth}px`)
         }
         this.#lifecycle.ownAll(
-            project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelection())
+            project.userEditingManager.audioUnit.catchupAndSubscribe(() => this.#refreshSelection()),
+            project.audioUnitSelection.subscribe({
+                onSelected: () => this.#refreshSelection(),
+                onDeselected: () => this.#refreshSelection()
+            })
         )
     }
     update(spans: ReadonlyArray<AudioUnitLayout.Boundary>): void {
@@ -66,8 +70,10 @@ export class GroupRails implements Terminable {
         this.#refreshSelection()
     }
     #refreshSelection(): void {
-        this.#rails.forEach(({button}, unit) => button.classList.toggle("line-active",
-            isTrackLineActive(this.project, unit)))
+        this.#rails.forEach(({button}, unit) => {
+            button.classList.toggle("line-active", isTrackLineActive(this.project, unit))
+            button.classList.toggle("selected", this.project.audioUnitSelection.isSelected(unit))
+        })
     }
     terminate(): void {
         this.#lifecycle.terminate()

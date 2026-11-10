@@ -3,6 +3,7 @@ import {AudioUnitLayout} from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 export namespace GroupDropLayout {
+    export const DepthStep = 24
     export type Row = {readonly unit: AudioUnitBox, readonly bounds: Rect, readonly header: Rect}
     export type Target = {
         readonly parent: Optional<AudioUnitBox>
@@ -40,7 +41,7 @@ export namespace GroupDropLayout {
         const after = coordinate >= start(bounds) + size(bounds) / 2
         let parent = model.parent
         if (!horizontal) {
-            const depth = Math.max(0, Math.floor((pointer.clientX - hit.bounds.x - 12) / AudioUnitLayout.Indent))
+            const depth = Math.max(0, Math.floor((pointer.clientX - hit.bounds.x - 12) / DepthStep))
             while (isDefined(parent) && layout.row(parent).unwrap().depth >= depth) {
                 parent = layout.row(parent).unwrap().parent
             }

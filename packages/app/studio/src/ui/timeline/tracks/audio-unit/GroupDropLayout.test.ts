@@ -213,6 +213,16 @@ describe("track drop layout", () => {
         expect(right.inside).toBe(false)
         expect(right.before).toBe(after)
     })
+    it("leaves one folder level per depth step when dragging left at a nested edge", () => {
+        const {group, inner, lastChild, after, leaf, build} = fixture()
+        const {row, resolve} = build()
+        const {x, y, height} = row(leaf).bounds
+        const at = (step: number) => resolve(y + height - 1, x + 12 + step * GroupDropLayout.DepthStep + 1)
+        expect([at(0).parent, at(0).before]).toEqual([undefined, after])
+        expect([at(1).parent, at(1).before]).toEqual([group, lastChild])
+        expect(at(2).parent).toBe(inner)
+        expect(at(2).before).toBeUndefined()
+    })
     it("returns no target for an empty visible list", () => {
         const {build} = fixture()
         expect(GroupDropLayout.resolve(build().layout, [], {clientX: 0, clientY: 0}, false).isEmpty()).toBe(true)

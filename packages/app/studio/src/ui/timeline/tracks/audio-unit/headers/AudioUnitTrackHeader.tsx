@@ -1,4 +1,4 @@
-import {editsOnPress, installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {deleteSelectedTracks, editsOnPress, installTrackSelection, installGroupTrackDrag} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -126,6 +126,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         }),
         Events.subscribe(element, "keydown", (event) => {
             if (!Keyboard.isDelete(event)) {return}
+            if (deleteSelectedTracks(project, audioUnitBoxAdapter.box)) {return}
             // Deleting the LAST content track keeps the unit: its synthetic lane takes over (deleting the
             // unit itself is the synthetic lane's / menu's job).
             project.editing.modify(() => audioUnitBoxAdapter.deleteTrack(trackBoxAdapter))
