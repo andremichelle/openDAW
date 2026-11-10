@@ -26,14 +26,14 @@ export class AudioUnitLayoutState implements Terminable {
                 this.#publish()
             }
         }))
-        this.#lifecycle.own(project.userEditingManager.viewStates.subscribe(() => this.#invalidate()))
         this.#lifecycle.own(project.rootBoxAdapter.audioUnits.catchupAndSubscribe({
             onAdd: adapter => {
                 const lifecycle = new Terminator()
                 this.#units.set(adapter.box, lifecycle)
                 lifecycle.ownAll(
                     adapter.box.output.subscribe(() => this.#invalidate()),
-                    adapter.box.type.subscribe(() => this.#invalidate())
+                    adapter.box.type.subscribe(() => this.#invalidate()),
+                    project.userEditingManager.viewStates.groupCollapsed(adapter.box).subscribe(() => this.#invalidate())
                 )
                 this.#invalidate()
             },

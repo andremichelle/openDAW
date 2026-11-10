@@ -219,6 +219,23 @@ describe("track folders", () => {
         project.terminate()
     })
 
+    it("publishes a layout for a collapse but not for height or automation view changes", async () => {
+        const {project, units: [first, second]} = await setup()
+        const group = asDefined(project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap())
+        const {viewStates} = project.userEditingManager
+        const notify = vi.fn()
+        const subscription = project.audioUnitLayout.value.subscribe(notify)
+        project.editing.modify(() => viewStates.height(group).setValue(120))
+        project.editing.modify(() => viewStates.height(first).setValue(90))
+        project.editing.modify(() => viewStates.automationCollapsed(first).setValue(true))
+        expect(notify).toHaveBeenCalledTimes(0)
+        project.editing.modify(() => viewStates.groupCollapsed(group).setValue(true))
+        expect(notify).toHaveBeenCalledTimes(1)
+        expect(project.audioUnitLayout.snapshot.row(first).unwrap().visibleIndex).toBe(-1)
+        subscription.terminate()
+        project.terminate()
+    })
+
     it("rejects source and descendant drops while allowing exact track-order positions", async () => {
         const {project, units: [first, second, third, fourth]} = await setup()
         const group = asDefined(project.editing.modify(() => project.grouping.create([first, second]).unwrap()).unwrap())
