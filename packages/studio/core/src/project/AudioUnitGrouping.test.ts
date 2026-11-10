@@ -595,6 +595,10 @@ describe("track folders", () => {
         const [outerCopy] = project.editing.modify(() => project.grouping.duplicate([outer])).unwrap()
         const innerCopy = AudioUnitGroups.children(project.rootBox, outerCopy).find(unit => unit.isGroup.getValue())
         expect([label(outerCopy), label(asDefined(innerCopy))]).toEqual(["Group 4", "Group 5"])
+        project.editing.modify(() => AudioUnitGroups.bus(first).unwrap().label.setValue("Mix 2024"))
+        const [yearCopy] = project.editing.modify(() => project.grouping.duplicate([first])).unwrap()
+        const [nextYearCopy] = project.editing.modify(() => project.grouping.duplicate([yearCopy])).unwrap()
+        expect([label(yearCopy), label(nextYearCopy)]).toEqual(["Mix 2024 2", "Mix 2024 3"])
         project.terminate()
     })
     it("duplicates a top-level track immediately after its source and supports undo/redo", async () => {

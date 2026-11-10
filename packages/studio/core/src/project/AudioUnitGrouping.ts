@@ -138,7 +138,9 @@ export class AudioUnitGrouping {
             .filter(unit => unit.isGroup.getValue())
             .flatMap(unit => AudioUnitGroups.bus(unit).mapOr(bus => bus === renamed ? [] : [bus.label.getValue()], [])))
         if (!taken.has(name)) {return name}
-        const stem = name.replace(/ \d+$/, "")
+        const numbered = name.replace(/ \d+$/, "")
+        const isFamily = (label: string): boolean => label !== name && (label === numbered || label.replace(/ \d+$/, "") === numbered)
+        const stem = numbered !== name && Array.from(taken).some(isFamily) ? numbered : name
         let index = 2
         while (taken.has(`${stem} ${index}`)) {index++}
         return `${stem} ${index}`
