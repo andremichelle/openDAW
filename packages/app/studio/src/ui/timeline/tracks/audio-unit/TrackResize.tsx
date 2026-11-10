@@ -47,8 +47,10 @@ export const installTrackResize = (lifecycle: Lifecycle, service: StudioService,
                 const elapsed = Math.min(now - lastTime, 100.0) / 1000.0
                 lastTime = now
                 const {top, bottom} = viewport.getBoundingClientRect()
-                const depth = pointerY > bottom - AutoScrollPadding ? pointerY - (bottom - AutoScrollPadding)
-                    : pointerY < top + AutoScrollPadding ? pointerY - (top + AutoScrollPadding) : 0
+                const depth = pointerY > startY && pointerY > bottom - AutoScrollPadding
+                    ? pointerY - Math.max(bottom - AutoScrollPadding, startY)
+                    : pointerY < startY && pointerY < top + AutoScrollPadding
+                        ? pointerY - Math.min(top + AutoScrollPadding, startY) : 0
                 if (depth === 0 || (depth > 0 && height.getValue() >= MaxTrackHeight)
                     || (depth < 0 && element.getBoundingClientRect().height <= minimum)) {
                     carry = 0.0

@@ -137,10 +137,10 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         installAutoScroll(element, (deltaX, deltaY) => {
             if (deltaY !== 0) {scrollModel.moveBy(deltaY)}
             if (deltaX !== 0) {
-                clips.scroll.setValue(clipScrollPosition(clips.scroll.getValue() + deltaX,
+                clips.scroll.setValue(clipScrollPosition(clips.scroll.getValue() + deltaX * Config.AutoScrollHorizontalSpeed,
                     Math.max(clips.columns.getValue(), clips.count.getValue()), element.clientWidth))
             }
-        }, {dragPadding: Config.AutoScrollDragPaddingVertical}),
+        }, {pointerOnly: true}),
         clipSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyClipBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyClipBoxAdapter) => selectable.onDeselected()
