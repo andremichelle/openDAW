@@ -5,7 +5,7 @@ component
   display: grid
   grid-template-columns: minmax(22em, 4fr) minmax(22em, 2fr)
   grid-template-rows: auto 1fr auto
-  column-gap: 8px
+  column-gap: 24px
   row-gap: 12px
   min-height: 0
 
@@ -59,11 +59,15 @@ component
         grid-column: 1 / -1
         color: var(--color-dark)
 
+      &:has(> div.loading)
+        height: 100%
+
       > div.loading
         grid-column: 1 / -1
+        position: relative
         display: flex
+        align-items: center
         justify-content: center
-        padding-top: 24px
 
       > div.entry
         @include mixins.library-device-row
@@ -101,9 +105,7 @@ component
     flex-direction: column
     row-gap: 16px
     min-height: 0
-    padding: 16px 20px
-    border-radius: 4px
-    background-color: rgba(black, 0.15)
+    padding: 10px 0
     line-height: 1.5
     overflow: hidden scroll
 
@@ -111,6 +113,8 @@ component
       flex: 0 0 auto
 
     > p.placeholder
+      margin: auto
+      text-align: center
       color: var(--color-shadow)
       font-size: 10px
 
