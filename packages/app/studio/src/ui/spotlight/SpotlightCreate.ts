@@ -22,6 +22,8 @@ export namespace SpotlightCreate {
     export type Wclap = {
         readonly id: string, readonly name: string, readonly info: WclapPluginInfo
         readonly local: boolean, readonly license: string, readonly size: number
+        // the catalogue's description of the bundle, empty for a bundle stored on this device only
+        readonly description: string
     }
 
     // without a project a new one is started first
@@ -139,10 +141,10 @@ export namespace SpotlightCreate {
             WclapCatalog.get().all().catch(() => []),
             WclapDescriber.stored().catch(() => [])
         ])
-        const cloud = published.flatMap(({uuid, name, plugins, license, size}) => {
+        const cloud = published.flatMap(({uuid, name, plugins, license, size, description}) => {
             const shortNames = WclapNames.distinct(plugins.map(info => info.name))
             return plugins.map((info, index) => ({
-                id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info, local: false, license, size
+                id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info, local: false, license, size, description
             }))
         })
         const cloudIds = new Set(published.map(({uuid}) => uuid))
@@ -155,7 +157,8 @@ export namespace SpotlightCreate {
                 const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
                 return bundle
                     .map(({info}, index) => ({
-                        id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0
+                        id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0,
+                        description: ""
                     }))
                     .filter(({info}) => !cloudClapIds.has(info.clapId))
             })

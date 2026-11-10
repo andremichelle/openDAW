@@ -14,6 +14,8 @@ export type WclapIndexEntry = {
     readonly size: number
     readonly url: string
     readonly credits: string
+    // what the bundle is and does, a few sentences (empty when the catalogue has none yet)
+    readonly description: string
     readonly license: string
     readonly plugins: ReadonlyArray<WclapIndexPlugin>
     // the ids of the older builds this one replaced
@@ -43,6 +45,7 @@ export namespace WclapIndex {
         size: z.number(),
         url: z.string(),
         credits: z.string().default(""),
+        description: z.string().default(""),
         license: z.string(),
         plugins: z.array(Plugin),
         supersedes: z.array(z.string()).default([])
