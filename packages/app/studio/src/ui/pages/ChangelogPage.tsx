@@ -43,7 +43,9 @@ export const ChangelogPage: PageFactory<StudioService> = ({lifecycle, service}: 
         nextIndex++
         release.load().then(text => {
             if (!alive) {return}
-            entries.appendChild(<article><Markdown text={text}/></article>)
+            const dated = /^_Released \d{4}-\d{2}-\d{2}_$/m.test(text)
+            const shown = dated ? text : text.replace(/^(# .*)$/m, "$1\n\n_Upcoming_")
+            entries.appendChild(<article><Markdown text={shown}/></article>)
             loading = false
             requestAnimationFrame(() => {if (isVisible()) {loadNext()}})
         }, reason => {
@@ -51,20 +53,25 @@ export const ChangelogPage: PageFactory<StudioService> = ({lifecycle, service}: 
             sentinel.textContent = `Could not load the changelog (${reason})`
         })
     }
-    const host: HTMLElement = (
-        <div className={className}>
-            <BackButton lifecycle={lifecycle} service={service}/>
+    const scroller: HTMLElement = (
+        <div className="scroller">
             <div className="content">
                 {entries}
                 {sentinel}
             </div>
         </div>
     )
+    const host: HTMLElement = (
+        <div className={className}>
+            <BackButton lifecycle={lifecycle} service={service}/>
+            {scroller}
+        </div>
+    )
     const isVisible = (): boolean =>
-        sentinel.getBoundingClientRect().top < host.getBoundingClientRect().bottom + host.clientHeight
+        sentinel.getBoundingClientRect().top < scroller.getBoundingClientRect().bottom + scroller.clientHeight
     const observer = new IntersectionObserver(observed => {
         if (observed.some(entry => entry.isIntersecting)) {loadNext()}
-    }, {root: host, rootMargin: "0px 0px 100% 0px"})
+    }, {root: scroller, rootMargin: "0px 0px 100% 0px"})
     observer.observe(sentinel)
     lifecycle.own({
         terminate: () => {
@@ -72,6 +79,6 @@ export const ChangelogPage: PageFactory<StudioService> = ({lifecycle, service}: 
             observer.disconnect()
         }
     })
-    lifecycle.own(installScrollbars(host))
+    lifecycle.own(installScrollbars(scroller))
     return host
 }

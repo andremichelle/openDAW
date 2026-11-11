@@ -2,24 +2,36 @@
 
 component
   flex: 1
-  padding: 2em
+  min-height: 0
+  padding: 2em 2em 0 2em
   display: flex
   flex-direction: column
   align-items: center
-  overflow: hidden auto
+  overflow: hidden
   line-height: 1.5em
   @include colors.panel-background
 
-  > div.content
-    width: 100%
-    max-width: 48em
+  > div.scroller
+    flex: 1
+    min-height: 0
+    align-self: stretch
+    display: flex
+    flex-direction: column
+    align-items: center
+    overflow: hidden auto
+    mask-image: linear-gradient(to bottom, transparent 0, black 2em)
 
-    > div.entries > article + article
-      margin-top: 3em
-      padding-top: 2em
-      border-top: 1px solid rgba(white, 0.1)
+    > div.content
+      padding: 2.5em 0 4em 0
+      width: 100%
+      max-width: 48em
 
-    > div.sentinel
-      padding: 2em 0
-      text-align: center
-      opacity: 0.5
+      > div.entries > article + article
+        margin-top: 3em
+        padding-top: 2em
+        border-top: 1px solid rgba(white, 0.1)
+
+      > div.sentinel
+        padding: 2em 0
+        text-align: center
+        opacity: 0.5
