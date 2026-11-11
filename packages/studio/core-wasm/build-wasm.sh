@@ -57,7 +57,7 @@ done
 DEVICE_MODULES=$(echo "$DEVICE_CRATES" | tr '-' '_')
 MODULES="engine stretch_wasm $DEVICE_MODULES"
 
-# Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`, CI: apt binaryen).
+# Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`, CI: binaryen GitHub release).
 # GUARDED: if it is not installed the build still works, just larger. The devices are PIC side modules (a
 # `dylink.0` section, imported PIC globals, a `__wasm_apply_data_relocs` export); wasm-opt understands side
 # modules and preserves all of that. The flags mirror rustc's default wasm32 feature set (Rust >= 1.82: bulk-memory, mutable-globals,

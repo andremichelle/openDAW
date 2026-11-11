@@ -38,7 +38,8 @@ jobs:
           rustup toolchain install nightly --profile minimal --component rust-src
           rustup target add wasm32-unknown-unknown --toolchain nightly
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          sudo apt-get update && sudo apt-get install -y binaryen
+          curl -sSfL https://github.com/WebAssembly/binaryen/releases/download/version_120/binaryen-version_120-x86_64-linux.tar.gz | tar -xz -C "$HOME"
+          echo "$HOME/binaryen-version_120/bin" >> "$GITHUB_PATH"
 
       - name: 📦 Install dependencies
         run: npm ci
