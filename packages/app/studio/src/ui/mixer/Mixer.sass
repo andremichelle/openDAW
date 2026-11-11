@@ -51,20 +51,24 @@ component
           display: flex
           justify-content: right
           align-items: flex-start
-          column-gap: 2px
 
-          > svg.collapse
-            flex: 0 0 auto
-            margin-top: 0.25em
-            font-size: 0.625em
-            color: rgba(white, 0.4)
+          > div.toggle
+            display: flex
+            align-items: flex-start
+            column-gap: 2px
             cursor: pointer
-            transition: transform 0.1s
 
-            &.collapsed
+            > svg
+              flex: 0 0 auto
+              margin-top: 0.25em
+              font-size: 0.625em
+              color: rgba(white, 0.4)
+              transition: transform 0.1s
+
+            &.collapsed > svg
               transform: rotate(-90deg)
 
-            &:hover
+            &:hover > svg, &:hover > h5
               color: var(--color-cream)
   [data-unit].group-drop-inside
     position: relative

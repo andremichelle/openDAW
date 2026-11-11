@@ -1,4 +1,5 @@
 @use "@/mixins"
+@use "@/colors"
 
 component
   --mixer-device-cell-height: 14px
@@ -92,8 +93,7 @@ component
       display: flex
 
   &.void
-    background-image: repeating-linear-gradient(-45deg, rgba(black, 0.25) 0 2px, transparent 2px 5px)
-    min-height: var(--mixer-device-cell-height)
+    @include colors.panel-background-dark
 
     > div.body, > div.add, > div.count
       display: none

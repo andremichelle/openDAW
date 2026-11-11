@@ -39,7 +39,12 @@ export const Mixer = ({lifecycle, service}: Construct) => {
     const project = service.project
     const sectionHeader = (kind: "midi" | "audio", label: string): HTMLElement => {
         const collapsed = project.userEditingManager.viewStates.mixerEffectsCollapsed(kind)
-        const toggle: HTMLElement = <Icon symbol={IconSymbol.Dropdown} className="collapse"/>
+        const toggle: HTMLElement = (
+            <div className="toggle">
+                <Icon symbol={IconSymbol.Dropdown}/>
+                <h5>{label}</h5>
+            </div>
+        )
         lifecycle.ownAll(
             Events.subscribe(toggle, "pointerdown", event => {
                 event.stopPropagation()
@@ -48,7 +53,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             collapsed.catchupAndSubscribe(owner => toggle.classList.toggle("collapsed", owner.getValue())),
             TextTooltip.default(toggle, () => collapsed.getValue() ? `Expand ${label}` : `Collapse ${label}`)
         )
-        return <div className="section">{toggle}<h5>{label}</h5></div>
+        return <div className="section">{toggle}</div>
     }
     const headers: HTMLElement = (
         <div className="headers">

@@ -10,7 +10,7 @@ import {DeviceDragging} from "@/ui/devices/DeviceDragging"
 import {MenuItems} from "@/ui/devices/menu-items"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TextScroller} from "@/ui/TextScroller"
-import {PanelType} from "@/ui/workspace/PanelType"
+import {DeviceNavigation} from "@/ui/mixer/DeviceNavigation"
 
 const className = Html.adoptStyleSheet(css, "MixerDeviceCell")
 
@@ -24,7 +24,7 @@ type Construct = {
 
 export const MixerDeviceCell = ({lifecycle, service, unit, adapter, frozen}: Construct) => {
     const {project} = service
-    const {editing, deviceSelection, userEditingManager} = project
+    const {editing, deviceSelection} = project
     const {enabledField, labelField, type} = adapter
     const color = getColorFor(type)
     const led: HTMLElement = <div className="led"/>
@@ -34,13 +34,6 @@ export const MixerDeviceCell = ({lifecycle, service, unit, adapter, frozen}: Con
             {led}{label}
         </div>
     )
-    const navigate = (): void => {
-        userEditingManager.audioUnit.editIfDifferent(unit.box.editing)
-        deviceSelection.deselectAll()
-        deviceSelection.select(adapter)
-        service.panelLayout.showIfAvailable(PanelType.DevicePanel)
-        service.revealDevice(adapter.uuid)
-    }
     const updateSelected = () => element.classList.toggle("selected", deviceSelection.isSelected(adapter))
     const dragLifecycle = lifecycle.own(new Terminator())
     let pendingNavigate = false
@@ -85,7 +78,7 @@ export const MixerDeviceCell = ({lifecycle, service, unit, adapter, frozen}: Con
             pendingNavigate = true
         }),
         Events.subscribe(element, "pointerup", (event: PointerEvent) => {
-            if (pendingNavigate && !dragged && event.button === 0) {navigate()}
+            if (pendingNavigate && !dragged && event.button === 0) {DeviceNavigation.reveal(service, unit, adapter)}
             pendingNavigate = false
         }),
         Events.subscribe(element, "dragend", () => pendingNavigate = false),

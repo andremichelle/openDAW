@@ -26,6 +26,7 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
 import {MixerDeviceList} from "./MixerDeviceList"
+import {DeviceNavigation} from "./DeviceNavigation"
 
 const className = Html.adoptStyleSheet(css, "ChannelStrip")
 
@@ -47,6 +48,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
     const inputLabel = lifecycle.own(Inject.value("No Input"))
+    const inputElement: HTMLElement = <h5 className="input">{inputLabel}</h5>
     const peaks = new Float32Array(2)
     const volumeLabel: HTMLDivElement = <div className="value-display"/>
     const maxPeakLabel: HTMLDivElement = <div className="value-display peak valid">-∞</div>
@@ -151,7 +153,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                             return resolvers
                         }
                     } provider={() => ({value: adapter.input.label.unwrap("input.label"), unit: ""})}>
-                        <h5 className="input">{inputLabel}</h5>
+                        {inputElement}
                     </DblClckTextInput>
                     <MixerDeviceList lifecycle={lifecycle} service={service} unit={adapter} kind="audio"
                                      collapsed={viewStates.mixerEffectsCollapsed("audio")}/>
@@ -226,6 +228,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             )
         }),
         adapter.input.catchupAndSubscribeLabelChange(option => inputLabel.value = option.unwrapOrElse("No Input")),
+        Events.subscribe(inputElement, "click", () =>
+            adapter.input.adapter().ifSome(input => DeviceNavigation.reveal(service, adapter, input))),
         service.subscribeSignal(() => permanentPeak = Number.NEGATIVE_INFINITY, "reset-peaks"),
         Events.subscribe(maxPeakLabel, "pointerdown", (event) => {
             service.resetPeaks()
