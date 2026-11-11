@@ -1,9 +1,9 @@
-import {Attempt, Attempts, int, isAbsent, isDefined, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Attempt, Attempts, int, isAbsent, isDefined, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox, InstrumentCompositeBox, InstrumentCompositeCellBox,
-    NoteEventCollectionBox, PlayfieldDeviceBox, TrackBox, ValueEventCollectionBox
+    NoteEventBox, NoteEventCollectionBox, PlayfieldDeviceBox, TrackBox, ValueEventCollectionBox
 } from "@opendaw/studio-boxes"
 import {
     InstrumentCompositeBoxAdapter, InstrumentFactories, InstrumentFactory, PlayfieldDeviceBoxAdapter, PlayfieldPads, TrackType, TransferUtils
@@ -55,8 +55,9 @@ export namespace AudioUnitAsLayer {
         sources.forEach(box => {if (reaches(box, dropped)) {dropped.add(box)}})
         sources.forEach(box => {
             if (!isInstanceOf(box, NoteEventCollectionBox) && !isInstanceOf(box, ValueEventCollectionBox)) {return}
-            if (box.incomingEdges().every(pointer => dropped.has(pointer.box))) {dropped.add(box)}
+            if (box.owners.pointerHub.incoming().every(pointer => dropped.has(pointer.box))) {dropped.add(box)}
         })
+        sources.forEach(box => {if (reaches(box, dropped)) {dropped.add(box)}})
         return sources.filter(box => !dropped.has(box))
     }
 
@@ -105,7 +106,7 @@ export namespace AudioUnitAsLayer {
         return Attempts.ok({cellBox, instrumentBox: pasteInto(project, cellBox, targetUnit, sourceGraph, sourceUnit, instrument, notes)})
     }
 
-    // the pad on the key is replaced, notes and audio stay behind since a pad plays only its own key
+    // the pad on the key is replaced, the notes move to a new note track of the Playfield, all on the pad's key
     export const pasteAsPad = (project: Project, playfield: PlayfieldDeviceBox, key: int,
                                data: ArrayBufferLike): Attempt<CompositeLayerProduct<InstrumentBox>, string> => {
         const source = sourceOf(data, InstrumentFactories.isPadInstrument, "pad")
@@ -116,13 +117,14 @@ export namespace AudioUnitAsLayer {
         PlayfieldPads.padAt(playfield, key).ifSome(pad => pad.delete())
         const cellBox = PlayfieldPads.createCell(boxGraph, playfield, key)
         fillCell(cellBox, sourceUnit)
-        const instrumentBox = pasteInto(project, cellBox, targetUnit, sourceGraph, sourceUnit, instrument, "keep")
+        const instrumentBox = pasteInto(project, cellBox, targetUnit, sourceGraph, sourceUnit, instrument, "append", Option.wrap(key))
         PlayfieldPads.preparePadInstrument(instrumentBox)
         return Attempts.ok({cellBox, instrumentBox})
     }
 
     const pasteInto = (project: Project, cellBox: InstrumentCompositeCellBox, targetUnit: AudioUnitBox,
-                       sourceGraph: BoxGraph, sourceUnit: AudioUnitBox, instrument: Box, notes: Notes): InstrumentBox => {
+                       sourceGraph: BoxGraph, sourceUnit: AudioUnitBox, instrument: Box, notes: Notes,
+                       pitch: Option<int> = Option.None): InstrumentBox => {
         const {boxGraph} = project
         const complete = sourceGraph.boxes().filter(box => box !== sourceUnit
             && !isInstanceOf(box, CaptureMidiBox) && !isInstanceOf(box, CaptureAudioBox))
@@ -166,6 +168,9 @@ export namespace AudioUnitAsLayer {
             .sort((left, right) => left.index.getValue() - right.index.getValue())
             .forEach((source, offset) => boxGraph.findBox(uuidMap.get(source.address.uuid, "track").target)
                 .ifSome((track: Box) => (track as TrackBox).index.setValue(existingTracks + offset)))
+        pitch.ifSome(value => sources.filter(box => isInstanceOf(box, NoteEventBox))
+            .forEach(source => boxGraph.findBox(uuidMap.get(source.address.uuid, "note").target)
+                .ifSome(note => asInstanceOf(note, NoteEventBox).pitch.setValue(value))))
         return boxGraph.findBox(uuidMap.get(instrument.address.uuid, "instrument").target)
             .unwrap("pasted instrument") as InstrumentBox
     }

@@ -181,7 +181,8 @@ describe("paste an audio unit as a layer", () => {
         const {sourceUnit, composite, compositeUnit} = project.editing.modify(() => {
             const source = api.createAnyInstrument(InstrumentFactories.Nano)
             const sourceTrack = tracksOf(source.audioUnitBox)[0]
-            api.createNoteRegion({trackBox: sourceTrack, position: 0, duration: 3840})
+            const sourceRegion = api.createNoteRegion({trackBox: sourceTrack, position: 0, duration: 3840})
+            api.createNoteEvent({owner: sourceRegion, position: 0, duration: 240, pitch: 64})
             api.createNoteClip(sourceTrack, 0)
             const target = api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
             const targetTrack = tracksOf(target.audioUnitBox)[0]
@@ -360,7 +361,7 @@ describe("paste an audio unit as a layer with grooves", () => {
         project.terminate()
     })
 
-    it("pastes an audio unit as a pad, replacing the pad on the key and leaving its notes behind", async () => {
+    it("pastes an audio unit as a pad, replacing the pad on the key and moving its notes to the pad key", async () => {
         const project = await createProject()
         const {api, boxAdapters} = project
         const {sourceUnit, playfield} = project.editing.modify(() => {
@@ -380,7 +381,7 @@ describe("paste an audio unit as a layer with grooves", () => {
         expect(PlayfieldPads.padsOf(playfield)).toEqual([cellBox])
         expect(cellBox.index.getValue()).toBe(38)
         expect(instrumentBox).toBeInstanceOf(NanoDeviceBox)
-        expect(project.boxGraph.boxes().filter(box => box instanceof NoteRegionBox).length).toBe(regions)
+        expect(project.boxGraph.boxes().filter(box => box instanceof NoteRegionBox).length).toBe(regions + 1)
         project.terminate()
     })
 

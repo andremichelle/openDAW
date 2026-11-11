@@ -12,7 +12,7 @@
   transition: outline-color 250ms linear
   background-color: rgba(white, 0.01)
 
-  @include mixins.corner-frame
+  @include mixins.corner-frame(rgba(white, 0.2))
 
   &.accept, &.swap
     outline: solid var(--color-green) 1px

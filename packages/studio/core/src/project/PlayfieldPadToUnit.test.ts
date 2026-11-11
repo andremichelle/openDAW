@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, isDefined, isInstanceOf, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {IndexedBox} from "@opendaw/lib-box"
-import {InstrumentFactories, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {
     AudioUnitBox,
     CompressorDeviceBox,
@@ -16,6 +16,7 @@ import {
 } from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {Project} from "./Project"
+import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
@@ -123,6 +124,26 @@ describe("PlayfieldPadToUnit", () => {
             api.movePadToUnit(cellBox, Option.wrap(api.insertionBefore(Option.wrap(first.address.uuid)))).result()).unwrap()
         expect(units(project).indexOf(unit)).toBe(units(project).indexOf(first) - 1)
         expect(cellBox.isAttached()).toBe(false)
+    })
+
+    it("pastes a cut pad track back onto its pad, with its notes on a new note track of the Playfield", async () => {
+        const {project, audioUnitBox, playfield, cellBox} = await setup()
+        const {api, editing, boxAdapters} = project
+        const unit = editing.modify(() => api.movePadToUnit(cellBox).result()).unwrap()
+        const entry = AudioUnitsClipboard.copyEntry(boxAdapters.adapterFor(unit, AudioUnitBoxAdapter)).unwrap("copy")
+        editing.modify(() => unit.delete())
+        const noteTracks = () => IndexedBox.collectIndexedBoxes(audioUnitBox.tracks).map(box => asInstanceOf(box, TrackBox))
+            .filter(track => track.type.getValue() === TrackType.Notes)
+        const before = noteTracks().length
+        const pad = editing.modify(() => api.pasteAudioUnitAsPad(playfield, 38, entry.data).result().cellBox).unwrap()
+        expect(pad.index.getValue()).toBe(38)
+        expect(isInstanceOf(pad.instrument.pointerHub.incoming()[0].box, VaporisateurDeviceBox)).toBe(true)
+        expect(noteTracks()).toHaveLength(before + 1)
+        const added = noteTracks().at(-1)
+        const region = asInstanceOf(added?.regions.pointerHub.incoming()[0].box, NoteRegionBox)
+        const notes = asInstanceOf(region.events.targetVertex.unwrap().box, NoteEventCollectionBox).events.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, NoteEventBox).pitch.getValue())
+        expect(notes).toEqual([38, 38])
     })
 
     it("refuses a cell that is no pad or holds no instrument", async () => {
