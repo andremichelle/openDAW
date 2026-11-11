@@ -1183,6 +1183,8 @@ export interface PlayfieldSlot extends MIDIEffectHost, AudioEffectHost {
     readonly sample: Sample
     /** MIDI note triggering this slot (0 to 127) */
     note: int
+    /** The note the slot's instrument plays when triggered (0 to 127, default 60) */
+    key: int
     /** Icon name */
     icon: string
     /** Enable the slot */
@@ -1350,6 +1352,8 @@ export interface Nano extends Instrument {
     oneShot: boolean
     /** Every note plays at the root key, ignoring the played key (default false). */
     fixedPitch: boolean
+    /** The region end releases a one-shot, which plays on into the sample, and fades a held note out over 5 ms (default false). */
+    tail: boolean
 }
 
 /**

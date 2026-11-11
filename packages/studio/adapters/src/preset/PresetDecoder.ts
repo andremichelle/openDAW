@@ -372,8 +372,8 @@ export namespace PresetDecoder {
             return Attempts.err("Preset contains no instrument")
         }
         const factoryKey = InstrumentFactories.keyOfBox(instrument)
-        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
-            return Attempts.err(`${instrument.name} cannot be used as a layer`)
+        if (!isDefined(factoryKey) || !InstrumentFactories.fitsCell(cellBox, InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrument.name} cannot be used here`)
         }
         const targetGraph = cellBox.graph
         const targetFieldAddress = cellBox.instrument.address

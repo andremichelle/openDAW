@@ -415,7 +415,7 @@ export class TracksManager implements Terminable {
                     adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
                     this.#watchLayers(deviceLifecycle, adapter.input.adapter())
                 } else if (adapter instanceof PlayfieldDeviceBoxAdapter) {
-                    this.#watchDeviceChain(deviceLifecycle, adapter.samples)
+                    this.#watchDeviceChain(deviceLifecycle, adapter.cells)
                 } else if (adapter instanceof PlayfieldSampleBoxAdapter) {
                     adapter.midiEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
                     adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
@@ -436,7 +436,7 @@ export class TracksManager implements Terminable {
         lifecycle.own(instrument.catchupAndSubscribe(option => {
             instrumentLifecycle.terminate()
             option.ifSome(adapter => {
-                if (adapter instanceof InstrumentCompositeBoxAdapter) {
+                if (adapter instanceof InstrumentCompositeBoxAdapter || adapter instanceof PlayfieldDeviceBoxAdapter) {
                     this.#watchDeviceChain(instrumentLifecycle, adapter.cells)
                 }
             })

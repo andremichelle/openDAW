@@ -47,6 +47,7 @@ use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
 use engine_env::clip_sequencer::ClipSequencer;
+use crate::pad_route::PadRouter;
 use engine_env::note_content_source::{NoteContentSource, NoteTrackAccess};
 use engine_env::note_sequencer::{advance_clips, ClipRead, NoteSequencer};
 use engine_env::block::Block;

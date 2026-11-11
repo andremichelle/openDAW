@@ -53,5 +53,6 @@ export const NanoDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
     28: {type: "float32", name: "panning", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""},
     29: {type: "boolean", name: "polyphone", pointerRules: ParameterPointerRules, value: true},
     30: {type: "boolean", name: "one-shot", pointerRules: ParameterPointerRules, value: false},
-    31: {type: "boolean", name: "fixed-pitch", pointerRules: ParameterPointerRules, value: false}
+    31: {type: "boolean", name: "fixed-pitch", pointerRules: ParameterPointerRules, value: false},
+    32: {type: "boolean", name: "tail", pointerRules: ParameterPointerRules, value: false}
 })

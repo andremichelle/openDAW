@@ -7,7 +7,8 @@ import {Promises} from "@opendaw/lib-runtime"
 import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {CompositeCell, DeviceHost} from "@opendaw/studio-adapters"
+import {CompositeCell, DeviceHost, InstrumentCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {MidiKeys} from "@opendaw/lib-dsp"
 import {Icon} from "@/ui/components/Icon"
 import {CompositeCellStrip} from "@/ui/devices/CompositeCellStrip"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -75,11 +76,16 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             </div>
         )
     })
+    const isPad = cell.mapOr(entry => entry instanceof InstrumentCompositeCellBoxAdapter && entry.isPad, false)
     const numbers: HTMLElement = <div className="entry-numbers"/>
+    const previousPad: HTMLElement = <div className="step-button"><Icon symbol={IconSymbol.ArrowLeft}/></div>
+    const nextPad: HTMLElement = <div className="step-button"><Icon symbol={IconSymbol.ArrowRight}/></div>
+    const padKey: HTMLElement = <div className="pad-key"/>
+    const padStepper: HTMLElement = <div className="pad-stepper">{previousPad}{padKey}{nextPad}</div>
     const navigation: HTMLElement = (
         <div className="navigation">
             {backButton}
-            {numbers}
+            {isPad ? padStepper : numbers}
         </div>
     )
     const element: HTMLElement = (
@@ -121,9 +127,27 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                          }}>{String(sibling.indexField.getValue() + 1)}</div>
                 )))
             }
-            rebuildNumbers(entry.siblings())
+            const neighbour = (direction: -1 | 1): Option<CompositeCell> => {
+                const key = entry.indexField.getValue()
+                const others = entry.siblings().filter(sibling => sibling !== entry
+                    && Math.sign(sibling.indexField.getValue() - key) === direction)
+                    .sort((left, right) => direction * (left.indexField.getValue() - right.indexField.getValue()))
+                return Option.wrap(others.at(0))
+            }
+            const updateStepper = () => {
+                padKey.textContent = MidiKeys.toFullString(entry.indexField.getValue())
+                previousPad.classList.toggle("disabled", neighbour(-1).isEmpty())
+                nextPad.classList.toggle("disabled", neighbour(1).isEmpty())
+            }
+            const step = (direction: -1 | 1) => neighbour(direction).ifSome(sibling => userEditingManager.audioUnit.edit(sibling.box))
+            if (isPad) {updateStepper()} else {rebuildNumbers(entry.siblings())}
             lifecycle.ownAll(
-                entry.subscribeSiblings(rebuildNumbers),
+                entry.subscribeSiblings(siblings => isPad ? updateStepper() : rebuildNumbers(siblings)),
+                entry.indexField.subscribe(() => {if (isPad) {updateStepper()}}),
+                Events.subscribe(previousPad, "click", () => step(-1)),
+                Events.subscribe(nextPad, "click", () => step(1)),
+                TextTooltip.default(previousPad, () => "Previous pad"),
+                TextTooltip.default(nextPad, () => "Next pad"),
                 entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue())
             )
         }

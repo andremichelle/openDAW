@@ -11,7 +11,7 @@ import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 import {NamBridges} from "../../src/nam-bridge"
 import {WclapBridges, WclapHostCallbacks} from "../../src/wclap/wclap-bridge"
 import {linkDevice, registerComposite, registerEffectComposite} from "../../src/device-linker"
-import {COMPOSITES, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
+import {COMPOSITES, CompositeSpec, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
 
 const DIST = path.resolve(__dirname, "../../dist")
 
@@ -47,7 +47,8 @@ export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {},
                                      broadcaster: () => LiveStreamBroadcaster | null = () => null,
                                      wclap: Partial<WclapHostCallbacks> = {},
-                                     extraDevices: ReadonlyArray<{file: string, boxType: string}> = []): Promise<FullEngine> => {
+                                     extraDevices: ReadonlyArray<{file: string, boxType: string}> = [],
+                                     composites: ReadonlyArray<CompositeSpec> = COMPOSITES): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(engineWasmPath))
@@ -83,7 +84,7 @@ export const loadFullEngine = async (sampleRate = 48000,
         const module = await WebAssembly.compile(readFileSync(file))
         linkDevice(engine, memory, table, module, boxType, sampleRate, bridgeImports)
     }
-    for (const composite of COMPOSITES) {
+    for (const composite of composites) {
         registerComposite(engine, memory, composite)
     }
     for (const composite of EFFECT_COMPOSITES) {

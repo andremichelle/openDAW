@@ -49,6 +49,7 @@ export const EmptySlot = (
         SlotDragAndDrop.installTarget({
             element,
             project,
+            playfield: adapter,
             getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
         sampleSelector.configureDrop(element, sample =>

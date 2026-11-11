@@ -101,7 +101,7 @@ export namespace DevicePanelDragAndDrop {
                 } else if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
                     if (!isDefined(dragData.device)) {return false}
                     const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[dragData.device]
-                    if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {return false}
+                    if (!isDefined(factory) || !InstrumentFactories.fitsCell(deviceHost.box, factory)) {return false}
                     instrumentContainer.style.opacity = "0.5"
                     return true
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {

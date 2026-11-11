@@ -70,7 +70,7 @@ export type LinkerEngine = {
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
                          childEnabledKey: number, childMuteKey: number, childSoloKey: number,
-                         childVolumeKey: number, childPanKey: number) => void
+                         childVolumeKey: number, childPanKey: number, cellKeyKey: number) => void
     effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number,
                                 indexKey: number, chainField: number, labelKey: number, gainKey: number,
                                 panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number,
@@ -83,7 +83,7 @@ export type CompositeRegistration = {
     boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
     childEnabledKey: number, childMuteKey: number, childSoloKey: number,
-    childVolumeKey: number, childPanKey: number
+    childVolumeKey: number, childPanKey: number, cellKeyKey: number
 }
 
 const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
@@ -186,7 +186,7 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
 export const registerComposite = (engine: LinkerEngine, memory: WebAssembly.Memory, spec: CompositeRegistration): void => {
     engine.composite_register(writeName(engine, memory, spec.boxType), spec.childrenField, spec.indexKey,
         spec.excludeKey, spec.cellInstrumentField, spec.cellMidiField, spec.cellAudioField, spec.childEnabledKey,
-        spec.childMuteKey, spec.childSoloKey, spec.childVolumeKey, spec.childPanKey)
+        spec.childMuteKey, spec.childSoloKey, spec.childVolumeKey, spec.childPanKey, spec.cellKeyKey)
 }
 
 // Register one EFFECT COMPOSITE box type (a parallel fx / midi stack): write its name, then map its entry

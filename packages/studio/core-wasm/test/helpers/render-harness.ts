@@ -5,7 +5,7 @@
 
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {decodeSteps, readCommits, stepForward} from "./sync-log"
 import {loadFullEngine} from "./load-full-engine"
 import {connectSyncToEngine} from "./connect-sync"
@@ -21,6 +21,8 @@ export const buildProject = async () => {
     await sync.settle(); engine.bind()
     engine.set_metronome_enabled(0)
     for (let at = 0; at < steps.length; at++) {stepForward(source, steps[at]); await sync.settle()}
+    DeviceMigration.migrate(source)
+    await sync.settle()
     drainSamples()
     const capture = (quanta: number): Float32Array => {
         engine.stop(); engine.play()

@@ -5,10 +5,19 @@
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {ApparatDeviceBox, AudioFileBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import type {BoxGraph} from "@opendaw/lib-box"
 import {loadFullEngine} from "./load-full-engine"
+import {COMPOSITES, CompositeSpec} from "../../src/engine-modules"
+
+// The Playfield before its slots became Nano pads: direct slot children with their own chains and strips.
+export const LEGACY_COMPOSITES: ReadonlyArray<CompositeSpec> = [
+    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
+        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22,
+        childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51, cellKeyKey: 0},
+    ...COMPOSITES.filter(spec => spec.boxType !== "PlayfieldDeviceBox")
+]
 import {connectSyncToEngine} from "./connect-sync"
 
 const PROJECTS = path.resolve(__dirname, "../fixtures/projects")
@@ -49,14 +58,17 @@ export type OdRender = {
 // Render `name`.od (from fixtures/projects) for `quanta` render quanta. Loads every AudioFileBox via the engine's
 // drain handshake (the test harness supplies a synthetic tone for each — enough to prove the asset path resolves
 // and the tape / audio-region players are AUDIBLE; swap in real PCM here for a byte-faithful render).
-export const renderOd = async (name: string, quanta = 256): Promise<OdRender> => {
+// `legacy` renders the project unmigrated on the former Playfield slots.
+export const renderOd = async (name: string, quanta = 256, legacy = false): Promise<OdRender> => {
     const buffer = readFileSync(path.join(PROJECTS, `${name}.od`))
     const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
     const {boxGraph} = ProjectSkeleton.decode(arrayBuffer)
+    if (!legacy) {DeviceMigration.migrate(boxGraph)}
     const audioFiles = boxGraph.boxes().filter(box => box instanceof AudioFileBox).length
     const scriptedDevices = registerScripts(boxGraph)
 
-    const {engine, memory, drainSamples} = await loadFullEngine()
+    const {engine, memory, drainSamples} = await loadFullEngine(48000, undefined, undefined, undefined, undefined,
+        legacy ? LEGACY_COMPOSITES : COMPOSITES)
     const sync = connectSyncToEngine(engine, memory, boxGraph)
     await sync.settle(); engine.bind(); await sync.settle()
     const samplesLoaded = drainSamples()

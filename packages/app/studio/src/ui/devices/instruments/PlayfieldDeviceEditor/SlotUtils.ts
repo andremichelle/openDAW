@@ -2,13 +2,13 @@ import {int} from "@opendaw/lib-std"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {CanvasPainter} from "@opendaw/studio-core"
 
-import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {NanoDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
 
 export namespace SlotUtils {
     export const color = (semitone: int) => `hsl(${semitone / 13 * 360}, 100%, 70%)`
 
     export const waveform = ({context, width, height}: CanvasPainter,
-                             sample: PlayfieldSampleBoxAdapter,
+                             sample: NanoDeviceBoxAdapter | PlayfieldSampleBoxAdapter,
                              semitone: int, forceBounds: boolean = false): void => sample.file().match({
         none: () => context.clearRect(0, 0, width, height),
         some: file => {

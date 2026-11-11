@@ -45,6 +45,7 @@ import {
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
+    PlayfieldPads,
     AudioClipBoxAdapter,
     AudioRegionBoxAdapter,
     AudioUnitBoxAdapter,
@@ -305,8 +306,8 @@ export class ProjectApi {
     }
 
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
-        if (!InstrumentFactories.isLayerInstrument(factory)) {
-            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
+        if (!InstrumentFactories.fitsCell(cellBox, factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a ${PlayfieldPads.isPad(cellBox) ? "pad" : "layer"}`)
         }
         cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
         const {create, defaultIcon, defaultName}: InstrumentFactory = factory
@@ -370,28 +371,42 @@ export class ProjectApi {
 
     // automation lanes are not copied
     duplicateCompositeLayer(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
-        const {boxGraph} = this.#project
         const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
-        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
-        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
         const insertIndex = cellBox.index.getValue() + 1
         IndexedBox.collectIndexedBoxes(composite.cells)
             .filter(box => box.index.getValue() >= insertIndex)
             .forEach(box => box.index.setValue(box.index.getValue() + 1))
+        const copy = this.#cloneCell(cellBox)
+        copy.index.setValue(insertIndex)
+        return copy
+    }
+
+    // a copy of a Playfield pad (its instrument and chains) on another key, automation lanes are not copied
+    copyPlayfieldPad(cellBox: InstrumentCompositeCellBox, key: int): InstrumentCompositeCellBox {
+        const copy = this.#cloneCell(cellBox)
+        copy.index.setValue(key)
+        return copy
+    }
+
+    #cloneCell(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
+        const {boxGraph} = this.#project
+        const composite = cellBox.composite.targetVertex.unwrap("composite.target").box
+        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
+        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
         PointerField.decodeWith({
             map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
                 address.map(addr => uuidMap.opt(addr.uuid).mapOr(({target}) => addr.moveTo(target), addr))
         }, () => TransferUtils.cloneBoxes([cellBox, ...dependencies]
             .filter(source => !TransferUtils.keepsIdentity(source)), uuidMap, boxGraph))
-        const copy = asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
+        return asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
             .unwrap("cell copy"), InstrumentCompositeCellBox)
-        copy.index.setValue(insertIndex)
-        return copy
     }
 
     deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {
-        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
-        const survivors = IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+        const composite = cellBox.composite.targetVertex.unwrap("composite.target").box
+        const survivors = isInstanceOf(composite, InstrumentCompositeBox)
+            ? IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+            : Arrays.empty<IndexedBox>()
         cellBox.delete()
         survivors.forEach((box, index) => box.index.setValue(index))
     }

@@ -1,4 +1,4 @@
-import {AudioFileBox, PlayfieldDeviceBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {int, Option, unitValue, UUID} from "@opendaw/lib-std"
@@ -11,6 +11,8 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../../LabeledAudioOutputsOwner"
+import {InstrumentCompositeCellBoxAdapter} from "./InstrumentComposite/InstrumentCompositeCellBoxAdapter"
+import {PlayfieldPads} from "./Playfield/PlayfieldPads"
 
 export type PlayfieldChopSlice = {start: unitValue, end: unitValue}
 
@@ -29,6 +31,7 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     readonly #box: PlayfieldDeviceBox
 
     readonly #samples: IndexedBoxAdapterCollection<PlayfieldSampleBoxAdapter, Pointers.Sample>
+    readonly #pads: IndexedBoxAdapterCollection<InstrumentCompositeCellBoxAdapter, Pointers.InstrumentCompositeCell>
     readonly #parametric: ParameterAdapterSet
 
     constructor(context: BoxAdaptersContext, box: PlayfieldDeviceBox) {
@@ -37,29 +40,23 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
 
         this.#samples = IndexedBoxAdapterCollection.create(
             box.samples, box => context.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter), Pointers.Sample)
+        this.#pads = IndexedBoxAdapterCollection.create(box.pads,
+            box => context.boxAdapters.adapterFor(box, InstrumentCompositeCellBoxAdapter), Pointers.InstrumentCompositeCell)
         this.#parametric = new ParameterAdapterSet(this.#context)
     }
 
-    reset(): void {this.#samples.adapters().forEach(adapter => adapter.box.delete())}
+    reset(): void {this.#pads.adapters().forEach(adapter => adapter.box.delete())}
 
     chop({file, startKey, slices}: PlayfieldChopOptions): void {
         const endKey = startKey + slices.length - 1
-        this.#samples.adapters()
+        this.#pads.adapters()
             .filter(adapter => {
                 const index = adapter.box.index.getValue()
                 return index >= startKey && index <= endKey
             })
             .forEach(adapter => adapter.box.delete())
-        slices.forEach(({start, end}, sliceIndex) => {
-            PlayfieldSampleBox.create(this.#context.boxGraph, UUID.generate(), box => {
-                box.file.refer(file)
-                box.device.refer(this.#box.samples)
-                box.index.setValue(startKey + sliceIndex)
-                box.sampleStart.setValue(start)
-                box.sampleEnd.setValue(end)
-                box.exclude.setValue(true)
-            })
-        })
+        slices.forEach(({start, end}, sliceIndex) => PlayfieldPads.create(this.#context.boxGraph, this.#box, file,
+            startKey + sliceIndex, {sampleStart: start, sampleEnd: end, exclude: true}))
     }
 
     get box(): PlayfieldDeviceBox {return this.#box}
@@ -71,7 +68,9 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return true}
+    /** @deprecated The slots of projects before the pads, empty once a project loaded. */
     get samples(): IndexedBoxAdapterCollection<PlayfieldSampleBoxAdapter, Pointers.Sample> {return this.#samples}
+    get cells(): IndexedBoxAdapterCollection<InstrumentCompositeCellBoxAdapter, Pointers.InstrumentCompositeCell> {return this.#pads}
     get context(): BoxAdaptersContext {return this.#context}
 
     deviceHost(): DeviceHost {
@@ -87,16 +86,14 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
             label: this.labelField.getValue(),
             children: () => Option.None
         }
-        for (const sample of this.#samples.adapters()) {
-            yield {
-                address: sample.address,
-                label: sample.fileLabel,
-                children: () => Option.wrap(sample.labeledAudioOutputs())
-            }
+        for (const pad of this.#pads.adapters()) {
+            yield {address: pad.address, label: pad.label, children: () => Option.wrap(pad.labeledAudioOutputs())}
         }
     }
 
     terminate(): void {
+        this.#samples.terminate()
+        this.#pads.terminate()
         this.#parametric.terminate()
     }
 }

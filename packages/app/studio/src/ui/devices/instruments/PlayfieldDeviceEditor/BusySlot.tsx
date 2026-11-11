@@ -4,16 +4,25 @@ import {
     asDefined,
     DefaultObservableValue,
     Editing,
+    Func,
     int,
     Lifecycle,
     MutableObservableValue,
     ObservableValue,
     Option,
-    Terminable
+    Terminable,
+    Terminator
 } from "@opendaw/lib-std"
 import {createElement, DomElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AutomatableParameterFieldAdapter,
+    InstrumentCompositeCellBoxAdapter,
+    NanoDeviceBoxAdapter,
+    NoteLifeCycle,
+    PlayfieldDeviceBoxAdapter,
+    PlayfieldPads
+} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
 import {CanvasPainter, ContextMenu, MenuItem} from "@opendaw/studio-core"
@@ -34,21 +43,25 @@ type Construct = {
     service: StudioService
     adapter: PlayfieldDeviceBoxAdapter
     sampleSelector: SampleSelector
-    sample: PlayfieldSampleBoxAdapter
+    pad: InstrumentCompositeCellBoxAdapter
     octave: ObservableValue<int>
     semitone: int
 }
 
 export const BusySlot = ({
-                             lifecycle, service, adapter, sampleSelector, sample, octave, semitone
+                             lifecycle, service, adapter, sampleSelector, pad, octave, semitone
                          }: Construct) => {
-    const {editing, engine, userEditingManager} = service.project
+    const {editing, engine, userEditingManager, boxAdapters} = service.project
+    let nano: Option<NanoDeviceBoxAdapter> = Option.None
     const labelName: HTMLElement = (<div className="label"/>)
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     const excludeValue = new DefaultObservableValue(false)
     const waveform: HTMLCanvasElement = (<canvas/>)
-    const waveformPainter = lifecycle.own(new CanvasPainter(waveform, painter => SlotUtils.waveform(painter, sample, semitone)))
+    const waveformPainter = lifecycle.own(new CanvasPainter(waveform, painter => nano.match({
+        none: () => painter.context.clearRect(0, 0, painter.width, painter.height),
+        some: device => SlotUtils.waveform(painter, device, semitone)
+    })))
     const playbackCanvas: HTMLCanvasElement = (<canvas/>)
     const playbackContext: CanvasRenderingContext2D = asDefined(playbackCanvas.getContext("2d"))
     const header: HTMLElement = (
@@ -57,7 +70,8 @@ export const BusySlot = ({
             {labelName}
         </header>
     )
-    const {mute, solo, exclude} = sample.namedParameter
+    const {mute, solo} = pad.namedParameter
+    const exclude = pad.excludeParameter.unwrap("pad exclude")
     const muteWrapper = EditWrapper.forAutomatableParameter(editing, mute)
     const soloWrapper = EditWrapper.forAutomatableParameter(editing, solo)
     const excludeWrapper = EditWrapper.forAutomatableParameter(editing, exclude)
@@ -65,12 +79,12 @@ export const BusySlot = ({
         <div className="checkboxes">
             <Checkbox lifecycle={lifecycle}
                       model={muteValue}
-                      appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute sample"}}>
+                      appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute pad"}}>
                 <Icon symbol={IconSymbol.Mute}/>
             </Checkbox>
             <Checkbox lifecycle={lifecycle}
                       model={soloValue}
-                      appearance={{activeColor: Colors.yellow, framed: true, tooltip: "Solo sample"}}>
+                      appearance={{activeColor: Colors.yellow, framed: true, tooltip: "Solo pad"}}>
                 <Icon symbol={IconSymbol.Solo}/>
             </Checkbox>
             <Checkbox lifecycle={lifecycle}
@@ -101,7 +115,54 @@ export const BusySlot = ({
     )
     let noteLifeTime: Terminable = Terminable.Empty
     let fileHandlerSubscription: Terminable = Terminable.Empty
-    const audioEffectsField = sample.audioEffectsField.unwrap("audioEffectsField").pointerHub
+    const instrumentLifecycle = lifecycle.own(new Terminator())
+    const audioEffectsField = pad.box.audioEffects.pointerHub
+    const paintPlayheads = (array: Float32Array) => nano.flatMap(device => device.file()).flatMap(file => file.data).match({
+        none: () => {
+            playbackCanvas.width = playbackCanvas.clientWidth
+            playbackCanvas.height = playbackCanvas.clientHeight
+        },
+        some: data => {
+            playbackCanvas.width = playbackCanvas.clientWidth
+            playbackCanvas.height = playbackCanvas.clientHeight
+            playbackContext.fillStyle = "rgba(0, 0, 0, 0.25)"
+            for (const position of array) {
+                if (position === -1) {break}
+                const x = position / data.numberOfFrames * playbackCanvas.width
+                playbackContext.fillRect(x - 1, 0, 3, playbackCanvas.height)
+            }
+            playbackContext.fillStyle = SlotUtils.color(semitone)
+            for (const position of array) {
+                if (position === -1) {break}
+                const x = position / data.numberOfFrames * playbackCanvas.width
+                playbackContext.fillRect(x, 0, 1, playbackCanvas.height)
+            }
+        }
+    })
+    const observeFile = (device: NanoDeviceBoxAdapter) => device.box.file.catchupAndSubscribe(pointer => {
+        fileHandlerSubscription.terminate()
+        fileHandlerSubscription = Terminable.Empty
+        waveformPainter.requestUpdate()
+        if (pointer.isEmpty()) {
+            labelName.textContent = device.labelField.getValue()
+            return
+        }
+        device.file().ifSome(file => {
+            fileHandlerSubscription = Terminable.many(
+                file.getOrCreateLoader().subscribe(state => {
+                    if (state.type === "loaded") {
+                        labelName.textContent = file.box.fileName.getValue()
+                        waveformPainter.requestUpdate()
+                    } else if (state.type === "progress") {
+                        labelName.textContent = `Loading... (${Math.round(state.progress * 100.0)}%)`
+                    } else if (state.type === "error") {
+                        labelName.textContent = state.reason
+                    }
+                }),
+                file.box.fileName.subscribe(() => labelName.textContent = file.box.fileName.getValue())
+            )
+        })
+    })
     lifecycle.ownAll(
         connectBoolean(muteValue, muteWrapper),
         connectBoolean(soloValue, soloWrapper),
@@ -111,67 +172,46 @@ export const BusySlot = ({
             onAdded: () => iconEdit.classList.toggle("has-effects", audioEffectsField.nonEmpty()),
             onRemoved: () => iconEdit.classList.toggle("has-effects", audioEffectsField.nonEmpty())
         }),
-        sample.box.file.catchupAndSubscribe((pointer) => {
+        pad.input.adapter().catchupAndSubscribe(input => {
+            instrumentLifecycle.terminate()
             fileHandlerSubscription.terminate()
-            if (pointer.isEmpty()) {return}
-            sample.file().ifSome(file => {
-                fileHandlerSubscription = Terminable.many(
-                    file.getOrCreateLoader().subscribe(state => {
-                        if (state.type === "loaded") {
-                            labelName.textContent = file.box.fileName.getValue()
-                            waveformPainter.requestUpdate()
-                        } else if (state.type === "progress") {
-                            labelName.textContent = `Loading... (${Math.round(state.progress * 100.0)}%)`
-                        } else if (state.type === "error") {
-                            labelName.textContent = state.reason
-                        }
-                    }),
-                    file.box.fileName.subscribe(() => labelName.textContent = file.box.fileName.getValue())
-                )
+            fileHandlerSubscription = Terminable.Empty
+            nano = input.flatMap(() => PlayfieldPads.nanoOf(boxAdapters, pad))
+            waveformPainter.requestUpdate()
+            paintPlayheads(new Float32Array([-1]))
+            nano.match({
+                none: () => {labelName.textContent = pad.label},
+                some: device => {
+                    const {sampleStart, sampleEnd} = device.namedParameter
+                    instrumentLifecycle.ownAll(
+                        observeFile(device),
+                        sampleStart.subscribe(() => waveformPainter.requestUpdate()),
+                        sampleEnd.subscribe(() => waveformPainter.requestUpdate()),
+                        service.project.liveStreamReceiver.subscribeFloats(device.positionsAddress, paintPlayheads)
+                    )
+                }
             })
         }),
-        service.project.liveStreamReceiver.subscribeFloats(sample.address, array => sample.file().flatMap(file => file.data)
-            .match({
-                none: () => {
-                    playbackCanvas.width = playbackCanvas.clientWidth
-                    playbackCanvas.height = playbackCanvas.clientHeight
-                },
-                some: data => {
-                    playbackCanvas.width = playbackCanvas.clientWidth
-                    playbackCanvas.height = playbackCanvas.clientHeight
-                    playbackContext.fillStyle = "rgba(0, 0, 0, 0.25)"
-                    for (const position of array) {
-                        if (position === -1) {break}
-                        const x = position / data.numberOfFrames * playbackCanvas.width
-                        playbackContext.fillRect(x - 1, 0, 3, playbackCanvas.height)
-                    }
-                    playbackContext.fillStyle = SlotUtils.color(semitone)
-                    for (const position of array) {
-                        if (position === -1) {break}
-                        const x = position / data.numberOfFrames * playbackCanvas.width
-                        playbackContext.fillRect(x, 0, 1, playbackCanvas.height)
-                    }
-                }
-            })),
         octave.catchupAndSubscribe(owner => {
             const slotIndex = owner.getValue() * 12 + semitone
             element.setAttribute("data-slot-index", String(slotIndex))
         }),
         SlotDragAndDrop.installSource({
             element,
-            sample,
+            pad,
             getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
         SlotDragAndDrop.installTarget({
             element,
             project: service.project,
+            playfield: adapter,
             getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
-        Events.subscribe(iconEdit, "click", () => userEditingManager.audioUnit.edit(sample.box)),
+        Events.subscribe(iconEdit, "click", () => userEditingManager.audioUnit.edit(pad.box)),
         Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
             if (event.ctrlKey) {return}
             noteLifeTime = NoteLifeCycle.start(signal =>
-                engine.noteSignal(signal), adapter.audioUnitBoxAdapter().uuid, sample.indexField.getValue())
+                engine.noteSignal(signal), adapter.audioUnitBoxAdapter().uuid, pad.indexField.getValue())
         }),
         Events.subscribe(header, "pointerup", () => noteLifeTime.terminate()),
         Events.subscribe(element, "keydown", (event) => {
@@ -186,11 +226,12 @@ export const BusySlot = ({
                 MenuItem.default({label: "Remove Sample"})
                     .setTriggerProcedure(() => sampleSelector.replaceSample(Option.None)),
                 MenuItem.default({label: "Reset Parameters"})
-                    .setTriggerProcedure(() => editing.modify(() => sample.resetParameters())),
-                resetBooleanItem(editing, adapter, "mute", "Reset Mute"),
-                resetBooleanItem(editing, adapter, "solo", "Reset Solo"),
-                resetBooleanItem(editing, adapter, "exclude", "Reset Exclude"),
-                DebugMenus.debugBox(sample.box)
+                    .setTriggerProcedure(() => editing.modify(() =>
+                        PlayfieldPads.resetParameters(pad.box, nano.map(device => device.box)))),
+                resetBooleanItem(editing, adapter, cell => Option.wrap(cell.namedParameter.mute), "Reset Mute"),
+                resetBooleanItem(editing, adapter, cell => Option.wrap(cell.namedParameter.solo), "Reset Solo"),
+                resetBooleanItem(editing, adapter, cell => cell.excludeParameter, "Reset Exclude"),
+                DebugMenus.debugBox(pad.box)
             )
         }),
         sampleSelector.configureDrop(element, sample =>
@@ -216,12 +257,12 @@ const connectBoolean = (value: MutableObservableValue<boolean>,
 
 const resetBooleanItem = (editing: Editing,
                           adapter: PlayfieldDeviceBoxAdapter,
-                          key: Extract<keyof PlayfieldSampleBoxAdapter["namedParameter"], "mute" | "solo" | "exclude">,
-                          label: string) =>
-    MenuItem.default({
-        label,
-        selectable: adapter.samples.adapters().some(adapter => adapter.namedParameter[key].getValue())
-    }).setTriggerProcedure(() => editing.modify(() => adapter.samples.adapters()
-        .filter(adapter => adapter.namedParameter[key].getValue())
-        .forEach(adapter => adapter.namedParameter[key].setValue(false))))
+                          parameterOf: Func<InstrumentCompositeCellBoxAdapter, Option<AutomatableParameterFieldAdapter<boolean>>>,
+                          label: string) => {
+    const active = () => adapter.cells.adapters().flatMap(pad => parameterOf(pad).match({
+        none: () => [], some: parameter => parameter.getValue() ? [parameter] : []
+    }))
+    return MenuItem.default({label, selectable: active().length > 0})
+        .setTriggerProcedure(() => editing.modify(() => active().forEach(parameter => parameter.setValue(false))))
+}
 

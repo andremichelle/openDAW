@@ -46,11 +46,11 @@ export namespace MenuItems {
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
             populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
             parent.addMenuItem(copyAudioUnit(audioUnit, {separatorBefore: true}))
-            parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true})
+            parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true, hidden: deviceHost.isPad})
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(api.duplicateCompositeLayer(deviceHost.box))
                 })))
-            parent.addMenuItem(MenuItem.default({label: "Delete layer"})
+            parent.addMenuItem(MenuItem.default({label: deviceHost.isPad ? "Delete pad" : "Delete layer", separatorBefore: deviceHost.isPad})
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(backTargetOfCell(deviceHost))
                     api.deleteCompositeLayer(deviceHost.box)

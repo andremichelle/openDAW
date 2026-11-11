@@ -88,7 +88,7 @@ export namespace DeviceSlot {
                 return InstrumentFactories.isLayerInstrument(factory)
             case "replace-instrument":
                 if (isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter)) {
-                    return InstrumentFactories.isLayerInstrument(factory)
+                    return InstrumentFactories.fitsCell(slot.host.box, factory)
                 }
                 return factory.trackType === TrackType.Notes
                     && slot.host.inputAdapter.mapOr(input => input.accepts === "midi", false)

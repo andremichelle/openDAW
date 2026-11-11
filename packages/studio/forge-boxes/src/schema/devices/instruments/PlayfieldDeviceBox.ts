@@ -4,7 +4,8 @@ import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 
 export const PlayfieldDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("PlayfieldDeviceBox", "notes", {
-    10: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
+    10: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}},
+    11: {type: "field", name: "pads", pointerRules: {accepts: [Pointers.InstrumentCompositeCell], mandatory: false}}
 })
 
 export const PlayfieldSampleBox: BoxSchema<Pointers> = {

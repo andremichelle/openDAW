@@ -4,8 +4,8 @@
 // input peaks, tidal [0] phase, revamp [0xFFF] spectrum (FFT runs only once the UI subscribes).
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {ApparatDeviceBox, AudioFileBox, AudioUnitBox, CaptureMidiBox, CompressorDeviceBox, GateDeviceBox, MaximizerDeviceBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, TidalDeviceBox, TrackBox, VaporisateurDeviceBox, VelocityDeviceBox} from "@opendaw/studio-boxes"
-import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
+import {ApparatDeviceBox, AudioFileBox, AudioUnitBox, CaptureMidiBox, CompressorDeviceBox, GateDeviceBox, MaximizerDeviceBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, PlayfieldDeviceBox, RevampDeviceBox, TidalDeviceBox, TrackBox, VaporisateurDeviceBox, VelocityDeviceBox} from "@opendaw/studio-boxes"
+import {PlayfieldPads, ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -154,7 +154,7 @@ describe("device live data", () => {
         const velocity = VelocityDeviceBox.create(source, UUID.generate(), box => {
             box.host.refer(unitA.midiEffects); box.index.setValue(0)
         })
-        // Unit B: a Playfield pad (voice positions at the pad's bare address + peaks at [1001]).
+        // Unit B: a Playfield pad (its Nano's voice positions at [1001], the pad's peaks at its bare address).
         const unitB = AudioUnitBox.create(source, UUID.generate(), box => {
             box.collection.refer(rootBox.audioUnits); box.output.refer(primaryAudioBusBox.input); box.index.setValue(2)
         })
@@ -163,9 +163,8 @@ describe("device live data", () => {
         const file = AudioFileBox.create(source, UUID.generate(), box => {
             box.startInSeconds.setValue(0.0); box.endInSeconds.setValue(1.0); box.fileName.setValue("synthetic")
         })
-        const pad = PlayfieldSampleBox.create(source, UUID.generate(), box => {
-            box.device.refer(playfield.samples); box.file.refer(file); box.index.setValue(60)
-        })
+        const pad = PlayfieldPads.create(source, playfield, file, 60)
+        const nano = pad.instrument.pointerHub.incoming()[0].box
         for (const unit of [unitA, unitB]) {
             const track = TrackBox.create(source, UUID.generate(), box => {
                 box.type.setValue(TrackType.Notes); box.enabled.setValue(true); box.index.setValue(0); box.target.refer(unit); box.tracks.refer(unit.tracks)
@@ -208,15 +207,14 @@ describe("device live data", () => {
         // The worklet's consume-on-read: sentinel at the index, reset — the next note starts at 0 again.
         ints[Math.min(ints[0], 1024)] = 0
         ints[0] = 0
-        // Playfield pad: voice positions at the BARE address (not the generic meter), peaks at [1001].
-        const positions = findEntry(entries, pad.address.uuid, [])
-        expect(positions.len, "positions replace the generic pad meter").toBe(16)
+        // Playfield pad: the Nano's voice positions at [1001], the pad's peaks at its bare address.
+        const positions = findEntry(entries, nano.address.uuid, [1001])
+        expect(positions.len).toBe(16)
         const first = floats(positions)[0]
         expect(first, "a voice playhead is live").toBeGreaterThanOrEqual(0)
         for (let quantum = 0; quantum < 10; quantum++) {engine.render()}
         expect(floats(positions)[0], "the playhead advances").toBeGreaterThan(first)
-        const padPeaks = findEntry(entries, pad.address.uuid, [1001])
-        expect(padPeaks.len).toBe(4)
+        const padPeaks = findEntry(entries, pad.address.uuid, [])
         expect(floats(padPeaks)[0], "the pad peak moves").toBeGreaterThan(0.001)
         // Vaporisateur envelope phases: 0..4 with the -1 sentinel after the last active voice.
         const phases = floats(env)

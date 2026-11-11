@@ -10,7 +10,6 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     PlayfieldDeviceBox,
-    PlayfieldSampleBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -19,8 +18,8 @@ import {
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
-import {CubedStep as CubedStepCodec, InstrumentFactories} from "@opendaw/studio-adapters"
-import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
+import {CubedStep as CubedStepCodec, InstrumentFactories, PlayfieldPads} from "@opendaw/studio-adapters"
+import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, Option, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
     AnyGroove,
@@ -151,12 +150,21 @@ export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> im
     }
 }
 
-export class PlayfieldSlotImpl extends Facade<PlayfieldSampleBox> implements PlayfieldSlot {
-    static wrap(context: Context, box: PlayfieldSampleBox): PlayfieldSlotImpl {
-        return context.facade(box, () => new PlayfieldSlotImpl(context, box))
+// a slot is a Playfield pad cell playing a Nano
+export class PlayfieldSlotImpl extends Facade<InstrumentCompositeCellBox> implements PlayfieldSlot {
+    static wrap(context: Context, box: InstrumentCompositeCellBox): PlayfieldSlotImpl {
+        return context.facade(box, () => new PlayfieldSlotImpl(context, box),
+            slot => slot.#boundNano !== PlayfieldSlotImpl.#nanoOf(box).unwrapOrNull())
     }
 
+    static isSlot(box: InstrumentCompositeCellBox): boolean {
+        return PlayfieldPads.isPad(box) && PlayfieldSlotImpl.#nanoOf(box).nonEmpty()
+    }
+
+    static #nanoOf(box: InstrumentCompositeCellBox): Option<NanoDeviceBox> {return PlayfieldPads.nanoBoxOf(box)}
+
     declare note: int
+    declare key: int
     declare icon: string
     declare enabled: boolean
     declare minimized: boolean
@@ -164,7 +172,6 @@ export class PlayfieldSlotImpl extends Facade<PlayfieldSampleBox> implements Pla
     declare solo: boolean
     declare exclude: boolean
     declare polyphone: boolean
-    declare gate: 0 | 1 | 2
     declare pitch: float
     declare sampleStart: unitValue
     declare sampleEnd: unitValue
@@ -174,25 +181,39 @@ export class PlayfieldSlotImpl extends Facade<PlayfieldSampleBox> implements Pla
     declare panning: bipolar
     readonly #midiChain: EffectChain<AnyMIDIEffectImpl>
     readonly #audioChain: EffectChain<AnyAudioEffectImpl>
+    readonly #boundNano: Nullable<NanoDeviceBox>
 
-    private constructor(context: Context, box: PlayfieldSampleBox) {
+    private constructor(context: Context, box: InstrumentCompositeCellBox) {
         super(context, box)
-        this.bind({
-            note: box.index, icon: box.icon, enabled: box.enabled, minimized: box.minimized, mute: box.mute,
-            solo: box.solo, exclude: box.exclude, polyphone: box.polyphone, gate: box.gate, pitch: box.pitch,
-            sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, attack: box.attack, release: box.release,
-            volume: box.volume, panning: box.panning
-        })
+        const nano = PlayfieldSlotImpl.#nanoOf(box).unwrap("a slot plays a Nano")
+        this.#boundNano = nano
+        this.bind({note: box.index, key: box.key, minimized: box.minimized, mute: box.mute, solo: box.solo,
+            exclude: box.exclude, volume: box.gain, panning: box.pan, icon: nano.icon, enabled: nano.enabled,
+            polyphone: nano.polyphone, pitch: nano.tune, sampleStart: nano.sampleStart, sampleEnd: nano.sampleEnd,
+            attack: nano.attack, release: nano.release})
         this.#midiChain = new EffectChain<AnyMIDIEffectImpl>(context, box.midiEffects, box => MIDIEffectImpls.wrap(context, box))
         this.#audioChain = new EffectChain<AnyAudioEffectImpl>(context, box.audioEffects, box => AudioEffectImpls.wrap(context, box))
     }
 
     get playfield(): Playfield {
-        const deviceBox = this.box.device.targetVertex.unwrap("slot has no playfield").box
+        const deviceBox = this.box.composite.targetVertex.unwrap("slot has no playfield").box
         return InstrumentImpls.wrap(this.context, deviceBox) as PlayfieldImpl
     }
     get sample(): Sample {
-        return AudioFiles.toSample(this.context, asInstanceOf(this.box.file.targetVertex.unwrap("slot has no file").box, AudioFileBox))
+        const nano = this.#nano()
+        return AudioFiles.toSample(this.context, asInstanceOf(nano.file.targetVertex.unwrap("slot has no file").box, AudioFileBox))
+    }
+    get gate(): 0 | 1 | 2 {
+        const nano = this.#nano()
+        return nano.loop.getValue() ? 2 : nano.oneShot.getValue() ? 0 : 1
+    }
+    set gate(value: 0 | 1 | 2) {
+        const gate = Guard.int32({length: 3}, value, "gate")
+        const nano = this.#nano()
+        this.context.edit(() => {
+            nano.loop.setValue(gate === 2)
+            nano.oneShot.setValue(gate === 0)
+        })
     }
     get midiEffects(): ReadonlyArray<AnyMIDIEffect> {return this.#midiChain.list()}
     get audioEffects(): ReadonlyArray<AnyAudioEffect> {return this.#audioChain.list()}
@@ -208,6 +229,8 @@ export class PlayfieldSlotImpl extends Facade<PlayfieldSampleBox> implements Pla
         return this.#audioChain.add(at => DeviceBoxes.createAudioEffect(this.context.boxGraph, key, this.box.audioEffects, at),
             props, index) as unknown as AudioEffects[K]
     }
+
+    #nano(): NanoDeviceBox {return PlayfieldSlotImpl.#nanoOf(this.box).unwrap("slot plays no sample")}
 }
 
 export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implements Playfield {
@@ -216,8 +239,10 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
     constructor(context: Context, box: PlayfieldDeviceBox) {super(context, box)}
 
     get slots(): ReadonlyArray<PlayfieldSlot> {
-        return this.box.samples.pointerHub.incoming()
-            .map(({box}) => PlayfieldSlotImpl.wrap(this.context, asInstanceOf(box, PlayfieldSampleBox)))
+        return this.box.pads.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, InstrumentCompositeCellBox))
+            .filter(box => PlayfieldSlotImpl.isSlot(box))
+            .map(box => PlayfieldSlotImpl.wrap(this.context, box))
             .sort((a, b) => a.note - b.note)
     }
 
@@ -230,22 +255,22 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
         return this.context.edit(() => {
             const fileBox = AudioFiles.use(this.context, sample)
             const note = isDefined(props?.note) ? Guard.int32({min: 0, max: 127}, props.note, "note") : this.#nextFreeNote()
-            this.slot(note)?.remove()
-            const slotBox = PlayfieldSampleBox.create(this.context.boxGraph, UUID.generate(), box => {
-                box.device.refer(this.box.samples)
-                box.file.refer(fileBox)
-                box.index.setValue(note)
-            })
+            this.#padBoxes().filter(box => box.index.getValue() === note).forEach(box => box.delete())
+            const slotBox = PlayfieldPads.create(this.context.boxGraph, this.box, fileBox, note)
             const rest = Props.without(props, "note")
             return Props.apply(PlayfieldSlotImpl.wrap(this.context, slotBox), rest)
         })
     }
 
     #nextFreeNote(): int {
-        const taken = new Set(this.slots.map(slot => slot.note))
+        const taken = new Set(this.#padBoxes().map(box => box.index.getValue()))
         for (let note = 60; note < 128; note++) {if (!taken.has(note)) {return note}}
         for (let note = 59; note >= 0; note--) {if (!taken.has(note)) {return note}}
         return panic("All 128 notes are taken")
+    }
+
+    #padBoxes(): ReadonlyArray<InstrumentCompositeCellBox> {
+        return this.box.pads.pointerHub.incoming().map(({box}) => asInstanceOf(box, InstrumentCompositeCellBox))
     }
 }
 
@@ -370,6 +395,7 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     declare polyphone: boolean
     declare oneShot: boolean
     declare fixedPitch: boolean
+    declare tail: boolean
 
     constructor(context: Context, box: NanoDeviceBox) {
         super(context, box)
@@ -377,7 +403,7 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
             volume: box.volume, octave: box.octave, tune: box.tune, rootKey: box.rootKey, attack: box.attack, release: box.release,
             sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, loop: box.loop, loopFade: box.loopFade,
             loopStart: box.loopStart, loopEnd: box.loopEnd, panning: box.panning, polyphone: box.polyphone,
-            oneShot: box.oneShot, fixedPitch: box.fixedPitch
+            oneShot: box.oneShot, fixedPitch: box.fixedPitch, tail: box.tail
         })
     }
 

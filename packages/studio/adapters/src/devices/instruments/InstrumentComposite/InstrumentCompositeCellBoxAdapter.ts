@@ -1,6 +1,7 @@
 import {Pointers} from "@opendaw/studio-enums"
-import {InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
-import {Option, Procedure, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {InstrumentCompositeCellBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
+import {isInstanceOf, Option, Procedure, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {MidiKeys} from "@opendaw/lib-dsp"
 import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, CompositeCell, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
@@ -8,9 +9,14 @@ import {IndexedBoxAdapter, IndexedBoxAdapterCollection} from "../../../IndexedBo
 import {BoxAdaptersContext} from "../../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../../ParameterAdapterSet"
 import {AudioUnitInput} from "../../../audio-unit/AudioUnitInput"
+import {AutomatableParameterFieldAdapter} from "../../../AutomatableParameterFieldAdapter"
 import {AudioUnitInputAdapter} from "../../../audio-unit/AudioUnitInputAdapter"
 import {AudioUnitBoxAdapter} from "../../../audio-unit/AudioUnitBoxAdapter"
 import {InstrumentCompositeBoxAdapter} from "../InstrumentCompositeBoxAdapter"
+import {PlayfieldDeviceBoxAdapter} from "../PlayfieldDeviceBoxAdapter"
+import {PlayfieldPads} from "../Playfield/PlayfieldPads"
+
+export type CellCompositeAdapter = InstrumentCompositeBoxAdapter | PlayfieldDeviceBoxAdapter
 
 export class InstrumentCompositeCellBoxAdapter implements CompositeCell, IndexedBoxAdapter {
     readonly class = "device-host"
@@ -27,6 +33,7 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
 
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
+    readonly excludeParameter: Option<AutomatableParameterFieldAdapter<boolean>>
 
     constructor(context: BoxAdaptersContext, box: InstrumentCompositeCellBox) {
         this.#context = context
@@ -38,6 +45,9 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
             box => context.boxAdapters.adapterFor(box, Devices.isAudioEffect), Pointers.AudioEffectHost))
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(context))
         this.namedParameter = this.#wrapParameters(box)
+        this.excludeParameter = PlayfieldPads.isPad(box)
+            ? Option.wrap(this.#parametric.createParameter(box.exclude, ValueMapping.bool, StringMapping.bool, "Exclude"))
+            : Option.None
     }
 
     get box(): InstrumentCompositeCellBox {return this.#box}
@@ -45,7 +55,12 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get label(): string {return this.#input.label.unwrapOrElse(() => `Layer ${this.#box.index.getValue() + 1}`)}
+    get keyField(): Int32Field {return this.#box.key}
+    get isPad(): boolean {return PlayfieldPads.isPad(this.#box)}
+    get label(): string {
+        const index = this.#box.index.getValue()
+        return this.#input.label.unwrapOrElse(() => this.isPad ? MidiKeys.toFullString(index) : `Layer ${index + 1}`)
+    }
     get input(): AudioUnitInput {return this.#input}
 
     get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {
@@ -62,9 +77,11 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     get hostsInstrument(): boolean {return true}
     get isAudioUnit(): boolean {return false}
 
-    compositeDevice(): InstrumentCompositeBoxAdapter {
-        return this.#context.boxAdapters
-            .adapterFor(this.#box.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBoxAdapter)
+    compositeDevice(): CellCompositeAdapter {
+        const box = this.#box.composite.targetVertex.unwrap("composite.target").box
+        return isInstanceOf(box, PlayfieldDeviceBox)
+            ? this.#context.boxAdapters.adapterFor(box, PlayfieldDeviceBoxAdapter)
+            : this.#context.boxAdapters.adapterFor(box, InstrumentCompositeBoxAdapter)
     }
 
     deviceHost(): DeviceHost {return this.compositeDevice().deviceHost()}

@@ -13,7 +13,7 @@ import {UUID} from "@opendaw/lib-std"
 import {WavFile} from "@opendaw/lib-dsp"
 import type {BoxGraph} from "@opendaw/lib-box"
 import {GrooveShuffleBox} from "@opendaw/studio-boxes"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -22,7 +22,9 @@ const QUANTA = 2000
 
 const decode = (): BoxGraph => {
     const buffer = readFileSync(FILE)
-    return ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer).boxGraph
+    const {boxGraph} = ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
+    DeviceMigration.migrate(boxGraph)
+    return boxGraph
 }
 
 const noiseSamples = (boxGraph: BoxGraph): Array<{uuid: UUID.Bytes, wav: ArrayBuffer}> => {

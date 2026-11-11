@@ -10,8 +10,8 @@ import {
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     PlayfieldDeviceBox,
-    PlayfieldSampleBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -24,6 +24,7 @@ import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
 import {TrackType} from "../timeline/TrackType"
+import {PlayfieldPads} from "../devices/instruments/Playfield/PlayfieldPads"
 
 export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
@@ -93,15 +94,8 @@ export namespace InstrumentFactories {
                 box.host.refer(host)
             })
             if (isDefined(attachment)) {
-                attachment.filter(({note, uuid, name, durationInSeconds, exclude}) => {
-                    const fileBox = useAudioFile(boxGraph, uuid, name, durationInSeconds)
-                    PlayfieldSampleBox.create(boxGraph, UUID.generate(), box => {
-                        box.device.refer(deviceBox.samples)
-                        box.file.refer(fileBox)
-                        box.index.setValue(note)
-                        box.exclude.setValue(exclude)
-                    })
-                })
+                attachment.forEach(({note, uuid, name, durationInSeconds, exclude}) =>
+                    PlayfieldPads.create(boxGraph, deviceBox, useAudioFile(boxGraph, uuid, name, durationInSeconds), note, {exclude}))
             }
             return deviceBox
         }
@@ -329,6 +323,12 @@ export namespace InstrumentFactories {
                 box.host.refer(host)
             })
     }
+
+    export const isPadInstrument = (factory: InstrumentFactory<any, any>): boolean =>
+        isLayerInstrument(factory) && factory !== Playfield && factory !== InstrumentComposite
+
+    export const fitsCell = (cell: InstrumentCompositeCellBox, factory: InstrumentFactory<any, any>): boolean =>
+        PlayfieldPads.isPad(cell) ? isPadInstrument(factory) : isLayerInstrument(factory)
 
     export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named

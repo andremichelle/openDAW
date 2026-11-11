@@ -133,7 +133,11 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             fixedPitch: this.#parametric.createParameter(
                 box.fixedPitch,
                 ValueMapping.bool,
-                StringMapping.bool, "Fixed Pitch")
+                StringMapping.bool, "Fixed Pitch"),
+            tail: this.#parametric.createParameter(
+                box.tail,
+                ValueMapping.bool,
+                StringMapping.bool, "Tail")
         } as const
     }
 }

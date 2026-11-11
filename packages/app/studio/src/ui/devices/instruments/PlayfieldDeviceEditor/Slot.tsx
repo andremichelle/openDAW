@@ -1,9 +1,14 @@
-import {DefaultObservableValue, int, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    InstrumentCompositeCellBoxAdapter,
+    NoteStreamReceiver,
+    PlayfieldDeviceBoxAdapter,
+    PlayfieldPads
+} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
-import {AudioFileBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
+import {AudioFileBox} from "@opendaw/studio-boxes"
 import {EmptySlot} from "@/ui/devices/instruments/PlayfieldDeviceEditor/EmptySlot"
 import {BusySlot} from "./BusySlot"
 
@@ -12,30 +17,37 @@ type Construct = {
     service: StudioService
     noteReceiver: NoteStreamReceiver
     adapter: PlayfieldDeviceBoxAdapter
-    sample: DefaultObservableValue<Option<PlayfieldSampleBoxAdapter>>
+    pad: DefaultObservableValue<Option<InstrumentCompositeCellBoxAdapter>>
     octave: ObservableValue<int>
     semitone: int
 }
 
 export const Slot = (
-    {lifecycle, service, noteReceiver, adapter, sample, octave, semitone}: Construct) => {
+    {lifecycle, service, noteReceiver, adapter, pad, octave, semitone}: Construct) => {
+    const {boxGraph, boxAdapters} = service.project
     const sampleSelector = new SampleSelector(service, {
-        isAttached: (): boolean => sample.getValue().match({
+        isAttached: (): boolean => pad.getValue().match({
             none: () => adapter.box.isAttached(),
             some: ({box}) => box.isAttached()
         }),
-        hasSample: (): boolean => sample.getValue().mapOr(sample => sample.box.file.nonEmpty(), false),
-        replace: (replacement: Option<AudioFileBox>) => {
-            sample.getValue().match<unknown>({
-                none: () => replacement
-                    .ifSome(file => PlayfieldSampleBox.create(service.project.boxGraph, UUID.generate(), box => {
-                        box.file.refer(file)
-                        box.device.refer(adapter.box.samples)
-                        box.index.setValue(octave.getValue() * 12 + semitone)
-                    })),
-                some: ({box}) => SampleSelectStrategy.changePointer(box.file, replacement)
-            })
-        }
+        hasSample: (): boolean => pad.getValue()
+            .flatMap(cell => PlayfieldPads.nanoOf(boxAdapters, cell)).mapOr(nano => nano.box.file.nonEmpty(), false),
+        replace: (replacement: Option<AudioFileBox>) => pad.getValue().match<unknown>({
+            none: () => replacement.ifSome(file =>
+                PlayfieldPads.create(boxGraph, adapter.box, file, octave.getValue() * 12 + semitone)),
+            some: cell => {
+                const nano = PlayfieldPads.nanoOf(boxAdapters, cell)
+                if (replacement.isEmpty()) {
+                    nano.ifSome(({box}) => SampleSelectStrategy.clearPointer(box.file))
+                    cell.box.delete()
+                } else {
+                    nano.match({
+                        none: () => replacement.ifSome(file => PlayfieldPads.playSample(boxGraph, cell.box, file)),
+                        some: ({box}) => SampleSelectStrategy.changePointer(box.file, replacement)
+                    })
+                }
+            }
+        })
     })
     const sampleLifecycle = lifecycle.own(new Terminator())
     const group = <div style={{
@@ -44,7 +56,7 @@ export const Slot = (
         gridColumn: String(semitone % 4 + 1)
     }}/>
     lifecycle.ownAll(
-        sample.catchupAndSubscribe(owner => {
+        pad.catchupAndSubscribe(owner => {
             sampleLifecycle.terminate()
             replaceChildren(group, owner.getValue().match({
                 none: () => (
@@ -56,12 +68,12 @@ export const Slot = (
                                octave={octave}
                                semitone={semitone}/>
                 ),
-                some: sample => (
+                some: cell => (
                     <BusySlot lifecycle={sampleLifecycle}
                               service={service}
                               adapter={adapter}
                               sampleSelector={sampleSelector}
-                              sample={sample}
+                              pad={cell}
                               octave={octave}
                               semitone={semitone}/>
                 )

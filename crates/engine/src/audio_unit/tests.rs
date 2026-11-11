@@ -1326,7 +1326,7 @@ fn composite_engine() -> Engine {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0, // direct instruments, no choke
-        child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine
 }
@@ -1341,7 +1341,7 @@ fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile()
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1380,7 +1380,7 @@ fn an_idle_composite_reconcile_does_not_enqueue_its_unit() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: CELL_VOLUME_KEY, child_pan_key: CELL_PAN_KEY
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: CELL_VOLUME_KEY, child_pan_key: CELL_PAN_KEY, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1425,7 +1425,7 @@ fn cell_composite_layers_share_one_clip_advance() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1526,7 +1526,7 @@ fn each_cell_gets_its_own_replica_of_a_unit_level_midi_effect() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1579,7 +1579,7 @@ fn a_leaving_cell_releases_its_midi_replica() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1639,7 +1639,7 @@ fn layer_engine() -> Engine {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: LAYER_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: LAYER_AUDIO_FIELD,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine
 }
@@ -1837,7 +1837,7 @@ fn nested_layer_engine() -> Engine {
     engine.composites.push(CompositeSpec {
         box_type: "TestPads".to_string(), children_field: PADS_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     });
     engine
 }
@@ -2012,7 +2012,7 @@ fn live_note_signal_reaches_a_cell_composites_sequencer() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0, cell_key_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -2142,7 +2142,7 @@ fn composite_engine_with_strip() -> Engine {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0,
         child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0,
-        child_volume_key: CHILD_VOLUME_KEY, child_pan_key: CHILD_PAN_KEY
+        child_volume_key: CHILD_VOLUME_KEY, child_pan_key: CHILD_PAN_KEY, cell_key_key: 0
     }];
     engine
 }
@@ -5792,4 +5792,145 @@ fn a_bytes_field_is_delivered_as_bytes_with_its_length() {
     let delivered = deliveries();
     assert_eq!(delivered.len(), 1);
     assert_eq!((delivered[0].0, delivered[0].1, delivered[0].3), (4, abi::FIELD_KIND_BYTES, 0), "an empty field is an empty slice");
+}
+
+// ---- Playfield pads: cells with a note route (pad key = cell index, played as the cell key) ----
+const PAD_INSTRUMENT_FIELD: u16 = 2;
+const PAD_INDEX_KEY: u16 = 5;
+const PAD_MUTE_KEY: u16 = 41;
+const PAD_SOLO_KEY: u16 = 42;
+const PAD_EXCLUDE_KEY: u16 = 44;
+const PAD_KEY_KEY: u16 = 45;
+const PAD_A: Uuid = [70u8; 16];
+const PAD_B: Uuid = [71u8; 16];
+const PAD_MIDI_A: Uuid = [72u8; 16];
+const PAD_MIDI_B: Uuid = [73u8; 16];
+
+fn pad_engine(pads: &[(Uuid, Uuid, i32, i32, i32, bool)]) -> (Engine, AudioUnitBinding) {
+    let mut engine = engine_with_devices();
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestPlayfield".to_string(), children_field: CHILDREN_FIELD, index_key: PAD_INDEX_KEY, exclude_key: PAD_EXCLUDE_KEY,
+        cell_instrument_field: PAD_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: PAD_MUTE_KEY, child_solo_key: PAD_SOLO_KEY, child_volume_key: 0, child_pan_key: 0,
+        cell_key_key: PAD_KEY_KEY
+    }];
+    let mut boxes = vec![
+        graph_box(MIDI_ROOT, "RootBox", &[(35, FieldValue::Hook)]),
+        graph_box(MIDI_TARGET, "MIDIOutputBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MIDI_ROOT, vec![35])))), (2, FieldValue::Hook),
+            (3, FieldValue::String("pads".to_string())), (5, FieldValue::Int32(0)), (6, FieldValue::Boolean(true))
+        ]),
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(COMPOSITE, "TestPlayfield", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ])
+    ];
+    for &(cell, device, channel, index, key, exclude) in pads {
+        boxes.push(graph_box(cell, "InstrumentCompositeCellBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (PAD_INSTRUMENT_FIELD, FieldValue::Hook),
+            (PAD_INDEX_KEY, FieldValue::Int32(index)), (PAD_KEY_KEY, FieldValue::Int32(key)),
+            (PAD_EXCLUDE_KEY, FieldValue::Boolean(exclude)), (PAD_MUTE_KEY, FieldValue::Boolean(false)), (PAD_SOLO_KEY, FieldValue::Boolean(false))
+        ]));
+        boxes.push(graph_box(device, "MIDIOutputDeviceBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(cell, vec![PAD_INSTRUMENT_FIELD])))),
+            (super::MIDI_OUT_CHANNEL_KEY, FieldValue::Int32(channel)), (super::MIDI_OUT_PARAMETERS_KEY, FieldValue::Hook),
+            (super::MIDI_OUT_DEVICE_KEY, FieldValue::Pointer(Some(Address::of(MIDI_TARGET, vec![2]))))
+        ]));
+    }
+    engine.graph = BoxGraph::from_boxes(boxes);
+    engine.observe_midi_outputs();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    engine.midi_out.borrow_mut().drain_queue(|_| {});
+    (engine, unit)
+}
+
+fn pad_block(engine: &mut Engine, from: f64) -> Vec<(u8, u8)> {
+    let stopped = abi::BlockFlags::create(false, false, false, false);
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: from, p1: from + 5.0, anchor: from, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
+    engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
+    let mut messages: Vec<(u8, u8)> = Vec::new();
+    engine.midi_out.borrow_mut().drain_queue(|message| messages.push((message.status, message.data1)));
+    messages.sort();
+    messages
+}
+
+fn set_pad_field(engine: &mut Engine, cell: Uuid, key: u16, old: FieldValue, new: FieldValue) {
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(cell, vec![key]), old, new}], &engine.registry).expect("edit pad field");
+}
+
+#[test]
+fn a_pad_receives_only_its_key_and_plays_it_as_the_pad_key() {
+    let (mut engine, unit) = pad_engine(&[(PAD_A, PAD_MIDI_A, 0, 36, 60, false), (PAD_B, PAD_MIDI_B, 1, 38, 62, false)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 0.0), [(0x90, 60)], "pad A plays its key, pad B stays silent");
+    assert!(note_bit(&unit, 36) && !note_bit(&unit, 60), "the unit shows the played key, not the pad key");
+    super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 36});
+    assert_eq!(pad_block(&mut engine, 5.0), [(0x80, 60)]);
+    assert!(!note_bit(&unit, 36));
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 40, velocity: 1.0});
+    assert!(pad_block(&mut engine, 10.0).is_empty(), "a key without a pad plays nothing");
+    assert!(note_bit(&unit, 40), "one pad marks every note the unit receives");
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 38, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 15.0), [(0x91, 62)]);
+    assert!(note_bit(&unit, 38));
+}
+
+#[test]
+fn a_pad_key_edit_during_a_sounding_note_releases_the_played_pitch() {
+    let (mut engine, mut unit) = pad_engine(&[(PAD_A, PAD_MIDI_A, 0, 36, 60, false)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 0.0), [(0x90, 60)]);
+    set_pad_field(&mut engine, PAD_A, PAD_KEY_KEY, FieldValue::Int32(60), FieldValue::Int32(67));
+    set_pad_field(&mut engine, PAD_A, PAD_INDEX_KEY, FieldValue::Int32(36), FieldValue::Int32(37));
+    engine.reconcile_one(&mut unit);
+    super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 36});
+    assert_eq!(pad_block(&mut engine, 5.0), [(0x80, 60)], "the note-off follows its note-on");
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 37, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 10.0), [(0x90, 67)], "the moved pad plays its new key");
+}
+
+#[test]
+fn exclude_pads_choke_each_other_by_their_pad_keys() {
+    let (mut engine, mut unit) = pad_engine(&[(PAD_A, PAD_MIDI_A, 0, 36, 60, true), (PAD_B, PAD_MIDI_B, 1, 38, 60, true)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 0.0), [(0x90, 60)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 38, velocity: 1.0});
+    // A MIDI Output ignores a choke; the router still turned pad A's copy of the 38 into one (not a note).
+    assert_eq!(pad_block(&mut engine, 5.0), [(0x91, 60)], "only pad B plays the 38");
+    engine.dirty_units.borrow_mut().clear();
+    set_pad_field(&mut engine, PAD_B, PAD_EXCLUDE_KEY, FieldValue::Boolean(true), FieldValue::Boolean(false));
+    assert!(!engine.dirty_units.borrow().is_empty(), "an exclude toggle re-chokes the siblings");
+    engine.reconcile_one(&mut unit);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 10.0), [(0x90, 60)]);
+}
+
+#[test]
+fn a_muted_pad_drops_note_starts_but_releases_its_sounding_note() {
+    let (mut engine, mut unit) = pad_engine(&[(PAD_A, PAD_MIDI_A, 0, 36, 60, false), (PAD_B, PAD_MIDI_B, 1, 38, 62, false)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 0.0), [(0x90, 60)]);
+    set_pad_field(&mut engine, PAD_A, PAD_MUTE_KEY, FieldValue::Boolean(false), FieldValue::Boolean(true));
+    engine.reconcile_one(&mut unit);
+    super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 36});
+    assert_eq!(pad_block(&mut engine, 5.0), [(0x80, 60)], "the sounding note still ends");
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert!(pad_block(&mut engine, 10.0).is_empty(), "a muted pad starts nothing");
+    set_pad_field(&mut engine, PAD_A, PAD_MUTE_KEY, FieldValue::Boolean(true), FieldValue::Boolean(false));
+    set_pad_field(&mut engine, PAD_B, PAD_SOLO_KEY, FieldValue::Boolean(false), FieldValue::Boolean(true));
+    engine.reconcile_one(&mut unit);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 38, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 15.0), [(0x91, 62)], "a soloed sibling silences the other pads");
+}
+
+#[test]
+fn two_pads_on_one_key_let_the_first_one_play() {
+    let (mut engine, unit) = pad_engine(&[(PAD_A, PAD_MIDI_A, 0, 36, 60, false), (PAD_B, PAD_MIDI_B, 1, 36, 62, false)]);
+    super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 36, velocity: 1.0});
+    assert_eq!(pad_block(&mut engine, 0.0), [(0x90, 60)], "one pad per key, as the slots");
 }

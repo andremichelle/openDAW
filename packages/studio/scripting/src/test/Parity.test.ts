@@ -23,13 +23,13 @@ const boundFields = (facade: object): Set<PrimitiveField<any, any>> =>
 
 const structural = new Set(["index", "host", "version", "label", "icon", "enabled", "minimized", "code"])
 
-const assertMirrored = (facade: object) => {
+const assertMirrored = (facade: object, unused: ReadonlyArray<string> = []) => {
     const box = (facade as Facade).box
     const fields: Array<[string, PrimitiveField<any, any>]> = []
     collectFields(box, "", fields)
     const bound = boundFields(facade)
     const missingAutomatable = fields
-        .filter(([, field]) => field.pointerRules.accepts.includes(Pointers.Automation) && !bound.has(field))
+        .filter(([name, field]) => field.pointerRules.accepts.includes(Pointers.Automation) && !bound.has(field) && !unused.includes(name))
         .map(([name]) => name)
     expect(missingAutomatable, `${box.name} automatable fields not mirrored`).toEqual([])
     const missingPlain = fields
@@ -96,7 +96,7 @@ describe("Schema parity", () => {
         const entry = unit.addAudioEffect("Composite").addEntry()
         expect(assertMirrored(entry)).toEqual([])
         const layer = project.addInstrumentUnit("InstrumentComposite").instrument.addLayer("Nano")
-        expect(assertMirrored(layer)).toEqual([])
+        expect(assertMirrored(layer, ["exclude"])).toEqual(["exclude", "key"]) // Playfield pad fields
         const send = unit.addSend(project.addAuxUnit())
         expect(assertMirrored(send)).toEqual(["routing"])
         expect(assertMirrored(unit)).toEqual(["type"])

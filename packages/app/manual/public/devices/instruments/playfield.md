@@ -10,7 +10,7 @@ A sample-based drum machine and sampler with a grid of pads, each mapped to a MI
 
 ## 0. Overview
 
-_Playfield_ organizes samples in a grid layout, with each pad assigned to a specific MIDI note. Drag samples onto pads, preview them with a click, and fine-tune playback parameters in the sample editor.
+_Playfield_ organizes samples in a grid layout, with each pad assigned to a specific MIDI note. Drag samples onto pads, preview them with a click, and fine-tune each pad in its own device chain.
 
 Example uses:
 
@@ -35,7 +35,7 @@ Each pad displays:
 - **M** (Mute): Silences the pad
 - **S** (Solo): Solos the pad, muting all others
 - **E** (Exclusive): Enables exclusive group mode. When active, triggering this pad stops other exclusive pads.
-- {icon:Focus} Opens the sample editor. Highlighted orange when audio effects are applied.
+- {icon:Focus} Opens the pad. Highlighted orange when audio effects are applied.
 
 ### 1.2 Loading Samples
 
@@ -50,7 +50,7 @@ Each pad displays:
 
 ### 1.3 Previewing
 
-Click the header area ({icon:Play} + name) to trigger the sample. Release to stop (respects gate settings).
+Click the header area ({icon:Play} + name) to trigger the pad. Release to stop (a one-shot plays on).
 
 ### 1.4 Octave Navigation
 
@@ -58,9 +58,9 @@ Use the octave selector to view different octave ranges. Each octave shows 12 pa
 
 ---
 
-## 2. Sample Editor
+## 2. Pad
 
-Click the {icon:Focus} icon on any pad to open the detailed sample editor.
+Click the {icon:Focus} icon on any pad to open it. A pad holds its own MIDI effects, a [Nano](nano) that plays the sample, and its own audio effects, with gain, pan, mute and solo on top. The numbers above the chain jump between the pads.
 
 ---
 
@@ -68,55 +68,21 @@ Click the {icon:Focus} icon on any pad to open the detailed sample editor.
 
 ---
 
-### 2.1 Waveform Display
+### 2.1 How a pad plays
 
-Large waveform view with draggable start and end markers. The colored vertical line shows the current playback position.
+A pad only hears its own note and plays it at the Nano's root key, so the sample keeps its original pitch. A new pad starts like this:
 
-- **Drag left marker**: Adjust sample start point
-- **Drag right marker**: Adjust sample end point
+- **Shot** on: the sample plays to the end of its region whatever the note length
+- **Tail** on: the release rings on past the region end, so a chopped slice fades out naturally
+- **Fixed** on: fine tuning of the incoming note (cents) is ignored
+- **Mono**: a new hit fades the previous one out
 
-### 2.2 Note Assignment
+Turn **Shot** off to stop the sample on note release, or turn the loop on to cycle the region while the note is held. Every other control works as described in the [Nano](nano) manual.
 
-Displays the MIDI note this pad responds to (e.g., G#3). This is determined by the pad's position in the grid.
+### 2.2 Excl. (Exclusive Group)
 
-### 2.3 Mute / Solo
+When enabled on several pads, triggering any of them stops the others. Classic use: open and closed hi-hats.
 
-- **M** (Mute): Silences this sample
-- **S** (Solo): Solos this sample, muting all other pads
+### 2.3 Older projects
 
-### 2.4 Excl. (Exclusive Group)
-
-When enabled, this sample belongs to an exclusive group. Triggering any sample in the group stops all other samples in the same group. Classic use: open and closed hi-hats.
-
-### 2.5 Gate
-
-Controls how the sample responds to note-on/note-off:
-
-- **Off**: Sample plays to completion regardless of note length
-- **On**: Sample stops when note is released
-- **Loop**: Sample loops while note is held
-
-### 2.6 Voice
-
-- **Mono**: Only one instance plays at a time (re-triggering restarts)
-- **Poly**: Multiple overlapping instances can play simultaneously
-
-### 2.7 Start
-
-Sample start position as percentage (0-100%). Use to skip the beginning of a sample.
-
-### 2.8 End
-
-Sample end position as percentage (0-100%). Use to cut off the tail of a sample.
-
-### 2.9 Attack
-
-Fade-in time when the sample starts. Prevents clicks and creates smoother entrances.
-
-### 2.10 Release
-
-Fade-out time when the sample stops (via gate or reaching the end). Smooths out the tail.
-
-### 2.11 Pitch
-
-Pitch adjustment in cents (-100 to +100). Use for fine-tuning or subtle detuning effects.
+Projects saved before the pads open with every slot turned into a pad, with the same sample, region, envelope, pitch, mix, effects and automation.

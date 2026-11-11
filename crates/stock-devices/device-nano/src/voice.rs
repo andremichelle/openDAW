@@ -20,7 +20,9 @@ pub struct Playback {
     pub loop_start: f32, // unit loop range, clamped inside the region
     pub loop_end: f32,
     pub one_shot: bool, // a note-off is ignored unless the loop is on
-    pub fixed_pitch: bool // every note plays at the root key
+    pub fixed_pitch: bool, // every note plays at the root key
+    pub tail: bool, // the region end releases a one-shot and fades out a gated voice instead of cutting it
+    pub end_fade: u32 // the gated tail fade in engine samples
 }
 
 impl Playback {
@@ -175,6 +177,9 @@ impl NanoVoice {
         let release = if self.fast_release > 0 {self.fast_release} else {playback.release.max(1)};
         let release_inverse = 1.0 / release as f32;
         let gain = playback.gain * self.velocity;
+        let one_shot_tail = playback.tail && !playback.releases_on_note_off();
+        let gated_tail = playback.tail && !loop_enabled && playback.releases_on_note_off();
+        let end_fade = playback.end_fade.max(1) as f64;
         for index in 0..out_left.len() {
             if loop_enabled {
                 if backwards && self.position <= loop_lo {
@@ -184,10 +189,11 @@ impl NanoVoice {
                     let wraps = libm::floor((self.position - loop_hi) / shift) + 1.0;
                     self.position -= wraps * shift;
                 }
-            } else if backwards && self.position <= lo {
-                return true;
-            } else if !backwards && self.position >= hi {
-                return true;
+            } else if if backwards {self.position <= lo} else {self.position >= hi} {
+                if !one_shot_tail || (backwards && self.position <= 0.0) {
+                    return true;
+                }
+                self.stop(playback.attack);
             }
             let int_position = self.position as usize;
             if int_position >= num_frames {
@@ -203,7 +209,13 @@ impl NanoVoice {
                 1.0
             };
             self.level = shaped;
-            let env = shaped * shaped;
+            let faded = if gated_tail {
+                let distance = (if backwards {self.position + increment - lo} else {hi - self.position - increment}) / increment.abs();
+                if distance < end_fade {shaped * (distance.max(0.0) / end_fade) as f32} else {shaped}
+            } else {
+                shaped
+            };
+            let env = faded * faded;
             let mut sample_left = left[int_position] * (1.0 - frac) + left[partner] * frac;
             let mut sample_right = right[int_position] * (1.0 - frac) + right[partner] * frac;
             if loop_enabled {
@@ -247,7 +259,8 @@ mod tests {
     fn playback(sample_start: f32, sample_end: f32) -> Playback {
         Playback {
             rate_ratio: 1.0, root_key: 60, octave: 0, tune_cents: 0.0, gain: 1.0, attack: (0.003 * SR) as u32, release: 4_800, sample_start, sample_end,
-            loop_enabled: false, loop_fade_frames: 0.0, loop_start: 0.0, loop_end: 1.0, one_shot: false, fixed_pitch: false
+            loop_enabled: false, loop_fade_frames: 0.0, loop_start: 0.0, loop_end: 1.0, one_shot: false, fixed_pitch: false,
+            tail: false, end_fade: 240
         }
     }
 
@@ -586,6 +599,58 @@ mod tests {
         voice.force_release(240);
         let (tail, finished) = run(&mut voice, &frames, &slow, 512);
         assert!(finished && tail[0] <= before[4_799] && peak(&tail[241..]) == 0.0, "fades from the release level, no jump");
+    }
+
+    #[test]
+    fn a_one_shot_tail_releases_at_the_region_end_and_reads_on() {
+        let frames = dc(48_000);
+        let settings = Playback {one_shot: true, tail: true, release: 480, ..playback(0.0, 0.1)};
+        let mut voice = started(60);
+        let (out, finished) = run(&mut voice, &frames, &settings, 8_192);
+        assert!(finished, "the release elapses past the region end");
+        assert!((out[4_700] - 1.0).abs() < 1.0e-6 && out[4_900] > 0.1 && out[4_900] < 1.0, "decays while reading past the region end");
+        assert!(out[4_800..5_300].windows(2).all(|pair| pair[1] <= pair[0]), "the tail never rises");
+        assert!(peak(&out[5_300..]) == 0.0, "silent once the release elapsed");
+        let mut cut = started(60);
+        let (out, finished) = run(&mut cut, &frames, &Playback {tail: false, ..settings}, 8_192);
+        assert!(finished && peak(&out[4_801..]) == 0.0, "without the tail the region end cuts");
+    }
+
+    #[test]
+    fn a_one_shot_tail_stops_at_the_sample_bounds() {
+        let frames = dc(4_800);
+        let settings = Playback {one_shot: true, tail: true, release: 48_000, ..playback(0.0, 0.9)};
+        let mut voice = started(60);
+        let (out, finished) = run(&mut voice, &frames, &settings, 8_192);
+        assert!(finished && out[4_700] > 0.0 && peak(&out[4_800..]) == 0.0, "the long release ends at the last frame");
+        let mut backward = started(60);
+        let (out, finished) = run(&mut backward, &frames, &Playback {sample_start: 0.5, sample_end: 0.1, ..settings}, 8_192);
+        assert!(finished && out[2_300] > 0.0 && peak(&out[2_400..]) == 0.0, "backwards ends at the first frame");
+    }
+
+    #[test]
+    fn a_gated_tail_fades_out_before_the_region_end() {
+        let frames = dc(48_000);
+        let settings = Playback {tail: true, ..playback(0.0, 0.1)};
+        let mut voice = started(60);
+        let (out, finished) = run(&mut voice, &frames, &settings, 8_192);
+        assert!(finished, "the region end still ends the voice");
+        assert!((out[4_500] - 1.0).abs() < 1.0e-6, "full level before the fade");
+        assert!(out[4_680] < 0.5 && out[4_680] > 0.0 && out[4_798] < 1.0e-3, "fades to silence over the last 5 ms");
+        assert!(out[4_561..4_800].windows(2).all(|pair| pair[1] <= pair[0]), "the fade never rises");
+        let mut held = started(60);
+        let (out, _) = run(&mut held, &frames, &Playback {loop_enabled: true, ..settings}, 8_192);
+        assert!(out[4_798] > 0.9, "a looping voice never fades at the region end");
+    }
+
+    #[test]
+    fn a_gated_tail_fade_lasts_five_ms_at_any_rate() {
+        let frames = dc(48_000);
+        let settings = Playback {tail: true, octave: 1, ..playback(0.0, 0.2)};
+        let mut voice = started(60);
+        let (out, finished) = run(&mut voice, &frames, &settings, 8_192);
+        assert!(finished, "the doubled rate reaches the region end after 4800 samples");
+        assert!((out[4_550] - 1.0).abs() < 1.0e-6 && out[4_620] < 1.0, "the fade spans 240 output samples");
     }
 
     #[test]

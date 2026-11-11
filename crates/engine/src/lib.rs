@@ -126,7 +126,14 @@ pub(crate) struct CompositeSpec {
     // strip runs a `ChannelStripProcessor` between the child's output and the sum. Playfield's slot keys
     // are 50 / 51.
     pub(crate) child_volume_key: u16,
-    pub(crate) child_pan_key: u16
+    pub(crate) child_pan_key: u16,
+    pub(crate) cell_key_key: u16 // a cell's `key` (0 = no pad routing, see `pad_route`)
+}
+
+impl CompositeSpec {
+    pub(crate) fn routes_pads(&self) -> bool {
+        self.cell_key_key != 0
+    }
 }
 
 /// How an effect composite hands its INPUT to its entries. `Broadcast` gives every entry the same signal (the
@@ -422,6 +429,7 @@ mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};
 mod composite;
+mod pad_route;
 mod effect_composite;
 
 mod param_automation;
@@ -834,7 +842,8 @@ enum PullLink {
     // `gate` is the child's SILENT flag (mute / not-soloed, TS `SampleProcessor.handleEvent`): while set, the
     // child's note STARTS are dropped (releases + chokes still pass, so held voices stop like TS).
     SlotRoute { upstream: SharedNoteEventSource, choke: Rc<[i32]>, gate: Rc<Cell<bool>> },
-    MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
+    MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> },
+    PadRoute { route: Rc<pad_route::PadRouter>, upstream: Rc<PullLink> }
 }
 
 impl PullLink {
@@ -847,6 +856,8 @@ impl PullLink {
                 Rc::ptr_eq(a, b) && a_choke[..] == b_choke[..] && Rc::ptr_eq(a_gate, b_gate),
             (PullLink::MidiFx {effect: a, upstream: a_upstream}, PullLink::MidiFx {effect: b, upstream: b_upstream}) =>
                 Rc::ptr_eq(a, b) && a_upstream.same(b_upstream),
+            (PullLink::PadRoute {route: a, upstream: a_upstream}, PullLink::PadRoute {route: b, upstream: b_upstream}) =>
+                Rc::ptr_eq(a, b) && a_upstream.same(b_upstream),
             _ => false
         }
     }
@@ -854,15 +865,25 @@ impl PullLink {
     fn holds(&self, effect: &Rc<PluginMidiEffect>) -> bool {
         match self {
             PullLink::MidiFx {effect: own, upstream} => Rc::ptr_eq(own, effect) || upstream.holds(effect),
+            PullLink::PadRoute {upstream, ..} => upstream.holds(effect),
             _ => false
         }
     }
 
     /// Every effect of this chain missing from `next` ends the notes it started, into `out`.
     pub(crate) fn release_leavers(&self, next: &PullLink, out: &mut Vec<EventRecord>) {
-        if let PullLink::MidiFx {effect, upstream} = self {
-            if !next.holds(effect) {effect.release_all(out)}
-            upstream.release_leavers(next, out);
+        match self {
+            PullLink::MidiFx {effect, upstream} => {
+                if !next.holds(effect) {effect.release_all(out)}
+                upstream.release_leavers(next, out);
+            }
+            PullLink::PadRoute {route, upstream} => {
+                let mut released: Vec<EventRecord> = Vec::new();
+                upstream.release_leavers(next, &mut released);
+                let count = route.route(&mut released);
+                out.extend_from_slice(&released[..count]);
+            }
+            _ => {}
         }
     }
 }
@@ -964,6 +985,20 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
     let count = match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out),
         Some(PullLink::SlotRoute {ref upstream, ref choke, ref gate}) => pull_from_slot_route(upstream, choke, gate, from, to, flags, out),
+        Some(PullLink::PadRoute {route, upstream}) => {
+            {
+                let pull = unsafe { PULL.get() };
+                pull.current = Some((*upstream).clone());
+                pull.note_bits = None;
+            }
+            let count = pull_events_into(from, to, flags, out, out_ptr) as usize;
+            {
+                let pull = unsafe { PULL.get() };
+                pull.current = Some(PullLink::PadRoute {route: route.clone(), upstream});
+                pull.note_bits = consumer_bits.clone();
+            }
+            route.route(&mut out[..count]) as u32
+        }
         Some(PullLink::MidiFx {effect, upstream}) => {
             // Descend into the fx: swap in ITS params + clock-armed state + the upstream link, so the fx's own
             // `host_update_parameters` / `next_update_position` see the fx's automation and its upstream pull
@@ -1789,10 +1824,10 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
     fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
                           cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16,
-                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16) {
+                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16, cell_key_key: u16) {
         self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
             cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key,
-            child_volume_key, child_pan_key});
+            child_volume_key, child_pan_key, cell_key_key});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
@@ -3810,7 +3845,7 @@ pub extern "C" fn device_set_sidechain_collection_field(device_id: u32, field: u
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
                                      cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32,
-                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32) {
+                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32, cell_key_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -3820,7 +3855,7 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
-                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16);
+                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16, cell_key_key as u16);
         }
     }
 }

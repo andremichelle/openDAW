@@ -37,7 +37,7 @@ type Construct = {
 export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
         volume, panning, octave, attack, release, sampleStart, sampleEnd, rootKey, polyphone, oneShot, fixedPitch,
-        loop, loopFade, loopStart, loopEnd, tune
+        tail, loop, loopFade, loopStart, loopEnd, tune
     } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
@@ -144,7 +144,13 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               </div>
                               {createParameterStack(controls, "pitch", "Pitch", tune, octave)}
                               {createParameterStack(controls, "envelope", "Envelope", attack, release)}
-                              {createParameterStack(controls, "waveform", "Waveform", sampleStart, sampleEnd)}
+                              <div className="parameter-stack wide waveform">
+                                  <div className="label">Waveform</div>
+                                  {createParameterRow(controls, sampleStart)}
+                                  <div className="name second">Tail</div>
+                                  {createParameterToggle(controls, tail)}
+                                  {createParameterRow(controls, sampleEnd)}
+                              </div>
                               <div className="parameter-stack wide loop">
                                   <div className="label">Loop</div>
                                   {createParameterRow(controls, loopStart, "Start")}

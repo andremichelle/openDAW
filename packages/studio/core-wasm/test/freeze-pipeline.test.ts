@@ -6,7 +6,7 @@ import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import type {BoxGraph} from "@opendaw/lib-box"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -17,7 +17,9 @@ const FREEZE_FLAGS = 1 | 8 // includeAudioEffects | skipChannelStrip (AudioUnitF
 
 const decode = (name: string): BoxGraph => {
     const buffer = readFileSync(path.resolve(__dirname, `../../../../test-files/${name}`))
-    return ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer).boxGraph
+    const {boxGraph} = ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
+    DeviceMigration.migrate(boxGraph)
+    return boxGraph
 }
 
 const registerScripts = (boxGraph: BoxGraph): void => {

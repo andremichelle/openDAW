@@ -81,9 +81,9 @@ export class Context {
         return result.value
     }
 
-    facade<B extends Box, F extends object>(box: B, factory: Func<B, F>): F {
+    facade<B extends Box, F extends object>(box: B, factory: Func<B, F>, isStale: Func<F, boolean> = () => false): F {
         const existing = this.#facades.get(box)
-        if (isDefined(existing)) {return existing as F}
+        if (isDefined(existing) && !isStale(existing as F)) {return existing as F}
         const created = factory(box)
         this.#facades.set(box, created)
         return created

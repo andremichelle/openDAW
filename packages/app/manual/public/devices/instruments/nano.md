@@ -76,6 +76,10 @@ Fade-out time after note-off. Longer values let the sample ring out; shorter val
 
 The part of the sample that plays, as a percentage of its length. Set the start past the end to play the sample backwards. The device menu offers _Reverse_, which swaps the two values.
 
+### 5.2 Tail
+
+Off, a note stops dead at the end of the region. On, a one-shot note starts its release there and plays on into the sample behind the region, and a held note fades out over the last 5 ms of the region. Playfield pads have it on, so a chopped slice rings out like before.
+
 ---
 
 ## 6. Loop
