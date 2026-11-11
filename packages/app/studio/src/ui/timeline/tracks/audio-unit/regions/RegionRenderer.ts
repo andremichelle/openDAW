@@ -1,4 +1,4 @@
-import {int, Iterables, Option, unitValue} from "@opendaw/lib-std"
+import {int, isInstanceOf, Iterables, Option, unitValue} from "@opendaw/lib-std"
 import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {
@@ -17,6 +17,8 @@ import {Context2d} from "@opendaw/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
+import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
+import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
 
 export namespace RegionRenderer {
     let audioRenderStrategy: AudioRenderer.Strategy = AudioRenderer.DefaultStrategy
@@ -149,6 +151,10 @@ export namespace RegionRenderer {
                         }
                     })
                     context.restore()
+                }
+                if (isInstanceOf(region, AudioRegionBoxAdapter) && tracks.hoveredAudioRegion.contains(region)) {
+                    AudioFadeHandles.render(context, range, region.fading, position, complete, bound.bottom, contentColor,
+                        AudioFadeAnchors.read(region.box))
                 }
                 if (selected) {
                     context.fillStyle = labelBackground

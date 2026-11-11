@@ -8,6 +8,7 @@ import {
     isDefined,
     isNotNull,
     Lifecycle,
+    MutableObservableOption,
     NumberComparator,
     ObservableOption,
     Option,
@@ -18,7 +19,7 @@ import {
 } from "@opendaw/lib-std"
 import {Dragging} from "@opendaw/lib-dom"
 import {
-    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, ColorCodes,
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioRegionBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, ColorCodes,
     IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
     TrackBoxAdapter, TrackType
@@ -66,6 +67,7 @@ export interface TrackFactory {
 
 export class TracksManager implements Terminable {
     readonly groupClipSelection: GroupClipSelection
+    readonly hoveredAudioRegion: MutableObservableOption<AudioRegionBoxAdapter>
     readonly #service: StudioService
     readonly #project: Project
     readonly #scrollContainer: Element
@@ -104,6 +106,7 @@ export class TracksManager implements Terminable {
         this.#factory = factory
 
         this.#terminator = new Terminator()
+        this.hoveredAudioRegion = this.#terminator.own(new MutableObservableOption<AudioRegionBoxAdapter>())
         this.groupClipSelection = this.#terminator.own(new GroupClipSelection(service.project))
         this.#audioUnits = UUID.newSet(({uuid}) => uuid)
         this.#modulators = UUID.newSet(({uuid}) => uuid)
