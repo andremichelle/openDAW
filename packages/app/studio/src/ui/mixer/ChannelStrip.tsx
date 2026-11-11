@@ -81,7 +81,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                            tracks={tracks} parameter={panning}>
             <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={panning}
                                        options={SnapCenter}>
-                <Knob lifecycle={lifecycle} color={Colors.yellow} value={panning} anchor={0.5}/>
+                <Knob lifecycle={lifecycle} color={Colors.cream} value={panning} anchor={0.5}/>
             </RelativeUnitValueDragging>
         </AutomationControl>
     )
