@@ -21,6 +21,7 @@ import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
 import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {ManifestoPage} from "@/ui/pages/ManifestoPage"
+import {ChangelogPage} from "@/ui/pages/ChangelogPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {StoragePage} from "@/ui/pages/StoragePage"
 import {TestPage} from "@/ui/pages/TestPage"
@@ -70,6 +71,7 @@ export const App = (service: StudioService) => {
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
+                    {path: "/changelog", factory: ChangelogPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
