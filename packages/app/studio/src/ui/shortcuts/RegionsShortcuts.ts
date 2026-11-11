@@ -8,6 +8,10 @@ export const RegionsShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyM),
         description: "Toggle mute"
     },
+    "split-regions": {
+        shortcut: Shortcut.of(Key.KeyE, {ctrl: true}),
+        description: "Split selected regions at playhead"
+    },
     "loop-selection": {
         shortcut: Shortcut.of(Key.KeyL, {ctrl: true, shift: true}),
         description: "Loop selected regions"

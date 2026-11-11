@@ -23,6 +23,7 @@ import {Browser} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {splitSelectedRegions} from "./splitSelectedRegions"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
@@ -101,6 +102,12 @@ export const installRegionContextMenu =
                             success: name => editing.modify(() => selection.selected()
                                 .forEach(adapter => adapter.box.label.setValue(name)))
                         }), EmptyExec)),
+                MenuItem.default({
+                    label: "Split at playhead",
+                    shortcut: RegionsShortcuts["split-regions"].shortcut.format(),
+                    selectable: selection.selected().some(region =>
+                        region.position < project.engine.position.getValue() && project.engine.position.getValue() < region.complete)
+                }).setTriggerProcedure(() => splitSelectedRegions(project)),
                 MenuItem.default({
                     label: "Loop Selection",
                     shortcut: RegionsShortcuts["loop-selection"].shortcut.format()

@@ -20,6 +20,7 @@ import {RegionStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/Regio
 import {RegionDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionDurationModifier.ts"
 import {RegionMoveModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveModifier.ts"
 import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionLoopDurationModifier.ts"
+import {splitSelectedRegions} from "./splitSelectedRegions"
 import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionContentStartModifier.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
@@ -120,6 +121,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             const selected = regionSelection.selected()
             if (selected.length === 0) {return false}
             editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
+            return true
+        }),
+        shortcuts.register(RegionsShortcuts["split-regions"].shortcut, () => {
+            splitSelectedRegions(project)
             return true
         }),
         shortcuts.register(RegionsShortcuts["loop-selection"].shortcut, () =>
