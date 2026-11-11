@@ -27,6 +27,7 @@ export namespace ClipboardManager {
     type AnyEntry = ClipboardEntry
 
     let fallbackEntry: Option<AnyEntry> = Option.None
+    const handlers = new WeakMap<HTMLElement, ClipboardHandler<AnyEntry>>()
 
     export const encode = (entry: AnyEntry): string => {
         const bytes = new Uint8Array(entry.data)
@@ -81,6 +82,20 @@ export namespace ClipboardManager {
 
     export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
         const noClient: Client = {clientX: 0, clientY: 0}
+        handlers.set(element, handler)
+        // Document listeners run in installation order, not DOM nesting order. Copy/cut belong to
+        // the closest focused editor; paste may use an ancestor that accepts a different entry type.
+        const ownsFocus = (entry?: AnyEntry): boolean => {
+            const active = element.ownerDocument.activeElement
+            if (active === element.ownerDocument.body) {return true}
+            for (let node = active; node !== null; node = node.parentElement) {
+                const candidate = handlers.get(node as HTMLElement)
+                if (candidate !== undefined && (!isDefined(entry) || candidate.canPaste(entry, noClient))) {
+                    return node === element
+                }
+            }
+            return false
+        }
         const writeEntry = (entry: E): void => {
             fallbackEntry = Option.wrap(entry)
             Clipboard.writeText(encode(entry))
@@ -119,9 +134,10 @@ export namespace ClipboardManager {
             }
         }
         return Terminable.many(
+            {terminate: () => {if (handlers.get(element) === handler) {handlers.delete(element)}}},
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
                 if (Events.isTextInput(document.activeElement)) {return}
-                if (!handler.canCopy(noClient)) {return}
+                if (!ownsFocus() || !handler.canCopy(noClient)) {return}
                 handler.copy().ifSome(entry => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -133,7 +149,7 @@ export namespace ClipboardManager {
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
                 if (Events.isTextInput(document.activeElement)) {return}
-                if (!handler.canCut(noClient)) {return}
+                if (!ownsFocus() || !handler.canCut(noClient)) {return}
                 handler.cut().ifSome(entry => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -149,13 +165,13 @@ export namespace ClipboardManager {
                 const text = event.clipboardData?.getData("text/plain") ?? ""
                 const entry = decode(text)
                 if (entry.nonEmpty()) {
-                    if (!handler.canPaste(entry.unwrap(), noClient)) {return}
+                    if (!ownsFocus(entry.unwrap()) || !handler.canPaste(entry.unwrap(), noClient)) {return}
                     event.preventDefault()
                     event.stopImmediatePropagation()
                     handler.paste(entry.unwrap())
                 } else {
                     fallbackEntry.ifSome(entry => {
-                        if (!handler.canPaste(entry, noClient)) {return}
+                        if (!ownsFocus(entry) || !handler.canPaste(entry, noClient)) {return}
                         event.preventDefault()
                         event.stopImmediatePropagation()
                         handler.paste(entry)
@@ -165,6 +181,7 @@ export namespace ClipboardManager {
             Events.subscribe(document, "keydown", (event: KeyboardEvent) => {
                 if (Events.isTextInput(document.activeElement)) {return}
                 if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
+                if (!ownsFocus()) {return}
                 const isMod = event.metaKey || event.ctrlKey
                 if (!isMod || event.shiftKey || event.altKey) {return}
                 if (event.key === "c") {
