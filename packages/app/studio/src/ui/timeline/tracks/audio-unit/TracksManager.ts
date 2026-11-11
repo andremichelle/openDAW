@@ -206,6 +206,14 @@ export class TracksManager implements Terminable {
 
     unitTracks(uuid: UUID.Bytes): Option<HTMLElement> {return this.#audioUnits.opt(uuid).map(({unitTracks}) => unitTracks)}
 
+    audioUnitAtClientY(clientY: number): Option<AudioUnitBox> {
+        const row = this.#flatLayout().rows.find(row => {
+            const rect = this.#element(row.content).getBoundingClientRect()
+            return rect.top <= clientY && clientY < rect.bottom
+        })
+        return Option.wrap(row?.unit)
+    }
+
     getByIndex(index: number): Option<TrackContext> {return Option.wrap(this.tracks()[index])}
 
     tracks(): ReadonlyArray<TrackContext> {
