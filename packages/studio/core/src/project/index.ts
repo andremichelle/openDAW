@@ -1,5 +1,6 @@
 export * from "./audio"
 export * from "./AudioUnitAsLayer"
+export * from "./PlayfieldPadToUnit"
 export * from "./AudioWavExport"
 export * from "./NestedHostExit"
 export * from "./NoteMidiExport"

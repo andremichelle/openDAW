@@ -48,13 +48,6 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     reset(): void {this.#pads.adapters().forEach(adapter => adapter.box.delete())}
 
     chop({file, startKey, slices}: PlayfieldChopOptions): void {
-        const endKey = startKey + slices.length - 1
-        this.#pads.adapters()
-            .filter(adapter => {
-                const index = adapter.box.index.getValue()
-                return index >= startKey && index <= endKey
-            })
-            .forEach(adapter => adapter.box.delete())
         slices.forEach(({start, end}, sliceIndex) => PlayfieldPads.create(this.#context.boxGraph, this.#box, file,
             startKey + sliceIndex, {sampleStart: start, sampleEnd: end, exclude: true}))
     }

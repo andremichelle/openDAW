@@ -5,7 +5,7 @@ import {BoxEditing, IndexedBox} from "@opendaw/lib-box"
 import {
     AudioEffectCompositeBoxAdapter, AudioUnitGroups, DeviceHost, Devices, InstrumentFactories, PresetEncoder, PresetHeader, ProjectSkeleton
 } from "@opendaw/studio-adapters"
-import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox, InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox, InstrumentCompositeCellBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {DeviceSlot} from "./DeviceSlot"
@@ -209,6 +209,42 @@ describe("DeviceSlot", () => {
             InstrumentFactories.Nano))
         expect(unitCount()).toBe(before + 1)
     })
+    const padSetup = async () => {
+        const context = await rackSetup()
+        const {project} = context
+        const playfield = project.editing.modify(() =>
+            project.api.createInstrument(InstrumentFactories.Playfield).instrumentBox as PlayfieldDeviceBox).unwrap()
+        const playfieldHost = project.boxAdapters.adapterFor(playfield.host.targetVertex.unwrap().box, Devices.isHost)
+        const slot: DeviceSlot = {type: "new-pad", host: playfieldHost, playfield, key: 38}
+        const pads = (): ReadonlyArray<[number, string]> => playfield.pads.pointerHub.incoming()
+            .map(({box}) => box as InstrumentCompositeCellBox)
+            .map(cell => [cell.index.getValue(), cell.instrument.pointerHub.incoming().at(0)?.box.name ?? "none"])
+        return {...context, slot, pads}
+    }
+
+    it("lists every pad instrument for a new pad and no racks or composites", async () => {
+        const {slot} = await padSetup()
+        expect(DeviceSlot.categoryOf(slot)).toBe("instrument")
+        expect(DeviceSlot.takesNotes(slot)).true
+        expect(DeviceSlot.isReplace(slot)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Vaporisateur)).true
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.MIDIOutput)).true
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Playfield)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.InstrumentComposite)).false
+        expect(DeviceSlot.acceptsInstrument(slot, InstrumentFactories.Tape)).false
+        expect(DeviceSlot.acceptsRack(slot, InstrumentFactories.Nano)).false
+        expect(DeviceSlot.padKey(slot).unwrapOrNull()).toBe(38)
+    })
+
+    it("places an instrument on the pad's key and never over an existing pad", async () => {
+        const {project, slot, pads} = await padSetup()
+        project.editing.modify(() => DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Vaporisateur))
+        expect(pads()).toEqual([[38, "VaporisateurDeviceBox"]])
+        const second = project.editing.modify(() => DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Tubular))
+        expect(second.unwrap().isEmpty()).true
+        expect(pads()).toEqual([[38, "VaporisateurDeviceBox"]])
+    })
+
     const layerSetup = async () => {
         const context = await rackSetup()
         const {project} = context

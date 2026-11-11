@@ -54,7 +54,7 @@ impl PadRouter {
     pub(crate) fn new(gate: Rc<Cell<bool>>, note_bits: Option<BroadcastSlot>) -> Self {
         Self {pad_key: Cell::new(-1), play_key: Rc::new(Cell::new(60)), choke: RefCell::new(Rc::from([])), gate,
             held: RefCell::new(Held {notes: [(0, 0); MAX_HELD], len: 0, evicted: [None; MAX_HELD], next_evicted: 0}),
-            note_bits, marks: Cell::new(true)}
+            note_bits, marks: Cell::new(false)}
     }
 
     pub(crate) fn set_pad_key(&self, key: i32) {

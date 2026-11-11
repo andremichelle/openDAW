@@ -38,6 +38,7 @@ import {AnimationFrame, deferNextFrame, Events, Html, Keyboard, ShortcutManager}
 import {DevicePanelShortcuts} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
 import {CompositeCellEditor} from "@/ui/devices/CompositeCellEditor"
+import {MenuItems} from "@/ui/devices/menu-items"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
 import {Box} from "@opendaw/lib-box"
@@ -208,7 +209,9 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                     <div style={{margin: "1.125rem 0 0 0"}}>
                         <DeviceMidiMeter lifecycle={chainLifecycle}
                                          receiver={project.liveStreamReceiver}
-                                         address={deviceHost.audioUnitBoxAdapter().address}/>
+                                         address={deviceHost.audioUnitBoxAdapter().address}
+                                         onlyKey={deviceHost instanceof InstrumentCompositeCellBoxAdapter && deviceHost.isPad
+                                             ? () => Option.wrap(deviceHost.indexField.getValue()) : undefined}/>
                     </div>
                 )
                 // Same footprint as the midi meter (8px + 0.25em margins), so every instrument-hosting chain
@@ -389,9 +392,14 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         instrumentShortcuts.register(DevicePanelShortcuts["delete-audio-unit"].shortcut, () => {
             const optHost = getCurrentDeviceHost()
             if (optHost.isEmpty()) {return false}
-            const audioUnit = optHost.unwrap().audioUnitBoxAdapter()
-            if (audioUnit.isOutput) {return false}
+            const host = optHost.unwrap()
             const {editing, api} = service.project
+            if (host instanceof InstrumentCompositeCellBoxAdapter) {
+                MenuItems.deleteCell(service, host)
+                return true
+            }
+            const audioUnit = host.audioUnitBoxAdapter()
+            if (audioUnit.isOutput) {return false}
             editing.modify(() => api.deleteAudioUnit(audioUnit.box))
             return true
         }),

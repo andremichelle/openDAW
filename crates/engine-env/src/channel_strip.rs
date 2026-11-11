@@ -84,6 +84,7 @@ pub struct ChannelStripProcessor {
     gain_right: LinearRamp,
     mute_gain: LinearRamp,
     meter: crate::meter::Meter, // peaks/RMS of the strip output (a broadcast slot)
+    scope: Option<crate::scope::Scope>,
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
@@ -100,6 +101,7 @@ impl ChannelStripProcessor {
             gain_left: LinearRamp::linear(sample_rate),
             gain_right: LinearRamp::linear(sample_rate),
             mute_gain: LinearRamp::linear(sample_rate),
+            scope: None,
             meter: crate::meter::Meter::new(sample_rate),
             sample_rate,
             processing: false,
@@ -173,6 +175,13 @@ impl ChannelStripProcessor {
         self.meter.slot()
     }
 
+    /// An oscilloscope of the strip output, its slot and its subscription flag.
+    pub fn enable_scope(&mut self) -> (crate::telemetry::BroadcastSlot, alloc::rc::Rc<core::cell::Cell<bool>>) {
+        let sample_rate = self.sample_rate;
+        let scope = self.scope.get_or_insert_with(|| crate::scope::Scope::new(sample_rate));
+        (scope.slot(), scope.active())
+    }
+
     // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
         crate::block::frame_of(block, position, self.sample_rate)
@@ -215,6 +224,7 @@ impl Processor for ChannelStripProcessor {
             None => {
                 output.clear_range(0, RENDER_QUANTUM);
                 self.meter.process(&output.left, &output.right); // the held peak still decays while unwired
+                if let Some(scope) = &mut self.scope {scope.process(&output.left, &output.right)}
                 return;
             }
         };
@@ -255,6 +265,7 @@ impl Processor for ChannelStripProcessor {
             }
         }
         self.meter.process(&output.left, &output.right);
+        if let Some(scope) = &mut self.scope {scope.process(&output.left, &output.right)}
     }
 }
 

@@ -127,23 +127,28 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                          }}>{String(sibling.indexField.getValue() + 1)}</div>
                 )))
             }
-            const neighbour = (direction: -1 | 1): Option<CompositeCell> => {
+            const neighbour = (siblings: ReadonlyArray<CompositeCell>, direction: -1 | 1): Option<CompositeCell> => {
                 const key = entry.indexField.getValue()
-                const others = entry.siblings().filter(sibling => sibling !== entry
+                const others = siblings.filter(sibling => sibling !== entry
                     && Math.sign(sibling.indexField.getValue() - key) === direction)
                     .sort((left, right) => direction * (left.indexField.getValue() - right.indexField.getValue()))
                 return Option.wrap(others.at(0))
             }
-            const updateStepper = () => {
+            const updateStepper = (siblings: ReadonlyArray<CompositeCell>) => {
                 padKey.textContent = MidiKeys.toFullString(entry.indexField.getValue())
-                previousPad.classList.toggle("disabled", neighbour(-1).isEmpty())
-                nextPad.classList.toggle("disabled", neighbour(1).isEmpty())
+                previousPad.classList.toggle("disabled", neighbour(siblings, -1).isEmpty())
+                nextPad.classList.toggle("disabled", neighbour(siblings, 1).isEmpty())
             }
-            const step = (direction: -1 | 1) => neighbour(direction).ifSome(sibling => userEditingManager.audioUnit.edit(sibling.box))
-            if (isPad) {updateStepper()} else {rebuildNumbers(entry.siblings())}
+            const step = (direction: -1 | 1) => neighbour(entry.siblings(), direction)
+                .ifSome(sibling => userEditingManager.audioUnit.edit(sibling.box))
+            const update = (siblings: ReadonlyArray<CompositeCell>) => {
+                if (!entry.box.isAttached()) {return}
+                if (isPad) {updateStepper(siblings)} else {rebuildNumbers(siblings)}
+            }
+            update(entry.siblings())
             lifecycle.ownAll(
-                entry.subscribeSiblings(siblings => isPad ? updateStepper() : rebuildNumbers(siblings)),
-                entry.indexField.subscribe(() => {if (isPad) {updateStepper()}}),
+                entry.subscribeSiblings(update),
+                entry.indexField.subscribe(() => update(entry.siblings())),
                 Events.subscribe(previousPad, "click", () => step(-1)),
                 Events.subscribe(nextPad, "click", () => step(1)),
                 TextTooltip.default(previousPad, () => "Previous pad"),

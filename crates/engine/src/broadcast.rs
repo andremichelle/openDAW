@@ -85,7 +85,7 @@ impl Broadcasts {
     /// its cold work follows the UI subscription just as a plugin's `host_broadcast_active` does.
     pub fn attach_producer_active(&mut self, uuid: Uuid, keys: &[u16], package_type: u32, flag: Rc<Cell<bool>>) {
         if let Some(entry) = self.entries.iter_mut().find(|entry|
-            entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type) {
+            entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type && entry.alive()) {
             flag.set(entry.active);
             entry.producer_active = Some(flag);
         }
@@ -97,7 +97,7 @@ impl Broadcasts {
     /// and persists across region edits; keeps the registration + write pointer stable so the knob never freezes.
     pub fn live_slot(&self, uuid: Uuid, keys: &[u16], package_type: u32) -> Option<BroadcastSlot> {
         self.entries.iter()
-            .find(|entry| entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type)
+            .find(|entry| entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type && entry.alive())
             .and_then(|entry| entry.owner.upgrade())
     }
 
@@ -167,5 +167,22 @@ mod tests {
         assert_eq!(broadcasts.entry(0).unwrap().uuid, [1u8; 16]);
         broadcasts.set_active(0, true);
         assert!(broadcasts.entry(0).unwrap().active);
+    }
+
+    #[test]
+    fn a_producer_flag_attaches_to_the_live_entry_and_follows_its_subscription() {
+        let mut broadcasts = Broadcasts::default();
+        let doomed: BroadcastSlot = engine_env::telemetry::broadcast_slot(4);
+        broadcasts.register([3u8; 16], &[1002], PACKAGE_FLOAT_ARRAY, &doomed);
+        drop(doomed);
+        let live: BroadcastSlot = engine_env::telemetry::broadcast_slot(4);
+        broadcasts.register([3u8; 16], &[1002], PACKAGE_FLOAT_ARRAY, &live);
+        let watched = Rc::new(Cell::new(false));
+        broadcasts.attach_producer_active([3u8; 16], &[1002], PACKAGE_FLOAT_ARRAY, watched.clone());
+        broadcasts.sweep();
+        broadcasts.set_active(0, true);
+        assert!(watched.get(), "the flag sits on the live entry, which survives the sweep");
+        broadcasts.set_active(0, false);
+        assert!(!watched.get());
     }
 }

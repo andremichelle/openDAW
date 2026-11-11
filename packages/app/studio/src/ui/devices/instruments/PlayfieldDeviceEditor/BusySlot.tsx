@@ -35,6 +35,8 @@ import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTr
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
+import {MenuItems} from "@/ui/devices/menu-items"
 
 const className = Html.adoptStyleSheet(css, "BusySlot")
 
@@ -53,13 +55,15 @@ export const BusySlot = ({
                          }: Construct) => {
     const {editing, engine, userEditingManager, boxAdapters} = service.project
     let nano: Option<NanoDeviceBoxAdapter> = Option.None
+    const scope = new Float32Array(PlayfieldPads.ScopePoints)
+    let scopePeak = 0.0
     const labelName: HTMLElement = (<div className="label"/>)
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     const excludeValue = new DefaultObservableValue(false)
     const waveform: HTMLCanvasElement = (<canvas/>)
     const waveformPainter = lifecycle.own(new CanvasPainter(waveform, painter => nano.match({
-        none: () => painter.context.clearRect(0, 0, painter.width, painter.height),
+        none: () => {if (pad.inputAdapter.nonEmpty()) {SlotUtils.scope(painter, scope, scopePeak, semitone)}},
         some: device => SlotUtils.waveform(painter, device, semitone)
     })))
     const playbackCanvas: HTMLCanvasElement = (<canvas/>)
@@ -71,10 +75,8 @@ export const BusySlot = ({
         </header>
     )
     const {mute, solo} = pad.namedParameter
-    const exclude = pad.excludeParameter.unwrap("pad exclude")
     const muteWrapper = EditWrapper.forAutomatableParameter(editing, mute)
     const soloWrapper = EditWrapper.forAutomatableParameter(editing, solo)
-    const excludeWrapper = EditWrapper.forAutomatableParameter(editing, exclude)
     const exclusionGroup: HTMLElement = (
         <div className="checkboxes">
             <Checkbox lifecycle={lifecycle}
@@ -166,8 +168,9 @@ export const BusySlot = ({
     lifecycle.ownAll(
         connectBoolean(muteValue, muteWrapper),
         connectBoolean(soloValue, soloWrapper),
-        connectBoolean(excludeValue, excludeWrapper),
-        TextTooltip.default(iconEdit, () => "Edit Sample"),
+        pad.excludeParameter.mapOr(exclude =>
+            connectBoolean(excludeValue, EditWrapper.forAutomatableParameter(editing, exclude)), Terminable.Empty),
+        TextTooltip.default(iconEdit, () => "Edit Pad"),
         audioEffectsField.catchupAndSubscribe({
             onAdded: () => iconEdit.classList.toggle("has-effects", audioEffectsField.nonEmpty()),
             onRemoved: () => iconEdit.classList.toggle("has-effects", audioEffectsField.nonEmpty())
@@ -177,10 +180,24 @@ export const BusySlot = ({
             fileHandlerSubscription.terminate()
             fileHandlerSubscription = Terminable.Empty
             nano = input.flatMap(() => PlayfieldPads.nanoOf(boxAdapters, pad))
+            scope.fill(0.0)
+            scopePeak = 0.0
             waveformPainter.requestUpdate()
             paintPlayheads(new Float32Array([-1]))
             nano.match({
-                none: () => {labelName.textContent = pad.label},
+                none: () => input.match({
+                    none: () => {labelName.textContent = pad.label},
+                    some: instrument => instrumentLifecycle.ownAll(
+                        instrument.labelField.catchupAndSubscribe(() => labelName.textContent = pad.label),
+                        service.project.liveStreamReceiver.subscribeFloats(pad.address.append(PlayfieldPads.ScopeKey), values => {
+                            const peak = values[PlayfieldPads.ScopePoints] ?? 0.0
+                            if (peak < SlotUtils.SilenceLevel && scopePeak < SlotUtils.SilenceLevel) {return}
+                            scope.set(values.subarray(0, PlayfieldPads.ScopePoints))
+                            scopePeak = peak
+                            waveformPainter.requestUpdate()
+                        })
+                    )
+                }),
                 some: device => {
                     const {sampleStart, sampleEnd} = device.namedParameter
                     instrumentLifecycle.ownAll(
@@ -221,9 +238,12 @@ export const BusySlot = ({
         }),
         ContextMenu.subscribe(element, collector => {
             collector.addItems(
-                MenuItem.default({label: "Browse Sample..."})
+                MenuItem.default({label: nano.isEmpty() ? "Replace with Sample..." : "Browse Sample..."})
                     .setTriggerProcedure(() => sampleSelector.browse()),
-                MenuItem.default({label: "Remove Sample"})
+                MenuItem.default({label: "Replace Instrument..."})
+                    .setTriggerProcedure(() => DeviceDialog.open(service, {type: "replace-instrument", host: pad})),
+                MenuItems.movePadToUnit(service, pad),
+                MenuItem.default({label: "Remove Pad"})
                     .setTriggerProcedure(() => sampleSelector.replaceSample(Option.None)),
                 MenuItem.default({label: "Reset Parameters"})
                     .setTriggerProcedure(() => editing.modify(() =>

@@ -36,6 +36,7 @@ import {
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    PlayfieldDeviceBox,
     TrackBox,
     ValueClipBox,
     ValueEventBox,
@@ -83,6 +84,7 @@ import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
 import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {PlayfieldPadToUnit} from "./PlayfieldPadToUnit"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
 
@@ -294,7 +296,6 @@ export class ProjectApi {
             return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
         }
         const {boxGraph} = this.#project
-        const {create, defaultIcon, defaultName} = factory
         const layers = IndexedBox.collectIndexedBoxes(composite.cells)
         const index = clamp(atIndex, 0, layers.length)
         layers.slice(index).forEach((box, offset) => box.index.setValue(index + offset + 1))
@@ -302,7 +303,34 @@ export class ProjectApi {
             box.composite.refer(composite.cells)
             box.index.setValue(index)
         })
-        return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
+        return Attempts.ok({cellBox, instrumentBox: this.#createInCell(cellBox, factory, attachment)})
+    }
+
+    #createInCell<A, INST extends InstrumentBox>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A, INST>,
+                                                 attachment?: A): INST {
+        const {create, defaultIcon, defaultName} = factory
+        const instrument = create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)
+        if (PlayfieldPads.isPad(cellBox)) {PlayfieldPads.preparePadInstrument(instrument)}
+        return instrument
+    }
+
+    createPlayfieldPad<A, INST extends InstrumentBox>(playfield: PlayfieldDeviceBox, key: int,
+                                                     factory: InstrumentFactory<A, INST>,
+                                                     attachment?: A): Attempt<CompositeLayerProduct<INST>, string> {
+        if (!InstrumentFactories.isPadInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a pad`)
+        }
+        if (!Number.isInteger(key) || key < 0 || key > 127) {return Attempts.err(`${key} is no MIDI key`)}
+        if (PlayfieldPads.padAt(playfield, key).nonEmpty()) {
+            return Attempts.err(`Key ${key} already holds a pad`)
+        }
+        const cellBox = PlayfieldPads.createCell(this.#project.boxGraph, playfield, key)
+        return Attempts.ok({cellBox, instrumentBox: this.#createInCell(cellBox, factory, attachment)})
+    }
+
+    // the pad's instrument, chains, mix, automation and notes on a new unit next to the Playfield
+    movePadToUnit(cellBox: InstrumentCompositeCellBox): Attempt<AudioUnitBox, string> {
+        return PlayfieldPadToUnit.extract(this.#project, cellBox)
     }
 
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
@@ -310,8 +338,7 @@ export class ProjectApi {
             return Attempts.err(`${factory.defaultName} cannot be used as a ${PlayfieldPads.isPad(cellBox) ? "pad" : "layer"}`)
         }
         cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
-        const {create, defaultIcon, defaultName}: InstrumentFactory = factory
-        return Attempts.ok(create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment))
+        return Attempts.ok(this.#createInCell(cellBox, factory, attachment))
     }
 
     moveCompositeLayer(composite: InstrumentCompositeBox, fromIndex: int, toIndex: int): void {

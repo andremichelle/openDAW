@@ -90,6 +90,9 @@ export const migratePlayfieldDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box
     if (slots.length === 0) {return}
     console.debug(`Migrate 'PlayfieldDeviceBox' ${slots.length} slot(s) to Nano pads`)
     boxGraph.beginTransaction()
-    slots.forEach(slot => migrateSlot(boxGraph, box, slot))
+    slots.forEach(slot => {
+        if (slot.file.isEmpty()) {console.warn(`Migrate 'PlayfieldSampleBox' on key ${slot.index.getValue()} has lost its sample`)}
+        migrateSlot(boxGraph, box, slot)
+    })
     boxGraph.endTransaction()
 }

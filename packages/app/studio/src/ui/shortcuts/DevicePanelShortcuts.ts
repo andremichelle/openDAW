@@ -3,7 +3,7 @@ import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/li
 export const DevicePanelShortcutsFactory = ShortcutValidator.validate({
     "delete-audio-unit": {
         shortcut: Shortcut.of(Key.DeleteAction),
-        description: "Delete the focused audio unit (instrument + its effect chain)"
+        description: "Delete the focused audio unit (instrument + its effect chain), or the focused pad or layer"
     }
 })
 

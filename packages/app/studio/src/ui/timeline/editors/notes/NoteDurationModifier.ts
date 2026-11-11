@@ -6,6 +6,7 @@ import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
+import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 
 class SelectedModifyStrategy implements NoteModifyStrategy {
     readonly #tool: NoteDurationModifier
@@ -113,6 +114,7 @@ export class NoteDurationModifier implements NoteModifier {
             }))
         this.#editing.modify(() => result
             .forEach(({adapter: {box}, duration}) => box.duration.setValue(duration)))
+        if (this.#reference.box.isAttached()) {NoteDrawDefaults.remember(this.#reference)}
     }
 
     cancel(): void {

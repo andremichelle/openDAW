@@ -20,7 +20,7 @@ import {Dragging} from "@opendaw/lib-dom"
 import {
     AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, ColorCodes,
     IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
-    InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter,
+    InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
     TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -398,7 +398,7 @@ export class TracksManager implements Terminable {
     }
 
     // Any device add / remove / re-index anywhere in a unit's chains changes automation-track grouping, so the
-    // timeline order must re-sort. Recurses into composite cells and Playfield slots (their chains re-sort too).
+    // timeline order must re-sort. Recurses into composite cells (their chains re-sort too).
     #watchDeviceChain<ADAPTER extends IndexedBoxAdapter, POINTER extends Pointers>(
         lifecycle: Terminator, collection: IndexedBoxAdapterCollection<ADAPTER, POINTER>): void {
         const watchers = UUID.newSet<{uuid: UUID.Bytes, lifecycle: Terminator}>(({uuid}) => uuid)
@@ -414,11 +414,6 @@ export class TracksManager implements Terminable {
                     adapter.midiEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
                     adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
                     this.#watchLayers(deviceLifecycle, adapter.input.adapter())
-                } else if (adapter instanceof PlayfieldDeviceBoxAdapter) {
-                    this.#watchDeviceChain(deviceLifecycle, adapter.cells)
-                } else if (adapter instanceof PlayfieldSampleBoxAdapter) {
-                    adapter.midiEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
-                    adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
                 }
                 this.#invalidateOrder()
             },

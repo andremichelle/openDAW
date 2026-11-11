@@ -153,8 +153,8 @@ export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> im
 // a slot is a Playfield pad cell playing a Nano
 export class PlayfieldSlotImpl extends Facade<InstrumentCompositeCellBox> implements PlayfieldSlot {
     static wrap(context: Context, box: InstrumentCompositeCellBox): PlayfieldSlotImpl {
-        return context.facade(box, () => new PlayfieldSlotImpl(context, box),
-            slot => slot.#boundNano !== PlayfieldSlotImpl.#nanoOf(box).unwrapOrNull())
+        return context.facade(box, () => new PlayfieldSlotImpl(context, box), slot =>
+            !(slot instanceof PlayfieldSlotImpl) || slot.#boundNano !== PlayfieldSlotImpl.#nanoOf(box).unwrapOrNull())
     }
 
     static isSlot(box: InstrumentCompositeCellBox): boolean {
@@ -239,8 +239,7 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
     constructor(context: Context, box: PlayfieldDeviceBox) {super(context, box)}
 
     get slots(): ReadonlyArray<PlayfieldSlot> {
-        return this.box.pads.pointerHub.incoming()
-            .map(({box}) => asInstanceOf(box, InstrumentCompositeCellBox))
+        return PlayfieldPads.padsOf(this.box)
             .filter(box => PlayfieldSlotImpl.isSlot(box))
             .map(box => PlayfieldSlotImpl.wrap(this.context, box))
             .sort((a, b) => a.note - b.note)
@@ -255,7 +254,6 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
         return this.context.edit(() => {
             const fileBox = AudioFiles.use(this.context, sample)
             const note = isDefined(props?.note) ? Guard.int32({min: 0, max: 127}, props.note, "note") : this.#nextFreeNote()
-            this.#padBoxes().filter(box => box.index.getValue() === note).forEach(box => box.delete())
             const slotBox = PlayfieldPads.create(this.context.boxGraph, this.box, fileBox, note)
             const rest = Props.without(props, "note")
             return Props.apply(PlayfieldSlotImpl.wrap(this.context, slotBox), rest)
@@ -263,14 +261,10 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
     }
 
     #nextFreeNote(): int {
-        const taken = new Set(this.#padBoxes().map(box => box.index.getValue()))
+        const taken = new Set(PlayfieldPads.padsOf(this.box).map(box => box.index.getValue()))
         for (let note = 60; note < 128; note++) {if (!taken.has(note)) {return note}}
         for (let note = 59; note >= 0; note--) {if (!taken.has(note)) {return note}}
         return panic("All 128 notes are taken")
-    }
-
-    #padBoxes(): ReadonlyArray<InstrumentCompositeCellBox> {
-        return this.box.pads.pointerHub.incoming().map(({box}) => asInstanceOf(box, InstrumentCompositeCellBox))
     }
 }
 
@@ -284,7 +278,8 @@ const guardLayerInstrument = (key: string): keyof LayerInstruments => {
 
 export class InstrumentCompositeLayerImpl extends Facade<InstrumentCompositeCellBox> implements InstrumentCompositeLayer {
     static wrap(context: Context, box: InstrumentCompositeCellBox): InstrumentCompositeLayerImpl {
-        return context.facade(box, () => new InstrumentCompositeLayerImpl(context, box))
+        return context.facade(box, () => new InstrumentCompositeLayerImpl(context, box),
+            layer => !(layer instanceof InstrumentCompositeLayerImpl))
     }
 
     declare gain: float
@@ -305,6 +300,7 @@ export class InstrumentCompositeLayerImpl extends Facade<InstrumentCompositeCell
     get index(): int {return this.box.index.getValue()}
     get composite(): InstrumentComposite {
         const deviceBox = this.box.composite.targetVertex.unwrap("layer has no composite").box
+        if (deviceBox instanceof PlayfieldDeviceBox) {return panic("a Playfield pad belongs to no Instrument Composite")}
         return InstrumentImpls.wrap(this.context, deviceBox) as InstrumentCompositeImpl
     }
     get instrument(): LayerInstruments[keyof LayerInstruments] {
@@ -316,12 +312,16 @@ export class InstrumentCompositeLayerImpl extends Facade<InstrumentCompositeCell
 
     setInstrument<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>): LayerInstruments[K] {
         const guarded = guardLayerInstrument(key)
+        if (!InstrumentFactories.fitsCell(this.box, InstrumentFactories.Named[guarded])) {
+            return panic(new TypeError(`${key} cannot be used as a pad`))
+        }
         return this.context.edit(() => {
             const label = this.box.instrument.pointerHub.incoming().at(0)?.box
             const previousLabel = isDefined(label) && InstrumentImpls.isBox(label) ? label.label.getValue() : undefined
             this.box.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
             const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, guarded, this.box.instrument,
                 previousLabel ?? InstrumentFactories.Named[guarded].defaultName)
+            if (PlayfieldPads.isPad(this.box)) {PlayfieldPads.preparePadInstrument(instrumentBox)}
             return Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props) as unknown as LayerInstruments[K]
         })
     }

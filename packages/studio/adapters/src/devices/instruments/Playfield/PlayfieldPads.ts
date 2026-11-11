@@ -1,4 +1,4 @@
-import {BoxGraph} from "@opendaw/lib-box"
+import {Box, BoxGraph} from "@opendaw/lib-box"
 import {int, isInstanceOf, Option, unitValue, UUID} from "@opendaw/lib-std"
 import {AudioFileBox, InstrumentCompositeCellBox, NanoDeviceBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {BoxAdapters} from "../../../BoxAdapters"
@@ -13,6 +13,8 @@ export type PlayfieldPadOptions = {
 
 export namespace PlayfieldPads {
     export const DefaultKey = 60
+    export const ScopeKey = 1002 // WASM CONTRACT: the pad oscilloscope at the cell address
+    export const ScopePoints = 128 // WASM CONTRACT: engine-env SCOPE_POINTS, followed by the peak
 
     export const isPad = (cell: InstrumentCompositeCellBox): boolean =>
         cell.composite.targetVertex.mapOr(({box}) => isInstanceOf(box, PlayfieldDeviceBox), false)
@@ -21,15 +23,26 @@ export namespace PlayfieldPads {
     export const create = (boxGraph: BoxGraph, playfield: PlayfieldDeviceBox, file: AudioFileBox,
                            index: int, {sampleStart = 0.0, sampleEnd = 1.0, exclude = false}: PlayfieldPadOptions = {}
     ): InstrumentCompositeCellBox => {
-        const cell = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
-            box.composite.refer(playfield.pads)
-            box.index.setValue(index)
-            box.key.setValue(DefaultKey)
-            box.exclude.setValue(exclude)
-        })
+        padsOf(playfield).filter(pad => pad.index.getValue() === index).forEach(pad => pad.delete())
+        const cell = createCell(boxGraph, playfield, index)
+        cell.exclude.setValue(exclude)
         createNano(boxGraph, cell, file, sampleStart, sampleEnd)
         return cell
     }
+
+    export const padsOf = (playfield: PlayfieldDeviceBox): ReadonlyArray<InstrumentCompositeCellBox> =>
+        playfield.pads.pointerHub.incoming().map(({box}) => box)
+            .filter((box): box is InstrumentCompositeCellBox => isInstanceOf(box, InstrumentCompositeCellBox))
+
+    export const padAt = (playfield: PlayfieldDeviceBox, index: int): Option<InstrumentCompositeCellBox> =>
+        Option.wrap(padsOf(playfield).find(pad => pad.index.getValue() === index))
+
+    export const createCell = (boxGraph: BoxGraph, playfield: PlayfieldDeviceBox, index: int): InstrumentCompositeCellBox =>
+        InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(playfield.pads)
+            box.index.setValue(index)
+            box.key.setValue(DefaultKey)
+        })
 
     // a pad playing another instrument gets a Nano instead
     export const playSample = (boxGraph: BoxGraph, cell: InstrumentCompositeCellBox, file: AudioFileBox): void => {
@@ -56,6 +69,16 @@ export namespace PlayfieldPads {
         nano.ifSome(box => applyDefaults(box, 0.0, 1.0))
     }
 
+    // a Nano placed on a pad starts like a sample pad
+    export const preparePadInstrument = (instrument: Box): void => {
+        if (isInstanceOf(instrument, NanoDeviceBox)) {applyDefaults(instrument, 0.0, 1.0)}
+    }
+
+    // a pad plays a Nano from a preset at the sample's own pitch
+    export const alignKeyToSample = (cell: InstrumentCompositeCellBox): void => {
+        if (isPad(cell)) {nanoBoxOf(cell).ifSome(nano => cell.key.setValue(nano.rootKey.getValue()))}
+    }
+
     // the part of a pad's Nano that makes it play like the former slot
     export const applyPadMode = (box: NanoDeviceBox): void => {
         box.volume.setValue(0.0)
@@ -76,8 +99,6 @@ export namespace PlayfieldPads {
         box.sampleStart.setValue(sampleStart)
         box.sampleEnd.setValue(sampleEnd)
         box.loop.setValue(false)
-        box.loopStart.setValue(0.0)
-        box.loopEnd.setValue(1.0)
         box.panning.setValue(0.0)
         box.polyphone.setValue(false)
         box.oneShot.setValue(true)

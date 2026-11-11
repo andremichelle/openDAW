@@ -33,7 +33,7 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
 
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
-    readonly excludeParameter: Option<AutomatableParameterFieldAdapter<boolean>>
+    #excludeParameter: Option<AutomatableParameterFieldAdapter<boolean>> = Option.None
 
     constructor(context: BoxAdaptersContext, box: InstrumentCompositeCellBox) {
         this.#context = context
@@ -45,9 +45,11 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
             box => context.boxAdapters.adapterFor(box, Devices.isAudioEffect), Pointers.AudioEffectHost))
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(context))
         this.namedParameter = this.#wrapParameters(box)
-        this.excludeParameter = PlayfieldPads.isPad(box)
-            ? Option.wrap(this.#parametric.createParameter(box.exclude, ValueMapping.bool, StringMapping.bool, "Exclude"))
-            : Option.None
+        this.#terminator.own(box.composite.catchupAndSubscribe(() => {
+            if (this.#excludeParameter.isEmpty() && this.isPad) {
+                this.#excludeParameter = Option.wrap(this.#parametric.createParameter(box.exclude, ValueMapping.bool, StringMapping.bool, "Exclude"))
+            }
+        }))
     }
 
     get box(): InstrumentCompositeCellBox {return this.#box}
@@ -56,6 +58,7 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     get indexField(): Int32Field {return this.#box.index}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get keyField(): Int32Field {return this.#box.key}
+    get excludeParameter(): Option<AutomatableParameterFieldAdapter<boolean>> {return this.#excludeParameter}
     get isPad(): boolean {return PlayfieldPads.isPad(this.#box)}
     get label(): string {
         const index = this.#box.index.getValue()

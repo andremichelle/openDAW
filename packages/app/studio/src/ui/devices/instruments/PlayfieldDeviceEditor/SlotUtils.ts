@@ -69,5 +69,31 @@ export namespace SlotUtils {
         }
     })
 
+    export const SilenceLevel = 0.001
+
+    // a pad's oscilloscope scaled to `peak`, a thin centre line while silent
+    export const scope = ({context, actualWidth, actualHeight, devicePixelRatio}: CanvasPainter, values: Float32Array,
+                          peak: number, semitone: int): void => {
+        const center = actualHeight / 2
+        context.strokeStyle = color(semitone)
+        context.beginPath()
+        if (peak < SilenceLevel) {
+            context.globalAlpha = 0.5
+            context.lineWidth = devicePixelRatio * 0.5
+            context.moveTo(0, center)
+            context.lineTo(actualWidth, center)
+        } else {
+            const scale = 0.9 / values.reduce((max, value) => Math.max(max, Math.abs(value)), peak)
+            context.lineWidth = devicePixelRatio
+            values.forEach((value, index) => {
+                const x = index / (values.length - 1) * actualWidth
+                const y = center - value * scale * center
+                if (index === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
+            })
+        }
+        context.stroke()
+        context.globalAlpha = 1.0
+    }
+
     const layout: PeaksPainter.Layout = {u0: 0.0, u1: 0.0, x0: 0.0, x1: 0.0, v0: +1.1, v1: -1.1, y0: 0.0, y1: 0.0}
 }

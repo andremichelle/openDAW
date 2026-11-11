@@ -33,7 +33,9 @@ import {
     Devices,
     EffectDeviceBox,
     FilteredSelection,
+    InstrumentCompositeCellBoxAdapter,
     InstrumentDeviceBoxAdapter,
+    InstrumentFactories,
     isGrooveBox,
     isModulatorBox,
     TransferUtils,
@@ -58,6 +60,7 @@ type DeviceMetadata = {
     midiEffectMaxIndex: int
     audioEffectCount: int
     audioEffectMaxIndex: int
+    instrumentKey: string
 }
 
 export namespace DevicesClipboard {
@@ -78,6 +81,7 @@ export namespace DevicesClipboard {
         output.writeInt(metadata.midiEffectMaxIndex)
         output.writeInt(metadata.audioEffectCount)
         output.writeInt(metadata.audioEffectMaxIndex)
+        output.writeString(metadata.instrumentKey)
         return output.toArrayBuffer()
     }
 
@@ -89,7 +93,8 @@ export namespace DevicesClipboard {
             midiEffectCount: input.readInt(),
             midiEffectMaxIndex: input.readInt(),
             audioEffectCount: input.readInt(),
-            audioEffectMaxIndex: input.readInt()
+            audioEffectMaxIndex: input.readInt(),
+            instrumentKey: input.position < buffer.byteLength ? input.readString() : ""
         }
     }
 
@@ -337,7 +342,8 @@ export namespace DevicesClipboard {
                 midiEffectCount: midiEffects.length,
                 midiEffectMaxIndex,
                 audioEffectCount: audioEffects.length,
-                audioEffectMaxIndex
+                audioEffectMaxIndex,
+                instrumentKey: isNotNull(instrument) ? InstrumentFactories.keyOfBox(instrument.box) ?? "" : ""
             }
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
             return Option.wrap({type: "devices", data, count: selected.length})
@@ -390,6 +396,15 @@ export namespace DevicesClipboard {
                         }).finally()
                         replaceInstrument = false
                     }
+                }
+                const pastedFactory = InstrumentFactories.Named[metadata.instrumentKey as InstrumentFactories.Keys]
+                if (replaceInstrument && isInstanceOf(host, InstrumentCompositeCellBoxAdapter) && isDefined(pastedFactory)
+                    && !InstrumentFactories.fitsCell(host.box, pastedFactory)) {
+                    RuntimeNotifier.info({
+                        headline: "Incompatible Instrument",
+                        message: `Cannot replace a ${host.isPad ? "pad" : "layer"}'s instrument with a '${pastedFactory.defaultName}'.`
+                    }).finally()
+                    replaceInstrument = false
                 }
                 const midiInsertIndex = selectedMidiEffects.length > 0
                     ? selectedMidiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), -1) + 1

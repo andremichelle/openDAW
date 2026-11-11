@@ -30,6 +30,25 @@ import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 
 export namespace MenuItems {
+    export const movePadToUnit = (service: StudioService, pad: InstrumentCompositeCellBoxAdapter): MenuItem =>
+        MenuItem.default({label: "Move to Own Track", hidden: !pad.isPad, selectable: pad.inputAdapter.nonEmpty()})
+            .setTriggerProcedure(() => {
+                const {editing, api, userEditingManager} = service.project
+                editing.modify(() => api.movePadToUnit(pad.box).match({
+                    ok: unit => userEditingManager.audioUnit.edit(unit.editing),
+                    err: reason => console.warn(reason)
+                }))
+            })
+
+    // leaves the cell for its parent, then deletes it
+    export const deleteCell = (service: StudioService, cell: InstrumentCompositeCellBoxAdapter): void => {
+        const {editing, api, userEditingManager} = service.project
+        editing.modify(() => {
+            userEditingManager.audioUnit.edit(backTargetOfCell(cell))
+            api.deleteCompositeLayer(cell.box)
+        })
+    }
+
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {
         const {project} = service
         const {editing, api} = project
@@ -50,11 +69,9 @@ export namespace MenuItems {
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(api.duplicateCompositeLayer(deviceHost.box))
                 })))
+            parent.addMenuItem(movePadToUnit(service, deviceHost))
             parent.addMenuItem(MenuItem.default({label: deviceHost.isPad ? "Delete pad" : "Delete layer", separatorBefore: deviceHost.isPad})
-                .setTriggerProcedure(() => editing.modify(() => {
-                    project.userEditingManager.audioUnit.edit(backTargetOfCell(deviceHost))
-                    api.deleteCompositeLayer(deviceHost.box)
-                })))
+                .setTriggerProcedure(() => deleteCell(service, deviceHost)))
             return
         }
         const instrumentBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box

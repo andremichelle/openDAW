@@ -49,6 +49,7 @@ pub mod frequency_split;
 pub mod graph;
 pub mod linkwitz_riley;
 pub mod meter;
+pub mod scope;
 pub mod note_event_instrument;
 pub mod note_event_source;
 pub mod note_region;

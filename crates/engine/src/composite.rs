@@ -116,6 +116,9 @@ const GAIN: Decibel = Decibel::default_volume();
 /// The pan mapping a child's `panning` automation curve resolves through: bipolar, matching the strip's own pan.
 const PAN: Linear = Linear::bipolar();
 
+// WASM CONTRACT: a pad's oscilloscope at the cell address + this key (PlayfieldPads.ScopeKey)
+const PAD_SCOPE_KEY: u16 = 1002;
+
 fn map_gain(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &GAIN)}
 
 fn map_pan(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &PAN)}
@@ -865,6 +868,11 @@ impl Engine {
         if spec.cell_instrument_field != 0 {
             let layer_meter = strip.borrow().meter_slot();
             self.broadcasts.register(child_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &layer_meter);
+        }
+        if spec.routes_pads() {
+            let (scope, active) = strip.borrow_mut().enable_scope();
+            self.broadcasts.register(child_uuid, &[PAD_SCOPE_KEY], crate::broadcast::PACKAGE_FLOAT_ARRAY, &scope);
+            self.broadcasts.attach_producer_active(child_uuid, &[PAD_SCOPE_KEY], crate::broadcast::PACKAGE_FLOAT_ARRAY, active);
         }
         let strip_id = self.context.register_processor(strip.clone());
         self.context.set_label(strip_id, alloc::string::String::from("slot-strip"));

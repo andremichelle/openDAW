@@ -79,10 +79,14 @@ A pad only hears its own note and plays it at the Nano's root key, so the sample
 
 Turn **Shot** off to stop the sample on note release, or turn the loop on to cycle the region while the note is held. Every other control works as described in the [Nano](nano) manual.
 
-### 2.2 Excl. (Exclusive Group)
+### 2.2 Move to Own Track
+
+Right-click a pad and choose **Move to Own Track** to turn it into a regular instrument track next to the Playfield. Its instrument, effects, mix, automation and notes go along, so it sounds the same. The pad is removed from the Playfield.
+
+### 2.3 Excl. (Exclusive Group)
 
 When enabled on several pads, triggering any of them stops the others. Classic use: open and closed hi-hats.
 
-### 2.3 Older projects
+### 2.4 Older projects
 
 Projects saved before the pads open with every slot turned into a pad, with the same sample, region, envelope, pitch, mix, effects and automation.
