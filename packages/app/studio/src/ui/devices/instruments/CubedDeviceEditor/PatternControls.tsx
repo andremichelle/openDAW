@@ -3,8 +3,7 @@ import {clamp, DefaultObservableValue, Editing, int, Lifecycle, Terminator} from
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions, Grooves} from "@opendaw/studio-adapters"
-import {ContextMenu, MenuItem, MIDILearning, Project} from "@opendaw/studio-core"
-import {CubedPatternActions} from "@/ui/devices/instruments/CubedDeviceEditor/CubedPatternActions"
+import {MenuItem, MIDILearning, Project} from "@opendaw/studio-core"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Button} from "@/ui/components/Button"
@@ -51,9 +50,7 @@ export const PatternControls = ({lifecycle, project, editing, midiLearning, adap
     }
     return (
         <div className={className}>
-            <div className="field" onInit={element =>
-                lifecycle.own(ContextMenu.subscribe(element, collector => collector.addItems(
-                    ...CubedPatternActions.clipboardItems({editing, adapter, origin: element}))))}>
+            <div className="field">
                 <label>Pattern</label>
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
