@@ -4,7 +4,7 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {LfoModulatorBoxAdapter} from "./LfoModulatorBoxAdapter"
 import {ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 
-// WASM CONTRACT: `draw` and `quantize` mirror the engine's `modulation::hash_bipolar` / `quantize`.
+// WASM CONTRACT: `draw`, `focus` and `quantize` mirror the engine's `modulation::hash_bipolar` / `focus` / `quantize`.
 export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulatorBox> {
     static readonly MaxLoop = 64
     static readonly MaxLevels = 32
@@ -26,7 +26,7 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
         let hash = Math.imul(seed, 0x9E3779B1) ^ Math.imul(local, 0x85EBCA77)
         hash = Math.imul(hash ^ (hash >>> 15), 0x2545F491)
         hash ^= hash >>> 13
-        return this.#quantize((hash >>> 0) / 4294967295.0 * 2.0 - 1.0)
+        return this.#quantize(this.#focus((hash >>> 0) / 4294967295.0 * 2.0 - 1.0))
     }
 
     valueAt(step: number): unitValue {
@@ -44,6 +44,16 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
     #localIndex(index: int): int {
         const length = this.loop
         return length > 0 ? ((index % length) + length) % length : index | 0
+    }
+
+    #focus(value: unitValue): unitValue {
+        const focus = this.box.focus.getValue()
+        if (focus <= 0.0) {return value}
+        const bias = this.box.bias.getValue()
+        const extent = value >= bias ? 1.0 - bias : 1.0 + bias
+        if (focus >= 1.0 || extent <= 0.0) {return bias}
+        const distance = (value - bias) / extent
+        return bias + Math.sign(distance) * Math.pow(Math.abs(distance), 1.0 / (1.0 - focus)) * extent
     }
 
     #quantize(value: unitValue): unitValue {
@@ -65,7 +75,11 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
             smooth: this.parametric.createParameter(box.smooth,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth")
+                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
+            bias: this.parametric.createParameter(box.bias,
+                ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Bias"),
+            focus: this.parametric.createParameter(box.focus,
+                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Focus")
         } as const
     }
 }

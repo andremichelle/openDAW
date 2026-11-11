@@ -2500,7 +2500,7 @@ impl Engine {
     /// LfoModulatorBox: shape 10, rateSync 11, rateAbsolute 12, phase 13, exponent 15. StepsModulatorBox:
     /// count 10, rateSync 11, rateAbsolute 12, phase 13, smooth 15, direction 16, steps 20 (array of 64).
     /// MacroModulatorBox: value 10. RandomModulatorBox: loop 10, rateSync 11, rateAbsolute 12, phase 13,
-    /// smooth 15, seed 16, levels 17.
+    /// smooth 15, seed 16, levels 17, bias 18, focus 19.
     fn advance_modulation(&mut self) {
         let free_running = self.transport.free_running();
         let playing = self.transport.is_playing();
@@ -2634,7 +2634,11 @@ impl Engine {
                 (13, unipolar,
                     |state, value| if let ModulatorKind::Random(random) = &state.kind {random.phase.set(value)}),
                 (15, unipolar,
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)})
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)}),
+                (18, bipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.bias.set(value)}),
+                (19, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.focus.set(value)})
             ],
             _ => alloc::vec![
                 (10u16, Integer(LinearInteger {min: 0, max: 4}),

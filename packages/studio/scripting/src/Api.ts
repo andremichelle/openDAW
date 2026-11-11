@@ -2856,6 +2856,10 @@ export interface RandomModulator extends Modulator {
     seed: int
     /** Quantise to n levels (0 = continuous, 1 to 32) */
     levels: int
+    /** The value the draws lean towards (-1.0 to 1.0) */
+    bias: bipolar
+    /** How strongly the draws gather around the bias (0.0 = evenly spread, 1.0 = always the bias) */
+    focus: unitValue
 }
 
 /**

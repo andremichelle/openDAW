@@ -27,6 +27,19 @@ describe("Modulators", () => {
         expect(() => project.addModulator("Envelope" as any)).toThrow(RangeError)
     })
 
+    it("leans random draws with bias and focus", () => {
+        const {project} = createFixture()
+        const random = project.addModulator("Random")
+        expect(random.bias).toBe(0)
+        expect(random.focus).toBe(0)
+        random.bias = -0.5
+        random.focus = 0.75
+        expect(random.bias).toBe(-0.5)
+        expect(random.focus).toBe(0.75)
+        random.bias = -3
+        expect(random.bias).toBe(-1)
+    })
+
     it("edits step sequences", () => {
         const {project} = createFixture()
         const steps = project.addModulator("Steps")
