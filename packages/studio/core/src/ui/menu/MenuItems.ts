@@ -1,6 +1,7 @@
 import {
     Arrays,
     Color,
+    Exec,
     MutableObservableValue,
     Option,
     Procedure,
@@ -45,9 +46,16 @@ export type InputValueMenuData = {
     minValueWidth?: string
 }
 
+export type ColorPaletteEntry = {
+    label: string
+    color: string
+    checked: boolean
+    select: Exec
+}
+
 export type ColorPaletteMenuData = {
     type: "color-palette"
-    colors: ReadonlyArray<{label: string, color: string, checked: boolean, select: () => void}>
+    colors: ReadonlyArray<ColorPaletteEntry>
 }
 
 export type MenuRootData = typeof Root
