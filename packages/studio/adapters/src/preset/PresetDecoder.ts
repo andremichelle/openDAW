@@ -32,7 +32,6 @@ import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
 import {DeviceMigration} from "../migration/DeviceMigration"
-import {PlayfieldPads} from "../devices/instruments/Playfield/PlayfieldPads"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 import {isGrooveBox} from "../grooves/GrooveBoxAdapter"
@@ -400,7 +399,6 @@ export namespace PresetDecoder {
             }
         }, () => TransferUtils.cloneBoxes([instrument, ...fresh], uuidMap, targetGraph))
         TransferUtils.normalizeGrooves(targetGraph, TransferUtils.createdBy(uuidMap, present))
-        PlayfieldPads.alignKeyToSample(cellBox)
         return Attempts.Ok
     }
 }

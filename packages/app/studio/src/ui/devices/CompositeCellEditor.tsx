@@ -141,14 +141,15 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             }
             const step = (direction: -1 | 1) => neighbour(entry.siblings(), direction)
                 .ifSome(sibling => userEditingManager.audioUnit.edit(sibling.box))
-            const update = (siblings: ReadonlyArray<CompositeCell>) => {
+            const update = () => {
                 if (!entry.box.isAttached()) {return}
+                const siblings = entry.siblings()
                 if (isPad) {updateStepper(siblings)} else {rebuildNumbers(siblings)}
             }
-            update(entry.siblings())
+            update()
             lifecycle.ownAll(
                 entry.subscribeSiblings(update),
-                entry.indexField.subscribe(() => update(entry.siblings())),
+                entry.indexField.subscribe(update),
                 Events.subscribe(previousPad, "click", () => step(-1)),
                 Events.subscribe(nextPad, "click", () => step(1)),
                 TextTooltip.default(previousPad, () => "Previous pad"),

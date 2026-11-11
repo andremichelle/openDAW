@@ -23,7 +23,7 @@ pub struct Scope {
     active: Rc<Cell<bool>>,
     was_active: bool,
     history: Vec<f32>, // every DECIMATION-th sample
-    crossings: [u64; CROSSINGS],
+    crossings: [u32; CROSSINGS], // sample counter, wrapping
     crossing_count: usize,
     counter: u64, // samples seen
     lowpass_coeff: f32,
@@ -67,7 +67,7 @@ impl Scope {
             if self.lowpass < -self.trigger_peak * HYSTERESIS {
                 self.armed = true;
             } else if self.armed && self.previous_lowpass < 0.0 && self.lowpass >= 0.0 {
-                self.crossings[self.crossing_count % CROSSINGS] = self.counter;
+                self.crossings[self.crossing_count % CROSSINGS] = self.counter as u32;
                 self.crossing_count += 1;
                 self.armed = false;
             }
@@ -96,12 +96,11 @@ impl Scope {
 
     // the latest crossing that still shows a full window
     fn trigger(&self) -> u64 {
-        let latest = self.counter.saturating_sub(WINDOW as u64);
-        let oldest = self.counter.saturating_sub((WINDOW + SEARCH - DECIMATION) as u64);
+        let now = self.counter as u32;
         (0..self.crossing_count.min(CROSSINGS))
-            .map(|index| self.crossings[(self.crossing_count - 1 - index) % CROSSINGS])
-            .find(|&crossing| crossing <= latest && crossing >= oldest)
-            .unwrap_or(latest)
+            .map(|index| now.wrapping_sub(self.crossings[(self.crossing_count - 1 - index) % CROSSINGS]) as u64)
+            .find(|&age| age >= WINDOW as u64 && age <= (WINDOW + SEARCH - DECIMATION) as u64)
+            .map_or(self.counter.saturating_sub(WINDOW as u64), |age| self.counter - age)
     }
 
     fn clear(&mut self) {

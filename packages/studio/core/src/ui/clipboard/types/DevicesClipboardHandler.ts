@@ -43,6 +43,7 @@ import {
     UnionBoxTypes
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
+import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {ClipboardUtils} from "../ClipboardUtils"
 
 type ClipboardDevices = ClipboardEntry<"devices">
@@ -60,7 +61,6 @@ type DeviceMetadata = {
     midiEffectMaxIndex: int
     audioEffectCount: int
     audioEffectMaxIndex: int
-    instrumentKey: string
 }
 
 export namespace DevicesClipboard {
@@ -81,7 +81,6 @@ export namespace DevicesClipboard {
         output.writeInt(metadata.midiEffectMaxIndex)
         output.writeInt(metadata.audioEffectCount)
         output.writeInt(metadata.audioEffectMaxIndex)
-        output.writeString(metadata.instrumentKey)
         return output.toArrayBuffer()
     }
 
@@ -93,8 +92,7 @@ export namespace DevicesClipboard {
             midiEffectCount: input.readInt(),
             midiEffectMaxIndex: input.readInt(),
             audioEffectCount: input.readInt(),
-            audioEffectMaxIndex: input.readInt(),
-            instrumentKey: input.position < buffer.byteLength ? input.readString() : ""
+            audioEffectMaxIndex: input.readInt()
         }
     }
 
@@ -342,8 +340,7 @@ export namespace DevicesClipboard {
                 midiEffectCount: midiEffects.length,
                 midiEffectMaxIndex,
                 audioEffectCount: audioEffects.length,
-                audioEffectMaxIndex,
-                instrumentKey: isNotNull(instrument) ? InstrumentFactories.keyOfBox(instrument.box) ?? "" : ""
+                audioEffectMaxIndex
             }
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
             return Option.wrap({type: "devices", data, count: selected.length})
@@ -397,14 +394,20 @@ export namespace DevicesClipboard {
                         replaceInstrument = false
                     }
                 }
-                const pastedFactory = InstrumentFactories.Named[metadata.instrumentKey as InstrumentFactories.Keys]
-                if (replaceInstrument && isInstanceOf(host, InstrumentCompositeCellBoxAdapter) && isDefined(pastedFactory)
-                    && !InstrumentFactories.fitsCell(host.box, pastedFactory)) {
-                    RuntimeNotifier.info({
-                        headline: "Incompatible Instrument",
-                        message: `Cannot replace a ${host.isPad ? "pad" : "layer"}'s instrument with a '${pastedFactory.defaultName}'.`
-                    }).finally()
-                    replaceInstrument = false
+                if (replaceInstrument && isInstanceOf(host, InstrumentCompositeCellBoxAdapter)) {
+                    const clipboard = BoxGraphCopy.readGraph(entry.data)
+                    // the top instrument is hosted outside the clipboard, a nested one inside it
+                    const pasted = clipboard.boxes().find(box => DeviceBoxUtils.isInstrumentDeviceBox(box)
+                        && box.host.targetAddress.mapOr(address => clipboard.findBox(address.uuid).isEmpty(), true))
+                    const pastedKey = isDefined(pasted) ? InstrumentFactories.keyOfBox(pasted) : undefined
+                    const pastedFactory = isDefined(pastedKey) ? InstrumentFactories.Named[pastedKey] : undefined
+                    if (isDefined(pastedFactory) ? !InstrumentFactories.fitsCell(host.box, pastedFactory) : host.isPad) {
+                        RuntimeNotifier.info({
+                            headline: "Incompatible Instrument",
+                            message: `Cannot replace a ${host.isPad ? "pad" : "layer"}'s instrument with a '${pastedFactory?.defaultName ?? pasted?.name ?? "device"}'.`
+                        }).finally()
+                        replaceInstrument = false
+                    }
                 }
                 const midiInsertIndex = selectedMidiEffects.length > 0
                     ? selectedMidiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), -1) + 1

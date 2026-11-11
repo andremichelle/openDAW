@@ -238,8 +238,6 @@ export const BusySlot = ({
         }),
         ContextMenu.subscribe(element, collector => {
             collector.addItems(
-                MenuItem.default({label: nano.isEmpty() ? "Replace with Sample..." : "Browse Sample..."})
-                    .setTriggerProcedure(() => sampleSelector.browse()),
                 MenuItem.default({label: "Replace Instrument..."})
                     .setTriggerProcedure(() => DeviceDialog.open(service, {type: "replace-instrument", host: pad})),
                 MenuItems.movePadToUnit(service, pad),
@@ -251,6 +249,7 @@ export const BusySlot = ({
                 resetBooleanItem(editing, adapter, cell => Option.wrap(cell.namedParameter.mute), "Reset Mute"),
                 resetBooleanItem(editing, adapter, cell => Option.wrap(cell.namedParameter.solo), "Reset Solo"),
                 resetBooleanItem(editing, adapter, cell => cell.excludeParameter, "Reset Exclude"),
+                ...MenuItems.padClipboard(service, adapter, octave.getValue() * 12 + semitone, Option.wrap(pad.box)),
                 DebugMenus.debugBox(pad.box)
             )
         }),

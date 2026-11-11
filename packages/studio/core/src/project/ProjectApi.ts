@@ -46,6 +46,7 @@ import {
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
+    CellInstrument,
     PlayfieldPads,
     AudioClipBoxAdapter,
     AudioRegionBoxAdapter,
@@ -308,10 +309,7 @@ export class ProjectApi {
 
     #createInCell<A, INST extends InstrumentBox>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A, INST>,
                                                  attachment?: A): INST {
-        const {create, defaultIcon, defaultName} = factory
-        const instrument = create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)
-        if (PlayfieldPads.isPad(cellBox)) {PlayfieldPads.preparePadInstrument(instrument)}
-        return instrument
+        return CellInstrument.create(this.#project.boxGraph, cellBox, factory, undefined, attachment).result()
     }
 
     createPlayfieldPad<A, INST extends InstrumentBox>(playfield: PlayfieldDeviceBox, key: int,
@@ -334,11 +332,7 @@ export class ProjectApi {
     }
 
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
-        if (!InstrumentFactories.fitsCell(cellBox, factory)) {
-            return Attempts.err(`${factory.defaultName} cannot be used as a ${PlayfieldPads.isPad(cellBox) ? "pad" : "layer"}`)
-        }
-        cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
-        return Attempts.ok(this.#createInCell(cellBox, factory, attachment))
+        return CellInstrument.replace(this.#project.boxGraph, cellBox, factory, undefined, attachment)
     }
 
     moveCompositeLayer(composite: InstrumentCompositeBox, fromIndex: int, toIndex: int): void {
@@ -394,6 +388,11 @@ export class ProjectApi {
     pasteAudioUnitAsLayer(composite: InstrumentCompositeBox, data: ArrayBufferLike,
                           notes: AudioUnitAsLayer.Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
         return AudioUnitAsLayer.paste(this.#project, composite, data, notes)
+    }
+
+    pasteAudioUnitAsPad(playfield: PlayfieldDeviceBox, key: int,
+                        data: ArrayBufferLike): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        return AudioUnitAsLayer.pasteAsPad(this.#project, playfield, key, data)
     }
 
     // automation lanes are not copied

@@ -105,12 +105,6 @@ export class SampleSelector {
         }).setTriggerProcedure(() => this.replaceSample(Option.None))
     }
 
-    createBrowseMenuData(): MenuItem {
-        return MenuItem.default({
-            label: "Browse Sample..."
-        }).setTriggerProcedure(() => this.browse())
-    }
-
     async browse() {
         const {status, value: sample} = await Promises.tryCatch(
             Files.open(FilePickerAcceptTypes.WavFiles)

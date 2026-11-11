@@ -1,6 +1,6 @@
 import css from "./EmptySlot.sass?inline"
 import {Events, Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue} from "@opendaw/lib-std"
+import {int, Lifecycle, ObservableValue, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
@@ -12,6 +12,7 @@ import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-ada
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu} from "@opendaw/studio-core"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {MenuItems} from "@/ui/devices/menu-items"
 import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 
 const className = Html.adoptStyleSheet(css, "EmptySlot")
@@ -70,7 +71,8 @@ export const EmptySlot = (
         })),
         noteReceiver.subscribe((receiver) => buttons.classList
             .toggle("playing", receiver.isNoteOn(octave.getValue() * 12 + semitone))),
-        ContextMenu.subscribe(element, collector => collector.addItems(sampleSelector.createBrowseMenuData()))
+        ContextMenu.subscribe(element, collector => collector.addItems(...MenuItems.padClipboard(
+            service, adapter, octave.getValue() * 12 + semitone, Option.None)))
     )
     return element
 }

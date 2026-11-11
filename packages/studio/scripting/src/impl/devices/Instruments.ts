@@ -18,7 +18,7 @@ import {
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
-import {CubedStep as CubedStepCodec, InstrumentFactories, PlayfieldPads} from "@opendaw/studio-adapters"
+import {CellInstrument, CubedStep as CubedStepCodec, InstrumentFactories, InstrumentFactory, PlayfieldPads} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, Option, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
@@ -311,17 +311,12 @@ export class InstrumentCompositeLayerImpl extends Facade<InstrumentCompositeCell
     get audioEffects(): ReadonlyArray<AnyAudioEffect> {return this.#audioChain.list()}
 
     setInstrument<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>): LayerInstruments[K] {
-        const guarded = guardLayerInstrument(key)
-        if (!InstrumentFactories.fitsCell(this.box, InstrumentFactories.Named[guarded])) {
-            return panic(new TypeError(`${key} cannot be used as a pad`))
-        }
+        const factory: InstrumentFactory = InstrumentFactories.Named[guardLayerInstrument(key)]
+        if (!InstrumentFactories.fitsCell(this.box, factory)) {return panic(new TypeError(`${key} cannot be used as a pad`))}
         return this.context.edit(() => {
             const label = this.box.instrument.pointerHub.incoming().at(0)?.box
             const previousLabel = isDefined(label) && InstrumentImpls.isBox(label) ? label.label.getValue() : undefined
-            this.box.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
-            const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, guarded, this.box.instrument,
-                previousLabel ?? InstrumentFactories.Named[guarded].defaultName)
-            if (PlayfieldPads.isPad(this.box)) {PlayfieldPads.preparePadInstrument(instrumentBox)}
+            const instrumentBox = CellInstrument.replace(this.context.boxGraph, this.box, factory, previousLabel).result()
             return Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props) as unknown as LayerInstruments[K]
         })
     }
@@ -368,8 +363,7 @@ export class InstrumentCompositeImpl extends InstrumentFacade<InstrumentComposit
                 box.composite.refer(this.box.cells)
                 box.index.setValue(index)
             })
-            const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, guarded, cellBox.instrument,
-                InstrumentFactories.Named[guarded].defaultName)
+            const instrumentBox = CellInstrument.create(this.context.boxGraph, cellBox, InstrumentFactories.Named[guarded] as InstrumentFactory).result()
             Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props)
             return Props.apply(InstrumentCompositeLayerImpl.wrap(this.context, cellBox), layer) as unknown as
                 InstrumentCompositeLayer & {readonly instrument: LayerInstruments[K]}

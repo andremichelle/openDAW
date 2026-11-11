@@ -1,17 +1,19 @@
-import {Attempt, Attempts, isAbsent, isDefined, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
+import {Attempt, Attempts, int, isAbsent, isDefined, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox, InstrumentCompositeBox, InstrumentCompositeCellBox,
-    NoteEventCollectionBox, TrackBox, ValueEventCollectionBox
+    NoteEventCollectionBox, PlayfieldDeviceBox, TrackBox, ValueEventCollectionBox
 } from "@opendaw/studio-boxes"
-import {InstrumentCompositeBoxAdapter, InstrumentFactories, TrackType, TransferUtils} from "@opendaw/studio-adapters"
+import {
+    InstrumentCompositeBoxAdapter, InstrumentFactories, InstrumentFactory, PlayfieldDeviceBoxAdapter, PlayfieldPads, TrackType, TransferUtils
+} from "@opendaw/studio-adapters"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import type {Project} from "./Project"
 import type {CompositeLayerProduct} from "./ProjectApi"
 import type {InstrumentBox} from "@opendaw/studio-adapters"
 
-// a copied audio unit ("audio-units" clipboard entry) becomes a new last layer: its instrument, both chains and
+// a copied audio unit ("audio-units" clipboard entry) becomes a new last layer or a pad: its instrument, both chains and
 // its strip go into the layer, its tracks are appended to the composite's unit, sends and capture are dropped
 export namespace AudioUnitAsLayer {
     // what happens to the note and audio tracks when both the clipboard and the composite's unit have content
@@ -64,8 +66,8 @@ export namespace AudioUnitAsLayer {
     const withoutEmptyContent = (sources: ReadonlyArray<Box>, unit: AudioUnitBox): ReadonlyArray<Box> =>
         without(sources, contentTracks(unit).filter(isEmptyTrack))
 
-    export const paste = (project: Project, composite: InstrumentCompositeBox, data: ArrayBufferLike,
-                          notes: Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> => {
+    const sourceOf = (data: ArrayBufferLike, fits: (factory: InstrumentFactory) => boolean, role: string)
+        : Attempt<{ sourceGraph: BoxGraph, sourceUnit: AudioUnitBox, instrument: Box }, string> => {
         const sourceGraph = BoxGraphCopy.readGraph(data)
         const sourceUnit = unitOf(sourceGraph)
         if (isAbsent(sourceUnit)) {return Attempts.err("Clipboard holds no audio unit")}
@@ -74,20 +76,54 @@ export namespace AudioUnitAsLayer {
             return Attempts.err("The audio unit holds no instrument")
         }
         const factoryKey = InstrumentFactories.keyOfBox(instrument)
-        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
-            return Attempts.err(`${instrument.name} cannot be used as a layer`)
+        if (!isDefined(factoryKey) || !fits(InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrument.name} cannot be used as a ${role}`)
         }
+        return Attempts.ok({sourceGraph, sourceUnit, instrument})
+    }
+
+    const fillCell = (cellBox: InstrumentCompositeCellBox, sourceUnit: AudioUnitBox): void => {
+        cellBox.gain.setValue(sourceUnit.volume.getValue())
+        cellBox.pan.setValue(sourceUnit.panning.getValue())
+        cellBox.mute.setValue(sourceUnit.mute.getValue())
+        cellBox.solo.setValue(sourceUnit.solo.getValue())
+    }
+
+    export const paste = (project: Project, composite: InstrumentCompositeBox, data: ArrayBufferLike,
+                          notes: Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> => {
+        const source = sourceOf(data, InstrumentFactories.isLayerInstrument, "layer")
+        if (source.isFailure()) {return Attempts.err(source.failureReason())}
+        const {sourceGraph, sourceUnit, instrument} = source.result()
         const {boxGraph, boxAdapters} = project
         const targetUnit = boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).audioUnitBoxAdapter().box
         const layers = IndexedBox.collectIndexedBoxes(composite.cells)
         const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.cells)
             box.index.setValue(layers.length)
-            box.gain.setValue(sourceUnit.volume.getValue())
-            box.pan.setValue(sourceUnit.panning.getValue())
-            box.mute.setValue(sourceUnit.mute.getValue())
-            box.solo.setValue(sourceUnit.solo.getValue())
+            fillCell(box, sourceUnit)
         })
+        return Attempts.ok({cellBox, instrumentBox: pasteInto(project, cellBox, targetUnit, sourceGraph, sourceUnit, instrument, notes)})
+    }
+
+    // the pad on the key is replaced, notes and audio stay behind since a pad plays only its own key
+    export const pasteAsPad = (project: Project, playfield: PlayfieldDeviceBox, key: int,
+                               data: ArrayBufferLike): Attempt<CompositeLayerProduct<InstrumentBox>, string> => {
+        const source = sourceOf(data, InstrumentFactories.isPadInstrument, "pad")
+        if (source.isFailure()) {return Attempts.err(source.failureReason())}
+        const {sourceGraph, sourceUnit, instrument} = source.result()
+        const {boxGraph, boxAdapters} = project
+        const targetUnit = boxAdapters.adapterFor(playfield, PlayfieldDeviceBoxAdapter).audioUnitBoxAdapter().box
+        PlayfieldPads.padAt(playfield, key).ifSome(pad => pad.delete())
+        const cellBox = PlayfieldPads.createCell(boxGraph, playfield, key)
+        fillCell(cellBox, sourceUnit)
+        const instrumentBox = pasteInto(project, cellBox, targetUnit, sourceGraph, sourceUnit, instrument, "keep")
+        PlayfieldPads.preparePadInstrument(instrumentBox)
+        return Attempts.ok({cellBox, instrumentBox})
+    }
+
+    const pasteInto = (project: Project, cellBox: InstrumentCompositeCellBox, targetUnit: AudioUnitBox,
+                       sourceGraph: BoxGraph, sourceUnit: AudioUnitBox, instrument: Box, notes: Notes): InstrumentBox => {
+        const {boxGraph} = project
         const complete = sourceGraph.boxes().filter(box => box !== sourceUnit
             && !isInstanceOf(box, CaptureMidiBox) && !isInstanceOf(box, CaptureAudioBox))
         const sources = notes === "keep" ? withoutContent(complete, sourceUnit)
@@ -130,8 +166,7 @@ export namespace AudioUnitAsLayer {
             .sort((left, right) => left.index.getValue() - right.index.getValue())
             .forEach((source, offset) => boxGraph.findBox(uuidMap.get(source.address.uuid, "track").target)
                 .ifSome((track: Box) => (track as TrackBox).index.setValue(existingTracks + offset)))
-        const instrumentBox = boxGraph.findBox(uuidMap.get(instrument.address.uuid, "instrument").target)
+        return boxGraph.findBox(uuidMap.get(instrument.address.uuid, "instrument").target)
             .unwrap("pasted instrument") as InstrumentBox
-        return Attempts.ok({cellBox, instrumentBox})
     }
 }

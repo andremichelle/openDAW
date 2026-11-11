@@ -250,7 +250,7 @@ export class Menu implements Terminable, Lifecycle {
         const container = <div className="container">{
             this.#item.collectChildren()
                 .filter((item: MenuItem) => !item.hidden)
-                .map((item: MenuItem) => {
+                .map((item: MenuItem, index: number) => {
                     item.open()
                     const hasChildren = item.hasChildren
                     const selectable = item.selectable
@@ -283,7 +283,7 @@ export class Menu implements Terminable, Lifecycle {
                     }
                     return (
                         <Frag>
-                            {item.separatorBefore && <hr/>}
+                            {item.separatorBefore && index > 0 && <hr/>}
                             {itemElement}
                         </Frag>
                     )

@@ -1,5 +1,5 @@
 import {describe, expect, it, beforeEach} from "vitest"
-import {isDefined, isInstanceOf, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, isInstanceOf, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, Box, BoxEditing, BoxGraph, Field, PointerField, type Vertex} from "@opendaw/lib-box"
 import {
     ApparatDeviceBox,
@@ -684,6 +684,40 @@ describe("DevicesClipboardHandler", () => {
             expect(unitB.audioUnitBox.input.pointerHub.incoming().length).toBe(1)
             expect(tapeB.isAttached()).toBe(true)
             expect(tapeA.isAttached()).toBe(true)
+            project.terminate()
+        })
+
+        it("refuses to paste a Playfield over a pad's instrument", async () => {
+            if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
+                Reflect.set(globalThis, "AudioWorkletNode", class {})
+            }
+            const {Project} = await import("../../../project/Project")
+            const project = Project.fromSkeleton(fakeEnv(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+            const {source, pad, padInstrument} = project.editing.modify(() => {
+                const source = project.api.createInstrument(InstrumentFactories.Playfield, {name: "Source"})
+                project.api.createPlayfieldPad(asInstanceOf(source.instrumentBox, PlayfieldDeviceBox), 38, InstrumentFactories.Nano)
+                const target = project.api.createInstrument(InstrumentFactories.Playfield, {name: "Target"})
+                const {cellBox, instrumentBox} = project.api.createPlayfieldPad(
+                    asInstanceOf(target.instrumentBox, PlayfieldDeviceBox), 36, InstrumentFactories.Vaporisateur).result()
+                return {source, pad: cellBox, padInstrument: instrumentBox}
+            }, false).unwrap("setup")
+            const padHost = project.boxAdapters.adapterFor(pad, Devices.isHost)
+            project.deviceSelection.select(project.boxAdapters.adapterFor(source.instrumentBox, Devices.isInstrument))
+            const copier = DevicesClipboard.createHandler({
+                getEnabled: () => true, editing: project.editing, selection: project.deviceSelection,
+                boxGraph: project.boxGraph, boxAdapters: project.boxAdapters,
+                getHost: () => Option.wrap(project.boxAdapters.adapterFor(source.audioUnitBox, Devices.isHost))
+            })
+            const entry = copier.copy().unwrap("copy")
+            project.deviceSelection.deselectAll()
+            project.deviceSelection.select(project.boxAdapters.adapterFor(padInstrument, Devices.isInstrument))
+            const paster = DevicesClipboard.createHandler({
+                getEnabled: () => true, editing: project.editing, selection: project.deviceSelection,
+                boxGraph: project.boxGraph, boxAdapters: project.boxAdapters, getHost: () => Option.wrap(padHost)
+            })
+            paster.paste(entry)
+            expect(padInstrument.isAttached()).toBe(true)
+            expect(pad.instrument.pointerHub.incoming().map(({box}) => box)).toEqual([padInstrument])
             project.terminate()
         })
     })

@@ -58,10 +58,10 @@ export namespace ClipboardManager {
 
     export const peek = (): Option<AnyEntry> => fallbackEntry
 
-    export const write = (entry: AnyEntry): void => {
+    export const write = (entry: AnyEntry, cut: boolean = false): void => {
         fallbackEntry = Option.wrap(entry)
         Clipboard.writeText(encode(entry))
-        notify(entry, "copied", IconSymbol.Copy)
+        if (cut) {notify(entry, "cut", IconSymbol.Scissors)} else {notify(entry, "copied", IconSymbol.Copy)}
     }
 
     export const decode = (text: string): Option<AnyEntry> => {

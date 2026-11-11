@@ -19,7 +19,7 @@ export namespace PlayfieldPads {
     export const isPad = (cell: InstrumentCompositeCellBox): boolean =>
         cell.composite.targetVertex.mapOr(({box}) => isInstanceOf(box, PlayfieldDeviceBox), false)
 
-    // plays like the former slot: one-shot to the region end, mono, no transposition
+    // replaces any pad on `index`, plays like the former slot: one-shot, mono, no transposition
     export const create = (boxGraph: BoxGraph, playfield: PlayfieldDeviceBox, file: AudioFileBox,
                            index: int, {sampleStart = 0.0, sampleEnd = 1.0, exclude = false}: PlayfieldPadOptions = {}
     ): InstrumentCompositeCellBox => {
@@ -72,11 +72,6 @@ export namespace PlayfieldPads {
     // a Nano placed on a pad starts like a sample pad
     export const preparePadInstrument = (instrument: Box): void => {
         if (isInstanceOf(instrument, NanoDeviceBox)) {applyDefaults(instrument, 0.0, 1.0)}
-    }
-
-    // a pad plays a Nano from a preset at the sample's own pitch
-    export const alignKeyToSample = (cell: InstrumentCompositeCellBox): void => {
-        if (isPad(cell)) {nanoBoxOf(cell).ifSome(nano => cell.key.setValue(nano.rootKey.getValue()))}
     }
 
     // the part of a pad's Nano that makes it play like the former slot

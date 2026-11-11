@@ -47,16 +47,6 @@ describe("PlayfieldPads", () => {
         expect((nano as NanoDeviceBox).file.targetVertex.unwrap().box).toBe(file)
     })
 
-    it("plays a Nano from a preset at the sample's own pitch", () => {
-        const {boxGraph, pad} = setup()
-        const nano = instrumentOf(pad) as NanoDeviceBox
-        boxGraph.beginTransaction()
-        nano.rootKey.setValue(48)
-        PlayfieldPads.alignKeyToSample(pad)
-        boxGraph.endTransaction()
-        expect(pad.key.getValue()).toBe(48)
-    })
-
     it("resets the pad and its Nano", () => {
         const {boxGraph, pad} = setup()
         const nano = instrumentOf(pad) as NanoDeviceBox

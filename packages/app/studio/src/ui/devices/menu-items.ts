@@ -9,18 +9,19 @@ import {
     InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
+    PlayfieldDeviceBoxAdapter,
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {
-    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectBox, EffectFactories, MenuItem, NestedHostExit,
+    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectBox, EffectFactories, MenuItem, NestedHostExit, PadsClipboard,
     PresetEntry
 } from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
 import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
-import {Editing, isDefined, isInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Editing, int, isDefined, isInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Clipboard} from "@opendaw/lib-dom"
-import {InstrumentCompositeBox} from "@opendaw/studio-boxes"
+import {InstrumentCompositeBox, InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
@@ -39,6 +40,34 @@ export namespace MenuItems {
                     err: reason => console.warn(reason)
                 }))
             })
+
+    // a pad copies as an audio unit, so a pad also takes any copied audio unit
+    export const padClipboard = (service: StudioService, playfield: PlayfieldDeviceBoxAdapter, key: int,
+                                 pad: Option<InstrumentCompositeCellBox>): ReadonlyArray<MenuItem> => {
+        const {editing, api} = service.project
+        const copy = (cell: InstrumentCompositeCellBox) => PadsClipboard.copyEntry(cell, playfield.audioUnitBoxAdapter().box)
+        return [
+            MenuItem.default({label: "Copy", selectable: pad.nonEmpty(), separatorBefore: true})
+                .setTriggerProcedure(() => pad.flatMap(copy).ifSome(entry => ClipboardManager.write(entry))),
+            MenuItem.default({label: "Cut", selectable: pad.nonEmpty()})
+                .setTriggerProcedure(() => pad.ifSome(cell => copy(cell).ifSome(entry => {
+                    ClipboardManager.write(entry, true)
+                    editing.modify(() => api.deleteCompositeLayer(cell))
+                }))),
+            MenuItem.default({label: "Paste"})
+                .setTriggerProcedure(async () => {
+                    const system = (await Option.async(Clipboard.readText())).flatMap(ClipboardManager.decode)
+                    const entry = system.nonEmpty() ? system : ClipboardManager.peek()
+                    if (!playfield.box.isAttached()) {return}
+                    if (entry.mapOr(entry => entry.type !== "audio-units", true)) {
+                        RuntimeNotifier.notify({message: "The clipboard holds no pad or audio unit", icon: "Warning"})
+                        return
+                    }
+                    editing.modify(() => api.pasteAudioUnitAsPad(playfield.box, key, entry.unwrap().data)
+                        .match({ok: () => {}, err: reason => RuntimeNotifier.notify({message: reason, icon: "Warning"})}))
+                })
+        ]
+    }
 
     // leaves the cell for its parent, then deletes it
     export const deleteCell = (service: StudioService, cell: InstrumentCompositeCellBoxAdapter): void => {

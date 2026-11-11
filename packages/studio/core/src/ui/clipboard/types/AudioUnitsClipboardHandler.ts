@@ -81,6 +81,9 @@ export namespace AudioUnitsClipboard {
             }
         }).boxes))
 
+    export const entryOf = (boxes: ReadonlyArray<Box>, type: AudioUnitType): ClipboardAudioUnits =>
+        ({type: "audio-units", data: ClipboardUtils.serializeBoxes(boxes, encodeMetadata({type})), count: 1})
+
     export const copyEntry = (audioUnitAdapter: AudioUnitBoxAdapter): Option<ClipboardAudioUnits> => {
         if (audioUnitAdapter.type === AudioUnitType.Output || AudioUnitGroups.isGroup(audioUnitAdapter.box)) {return Option.None}
         const audioUnitBox = audioUnitAdapter.box

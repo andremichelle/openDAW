@@ -54,7 +54,7 @@ export const paintWaveform = ({context, width, height}: CanvasPainter, adapter: 
         const u1 = end * numFrames
         const x0 = start * wd
         const x1 = end * wd
-        context.fillStyle = Colors.dark.toString()
+        context.fillStyle = Colors.blue.toString()
         renderRange(u0, u1, x0, x1)
         context.fillRect(Math.round(x0), 0, 1, fullHeight)
         context.fillRect(Math.round(x1), 0, 1, fullHeight)
