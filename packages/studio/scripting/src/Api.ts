@@ -332,6 +332,27 @@ export interface ScaleMatrixEffect extends MIDIEffect {
 }
 
 /**
+ * Plays the chord on the step of a key for every white key, held black keys change it (C# 7th, D# 9th, F# sus2,
+ * G# sus4, A# the next inversion)
+ * @group MIDI Effects
+ */
+export interface ChordKeysEffect extends MIDIEffect {
+    /** Always "ChordKeys" */
+    readonly key: "ChordKeys"
+    /** Root pitch class (0 to 11, 0 = C, default 0) */
+    root: int
+    /**
+     * Scale (0 to 14, default 0): Major, Natural Minor, Harmonic Minor, Melodic Minor, Dorian, Phrygian, Lydian,
+     * Mixolydian, Locrian, Pentatonic Major, Pentatonic Minor, Blues, Whole Tone, Diminished, Augmented
+     */
+    scale: int
+    /** Uses the key of the project's key track at the note's position instead of root and scale (default true) */
+    follow: boolean
+    /** Plays each chord in the inversion closest to the previous one (default false) */
+    voiceLeading: boolean
+}
+
+/**
  * Reshapes note velocities
  * @group MIDI Effects
  */
@@ -385,6 +406,8 @@ export interface MIDIEffects {
     "NoteFilter": NoteFilterEffect
     /** {@link ScaleMatrixEffect} */
     "ScaleMatrix": ScaleMatrixEffect
+    /** {@link ChordKeysEffect} */
+    "ChordKeys": ChordKeysEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */

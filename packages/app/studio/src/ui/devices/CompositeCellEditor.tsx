@@ -1,13 +1,13 @@
 import css from "./CompositeCellEditor.sass?inline"
-import {Errors, Lifecycle, Option, panic} from "@opendaw/lib-std"
+import {Errors, Lifecycle, Option, panic, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Box, Vertex} from "@opendaw/lib-box"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {CompositeCell, DeviceHost, InstrumentCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {CompositeCell, DeviceHost, InstrumentCompositeCellBoxAdapter, NoteLifeCycle} from "@opendaw/studio-adapters"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {Icon} from "@/ui/components/Icon"
 import {CompositeCellStrip} from "@/ui/devices/CompositeCellStrip"
@@ -17,6 +17,7 @@ import {ClipboardManager, DevicesClipboard, MenuItem} from "@opendaw/studio-core
 import {MenuItems} from "@/ui/devices/menu-items"
 import {DebugMenus} from "@/ui/menu/debug"
 import {StudioService} from "@/service/StudioService"
+import {DevicePanelShortcuts} from "@/ui/shortcuts/DevicePanelShortcuts"
 
 const className = Html.adoptStyleSheet(css, "CompositeCellEditor")
 
@@ -82,10 +83,12 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const nextPad: HTMLElement = <div className="step-button"><Icon symbol={IconSymbol.ArrowRight}/></div>
     const padKey: HTMLElement = <div className="pad-key"/>
     const padStepper: HTMLElement = <div className="pad-stepper">{previousPad}{padKey}{nextPad}</div>
+    const playButton: HTMLElement = <div className="play-button">PLAY</div>
     const navigation: HTMLElement = (
         <div className="navigation">
             {backButton}
             {isPad ? padStepper : numbers}
+            {isPad ? playButton : null}
         </div>
     )
     const element: HTMLElement = (
@@ -147,7 +150,38 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                 if (isPad) {updateStepper(siblings)} else {rebuildNumbers(siblings)}
             }
             update()
+            let padNote: Terminable = Terminable.Empty
+            const releasePadNote = (): void => {
+                padNote.terminate()
+                padNote = Terminable.Empty
+                playButton.classList.remove("active")
+            }
+            const playPadNote = (): void => {
+                releasePadNote()
+                playButton.classList.add("active")
+                padNote = NoteLifeCycle.start(signal => service.project.engine.noteSignal(signal),
+                    host.audioUnitBoxAdapter().uuid, entry.indexField.getValue())
+            }
+            const playShortcut = DevicePanelShortcuts["play-pad"].shortcut
             lifecycle.ownAll(
+                Terminable.create(releasePadNote),
+                Events.subscribe(playButton, "pointerdown", (event: PointerEvent) => {
+                    playButton.setPointerCapture(event.pointerId)
+                    playPadNote()
+                }),
+                Events.subscribe(playButton, "pointerup", releasePadNote),
+                Events.subscribe(playButton, "lostpointercapture", releasePadNote),
+                ShortcutManager.get().global.register(playShortcut, () => {
+                    if (!isPad) {return false}
+                    playPadNote()
+                    return true
+                }),
+                Events.subscribe(window, "keyup", (event: KeyboardEvent) => {
+                    if (Shortcut.resolveCode(event) === playShortcut.code) {releasePadNote()}
+                }),
+                Events.subscribe(window, "blur", releasePadNote),
+                TextTooltip.default(playButton, () =>
+                    `Play pad (${DevicePanelShortcuts["play-pad"].shortcut.format().join("")})`),
                 entry.subscribeSiblings(update),
                 entry.indexField.subscribe(update),
                 Events.subscribe(previousPad, "click", () => step(-1)),

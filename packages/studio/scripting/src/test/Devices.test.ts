@@ -7,7 +7,7 @@ describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "ChordKeys", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach((key, index) => {
             const effect = unit.addMIDIEffect(key)
             expect(effect.key).toBe(key)
@@ -33,6 +33,18 @@ describe("Devices", () => {
         expect(() => matrix.setCustom(new Array(13).fill(0))).toThrow(RangeError)
         matrix.root = 14
         expect(matrix.root).toBe(11)
+    })
+
+    it("edits Chord Keys", () => {
+        const {project} = createFixture()
+        const chordKeys = project.addInstrumentUnit("Vaporisateur").addMIDIEffect("ChordKeys")
+        expect([chordKeys.root, chordKeys.scale, chordKeys.follow, chordKeys.voiceLeading]).toEqual([0, 0, true, false])
+        chordKeys.scale = 3
+        chordKeys.follow = false
+        chordKeys.voiceLeading = true
+        expect([chordKeys.scale, chordKeys.follow, chordKeys.voiceLeading]).toEqual([3, false, true])
+        chordKeys.root = 14
+        expect(chordKeys.root).toBe(11)
     })
 
     it("adds every audio effect with defaults", () => {

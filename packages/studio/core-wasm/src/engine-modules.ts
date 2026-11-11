@@ -88,6 +88,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_pitch.wasm", boxType: "PitchDeviceBox"},     // midi effect
     {url: "/wasm/plugins/device_note_filter.wasm", boxType: "NoteFilterDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_scale_matrix.wasm", boxType: "ScaleMatrixDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_chord_keys.wasm", boxType: "ChordKeysDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {url: "/wasm/plugins/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
     {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
