@@ -42,7 +42,17 @@ describe("visible audio fade handles", () => {
         expect(AudioFadeHandles.hitTest(range, fading, 0, 100, 48, {in: 0.5, out: 0.5}, 101, AudioFadeHandles.y()).isEmpty())
             .toBe(true)
     })
-    it.each([true, false])("moves the diamond in both screen axes and keeps it on the curve, fadeIn=%s", fadeIn => {
+    it.runIf(AudioFadeHandles.SlopeOnCenterAxis).each([true, false])("keeps the slope handle on the center axis of the fade, fadeIn=%s", fadeIn => {
+        for (const [deltaX, deltaY] of [[20, 0], [-20, 8], [0, -8]]) {
+            const point = AudioFadeHandles.curveAfterDrag(0.5, 0.3, deltaX, deltaY, 100, 55, fadeIn)
+            expect(point.position).toBe(0.5)
+            const config = {...fading, in: fadeIn ? 100 : 0, out: fadeIn ? 0 : 100, inSlope: point.slope, outSlope: point.slope}
+            const [handle] = AudioFadeHandles.slopeHandles(range, config, 0, 200, 55, {in: 0.2, out: 0.8})
+            expect(handle.x).toBeCloseTo(fadeIn ? 50 : 150)
+            expect(handle.y).toBeCloseTo(35 + deltaY)
+        }
+    })
+    it.skipIf(AudioFadeHandles.SlopeOnCenterAxis).each([true, false])("moves the diamond in both screen axes and keeps it on the curve, fadeIn=%s", fadeIn => {
         for (const [deltaX, deltaY] of [[20, 0], [-20, 0], [0, 8], [20, 8], [-20, -8]]) {
             const point = AudioFadeHandles.curveAfterDrag(0.5, 0.5, deltaX, deltaY, 100, 55, fadeIn)
             const config = {...fading, in: fadeIn ? 100 : 0, out: fadeIn ? 0 : 100,
@@ -62,6 +72,15 @@ describe("visible audio fade handles", () => {
         const zoomed = AudioFadeHandles.curveAfterDrag(0.5, 0.5, 40, 8, 200, 55, true)
         expect(zoomed.position).toBeCloseTo(first.position)
         expect(zoomed.slope).toBeCloseTo(first.slope)
+    })
+    it.each([true, false])("keeps the diamond at the pointer height when dragged to the fade edges, fadeIn=%s", fadeIn => {
+        for (const deltaX of [-48, -45, -40, 40, 45, 48]) {
+            const point = AudioFadeHandles.curveAfterDrag(0.5, 0.5, deltaX, 0, 100, 55, fadeIn)
+            const config = {...fading, in: fadeIn ? 100 : 0, out: fadeIn ? 0 : 100,
+                inSlope: point.slope, outSlope: point.slope}
+            const [handle] = AudioFadeHandles.slopeHandles(range, config, 0, 200, 55, {in: point.position, out: point.position})
+            expect(handle.y).toBeCloseTo(35, 1)
+        }
     })
     it("bounds the point and curve for extreme or tiny drags", () => {
         for (const delta of [-1000, 1000]) {

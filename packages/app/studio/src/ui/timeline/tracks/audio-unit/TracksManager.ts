@@ -19,9 +19,9 @@ import {
 } from "@opendaw/lib-std"
 import {Dragging} from "@opendaw/lib-dom"
 import {
-    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioRegionBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, ColorCodes,
-    IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
-    InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioRegionBoxAdapter, AudioUnitBoxAdapter,
+    AudioUnitInputAdapter, ColorCodes, IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection,
+    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
     TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
 import {AudioUnitBox} from "@opendaw/studio-boxes"

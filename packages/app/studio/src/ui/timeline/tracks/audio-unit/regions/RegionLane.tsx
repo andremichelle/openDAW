@@ -44,7 +44,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         }),
         {terminate: () => grooveLabels.forEach(entry => entry.subscription.terminate())},
         trackManager.hoveredAudioRegion.subscribe(option => {
-            const next = option.map(region => region)
+            const next: Option<AudioRegionBoxAdapter> = Option.wrap(option.unwrapOrNull())
             if (ownsRegion(hoveredRegion) || ownsRegion(next)) {requestUpdate()}
             hoveredRegion = next
         }),

@@ -1,6 +1,7 @@
-import {createAudioFadeCurveDrag} from "./AudioFadeCurveDrag"
+import {AudioFadeCurveDrag} from "./AudioFadeCurveDrag"
 import {AudioFadeAnchors} from "./AudioFadeAnchors"
-import {createAudioFadeLengthDrag} from "./AudioFadeLengthDrag"
+import {AudioFadeLengthDrag} from "./AudioFadeLengthDrag"
+import {AudioFadeHandles} from "./AudioFadeHandles"
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioRegionBoxAdapter, ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -67,7 +68,7 @@ describe("new fade length drags", () => {
             left.fading.inField.setValue(0)
             left.fading.outField.setValue(0)
         })
-        const drag = createAudioFadeLengthDrag(left.fading, left.duration, fadeIn, 0, project.editing)
+        const drag = AudioFadeLengthDrag.create(left.fading, left.duration, fadeIn, 0, project.editing)
         drag.update(fadeIn ? 960 : -960)
         drag.approve()
         expect(fadeIn ? left.fading.inSlope : left.fading.outSlope).toBe(0.5)
@@ -87,14 +88,14 @@ describe("new fade length drags", () => {
     })
     it.each([true, false])("preserves existing curved fades and restores canceled drags, fadeIn=%s", async fadeIn => {
         const {project, left} = await setup()
-        const drag = createAudioFadeLengthDrag(left.fading, left.duration, fadeIn, 0, project.editing)
+        const drag = AudioFadeLengthDrag.create(left.fading, left.duration, fadeIn, 0, project.editing)
         drag.update(fadeIn ? 3000 : -3000)
         expect(left.fading.inSlope).toBeCloseTo(0.7)
         expect(left.fading.outSlope).toBeCloseTo(0.3)
         drag.cancel()
         expect(fades(left)).toEqual([480, 960])
         project.editing.modify(() => (fadeIn ? left.fading.inField : left.fading.outField).setValue(0))
-        const fresh = createAudioFadeLengthDrag(left.fading, left.duration, fadeIn, 0, project.editing)
+        const fresh = AudioFadeLengthDrag.create(left.fading, left.duration, fadeIn, 0, project.editing)
         fresh.update(fadeIn ? 960 : -960)
         fresh.cancel()
         expect(fades(left)).toEqual(fadeIn ? [0, 960] : [480, 0])
@@ -106,14 +107,14 @@ describe("new fade length drags", () => {
 
 
 describe("movable fade curve points", () => {
-    it.each([true, false])("saves both coordinates, restores Undo/Redo and cancels the next drag, fadeIn=%s", async fadeIn => {
+    it.skipIf(AudioFadeHandles.SlopeOnCenterAxis).each([true, false])("saves both coordinates, restores Undo/Redo and cancels the next drag, fadeIn=%s", async fadeIn => {
         const {project, left} = await setup()
         project.editing.modify(() => {
             left.fading.inSlopeField.setValue(0.5)
             left.fading.outSlopeField.setValue(0.5)
         })
         const originalLengths = fades(left)
-        const drag = createAudioFadeCurveDrag(left, fadeIn, 100, 55, project.editing)
+        const drag = AudioFadeCurveDrag.create(left, fadeIn, 100, 55, project.editing)
         drag.update(20, 8)
         drag.approve()
         const key = fadeIn ? "in" : "out"
@@ -129,7 +130,7 @@ describe("movable fade curve points", () => {
         expect(fadeIn ? left.fading.inSlope : left.fading.outSlope).toBe(0.5)
         project.editing.redo()
         expect(AudioFadeAnchors.read(left.box)[key]).toBeCloseTo(0.7)
-        const next = createAudioFadeCurveDrag(left, fadeIn, 100, 55, project.editing)
+        const next = AudioFadeCurveDrag.create(left, fadeIn, 100, 55, project.editing)
         next.update(-10, -4)
         next.cancel()
         expect(AudioFadeAnchors.read(left.box)[key]).toBeCloseTo(0.7)
@@ -140,7 +141,7 @@ describe("movable fade curve points", () => {
         const {project, left} = await setup()
         const boxCount = project.boxGraph.boxes().length
         const slope = left.fading.inSlope
-        const drag = createAudioFadeCurveDrag(left, true, 100, 55, project.editing)
+        const drag = AudioFadeCurveDrag.create(left, true, 100, 55, project.editing)
         drag.update(0, 0)
         expect(project.boxGraph.boxes()).toHaveLength(boxCount)
         drag.update(10, 5)

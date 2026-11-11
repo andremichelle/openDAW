@@ -82,7 +82,7 @@ export namespace RegionRenderer {
                 const x0Int = x1Int - x0Raw < 2 * dpr ? x0Raw : x0Raw + dpr
                 const xnInt = x1Int - x0Int
                 const selected = region.isSelected && !filterSelected
-                const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
+                const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor, handleColor} =
                     RegionPaintBucket.create(region, selected, trackDisabled)
                 context.clearRect(x0Int, 0, xnInt, height)
                 context.fillStyle = labelBackground
@@ -153,7 +153,7 @@ export namespace RegionRenderer {
                     context.restore()
                 }
                 if (isInstanceOf(region, AudioRegionBoxAdapter) && tracks.hoveredAudioRegion.contains(region)) {
-                    AudioFadeHandles.render(context, range, region.fading, position, complete, bound.bottom, contentColor,
+                    AudioFadeHandles.render(context, range, region.fading, position, complete, bound.bottom, handleColor,
                         AudioFadeAnchors.read(region.box))
                 }
                 if (selected) {
