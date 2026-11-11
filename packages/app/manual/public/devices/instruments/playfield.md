@@ -81,7 +81,7 @@ Turn **Shot** off to stop the sample on note release, or turn the loop on to cyc
 
 ### 2.2 Move to Own Track
 
-Right-click a pad and choose **Move to Own Track** to turn it into a regular instrument track next to the Playfield. Its instrument, effects, mix, automation and notes go along, so it sounds the same. The pad is removed from the Playfield.
+Right-click a pad and choose **Move to Own Track** to turn it into a regular instrument track next to the Playfield, or drag the pad onto the timeline to place the new track where you drop it. Its instrument, effects, mix, automation and notes go along, so it sounds the same. The pad is removed from the Playfield.
 
 ### 2.3 Excl. (Exclusive Group)
 

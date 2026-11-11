@@ -13,12 +13,14 @@ import {
     PlayfieldDeviceBox,
     TrackBox
 } from "@opendaw/studio-boxes"
-import {AudioUnitFactory, InstrumentBox, PlayfieldPads, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitFactory, AudioUnitGroups, InstrumentBox, PlayfieldPads, TrackType} from "@opendaw/studio-adapters"
 import type {Project} from "./Project"
+import type {AudioUnitInsertion} from "./ProjectApi"
 
 // a pad becomes its own instrument unit next to the Playfield and sounds the same there
 export namespace PlayfieldPadToUnit {
-    export const extract = (project: Project, cell: InstrumentCompositeCellBox): Attempt<AudioUnitBox, string> => {
+    export const extract = (project: Project, cell: InstrumentCompositeCellBox,
+                            insertion: Option<AudioUnitInsertion> = Option.None): Attempt<AudioUnitBox, string> => {
         if (!PlayfieldPads.isPad(cell)) {return Attempts.err("Not a Playfield pad")}
         const instrument = cell.instrument.pointerHub.incoming().at(0)?.box
         if (isAbsent(instrument)) {return Attempts.err("The pad holds no instrument")}
@@ -26,11 +28,15 @@ export namespace PlayfieldPadToUnit {
         const source = playfield.host.targetVertex.unwrap("playfield host").box
         if (!isInstanceOf(source, AudioUnitBox)) {return Attempts.err("Only a Playfield on its own track can hand out a pad")}
         const {boxGraph, api} = project
-        const destination = source.output.targetVertex.map(({box}) => box).unwrapOrNull()
+        const placement = insertion.unwrapOrElse(() => api.insertionAfter(Option.wrap(source)))
+        const destination = insertion.isEmpty()
+            ? source.output.targetVertex.map(({box}) => box).unwrapOrNull()
+            : placement.parent.flatMap(uuid => boxGraph.findBox(uuid))
+                .flatMap(box => isInstanceOf(box, AudioUnitBox) ? AudioUnitGroups.bus(box) : Option.None).unwrapOrNull()
         const unit = AudioUnitFactory.create(project.skeleton, AudioUnitType.Instrument,
             Option.wrap(CaptureMidiBox.create(boxGraph, UUID.generate())), undefined,
             isInstanceOf(destination, AudioBusBox) ? destination : undefined)
-        api.placeAudioUnitsAt([unit], api.insertionAfter(Option.wrap(source)))
+        api.placeAudioUnitsAt([unit], placement)
         unit.volume.setValue(cell.gain.getValue())
         unit.panning.setValue(cell.pan.getValue())
         unit.mute.setValue(cell.mute.getValue())

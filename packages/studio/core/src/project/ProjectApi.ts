@@ -327,8 +327,9 @@ export class ProjectApi {
     }
 
     // the pad's instrument, chains, mix, automation and notes on a new unit next to the Playfield
-    movePadToUnit(cellBox: InstrumentCompositeCellBox): Attempt<AudioUnitBox, string> {
-        return PlayfieldPadToUnit.extract(this.#project, cellBox)
+    movePadToUnit(cellBox: InstrumentCompositeCellBox,
+                  insertion: Option<AudioUnitInsertion> = Option.None): Attempt<AudioUnitBox, string> {
+        return PlayfieldPadToUnit.extract(this.#project, cellBox, insertion)
     }
 
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {

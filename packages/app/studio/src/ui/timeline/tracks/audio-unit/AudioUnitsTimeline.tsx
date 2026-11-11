@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {DefaultObservableValue, int, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isInstanceOf, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -13,13 +13,14 @@ import {
     AudioUnitBoxAdapter,
     InstrumentFactories,
     ModulatorBoxAdapter,
+    PlayfieldPads,
     TrackBoxAdapter
 } from "@opendaw/studio-adapters"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, InstrumentCompositeCellBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
@@ -117,10 +118,16 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         </div>
     )
     const unitInsertion = new UnitInsertion(element, manager, rootBoxAdapter)
+    const draggedPad = (dragData: AnyDragData): Option<InstrumentCompositeCellBox> => dragData.type !== "playfield-slot"
+        ? Option.None
+        : boxGraph.findBox(UUID.parse(dragData.uuid))
+            .flatMap(box => isInstanceOf(box, PlayfieldDeviceBox) ? PlayfieldPads.padAt(box, dragData.index) : Option.None)
+            .flatMap(pad => pad.instrument.pointerHub.incoming().length > 0 ? Option.wrap(pad) : Option.None)
     const isNewUnit = (dragData: AnyDragData): boolean =>
         (dragData.type === "instrument" && dragData.device !== null)
         || (dragData.type === "preset" && (dragData.category === "instrument" || dragData.category === "audio-unit"))
         || (dragData.type === "script" && dragData.script.target === "apparat")
+        || draggedPad(dragData).nonEmpty()
     lifecycle.ownAll(
         // The root sees drags over headers, lanes, gaps and the empty band alike, so a new unit can land
         // between any two units. The inner targets (effects onto a header, samples onto a lane) keep theirs.
@@ -134,7 +141,10 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 unitInsertion.hide()
                 if (!isNewUnit(dragData)) {return}
                 const anchor = unitInsertion.anchorAt(event.clientY)
-                if (dragData.type === "instrument" && dragData.device !== null) {
+                if (dragData.type === "playfield-slot") {
+                    draggedPad(dragData).ifSome(pad => editing.modify(() => api.movePadToUnit(pad, Option.wrap(api.insertionBefore(anchor)))
+                        .match({ok: unit => userEditingManager.audioUnit.edit(unit.editing), err: reason => console.warn(reason)})))
+                } else if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
                     editing.modify(() => {
                         const {audioUnitBox} = api.createInstrumentAt(factory, api.insertionBefore(anchor))

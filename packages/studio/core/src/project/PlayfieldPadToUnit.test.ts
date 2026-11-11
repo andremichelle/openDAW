@@ -115,6 +115,16 @@ describe("PlayfieldPadToUnit", () => {
         expect(pitches(movedCollection)).toEqual([62, 62])
     })
 
+    it("places the new unit where a drop names it", async () => {
+        const {project, cellBox} = await setup()
+        const {api, editing} = project
+        const first = units(project)[0]
+        const unit = editing.modify(() =>
+            api.movePadToUnit(cellBox, Option.wrap(api.insertionBefore(Option.wrap(first.address.uuid)))).result()).unwrap()
+        expect(units(project).indexOf(unit)).toBe(units(project).indexOf(first) - 1)
+        expect(cellBox.isAttached()).toBe(false)
+    })
+
     it("refuses a cell that is no pad or holds no instrument", async () => {
         const {project, cellBox} = await setup()
         project.editing.modify(() => cellBox.instrument.pointerHub.incoming().forEach(({box}) => box.delete()))

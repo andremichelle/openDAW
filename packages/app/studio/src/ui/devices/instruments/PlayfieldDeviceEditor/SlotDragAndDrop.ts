@@ -1,4 +1,4 @@
-import {byte, int, Terminable} from "@opendaw/lib-std"
+import {byte, int, Terminable, UUID} from "@opendaw/lib-std"
 import {Project} from "@opendaw/studio-core"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData, DragDevice} from "@/ui/AnyDragData"
@@ -33,7 +33,7 @@ export namespace SlotDragAndDrop {
         return DragAndDrop.installSource(element, () => ({
             type: "playfield-slot",
             index: getSlotIndex() as byte,
-            uuid: pad.box.composite.targetAddress.unwrap("composite").uuid.toString()
+            uuid: UUID.toString(pad.box.composite.targetAddress.unwrap("composite").uuid)
         } satisfies DragDevice))
     }
 
@@ -47,7 +47,7 @@ export namespace SlotDragAndDrop {
     // pads move within their own Playfield only
     export const installTarget = ({element, project, playfield, getSlotIndex}: TargetConstruct): Terminable => {
         const accepts = (data: AnyDragData): boolean => data.type === "playfield-slot"
-            && data.uuid === playfield.address.uuid.toString() && data.index !== getSlotIndex()
+            && data.uuid === UUID.toString(playfield.address.uuid) && data.index !== getSlotIndex()
         return DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => accepts(data),
             drop: (event: DragEvent, data: AnyDragData): void => {
