@@ -42,7 +42,9 @@ export const UserInterfaceBox: BoxSchema<Pointers> = {
                 type: "field",
                 name: "view-states",
                 pointerRules: {accepts: [Pointers.ViewState], mandatory: false}
-            }
+            },
+            50: {type: "boolean", name: "mixer-midi-effects-collapsed"},
+            51: {type: "boolean", name: "mixer-audio-effects-collapsed"}
         },
         name: "UserInterfaceBox"
     }, pointerRules: {accepts: [Pointers.MetaData], mandatory: false}

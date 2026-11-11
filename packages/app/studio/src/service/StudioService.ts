@@ -441,6 +441,8 @@ export class StudioService implements ProjectEnv {
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
 
+    revealDevice(uuid: UUID.Bytes): void {this.#signals.notify({type: "reveal-device", uuid})}
+
     async verifyProject() {
         if (!this.hasProfile) {return}
         const {boxGraph} = this.project

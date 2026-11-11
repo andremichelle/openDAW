@@ -167,7 +167,7 @@ export namespace TrackGrouping {
             Events.subscribe(header, "pointerdown", (event: PointerEvent) => {
                 dragged = false
                 onRelease = null
-                if (event.target instanceof Element && event.target.closest("button,input,select,svg.collapse-automation")) {return}
+                if (event.target instanceof Element && event.target.closest("button,input,select,svg.collapse-automation,[data-mixer-devices]")) {return}
                 if (event.button === 2 || Browser.isMacOS() && event.ctrlKey) {
                     selectForMenu(project, unit)
                 } else if (event.button === 0) {

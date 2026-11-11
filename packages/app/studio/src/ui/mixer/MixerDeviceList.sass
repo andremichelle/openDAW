@@ -1,0 +1,97 @@
+@use "@/mixins"
+
+component
+  --mixer-device-cell-height: 14px
+  @include mixins.width-available
+  display: flex
+  flex-direction: column
+  row-gap: 1px
+  min-width: 0
+  border-radius: 0.25em
+  background-color: rgba(black, 0.2)
+  padding: 2px
+
+  > div.body
+    display: flex
+    min-height: 0
+
+    > div.scroll
+      flex: 1 1 auto
+      min-width: 0
+      display: flex
+      flex-direction: column
+      max-height: calc(var(--mixer-device-cell-height) * var(--max-device-rows))
+      overflow: hidden
+
+      &.insert-end
+        box-shadow: inset 0 -2px 0 var(--color-blue)
+
+    > div.scrollbar
+      display: none
+      flex: 0 0 4px
+      margin-left: 1px
+
+      > div
+        width: 4px
+        background-color: transparent
+
+        > div
+          left: 0
+          right: 0
+          width: 4px
+
+  > div.add
+    margin-top: auto
+    flex: 0 0 var(--mixer-device-cell-height)
+    height: var(--mixer-device-cell-height)
+    display: flex
+    align-items: center
+    justify-content: center
+    border-radius: 2px
+    font-size: 10px
+    color: rgba(white, 0.3)
+    background-color: rgba(white, 0.03)
+    cursor: pointer
+
+    &:hover
+      color: var(--color-cream)
+      background-color: rgba(white, 0.08)
+
+  &.refuses > div.add
+    display: none
+
+  &.frozen > div.add
+    cursor: default
+    opacity: 0.3
+    pointer-events: none
+
+  &.empty > div.body
+    display: none
+
+  &.scrollable > div.body > div.scrollbar
+    display: flex
+
+  > div.count
+    display: none
+    height: var(--mixer-device-cell-height)
+    font-size: 0.5em
+    line-height: var(--mixer-device-cell-height)
+    text-align: center
+    color: var(--color-cream)
+
+  &.empty > div.count
+    color: rgba(white, 0.2)
+
+  &.collapsed
+    > div.body, > div.add
+      display: none
+
+    > div.count
+      display: block
+
+  &.void
+    background-image: repeating-linear-gradient(-45deg, rgba(black, 0.25) 0 2px, transparent 2px 5px)
+    min-height: var(--mixer-device-cell-height)
+
+    > div.body, > div.add, > div.count
+      display: none

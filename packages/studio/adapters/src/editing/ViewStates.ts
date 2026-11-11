@@ -34,6 +34,9 @@ export class ViewStates implements Terminable {
     follow(userInterfaceBox: UserInterfaceBox): void {
         this.#release()
         this.#user = Option.wrap(userInterfaceBox)
+        this.#following.ownAll(
+            userInterfaceBox.mixerMidiEffectsCollapsed.subscribe(() => this.#notifier.notify()),
+            userInterfaceBox.mixerAudioEffectsCollapsed.subscribe(() => this.#notifier.notify()))
         this.#following.own(userInterfaceBox.viewStates.pointerHub.catchupAndSubscribe({
             onAdded: pointer => {
                 const {box} = pointer
@@ -60,6 +63,13 @@ export class ViewStates implements Terminable {
         return this.#value(target, box => box.height.getValue(), (box, value) => box.height.setValue(value), 0)
     }
 
+    mixerEffectsCollapsed(kind: "midi" | "audio"): MutableObservableValue<boolean> {
+        const field = (user: UserInterfaceBox) => kind === "midi" ? user.mixerMidiEffectsCollapsed : user.mixerAudioEffectsCollapsed
+        return this.#observable(
+            () => this.#user.mapOr(user => field(user).getValue(), false),
+            value => this.#user.ifSome(user => field(user).setValue(value)))
+    }
+
     subscribe(observer: Observer<void>): Subscription {return this.#notifier.subscribe(observer)}
 
     terminate(): void {
@@ -82,24 +92,26 @@ export class ViewStates implements Terminable {
 
     #value<T>(target: AudioUnitBox | TrackBox, read: (box: ViewStateBox) => T,
               write: (box: ViewStateBox, value: T) => void, fallback: T): MutableObservableValue<T> {
-        const states = this
+        return this.#observable(() => this.#entry(target).mapOr(read, fallback), value => this.#entry(target).match({
+            none: () => {
+                if (value === fallback) {return}
+                this.#user.ifSome(user => write(ViewStateBox.create(user.graph, UUID.generate(), box => {
+                    box.target.refer(target)
+                    box.user.refer(user.viewStates)
+                }), value))
+            },
+            some: box => write(box, value)
+        }))
+    }
+
+    #observable<T>(read: () => T, write: (value: T) => void): MutableObservableValue<T> {
+        const notifier = this.#notifier
         return new class implements MutableObservableValue<T> {
-            getValue(): T {return states.#entry(target).mapOr(read, fallback)}
-            setValue(value: T): void {
-                states.#entry(target).match({
-                    none: () => {
-                        if (value === fallback) {return}
-                        states.#user.ifSome(user => write(ViewStateBox.create(user.graph, UUID.generate(), box => {
-                            box.target.refer(target)
-                            box.user.refer(user.viewStates)
-                        }), value))
-                    },
-                    some: box => write(box, value)
-                })
-            }
+            getValue(): T {return read()}
+            setValue(value: T): void {write(value)}
             subscribe(observer: Observer<ObservableValue<T>>): Subscription {
                 let last = this.getValue()
-                return states.#notifier.subscribe(() => {
+                return notifier.subscribe(() => {
                     const next = this.getValue()
                     if (next === last) {return}
                     last = next

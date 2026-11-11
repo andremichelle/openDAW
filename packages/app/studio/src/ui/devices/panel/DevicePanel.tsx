@@ -34,7 +34,7 @@ import {Orientation, Scroller} from "@/ui/components/Scroller"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip"
 import {installAutoScroll} from "@/ui/AutoScroll"
-import {deferNextFrame, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, deferNextFrame, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DevicePanelShortcuts} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
 import {CompositeCellEditor} from "@/ui/devices/CompositeCellEditor"
@@ -160,6 +160,19 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
 
     const chainLifecycle = lifecycle.own(new Terminator())
     const mounts = UUID.newSet<DeviceMount>(({uuid}) => uuid)
+    const pendingReveal = new MutableObservableOption<UUID.Bytes>()
+    const revealPending = (): void => pendingReveal.ifSome(uuid => {
+        mounts.opt(uuid).match({
+            none: () => pendingReveal.clear(),
+            some: mount => {
+                const editor = mount.editor()
+                if (!isInstanceOf(editor, Element) || !editor.isConnected || devices.clientWidth === 0) {return}
+                pendingReveal.clear()
+                const offset = editor.getBoundingClientRect().left - containers.getBoundingClientRect().left
+                scrollModel.position = offset - (devices.clientWidth - editor.clientWidth) / 2
+            }
+        })
+    })
     const updateDom = lifecycle.own(deferNextFrame(() => {
         // Emptying the containers detaches the focused device header, and the browser drops focus to <body>. The
         // panel's Ctrl+D context is focus-scoped, so without restoring it the next press falls through to the
@@ -180,6 +193,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         const optEditing = project.userEditingManager.audioUnit.get()
         noAudioUnitSelectedPlaceholder.classList.toggle("hidden", optEditing.nonEmpty())
         if (optEditing.isEmpty()) {
+            pendingReveal.clear()
             clearChains()
             return
         }
@@ -229,6 +243,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                           compact={true}/>
         ))
         updateScroller()
+        revealPending()
         if (isNotNull(previouslyFocused)) {
             // A surviving mount keeps its element, so the same header can take the focus back. A device that is
             // gone (cut, replaced) hands it to whatever is selected now.
@@ -380,7 +395,14 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             editing.modify(() => api.deleteAudioUnit(audioUnit.box))
             return true
         }),
-        Html.watchResize(element, updateScroller),
+        service.subscribeSignal(({uuid}) => {
+            pendingReveal.wrap(uuid)
+            AnimationFrame.once(revealPending)
+        }, "reveal-device"),
+        Html.watchResize(element, () => {
+            updateScroller()
+            revealPending()
+        }),
         Html.watchResize(containers, updateScroller),
         scrollModel.subscribe(() => devices.scrollLeft = scrollModel.position),
         Events.subscribe(element, "wheel", (event: WheelEvent) => {

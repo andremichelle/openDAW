@@ -16,6 +16,9 @@ import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {GroupRails} from "@/ui/timeline/tracks/audio-unit/GroupRails"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
+import {Icon} from "@/ui/components/Icon"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {IconSymbol} from "@opendaw/studio-enums"
 
 const loadMasteringPanel = dynamicImportWithRetry(() => import("@/ui/mixer/MasteringPanel"))
 
@@ -34,10 +37,25 @@ type Construct = {
 
 export const Mixer = ({lifecycle, service}: Construct) => {
     const project = service.project
+    const sectionHeader = (kind: "midi" | "audio", label: string): HTMLElement => {
+        const collapsed = project.userEditingManager.viewStates.mixerEffectsCollapsed(kind)
+        const toggle: HTMLElement = <Icon symbol={IconSymbol.Dropdown} className="collapse"/>
+        lifecycle.ownAll(
+            Events.subscribe(toggle, "pointerdown", event => {
+                event.stopPropagation()
+                project.editing.modify(() => collapsed.setValue(!collapsed.getValue()), false)
+            }),
+            collapsed.catchupAndSubscribe(owner => toggle.classList.toggle("collapsed", owner.getValue())),
+            TextTooltip.default(toggle, () => collapsed.getValue() ? `Expand ${label}` : `Collapse ${label}`)
+        )
+        return <div className="section">{toggle}<h5>{label}</h5></div>
+    }
     const headers: HTMLElement = (
         <div className="headers">
             <h5/>
+            {sectionHeader("midi", "MIDI FX")}
             <h5>Input</h5>
+            {sectionHeader("audio", "Audio FX")}
             <h5>Sends</h5>
             <h5>Output</h5>
             <h5>Pan</h5>
@@ -106,7 +124,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         masteringPanel.ifSome(panel => {
             const outputIndex = sorted.findIndex(({adapter}) => adapter.isOutput)
             panel.style.gridColumn = String(outputIndex + 3)
-            panel.style.gridRow = "2 / 9"
+            panel.style.gridRow = "2 / 11"
             channelStripContainer.appendChild(panel)
         })
         groupRails.update(layout.boundaries)
@@ -151,6 +169,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 terminator.ownAll(
                     Events.subscribe(editor, "pointerdown", (event: PointerEvent) => {
                         scrollIntoViewEnabled = false
+                        if (event.target instanceof Element && isDefined(event.target.closest("[data-mixer-devices]"))) {return}
                         if (TrackGrouping.editsOnPress(project, adapter.box, event) && !project.userEditingManager.audioUnit.isEditing(adapter.box.editing)) {
                             project.userEditingManager.audioUnit.edit(adapter.box.editing)
                         }

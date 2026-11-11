@@ -10,6 +10,7 @@ export namespace ContextMenu {
     export interface Collector {
         addItems(...items: MenuItem[]): this
         closeWhen(observe: Func<Exec, Subscription>): void
+        stopPropagation(): void
 
         get client(): Client
     }
@@ -24,6 +25,7 @@ export namespace ContextMenu {
 
         #hasItems: boolean = false
         #separatorBefore: boolean = false
+        #stopped: boolean = false
 
         constructor(readonly client: Client) {}
 
@@ -44,10 +46,15 @@ export namespace ContextMenu {
 
         readonly closeWhen = (observe: Func<Exec, Subscription>): void => {this.#observers.push(observe)}
 
+        readonly stopPropagation = (): void => {this.#stopped = true}
+
         readonly watch = (close: Exec): Terminable => Terminable.many(...this.#observers.map(observe => observe(close)))
 
         readonly appendToChain = (fn: () => unknown): void => {
-            this.#chain = this.#chain.then(async () => {await fn()})
+            this.#chain = this.#chain.then(async () => {
+                if (this.#stopped) {return}
+                await fn()
+            })
         }
         readonly waitForChain = (): Promise<void> => this.#chain
 

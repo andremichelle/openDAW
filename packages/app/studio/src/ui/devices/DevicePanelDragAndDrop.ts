@@ -16,9 +16,9 @@ import {
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectBox, EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
+import {PresetSource, Project} from "@opendaw/studio-core"
+import {EffectDrop} from "@/ui/devices/EffectDrop"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
-import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
@@ -173,37 +173,9 @@ export namespace DevicePanelDragAndDrop {
                 // because `drop` is reachable on its own.
                 const optField = DeviceHost.chainFieldOf(deviceHost, accepts)
                 if (optField.isEmpty()) {return}
-                const field = optField.unwrap()
                 const container = accepts === "audio" ? audioEffectsContainer : midiEffectsContainer
                 const [index] = DragAndDrop.findInsertLocation(event, container)
-                if (dragData.uuids === null) {
-                    editing.modify(() => {
-                        const factory = EffectFactories.MergedNamed[dragData.device]
-                        project.api.insertEffect(field, factory, index)
-                    })
-                } else {
-                    const uuids = dragData.uuids
-                    if (uuids.length === 0) {return}
-                    const deviceType = accepts === "audio" ? "audio-effect" : "midi-effect"
-                    const boxes = uuids
-                        .map(uuidStr => project.boxGraph.findBox(UUID.parse(uuidStr)).unwrapOrNull())
-                        .filter(isDefined)
-                        .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
-                    if (boxes.length === 0) {return}
-                    if (DragAndDrop.isCopy(event, dragData)) {
-                        editing.modify(() => project.api.copyEffects(field, boxes, index))
-                        return
-                    }
-                    const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
-                    if (sameChain) {
-                        // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.
-                        const startIndices = boxes.map(box => box.index.getValue()).toSorted((a, b) => a - b)
-                        editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
-                    } else {
-                        // A cross-chain MOVE (e.g. an effect dragged out of a composite branch): re-home it here.
-                        editing.modify(() => project.api.moveEffects(field, boxes, index))
-                    }
-                }
+                EffectDrop.apply(project, dragData, optField.unwrap(), index, DragAndDrop.isCopy(event, dragData))
             },
             enter: () => {},
             leave: () => {

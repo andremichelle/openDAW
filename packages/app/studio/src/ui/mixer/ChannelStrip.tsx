@@ -25,6 +25,7 @@ import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
+import {MixerDeviceList} from "./MixerDeviceList"
 
 const className = Html.adoptStyleSheet(css, "ChannelStrip")
 
@@ -141,6 +142,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             {!compact && (
                 <Frag>
                     {iconElement}
+                    <MixerDeviceList lifecycle={lifecycle} service={service} unit={adapter} kind="midi"
+                                     collapsed={viewStates.mixerEffectsCollapsed("midi")}/>
                     <DblClckTextInput resolversFactory={
                         () => {
                             const resolvers = Promise.withResolvers<string>()
@@ -150,6 +153,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                     } provider={() => ({value: adapter.input.label.unwrap("input.label"), unit: ""})}>
                         <h5 className="input">{inputLabel}</h5>
                     </DblClckTextInput>
+                    <MixerDeviceList lifecycle={lifecycle} service={service} unit={adapter} kind="audio"
+                                     collapsed={viewStates.mixerEffectsCollapsed("audio")}/>
                     <AuxSendGroup lifecycle={lifecycle} project={project} audioUnitAdapter={adapter}
                                   mastering={mastering}/>
                     {isOutput

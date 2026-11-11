@@ -20,7 +20,7 @@ component
       width: max-content
       padding: 0.5em
       display: grid
-      grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto 40px 1fr auto
+      grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto auto auto 40px 1fr auto
       grid-auto-flow: column dense
       justify-content: start
       --mixer-row-gap: 4px
@@ -28,24 +28,44 @@ component
       column-gap: 8px
 
       > [data-unit]
-        grid-row: 2 / 9
+        grid-row: 2 / 11
 
       > div.headers
         display: grid
         grid-template-rows: subgrid
-        grid-row: 2 / 9
+        grid-row: 2 / 11
         grid-column: 1
         padding: 0 0.5em 0.5em 1em
         border-radius: 0.125em
         background-color: rgba(white, 0.01)
 
-        > h5
+        h5
           font-size: 0.5em
           display: flex
           margin-top: 0.375em
           justify-content: right
           color: rgba(white, 0.4)
           pointer-events: none
+
+        > div.section
+          display: flex
+          justify-content: right
+          align-items: flex-start
+          column-gap: 2px
+
+          > svg.collapse
+            flex: 0 0 auto
+            margin-top: 0.25em
+            font-size: 0.625em
+            color: rgba(white, 0.4)
+            cursor: pointer
+            transition: transform 0.1s
+
+            &.collapsed
+              transform: rotate(-90deg)
+
+            &:hover
+              color: var(--color-cream)
   [data-unit].group-drop-inside
     position: relative
 
