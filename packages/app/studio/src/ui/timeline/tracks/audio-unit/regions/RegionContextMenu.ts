@@ -73,6 +73,9 @@ export const installRegionContextMenu =
             const region = target.region
             closeWhen(close => region.box.subscribeDeletion(close))
             addItems(
+                ColorMenu.createPalette(hue => editing.modify(() =>
+                    selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue))),
+                    selection.selected().every(adapter => adapter.hue === region.hue) ? region.hue : undefined),
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
@@ -92,8 +95,6 @@ export const installRegionContextMenu =
                     const newValue = !region.mute
                     return selection.selected().slice().forEach(adapter => adapter.box.mute.setValue(newValue))
                 })),
-                ColorMenu.createItem(hue => editing.modify(() =>
-                    selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
                 GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Rename"})
                     .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label)
