@@ -12,6 +12,7 @@ import {AnyRegionBoxAdapter, RegionEditing, TrackType} from "@opendaw/studio-ada
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
+import {duplicateSelectedRegions} from "./duplicateSelectedRegions"
 import {StudioService} from "@/service/StudioService.ts"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
 import {Cursor} from "@/ui/Cursors.ts"
@@ -78,7 +79,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const {audioUnitFreeze} = project
     const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
-    const shortcuts = ShortcutManager.get().createContext(element, "Regions")
+    const shortcuts = ShortcutManager.get().createContext(element, "Regions", 1)
     const {engine, boxGraph, overlapResolver, trackFocus} = project
     const clipboardHandler = RegionsClipboard.createHandler({
         getEnabled: () => !engine.isPlaying.getValue(),
@@ -108,6 +109,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             regionSelection.select(...manager.tracks()
                 .filter(track => !track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false))
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
+        }),
+        shortcuts.register(RegionsShortcuts["duplicate-regions"].shortcut, () => {
+            duplicateSelectedRegions(project)
+            return true
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
         shortcuts.register(RegionsShortcuts["delete-selection"].shortcut, () => {

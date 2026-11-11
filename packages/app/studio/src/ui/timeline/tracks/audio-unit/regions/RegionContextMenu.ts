@@ -1,3 +1,4 @@
+import {duplicateSelectedRegions} from "./duplicateSelectedRegions"
 import {Editing, EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
 import {
@@ -76,14 +77,8 @@ export const installRegionContextMenu =
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
-                MenuItem.default({label: "Duplicate"})
-                    .setTriggerProcedure(() => editing.modify(() => {
-                        project.api.duplicateRegion(region)
-                            .ifSome(duplicate => {
-                                selection.deselectAll()
-                                selection.select(duplicate)
-                            })
-                    })),
+                MenuItem.default({label: "Duplicate", shortcut: RegionsShortcuts["duplicate-regions"].shortcut.format()})
+                    .setTriggerProcedure(() => duplicateSelectedRegions(project)),
                 MenuItem.default({
                     label: "Mute",
                     checked: region.mute,
