@@ -1,4 +1,4 @@
-import {asDefined, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
+import {asDefined, Predicate, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
 import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {AudioUnitBoxAdapter, AudioUnitLayout, ColorCodes} from "@opendaw/studio-adapters"
@@ -30,7 +30,8 @@ export class GroupRails implements Terminable {
             })
         )
     }
-    update(spans: ReadonlyArray<AudioUnitLayout.Boundary>): void {
+    update(allSpans: ReadonlyArray<AudioUnitLayout.Boundary>, drawn: Predicate<AudioUnitBox> = () => true): void {
+        const spans = allSpans.filter(({unit}) => drawn(unit))
         const groups = new Set(spans.map(span => span.unit))
         this.#rails.forEach((entry, unit) => {
             if (groups.has(unit)) {return}
@@ -66,8 +67,8 @@ export class GroupRails implements Terminable {
         if (this.container instanceof HTMLElement && this.horizontal) {
             // Include one nesting step per rail, accounting for the grid's first control-row gap.
             // The final rail-to-strip gap then matches the gap between nested rails.
-            const height = spans.length === 0 ? "0px" :
-                `calc(${(1 + Math.max(...spans.map(span => span.depth))) * AudioUnitLayout.Indent}px - var(--mixer-row-gap, 4px))`
+            const height = allSpans.length === 0 ? "0px" :
+                `calc(${(1 + Math.max(...allSpans.map(span => span.depth))) * AudioUnitLayout.Indent}px - var(--mixer-row-gap, 4px))`
             this.container.style.setProperty("--group-rail-height", height)
         }
         this.#refreshSelection()

@@ -1,4 +1,4 @@
-import {asDefined, Optional, Option, Predicate} from "@opendaw/lib-std"
+import {asDefined, isDefined, Optional, Option, Predicate} from "@opendaw/lib-std"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitGroups} from "./AudioUnitGroups"
 
@@ -7,6 +7,7 @@ export class AudioUnitLayout {
     readonly visibleRows: ReadonlyArray<AudioUnitLayout.Row>
     readonly boundaries: ReadonlyArray<AudioUnitLayout.Boundary>
     readonly #byUnit: ReadonlyMap<AudioUnitBox, AudioUnitLayout.Row>
+    readonly #parents: ReadonlySet<AudioUnitBox>
 
     constructor(root: RootBox,
                 isCollapsed: Predicate<AudioUnitBox>) {
@@ -41,8 +42,10 @@ export class AudioUnitLayout {
         this.visibleRows = visible
         this.boundaries = boundaries
         this.#byUnit = byUnit
+        this.#parents = new Set(rows.flatMap(row => isDefined(row.parent) ? [row.parent] : []))
     }
     row(unit: AudioUnitBox): Option<AudioUnitLayout.Row> {return Option.wrap(this.#byUnit.get(unit))}
+    hasMembers(unit: AudioUnitBox): boolean {return this.#parents.has(unit)}
 }
 
 export namespace AudioUnitLayout {

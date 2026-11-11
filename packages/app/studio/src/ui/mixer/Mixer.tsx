@@ -132,7 +132,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
             panel.style.gridRow = "2 / 11"
             channelStripContainer.appendChild(panel)
         })
-        groupRails.update(layout.boundaries)
+        groupRails.update(layout.boundaries, unit => layout.hasMembers(unit))
         anchorLifecycle.terminate()
         const first = sorted.at(0)
         if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}

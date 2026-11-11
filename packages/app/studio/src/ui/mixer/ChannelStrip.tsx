@@ -136,6 +136,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             folderToggle.setAttribute("aria-label", collapsed ? "Expand group bus" : "Collapse group bus")
             folderToggle.title = collapsed ? "Expand group bus" : "Collapse group bus"
         }))
+        lifecycle.own(project.audioUnitLayout.value.catchupAndSubscribe(owner =>
+            folderToggle.classList.toggle("hidden", !owner.getValue().hasMembers(adapter.box))))
         iconElement.appendChild(folderToggle)
     }
     const classList = Html.buildClassList(className,
@@ -212,7 +214,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
         ContextMenu.subscribe(element, collector => {
             if (!project.audioUnitSelection.isSelected(adapter.box)) {TrackGrouping.selectTracks(project, [adapter.box])}
             collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
-            if (isGroup) {
+            if (isGroup && project.audioUnitLayout.snapshot.hasMembers(adapter.box)) {
                 collector.addItems(MenuItem.default({
                     label: groupCollapsed.getValue() ? "Expand Group Bus" : "Collapse Group Bus"
                 }).setTriggerProcedure(() => editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))))

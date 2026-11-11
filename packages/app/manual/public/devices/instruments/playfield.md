@@ -43,7 +43,7 @@ Each pad displays:
 - **Move samples**: Drag a sample from one pad to another to swap positions
 - **Copy samples**: Hold ⌥ and drag a sample to copy it to another pad
 - **Move to another octave**: Drag a sample over the octave dots on the left, hold until the octave switches, then drop on any pad
-- **Context menu**: Right-click a pad to browse for samples
+- **Copy, Cut, Paste**: Right-click a pad. A copied pad is an ordinary audio unit, so it pastes onto another pad, onto the timeline as a new track, or into a Composite as a layer. A pad also takes any audio unit copied from a track. Its notes stay behind, and a pad already on that key is replaced.
 - **Delete**: Select a pad and press Delete to remove the sample
 
 > **Note**: Copying uses ⌥ (Option/Alt) instead of ⌘ (Command) due to a long-standing browser limitation on macOS where the drop event doesn't fire when Command is held during drag operations.
@@ -87,6 +87,12 @@ Right-click a pad and choose **Move to Own Track** to turn it into a regular ins
 
 When enabled on several pads, triggering any of them stops the others. Classic use: open and closed hi-hats.
 
-### 2.4 Older projects
+### 2.4 Other instruments
+
+An empty pad has an instrument button next to the sample button. It opens the device browser, so a pad can play any instrument, presets, WebCLAPs and soundfonts included. A pad with an instrument offers **Replace Instrument** in its menu.
+
+A pad always sends C3 to its instrument. That is why a Playfield or a Composite cannot be put on a pad: it would only ever play its own C3. Tape is left out as well, since it plays its own timeline and ignores notes.
+
+### 2.5 Older projects
 
 Projects saved before the pads open with every slot turned into a pad, with the same sample, region, envelope, pitch, mix, effects and automation.
