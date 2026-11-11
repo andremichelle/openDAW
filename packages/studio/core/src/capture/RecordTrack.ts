@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "../TrackHeightDefaults"
 import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
 import {asInstanceOf, Editing, int, isDefined, Nullable, UUID} from "@opendaw/lib-std"
 import {TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -33,6 +34,7 @@ export namespace RecordTrack {
 
     const createAt = (audioUnitBox: AudioUnitBox, type: TrackType, index: int): TrackBox =>
         TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
+            box.height.setValue(TrackHeightDefaults.get())
             box.type.setValue(type)
             box.index.setValue(index)
             box.tracks.refer(audioUnitBox.tracks)

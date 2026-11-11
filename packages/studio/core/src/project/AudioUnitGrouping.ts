@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "../TrackHeightDefaults"
 import {Arrays, asDefined, asInstanceOf, isDefined, Option, Optional} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitGroups, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {AudioBusBox, AuxSendBox, AudioUnitBox} from "@opendaw/studio-boxes"
@@ -69,6 +70,7 @@ export class AudioUnitGrouping {
         const bus = AudioBusFactory.create(skeleton, this.#uniqueGroupName("Group Bus"), IconSymbol.Merge, AudioUnitType.Bus, Colors.orange,
             isDefined(parent) ? AudioUnitGroups.bus(parent).unwrapOrUndefined() : undefined)
         const group = asInstanceOf(bus.output.targetVertex.unwrap().box, AudioUnitBox)
+        group.userInterface.height.setValue(TrackHeightDefaults.get())
         group.volume.setValue(0) // unity gain: grouping alone must not change the level
         this.move([group], parent, anchor)
         this.move(selected, group)

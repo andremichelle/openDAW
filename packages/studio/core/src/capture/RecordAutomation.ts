@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "../TrackHeightDefaults"
 import {int, Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@opendaw/lib-std"
 import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address} from "@opendaw/lib-box"
@@ -50,7 +51,7 @@ export namespace RecordAutomation {
         if (existing.nonEmpty()) {return existing}
         // The new lane only joins its collection on commit, so take the adapter straight from the box.
         return Option.wrap(project.boxAdapters
-            .adapterFor(tracks.create(TrackType.Value, adapter.field), TrackBoxAdapter))
+            .adapterFor(TrackHeightDefaults.apply(tracks.create(TrackType.Value, adapter.field)), TrackBoxAdapter))
     }
 
     const createRegion = (

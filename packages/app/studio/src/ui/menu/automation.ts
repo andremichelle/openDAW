@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "@opendaw/studio-core"
 import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
 import {
     AudioUnitTracks,
@@ -31,7 +32,7 @@ export const parameterContextItems = <T extends PrimitiveValues>(editing: Editin
             ? MenuItem.default({label: "Create Automation", hidden: disableAutomation})
                 .setTriggerProcedure(() => editing.modify(() => {
                     if (parameter.track.nonEmpty()) {return}
-                    tracks.create(TrackType.Value, field)
+                    TrackHeightDefaults.apply(tracks.create(TrackType.Value, field))
                 }))
             : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
                 .setTriggerProcedure(() => editing.modify(() =>
@@ -64,7 +65,7 @@ const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,
         automation.isEmpty()
             ? MenuItem.default({label: "Create Automation", selectable: owner.nonEmpty()})
                 .setTriggerProcedure(() => editing.modify(() =>
-                    owner.ifSome(tracks => tracks.create(TrackType.Value, field))))
+                    owner.ifSome(tracks => TrackHeightDefaults.apply(tracks.create(TrackType.Value, field)))))
             : MenuItem.default({label: "Remove Automation"})
                 .setTriggerProcedure(() => editing.modify(() =>
                     automation.ifSome(track => owner.unwrap("no lane owner").delete(track)))),
