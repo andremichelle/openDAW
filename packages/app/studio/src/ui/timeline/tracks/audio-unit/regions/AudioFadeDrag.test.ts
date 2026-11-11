@@ -1,4 +1,5 @@
-import {createAudioFadeCurveDrag, readFadeCurvePositions} from "./AudioFadeCurveDrag"
+import {createAudioFadeCurveDrag} from "./AudioFadeCurveDrag"
+import {AudioFadeAnchors} from "./AudioFadeAnchors"
 import {createAudioFadeLengthDrag} from "./AudioFadeLengthDrag"
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
@@ -117,21 +118,21 @@ describe("movable fade curve points", () => {
         drag.approve()
         const key = fadeIn ? "in" : "out"
         const slope = fadeIn ? left.fading.inSlope : left.fading.outSlope
-        expect(readFadeCurvePositions(left.box)[key]).toBeCloseTo(0.7)
+        expect(AudioFadeAnchors.read(left.box)[key]).toBeCloseTo(0.7)
         expect(fades(left)).toEqual(originalLengths)
         const loaded = ProjectSkeleton.decode(ProjectSkeleton.encode(project.boxGraph))
         const loadedBox = loaded.boxGraph.findBox(left.box.address.uuid).unwrap() as AudioRegionBox
-        expect(readFadeCurvePositions(loadedBox)[key]).toBeCloseTo(0.7)
+        expect(AudioFadeAnchors.read(loadedBox)[key]).toBeCloseTo(0.7)
         expect(fadeIn ? loadedBox.fading.inSlope.getValue() : loadedBox.fading.outSlope.getValue()).toBe(slope)
         project.editing.undo()
-        expect(readFadeCurvePositions(left.box)).toEqual({in: 0.5, out: 0.5})
+        expect(AudioFadeAnchors.read(left.box)).toEqual({in: 0.5, out: 0.5})
         expect(fadeIn ? left.fading.inSlope : left.fading.outSlope).toBe(0.5)
         project.editing.redo()
-        expect(readFadeCurvePositions(left.box)[key]).toBeCloseTo(0.7)
+        expect(AudioFadeAnchors.read(left.box)[key]).toBeCloseTo(0.7)
         const next = createAudioFadeCurveDrag(left, fadeIn, 100, 55, project.editing)
         next.update(-10, -4)
         next.cancel()
-        expect(readFadeCurvePositions(left.box)[key]).toBeCloseTo(0.7)
+        expect(AudioFadeAnchors.read(left.box)[key]).toBeCloseTo(0.7)
         expect(fadeIn ? left.fading.inSlope : left.fading.outSlope).toBe(slope)
         project.terminate()
     })
@@ -144,7 +145,7 @@ describe("movable fade curve points", () => {
         expect(project.boxGraph.boxes()).toHaveLength(boxCount)
         drag.update(10, 5)
         drag.cancel()
-        expect(readFadeCurvePositions(left.box)).toEqual({in: 0.5, out: 0.5})
+        expect(AudioFadeAnchors.read(left.box)).toEqual({in: 0.5, out: 0.5})
         expect(left.fading.inSlope).toBe(slope)
         expect(project.boxGraph.boxes()).toHaveLength(boxCount)
         project.terminate()

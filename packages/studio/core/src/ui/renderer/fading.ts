@@ -1,4 +1,4 @@
-import {Curve, TAU} from "@opendaw/lib-std"
+import {Curve} from "@opendaw/lib-std"
 import {FadingEnvelope} from "@opendaw/lib-dsp"
 import {TimelineRange} from "../../index"
 import {RegionBound} from "./env"
@@ -10,8 +10,7 @@ export namespace AudioFadingRenderer {
                            {top, bottom}: RegionBound,
                            startPPQN: number,
                            endPPQN: number,
-                           color: string,
-                           showHandles: boolean = true): void => {
+                           color: string): void => {
         const dpr = devicePixelRatio
         const actualTop = top * dpr
         const actualBottom = bottom * dpr
@@ -54,16 +53,5 @@ export namespace AudioFadingRenderer {
             path.lineTo(x0, actualTop)
             context.fill(path)
         }
-        if (!showHandles) {return}
-        const handleRadius = 1.5 * dpr
-        const x0 = Math.max(range.unitToX(startPPQN + fadeIn), range.unitToX(startPPQN)) * dpr
-        const x1 = Math.min(range.unitToX(endPPQN - fadeOut), range.unitToX(endPPQN)) * dpr
-        context.fillStyle = color
-        context.beginPath()
-        context.arc(x0, actualTop, handleRadius, 0, TAU)
-        context.fill()
-        context.beginPath()
-        context.arc(x1, actualTop, handleRadius, 0, TAU)
-        context.fill()
     }
 }

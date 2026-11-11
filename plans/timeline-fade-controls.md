@@ -4,14 +4,12 @@ Show larger, clip-colored square length handles while hovering over a clip. New 
 
 ## AI-assisted work
 
-Extracted this change from [the combined timeline PR](https://github.com/polinom/openDAW/pull/2) and adapted it to upstream `next-release`. Reviewed the resulting diff separately from the other feature branches.
+Extracted from a combined timeline branch and adapted to `next-release`, then reviewed as its own diff.
 
 ## Manual check
 
 Hover an audio clip, pull out each fade, and drag its diamond horizontally and vertically. Undo, then save and reopen to check the diamond position.
 
-## Two-axis drag follow-up
+## Hit testing
 
-The existing curve math already moves the point horizontally and vertically. On short fades, the square and diamond grab areas can overlap. The old hit test tried the square first, so grabbing the visible diamond could start a length or Shift slope drag instead. Use the painted shape first and the closest handle within the grab radius second. Use the same positions for painting and hit testing, and only test handles on the hovered clip.
-
-Studio type checking and 19 focused tests passed. An isolated Chrome project with a generated WAV verified horizontal and diagonal drags, both fade directions, and a short fade where the overlapping diamond moved without changing the square position. Project graph tests cover save/load, Undo/Redo, and cancel.
+On short fades the square and diamond grab areas overlap. The painted shape wins first, then the closest handle within the grab radius. Painting and hit testing share the same positions, and only the hovered clip is tested.

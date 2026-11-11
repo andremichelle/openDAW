@@ -1,5 +1,3 @@
-import {readFadeCurvePositions} from "./AudioFadeCurveDrag"
-import {AudioFadeHandles} from "./AudioFadeHandles"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
@@ -13,6 +11,8 @@ import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {AudioUnitFreeze, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
+import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
+import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
 
 export type RegionCaptureTarget =
     | { type: "region", part: "position", region: AnyRegionBoxAdapter }
@@ -20,9 +20,7 @@ export type RegionCaptureTarget =
     | { type: "region", part: "complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
-    | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
-    | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
-    | { type: "region", part: "fading-in-slope" | "fading-out-slope", region: AudioRegionBoxAdapter }
+    | { type: "region", part: AudioFadeHandles.Part, region: AudioRegionBoxAdapter, track: TrackContext }
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
@@ -58,8 +56,8 @@ export namespace RegionCapturing {
                     const x1 = range.unitToX(region.complete)
                     if (isInstanceOf(region, AudioRegionBoxAdapter)) {
                         const part = AudioFadeHandles.hitTest(range, region.fading, region.position, region.complete,
-                            track.size, readFadeCurvePositions(region.box), x, y - track.position)
-                        if (part !== undefined) {return {type: "region", part, region}}
+                            track.size, AudioFadeAnchors.read(region.box), x, y - track.position)
+                        if (part.nonEmpty()) {return {type: "region", part: part.unwrap(), region, track}}
                     }
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
                         const bottomEdge = y > track.position + RegionLabel.labelHeight()

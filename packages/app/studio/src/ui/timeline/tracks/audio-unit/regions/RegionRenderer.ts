@@ -1,5 +1,3 @@
-import {readFadeCurvePositions} from "./AudioFadeCurveDrag"
-import {AudioFadeHandles} from "./AudioFadeHandles"
 import {int, isInstanceOf, Iterables, Option, unitValue} from "@opendaw/lib-std"
 import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
@@ -19,6 +17,8 @@ import {Context2d} from "@opendaw/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
+import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
+import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
 
 export namespace RegionRenderer {
     let audioRenderStrategy: AudioRenderer.Strategy = AudioRenderer.DefaultStrategy
@@ -29,7 +29,7 @@ export namespace RegionRenderer {
     export const render = (context: CanvasRenderingContext2D,
                            tracks: TracksManager,
                            range: TimelineRange,
-                           index: int, hoverUnit: number | null = null): void => {
+                           index: int): void => {
         const canvas = context.canvas
         const {width, height} = canvas
         const {fontFamily} = getComputedStyle(canvas)
@@ -134,7 +134,7 @@ export namespace RegionRenderer {
                                 contentLoops.forEach(pass => AudioRenderer.render(context, range, file, tempoMap,
                                     region.observableOptPlayMode, region.waveformOffset.getValue(),
                                     region.gain.getValue(), bound, contentColor, pass, true, audioRenderStrategy))
-                                AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground, false)
+                                AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
                             }),
                         visitValueRegionBoxAdapter: (region: ValueRegionBoxAdapter): void => {
                             const top = bound.top * dpr
@@ -152,9 +152,9 @@ export namespace RegionRenderer {
                     })
                     context.restore()
                 }
-                if (isInstanceOf(region, AudioRegionBoxAdapter)
-                    && hoverUnit !== null && hoverUnit >= position && hoverUnit < complete) {
-                    AudioFadeHandles.render(context, range, region.fading, position, complete, contentColor, readFadeCurvePositions(region.box))
+                if (isInstanceOf(region, AudioRegionBoxAdapter) && tracks.hoveredAudioRegion.contains(region)) {
+                    AudioFadeHandles.render(context, range, region.fading, position, complete, bound.bottom, contentColor,
+                        AudioFadeAnchors.read(region.box))
                 }
                 if (selected) {
                     context.fillStyle = labelBackground

@@ -1,8 +1,8 @@
-import {Events, Html} from "@opendaw/lib-dom"
-import {Lifecycle, Subscription, UUID} from "@opendaw/lib-std"
+import {Html} from "@opendaw/lib-dom"
+import {Lifecycle, Option, Subscription, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {RegionRenderer} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
-import {TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
 import {RegionLaneClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
@@ -23,13 +23,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
     const element: Element = (<div className={className}>{canvas}</div>)
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         if (visible) {
-            const pointer = trackManager.regionPointer.getValue()
-            const bounds = canvas.getBoundingClientRect()
-            const hoverUnit = pointer !== null
-                && pointer.x >= bounds.left && pointer.x < bounds.right
-                && pointer.y >= bounds.top && pointer.y < bounds.bottom
-                ? range.xToUnit(pointer.x - bounds.left) : null
-            RegionRenderer.render(context, trackManager, range, adapter.listIndex, hoverUnit)
+            RegionRenderer.render(context, trackManager, range, adapter.listIndex)
             updated = true
         }
     }))
@@ -38,6 +32,9 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         painter.requestUpdate()
     }
     const {trackFocus, rootBoxAdapter} = trackManager.service.project
+    const ownsRegion = (option: Option<AudioRegionBoxAdapter>): boolean =>
+        option.mapOr(region => region.trackBoxAdapter.contains(adapter), false)
+    let hoveredRegion: Option<AudioRegionBoxAdapter> = Option.None
     const grooveLabels = UUID.newSet<{uuid: UUID.Bytes, subscription: Subscription}>(entry => entry.uuid)
     lifecycle.ownAll(
         rootBoxAdapter.grooves.catchupAndSubscribe({
@@ -46,8 +43,11 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
             onReorder: () => {}
         }),
         {terminate: () => grooveLabels.forEach(entry => entry.subscription.terminate())},
-        trackManager.regionPointer.subscribe(requestUpdate),
-        Events.subscribe(trackManager.scrollableContainer, "scroll", requestUpdate),
+        trackManager.hoveredAudioRegion.subscribe(option => {
+            const next = option.map(region => region)
+            if (ownsRegion(hoveredRegion) || ownsRegion(next)) {requestUpdate()}
+            hoveredRegion = next
+        }),
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),

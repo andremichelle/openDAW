@@ -34,13 +34,13 @@ describe("visible audio fade handles", () => {
         const [diamond] = AudioFadeHandles.slopeHandles(range, config, 0, 100, height, anchors)
         const squareX = fadeIn ? 5 : 95, squareY = AudioFadeHandles.y()
         expect(Math.hypot(diamond.x - squareX, diamond.y - squareY)).toBeLessThan(AudioFadeHandles.hitRadius)
-        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, diamond.x, diamond.y)).toBe(diamond.part)
-        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, squareX, squareY))
+        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, diamond.x, diamond.y).unwrap()).toBe(diamond.part)
+        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, squareX, squareY).unwrap())
             .toBe(fadeIn ? "fading-in" : "fading-out")
     })
     it("does not grab a handle that is hidden outside the hovered clip", () => {
-        expect(AudioFadeHandles.hitTest(range, fading, 0, 100, 48, {in: 0.5, out: 0.5}, 101, AudioFadeHandles.y()))
-            .toBeUndefined()
+        expect(AudioFadeHandles.hitTest(range, fading, 0, 100, 48, {in: 0.5, out: 0.5}, 101, AudioFadeHandles.y()).isEmpty())
+            .toBe(true)
     })
     it.each([true, false])("moves the diamond in both screen axes and keeps it on the curve, fadeIn=%s", fadeIn => {
         for (const [deltaX, deltaY] of [[20, 0], [-20, 0], [0, 8], [20, 8], [-20, -8]]) {

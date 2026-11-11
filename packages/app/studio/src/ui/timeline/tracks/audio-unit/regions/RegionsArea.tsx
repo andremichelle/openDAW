@@ -1,14 +1,24 @@
 import css from "./RegionsArea.sass?inline"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
-import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
+import {
+    clamp,
+    DefaultObservableValue,
+    EmptyExec,
+    isDefined,
+    isInstanceOf,
+    Lifecycle,
+    Nullable,
+    Option,
+    Unhandled
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
 import {ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {AnyRegionBoxAdapter, RegionEditing, TrackType} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, AudioRegionBoxAdapter, RegionEditing, TrackType} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
@@ -21,8 +31,9 @@ import {RegionDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/Re
 import {RegionMoveModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveModifier.ts"
 import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionLoopDurationModifier.ts"
 import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionContentStartModifier.ts"
-import {createAudioFadeCurveDrag} from "./AudioFadeCurveDrag"
-import {createAudioFadeLengthDrag} from "./AudioFadeLengthDrag"
+import {createAudioFadeCurveDrag} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeCurveDrag.ts"
+import {createAudioFadeLengthDrag} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeLengthDrag.ts"
+import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
@@ -98,6 +109,12 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     })
 
     const emptyLanePointer = {clientX: 0, clientY: 0}
+    const hoverAudioRegion = (target: Nullable<RegionCaptureTarget>, clientX: number) => {
+        const unit = range.xToUnit(clientX - element.getBoundingClientRect().left)
+        const region = isDefined(target) && target.type === "region" ? target.region : null
+        manager.hoveredAudioRegion.wrap(isInstanceOf(region, AudioRegionBoxAdapter)
+            && region.position <= unit && unit < region.complete ? region : null)
+    }
     const emptyLaneHint = () => ({
         clientX: emptyLanePointer.clientX + 8, clientY: emptyLanePointer.clientY + 16, text: "Double-click to create a note-region"
     })
@@ -162,10 +179,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             }
         }),
         Events.subscribe(element, "pointermove", (event: PointerEvent) => {
-            manager.regionPointer.setValue({x: event.clientX, y: event.clientY})
             emptyLanePointer.clientX = event.clientX
             emptyLanePointer.clientY = event.clientY
             const target = capturing.captureEvent(event)
+            hoverAudioRegion(target, event.clientX)
             const tooltip = Layers.get(element).textTooltip
             if (TextTooltip.enabled && StudioPreferences.settings.visibility["visible-help-hints"] && target?.type === "track" && target.track.trackBoxAdapter.type === TrackType.Notes
                 && target.track.trackBoxAdapter.regions.collection.length() === 0) {
@@ -175,8 +192,13 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             }
         }),
         Events.subscribe(element, "pointerleave", () => {
-            manager.regionPointer.setValue(null)
+            manager.hoveredAudioRegion.clear()
             Layers.get(element).textTooltip.hide()
+        }),
+        Events.subscribe(scrollContainer, "scroll", () => {
+            if (!element.matches(":hover")) {return}
+            const {clientX, clientY} = emptyLanePointer
+            hoverAudioRegion(capturing.capturePoint(clientX, clientY), clientX)
         }),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
@@ -338,7 +360,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "fading-in-slope":
                     case "fading-out-slope":
                     case "fading-out": {
-                        const audioRegion = target.region
+                        const {region: audioRegion, track} = target
                         const isFadeIn = target.part === "fading-in" || target.part === "fading-in-slope"
                         const {duration, fading} = audioRegion
                         const diamond = target.part === "fading-in-slope" || target.part === "fading-out-slope"
@@ -346,23 +368,16 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                             const slopeField = isFadeIn ? fading.inSlopeField : fading.outSlopeField
                             const originalSlope = slopeField.getValue()
                             const startX = event.clientX, startY = event.clientY
-                            const scale = fading.in + fading.out > duration ? duration / (fading.in + fading.out) : 1
-                            const fadeLength = (isFadeIn ? fading.in : fading.out) * scale
-                            const fadeWidth = Math.abs(range.unitToX(audioRegion.position + fadeLength)
-                                - range.unitToX(audioRegion.position))
-                            const laneHeight = manager.tracks().find(track => track.trackBoxAdapter === audioRegion.trackBoxAdapter.unwrap())?.size ?? 48
                             if (diamond) {
-                                const drag = createAudioFadeCurveDrag(audioRegion, isFadeIn, fadeWidth, laneHeight, editing)
+                                const fadeLength = (isFadeIn ? fading.in : fading.out) * AudioFadeHandles.scale(fading, duration)
+                                const fadeWidth = Math.abs(range.unitToX(audioRegion.position + fadeLength)
+                                    - range.unitToX(audioRegion.position))
+                                const drag = createAudioFadeCurveDrag(audioRegion, isFadeIn, fadeWidth, track.size, editing)
                                 return Option.wrap({
-                                    ...drag,
-                                    update: (dragEvent: Dragging.Event) => {
-                                        drag.update(dragEvent.clientX - startX, dragEvent.clientY - startY)
-                                        manager.regionPointer.setValue({x: dragEvent.clientX, y: dragEvent.clientY})
-                                    },
-                                    cancel: () => {
-                                        drag.cancel()
-                                        manager.regionPointer.setValue({x: startX, y: startY})
-                                    }
+                                    update: (dragEvent: Dragging.Event) =>
+                                        drag.update(dragEvent.clientX - startX, dragEvent.clientY - startY),
+                                    approve: () => drag.approve(),
+                                    cancel: () => drag.cancel()
                                 } satisfies Dragging.Process)
                             }
                             return Option.wrap({
@@ -378,9 +393,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         const startPointer = range.xToUnit(event.clientX - clientRect.left)
                         const drag = createAudioFadeLengthDrag(fading, duration, isFadeIn, startPointer, editing)
                         return Option.wrap({
-                            ...drag,
                             update: (dragEvent: Dragging.Event) =>
-                                drag.update(range.xToUnit(dragEvent.clientX - clientRect.left))
+                                drag.update(range.xToUnit(dragEvent.clientX - clientRect.left)),
+                            approve: () => drag.approve(),
+                            cancel: () => drag.cancel()
                         } satisfies Dragging.Process)
                     }
                     default: {
