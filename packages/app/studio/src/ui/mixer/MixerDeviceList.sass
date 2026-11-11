@@ -2,14 +2,16 @@
 
 component
   --mixer-device-cell-height: 14px
+  --mixer-device-padding: 1px
+  --mixer-device-inner-radius: calc(0.25em - var(--mixer-device-padding))
   @include mixins.width-available
   display: flex
   flex-direction: column
   row-gap: 1px
   min-width: 0
   border-radius: 0.25em
-  background-color: rgba(black, 0.2)
-  padding: 2px
+  background-color: rgba(black, 0.25)
+  padding: var(--mixer-device-padding)
 
   > div.body
     display: flex
@@ -47,11 +49,13 @@ component
     display: flex
     align-items: center
     justify-content: center
-    border-radius: 2px
-    font-size: 10px
+    border-radius: var(--mixer-device-inner-radius)
     color: rgba(white, 0.3)
     background-color: rgba(white, 0.03)
     cursor: pointer
+
+    > svg
+      font-size: 10px
 
     &:hover
       color: var(--color-cream)
@@ -73,21 +77,19 @@ component
 
   > div.count
     display: none
-    height: var(--mixer-device-cell-height)
-    font-size: 0.5em
-    line-height: var(--mixer-device-cell-height)
-    text-align: center
-    color: var(--color-cream)
-
-  &.empty > div.count
-    color: rgba(white, 0.2)
+    flex: 1 0 var(--mixer-device-cell-height)
+    align-items: center
+    justify-content: center
+    font-size: 9px
+    line-height: 1
+    color: rgba(white, 0.15)
 
   &.collapsed
     > div.body, > div.add
       display: none
 
     > div.count
-      display: block
+      display: flex
 
   &.void
     background-image: repeating-linear-gradient(-45deg, rgba(black, 0.25) 0 2px, transparent 2px 5px)

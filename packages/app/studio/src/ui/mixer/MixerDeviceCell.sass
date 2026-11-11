@@ -7,7 +7,7 @@ component
   align-items: center
   column-gap: 3px
   padding: 0 3px
-  border-radius: 2px
+  border-radius: var(--mixer-device-inner-radius)
   cursor: pointer
   min-width: 0
 
@@ -45,7 +45,7 @@ component
     text-overflow: ellipsis
 
   &.enabled > span.label
-    color: var(--color-cream)
+    color: rgba(white, 0.7)
 
   &.frozen
     cursor: default
