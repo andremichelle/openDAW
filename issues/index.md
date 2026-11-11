@@ -2,11 +2,11 @@
 
 All 422 GitHub issues (pull requests excluded), fetched 2026-11-09. Open issues have one file each with summary, analysis and a possible solution. Closed issues are listed below only.
 
-## Open (49)
+## Open (46)
 
-Complexity: small 9, medium 17, large 20, unknown 3
+Complexity: small 9, medium 17, large 17, unknown 3
 
-Status: probably-fixed 1, ready 17, partially-done 13, discussion 10, needs-info 5, blocked 3
+Status: probably-fixed 1, ready 17, partially-done 11, discussion 10, needs-info 5, blocked 2
 
 Sorted by status (probably fixed and ready first), then complexity.
 
@@ -40,9 +40,7 @@ Sorted by status (probably fixed and ready first), then complexity.
 | [139](0139.md) | Request - Parameter Modulation Controllers | feature | modulation | partially-done | large | Request for parameter modulators: envelope follower, LFO, MSEG, step, XY, key tracking and velocity. |
 | [170](0170.md) | Dynamically load devices into the studio | feature | devices | partially-done | large | Load devices (stock and external) on demand at runtime instead of bundling them all, with sandboxing so a broken device cannot crash the studio. |
 | [203](0203.md) | Analyser Device | feature | devices | partially-done | large | An analyser with oscilloscope, spectrum, spectrogram, phase scope, pitch detector and loudness, ideally able to compare several tracks. |
-| [288](0288.md) | convert playfield into a generic one-shot grid | feature | devices | partially-done | large | Let the Playfield host any instrument per pad, so a drum kit can mix synths and samples, plus a named drum key layout in the note editor. |
 | [300](0300.md) | Grouped tracks | feature | timeline | partially-done | large | Folder style group tracks in the timeline that collapse their children and route them through a shared bus. |
-| [411](0411.md) | Make Nano V2 including all feature of a Playfield slot | feature | devices | partially-done | large | Nano must cover every feature of a Playfield slot so that Playfield pads can be replaced by Nano instances. |
 | [255](0255.md) | Implement dough-samples to default openDAW samples | feature | cloud | discussion | small | Add Strudel's dough-samples collection to the default openDAW sample library. |
 | [149](0149.md) | Separate envelopes for volume and filter in Vaporisatur | feature | devices | discussion | medium | Vaporisateur uses one ADSR for both amplitude and filter cutoff, users ask for a separate filter envelope. |
 | [327](0327.md) | Add a "deleted tracks" pan | feature | timeline | discussion | medium | Tracks disappear unnoticed, the reporter asks for a recycle bin panel to listen to and restore deleted tracks. |
@@ -60,9 +58,8 @@ Sorted by status (probably fixed and ready first), then complexity.
 | [516](0516.md) | Safari: input peak meter reacts about 500 ms late | bug | recording | needs-info | unknown | In Safari the input peak meter of an armed audio track lags about 500 ms behind the sound, recording itself is aligned. |
 | [518](0518.md) | latency issues on linux | bug | audio output | blocked | small | 40 to 50 ms output latency and a 115 ms round trip on Linux (Fedora, PipeWire, Chromium based Helium, Scarlett Solo). |
 | [23](0023.md) | Native Version | feature | desktop | blocked | large | Request for a locally installable openDAW for Linux, for offline use and better audio performance. |
-| [409](0409.md) | Dragging playfield instruments into seperate tracks | feature | devices | blocked | large | Drag a Playfield pad to the timeline to split it into its own track with its notes and its own effects. |
 
-## Closed (373)
+## Closed (376)
 
 | # | Title | Type | Area | Resolution | Summary |
 |---|---|---|---|---|---|
@@ -141,7 +138,9 @@ Sorted by status (probably fixed and ready first), then complexity.
 | 415 | audio dropouts while interacting with UI | bug | audio engine | fixed | Playback has small dropouts while selecting or editing in large projects. |
 | 414 | return playhead to initial position when stopping | feature | transport | fixed | Playhead should return to its start position on stop instead of on next play. |
 | 412 | Visibility toggles | feature | UI | fixed | Clip menu and tempo and signature automation visibility should persist. |
+| 411 | Make Nano V2 including all feature of a Playfield slot | feature | devices | fixed | Every Playfield pad plays with Nano, old slots migrate to pads with the same sample and settings. |
 | 410 | Project closes if ALT+Mousewheel is used outside timeline | bug | UI | fixed | Using Alt plus mouse wheel outside the timeline closes the project in Firefox. |
+| 409 | Dragging playfield instruments into seperate tracks | feature | devices | fixed | A pad dragged onto the timeline (or Move to Own Track) becomes its own track with its effects, mix, automation and only its notes. |
 | 407 | Total UX freedom | feature | UX | answered | Megathread for the reporter's UX ideas linking #403, #405, #408 and #409. |
 | 405 | Make curve envelope selectable | feature | automation | fixed | Curve slope values of envelopes should be selectable and editable by typing. |
 | 403 | New device drag UX | feature | UI | fixed | Dragging new devices needs auto scroll and an easier drop target. |
@@ -218,6 +217,7 @@ Sorted by status (probably fixed and ready first), then complexity.
 | 291 | visual bug with automation node curves | bug | automation | fixed | Automation curves render incorrectly at -100%. |
 | 290 | Recording silently drops audio in hidden tabs: RingBuffer main-thread reader is timer-throttled while the ring holds only ~0.37s | bug | recording | fixed | Recording in a hidden tab silently drops audio because the ring buffer reader is timer throttled while the ring holds only about 0.37 seconds. |
 | 289 | selecting a midi clip | other | UI | fixed | Selecting a MIDI clip should also select its track and switch the device panel to it. |
+| 288 | convert playfield into a generic one-shot grid | feature | devices | fixed | Pads hold any instrument with their own chains and react only to their own note, the drum key layout in the note editor is planned separately. |
 | 287 | dragging multiple clips over a single clip causes opendaw to crash | bug | timeline | fixed | Dragging several clips over one clip crashes the studio. |
 | 286 | mixdown is not the correct length | bug | export | not-planned | Mixdown ignores the end marker. |
 | 285 | more buttons to create audio busses | feature | mixer | not-planned | Request for easier add bus buttons in the timeline and mixer. |
