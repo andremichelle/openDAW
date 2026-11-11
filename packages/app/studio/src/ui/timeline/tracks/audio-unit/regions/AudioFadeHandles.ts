@@ -37,6 +37,42 @@ export namespace AudioFadeHandles {
         ]
     }
 
+    const lengthHandles = (range: Pick<TimelineRange, "unitToX">,
+                           fading: FadingEnvelope.Config, start: number, end: number) => {
+        const {inX, outX} = positions(range, fading, start, end)
+        return [
+            {part: "fading-in" as const, x: inX, y: y()},
+            {part: "fading-out" as const, x: outX, y: y()}
+        ]
+    }
+
+    export const hitTest = (range: Pick<TimelineRange, "unitToX">,
+                            fading: FadingEnvelope.Config, start: number, end: number, height: number,
+                            anchors: {in: number, out: number}, x: number, localY: number) => {
+        // The canvas only shows the handles for the clip under the pointer.
+        if (x < range.unitToX(start) || x >= range.unitToX(end)) {return undefined}
+        const diamonds = slopeHandles(range, fading, start, end, height, anchors)
+        const squares = lengthHandles(range, fading, start, end)
+        let closest: (typeof diamonds | typeof squares)[number]["part"] | undefined
+        let bestDistance = hitRadius ** 2
+        let bestOnShape = false
+        // Match paint order on ties: a diamond is drawn on top of a square.
+        for (const [handles, diamond] of [[diamonds.toReversed(), true], [squares, false]] as const) {
+            for (const handle of handles) {
+                const dx = Math.abs(x - handle.x), dy = Math.abs(localY - handle.y)
+                const distance = dx * dx + dy * dy
+                const onShape = (diamond ? dx + dy : Math.max(dx, dy)) <= radius
+                if (distance > hitRadius ** 2) {continue}
+                if (onShape && !bestOnShape || onShape === bestOnShape && distance < bestDistance) {
+                    bestDistance = distance
+                    bestOnShape = onShape
+                    closest = handle.part
+                }
+            }
+        }
+        return closest
+    }
+
     export const curveAfterDrag = (originalSlope: number, originalPosition: number,
                                    deltaX: number, deltaY: number, width: number, height: number, fadeIn: boolean) => {
         const position = clamp(originalPosition + deltaX / Math.max(1, width), 0.02, 0.98)
@@ -54,15 +90,14 @@ export namespace AudioFadeHandles {
     export const render = (context: CanvasRenderingContext2D, range: TimelineRange,
                            fading: FadingEnvelope.Config, start: number, end: number, color: string,
                            anchors = {in: 0.5, out: 0.5}): void => {
-        const {inX, outX} = positions(range, fading, start, end)
         const dpr = devicePixelRatio
         context.save()
         context.fillStyle = color
         context.strokeStyle = "#15191d"
         context.lineWidth = 1.5 * dpr
-        for (const x of [inX, outX]) {
+        for (const {x, y} of lengthHandles(range, fading, start, end)) {
             context.beginPath()
-            context.rect((x - radius) * dpr, (y() - radius) * dpr, radius * 2 * dpr, radius * 2 * dpr)
+            context.rect((x - radius) * dpr, (y - radius) * dpr, radius * 2 * dpr, radius * 2 * dpr)
             context.fill()
             context.stroke()
         }

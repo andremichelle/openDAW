@@ -6,7 +6,7 @@ import {
     AudioRegionBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
-import {BinarySearch, Geom, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
@@ -57,22 +57,9 @@ export namespace RegionCapturing {
                     const x0 = range.unitToX(region.position)
                     const x1 = range.unitToX(region.complete)
                     if (isInstanceOf(region, AudioRegionBoxAdapter)) {
-                        const {fading} = region
-                        const handleRadius = AudioFadeHandles.hitRadius
-                        const handleY = track.position + AudioFadeHandles.y()
-                        const {inX: fadeInX, outX: fadeOutX} = AudioFadeHandles.positions(range, fading, region.position, region.complete)
-                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)
-                            && Math.abs(x - fadeInX) <= Math.abs(x - fadeOutX)) {
-                            return {type: "region", part: "fading-in", region}
-                        }
-                        if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
-                            return {type: "region", part: "fading-out", region}
-                        }
-                        for (const handle of AudioFadeHandles.slopeHandles(range, fading, region.position, region.complete, track.size, readFadeCurvePositions(region.box))) {
-                            if (Geom.isInsideCircle(x, y, handle.x, track.position + handle.y, handleRadius)) {
-                                return {type: "region", part: handle.part, region}
-                            }
-                        }
+                        const part = AudioFadeHandles.hitTest(range, region.fading, region.position, region.complete,
+                            track.size, readFadeCurvePositions(region.box), x, y - track.position)
+                        if (part !== undefined) {return {type: "region", part, region}}
                     }
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
                         const bottomEdge = y > track.position + RegionLabel.labelHeight()

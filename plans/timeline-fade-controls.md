@@ -9,3 +9,9 @@ Extracted this change from [the combined timeline PR](https://github.com/polinom
 ## Manual check
 
 Hover an audio clip, pull out each fade, and drag its diamond horizontally and vertically. Undo, then save and reopen to check the diamond position.
+
+## Two-axis drag follow-up
+
+The existing curve math already moves the point horizontally and vertically. On short fades, the square and diamond grab areas can overlap. The old hit test tried the square first, so grabbing the visible diamond could start a length or Shift slope drag instead. Use the painted shape first and the closest handle within the grab radius second. Use the same positions for painting and hit testing, and only test handles on the hovered clip.
+
+Studio type checking and 19 focused tests passed. An isolated Chrome project with a generated WAV verified horizontal and diagonal drags, both fade directions, and a short fade where the overlapping diamond moved without changing the square position. Project graph tests cover save/load, Undo/Redo, and cancel.

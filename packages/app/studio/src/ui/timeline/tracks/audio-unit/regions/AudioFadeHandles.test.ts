@@ -26,6 +26,22 @@ describe("visible audio fade handles", () => {
         expect(handles[1].x).toBe(75)
         expect(handles[1].y).toBeCloseTo(45)
     })
+    it.each([true, false])("grabs the visible diamond when it overlaps a length target, fadeIn=%s", fadeIn => {
+        const config = {...fading, in: fadeIn ? 5 : 0, out: fadeIn ? 0 : 5,
+            inSlope: 0.9, outSlope: 0.1}
+        const anchors = {in: 0.5, out: 0.5}
+        const height = 48
+        const [diamond] = AudioFadeHandles.slopeHandles(range, config, 0, 100, height, anchors)
+        const squareX = fadeIn ? 5 : 95, squareY = AudioFadeHandles.y()
+        expect(Math.hypot(diamond.x - squareX, diamond.y - squareY)).toBeLessThan(AudioFadeHandles.hitRadius)
+        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, diamond.x, diamond.y)).toBe(diamond.part)
+        expect(AudioFadeHandles.hitTest(range, config, 0, 100, height, anchors, squareX, squareY))
+            .toBe(fadeIn ? "fading-in" : "fading-out")
+    })
+    it("does not grab a handle that is hidden outside the hovered clip", () => {
+        expect(AudioFadeHandles.hitTest(range, fading, 0, 100, 48, {in: 0.5, out: 0.5}, 101, AudioFadeHandles.y()))
+            .toBeUndefined()
+    })
     it.each([true, false])("moves the diamond in both screen axes and keeps it on the curve, fadeIn=%s", fadeIn => {
         for (const [deltaX, deltaY] of [[20, 0], [-20, 0], [0, 8], [20, 8], [-20, -8]]) {
             const point = AudioFadeHandles.curveAfterDrag(0.5, 0.5, deltaX, deltaY, 100, 55, fadeIn)
