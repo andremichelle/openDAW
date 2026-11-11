@@ -1,4 +1,4 @@
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {Lifecycle, Subscription, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {RegionRenderer} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
@@ -23,7 +23,13 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
     const element: Element = (<div className={className}>{canvas}</div>)
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         if (visible) {
-            RegionRenderer.render(context, trackManager, range, adapter.listIndex)
+            const pointer = trackManager.regionPointer.getValue()
+            const bounds = canvas.getBoundingClientRect()
+            const hoverUnit = pointer !== null
+                && pointer.x >= bounds.left && pointer.x < bounds.right
+                && pointer.y >= bounds.top && pointer.y < bounds.bottom
+                ? range.xToUnit(pointer.x - bounds.left) : null
+            RegionRenderer.render(context, trackManager, range, adapter.listIndex, hoverUnit)
             updated = true
         }
     }))
@@ -40,6 +46,8 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
             onReorder: () => {}
         }),
         {terminate: () => grooveLabels.forEach(entry => entry.subscription.terminate())},
+        trackManager.regionPointer.subscribe(requestUpdate),
+        Events.subscribe(trackManager.scrollableContainer, "scroll", requestUpdate),
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),

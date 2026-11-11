@@ -66,6 +66,7 @@ export interface TrackFactory {
 
 export class TracksManager implements Terminable {
     readonly groupClipSelection: GroupClipSelection
+    readonly regionPointer: DefaultObservableValue<{x: number, y: number} | null>
     readonly #service: StudioService
     readonly #project: Project
     readonly #scrollContainer: Element
@@ -104,6 +105,7 @@ export class TracksManager implements Terminable {
         this.#factory = factory
 
         this.#terminator = new Terminator()
+        this.regionPointer = this.#terminator.own(new DefaultObservableValue<{x: number, y: number} | null>(null))
         this.groupClipSelection = this.#terminator.own(new GroupClipSelection(service.project))
         this.#audioUnits = UUID.newSet(({uuid}) => uuid)
         this.#modulators = UUID.newSet(({uuid}) => uuid)

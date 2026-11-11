@@ -10,7 +10,8 @@ export namespace AudioFadingRenderer {
                            {top, bottom}: RegionBound,
                            startPPQN: number,
                            endPPQN: number,
-                           color: string): void => {
+                           color: string,
+                           showHandles: boolean = true): void => {
         const dpr = devicePixelRatio
         const actualTop = top * dpr
         const actualBottom = bottom * dpr
@@ -53,6 +54,7 @@ export namespace AudioFadingRenderer {
             path.lineTo(x0, actualTop)
             context.fill(path)
         }
+        if (!showHandles) {return}
         const handleRadius = 1.5 * dpr
         const x0 = Math.max(range.unitToX(startPPQN + fadeIn), range.unitToX(startPPQN)) * dpr
         const x1 = Math.min(range.unitToX(endPPQN - fadeOut), range.unitToX(endPPQN)) * dpr

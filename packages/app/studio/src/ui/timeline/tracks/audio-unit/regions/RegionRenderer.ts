@@ -1,4 +1,6 @@
-import {int, Iterables, Option, unitValue} from "@opendaw/lib-std"
+import {readFadeCurvePositions} from "./AudioFadeCurveDrag"
+import {AudioFadeHandles} from "./AudioFadeHandles"
+import {int, isInstanceOf, Iterables, Option, unitValue} from "@opendaw/lib-std"
 import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {
@@ -27,7 +29,7 @@ export namespace RegionRenderer {
     export const render = (context: CanvasRenderingContext2D,
                            tracks: TracksManager,
                            range: TimelineRange,
-                           index: int): void => {
+                           index: int, hoverUnit: number | null = null): void => {
         const canvas = context.canvas
         const {width, height} = canvas
         const {fontFamily} = getComputedStyle(canvas)
@@ -132,7 +134,7 @@ export namespace RegionRenderer {
                                 contentLoops.forEach(pass => AudioRenderer.render(context, range, file, tempoMap,
                                     region.observableOptPlayMode, region.waveformOffset.getValue(),
                                     region.gain.getValue(), bound, contentColor, pass, true, audioRenderStrategy))
-                                AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
+                                AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground, false)
                             }),
                         visitValueRegionBoxAdapter: (region: ValueRegionBoxAdapter): void => {
                             const top = bound.top * dpr
@@ -149,6 +151,10 @@ export namespace RegionRenderer {
                         }
                     })
                     context.restore()
+                }
+                if (isInstanceOf(region, AudioRegionBoxAdapter)
+                    && hoverUnit !== null && hoverUnit >= position && hoverUnit < complete) {
+                    AudioFadeHandles.render(context, range, region.fading, position, complete, contentColor, readFadeCurvePositions(region.box))
                 }
                 if (selected) {
                     context.fillStyle = labelBackground

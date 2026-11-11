@@ -1,3 +1,5 @@
+import {readFadeCurvePositions} from "./AudioFadeCurveDrag"
+import {AudioFadeHandles} from "./AudioFadeHandles"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
@@ -20,6 +22,7 @@ export type RegionCaptureTarget =
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
     | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
     | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
+    | { type: "region", part: "fading-in-slope" | "fading-out-slope", region: AudioRegionBoxAdapter }
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
@@ -55,15 +58,20 @@ export namespace RegionCapturing {
                     const x1 = range.unitToX(region.complete)
                     if (isInstanceOf(region, AudioRegionBoxAdapter)) {
                         const {fading} = region
-                        const handleRadius = 3
-                        const handleY = track.position + RegionLabel.labelHeight()
-                        const fadeInX = range.unitToX(region.position + fading.in)
-                        const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
-                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
+                        const handleRadius = AudioFadeHandles.hitRadius
+                        const handleY = track.position + AudioFadeHandles.y()
+                        const {inX: fadeInX, outX: fadeOutX} = AudioFadeHandles.positions(range, fading, region.position, region.complete)
+                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)
+                            && Math.abs(x - fadeInX) <= Math.abs(x - fadeOutX)) {
                             return {type: "region", part: "fading-in", region}
                         }
                         if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
                             return {type: "region", part: "fading-out", region}
+                        }
+                        for (const handle of AudioFadeHandles.slopeHandles(range, fading, region.position, region.complete, track.size, readFadeCurvePositions(region.box))) {
+                            if (Geom.isInsideCircle(x, y, handle.x, track.position + handle.y, handleRadius)) {
+                                return {type: "region", part: handle.part, region}
+                            }
                         }
                     }
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
