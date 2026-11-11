@@ -45,9 +45,14 @@ export type InputValueMenuData = {
     minValueWidth?: string
 }
 
+export type ColorPaletteMenuData = {
+    type: "color-palette"
+    colors: ReadonlyArray<{label: string, color: string, checked: boolean, select: () => void}>
+}
+
 export type MenuRootData = typeof Root
 
-export type MenuData = (DefaultMenuData & MenuItemOptions) | MenuRootData | HeaderMenuData | InputValueMenuData
+export type MenuData = (DefaultMenuData & MenuItemOptions) | MenuRootData | HeaderMenuData | InputValueMenuData | ColorPaletteMenuData
 
 export interface MenuCollector {
     addItems(...items: MenuItem[]): void
@@ -62,6 +67,10 @@ export class MenuItem<DATA extends MenuData = MenuData> {
 
     static default(properties: Omit<DefaultMenuData, "type"> & MenuItemOptions) {
         return this.#create({type: "default", ...properties}, properties)
+    }
+
+    static colorPalette(properties: Omit<ColorPaletteMenuData, "type"> & MenuItemOptions) {
+        return this.#create({type: "color-palette", ...properties}, properties)
     }
 
     static inputValue(properties: Omit<InputValueMenuData, "type"> & MenuItemOptions) {

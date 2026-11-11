@@ -12,6 +12,12 @@ export namespace ColorMenu {
         {label: "Yellow", hue: 60.0}
     ].sort((a, b) => a.hue - b.hue)
 
+    export const createPalette = (procedure: Procedure<number>, currentHue?: number) =>
+        MenuItem.colorPalette({colors: Colors.map(({label, hue}) => ({
+            label, color: `hsl(${hue}, 75%, 55%)`, checked: currentHue === hue,
+            select: () => procedure(hue)
+        }))})
+
     export const createItem = (procedure: Procedure<number>) => MenuItem.default({label: "Color"})
         .setRuntimeChildrenProcedure(parent => parent
             .addMenuItem(...Colors.map(({label, hue}) => MenuItem.default({label})

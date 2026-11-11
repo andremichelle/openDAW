@@ -263,6 +263,19 @@ export class Menu implements Terminable, Lifecycle {
                                     return <HeaderMenuDataElement data={item.data}/>
                                 } else if (item.data.type === "default") {
                                     return <DefaultMenuDataElement data={item.data}/>
+                                } else if (item.data.type === "color-palette") {
+                                    return <div className="color-palette" role="group" aria-label="Clip color">
+                                        {item.data.colors.map(color => <button type="button"
+                                            data-close-on-blur aria-label={color.label} title={color.label}
+                                            aria-pressed={color.checked} style={{"--swatch-color": color.color}}
+                                            onpointerdown={event => event.preventDefault()}
+                                            onclick={event => {
+                                                event.stopPropagation()
+                                                if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
+                                                this.root.terminate()
+                                                color.select()
+                                            }}/>) }
+                                    </div>
                                 } else if (item.data.type === "input-value") {
                                     return <ValueSliderMenuDataElement data={item.data} lifecycle={this}/>
                                 }
@@ -278,6 +291,7 @@ export class Menu implements Terminable, Lifecycle {
                     itemElement.onpointerenter = () => this.#onPointerEnter(item, itemElement)
                     itemElement.onpointerleave = (event: PointerEvent) => this.#onPointerLeave(item, itemElement, event)
                     itemElement.onpointerup = (event: PointerEvent) => {
+                        if (item.data.type === "color-palette") {return}
                         if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
                         this.#onPointerUp(item, itemElement, event)
                     }
