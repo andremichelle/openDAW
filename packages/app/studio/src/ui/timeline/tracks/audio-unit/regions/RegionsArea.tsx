@@ -8,7 +8,9 @@ import {ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {installArrangementTrackClick} from "@/ui/timeline/ArrangementTrackClick"
 import {AnyRegionBoxAdapter, RegionEditing, TrackType} from "@opendaw/studio-adapters"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
@@ -24,7 +26,7 @@ import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/region
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {Browser, CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Layers} from "@/ui/surface/Layers"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -104,6 +106,14 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         }),
         shortcuts,
         ClipboardManager.install(element, clipboardHandler),
+        installArrangementTrackClick(element, event => {
+            if (Browser.isMacOS() && event.ctrlKey) {return}
+            return manager.audioUnitAtClientY(event.clientY).mapOr(unit => {
+                const press = TrackGrouping.trackPressOf(event)
+                const anchor = TrackGrouping.editedTrack(project)
+                return () => TrackGrouping.pressTrack(project, unit, press, anchor)?.()
+            }, undefined)
+        }),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
                 .filter(track => !track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false))

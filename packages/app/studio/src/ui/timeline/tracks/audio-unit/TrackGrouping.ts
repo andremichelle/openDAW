@@ -17,7 +17,7 @@ export namespace TrackGrouping {
         audioUnitSelection.select(...next)
     }
 
-    const editedTrack = (project: Project): Option<AudioUnitBox> => project.userEditingManager.audioUnit.get()
+    export const editedTrack = (project: Project): Option<AudioUnitBox> => project.userEditingManager.audioUnit.get()
         .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost).audioUnitBoxAdapter().box)
 
     export const deselectHiddenTracks = (project: Project): Terminable => {
@@ -143,11 +143,12 @@ export namespace TrackGrouping {
         return rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.unit)
     }
 
-    export const pressTrack = (project: Project, unit: AudioUnitBox, press: TrackPress): Nullable<Exec> => {
+    export const pressTrack = (project: Project, unit: AudioUnitBox, press: TrackPress,
+                               rangeAnchor = editedTrack(project)): Nullable<Exec> => {
         const {audioUnitSelection} = project
         const selected = audioUnitSelection.isSelected(unit)
         if (press === "range") {
-            selectTracks(project, editedTrack(project).mapOr(anchor => visibleRange(project, anchor, unit), [unit]))
+            selectTracks(project, rangeAnchor.mapOr(anchor => visibleRange(project, anchor, unit), [unit]))
         } else if (press === "toggle") {
             if (selected) {audioUnitSelection.deselect(unit)}
             else {selectTracks(project, [...audioUnitSelection.selected(), unit])}
