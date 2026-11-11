@@ -69,4 +69,5 @@ Add effects to process all routed audio together:
 
 ## See Also
 
+- [Group Bus](group-bus) - Folding, nesting and moving tracks in the timeline
 - [Mixer](mixer) - Channel strip controls and signal flow
