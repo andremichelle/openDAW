@@ -217,6 +217,21 @@ Before starting, ensure you have the following installed on your system:
   the WASM modules (`brew install binaryen`, or `apt install binaryen`). If it is missing, the build still
   succeeds and ships unoptimised modules.
 
+#### Optional: WebNN hardware acceleration (Neural Demux)
+
+Neural Demux's stem separation works everywhere via the WASM (CPU) provider : nothing below is required
+for that. The WebNN (NPU) / WebNN (GPU) options accelerate it through Intel's OpenVINO Execution Provider,
+so they only work on Intel hardware:
+
+- **WebNN-NPU**: Intel Core Ultra (Meteor Lake or newer) with the Intel NPU driver installed.
+- **WebNN-GPU**: Intel integrated or Arc GPU with up-to-date Intel graphics drivers.
+- Chrome or Edge, with WebNN enabled (check `chrome://flags` if the option doesn't appear).
+- Served over HTTPS, or `localhost` specifically : WebNN requires a secure context, and `http://127.0.0.1`
+  or a LAN IP won't qualify even though the rest of the dev server works fine there.
+
+If a model shows WebNN (NPU)/(GPU) as disabled in the dropdown, that model's export doesn't partition
+correctly on WebNN, use WASM (or WebGPU, where available) instead.
+
 ### Clone
 
 `git clone https://github.com/andremichelle/opendaw.git && cd opendaw`

@@ -1,0 +1,92 @@
+component
+  display: flex
+  flex-direction: column
+  gap: 0.75em
+  padding: 1em 0
+  min-width: 22rem
+
+  > .status
+    margin: 0
+    font-size: 0.8em
+    opacity: 0.7
+
+  > .transport
+    display: flex
+    flex-direction: row
+    align-items: center
+    gap: 0.75em
+
+    > .play-stop
+      display: flex
+      align-items: center
+      justify-content: center
+      width: 1.5em
+      height: 1.5em
+      border-radius: 50%
+      outline: 1px rgba(white, 0.2) solid
+      cursor: pointer
+      flex-shrink: 0
+
+      svg
+        width: 0.9em
+        height: 0.9em
+
+    > .seek-track
+      position: relative
+      flex-grow: 1
+      height: 0.5rem
+      border-radius: 0.5rem
+      background-color: var(--color-black)
+      overflow: hidden
+      cursor: pointer
+      --progress: 0.0
+      --position: 0.0
+
+      > .seek-fill
+        position: absolute
+        top: 0
+        left: 0
+        bottom: 0
+        border-radius: 0.5rem
+        width: calc(100% * var(--progress))
+        background-color: rgba(255, 255, 255, 0.2)
+
+      > .seek-playhead
+        position: absolute
+        top: 0
+        bottom: 0
+        width: 2px
+        background-color: var(--color-blue)
+        left: calc(100% * var(--position))
+
+  > .stems
+    display: flex
+    flex-direction: column
+    gap: 0.4em
+
+    > .stem-row
+      display: flex
+      flex-direction: row
+      align-items: center
+      gap: 0.5em
+
+      > .name
+        flex-grow: 1
+        font-size: 0.85em
+
+      span
+        font-size: 0.8em
+
+      &.header
+        opacity: 0.6
+
+        > .column-label
+          width: 4.5em
+          font-size: 0.7em
+          text-align: center
+
+  > .hint
+    margin: 0
+    font-size: 0.7em
+    opacity: 0.5
+    line-height: 1.4

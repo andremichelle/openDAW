@@ -1,5 +1,8 @@
 export {StemSeparationTask} from "./StemSeparationTask"
 export type {StemSeparationInput, StemSeparationOutput} from "./StemSeparationTask"
+export {HtdemucsFwdTask} from "./HtdemucsFwdTask"
+export type {PartialStemResult} from "./htdemucs-fwd/Partial"
+export {HOP as HTDEMUCS_FWD_HOP} from "./htdemucs-fwd/Constants"
 export {BasicPitchTask} from "./BasicPitchTask"
 export type {BasicPitchInput, BasicPitchOutput, BasicPitchNote} from "./BasicPitchTask"
 export {TempoDetectionTask} from "./TempoDetectionTask"
