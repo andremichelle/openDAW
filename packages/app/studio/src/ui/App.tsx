@@ -28,6 +28,7 @@ import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
 import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
+import {TestingPage} from "@/ui/pages/TestingPage"
 import {DevicePreviewRoute} from "@/service/StudioNavigation"
 import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
 import {SampleEditorRoute} from "@/service/SampleEditorService"
@@ -90,6 +91,7 @@ export const App = (service: StudioService) => {
                     {path: "/open-bundle/*", factory: OpenBundlePage},
                     {path: "/open-project", factory: OpenProjectPage},
                     {path: "/test", factory: TestPage},
+                    {path: "/testing", factory: TestingPage},
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},
                     {path: "/join/*", factory: JoinRoomPage},

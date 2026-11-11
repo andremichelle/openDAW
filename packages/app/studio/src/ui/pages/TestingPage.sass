@@ -1,0 +1,25 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 2em
+  display: flex
+  flex-direction: column
+  row-gap: 1.5em
+  overflow: hidden auto
+  @include colors.panel-background
+
+  > h1
+    margin: 0
+    color: var(--color-cream)
+
+  > section
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+
+    > h2
+      margin: 0
+      font-size: 12px
+      font-weight: normal
+      color: var(--color-orange)
