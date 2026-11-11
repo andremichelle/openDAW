@@ -1,0 +1,23 @@
+component
+  display: flex
+  column-gap: 1px
+  padding: 1px
+  border-radius: 2px
+  background-color: var(--color-panel-background-dark)
+  pointer-events: none
+
+  > div.channel
+    width: 3px
+    height: 100%
+    border-radius: 1px
+    overflow: hidden
+
+    > div.bar
+      --level: 0
+      width: 100%
+      height: 100%
+      background: linear-gradient(to top, var(--color-green) var(--stop-yellow), var(--color-yellow) var(--stop-yellow), var(--color-yellow) var(--stop-red), var(--color-red) var(--stop-red))
+      clip-path: inset(calc((1 - var(--level)) * 100%) 0 0 0)
+
+  &.silent > div.channel > div.bar
+    opacity: 0.3

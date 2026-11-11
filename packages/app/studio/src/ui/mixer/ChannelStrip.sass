@@ -112,6 +112,32 @@ component
 
     &.volume
       grid-template-rows: calc(1em - 1px) 1fr
+      min-height: 0
+
+      > .full > *
+        min-height: 0
+
+      > div.compact-volume
+        display: none
+        grid-column: 1 / -1
+        position: relative
+        justify-content: center
+        align-items: flex-start
+
+        > .meter
+          position: absolute
+          top: 0
+          right: 0
+          bottom: 0
+
+      &.compact
+        min-height: auto
+
+        > .full
+          display: none
+
+        > div.compact-volume
+          display: flex
 
       > div.value-display
         height: 100%

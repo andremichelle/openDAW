@@ -4,6 +4,7 @@ import {
     clampUnit,
     Editing,
     EmptyExec,
+    int,
     Lifecycle,
     Nullable,
     Option,
@@ -21,6 +22,8 @@ import {StudioPreferences} from "@opendaw/studio-core"
 import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
+
+const MinMarkerGap = 3
 
 export const enum MarkerLength {Short, Long}
 
@@ -159,7 +162,21 @@ export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVo
                     ? clientWidth
                     : CssUtils.calc("75%", clientWidth, em)
             })
-            lineContainer.height.baseVal.value = CssUtils.calc("100% - 2em", clientHeight, em)
+            const lineHeight = CssUtils.calc("100% - 2em", clientHeight, em)
+            lineContainer.height.baseVal.value = lineHeight
+            const positions: Array<number> = []
+            const priority = (marker: VolumeMarker): int =>
+                marker.decibel === 0 ? 0 : marker.length === MarkerLength.Long ? 1 : 2
+            markers
+                .map((marker, index) => ({marker, index}))
+                .toSorted((left, right) => priority(left.marker) - priority(right.marker))
+                .forEach(({marker, index}) => {
+                    const y = (1.0 - parameter.valueMapping.x(marker.decibel)) * lineHeight
+                    const visible = positions.every(other => Math.abs(other - y) >= MinMarkerGap)
+                    if (visible) {positions.push(y)}
+                    linesLeft[index].classList.toggle("hidden", !visible)
+                    linesRight[index].classList.toggle("hidden", !visible)
+                })
 
             // attach a new dragging function with updated options
             //

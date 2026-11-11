@@ -7,6 +7,10 @@ import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "peak-meter")
 
+const LabelGapRatio = 1.25
+
+const labelPriority = (db: number): int => db === 0 ? 0 : db % 12 === 0 ? 1 : 2
+
 type Construct = {
     lifecycle: Lifecycle
     peaks: Float32Array
@@ -85,12 +89,19 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
         const labels: SVGGraphicsElement = (
             <g stroke="none" fill={Colors.dark} style={{fontSize: "0.4375em"}}/>
         )
-        for (let db = -54; db <= 0; db += 6) {
+        const labelGap = emInPixels * 0.4375 * LabelGapRatio
+        const unitY = trackHeight
+        const positions: Array<number> = [unitY]
+        const decibels = Arrays.create(index => -54 + index * 6, 10)
+            .toSorted((left, right) => labelPriority(left) - labelPriority(right))
+        decibels.forEach(db => {
             const y = paddingInPX + trackHeight * (1.0 - mapping.x(db))
+            if (db !== 0 && positions.some(other => Math.abs(other - y) < labelGap)) {return}
+            positions.push(y)
             strokes.append(<line x1="1" x2="2" y1={y} y2={y}></line>)
             labels.append(<text x="3" y={`${y + 0.5}`} alignment-baseline="middle">{`${Math.abs(db)}`}</text>)
-        }
-        labels.append(<text x="3" y={`${trackHeight}`} alignment-baseline="middle">db</text>)
+        })
+        labels.append(<text x="3" y={`${unitY}`} alignment-baseline="middle">db</text>)
         element.appendChild(
             <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
                 <defs>

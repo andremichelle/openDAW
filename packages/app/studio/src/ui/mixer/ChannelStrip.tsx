@@ -27,8 +27,11 @@ import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
 import {MixerDeviceList} from "./MixerDeviceList"
 import {DeviceNavigation} from "./DeviceNavigation"
+import {MiniPeakMeter} from "./MiniPeakMeter"
 
 const className = Html.adoptStyleSheet(css, "ChannelStrip")
+
+const CompactVolumeHeight = 96
 
 type Construct = {
     lifecycle: Lifecycle
@@ -78,7 +81,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                            tracks={tracks} parameter={panning}>
             <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={panning}
                                        options={SnapCenter}>
-                <Knob lifecycle={lifecycle} value={panning} anchor={0.5}/>
+                <Knob lifecycle={lifecycle} color={Colors.yellow} value={panning} anchor={0.5}/>
             </RelativeUnitValueDragging>
         </AutomationControl>
     )
@@ -138,6 +141,30 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     const classList = Html.buildClassList(className,
         isGroup && "group", isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
     const peakMeter: DomElement = (<PeakMeter lifecycle={lifecycle} peaks={peaks}/>)
+    const miniPeakMeter: HTMLElement = <MiniPeakMeter lifecycle={lifecycle} peaks={peaks}/>
+    const volumeKnobControl: HTMLElement = (
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={volume}>
+            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={volume}>
+                <Knob lifecycle={lifecycle} value={volume} anchor={0.0}/>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
+    )
+    volumeControl.classList.add("full")
+    peakMeter.classList.add("full")
+    miniPeakMeter.classList.add("meter")
+    const volumeLayout: HTMLElement = (
+        <div className="twin-layout volume">
+            {volumeLabel}
+            {maxPeakLabel}
+            {volumeControl}
+            {peakMeter}
+            <div className="compact-volume">
+                {volumeKnobControl}
+                {miniPeakMeter}
+            </div>
+        </div>
+    )
     const element: HTMLElement = (
         <div className={classList} data-drag>
             <div className="unit-line"/>
@@ -166,12 +193,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                     {panningControl}
                 </Frag>
             )}
-            <div className="twin-layout volume">
-                {volumeLabel}
-                {maxPeakLabel}
-                {volumeControl}
-                {peakMeter}
-            </div>
+            {volumeLayout}
             <div className="twin-layout mute-solo">
                 {muteControl}
                 {!isOutput && soloControl}
@@ -180,8 +202,13 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     )
     lifecycle.ownAll(
         mixer.registerChannelStrip(adapter, {
-            silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
+            silent: (value: boolean) => {
+                peakMeter.classList.toggle("silent", value)
+                miniPeakMeter.classList.toggle("silent", value)
+            }
         } satisfies ChannelStripView),
+        Html.watchResize(volumeLayout, () =>
+            volumeLayout.classList.toggle("compact", volumeLayout.clientHeight < CompactVolumeHeight)),
         ContextMenu.subscribe(element, collector => {
             if (!project.audioUnitSelection.isSelected(adapter.box)) {TrackGrouping.selectTracks(project, [adapter.box])}
             collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
