@@ -244,6 +244,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-chord-keys"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "math",
+]
+
+[[package]]
 name = "device-compressor"
 version = "0.0.0"
 dependencies = [
