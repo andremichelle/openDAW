@@ -7,9 +7,7 @@ import {BoxEditing, EditingCheckpoint} from "@opendaw/lib-box"
 import type {StudioService} from "@/service/StudioService"
 import {DeviceCandidate, DeviceEntry} from "@/ui/browse/DeviceCatalog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {LocalLayer} from "@opendaw/studio-core"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 // every pick is applied right away from the state before opening, approve keeps the last one as ONE undo step
 // in a live room picks stay on this client, approve runs the last one again and sends it to the room as one edit
@@ -87,10 +85,6 @@ export class DeviceAudition implements Terminable {
             this.#rollback()
             if (this.#apply(candidate.unwrap(), keepTimeline.value, this.#layer.nonEmpty())) {await this.#settle(candidate.unwrap(), name)}
         }
-        if (this.#current.nonEmpty()) {this.#layer.match({
-            none: () => this.#createRegion(),
-            some: layer => layer.run(() => this.#createRegion())
-        })}
         this.#layer.ifSome(layer => layer.publish())
         this.#generation++
         this.#checkpoint.ifSome(checkpoint => checkpoint.commit())
@@ -115,14 +109,6 @@ export class DeviceAudition implements Terminable {
         loading.catch(() => this.#candidates.delete(entry.key))
         this.#candidates.set(entry.key, loading)
         return loading
-    }
-
-    #createRegion(): void {
-        if (this.#slot.type !== "new-instrument") {return}
-        const {project} = this.#service
-        project.editing.modify(() => project.userEditingManager.audioUnit.get().ifSome(({box}) => {
-            if (isInstanceOf(box, AudioUnitBox)) {NewInstrumentRegion.create(project, this.#service.timeline.snapping, box)}
-        }), false)
     }
 
     #apply(candidate: DeviceCandidate, keepTimeline: boolean, local: boolean): boolean {

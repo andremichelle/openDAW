@@ -8,7 +8,7 @@ import {ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, RegionEditing, TrackType} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
@@ -26,9 +26,11 @@ import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionD
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
+import {Layers} from "@/ui/surface/Layers"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, ElementCapturing, RegionsClipboard, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {moveByWheelPixels} from "@/ui/timeline/editors/WheelScroll"
@@ -91,6 +93,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         overlapResolver
     })
 
+    const emptyLanePointer = {clientX: 0, clientY: 0}
+    const emptyLaneHint = () => ({
+        clientX: emptyLanePointer.clientX + 8, clientY: emptyLanePointer.clientY + 16, text: "Double-click to create a note-region"
+    })
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
@@ -151,6 +157,19 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 trackFocus.focus(target.track.trackBoxAdapter)
             }
         }),
+        Events.subscribe(element, "pointermove", (event: PointerEvent) => {
+            emptyLanePointer.clientX = event.clientX
+            emptyLanePointer.clientY = event.clientY
+            const target = capturing.captureEvent(event)
+            const tooltip = Layers.get(element).textTooltip
+            if (TextTooltip.enabled && StudioPreferences.settings.visibility["visible-help-hints"] && target?.type === "track" && target.track.trackBoxAdapter.type === TrackType.Notes
+                && target.track.trackBoxAdapter.regions.collection.length() === 0) {
+                tooltip.show(emptyLaneHint)
+            } else {
+                tooltip.hide()
+            }
+        }),
+        Events.subscribe(element, "pointerleave", () => Layers.get(element).textTooltip.hide()),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return}

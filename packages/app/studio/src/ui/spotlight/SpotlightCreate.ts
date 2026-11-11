@@ -16,7 +16,6 @@ import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 export namespace SpotlightCreate {
     export type Wclap = {
@@ -43,9 +42,7 @@ export namespace SpotlightCreate {
 
     const createInstrument = (service: StudioService, factory: InstrumentFactory): InstrumentBox => {
         const {project} = service
-        const {audioUnitBox, instrumentBox} = project.api.createInstrumentAt(factory, insertionAfterEditing(project))
-        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
-        return instrumentBox
+        return project.api.createInstrumentAt(factory, insertionAfterEditing(project)).instrumentBox
     }
 
     const effectField = (project: Project, accepts: "audio" | "midi") =>

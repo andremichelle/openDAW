@@ -2,7 +2,6 @@ import {DefaultObservableValue, isDefined, RuntimeNotifier, UUID} from "@opendaw
 import {InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
 import {AudioUnitInsertion, PresetSource, PresetStorage} from "@opendaw/studio-core"
 import {OpenPresetAPI} from "@/opendaw-api"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import type {StudioService} from "@/service/StudioService"
 
 export namespace PresetApplication {
@@ -36,7 +35,6 @@ export namespace PresetApplication {
             const first = imported.at(0)
             if (isDefined(first)) {
                 project.userEditingManager.audioUnit.edit(first.editing)
-                NewInstrumentRegion.create(project, service.timeline.snapping, first)
             }
         })
         project.loadScriptDevices()
@@ -57,8 +55,6 @@ export namespace PresetApplication {
                 {keepMIDIEffects: true, keepAudioEffects: true})
             if (attempt.isFailure()) {
                 RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
-            } else {
-                NewInstrumentRegion.create(project, service.timeline.snapping, product.audioUnitBox)
             }
         })
         project.loadScriptDevices()

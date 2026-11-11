@@ -28,7 +28,6 @@ import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
@@ -146,10 +145,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                         .match({ok: unit => userEditingManager.audioUnit.edit(unit.editing), err: reason => console.warn(reason)})))
                 } else if (dragData.type === "instrument" && dragData.device !== null) {
                     const factory = InstrumentFactories[dragData.device]
-                    editing.modify(() => {
-                        const {audioUnitBox} = api.createInstrumentAt(factory, api.insertionBefore(anchor))
-                        NewInstrumentRegion.create(service.project, service.timeline.snapping, audioUnitBox)
-                    })
+                    editing.modify(() => api.createInstrumentAt(factory, api.insertionBefore(anchor)))
                 } else if (dragData.type === "preset") {
                     if (dragData.category === "audio-unit") {
                         PresetApplication.createNewAudioUnitFromRack(service, dragData.uuid, dragData.source, api.insertionBefore(anchor))
@@ -160,10 +156,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                     }
                 } else if (dragData.type === "script") {
                     SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
-                        const {audioUnitBox, instrumentBox} = project.api.createInstrumentAt(
-                            SpotlightCreate.ScriptHosts.apparat, project.api.insertionBefore(anchor))
-                        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
-                        return Option.wrap(instrumentBox)
+                        return Option.wrap(project.api.createInstrumentAt(
+                            SpotlightCreate.ScriptHosts.apparat, project.api.insertionBefore(anchor)).instrumentBox)
                     }))
                 }
             },

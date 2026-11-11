@@ -11,9 +11,7 @@ import type {StudioService} from "@/service/StudioService"
 import {DeviceSlot} from "./DeviceSlot"
 import {DeviceAudition} from "./DeviceAudition"
 import type {DeviceCandidate, DeviceEntry} from "./DeviceCatalog"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
-vi.mock("@/ui/timeline/NewInstrumentRegion", () => ({NewInstrumentRegion: {create: vi.fn()}}))
 
 vi.hoisted(() => {
     if (Reflect.get(globalThis, "AudioWorkletNode") === undefined) {Reflect.set(globalThis, "AudioWorkletNode", class {})}
@@ -399,21 +397,6 @@ describe("DeviceAudition", () => {
         audition.cancel()
     })
 
-    it("creates the new instrument's region on approve, not on a pick", async () => {
-        const {service, project, InstrumentEntry} = await instrumentSetup()
-        const create = vi.mocked(NewInstrumentRegion.create)
-        create.mockClear()
-        const audition = new DeviceAudition(service, {type: "new-instrument", insertion: project.api.insertionAfterEditing()})
-        audition.pick(InstrumentEntry)
-        await settled()
-        audition.pick({...InstrumentEntry, key: "again"})
-        await settled()
-        expect(create).not.toHaveBeenCalled()
-        await audition.approve()
-        expect(create).toHaveBeenCalledTimes(1)
-        expect(project.editing.canUndo()).true
-    })
-
     const instrumentSetup = async () => {
         const context = await auditionSetup()
         const InstrumentEntry = entryOf("Nano", (project, slot) =>
@@ -471,7 +454,7 @@ describe("DeviceAudition", () => {
         audition.terminate()
     })
 
-    it("sends one message on approve even with a settle and a region", async () => {
+    it("sends one message on approve even with a settle", async () => {
         const {service, InstrumentEntry, doc, project} = await roomSetup()
         const updates = vi.fn()
         doc.on("update", updates)
@@ -485,13 +468,11 @@ describe("DeviceAudition", () => {
                 }}
             }
         }
-        vi.mocked(NewInstrumentRegion.create).mockImplementation((_project, _snapping, box) => box.volume.setValue(-6))
         const audition = new DeviceAudition(service, {type: "new-instrument", insertion: project.api.insertionAfterEditing()})
         audition.pick(settling)
         await settled()
         expect(updates).not.toHaveBeenCalled()
         await audition.approve()
-        vi.mocked(NewInstrumentRegion.create).mockReset()
         expect(updates).toHaveBeenCalledTimes(1)
         expect(audition.hasLocalChanges).false
     })
