@@ -308,6 +308,43 @@ covered by the adapter tests (62 in `SamplerZones.test.ts`).
 Left open from the reviews: the range and turn order are computed twice per refresh, and the five older items
 under "Review and test pass".
 
+Mode pass in the browser 2026-11-12, with a harness that plays the window's piano and reads the playheads of
+the focused zone, so what plays is seen, not heard:
+
+1. In Turn with two and three zones: one zone per note, in list order, also after reordering and after adding a
+   zone by a drop.
+2. Random with three zones: never the same zone twice in a row, each gets its turn.
+3. Together: every zone of the range plays on every note.
+4. Release trigger: silent while the key is held, plays on key up.
+5. Choke: a one shot is cut by another zone of the same choke.
+6. One Shot plays to the end after key up. Reverse runs from the end. Start and end trim. Loop On and Always
+   stay inside the loop points while held.
+7. Transpose 12 doubles the speed, a key an octave above the root too, Track 0% keeps the root speed.
+8. Velocity layers answer soft and loud notes separately.
+9. Tools: Select All, Spread Keys, Crossfade, Root to Low, Duplicate, Delete, Restore, Clean Up.
+10. Map: move, resize by edges, selection rectangle. Modulation slots: add, set, remove, mirrored on the panel.
+11. Combined: join by drop, replace on the waveform, remove, restore, pan apart as a stereo pair and back, move a
+    zone to a second group, delete that group. Undo of forty edits and redo of all forty give the same instrument.
+
+Found and fixed in that pass:
+
+1. Release tails were not counted by Voices, so a long release piled voices up to the pool limit. Voices now
+   bounds everything that sounds. A new note takes its room from the quietest tail, and without a tail from the
+   oldest held note. A note goes with all its layers, a one shot whose key is up counts as ringing out, the
+   quietest is judged by zone gain and fade as well as the envelope, and release samples have a budget of their
+   own so they never cut the tail of their own note. Two earlier versions did not survive their reviews.
+2. A zone under another one could not be picked on the map. A second click on the same spot goes to the next.
+3. Singular wording ("1 sample", "1 sample zone").
+
+Seen once and not reproduced: the Groups list had "Group 1" shown instead of "All" without a click on it.
+
+12. Glide: a note starts at the speed of the previous note's pitch and moves towards its own. LFO 1 to Pitch
+    makes the speed swing around the plain rate.
+
+Not covered by the pass: Legato (the window's piano cannot hold two keys), the filter, the envelope stages
+other than release, LFO delay, fade, sync and restart, and the other modulation targets. They have engine tests
+only. Listening stays with André.
+
 Decided without André, to confirm:
 
 1. A deleted group takes its zones with it. Moving them to another group would let release samples sound on

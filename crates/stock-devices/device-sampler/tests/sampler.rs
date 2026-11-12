@@ -931,3 +931,128 @@ fn release_samples_respect_the_voice_limit() {
     rig.left(&[], 4_800);
     assert!(rig.voices() <= 2, "{} release voices sound with a limit of 2", rig.voices());
 }
+
+#[test]
+fn release_tails_are_bounded_by_the_voice_limit() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[zone(ONE)]);
+    for note in 0..12 {
+        rig.left(&[on(note, 60)], 16);
+        rig.left(&[off(note, 60)], 16);
+    }
+    rig.left(&[], 4_800);
+    assert!(rig.voices() <= 2, "{} tails ring with a limit of 2", rig.voices());
+}
+
+#[test]
+fn a_release_tail_rings_on_within_the_limit() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[zone(ONE)]);
+    rig.left(&[on(1, 60)], 16);
+    rig.left(&[off(1, 60)], 16);
+    rig.left(&[on(2, 62)], 4_800);
+    assert_eq!(rig.voices(), 2, "the tail of the first note and the second note");
+}
+
+#[test]
+fn a_new_note_takes_the_room_of_a_tail_not_of_a_held_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, ..zone(ONE)},
+        Zone {key_low: 62, key_high: 62, ..zone(HALF)},
+        Zone {key_low: 64, key_high: 64, ..zone(QUARTER)}
+    ]);
+    rig.left(&[on(1, 60)], 16);
+    rig.left(&[on(2, 62)], 16);
+    rig.left(&[off(2, 62)], 16);
+    let level = rig.left(&[on(3, 64)], 4_800)[4_799];
+    assert_eq!(rig.voices(), 2);
+    assert!(close(level, 1.25), "the held note and the new one sound, the tail is gone: {level}");
+}
+
+#[test]
+fn fewer_voices_take_effect_at_once() {
+    let mut rig = Rig::new();
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[zone(ONE)]);
+    for note in 0..6 {
+        rig.left(&[on(note, 60)], 16);
+        rig.left(&[off(note, 60)], 16);
+    }
+    assert_eq!(rig.voices(), 6);
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.left(&[], 4_800);
+    assert_eq!(rig.voices(), 2);
+}
+
+#[test]
+fn the_quietest_tail_makes_room_first() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, gain: -30.0, ..zone(ONE)},
+        Zone {key_low: 62, key_high: 62, ..zone(HALF)},
+        Zone {key_low: 64, key_high: 64, ..zone(QUARTER)}
+    ]);
+    rig.left(&[on(1, 62)], 16);
+    rig.left(&[off(1, 62)], 16);
+    rig.left(&[on(2, 60)], 16);
+    rig.left(&[off(2, 60)], 16);
+    let level = rig.left(&[on(3, 64)], 2_400)[2_399];
+    assert_eq!(rig.voices(), 2);
+    assert!(level > 0.5, "the loud tail stays, the one 30 dB down goes although it was released later: {level}");
+}
+
+#[test]
+fn a_release_sample_leaves_the_tail_of_its_note_alone() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[zone(ONE), Zone {group: Some(7), ..zone(QUARTER)}]);
+    rig.left(&[on(1, 60)], 16);
+    let level = rig.left(&[off(1, 60)], 2_400)[2_399];
+    assert_eq!(rig.voices(), 2, "the tail and the release sample");
+    assert!(level > 1.0, "{level}");
+}
+
+#[test]
+fn a_one_shot_whose_key_is_up_goes_before_a_held_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, one_shot: true, ..zone(QUARTER)},
+        Zone {key_low: 62, key_high: 62, ..zone(ONE)},
+        Zone {key_low: 64, key_high: 64, ..zone(HALF)}
+    ]);
+    rig.left(&[on(1, 62)], 16);
+    rig.left(&[on(2, 60)], 16);
+    rig.left(&[off(2, 60)], 16);
+    let level = rig.left(&[on(3, 64)], 2_400)[2_399];
+    assert!(close(level, 1.5), "the held note and the new one, the one shot is gone: {level}");
+}
+
+#[test]
+fn the_layers_of_a_note_make_room_together() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(4));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 62, panning: -1.0, ..zone(ONE)},
+        Zone {key_low: 60, key_high: 62, panning: 1.0, ..zone(ONE)},
+        Zone {key_low: 64, key_high: 64, ..zone(HALF)}
+    ]);
+    for (note, key) in [(1, 60), (2, 62)] {
+        rig.left(&[on(note, key)], 16);
+        rig.left(&[off(note, key)], 16);
+    }
+    rig.left(&[on(3, 64)], 2_400);
+    assert_eq!(rig.voices(), 3, "one whole pair went, not one side of it");
+}

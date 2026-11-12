@@ -241,6 +241,8 @@ pub struct Voice {
     loop_end: f64,
     loop_fade: f64,
     released: bool,
+    key_up: bool,
+    pub release_sample: bool,
     fast: bool,
     pub amp: Envelope,
     pub modulation: Envelope,
@@ -254,6 +256,9 @@ pub struct Voice {
 impl Voice {
     pub fn is_active(&self) -> bool {self.active}
     pub fn is_released(&self) -> bool {self.released}
+    pub fn is_fading(&self) -> bool {self.fast}
+    // the key is up: a tail, or a one shot that plays on by itself
+    pub fn is_ringing_out(&self) -> bool {self.key_up}
     pub fn position(&self) -> f64 {self.position}
 
     #[allow(clippy::too_many_arguments)]
@@ -278,6 +283,8 @@ impl Voice {
         self.loop_shift = 0.0;
         self.prepared = false;
         self.released = false;
+        self.key_up = false;
+        self.release_sample = false;
         self.fast = false;
         self.amp.start();
         self.modulation.start();
@@ -307,6 +314,7 @@ impl Voice {
     }
 
     pub fn note_off(&mut self) {
+        self.key_up = true;
         if self.zone.one_shot {return}
         self.released = true;
         self.amp.release();
@@ -315,6 +323,7 @@ impl Voice {
 
     // a choke or a stolen voice: out within a few milliseconds whatever the zone says
     pub fn fast_release(&mut self) {
+        self.key_up = true;
         self.released = true;
         self.fast = true;
         self.amp.release();

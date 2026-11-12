@@ -175,9 +175,7 @@ export namespace SamplerZoneMap {
         const {entries, selection} = state
         const keyWidth = width / NumKeys
         const yOf = (velocity: number): number => height * (1.0 - velocity / MaxVelocity)
-        const inside = (entry: Entry): boolean => visible(state, entry)
-            && x >= entry.keyLow * keyWidth && x < (entry.keyHigh + 1) * keyWidth
-            && y >= yOf(entry.velocityHigh) && y < yOf(entry.velocityLow - 1)
+        const inside = (entry: Entry): boolean => covers(state, entry, x, y, width, height)
         const target = entries.find(entry => selection.has(entry.zone) && inside(entry)) ?? entries.find(inside)
         return Option.wrap(target).map(entry => {
             const left = entry.keyLow * keyWidth, right = (entry.keyHigh + 1) * keyWidth
@@ -187,6 +185,23 @@ export namespace SamplerZoneMap {
                 : y - top < vertical ? "top" : bottom - y < vertical ? "bottom" : "move"
             return {zones: entries.filter(other => sameRange(other, entry)).map(({zone}) => zone), edge}
         })
+    }
+
+    const covers = (state: State, entry: Entry, x: number, y: number, width: number, height: number): boolean => {
+        const keyWidth = width / NumKeys
+        const yOf = (velocity: number): number => height * (1.0 - velocity / MaxVelocity)
+        return visible(state, entry) && x >= entry.keyLow * keyWidth && x < (entry.keyHigh + 1) * keyWidth
+            && y >= yOf(entry.velocityHigh) && y < yOf(entry.velocityLow - 1)
+    }
+
+    export const behind = (state: State, x: number, y: number, width: number, height: number,
+                           zone: SamplerZoneBoxAdapter): ReadonlyArray<SamplerZoneBoxAdapter> => {
+        const under = state.entries.filter(entry => covers(state, entry, x, y, width, height))
+        const ranges = under.filter((entry, index) => under.findIndex(other => sameRange(other, entry)) === index)
+        const current = ranges.findIndex(entry => under.some(other => other.zone === zone && sameRange(other, entry)))
+        if (ranges.length < 2 || current < 0) {return []}
+        const next = ranges[(current + 1) % ranges.length]
+        return under.filter(entry => sameRange(entry, next)).map(entry => entry.zone)
     }
 
     // black keys sit on their semitone column to line up with the map, white keys split below their centres

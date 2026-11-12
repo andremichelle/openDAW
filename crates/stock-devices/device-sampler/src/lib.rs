@@ -265,7 +265,10 @@ fn update_envelope(state: &mut SamplerState, index: usize) {
 
 fn apply_parameter(state: &mut SamplerState, index: usize, value: ParamValue) {
     match index {
-        VOICES => state.max_voices = int_value(value, &VOICES_MAPPING),
+        VOICES => {
+            state.max_voices = int_value(value, &VOICES_MAPPING);
+            limit_voices(state);
+        }
         GLIDE => state.glide = float_value(value, &SECONDS_MAPPING),
         LEGATO => state.legato = bool_value(value),
         OCTAVE => state.octave = int_value(value, &OCTAVE_MAPPING),
@@ -356,19 +359,21 @@ fn free_voice(state: &mut SamplerState) -> usize {
     oldest
 }
 
-// More sounding voices than allowed: the oldest ones that are not falling already fall fast.
+// a note goes with all its layers, release samples have a budget of their own
 fn limit_voices(state: &mut SamplerState) {
-    loop {
-        let sounding = state.voices.iter().filter(|voice| voice.is_active() && !voice.is_released()).count() as i32;
-        if sounding <= state.max_voices {return}
-        let mut oldest: Option<usize> = None;
-        for (index, voice) in state.voices.iter().enumerate() {
-            if !voice.is_active() || voice.is_released() {continue}
-            if oldest.is_none_or(|other| voice.seq < state.voices[other].seq) {oldest = Some(index);}
-        }
-        match oldest {
-            Some(index) => state.voices[index].fast_release(),
-            None => return
+    for release_samples in [false, true] {
+        loop {
+            let counted = |voice: &&Voice| voice.is_active() && !voice.is_fading() && voice.release_sample == release_samples;
+            if state.voices.iter().filter(counted).count() as i32 <= state.max_voices {break}
+            let loudness = |voice: &Voice| voice.amp.level() * voice.amp.level() * db_to_gain(voice.zone.gain) * voice.fade_gain;
+            let ringing = state.voices.iter().filter(|voice| counted(voice) && voice.is_ringing_out())
+                .min_by(|left, right| loudness(left).total_cmp(&loudness(right)).then(left.seq.cmp(&right.seq)));
+            let Some(victim) = ringing.or_else(|| state.voices.iter().filter(counted).min_by_key(|voice| voice.seq)) else {break};
+            let (id, ringing_out) = (victim.id, victim.is_ringing_out());
+            state.voices.iter_mut()
+                .filter(|voice| voice.is_active() && voice.id == id && voice.release_sample == release_samples
+                    && voice.is_ringing_out() == ringing_out)
+                .for_each(Voice::fast_release);
         }
     }
 }
@@ -488,7 +493,10 @@ fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f3
         let voice = &mut state.voices[index];
         voice.start(id, seq, key, pitch, velocity, random, zone, sample, fade, group.choke, phases);
         voice.row = row as u32;
-        if trigger == TRIGGER_RELEASE {voice.zone.one_shot = true;}
+        if trigger == TRIGGER_RELEASE {
+            voice.zone.one_shot = true;
+            voice.release_sample = true;
+        }
         if glide > 0 && has_last && trigger == TRIGGER_ATTACK {voice.glide(last, glide);}
         let sums = sums_of(state, index);
         state.voices[index].start_shift = sums.start;

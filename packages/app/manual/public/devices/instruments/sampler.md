@@ -26,8 +26,9 @@ that maps the samples.
 
 ### 1.1 Play
 
-- **Voices**: How many voices may sound at once. The oldest one falls away when a new one needs room. One voice
-  makes the instrument monophonic.
+- **Voices**: How many voices may sound at once, notes that are ringing out included. When a new one needs room,
+  the quietest note that is ringing out falls away with all its layers, and without one the oldest held note.
+  Release samples are counted on their own, up to the same number. One voice makes the instrument monophonic.
 - **Glide**: The time a note takes to slide from the pitch of the note before.
 - **Legato**: With one voice, a note played while another is held carries the sounding sample to the new key
   instead of starting it again.
@@ -129,6 +130,9 @@ is a rectangle.
 
 Several zones can lie on exactly the same keys and velocities. The map draws them as one rectangle and a click
 selects all of them. The list "Zones on This Range" shows them one by one.
+
+Where zones with different ranges, or of different groups, cover the same spot, click the spot again to reach
+the next one.
 
 ### 2.3 Samples
 

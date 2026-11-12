@@ -6,6 +6,7 @@ import {Sample, SamplerDeviceBoxAdapter, SamplerImport, SamplerSfz, SamplerSound
 import {ExternalLib, Project, ResourceStructures, SampleStorage, StructureFile} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs"
+import {SamplerText} from "./SamplerText"
 
 // Imports a soundfont preset or an SFZ file into a Sampler. Loaded on demand, the studio does not carry it at boot.
 export namespace SamplerImporter {
@@ -85,7 +86,7 @@ export namespace SamplerImporter {
         if (missing > 0) {
             await RuntimeNotifier.info({
                 headline: "Samples Missing",
-                message: `${missing} of ${sources.length} samples that '${file.name}' names were not chosen. Their sample zones were left out.`
+                message: `${missing} of ${SamplerText.count(sources.length, "sample", "samples")} that '${file.name}' names ${missing === 1 ? "was" : "were"} not chosen. ${missing === 1 ? "Its" : "Their"} sample zones were left out.`
             })
         }
     }
@@ -131,7 +132,7 @@ export namespace SamplerImporter {
         if (failed > 0) {
             await RuntimeNotifier.info({
                 headline: "Samples Not Imported",
-                message: `${failed} of ${sources.length} samples could not be stored. Their sample zones were left out.`
+                message: `${failed} of ${SamplerText.count(sources.length, "sample", "samples")} could not be stored. ${failed === 1 ? "Its" : "Their"} sample zones were left out.`
             })
         }
     }

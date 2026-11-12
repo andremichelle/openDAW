@@ -1,7 +1,7 @@
 import css from "./SamplerZoneEditor.sass?inline"
 import {
     Arrays, clamp, Exec, Func, int, isDefined, Lifecycle, MutableObservableValue, Notifier, ObservableValue, Observer,
-    Optional, Procedure, RuntimeNotifier, Subscription, UUID
+    Optional, Point, Procedure, RuntimeNotifier, Subscription, UUID
 } from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Events, Files, Html} from "@opendaw/lib-dom"
@@ -24,6 +24,7 @@ import {ControlContext} from "../NanoDeviceEditor/ParameterControls"
 import {SamplerModulationList} from "./SamplerModulationList"
 import {SamplerSamples} from "./SamplerSamples"
 import {SamplerStacks} from "./SamplerStacks"
+import {SamplerText} from "./SamplerText"
 import {SamplerValueLabel} from "./SamplerValueLabel"
 import {SamplerVoiceStacks} from "./SamplerVoiceStacks"
 import {SamplerZoneMap} from "./SamplerZoneMap"
@@ -56,6 +57,10 @@ type Drag = {
     readonly origins: ReadonlyArray<Origin>
     // the zones a click without a move collapses the selection to
     readonly collapse: Optional<ReadonlyArray<Zone>>
+    // where the pointer went down, and whether the click before went down there too
+    readonly at: Point
+    readonly again: boolean
+    readonly hit: Zone
 }
 
 type Band = {
@@ -71,6 +76,7 @@ const MaxKey = SamplerZoneMap.NumKeys - 1
 const {RoundRobinNames, TriggerNames} = SamplerGroupBoxAdapter
 const RobinCycle = 1
 const MarkerReach = 6
+const ClickReach = 3
 const LoopModeNames: ReadonlyArray<string> = ["Off", "On", "Always"]
 
 type Format = { readonly print: Func<number, SamplerValueLabel.Printed>, readonly parse: Func<string, Optional<number>> }
@@ -125,6 +131,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     let pressed: int = -1
     let drag: Optional<Drag> = undefined
     let dragMoved: boolean = false
+    let lastClick: Optional<Point> = undefined
     let band: Optional<Band> = undefined
     let rect: Optional<SamplerZoneMap.Range> = undefined
     let groupsSignature = ""
@@ -140,6 +147,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         [...first, ...second.filter(zone => !first.includes(zone))]
     const select = (zones: ReadonlyArray<Zone>, focus?: Zone): void => {
         selection = zones
+        lastClick = undefined
         focused = focus ?? (isDefined(focused) && zones.includes(focused) ? focused : zones.at(0))
     }
     // shift, cmd or ctrl adds the zones or takes them out again
@@ -399,8 +407,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const updateStack = (): void => {
         const mode = robinMode()
         const zones = isDefined(focused) ? turnOrder(focused) : []
-        stackTitle.textContent = zones.length === 0 ? "Zones on This Range" : zones.length === 1
-            ? "1 Zone on This Range" : `${zones.length} Zones on This Range`
+        stackTitle.textContent = zones.length === 0 ? "Zones on This Range"
+            : `${SamplerText.count(zones.length, "Zone", "Zones")} on This Range`
         stackHint.classList.toggle("hidden", zones.length > 0)
         const signature = `${mode}|` + zones.map(zone => `${UUID.toString(zone.uuid)}/${fileNameOf(zone)}/`
             + `${zone.box.panning.getValue()}/${zone.box.gain.getValue()}`).join("|")
@@ -515,7 +523,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const count = group.zones.adapters().length
         if (count > 0 && !await RuntimeNotifier.approve({
             headline: "Delete Group",
-            message: `'${group.box.label.getValue()}' has ${count} sample zones. They are deleted with it.`,
+            message: `'${group.box.label.getValue()}' has ${SamplerText.count(count, "sample zone", "sample zones")}. `
+                + `${count === 1 ? "It is" : "They are"} deleted with the group.`,
             approveText: "Delete"
         })) {return}
         if (!group.box.isAttached()) {return}
@@ -558,8 +567,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const files = new Set(zones.map(zone => zone.file().unwrapOrUndefined()).filter(isDefined))
         const used = new Set(zones.filter(zone => zone.box.enabled.getValue()).map(zone => zone.file().unwrapOrUndefined()).filter(isDefined))
         presetName.textContent = adapter.labelField.getValue()
-        sampleCount.textContent = `${files.size} samples, ${files.size - used.size} unused`
-        selectionLabel.textContent = `${selection.length} of ${zones.length} sample zones selected`
+        sampleCount.textContent = `${SamplerText.count(files.size, "sample", "samples")}, ${files.size - used.size} unused`
+        selectionLabel.textContent = `${selection.length} of ${SamplerText.count(zones.length, "sample zone", "sample zones")} selected`
         const zone = focused
         const robins = isDefined(zone) ? turnOrder(zone) : []
         // zones on the same range take turns when their group has a round robin, else they sound together
@@ -671,9 +680,11 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         boxGraph.subscribeToAllUpdates({onUpdate: schedule}),
         adapter.labelField.subscribe(schedule),
         Events.subscribe(map, "pointerdown", (event: PointerEvent) => {
+            if (event.button !== 0) {return}
             const {x, y, width, height} = pointerOf(map, event)
             const key = SamplerZoneMap.keyAt(x, width)
             const velocity = SamplerZoneMap.velocityAt(y, height)
+            const again = isDefined(lastClick) && Math.abs(lastClick.x - x) <= ClickReach && Math.abs(lastClick.y - y) <= ClickReach
             map.setPointerCapture(event.pointerId)
             SamplerZoneMap.hit(state(), x, y, width, height, EdgeReach).match({
                 none: () => {
@@ -692,6 +703,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                     dragMoved = false
                     drag = {
                         edge, key, velocity, collapse: collapse ? zones : undefined,
+                        at: {x, y}, again: chosen && !collapse && again, hit: zones[0],
                         origins: selection.map(zone => ({
                             zone, keyLow: zone.box.keyLow.getValue(), keyHigh: zone.box.keyHigh.getValue(),
                             velocityLow: zone.box.velocityLow.getValue(), velocityHigh: zone.box.velocityHigh.getValue(),
@@ -708,7 +720,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             const velocity = SamplerZoneMap.velocityAt(y, height)
             readout.textContent = `${MidiKeys.toFullString(key)} / ${velocity}`
             if (isDefined(drag)) {
-                if (key === drag.key && velocity === drag.velocity && !dragMoved) {return}
+                const still = Math.abs(x - drag.at.x) <= ClickReach && Math.abs(y - drag.at.y) <= ClickReach
+                if (!dragMoved && (still || (key === drag.key && velocity === drag.velocity))) {return}
                 dragMoved = true
                 const current = drag
                 editing.modify(() => applyDrag(current, key, velocity), false)
@@ -725,7 +738,16 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }),
         Events.subscribe(map, "pointerup", () => {
             if (isDefined(drag)) {
-                if (dragMoved) {editing.mark()} else if (isDefined(drag.collapse)) {select(drag.collapse)}
+                if (dragMoved) {
+                    editing.mark()
+                } else if (isDefined(drag.collapse)) {
+                    select(drag.collapse)
+                } else if (drag.again) {
+                    const {width, height} = map.getBoundingClientRect()
+                    const behind = SamplerZoneMap.behind(state(), drag.at.x, drag.at.y, width, height, drag.hit)
+                    if (behind.length > 0) {select(behind)}
+                }
+                lastClick = dragMoved ? undefined : drag.at
             }
             drag = undefined
             band = undefined
@@ -737,6 +759,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             drag = undefined
             band = undefined
             rect = undefined
+            lastClick = undefined
             refresh.notify()
         }),
         Events.subscribe(map, "pointerleave", () => readout.textContent = "Key / Velocity"),

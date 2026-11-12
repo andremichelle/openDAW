@@ -4,6 +4,7 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleLoader, SamplerDeviceBoxAdapter, SamplerImport, SamplerSoundfontExport} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
+import {SamplerText} from "./SamplerText"
 import {Dialogs} from "@/ui/components/dialogs"
 
 // Saves a Sampler as a soundfont (.sf2). Loaded on demand, the studio does not carry it at boot.
@@ -50,13 +51,14 @@ export namespace SamplerExporter {
         dialog.terminate()
         const missing = samples.filter(sample => !isDefined(sample)).length
         const notes: Array<string> = []
-        if (clipped > 0) {notes.push(`${clipped} frames are louder than full scale and will be clipped, a soundfont stores 16 bit.`)}
-        if (missing > 0) {notes.push(`${missing} of ${samples.length} samples could not be loaded, their sample zones are left out.`)}
-        if (skipped > 0) {notes.push(`${skipped} sample zones are left out, a soundfont has no round robins and no release triggers.`)}
+        const {count} = SamplerText
+        if (clipped > 0) {notes.push(`${count(clipped, "frame is", "frames are")} louder than full scale and will be clipped, a soundfont stores 16 bit.`)}
+        if (missing > 0) {notes.push(`${missing} of ${count(samples.length, "sample", "samples")} could not be loaded, ${missing === 1 ? "its" : "their"} sample zones are left out.`)}
+        if (skipped > 0) {notes.push(`${count(skipped, "sample zone is", "sample zones are")} left out, a soundfont has no round robins and no release triggers.`)}
         const buffer = SamplerSoundfontExport.encode(instrument, samples)
         const approved = await RuntimeNotifier.approve({
             headline: "Export Soundfont",
-            message: [`'${instrument.name}' with ${samples.length - missing} samples.`, ...notes].join("\n\n"),
+            message: [`'${instrument.name}' with ${count(samples.length - missing, "sample", "samples")}.`, ...notes].join("\n\n"),
             approveText: "Save"
         })
         if (!approved) {return}

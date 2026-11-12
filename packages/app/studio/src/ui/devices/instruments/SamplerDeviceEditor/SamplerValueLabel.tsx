@@ -68,7 +68,7 @@ export namespace SamplerValueLabel {
             const [text, unit] = field.available?.() === false ? Unavailable : field.print(field.get())
             label.textContent = text
             label.classList.toggle("spread", isDefined(spread))
-            label.title = isDefined(spread) ? `${field.print(spread[0]).join(" ")} to ${field.print(spread[1]).join(" ")}` : ""
+            label.title = isDefined(spread) ? `${field.print(spread[0]).join(" ").trim()} to ${field.print(spread[1]).join(" ").trim()}` : ""
             if (unit.length > 0) {label.setAttribute("unit", unit)} else {label.removeAttribute("unit")}
         }
         let drag: Optional<{ readonly y: number, readonly value: number }> = undefined
