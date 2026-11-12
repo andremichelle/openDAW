@@ -71,7 +71,7 @@ describe("audio split outer fades", () => {
         expect(fades(left)).toEqual([480, 960])
         expect(left.duration).toBe(3840)
         expect(project.editing.redo()).toBe(true)
-        expect((track.regions.collection.asArray() as AudioRegionBoxAdapter[]).map(fades)).toEqual([[480, 0], [0, 960]])
+        expect((track.regions.collection.asArray() as Array<AudioRegionBoxAdapter>).map(fades)).toEqual([[480, 0], [0, 960]])
         project.terminate()
     })
     it("does not add fades on repeated splits or edge cuts", async () => {
@@ -95,5 +95,4 @@ describe("audio split outer fades", () => {
         expect([left, right].map(fades)).toEqual([[120, 0], [0, 960]])
         project.terminate()
     })
-
 })

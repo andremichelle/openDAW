@@ -1,15 +1,18 @@
 import {ppqn} from "@opendaw/lib-dsp"
-import {mod, Option, panic} from "@opendaw/lib-std"
+import {EmptyProcedure, mod, Option, panic, Procedure} from "@opendaw/lib-std"
 import {AnyRegionBoxAdapter, UnionAdapterTypes} from "../UnionAdapterTypes"
 
 export namespace RegionEditing {
-    const preserveOuterFades = (left: AnyRegionBoxAdapter, right: AnyRegionBoxAdapter,
-                                original: {in: number, out: number} | null): void => {
-        if (original !== null && left.type === "audio-region" && right.type === "audio-region") {
-            left.fading.inField.setValue(Math.min(original.in, left.duration))
-            right.fading.outField.setValue(Math.min(original.out, right.duration))
-            left.fading.outField.setValue(0)
+    const keepOuterFades = (left: AnyRegionBoxAdapter): Procedure<AnyRegionBoxAdapter> => {
+        if (left.type !== "audio-region") {return EmptyProcedure}
+        const {fading} = left
+        const {in: fadeIn, out: fadeOut} = fading
+        return right => {
+            if (right.type !== "audio-region") {return}
+            fading.inField.setValue(Math.min(fadeIn, left.duration))
+            fading.outField.setValue(0)
             right.fading.inField.setValue(0)
+            right.fading.outField.setValue(Math.min(fadeOut, right.duration))
         }
     }
 
@@ -19,7 +22,7 @@ export namespace RegionEditing {
         if (region.position >= cut || cut >= region.complete) {return Option.None}
         if (UnionAdapterTypes.isLoopableRegion(region)) {
             const {position, complete, loopOffset, loopDuration} = region
-            const fades = region.type === "audio-region" ? {in: region.fading.in, out: region.fading.out} : null
+            const applyFades = keepOuterFades(region)
             region.duration = cut - position
             const right = region.copyTo({
                 position: cut,
@@ -27,7 +30,7 @@ export namespace RegionEditing {
                 loopOffset: mod(loopOffset + (cut - position), loopDuration),
                 consolidate
             }) as REGION
-            preserveOuterFades(region, right, fades)
+            applyFades(right)
             return Option.wrap(right)
         } else {
             return panic("Not yet implemented")
@@ -39,14 +42,14 @@ export namespace RegionEditing {
             const {position, complete, loopOffset, loopDuration} = region
             if (begin - position <= 0) {return panic(`first part duration will be zero or negative(${begin - position})`)}
             if (complete - end <= 0) {return panic(`second part duration will be zero or negative(${complete - end})`)}
-            const fades = region.type === "audio-region" ? {in: region.fading.in, out: region.fading.out} : null
+            const applyFades = keepOuterFades(region)
             region.duration = begin - position
             const right = region.copyTo({
                 position: end,
                 duration: complete - end,
                 loopOffset: mod(loopOffset + (end - position), loopDuration)
             }) as REGION
-            preserveOuterFades(region, right, fades)
+            applyFades(right)
             return right
         } else {
             return panic("Not yet implemented")
