@@ -64,13 +64,46 @@ Not part of the Sampler (#538), which stays on floats until this lands.
 5. The main thread needs floats for Web Audio buffers and for the peak worker, either converted on demand or read
    through the same kind of accessor.
 
+## One reader in Rust (first step)
+
+Decided 2026-11-12. Before any format work the engine gets one way to read sample frames.
+
+1. Today every reader takes `sample.plane(0)` and `sample.plane(1)` as `&[f32]` and indexes them itself: 18 sites
+   in six files (region player 10, Convolver 2, Nano 2, Playfield sample 2, Sampler 1, Soundfont 1). Each has its
+   own interpolation.
+2. A `SampleView` in the abi replaces the two slices:
+   1. `frame(channel, index) -> f32`. A mono sample answers channel 1 with channel 0.
+   2. `linear(channel, position)` and `cubic(channel, position)`, the interpolations that exist today, once.
+   3. `copy_into(channel, range, &mut [f32])` for readers that take a stretch at once (Convolver load, stretch).
+3. The format is decided per call or per block, never per frame.
+4. Step A: the view with floats only, all six readers moved, output bit-identical (golden and parity tests).
+5. Step B: 16 bit inside the view. No reader changes again.
+6. A private interpolation is only replaced by the shared one where the maths is the same. Otherwise the reader
+   keeps its formula and uses `frame()`.
+7. Region player and stretch are the hot paths. They use `copy_into` or keep a float fast path, after measuring.
+
+## Why a sample is in memory twice
+
+1. The engine asks the main thread for a sample (`fetchAudio`), gets the `AudioData` and copies its frames into
+   its own wasm memory (`sample_allocate`, `sample_set_ready` in `core-wasm/src/boot.ts`).
+2. The main thread keeps its `AudioData` in the `DefaultSampleLoader` for as long as the loader lives.
+3. With the TypeScript engine the audio thread read that same shared buffer, so there was one copy. The wasm
+   engine cannot read outside its memory, so the copy became a second one.
+4. What the main thread needs after loading is mostly not the frames: peaks draw the waveforms, the editors read
+   the frame count and the sample rate. The frames are needed on demand only: sample editor, bounce, export,
+   mono conversion, transient and BPM detection, preview, cloud upload.
+5. Dropping the main thread's frames once the engine has them, and reading them back from the OPFS on demand,
+   would halve sample memory for every format. To be weighed against stage 3.
+
 ## Order
 
-1. Measure: memory per sample on the main thread and in the engine, read cost of 16 bit in the region player.
-2. `WavFile` and `AudioData` format field, storage in source depth for new imports.
-3. Engine format field and shared reader, all six readers.
-4. Conversion of stored samples.
-5. 24 bit and 8 bit, if decided.
+1. One reader in Rust, floats only, bit-identical.
+2. Measure: memory per sample on the main thread and in the engine, read cost of 16 bit in the region player.
+3. Storage in source depth for new imports, decoded to floats on load.
+4. Engine format field, 16 bit inside the shared reader.
+5. Conversion of stored samples.
+6. `AudioData` format field on the main thread, or dropping its frames (see above).
+7. 24 bit and 8 bit, if decided.
 
 ## Open
 
