@@ -69,9 +69,9 @@ export namespace EffectFactories {
     }
 
     export const NoteFilter: EffectFactory = {
-        defaultName: "Note Filter",
+        defaultName: "Filter",
         defaultIcon: IconSymbol.Piano,
-        briefDescription: "Note Filter",
+        briefDescription: "Filter",
         description: "Passes a key range and transposes or sets the keys",
         manualPage: DeviceManualUrls.NoteFilter,
         separatorBefore: false,
@@ -80,7 +80,7 @@ export namespace EffectFactories {
         boxName: "NoteFilterDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
-                box.label.setValue("Note Filter")
+                box.label.setValue("Filter")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })

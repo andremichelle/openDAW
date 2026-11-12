@@ -1,4 +1,4 @@
-# Note Filter
+# Filter
 
 A MIDI effect that passes a range of keys and transposes them or sets them to one key.
 
@@ -6,11 +6,11 @@ A MIDI effect that passes a range of keys and transposes them or sets them to on
 
 ## 0. Overview
 
-_Note Filter_ lets only the notes between **Min** and **Max** through. The passing notes are then either transposed by a number of semitones or all played as one key.
+_Filter_ lets only the notes between **Min** and **Max** through. The passing notes are then either transposed by a number of semitones or all played as one key.
 
 Example uses:
 
-- Keyboard splits, one Note Filter per layer
+- Keyboard splits, one Filter per layer
 - Pulling a single drum out of a drum loop
 - Playing a range of keys as one key, for example to trigger a one-shot sample
 

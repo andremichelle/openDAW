@@ -52,7 +52,12 @@ export namespace DeviceBoxes {
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
-        Arpeggio: "Arpeggio", Pitch: "Pitch", NoteFilter: "Note Filter", ScaleMatrix: "Scale Matrix", ChordKeys: "Chord Keys", Velocity: "Velocity",
+        Arpeggio: "Arpeggio",
+        Pitch: "Pitch",
+        NoteFilter: "Filter",
+        ScaleMatrix: "Scale Matrix",
+        ChordKeys: "Chord Keys",
+        Velocity: "Velocity",
         Zeitgeist: "Zeitgeist",
         Spielwerk: "Spielwerk"
     }
