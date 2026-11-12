@@ -3,7 +3,7 @@ import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {Storage} from "../Storage"
-import {AudioData, PcmData, WavFile} from "@opendaw/lib-dsp"
+import {AudioData, PcmData, SampleConversion, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace SampleStorage {
@@ -95,6 +95,16 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         await Workers.Opfs.write(`${path}/audio.wav`, bytes)
         if (!await written(`${path}/audio.wav`)) {return Promise.reject(new Error("The audio file could not be replaced"))}
         await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
+    }
+
+    // Rewrites a stored sample as 16 bit if it still is of the expected kind. Answers whether it was rewritten.
+    async convert(uuid: UUID.Bytes, expected: SampleConversion.Kind): Promise<boolean> {
+        const pcm = await this.loadPcm(uuid)
+        if (SampleConversion.judge(pcm).kind !== expected) {return false}
+        const converted = SampleConversion.convert(pcm)
+        if (converted.isEmpty()) {return false}
+        await this.replaceAudio(uuid, converted.unwrap())
+        return true
     }
 
     // finishes or discards what a cut off replacement left behind

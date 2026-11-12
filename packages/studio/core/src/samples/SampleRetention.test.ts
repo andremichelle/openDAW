@@ -231,6 +231,61 @@ describe("SampleStorage.replaceAudio", () => {
     })
 })
 
+describe("SampleStorage.convert", () => {
+    it("rewrites an exact float sample as 16 bit without changing a value", async () => {
+        const audio = exact()
+        const uuid = await put(audio, "float32")
+        expect(await storage.convert(uuid, "exact")).toBe(true)
+        expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
+    })
+    it("rounds an inexact sample when asked to", async () => {
+        const audio = inexact()
+        const uuid = await put(audio, "float32")
+        expect(await storage.convert(uuid, "rounding")).toBe(true)
+        expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
+        const [loaded] = await storage.load(uuid)
+        loaded.frames.forEach((frames, channel) => frames.forEach((value, frame) =>
+            expect(Math.abs(value - audio.frames[channel][frame])).toBeLessThanOrEqual(0.5 / 32_768)))
+    })
+    it("lowers a sample just above full scale to full scale", async () => {
+        const uuid = await put(audioOf([1.01, -0.5, 0.25]), "float32")
+        expect(await storage.convert(uuid, "scaling")).toBe(true)
+        const [loaded] = await storage.load(uuid)
+        expect(loaded.frames[0][0]).toBe(32_767 / 32_768)
+        expect(Math.max(...Array.from(loaded.frames[0]).map(Math.abs))).toBeLessThan(1.0)
+    })
+    it("does not touch a sample that is not of the expected kind", async () => {
+        const uuid = await put(inexact(), "float32")
+        const before = audioFile(uuid).slice()
+        expect(await storage.convert(uuid, "exact")).toBe(false)
+        expect(await storage.convert(uuid, "scaling")).toBe(false)
+        expect(Array.from(audioFile(uuid))).toEqual(Array.from(before))
+    })
+    it("does not touch a sample that is too loud or already 16 bit", async () => {
+        const loud = await put(audioOf([2.0, 0.1]), "float32")
+        expect(await storage.convert(loud, "float")).toBe(false)
+        expect(headerOf(loud)).toEqual({tag: 3, bits: 32})
+        const small = await put(exact(), "smallest")
+        expect(await storage.convert(small, "sixteen")).toBe(false)
+        expect(await storage.convert(small, "exact")).toBe(false)
+    })
+    it("a converted sample loads in a loader as 16 bit with the same floats", async () => {
+        const audio = exact()
+        const uuid = await put(audio, "float32")
+        const manager = new GlobalSampleLoaderManager(providerOf(new Map()), {retain: "while-used"})
+        const loader = manager.getOrCreate(uuid)
+        expect((await SampleLoader.stored(loader)).format).toBe("float32")
+        await storage.convert(uuid, "exact")
+        manager.invalidate(uuid)
+        expect((await SampleLoader.stored(loader)).format).toBe("int16")
+        expect(bitsOf(await manager.getAudioData(uuid))).toEqual(bitsOf(audio))
+    })
+    it("rejects for a sample that is not stored", async () => {
+        await expect(storage.convert(UUID.generate(), "exact")).rejects.toThrow()
+    })
+})
+
 describe("DefaultSampleLoader, retention always", () => {
     const loaded = async (audio: AudioData): Promise<DefaultSampleLoader> => {
         const loader = new DefaultSampleLoader(UUID.generate())
