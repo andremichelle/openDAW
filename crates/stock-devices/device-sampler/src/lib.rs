@@ -452,11 +452,10 @@ fn note_off(state: &mut SamplerState, event: &EventRecord) {
 fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f32, trigger: i32) {
     let zones = state.zones;
     let midi = midi_velocity(velocity);
-    let counter = state.robins[key as usize] as u32;
+    let robins = state.robins;
     let draw = (state.random.uniform() * 65_536.0) as u32;
     let random = state.random.uniform() * 2.0 - 1.0;
     let glide = (state.glide * state.sample_rate) as u32;
-    let mut picked: Option<u32> = None;
     let mut started = false;
     for row in 0..zones.rows() {
         let zone = Zone::read(&zones, row);
@@ -465,9 +464,14 @@ fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f3
         let group = Group::find(&state.groups, zone.group);
         if group.trigger != trigger {continue}
         if group.round_robin != ROBIN_OFF {
+            // one counter per stack, kept at its lowest key, so the stack takes turns across all its keys
+            let slot = zone.key_low.clamp(0, KEYS as i32 - 1) as usize;
+            let counter = robins[slot] as u32;
             let (rank, size) = robin_position(&zones, row, &zone);
             let pick = robin_pick(group.round_robin, size, counter, draw);
-            if size > 1 && group.round_robin == ROBIN_RANDOM {picked = Some(pick);}
+            if trigger == TRIGGER_ATTACK {
+                state.robins[slot] = if size > 1 && group.round_robin == ROBIN_RANDOM {pick} else {counter.wrapping_add(1)} as u8;
+            }
             if rank != pick {continue}
         }
         if group.choke > 0 {
@@ -491,10 +495,7 @@ fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f3
         state.voices[index].loop_shift = sums.loop_start;
         started = true;
     }
-    if started && trigger == TRIGGER_ATTACK {
-        state.robins[key as usize] = picked.map_or(counter.wrapping_add(1), |pick| pick) as u8;
-        limit_voices(state);
-    }
+    if started {limit_voices(state);}
 }
 
 fn source_value(state: &SamplerState, voice: &Voice, source: i32) -> f32 {

@@ -41,16 +41,21 @@ export namespace SamplerSoundfontExport {
         const files: Array<AudioFileBox> = []
         const zones: Array<SamplerImport.Zone> = []
         let skipped = 0
+        const stacks = new Set<string>()
         SamplerZones.zonesOf(device)
             .filter(zone => zone.enabled.getValue())
-            .sort((left, right) => left.index.getValue() - right.index.getValue())
+            .sort((left, right) => left.sequence.getValue() - right.sequence.getValue() || left.index.getValue() - right.index.getValue())
             .forEach(zone => {
                 const file = zone.file.targetVertex.unwrapOrNull()?.box
                 const groupBox = zone.group.targetVertex.unwrapOrNull()?.box
                 const group = groupBoxes.findIndex(box => box === groupBox)
                 if (!(file instanceof AudioFileBox) || group < 0) {return}
                 const {roundRobin, trigger} = groupBoxes[group]
-                if (trigger.getValue() === TriggerRelease || (roundRobin.getValue() !== 0 && zone.sequence.getValue() > 1)) {
+                // zones of a group on the same range take turns, whatever their sequence says: the first one stays
+                const stack = [group, zone.keyLow.getValue(), zone.keyHigh.getValue(), zone.velocityLow.getValue(), zone.velocityHigh.getValue()].join("/")
+                const further = roundRobin.getValue() !== 0 && stacks.has(stack)
+                stacks.add(stack)
+                if (trigger.getValue() === TriggerRelease || further) {
                     skipped++
                     return
                 }

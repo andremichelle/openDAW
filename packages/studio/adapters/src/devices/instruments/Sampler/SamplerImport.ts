@@ -64,8 +64,9 @@ export namespace SamplerImport {
     // `sample` index, a zone whose sample is missing is left out.
     export const apply = (boxGraph: BoxGraph, device: SamplerDeviceBox, instrument: Instrument,
                           files: ReadonlyArray<Optional<AudioFileBox>>): int => {
-        SamplerZones.remove(SamplerZones.zonesOf(device))
-        device.groups.pointerHub.incoming().forEach(({box}) => box.delete())
+        // the old zones go last: a sample they share with the new ones must never be without a zone
+        const oldZones = SamplerZones.zonesOf(device)
+        const oldGroups = device.groups.pointerHub.incoming().map(({box}) => box)
         const described = instrument.groups.length > 0 ? instrument.groups : [DefaultGroup]
         const groups: ReadonlyArray<SamplerGroupBox> = described.map(({label, roundRobin, choke, trigger}) => {
             const group = SamplerZones.createGroup(boxGraph, device, label)
@@ -101,6 +102,8 @@ export namespace SamplerImport {
             box.loopEnd.setValue(clamp(zone.loopEnd ?? MaxFrame, 0, MaxFrame))
             created++
         })
+        SamplerZones.remove(oldZones)
+        oldGroups.forEach(box => box.delete())
         if (instrument.name.length > 0) {device.label.setValue(instrument.name)}
         const envelope = instrument.envelope
         if (isDefined(envelope)) {

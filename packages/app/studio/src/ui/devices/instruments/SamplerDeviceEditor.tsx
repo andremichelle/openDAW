@@ -1,5 +1,5 @@
 import css from "./SamplerDeviceEditor.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {EmptyExec, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {DeviceHost, InstrumentFactories, SamplerDeviceBoxAdapter} from "@opendaw/studio-adapters"
@@ -12,6 +12,7 @@ import {StudioService} from "@/service/StudioService"
 import {ControlContext} from "./NanoDeviceEditor/ParameterControls"
 import {SamplerVoiceStacks} from "./SamplerDeviceEditor/SamplerVoiceStacks"
 import {SamplerModulationList} from "./SamplerDeviceEditor/SamplerModulationList"
+import {SamplerSamples} from "./SamplerDeviceEditor/SamplerSamples"
 import {SamplerZoneWindow} from "./SamplerDeviceEditor/SamplerZoneWindow"
 
 const className = Html.adoptStyleSheet(css, "SamplerDeviceEditor")
@@ -42,7 +43,8 @@ export const SamplerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                           </Button>
                       )}
                       populateControls={() => (
-                          <div className={className}>
+                          <div className={className} onInit={element => lifecycle.own(
+                              SamplerSamples.installDrop(element, element, service, adapter, () => undefined, EmptyExec))}>
                               <div className="stacks">{stacks.slice(0, 3)}</div>
                               <div className="stacks">{stacks.slice(3)}</div>
                               <SamplerModulationList lifecycle={lifecycle} editing={editing} adapter={adapter} onHover={highlight}/>

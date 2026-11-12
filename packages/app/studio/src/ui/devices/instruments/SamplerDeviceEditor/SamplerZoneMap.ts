@@ -50,8 +50,8 @@ export namespace SamplerZoneMap {
             }
         })
 
-    const sameRange = (a: Entry, b: Entry): boolean => a.group === b.group && a.keyLow === b.keyLow
-        && a.keyHigh === b.keyHigh && a.velocityLow === b.velocityLow && a.velocityHigh === b.velocityHigh
+    const sameRange = (entry: Entry, other: Entry): boolean => entry.group === other.group && entry.keyLow === other.keyLow
+        && entry.keyHigh === other.keyHigh && entry.velocityLow === other.velocityLow && entry.velocityHigh === other.velocityHigh
     const visible = ({group}: State, entry: Entry): boolean => group === -1 || entry.group === group
 
     export const paint = (context: CanvasRenderingContext2D, width: number, height: number, scale: number,

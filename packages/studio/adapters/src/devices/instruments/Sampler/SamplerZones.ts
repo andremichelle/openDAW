@@ -1,6 +1,7 @@
 import {Arrays, clamp, int, isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
 import {AudioFileBox, SamplerDeviceBox, SamplerGroupBox, SamplerZoneBox} from "@opendaw/studio-boxes"
+import {Sample} from "../../../sample/Sample"
 
 // Creating, mapping and removing the sample zones of a Sampler. Everything edits boxes directly, the caller
 // wraps it in one modification.
@@ -54,6 +55,26 @@ export namespace SamplerZones {
         return unused.length
     }
 
+    // New zones for the samples, mapped by what their names say. Without a group they join the first one.
+    export const addSamples = (boxGraph: BoxGraph, device: SamplerDeviceBox, group: Optional<SamplerGroupBox>,
+                               samples: ReadonlyArray<Sample>): ReadonlyArray<SamplerZoneBox> => {
+        if (samples.length === 0) {return Arrays.empty()}
+        const target = group ?? device.groups.pointerHub.incoming()
+            .map(({box}) => box as SamplerGroupBox)
+            .sort((left, right) => left.index.getValue() - right.index.getValue()).at(0)
+            ?? createGroup(boxGraph, device, "Group 1")
+        const created = samples.map(sample => {
+            const uuid = UUID.parse(sample.uuid)
+            const file = boxGraph.findBox<AudioFileBox>(uuid).unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
+                box.fileName.setValue(sample.name)
+                box.endInSeconds.setValue(sample.duration)
+            }))
+            return create(boxGraph, device, target, file)
+        })
+        mapByName(created)
+        return created
+    }
+
     export const zonesOf = (device: SamplerDeviceBox): ReadonlyArray<SamplerZoneBox> =>
         device.zones.pointerHub.incoming().map(({box}) => box as SamplerZoneBox)
 
@@ -101,7 +122,7 @@ export namespace SamplerZones {
         const keys = new Set(layered.map(({zone}) => zone.keyLow.getValue()))
         keys.forEach(key => {
             const column = layered.filter(({zone}) => zone.keyLow.getValue() === key)
-            const layers = Arrays.removeDuplicates(column.map(({layer}) => layer ?? 0)).sort((a, b) => a - b)
+            const layers = Arrays.removeDuplicates(column.map(({layer}) => layer ?? 0)).sort((low, high) => low - high)
             column.forEach(({zone, layer}) => {
                 const [low, high] = layerRange(layers.indexOf(layer ?? 0), layers.length)
                 zone.velocityLow.setValue(low)
@@ -118,7 +139,7 @@ export namespace SamplerZones {
 
     // each zone reaches halfway to the neighbouring roots
     export const spreadKeys = (zones: ReadonlyArray<SamplerZoneBox>): void => {
-        const roots = Arrays.removeDuplicates(zones.map(zone => zone.rootKey.getValue())).sort((a, b) => a - b)
+        const roots = Arrays.removeDuplicates(zones.map(zone => zone.rootKey.getValue())).sort((low, high) => low - high)
         zones.forEach(zone => {
             const root = zone.rootKey.getValue()
             const index = roots.indexOf(root)
@@ -134,7 +155,7 @@ export namespace SamplerZones {
         const columns = new Map<string, Array<SamplerZoneBox>>()
         zones.forEach(zone => columns.set(columnOf(zone), [...columns.get(columnOf(zone)) ?? [], zone]))
         columns.forEach(column => {
-            const layers = Arrays.removeDuplicates(column.map(zone => zone.velocityLow.getValue())).sort((a, b) => a - b)
+            const layers = Arrays.removeDuplicates(column.map(zone => zone.velocityLow.getValue())).sort((low, high) => low - high)
             const targets = column.map(zone => layerRange(layers.indexOf(zone.velocityLow.getValue()), layers.length))
             column.forEach((zone, index) => {
                 zone.velocityLow.setValue(targets[index][0])
@@ -185,9 +206,10 @@ export namespace SamplerZones {
     export const duplicate = (boxGraph: BoxGraph, device: SamplerDeviceBox,
                               zones: ReadonlyArray<SamplerZoneBox>): ReadonlyArray<SamplerZoneBox> => {
         const all = zonesOf(device)
+        const copies: Array<SamplerZoneBox> = []
         return zones.map(zone => {
-            const robins = all.filter(other => sharesRange(zone, other)).length
-            return SamplerZoneBox.create(boxGraph, UUID.generate(), box => {
+            const robins = all.concat(copies).filter(other => sharesRange(zone, other)).length
+            const copy = SamplerZoneBox.create(boxGraph, UUID.generate(), box => {
                 box.device.refer(device.zones)
                 zone.group.targetVertex.ifSome(target => box.group.refer(target))
                 zone.file.targetVertex.ifSome(target => box.file.refer(target))
@@ -215,6 +237,8 @@ export namespace SamplerZones {
                 box.loopEnd.setValue(zone.loopEnd.getValue())
                 box.loopFade.setValue(zone.loopFade.getValue())
             })
+            copies.push(copy)
+            return copy
         })
     }
 

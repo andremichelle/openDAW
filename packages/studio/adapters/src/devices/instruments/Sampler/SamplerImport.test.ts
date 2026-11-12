@@ -35,7 +35,7 @@ const setup = () => {
     }
     const file = (name: string): AudioFileBox => AudioFileBox.create(boxGraph, UUID.generate(), box => box.fileName.setValue(name))
     const groupsOf = (): ReadonlyArray<SamplerGroupBox> => device.groups.pointerHub.incoming()
-        .map(({box}) => box as SamplerGroupBox).sort((a, b) => a.index.getValue() - b.index.getValue())
+        .map(({box}) => box as SamplerGroupBox).sort((left, right) => left.index.getValue() - right.index.getValue())
     return {boxGraph, device, oldFile, edit, file, groupsOf}
 }
 
@@ -140,6 +140,19 @@ const soundfont = (samples: ReadonlyArray<FakeSample>, instrumentZones: Readonly
     samples,
     presets: [{header: {name: " Piano ", bank: 0, preset: 3}, zones: [{...presetZone, instrument: {zones: instrumentZones}}]}]
 }) as unknown as SoundFont2
+
+describe("SamplerImport.apply on a device that already uses the samples", () => {
+    it("keeps a file the old and the new zones share", () => {
+        const {boxGraph, device, oldFile, edit} = setup()
+        const created = edit(() => SamplerImport.apply(boxGraph, device,
+            {name: "x", groups: [], zones: [zone()], envelope: undefined, filter: undefined}, [oldFile]))
+        expect(created).toBe(1)
+        expect(oldFile.isAttached()).toBe(true)
+        const zones = SamplerZones.zonesOf(device)
+        expect(zones).toHaveLength(1)
+        expect(zones[0].file.targetVertex.unwrap().box).toBe(oldFile)
+    })
+})
 
 describe("SamplerSoundfont", () => {
     it("names presets by bank and number", () => {

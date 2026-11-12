@@ -411,7 +411,7 @@ impl Voice {
             if reverse {
                 self.position -= control.increment;
                 if looping && self.position < self.loop_start {
-                    self.position += self.loop_end - self.loop_start;
+                    self.position = self.loop_end - (self.loop_start - self.position) % (self.loop_end - self.loop_start);
                 } else if self.position < self.start {
                     self.active = false;
                     return;
@@ -419,7 +419,7 @@ impl Voice {
             } else {
                 self.position += control.increment;
                 if looping && self.position >= self.loop_end {
-                    self.position -= self.loop_end - self.loop_start;
+                    self.position = self.loop_start + (self.position - self.loop_start) % (self.loop_end - self.loop_start);
                 } else if self.position >= self.end {
                     self.active = false;
                     return;

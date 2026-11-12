@@ -19,7 +19,7 @@ export namespace SamplerZoneWindow {
         }
         const session = new Terminator()
         const handle = FloatingWindow({
-            title: `${adapter.labelField.getValue()} Sample Zones`, icon: InstrumentFactories.Sampler.defaultIcon,
+            title: "Sample Zones", icon: InstrumentFactories.Sampler.defaultIcon,
             width: Width, height: Height, resizable: false,
             onClose: () => session.terminate()
         }, <SamplerZoneEditor lifecycle={session} service={service} adapter={adapter} deviceHost={deviceHost}/>)

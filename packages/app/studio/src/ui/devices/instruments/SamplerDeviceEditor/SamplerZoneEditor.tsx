@@ -8,22 +8,21 @@ import {Events, Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {BooleanField, Float32Field, Int32Field} from "@opendaw/lib-box"
-import {AudioFileBox, SamplerZoneBox} from "@opendaw/studio-boxes"
+import {SamplerZoneBox} from "@opendaw/studio-boxes"
 import {
-    DeviceHost, NoteSignal, NoteStreamReceiver, Sample, SamplerDeviceBoxAdapter, SamplerGroupBoxAdapter, SamplerZoneBoxAdapter, SamplerZones
+    DeviceHost, NoteSignal, NoteStreamReceiver, SamplerDeviceBoxAdapter, SamplerGroupBoxAdapter, SamplerZoneBoxAdapter, SamplerZones
 } from "@opendaw/studio-adapters"
 import {CanvasPainter, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
-import {AnyDragData} from "@/ui/AnyDragData"
-import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {ControlContext} from "../NanoDeviceEditor/ParameterControls"
 import {SamplerModulationList} from "./SamplerModulationList"
+import {SamplerSamples} from "./SamplerSamples"
 import {SamplerStacks} from "./SamplerStacks"
 import {SamplerValueLabel} from "./SamplerValueLabel"
 import {SamplerVoiceStacks} from "./SamplerVoiceStacks"
@@ -321,8 +320,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             zonesSignature = signature
             zoneRows = zones.map(zone => [zone, (
                 <div className={Html.buildClassList("row", !zone.box.enabled.getValue() && "off")} onclick={(event: MouseEvent) => {
-                    const robins = SamplerZoneMap.robinsOf(state(), zone)
-                    if (hasModifier(event)) {toggleSelect(robins)} else {select(robins, zone)}
+                    // a row is one zone, the map selects every zone that shares its range
+                    if (hasModifier(event)) {toggleSelect([zone])} else {select([zone], zone)}
                     refresh.notify()
                 }}>
                     <span>{fileNameOf(zone).replace(/\.[A-Za-z0-9]+$/, "")}</span>
@@ -368,7 +367,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }))
     const update = (): void => {
         entries = SamplerZoneMap.entries(adapter)
-        rows = adapter.zones.adapters().toSorted((a, b) => UUID.Comparator(a.uuid, b.uuid))
+        rows = adapter.zones.adapters().toSorted((left, right) => UUID.Comparator(left.uuid, right.uuid))
         watchLoaders()
         const attached = selection.filter(zone => zone.box.isAttached())
         if (attached.length !== selection.length) {select(attached)}
@@ -426,40 +425,14 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         pressed = -1
         refresh.notify()
     }
-    // new zones for the samples, in the shown group, mapped by what their names say
-    const addZones = (samples: ReadonlyArray<Sample>): void => {
-        if (samples.length === 0) {return}
-        const created: Array<SamplerZoneBox> = []
-        editing.modify(() => {
-            const group = (shownGroup ?? adapter.groups.adapters().at(0))?.box
-                ?? SamplerZones.createGroup(boxGraph, adapter.box, "Group 1")
-            samples.forEach(sample => {
-                const uuid = UUID.parse(sample.uuid)
-                const file = boxGraph.findBox<AudioFileBox>(uuid).unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
-                    box.fileName.setValue(sample.name)
-                    box.endInSeconds.setValue(sample.duration)
-                }))
-                created.push(SamplerZones.create(boxGraph, adapter.box, group, file))
-            })
-            SamplerZones.mapByName(created)
-        })
+    const added = (created: ReadonlyArray<SamplerZoneBox>): void => {
+        if (created.length === 0) {return}
         select(adapter.zones.adapters().filter(zone => created.includes(zone.box)))
         refresh.notify()
     }
-    const importFiles = async (files: ReadonlyArray<File>): Promise<void> => {
-        const imported: Array<Sample> = []
-        for (const file of files) {
-            // a tempo of 0 is "none": no detection, these are notes and hits, not loops
-            const {status, value} = await Promises.tryCatch(file.arrayBuffer()
-                .then(arrayBuffer => service.sampleService.importFile({name: file.name, arrayBuffer, bpm: 0})))
-            if (status === "resolved") {imported.push(value)}
-        }
-        imported.forEach(sample => project.trackUserCreatedSample(UUID.parse(sample.uuid)))
-        addZones(imported)
-    }
     const browse = async (): Promise<void> => {
         const {status, value: files} = await Promises.tryCatch(Files.open({...FilePickerAcceptTypes.WavFiles, multiple: true}))
-        if (status === "resolved") {await importFiles(files)}
+        if (status === "resolved") {added(SamplerSamples.add(project, adapter, shownGroup?.box, await SamplerSamples.importFiles(service, project, files)))}
     }
     const tool = (label: string, tooltip: string, action: Exec): JsxValue => (
         <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip}} onClick={() => {
@@ -561,19 +534,11 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         Events.subscribe(keys, "pointermove", (event: PointerEvent) => {if (pressed !== -1) {play(event)}}),
         Events.subscribe(keys, "pointerup", release),
         Events.subscribe(keys, "pointercancel", release),
-        DragAndDrop.installTarget(mapDisplay, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
-            drop: async (_event: DragEvent, data: AnyDragData): Promise<void> => {
-                if (data.type === "sample") {addZones([data.sample])} else if (data.type === "file") {await importFiles(data.files)}
-            },
-            enter: (allowDrop: boolean) => mapDisplay.classList.toggle("accept", allowDrop),
-            leave: () => mapDisplay.classList.remove("accept")
-        }),
         {terminate: release}
     )
     readout.textContent = "Key / Velocity"
     update()
-    return (
+    const element: HTMLElement = (
         <div className={className}>
             <header>
                 {presetName}
@@ -694,4 +659,6 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             </div>
         </div>
     )
+    lifecycle.own(SamplerSamples.installDrop(element, mapDisplay, service, adapter, () => shownGroup?.box, added))
+    return element
 }

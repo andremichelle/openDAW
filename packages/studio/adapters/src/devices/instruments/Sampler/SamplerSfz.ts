@@ -28,7 +28,7 @@ export namespace SamplerSfz {
             if (isDefined(define)) {variables.set(define[1], define[2])}
             return !/^\s*#/.test(line)
         })
-        const names = Array.from(variables.keys()).sort((a, b) => b.length - a.length)
+        const names = Array.from(variables.keys()).sort((shorter, longer) => longer.length - shorter.length)
         const source = names.reduce((result, name) => result.split(name).join(variables.get(name) ?? ""), lines.join("\n"))
         const sections: Array<{ header: string, opcodes: Opcodes }> = []
         const pattern = /<(\w+)>|([A-Za-z_][\w]*)=/g

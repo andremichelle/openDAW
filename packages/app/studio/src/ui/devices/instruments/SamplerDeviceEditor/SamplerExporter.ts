@@ -22,6 +22,7 @@ export namespace SamplerExporter {
     })
 
     export const save = async (service: StudioService, adapter: SamplerDeviceBoxAdapter): Promise<void> => {
+        const {sampleManager} = service.project
         const {instrument, files, skipped} = SamplerSoundfontExport.describe(adapter.box)
         if (instrument.zones.length === 0) {
             await RuntimeNotifier.info({headline: "Nothing to Export", message: "This Sampler has no sample zones."})
@@ -34,7 +35,7 @@ export namespace SamplerExporter {
         for (const [index, file] of files.entries()) {
             progress.setValue(index / files.length)
             dialog.message = file.fileName.getValue()
-            const audio = await loaded(service.project.sampleManager.getOrCreate(file.address.uuid))
+            const audio = await loaded(sampleManager.getOrCreate(file.address.uuid))
             if (!isDefined(audio)) {
                 samples.push(undefined)
                 continue

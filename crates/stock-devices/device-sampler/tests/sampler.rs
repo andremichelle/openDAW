@@ -258,12 +258,12 @@ fn round_robins_take_turns_in_sequence_order() {
 }
 
 #[test]
-fn each_key_counts_its_own_round_robins() {
+fn a_stack_takes_turns_across_all_its_keys() {
     let mut rig = robin_rig(1);
     assert_eq!(hit(&mut rig, 1, 60), 1.0);
     assert_eq!(hit(&mut rig, 2, 60), 0.5);
-    assert_eq!(hit(&mut rig, 3, 72), 1.0, "another key starts at its own first");
-    assert_eq!(hit(&mut rig, 4, 60), 0.25);
+    assert_eq!(hit(&mut rig, 3, 72), 0.25, "another key of the same stack plays the next one");
+    assert_eq!(hit(&mut rig, 4, 60), 1.0);
 }
 
 #[test]
@@ -906,4 +906,28 @@ fn a_synced_lfo_snaps_to_the_nearest_note_length() {
     assert!(close(synced_hertz(500.0, 120.0), 16.0), "never faster than a thirty-second");
     assert!(close(synced_hertz(2.0, 60.0), 2.0), "at 60 bpm the same rate is an eighth");
     assert!(close(synced_hertz(3.0, 120.0), 3.0), "a dotted value sits on the sixth");
+}
+
+#[test]
+fn a_short_loop_stays_inside_its_points_far_above_the_root() {
+    let mut rig = Rig::new();
+    // the ramp holds its frame number, so the output shows where the read head is
+    rig.zones(&[Zone {loop_mode: 2, loop_start: 100, loop_end: 108, root_key: 0, ..zone(RAMP)}]);
+    let rendered = rig.left(&[on(1, 96)], 4_800);
+    assert!(rendered[400..].iter().all(|value| (99.0..=109.0).contains(value)), "the read head left the loop");
+}
+
+#[test]
+fn release_samples_respect_the_voice_limit() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[Zone {group: Some(7), ..zone(ONE)}]);
+    for note in 0..12 {
+        rig.left(&[on(note, 60)], 16);
+        rig.left(&[off(note, 60)], 16);
+    }
+    rig.left(&[], 4_800);
+    assert!(rig.voices() <= 2, "{} release voices sound with a limit of 2", rig.voices());
 }

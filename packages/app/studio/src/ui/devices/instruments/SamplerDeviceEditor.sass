@@ -11,6 +11,11 @@ component
   @include shared.stacks
   @include shared.modulation
 
+  &.accept
+    outline: solid var(--color-green) 1px
+    outline-offset: 4px
+    border-radius: 2px
+
   > div.modulation
     grid-column: 2
     grid-row: 1 / -1

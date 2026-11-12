@@ -3,7 +3,7 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Sample, SamplerDeviceBoxAdapter, SamplerImport, SamplerSfz, SamplerSoundfont} from "@opendaw/studio-adapters"
-import {ExternalLib, ResourceStructures, SampleStorage, StructureFile} from "@opendaw/studio-core"
+import {ExternalLib, Project, ResourceStructures, SampleStorage, StructureFile} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs"
 
@@ -21,14 +21,16 @@ export namespace SamplerImporter {
     const baseName = (path: string): string => path.slice(path.lastIndexOf("/") + 1).toLowerCase()
 
     export const browse = async (service: StudioService, adapter: SamplerDeviceBoxAdapter): Promise<void> => {
+        // the project the Sampler lives in: it may be closed or replaced while the import runs
+        const {project} = service
         const {status, value: files} = await Promises.tryCatch(Files.open(Accept))
         if (status === "rejected") {return}
         const soundfont = files.find(file => hasExtension(file, ".sf2"))
         const sfz = files.find(file => hasExtension(file, ".sfz"))
         if (isDefined(soundfont)) {
-            await importSoundfont(service, adapter, soundfont)
+            await importSoundfont(service, project, adapter, soundfont)
         } else if (isDefined(sfz)) {
-            await importSfz(service, adapter, sfz, files)
+            await importSfz(service, project, adapter, sfz, files)
         } else {
             await RuntimeNotifier.info({
                 headline: "Nothing to Import",
@@ -37,7 +39,8 @@ export namespace SamplerImporter {
         }
     }
 
-    const importSoundfont = async (service: StudioService, adapter: SamplerDeviceBoxAdapter, file: File): Promise<void> => {
+    const importSoundfont = async (service: StudioService, project: Project, adapter: SamplerDeviceBoxAdapter,
+                                   file: File): Promise<void> => {
         const library = await ExternalLib.SoundFont2()
         if (library.status === "rejected") {
             await RuntimeNotifier.info({headline: "Import Failed", message: "The soundfont reader could not be loaded."})
@@ -57,13 +60,13 @@ export namespace SamplerImporter {
         })
         if (choice.isEmpty()) {return}
         const {instrument, samples} = SamplerSoundfont.convert(parsed.value, choice.unwrap())
-        await store(service, adapter, instrument, stem(file.name), samples.map(sample => ({
+        await store(service, project, adapter, instrument, stem(file.name), samples.map(sample => ({
             name: `${sample.name}.wav`,
             read: async () => SamplerImport.encodeWav(sample)
         })))
     }
 
-    const importSfz = async (service: StudioService, adapter: SamplerDeviceBoxAdapter, file: File,
+    const importSfz = async (service: StudioService, project: Project, adapter: SamplerDeviceBoxAdapter, file: File,
                              files: ReadonlyArray<File>): Promise<void> => {
         const {instrument, samplePaths} = SamplerSfz.parse(await file.text(), stem(file.name))
         const sources: ReadonlyArray<Optional<Source>> = samplePaths.map(path => {
@@ -78,7 +81,7 @@ export namespace SamplerImporter {
             })
             return
         }
-        await store(service, adapter, instrument, stem(file.name), sources)
+        await store(service, project, adapter, instrument, stem(file.name), sources)
         if (missing > 0) {
             await RuntimeNotifier.info({
                 headline: "Samples Missing",
@@ -89,9 +92,10 @@ export namespace SamplerImporter {
 
     // Stores each sample once (a sample that is already there is found by its content), files them under
     // Multi Samples and turns the instrument into the Sampler's zones.
-    const store = async (service: StudioService, adapter: SamplerDeviceBoxAdapter, instrument: SamplerImport.Instrument,
-                         folder: string, sources: ReadonlyArray<Optional<Source>>): Promise<void> => {
-        const {project} = service
+    const store = async (service: StudioService, project: Project, adapter: SamplerDeviceBoxAdapter,
+                         instrument: SamplerImport.Instrument, folder: string,
+                         sources: ReadonlyArray<Optional<Source>>): Promise<void> => {
+        let failed = 0
         const progress = new DefaultObservableValue(0.0)
         const dialog = Dialogs.progress({headline: "Importing Samples", message: "", progress})
         const stored: Array<Optional<Sample>> = []
@@ -105,6 +109,7 @@ export namespace SamplerImporter {
             const imported = await Promises.tryCatch(source.read()
                 // a tempo of 0 is "none": no detection, these are notes and hits, not loops
                 .then(arrayBuffer => service.sampleService.importFile({name: source.name, arrayBuffer, bpm: 0})))
+            if (imported.status === "rejected") {failed++}
             stored.push(imported.status === "resolved" ? imported.value : undefined)
         }
         dialog.terminate()
@@ -123,5 +128,11 @@ export namespace SamplerImporter {
                 box.endInSeconds.setValue(sample.duration)
             }))
         })))
+        if (failed > 0) {
+            await RuntimeNotifier.info({
+                headline: "Samples Not Imported",
+                message: `${failed} of ${sources.length} samples could not be stored. Their sample zones were left out.`
+            })
+        }
     }
 }

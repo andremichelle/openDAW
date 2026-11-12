@@ -301,3 +301,68 @@ describe("SamplerZones", () => {
         expect(SamplerZones.sharesRange(zones[0], zones[1])).toBe(false)
     })
 })
+
+describe("SamplerZones.addSamples", () => {
+    const sample = (name: string, uuid: UUID.Bytes = UUID.generate()) =>
+        ({uuid: UUID.toString(uuid), name, bpm: 0, duration: 1.5, sample_rate: 48000, origin: "import" as const})
+    const groupsOf = (device: SamplerDeviceBox): ReadonlyArray<SamplerGroupBox> =>
+        device.groups.pointerHub.incoming().map(({box}) => box as SamplerGroupBox)
+    it("creates a zone and a file box per sample and maps them by name", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Piano C4.wav"), sample("Piano E4.wav")]))
+        expect(created).toHaveLength(2)
+        expect(created.map(zone => zone.rootKey.getValue())).toEqual([60, 64])
+        expect(created.every(zone => zone.group.targetVertex.unwrap().box === group)).toBe(true)
+        const file = created[0].file.targetVertex.unwrap().box as AudioFileBox
+        expect(file.fileName.getValue()).toBe("Piano C4.wav")
+        expect(file.endInSeconds.getValue()).toBe(1.5)
+    })
+    it("reuses the file box of a sample the project already has", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        const uuid = UUID.generate()
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav", uuid), sample("Kick.wav", uuid)]))
+        expect(created).toHaveLength(2)
+        expect(created[0].file.targetVertex.unwrap().box).toBe(created[1].file.targetVertex.unwrap().box)
+    })
+    it("uses the first group by index when none is given", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            SamplerZones.createGroup(boxGraph, device, "Second")
+            created = SamplerZones.addSamples(boxGraph, device, undefined, [sample("Kick.wav")])
+        })
+        expect(created[0].group.targetVertex.unwrap().box).toBe(group)
+    })
+    it("creates a group when the device has none", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            group.delete()
+            created = SamplerZones.addSamples(boxGraph, device, undefined, [sample("Kick.wav")])
+        })
+        expect(groupsOf(device)).toHaveLength(1)
+        expect(created[0].group.targetVertex.unwrap().box).toBe(groupsOf(device)[0])
+    })
+    it("does nothing without samples, not even a group", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            group.delete()
+            created = SamplerZones.addSamples(boxGraph, device, undefined, [])
+        })
+        expect(created).toHaveLength(0)
+        expect(groupsOf(device)).toHaveLength(0)
+    })
+})
+
+describe("SamplerZones.duplicate of a whole stack", () => {
+    it("gives every copy its own place among the round robins", () => {
+        const {boxGraph, device, zones, edit} = setup(["a.wav", "b.wav"])
+        edit(() => zones[1].sequence.setValue(2))
+        let copies: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => copies = SamplerZones.duplicate(boxGraph, device, zones))
+        expect(copies.map(zone => zone.sequence.getValue())).toEqual([3, 4])
+    })
+})

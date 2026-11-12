@@ -206,12 +206,60 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
 5. Tests: 20, most of them write a soundfont and read it back through the soundfont reader and the importer.
    Not tried in the browser and not opened in another soundfont player yet.
 
+## Samples from the browser (done, uncommitted)
+
+1. A sample dragged from the sample browser, or audio files from the desktop, can be dropped anywhere on the
+   sample zone window and on the device panel. On the window the zones go to the shown group, on the panel to the
+   first group.
+2. `SamplerZones.addSamples` in the adapters creates the zones and maps them by name. `SamplerSamples` in the app
+   holds the file import and the drop target, the window and the panel share it.
+3. A row in the Sample Zones list selects that one zone. The map still selects every zone that shares a range.
+   Without this, three samples dropped without a note in their names could never be told apart.
+
+## Review and test pass 2026-11-12 (done, uncommitted)
+
+Fixed after the code review:
+
+1. Importing again into a Sampler that already used the same samples left zones without a sample. The new zones
+   are now created before the old ones go.
+2. A short loop played far above its root ran out of its loop points and held one value.
+3. Release samples ignored the Voices limit.
+4. Round robins counted per key. A stack now takes turns across all its keys.
+5. Export SF2 kept every round robin when all had sequence 1. It keeps the first of each stack.
+6. Duplicate gave every copy of a stack the same sequence.
+7. Imports and drops keep the project they started in when it is closed or replaced meanwhile. Files that cannot
+   be read are reported, a batch shows its progress.
+8. A drop that adds nothing keeps the selection. The window title no longer shows a stale name.
+
+Left from the review, not fixed:
+
+1. Parse helpers return `Optional` where the code style asks for `Option` (`SamplerValueLabel.Field.parse` and
+   its formats, `SamplerSfz.parseKey`, `framesOf`).
+2. Group and trigger names, note parsing and the find-or-create of a sample file box exist more than once.
+3. A zone's `index` is the zone count, which can repeat after Clean Up. Only the order uses it.
+4. The playhead canvas is resized on every position update.
+5. Some two line comments.
+
+Browser, on a fresh project: add Sampler, drop samples on the panel and the window, type and drag values, play
+keys, groups, modulation, export dialog, undo back to an empty project with the window open, playback of the
+imported Steinway. No console errors. Not tested: saving the exported file and the import, both need the native
+file dialog.
+
 ## Next
 
-1. Scripting API.
+1. Scripting API. The shape is worked out on an example in `plans/sampler-scripting.md`.
 2. Release notes with the DEV deploy.
-3. A preview in the import dialog. SFZ `#include`. Groups cannot be
-   deleted yet.
+3. A preview in the import dialog. SFZ `#include`. Groups cannot be deleted yet.
+
+## Later
+
+1. Chop a sample onto the keys: import one sample, cut it at its transients or on the grid, and place the slices
+   on consecutive keys as zones of the same file (sample start and end per zone).
+2. Envelope and LFO per zone. The device's stay the default, a zone can override them with a box of its own
+   attached to it. The engine can deliver those as a second table joined to the zones, no new mechanism. Overrides
+   would not be automatable. Soundfont import could then keep the envelopes per zone.
+3. Mod Wheel, Aftertouch and Bend, once openDAW supports them.
+4. Sample bit depth, `plans/sample-bits.md`.
 
 ## Decided 2026-11-12
 
@@ -222,5 +270,39 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
 
 ## Open
 
-1. The design is signed off (2026-11-12). The user interface calls the zones "Sample Zones".
-2. A zone edit delivers the whole zone table again. Fine for hundreds of zones, to be measured for thousands.
+1. A zone edit delivers the whole zone table again. Fine for hundreds of zones, to be measured for thousands.
+
+## Open questions for André (2026-11-12)
+
+Design
+
+1. A row in the Sample Zones list now selects one zone, the map selects all zones on the same range. Keep it?
+2. Dropped samples without a note in their name all land on the full key range, on top of each other. Should
+   they instead take the next free key each, upwards from C1, like a drum kit?
+3. Envelope and LFO per zone as override boxes (see Later). Build it, and before or after the first release?
+4. Groups cannot be deleted yet. On delete, do the zones go with the group or move to the first group?
+5. Round robins now take turns per stack, across all keys the stack covers. Before, every key counted on its
+   own. Is per stack what you want?
+6. The window title is now just "Sample Zones", the instrument name is the first thing inside. Fine?
+7. The five code items left from the review (see above): fix them now or leave them?
+
+Import and export
+
+8. Export SF2 leaves out further round robins, release triggers, fades, One Shot, the mod envelope, LFOs and
+   modulation. One Shot could be written as a long release, and LFO to pitch as SF2 vibrato. Worth it?
+9. Export clips samples louder than full scale after asking. Offer to normalise the whole instrument instead?
+10. Import takes the envelope and filter of the first zone for the whole instrument. Fine until per zone overrides
+   exist?
+11. The Soundfont device stays next to the Sampler for now. When does it go, and are existing projects converted
+   on load?
+
+Scripting
+
+12. The five points under Open in `plans/sampler-scripting.md`.
+
+Release
+
+13. The export was written against the soundfont reader we use. It has not been opened in another soundfont
+    player. Do you have one at hand to try a file?
+14. Which CC0 libraries ship first under `Multi Samples` in the cloud (VCSL, the mridangam set)?
+15. Release notes go in with the DEV deploy. Deploy to DEV now, or after the scripting API?

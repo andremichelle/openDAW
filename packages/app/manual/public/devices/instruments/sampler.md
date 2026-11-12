@@ -95,7 +95,9 @@ A new Sampler starts with one connection: Velocity to Gain at 100%. Remove it to
 ### 2.1 Adding samples
 
 - **Add Samples** opens a file dialog. Several files can be chosen at once.
-- Samples and audio files can also be dropped onto the map.
+- Samples from the sample browser and audio files can be dropped anywhere on the window. They join the group that
+  is shown.
+- They can also be dropped on the device panel, without opening the window.
 
 New samples are mapped from their file names: a note name (`C4`, `c#3`, `Bb2`) becomes the root key, a dynamic
 (`pp` to `fff`, or `v1`, `v2`) becomes a velocity layer and `rr1`, `rr2` number the round robins. Notes are read
@@ -107,6 +109,8 @@ The map shows keys from left to right and velocity from bottom to top, with a pi
 is a rectangle.
 
 - **Click** a zone to select it. **Shift**, **Cmd** or **Ctrl** click adds a zone or takes it out again.
+- A zone on the map stands for every zone on the same keys and velocities. **Click** a name in the Sample Zones
+  list to select that one zone only.
 - **Click** empty space to deselect.
 - **Drag** on empty space to draw a selection rectangle.
 - **Drag** a zone to move it. Drag an edge to change its range. All selected zones follow.

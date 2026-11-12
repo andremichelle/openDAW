@@ -21,10 +21,10 @@ $gap: 6px
   display: flex
   column-gap: 0.25em
   justify-content: end
-  padding: 0 0.5em
+  padding: 2px 0.5em 0 0.5em
   border-radius: 0.25em
   font-size: 8px
-  line-height: 18px
+  line-height: 16px
   white-space: nowrap
   color: var(--color-gray)
   touch-action: none
@@ -36,7 +36,7 @@ $gap: 6px
   &.modifying
     color: var(--color-blue)
     box-shadow: 0 0 0 0.5px rgba(white, 0.1)
-    background-color: var(--color-black)
+    background-color: rgba(black, 0.3)
 
 @mixin list-rows
   min-height: 0
@@ -128,6 +128,13 @@ $gap: 6px
     label.value
       width: 40px
       @include value-label
+
+    label.framed
+      padding-top: 2px
+      line-height: 16px
+
+      &.modifying
+        background-color: rgba(black, 0.3)
 
     // borrowed from NanoDeviceEditor
     .toggle
