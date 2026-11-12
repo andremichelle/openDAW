@@ -64,7 +64,9 @@ export namespace DawProject {
         // the exporter reads the frames at once, so they are leased for its run
         const leases = await Promise.all(skeleton.boxGraph.boxes()
             .filter(box => box instanceof AudioFileBox)
-            .map(box => Promises.tryCatch(sampleManager.getOrCreate(box.address.uuid).acquire())))
+            .map(box => sampleManager.getOrCreate(box.address.uuid))
+            .filter(loader => loader.state.type === "loaded" && isDefined(loader.acquire))
+            .map(loader => Promises.tryCatch(loader.acquire())))
         const written = tryCatch(() => DawProjectExporter.write(skeleton, sampleManager, {
             write: (path: string, buffer: ArrayBuffer): FileReferenceSchema => {
                 zip.file(path, buffer)

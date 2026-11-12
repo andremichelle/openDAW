@@ -101,6 +101,23 @@ describe("PcmData.quantize", () => {
     })
 })
 
+describe("WavFile.isSixteenBit", () => {
+    it("knows the header encodePcm writes", () =>
+        expect(WavFile.isSixteenBit(new Uint8Array(WavFile.encodePcm(PcmData.smallest(audioOf([0.5, -0.5])))).subarray(0, 44))).toBe(true))
+    it("says no to a float file, a 24 bit file, a short head and garbage", () => {
+        expect(WavFile.isSixteenBit(new Uint8Array(WavFile.encodeFloats(audioOf([0.5]))))).toBe(false)
+        expect(WavFile.isSixteenBit(new Uint8Array(WavFile.encodeInts24(audioOf([0.5]))))).toBe(false)
+        expect(WavFile.isSixteenBit(new Uint8Array(WavFile.encodePcm(PcmData.smallest(audioOf([0.5])))).subarray(0, 43))).toBe(false)
+        expect(WavFile.isSixteenBit(new Uint8Array(64))).toBe(false)
+    })
+    it("reads a head that sits inside a larger buffer", () => {
+        const file = new Uint8Array(WavFile.encodePcm(PcmData.smallest(audioOf([0.5]))))
+        const padded = new Uint8Array(file.byteLength + 8)
+        padded.set(file, 8)
+        expect(WavFile.isSixteenBit(padded.subarray(8))).toBe(true)
+    })
+})
+
 describe("WavFile.encodePcm and decodePcm", () => {
     it("writes a canonical 16 bit header", () => {
         const view = new DataView(WavFile.encodePcm(PcmData.smallest(audioOf([0.5, -0.5, 0], [0.25, 0, -1]))))

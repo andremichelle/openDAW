@@ -724,7 +724,7 @@ impl SampleRef {
     /// `frames_ptr + channel * frame_count * 4`). The one `unsafe` stays here in the shim; device DSP reads
     /// frames as a slice. The slice borrows the resident sample memory, valid while the sample stays resident.
     #[inline]
-    pub fn plane(&self, channel: u32) -> &[f32] {
+    fn plane(&self, channel: u32) -> &[f32] {
         #[cfg(target_family = "wasm")]
         {
             let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 4;

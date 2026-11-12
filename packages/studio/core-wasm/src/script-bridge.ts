@@ -18,6 +18,8 @@ import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 import {SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "./engine-exports"
 
+const CONVERSION_BUDGET = 1 << 16
+
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
 // cover a script still compiling / addModule-ing async, short enough to surface a genuine misconfiguration.
@@ -86,7 +88,8 @@ class Bridge {
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
-    readonly sampleFloats = new Map<number, {handle: number, frames: Array<Float32Array>}>() // index -> float copy of 16 bit frames
+    // index -> float copy of a 16 bit sample, converted a part per block
+    readonly sampleFloats = new Map<number, {handle: number, source: number, done: number, frames: Array<Float32Array>}>()
     sidechains: ReadonlyArray<SidechainDecl> = []
     sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
@@ -551,8 +554,7 @@ export class ScriptBridges {
         return true
     }
 
-    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData: float frames as
-    // views (no copy), 16 bit frames as a float copy kept for as long as the slot holds that handle.
+    // hands the proc float views of a float sample, a float copy of a 16 bit one once it is converted
     #deliverSample(bridge: Bridge, index: number, sampleHandle: number): void {
         if (bridge.proc === null) {return}
         const label = bridge.sampleLabels.get(index)
@@ -571,18 +573,29 @@ export class ScriptBridges {
         const sampleRate = view.getFloat32(12, true)
         const frames: Array<Float32Array> = []
         if (view.getUint32(16, true) === SAMPLE_FORMAT_I16) {
-            const kept = bridge.sampleFloats.get(index)
-            if (kept !== undefined && kept.handle === sampleHandle) {
-                frames.push(...kept.frames)
-            } else {
-                for (let channel = 0; channel < channelCount; channel++) {
-                    const source = new Int16Array(this.#memory.buffer, framesPtr + channel * frameCount * 2, frameCount)
-                    const target = new Float32Array(frameCount)
-                    for (let frame = 0; frame < frameCount; frame++) {target[frame] = source[frame] / 32768}
-                    frames.push(target)
+            let kept = bridge.sampleFloats.get(index)
+            if (!isDefined(kept) || kept.handle !== sampleHandle || kept.source !== framesPtr || kept.frames.length !== channelCount
+                || kept.frames[0]?.length !== frameCount) {
+                kept = {
+                    handle: sampleHandle, source: framesPtr, done: 0,
+                    frames: Array.from({length: channelCount}, () => new Float32Array(frameCount))
                 }
-                bridge.sampleFloats.set(index, {handle: sampleHandle, frames})
+                bridge.sampleFloats.set(index, kept)
             }
+            const total = channelCount * frameCount
+            if (kept.done < total) {
+                const source = new Int16Array(this.#memory.buffer, framesPtr, total)
+                const end = Math.min(total, kept.done + CONVERSION_BUDGET)
+                for (let position = kept.done; position < end; position++) {
+                    kept.frames[Math.floor(position / frameCount)][position % frameCount] = source[position] / 32768
+                }
+                kept.done = end
+                if (end < total) {
+                    bridge.proc.samples[label] = null
+                    return
+                }
+            }
+            frames.push(...kept.frames)
         } else {
             bridge.sampleFloats.delete(index)
             for (let channel = 0; channel < channelCount; channel++) {

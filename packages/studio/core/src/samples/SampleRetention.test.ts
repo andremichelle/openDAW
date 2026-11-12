@@ -24,7 +24,10 @@ Communicator.executor<OpfsProtocol>(worker.channel("opfs"), {
         const bytes = files.get(path)
         return bytes === undefined ? Promise.reject(new Error(`not found: ${path}`)) : bytes.slice()
     },
-    exists: async (path: string): Promise<boolean> => Array.from(files.keys()).some(key => key.startsWith(path)),
+    exists: async (path: string): Promise<boolean> => {
+        const file = files.get(path)
+        return file === undefined ? Array.from(files.keys()).some(key => key.startsWith(`${path}/`)) : file.byteLength > 0
+    },
     delete: async (path: string): Promise<void> => {
         Array.from(files.keys()).filter(key => key.startsWith(path)).forEach(key => files.delete(key))
     },
@@ -211,46 +214,75 @@ describe("SampleStorage.replaceAudio", () => {
         await storage.replaceAudio(uuid, PcmData.smallest(audio))
         expect([files.get(pathOf(uuid, "peaks.bin")), files.get(pathOf(uuid, "meta.json"))]).toEqual(before)
     })
-    it("a load completes a replacement that was cut off", async () => {
-        const audio = exact()
-        const uuid = await put(audio, "float32")
-        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(WavFile.encodePcm(PcmData.smallest(audio))))
-        files.set(pathOf(uuid, "audio.wav"), audioFile(uuid).slice(0, 51))
-        const [loaded] = await storage.load(uuid)
-        expect(bitsOf(loaded)).toEqual(bitsOf(audio))
+    it("leaves neither the pending file nor the commit mark behind", async () => {
+        const uuid = await put(exact(), "float32")
+        await storage.replaceAudio(uuid, PcmData.smallest(exact()))
+        expect(Array.from(files.keys()).filter(key => key.includes(UUID.toString(uuid))).map(key => key.split("/")[3]).sort())
+            .toEqual(["audio.wav", "meta.json", "peaks.bin"])
+    })
+    // what a page that died after the commit mark leaves: the mark, the complete new file and any audio file
+    const cutOff = async (audioAfter: (bytes: Uint8Array, next: Uint8Array) => Uint8Array): Promise<UUID.Bytes> => {
+        const uuid = await put(exact(), "float32")
+        const next = new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact())))
+        files.set(pathOf(uuid, SampleStorage.Pending), next)
+        files.set(pathOf(uuid, SampleStorage.Commit), new Uint8Array([1]))
+        files.set(pathOf(uuid, "audio.wav"), audioAfter(audioFile(uuid), next))
+        return uuid
+    }
+    it("a load completes a committed replacement over an untouched audio file", async () => {
+        const uuid = await cutOff(bytes => bytes)
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(exact()))
         expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
         expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
+        expect(files.has(pathOf(uuid, SampleStorage.Commit))).toBe(false)
     })
-    it("loadPcm and loadStored complete it as well", async () => {
-        const audio = exact()
-        for (const read of [(uuid: UUID.Bytes) => storage.loadPcm(uuid), (uuid: UUID.Bytes) => storage.loadStored(uuid).then(([pcm]) => pcm)]) {
-            const uuid = await put(audio, "float32")
-            files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(WavFile.encodePcm(PcmData.smallest(audio))))
-            files.set(pathOf(uuid, "audio.wav"), new Uint8Array(0))
-            expect((await read(uuid)).format).toBe("int16")
+    it("a load completes a committed replacement over a truncated audio file", async () => {
+        const uuid = await cutOff(bytes => bytes.slice(0, 51))
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(exact()))
+    })
+    it("a load completes a committed replacement over a torn file that still decodes", async () => {
+        // the new header and length are in place, the frames behind it are still zero
+        const uuid = await cutOff((_bytes, next) => {
+            const torn = new Uint8Array(next.byteLength)
+            torn.set(next.subarray(0, 44))
+            return torn
+        })
+        expect(WavFile.decodePcm(audioFile(uuid).slice().buffer as ArrayBuffer).format).toBe("int16")
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(exact()))
+        expect(Array.from(audioFile(uuid))).toEqual(Array.from(new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact())))))
+    })
+    it("loadPcm, loadStored and settle complete it as well", async () => {
+        const reads: ReadonlyArray<(uuid: UUID.Bytes) => Promise<unknown>> = [
+            uuid => storage.loadPcm(uuid), uuid => storage.loadStored(uuid), uuid => storage.settle(uuid)]
+        for (const read of reads) {
+            const uuid = await cutOff(() => new Uint8Array(0))
+            await read(uuid)
+            expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
             expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
+            expect(files.has(pathOf(uuid, SampleStorage.Commit))).toBe(false)
         }
     })
-    it("an intact file wins over what was left behind", async () => {
+    it("a pending file without the commit mark is never used", async () => {
         const audio = inexact()
         const uuid = await put(audio, "float32")
-        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array([1, 2, 3]))
+        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact()))))
         expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
+        expect(headerOf(uuid)).toEqual({tag: 3, bits: 32})
         await storage.settle(uuid)
         expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
-        expect(headerOf(uuid)).toEqual({tag: 3, bits: 32})
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
+    })
+    it("an empty commit mark does not count", async () => {
+        const audio = inexact()
+        const uuid = await put(audio, "float32")
+        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact()))))
+        files.set(pathOf(uuid, SampleStorage.Commit), new Uint8Array(0))
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
     })
     it("a broken file with nothing left behind still fails", async () => {
         const uuid = await put(exact(), "float32")
         files.set(pathOf(uuid, "audio.wav"), new Uint8Array(10))
         await expect(storage.load(uuid)).rejects.toThrow()
-    })
-    it("a broken file with a broken copy fails and keeps both", async () => {
-        const uuid = await put(exact(), "float32")
-        files.set(pathOf(uuid, "audio.wav"), new Uint8Array(10))
-        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(7))
-        await expect(storage.loadPcm(uuid)).rejects.toThrow()
-        expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(true)
     })
     it("settle does nothing for an ordinary sample", async () => {
         const uuid = await put(exact(), "smallest")
@@ -582,6 +614,19 @@ describe("SampleLoader helpers", () => {
         expect(pcm.format).toBe("float32")
         expect(pcm.frames[0]).toBe(audio.frames[0])
     })
+    it("a loader written before acquire existed is served through its data", async () => {
+        const audio = inexact()
+        const legacy = {
+            data: Option.wrap(audio), state: {type: "loaded"},
+            subscribe: (observer: (state: { type: "loaded" }) => void) => {
+                observer({type: "loaded"})
+                return {terminate: () => {}}
+            }
+        } as unknown as SampleLoader
+        expect(await SampleLoader.frames(legacy)).toBe(audio)
+        expect(await SampleLoader.use(legacy, data => data.numberOfFrames)).toBe(5)
+        expect((await SampleLoader.stored(legacy)).frames[0]).toBe(audio.frames[0])
+    })
     it("infoOf answers with the data of a loader written before info existed", () => {
         const audio = inexact()
         const legacy = {data: Option.wrap(audio)} as unknown as SampleLoader
@@ -590,6 +635,16 @@ describe("SampleLoader helpers", () => {
 })
 
 describe("GlobalSampleLoaderManager", () => {
+    // a loaded loader of the manager that no longer finds its frames in memory, as after a garbage collection
+    const forgetful = async (manager: GlobalSampleLoaderManager, uuid: UUID.Bytes): Promise<DefaultSampleLoader> => {
+        const loader = manager.getOrCreate(uuid)
+        await SampleLoader.loaded(loader)
+        if (!(loader instanceof DefaultSampleLoader)) {throw new Error("unexpected loader")}
+        const [info, peaks] = [loader.info.unwrap(), loader.peaks.unwrap()]
+        loader.invalidate()
+        loader.setStored(info, peaks, meta, Option.None)
+        return loader
+    }
     it("keeps frames by default, as it always did", async () => {
         const audio = exact()
         const uuid = await put(audio, "float32")
@@ -660,6 +715,39 @@ describe("GlobalSampleLoaderManager", () => {
         await expect(SampleLoader.loaded(loader)).rejects.toThrow("Sample not found")
         await expect(loader.acquire()).rejects.toThrow()
         expect(loader.state.type).toBe("error")
+    })
+    it("fetches a stored sample again when its file is gone while the project uses it", async () => {
+        const uuid = UUID.generate()
+        const audio = exact()
+        const provider = providerOf(new Map([[UUID.toString(uuid), audio]]))
+        storage.format = "smallest"
+        const manager = new GlobalSampleLoaderManager(provider, {retain: "while-used"})
+        const loader = await forgetful(manager, uuid)
+        files.clear()
+        const pcm = await SampleLoader.stored(loader)
+        expect(pcm.format).toBe("int16")
+        expect(provider.calls).toBe(2)
+        expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
+        expect(bitsOf(await manager.getAudioData(uuid))).toEqual(bitsOf(audio))
+    })
+    it("fails a lease for a deleted sample that nobody can provide, and keeps saying loaded", async () => {
+        const uuid = await put(exact(), "smallest")
+        const manager = new GlobalSampleLoaderManager(providerOf(new Map()), {retain: "while-used"})
+        const loader = await forgetful(manager, uuid)
+        files.clear()
+        await expect(loader.acquire()).rejects.toThrow("Sample not found")
+        await expect(SampleLoader.stored(loader)).rejects.toThrow("Sample not found")
+        expect(loader.info.unwrap().numberOfFrames).toBe(5)
+    })
+    it("keeps the frames of a deleted sample under the default retention", async () => {
+        const audio = exact()
+        const uuid = await put(audio, "float32")
+        const manager = new GlobalSampleLoaderManager(providerOf(new Map()))
+        const loader = manager.getOrCreate(uuid)
+        await SampleLoader.loaded(loader)
+        files.clear()
+        expect(bitsOf(await manager.getAudioData(uuid))).toEqual(bitsOf(audio))
+        expect((await SampleLoader.stored(loader)).format).toBe("float32")
     })
     it("gives a second loader of the same sample its info without frames", async () => {
         const uuid = await put(exact(), "smallest")

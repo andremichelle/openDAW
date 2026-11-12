@@ -85,6 +85,14 @@ export namespace WavFile {
         return audioData
     }
 
+    // whether the first 44 bytes are the header of a 16 bit PCM file as `encodePcm` writes it
+    export const isSixteenBit = (head: Uint8Array): boolean => {
+        if (head.byteLength < 44) {return false}
+        const view = new DataView(head.buffer, head.byteOffset, head.byteLength)
+        return view.getUint32(0, true) === MAGIC_RIFF && view.getUint32(8, true) === MAGIC_WAVE
+            && view.getUint32(12, true) === MAGIC_FMT && view.getUint16(20, true) === 1 && view.getUint16(34, true) === 16
+    }
+
     // 16 bit PCM stays 16 bit, everything else is decoded to floats
     export const decodePcm = (buffer: ArrayBuffer): PcmData => {
         const view = new DataView(buffer)

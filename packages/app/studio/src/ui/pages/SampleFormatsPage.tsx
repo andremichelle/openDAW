@@ -131,6 +131,7 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({headline: "Converting Samples", message: "", progress})
         const failed: Array<string> = []
+        const done = new Set<string>()
         let skipped = 0
         for (const [index, entry] of entries.entries()) {
             dialog.message = entry.name
@@ -139,6 +140,7 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
             if (result.status === "rejected") {
                 failed.push(`${entry.name}: ${String(result.error)}`)
             } else if (result.value) {
+                done.add(entry.id)
                 service.sampleManager.invalidate(uuid)
             } else {
                 skipped++
@@ -151,7 +153,7 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         if (skipped > 0) {notes.push(`${skipped} changed since the scan and ${skipped === 1 ? "was" : "were"} left alone.`)}
         if (failed.length > 0) {notes.push(`${failed.length} could not be converted:\n${failed.join("\n")}`)}
         if (notes.length > 0) {await RuntimeNotifier.info({headline: "Not Everything Was Converted", message: notes.join("\n")})}
-        await scan()
+        show({...report, entries: report.entries.map(entry => done.has(entry.id) ? SampleFormats.converted(entry) : entry)})
     }
     const renderReport = (report: SampleFormats.Report): void => {
         reportTerminator.terminate()
@@ -192,6 +194,10 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         for (const entry of report.entries.filter(({pending}) => pending)) {
             await Promises.tryCatch(SampleStorage.get().settle(UUID.parse(entry.id)))
         }
+        show(report)
+    }
+    // the lossless conversions are chosen up front, the others are a decision
+    const show = (report: SampleFormats.Report): void => {
         chosen.clear()
         report.entries.filter(({kind}) => kind === "exact").forEach(({id}) => chosen.add(id))
         current.wrap(report)

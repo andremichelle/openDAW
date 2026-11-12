@@ -2,7 +2,7 @@ import {ByteArrayInput, int, Option, Progress, SortedSet, Terminable, UUID} from
 import {DefaultSampleLoader} from "./DefaultSampleLoader"
 import {SampleProvider} from "./SampleProvider"
 import {SampleLoader, SampleLoaderManager, SampleMetaData, SampleRetention} from "@opendaw/studio-adapters"
-import {AudioData, AudioInfo} from "@opendaw/lib-dsp"
+import {AudioData, AudioInfo, PcmData} from "@opendaw/lib-dsp"
 import {SampleStorage} from "./SampleStorage"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Workers} from "../Workers"
@@ -99,7 +99,7 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
 
     getOrCreate(uuid: UUID.Bytes): SampleLoader {
         return this.#loaders.getOrCreate(uuid, uuid => {
-            const loader = new DefaultSampleLoader(uuid, this.#retain)
+            const loader = new DefaultSampleLoader(uuid, this.#retain, uuid => this.#restore(uuid))
             this.#load(loader)
             return loader
         })
@@ -141,6 +141,14 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
             loader.setError(error instanceof Error ? error.message : String(error))
         }).finally(() => this.#pending.removeByKey(uuid))
         this.#pending.add({uuid, promise})
+    }
+
+    // a sample whose stored file is gone is fetched and stored again
+    async #restore(uuid: UUID.Bytes): Promise<PcmData> {
+        const [audio, meta] = await this.#provider.fetch(uuid, Progress.Empty)
+        const peaks = await Workers.Peak.generateAsync(Progress.Empty, SamplePeaks.findBestFit(audio.numberOfFrames),
+            audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
+        return SampleStorage.get().store({uuid, audio, peaks, meta})
     }
 
     #apply(loader: DefaultSampleLoader, {data, info, peaks, meta}: CachedSample): void {

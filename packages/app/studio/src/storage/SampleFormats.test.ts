@@ -90,9 +90,11 @@ describe("SampleFormats.scan", () => {
         const store: Store = new Map()
         sample(store, "cut", floatFile(0.5))
         store.set("samples/v2/cut/audio.wav.pending", smallFile(0.5))
+        sample(store, "marked", floatFile(0.5))
+        store.set("samples/v2/marked/audio.wav.commit", new Uint8Array([1]))
         sample(store, "fine", floatFile(0.5))
         const {report} = await scanOf(store)
-        expect(report.entries.map(({id, pending}) => [id, pending])).toEqual([["cut", true], ["fine", false]])
+        expect(report.entries.map(({id, pending}) => [id, pending])).toEqual([["cut", true], ["marked", true], ["fine", false]])
     })
     it("ignores files that are not a sample's audio", async () => {
         const store: Store = new Map()
@@ -125,6 +127,10 @@ describe("SampleFormats helpers", () => {
     it("sorts a kind by size, largest first, then by name", () => {
         const entries = [entry("exact", 0.5, 10, 4, "b"), entry("exact", 0.5, 30, 4, "a"), entry("float", 2, 99), entry("exact", 0.5, 10, 4, "a2")]
         expect(SampleFormats.ofKind(entries, "exact").map(({name}) => name)).toEqual(["a", "a2", "b"])
+    })
+    it("an entry after its conversion is 16 bit, smaller and frees nothing more", () => {
+        expect(SampleFormats.converted(entry("rounding", 0.5, 1000, 400)))
+            .toEqual({id: "x", name: "x", origin: null, size: 600, kind: "sixteen", peak: null, saving: 0, pending: false})
     })
     it("sums sizes and savings", () => {
         const entries = [entry("exact", 0.5, 100, 40), entry("rounding", 0.5, 50, 20)]

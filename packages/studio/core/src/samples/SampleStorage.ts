@@ -1,10 +1,12 @@
-import {ByteArrayInput, EmptyExec, Func, Lazy, Progress, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, EmptyExec, Lazy, Progress, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {Storage} from "../Storage"
 import {AudioData, PcmData, SampleConversion, WavFile} from "@opendaw/lib-dsp"
-import {Promises} from "@opendaw/lib-runtime"
+
+const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 
 export namespace SampleStorage {
     export type NewSample = {
@@ -21,6 +23,8 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     static readonly Folder = "samples/v2"
     // the new frames of a sample while its audio file is being replaced
     static readonly Pending = "audio.wav.pending"
+    // exists once the pending file is complete: from then on it is the truth
+    static readonly Commit = "audio.wav.commit"
 
     @Lazy
     static get(): SampleStorage {return new SampleStorage()}
@@ -68,32 +72,35 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     async loadPeaks(uuid: UUID.Bytes, audio: AudioData): Promise<Peaks> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const bytes = await Workers.Opfs.read(`${path}/peaks.bin`)
-        return this.#readOrRegeneratePeaks(path, bytes, () => audio,
-            bytes => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+        return this.#readOrRegeneratePeaks(path, bytes, () => audio)
     }
 
     // the frames as they are stored, 16 bit stays 16 bit
     async loadPcm(uuid: UUID.Bytes): Promise<PcmData> {
-        const path = `${this.folder}/${UUID.toString(uuid)}`
-        return this.#decode(path, await Workers.Opfs.read(`${path}/audio.wav`), WavFile.decodePcm)
+        return WavFile.decodePcm(exactBuffer(await this.#audio(`${this.folder}/${UUID.toString(uuid)}`)))
     }
 
-    // Replaces the stored frames. The new file is written beside the old one first, so a page that dies in the
-    // middle leaves a sample the next load completes.
+    // replaces the stored frames so that a page dying in the middle leaves a sample the next load completes
     async replaceAudio(uuid: UUID.Bytes, pcm: PcmData): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const bytes = new Uint8Array(WavFile.encodePcm(pcm))
         const written = async (file: string): Promise<boolean> => {
             const stored = await Workers.Opfs.read(file)
-            return stored.byteLength === bytes.byteLength && stored.every((value, index) => value === bytes[index])
+            if (stored.byteLength !== bytes.byteLength) {return false}
+            for (let index = 0; index < bytes.byteLength; index++) {
+                if (stored[index] !== bytes[index]) {return false}
+            }
+            return true
         }
         await Workers.Opfs.write(`${path}/${SampleStorage.Pending}`, bytes)
         if (!await written(`${path}/${SampleStorage.Pending}`)) {
             await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
             return Promise.reject(new Error("The new audio file could not be written"))
         }
+        await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array([1]))
         await Workers.Opfs.write(`${path}/audio.wav`, bytes)
         if (!await written(`${path}/audio.wav`)) {return Promise.reject(new Error("The audio file could not be replaced"))}
+        await Workers.Opfs.delete(`${path}/${SampleStorage.Commit}`)
         await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
     }
 
@@ -110,7 +117,7 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     // finishes or discards what a cut off replacement left behind
     async settle(uuid: UUID.Bytes): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
-        await this.loadPcm(uuid)
+        await this.#audio(path)
         if (await Workers.Opfs.exists(`${path}/${SampleStorage.Pending}`)) {
             await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
         }
@@ -118,21 +125,19 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
 
     async load(uuid: UUID.Bytes): Promise<[AudioData, Peaks, SampleMetaData]> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
-        const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
-            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
         const [audioBytes, peaksBytes, metaBytes] = await Promise.all([
-            Workers.Opfs.read(`${path}/audio.wav`),
+            this.#audio(path),
             Workers.Opfs.read(`${path}/peaks.bin`),
             Workers.Opfs.read(`${path}/meta.json`)
         ])
-        const decoded = await this.#decode(path, audioBytes, WavFile.decodeFloats)
+        const decoded = WavFile.decodeFloats(exactBuffer(audioBytes))
         const audio: AudioData = {
             sampleRate: decoded.sampleRate,
             numberOfFrames: decoded.numberOfFrames,
             numberOfChannels: decoded.frames.length,
             frames: decoded.frames
         }
-        const peaks = await this.#readOrRegeneratePeaks(path, peaksBytes, () => audio, exactBuffer)
+        const peaks = await this.#readOrRegeneratePeaks(path, peaksBytes, () => audio)
         const meta: SampleMetaData = JSON.parse(new TextDecoder().decode(metaBytes))
         return [audio, peaks, meta]
     }
@@ -140,38 +145,35 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     // as `load`, the frames left in the format they are stored in
     async loadStored(uuid: UUID.Bytes): Promise<[PcmData, Peaks, SampleMetaData]> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
-        const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
-            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
         const [audioBytes, peaksBytes, metaBytes] = await Promise.all([
-            Workers.Opfs.read(`${path}/audio.wav`),
+            this.#audio(path),
             Workers.Opfs.read(`${path}/peaks.bin`),
             Workers.Opfs.read(`${path}/meta.json`)
         ])
-        const pcm = await this.#decode(path, audioBytes, WavFile.decodePcm)
-        const peaks = await this.#readOrRegeneratePeaks(path, peaksBytes, () => PcmData.floats(pcm), exactBuffer)
+        const pcm = WavFile.decodePcm(exactBuffer(audioBytes))
+        const peaks = await this.#readOrRegeneratePeaks(path, peaksBytes, () => PcmData.floats(pcm))
         const meta: SampleMetaData = JSON.parse(new TextDecoder().decode(metaBytes))
         return [pcm, peaks, meta]
     }
 
-    // decodes the audio file, or completes a replacement that was cut off and decodes that
-    async #decode<T>(path: string, bytes: Uint8Array, decode: Func<ArrayBuffer, T>): Promise<T> {
-        const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
-            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-        const direct = tryCatch(() => decode(exactBuffer(bytes)))
-        if (direct.status === "success") {return direct.value}
-        const pending = await Promises.tryCatch(Workers.Opfs.read(`${path}/${SampleStorage.Pending}`))
-        if (pending.status === "rejected") {return Promise.reject(direct.error)}
-        const value = decode(exactBuffer(pending.value))
+    // the bytes of the audio file, after completing a replacement that was cut off
+    async #audio(path: string): Promise<Uint8Array> {
+        const [bytes, committed] = await Promise.all([
+            Workers.Opfs.read(`${path}/audio.wav`),
+            Workers.Opfs.exists(`${path}/${SampleStorage.Commit}`)
+        ])
+        if (!committed) {return bytes}
         console.warn(`completing the replacement of '${path}/audio.wav'`)
-        await Workers.Opfs.write(`${path}/audio.wav`, pending.value)
+        const pending = await Workers.Opfs.read(`${path}/${SampleStorage.Pending}`)
+        await Workers.Opfs.write(`${path}/audio.wav`, pending)
+        await Workers.Opfs.delete(`${path}/${SampleStorage.Commit}`)
         await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
-        return value
+        return pending
     }
 
     async #readOrRegeneratePeaks(path: string,
                                  bytes: Uint8Array,
-                                 frames: Provider<AudioData>,
-                                 exactBuffer: (bytes: Uint8Array) => ArrayBuffer): Promise<Peaks> {
+                                 frames: Provider<AudioData>): Promise<Peaks> {
         if (bytes.byteLength > 0) {
             const attempt = tryCatch(() => SamplePeaks.from(new ByteArrayInput(exactBuffer(bytes))))
             if (attempt.status === "success") {return attempt.value}

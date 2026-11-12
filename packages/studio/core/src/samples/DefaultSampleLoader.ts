@@ -1,4 +1,4 @@
-import {int, Notifier, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {Func, int, Notifier, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {Peaks} from "@opendaw/lib-fusion"
 import {AudioLease, SampleLoader, SampleLoaderState, SampleMetaData, SampleRetention} from "@opendaw/studio-adapters"
 import {AudioData, AudioInfo, PcmData} from "@opendaw/lib-dsp"
@@ -7,6 +7,7 @@ import {SampleStorage} from "./SampleStorage"
 export class DefaultSampleLoader implements SampleLoader {
     readonly #uuid: UUID.Bytes
     readonly #retention: SampleRetention
+    readonly #restore: Option<Func<UUID.Bytes, Promise<PcmData>>>
     readonly #notifier: Notifier<SampleLoaderState>
 
     #meta: Option<SampleMetaData> = Option.None
@@ -22,9 +23,11 @@ export class DefaultSampleLoader implements SampleLoader {
     #reading: Option<Promise<PcmData>> = Option.None
     #inflating: Option<Promise<AudioData>> = Option.None
 
-    constructor(uuid: UUID.Bytes, retention: SampleRetention = "always") {
+    // `restore` brings back a sample whose stored file is gone and answers with its frames
+    constructor(uuid: UUID.Bytes, retention: SampleRetention = "always", restore?: Func<UUID.Bytes, Promise<PcmData>>) {
         this.#uuid = uuid
         this.#retention = retention
+        this.#restore = Option.wrap(restore)
         this.#notifier = new Notifier<SampleLoaderState>()
     }
 
@@ -155,7 +158,11 @@ export class DefaultSampleLoader implements SampleLoader {
 
     #read(): Promise<PcmData> {
         if (this.#reading.isEmpty()) {
-            const reading = SampleStorage.get().loadPcm(this.#uuid).then(pcm => {
+            const stored = SampleStorage.get().loadPcm(this.#uuid).catch((reason: unknown) => this.#restore.match({
+                none: () => Promise.reject(reason),
+                some: restore => restore(this.#uuid)
+            }))
+            const reading = stored.then(pcm => {
                 this.#stored = Option.wrap(new WeakRef(pcm))
                 return pcm
             }).finally(() => this.#reading = Option.None)

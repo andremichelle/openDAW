@@ -116,7 +116,10 @@ type Loaded = {
 
 type PendingNote = { on: boolean, key: number, velocity: number }
 // a slot's sample as the engine delivered it, and the plugin instance that has it already
-type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded> }
+type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded>, converting: Nullable<Conversion> }
+// a 16 bit sample on its way into a plugin as floats, a part per block
+type Conversion = { loaded: Loaded, source: number, target: number, total: number, done: number }
+const CONVERSION_BUDGET = 1 << 16
 // the engine's resolution of a sample handle (Route F), attached once the engine exists
 export type WclapSampleResolver = {
     host_resolve_sample(handle: number, outPtr: number): number
@@ -936,7 +939,7 @@ export class WclapBridges {
         if (!isDefined(plugin)) {return}
         const known = plugin.samples.get(key)
         if (isDefined(known) && known.present === present && (!present || known.handle === sampleHandle)) {return}
-        plugin.samples.set(key, {handle: sampleHandle, present, delivered: null})
+        plugin.samples.set(key, {handle: sampleHandle, present, delivered: null, converting: null})
     }
 
     // Before a process call: the slots this plugin instance does not have yet, a sample once the engine holds its
@@ -966,17 +969,35 @@ export class WclapBridges {
             const channelCount = info.getUint32(8, true)
             const rate = info.getFloat32(12, true)
             const format = info.getUint32(16, true)
+            const total = channelCount * frameCount
+            if (format === SAMPLE_FORMAT_I16) {
+                let conversion = slot.converting
+                if (isNull(conversion) || conversion.loaded !== loaded || conversion.source !== framesPtr || conversion.total !== total) {
+                    const target = this.#call(loaded, ext + ClapAbi.PluginSamples.PREPARE, loaded.plugin, key, frameCount, channelCount, rate)
+                    if (target === 0) {
+                        slot.converting = null
+                        slot.delivered = loaded
+                        continue
+                    }
+                    conversion = {loaded, source: framesPtr, target, total, done: 0}
+                    slot.converting = conversion
+                }
+                const end = Math.min(total, conversion.done + CONVERSION_BUDGET)
+                const source = new Int16Array(this.#memory.buffer, framesPtr, total)
+                const planes = new Float32Array(loaded.memory.buffer, conversion.target, total)
+                for (let index = conversion.done; index < end; index++) {planes[index] = source[index] / 32768}
+                conversion.done = end
+                if (end < total) {continue}
+                slot.converting = null
+                slot.delivered = loaded
+                this.#call(loaded, ext + ClapAbi.PluginSamples.COMMIT, loaded.plugin, key)
+                continue
+            }
             slot.delivered = loaded
             const target = this.#call(loaded, ext + ClapAbi.PluginSamples.PREPARE, loaded.plugin, key, frameCount, channelCount, rate)
             if (target === 0) {continue}
             // prepare may grow the plugin's memory: the views are taken after it
-            const planes = new Float32Array(loaded.memory.buffer, target, channelCount * frameCount)
-            if (format === SAMPLE_FORMAT_I16) {
-                const source = new Int16Array(this.#memory.buffer, framesPtr, channelCount * frameCount)
-                for (let index = 0; index < source.length; index++) {planes[index] = source[index] / 32768}
-            } else {
-                planes.set(new Float32Array(this.#memory.buffer, framesPtr, channelCount * frameCount))
-            }
+            new Float32Array(loaded.memory.buffer, target, total).set(new Float32Array(this.#memory.buffer, framesPtr, total))
             this.#call(loaded, ext + ClapAbi.PluginSamples.COMMIT, loaded.plugin, key)
         }
     }

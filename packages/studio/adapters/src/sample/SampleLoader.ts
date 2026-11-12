@@ -1,10 +1,10 @@
-import {Func, isDefined, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Func, isDefined, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {Peaks} from "@opendaw/lib-fusion"
 import {SampleLoaderState} from "./SampleLoaderState"
 import {SampleMetaData} from "./SampleMetaData"
 import {AudioData, AudioInfo, PcmData} from "@opendaw/lib-dsp"
 
-// The frames of a sample, kept in memory for as long as the lease is not terminated.
+// The frames of a sample, kept in memory until the lease is terminated.
 export type AudioLease = Terminable & { readonly data: AudioData }
 
 export interface SampleLoader {
@@ -26,15 +26,21 @@ export interface SampleLoader {
     pcm?(): Promise<PcmData>
 }
 
-// "always" keeps the frames of a loaded sample in memory. "while-used" keeps them only while leased and reads
-// them back from storage when they are asked for again.
+// "while-used" keeps frames only while leased and reads them back from storage when asked again
 export type SampleRetention = "always" | "while-used"
 
 export namespace SampleLoader {
+    // a loader written before `acquire` existed keeps its data once loaded
+    const lease = async (loader: SampleLoader): Promise<AudioLease> => {
+        if (isDefined(loader.acquire)) {return loader.acquire()}
+        await loaded(loader)
+        return {data: loader.data.unwrap("The loader holds no data"), terminate: EmptyExec}
+    }
+
     // leases the frames for the run of `user`, also when it fails
     export const use = async <T>(loader: SampleLoader, user: Func<AudioData, T | Promise<T>>): Promise<T> => {
-        const lease = await loader.acquire()
-        return Promise.resolve(lease.data).then(user).finally(() => lease.terminate())
+        const {data, terminate} = await lease(loader)
+        return Promise.resolve(data).then(user).finally(terminate)
     }
 
     // the frames, held by whoever keeps the result

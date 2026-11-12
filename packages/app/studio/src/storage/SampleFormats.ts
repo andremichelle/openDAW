@@ -21,19 +21,12 @@ export namespace SampleFormats {
     export type Reader = (path: string) => Promise<Uint8Array>
     export type HeadReader = (path: string, bytes: int) => Promise<Uint8Array>
 
+    // duplicated from SampleStorage, which this worker does not load
     export const Folder = "samples/v2/"
+    const Leftovers: ReadonlyArray<string> = ["audio.wav.pending", "audio.wav.commit"]
     const HeadBytes = 44
-    const Pending = "audio.wav.pending"
 
     export const KindOrder: ReadonlyArray<SampleConversion.Kind> = ["exact", "rounding", "scaling", "float", "sixteen"]
-
-    // a file this studio wrote: a 44 byte header with the format at fixed places
-    const isSixteenBit = (head: Uint8Array): boolean => {
-        if (head.byteLength < HeadBytes) {return false}
-        const view = new DataView(head.buffer, head.byteOffset, head.byteLength)
-        return view.getUint32(0, true) === 0x46464952 && view.getUint32(12, true) === 0x20746d66
-            && view.getUint16(20, true) === 1 && view.getUint16(34, true) === 16
-    }
 
     const metaOf = async (read: Reader, path: string): Promise<{ name: Nullable<string>, origin: Nullable<string> }> => {
         const bytes = await Promises.tryCatch(read(path))
@@ -48,8 +41,8 @@ export namespace SampleFormats {
                                progress: Procedure<unitValue>): Promise<Report> => {
         const audio = files.filter(({path}) => path.startsWith(Folder) && path.endsWith("/audio.wav")
             && path.split("/").length === 4)
-        const pending = new Set(files.filter(({path}) => path.startsWith(Folder) && path.endsWith(`/${Pending}`))
-            .map(({path}) => path.split("/")[2]))
+        const pending = new Set(files.filter(({path}) => path.startsWith(Folder)
+            && Leftovers.some(name => path.endsWith(`/${name}`))).map(({path}) => path.split("/")[2]))
         const entries: Array<Entry> = []
         const failures: Array<string> = []
         for (const [index, {path, size}] of audio.entries()) {
@@ -58,7 +51,7 @@ export namespace SampleFormats {
             const {name, origin} = await metaOf(read, `${folder}/meta.json`)
             const base = {id, name: name ?? id, origin, size, pending: pending.has(id)}
             const start = await Promises.tryCatch(head(path, HeadBytes))
-            if (start.status === "resolved" && isSixteenBit(start.value)) {
+            if (start.status === "resolved" && WavFile.isSixteenBit(start.value)) {
                 entries.push({...base, kind: "sixteen", peak: null, saving: 0})
             } else {
                 const bytes = await Promises.tryCatch(read(path))
@@ -77,6 +70,10 @@ export namespace SampleFormats {
         }
         return {entries, failures}
     }
+
+    // the entry of a sample after its conversion
+    export const converted = (entry: Entry): Entry =>
+        ({...entry, kind: "sixteen", peak: null, size: entry.size - entry.saving, saving: 0, pending: false})
 
     export const ofKind = (entries: ReadonlyArray<Entry>, kind: SampleConversion.Kind): ReadonlyArray<Entry> =>
         entries.filter(entry => entry.kind === kind).toSorted((left, right) => right.size - left.size

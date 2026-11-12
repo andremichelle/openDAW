@@ -390,6 +390,28 @@ describe("16 bit samples reach scripts as floats", () => {
         both("apparat mono", apparat, MONO, 1, play(120)), 120_000)
 })
 
+describe("a long 16 bit sample is converted for a script a part per block", () => {
+    // 400000 values, more than six blocks of conversion
+    const LONG = noise(2, 200_000)
+    const firstSounding = (output: Float32Array): number => {
+        for (let quantum = 0; quantum * 256 < output.length; quantum++) {
+            if (output.subarray(quantum * 256, (quantum + 1) * 256).some(value => value !== 0.0)) {return quantum}
+        }
+        return -1
+    }
+    it("the script sees no sample until it is whole, then plays it like its float twin", async () => {
+        const source = apparat()
+        const asFloats = await render(source, LONG, 2, "float32", play(40))
+        const asInts = await render(source, LONG, 2, "int16", play(40))
+        const [floatStart, intStart] = [firstSounding(asFloats), firstSounding(asInts)]
+        expect(floatStart).toBe(0)
+        expect(intStart, "the 16 bit sample needs some blocks").toBeGreaterThanOrEqual(3)
+        expect(intStart).toBeLessThanOrEqual(8)
+        const quanta = 20
+        expectSame(asInts.slice(intStart * 256, (intStart + quanta) * 256), asFloats.slice(0, quanta * 256), "delayed start")
+    }, 120_000)
+})
+
 describe("16 bit samples reach WebCLAP plugins as floats", () => {
     const bundle: WclapBundle = {files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(path.resolve(__dirname, "assets", "radar.wasm")))}]}
     const project = (): BoxGraph => buildEffectProject(0.0, (source, unit) => {
@@ -434,6 +456,12 @@ describe("16 bit samples reach WebCLAP plugins as floats", () => {
         const again = await run(source, STEREO, 2, "float32")
         expectSame(again, asFloats, "two float runs, the control")
         expectSame(await run(source, STEREO, 2, "int16"), asFloats, "radar")
+    }, 120_000)
+    it("Radar gets a long 16 bit sample a part per block and plays it", async () => {
+        const output = await run(project(), noise(2, 200_000), 2, "int16")
+        expect(output.subarray(0, 256).every(value => value === 0.0), "nothing sounds before the sample is whole").toBe(true)
+        expect(output.some(value => Math.abs(value) > 0.001)).toBe(true)
+        expect(output.every(value => Number.isFinite(value))).toBe(true)
     }, 120_000)
     it("Radar plays a mono 16 bit sample like its float twin", async () => {
         const source = project()

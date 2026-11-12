@@ -5,9 +5,7 @@ import {dbToGain} from "./utils"
 
 // What a stored sample can become when it is rewritten as 16 bit.
 export namespace SampleConversion {
-    // "sixteen": is 16 bit already. "exact": every value survives, nothing is lost. "rounding": stays below full
-    // scale and is rounded to the nearest step. "scaling": up to Headroom above full scale, lowered to full scale
-    // and rounded. "float": louder than that, stays as it is.
+    // exact: nothing is lost. rounding: below full scale. scaling: up to Headroom above it. float: stays as it is.
     export type Kind = "sixteen" | "exact" | "rounding" | "scaling" | "float"
     export type Verdict = { readonly kind: Kind, readonly peak: number }
 
