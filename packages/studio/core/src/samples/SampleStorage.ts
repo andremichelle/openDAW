@@ -96,10 +96,11 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
             }
             return true
         }
-        await Workers.Opfs.write(`${path}/${SampleStorage.Pending}`, bytes)
-        if (!await written(`${path}/${SampleStorage.Pending}`)) {
-            await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
-            return Promise.reject(new Error("The new audio file could not be written"))
+        const staged = await Promises.tryCatch(Workers.Opfs.write(`${path}/${SampleStorage.Pending}`, bytes)
+            .then(() => written(`${path}/${SampleStorage.Pending}`)))
+        if (staged.status === "rejected" || !staged.value) {
+            await Promises.tryCatch(Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`))
+            return Promise.reject(staged.status === "rejected" ? staged.error : new Error("The new audio file could not be written"))
         }
         await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array([1]))
         await Workers.Opfs.write(`${path}/audio.wav`, bytes)
@@ -112,8 +113,9 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     // rewrites the sample as 16 bit if it still is of the expected kind, answers whether it did
     async convert(uuid: UUID.Bytes, expected: SampleConversion.Kind): Promise<boolean> {
         const pcm = await this.loadPcm(uuid)
-        if (SampleConversion.judge(pcm).kind !== expected) {return false}
-        const converted = SampleConversion.convert(pcm)
+        const verdict = SampleConversion.judge(pcm)
+        if (verdict.kind !== expected) {return false}
+        const converted = SampleConversion.convert(pcm, verdict)
         if (converted.isEmpty()) {return false}
         await this.replaceAudio(uuid, converted.unwrap())
         return true
@@ -123,8 +125,9 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     async settle(uuid: UUID.Bytes): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         await this.#audio(path)
-        if (await Workers.Opfs.exists(`${path}/${SampleStorage.Pending}`)) {
-            await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
+        const names = (await Workers.Opfs.list(path)).map(entry => entry.name)
+        for (const name of [SampleStorage.Commit, SampleStorage.Pending]) {
+            if (names.includes(name)) {await Workers.Opfs.delete(`${path}/${name}`)}
         }
     }
 
@@ -177,6 +180,10 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     async #complete(path: string): Promise<Uint8Array> {
         console.warn(`completing the replacement of '${path}/audio.wav'`)
         const pending = await Promises.tryCatch(Workers.Opfs.read(`${path}/${SampleStorage.Pending}`))
+        if (pending.status === "rejected"
+            && (await Workers.Opfs.list(path)).some(entry => entry.name === SampleStorage.Pending)) {
+            return Promise.reject(pending.error)
+        }
         if (pending.status === "resolved") {await Workers.Opfs.write(`${path}/audio.wav`, pending.value)}
         // an emptied mark no longer counts, should deleting it fail
         await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array(0))

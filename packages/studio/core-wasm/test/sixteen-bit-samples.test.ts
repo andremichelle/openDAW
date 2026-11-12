@@ -415,6 +415,16 @@ describe("a long 16 bit sample is converted for a script a part per block", () =
         const quanta = 20
         expectSame(asInts.slice(intStart * 256, (intStart + quanta) * 256), asFloats.slice(0, quanta * 256), "delayed start")
     }, 120_000)
+    // 24 MB of floats do not fit the engine's first 16 MB, so the memory grows for the copy
+    it("a float copy that grows the engine memory still plays", async () => {
+        const source = apparat()
+        const huge = noise(2, 3_000_000)
+        const asFloats = await render(source, huge, 2, "float32", play(220))
+        const asInts = await render(source, huge, 2, "int16", play(220))
+        const intStart = firstSounding(asInts)
+        expect(intStart, "the 16 bit sample arrives").toBeGreaterThan(100)
+        expectSame(asInts.slice(intStart * 256, (intStart + 20) * 256), asFloats.slice(0, 20 * 256), "grown")
+    }, 180_000)
 })
 
 describe("an offline render does not start without its 16 bit samples", () => {

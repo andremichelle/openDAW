@@ -551,3 +551,7 @@ So reading 16 bit costs nothing that matters, and the float path is the code it 
 6. Reading only the header on a first load under `"while-used"`. Needs a partial read in the OPFS protocol.
 7. Frozen tracks hold their audio on the main thread and in the engine.
 8. Soundfont device: its blob holds floats made from 16 bit data.
+9. A 16 bit sample used by a script or a WebCLAP plugin keeps a float copy in the engine until its file box
+   goes. A plugin copies the frames into its own memory anyway, so it could convert while copying.
+10. Converting a sample checks the written file byte by byte on the main thread. The check could move into
+    the OPFS worker.

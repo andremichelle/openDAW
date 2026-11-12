@@ -343,13 +343,10 @@ export class ScriptBridges {
 
     #audio(handle: number, srcL: number, srcR: number, outL: number, outR: number,
            s0: number, s1: number, index: number, p0: number, p1: number, bpm: number, flags: number): number {
-        const buffer = this.#memory.buffer
-        const outLeft = new Float32Array(buffer, outL, RENDER_QUANTUM)
-        const outRight = new Float32Array(buffer, outR, RENDER_QUANTUM)
         // the engine keeps a device's output between quanta: every failure must clear it, or the last quantum loops
         const mute = (): number => {
-            outLeft.fill(0.0, s0, s1)
-            outRight.fill(0.0, s0, s1)
+            new Float32Array(this.#memory.buffer, outL, RENDER_QUANTUM).fill(0.0, s0, s1)
+            new Float32Array(this.#memory.buffer, outR, RENDER_QUANTUM).fill(0.0, s0, s1)
             return 1
         }
         const bridge = this.#bridges.get(handle)
@@ -358,16 +355,22 @@ export class ScriptBridges {
         if (proc === null) {return mute()}
         const block = {index, p0, p1, s0, s1, bpm, flags}
         if (!this.#syncData(bridge, false) || !this.#deliverMessages(bridge)) {return mute()}
+        // resolving a sample may grow the engine memory, so the views are taken after it
+        const delivered = tryCatch(() => {
+            for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
+        })
+        if (delivered.status === "failure") {
+            this.#silence(bridge, `Runtime error: ${delivered.error}`)
+            return mute()
+        }
+        const buffer = this.#memory.buffer
+        const outLeft = new Float32Array(buffer, outL, RENDER_QUANTUM)
+        const outRight = new Float32Array(buffer, outR, RENDER_QUANTUM)
         try {
             if (bridge.sidechains.length > 0) {
                 this.#deliverSidechains(bridge, s0, s1)
                 proc.sidechains = bridge.sidechainLookup
             }
-            // Re-resolve the @sample slots every block (mirrors the TS `#pollSamples`): a sample's PCM loads
-            // ASYNC after bind, so the handle is delivered before its frames are resident; re-resolving flips
-            // `samples[label]` from null to the AudioData once ready. Re-deriving the views each block also
-            // keeps them valid if the SharedArrayBuffer grew (same reason `#audio` re-derives its outputs).
-            for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
             if (bridge.kind === KIND_AUDIO_EFFECT) {
                 const io = {src: [new Float32Array(buffer, srcL, RENDER_QUANTUM), new Float32Array(buffer, srcR, RENDER_QUANTUM)], out: [outLeft, outRight]}
                 proc.process(io, block)
@@ -551,8 +554,7 @@ export class ScriptBridges {
         return true
     }
 
-    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData view (no copy). A
-    // 16 bit sample resolves once the engine has built its float copy.
+    // hands the proc a view of the float frames (no copy), null until they are resident
     #deliverSample(bridge: Bridge, index: number, sampleHandle: number): void {
         if (bridge.proc === null) {return}
         const label = bridge.sampleLabels.get(index)

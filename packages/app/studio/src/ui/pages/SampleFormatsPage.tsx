@@ -140,13 +140,16 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         let skipped = 0
         for (const [index, entry] of entries.entries()) {
             dialog.message = entry.name
-            const uuid = UUID.parse(entry.id)
-            const result = await Promises.tryCatch(SampleStorage.get().convert(uuid, entry.kind))
+            const result = await Promises.tryCatch(Promise.resolve().then(async () => {
+                const uuid = UUID.parse(entry.id)
+                const converted = await SampleStorage.get().convert(uuid, entry.kind)
+                if (converted) {service.sampleManager.invalidate(uuid)}
+                return converted
+            }))
             if (result.status === "rejected") {
                 failed.push(`${entry.name}: ${String(result.error)}`)
             } else if (result.value) {
                 done.add(entry.id)
-                service.sampleManager.invalidate(uuid)
             } else {
                 skipped++
             }
@@ -199,7 +202,7 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         }
         const report = result.value
         if (settle && report.leftovers.length > 0) {
-            for (const id of report.leftovers) {await Promises.tryCatch(SampleStorage.get().settle(UUID.parse(id)))}
+            for (const id of report.leftovers) {await Promises.tryCatch(Promise.resolve().then(() => SampleStorage.get().settle(UUID.parse(id))))}
             return scan(false)
         }
         // the lossless conversions are chosen up front, the others are a decision

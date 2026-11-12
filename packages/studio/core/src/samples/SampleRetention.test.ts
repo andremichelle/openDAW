@@ -13,14 +13,23 @@ import {SampleProvider} from "./SampleProvider"
 // The storage worker and the peak worker run in this process, the files live in a map.
 const files = new Map<string, Uint8Array>()
 const reads: Array<string> = []
+const unreadable = new Set<string>()
+const unwritable = new Set<string>()
 const channel = new MessageChannel()
 Workers.messenger = Option.wrap(Messenger.for(channel.port1))
 const worker = Messenger.for(channel.port2)
 SamplePeakWorker.install(worker)
 Communicator.executor<OpfsProtocol>(worker.channel("opfs"), {
-    write: async (path: string, data: Uint8Array): Promise<void> => {files.set(path, data.slice())},
+    write: async (path: string, data: Uint8Array): Promise<void> => {
+        if (unwritable.has(path)) {
+            files.set(path, new Uint8Array(0))
+            return Promise.reject(new Error(`quota: ${path}`))
+        }
+        files.set(path, data.slice())
+    },
     read: async (path: string): Promise<Uint8Array> => {
         reads.push(path)
+        if (unreadable.has(path)) {return Promise.reject(new Error(`locked: ${path}`))}
         const bytes = files.get(path)
         return bytes === undefined ? Promise.reject(new Error(`not found: ${path}`)) : bytes.slice()
     },
@@ -31,7 +40,9 @@ Communicator.executor<OpfsProtocol>(worker.channel("opfs"), {
     delete: async (path: string): Promise<void> => {
         Array.from(files.keys()).filter(key => key.startsWith(path)).forEach(key => files.delete(key))
     },
-    list: async (): Promise<ReadonlyArray<OpfsProtocol.Entry>> => [],
+    list: async (path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> => Array.from(files.keys())
+        .filter(key => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes("/"))
+        .map((key): OpfsProtocol.Entry => ({name: key.slice(path.length + 1), kind: "file"})),
     isAvailable: async (): Promise<boolean> => true
 })
 
@@ -283,6 +294,38 @@ describe("SampleStorage.replaceAudio", () => {
         const uuid = await put(audio, "float32")
         files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact()))))
         files.set(pathOf(uuid, SampleStorage.Commit), new Uint8Array(0))
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
+    })
+    it("settle removes an emptied commit mark and an empty pending file", async () => {
+        const audio = inexact()
+        const uuid = await put(audio, "float32")
+        files.set(pathOf(uuid, SampleStorage.Pending), new Uint8Array(0))
+        files.set(pathOf(uuid, SampleStorage.Commit), new Uint8Array(0))
+        await storage.settle(uuid)
+        expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
+        expect(files.has(pathOf(uuid, SampleStorage.Commit))).toBe(false)
+        expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
+    })
+    it("a pending file that cannot be read right now is kept for the next load", async () => {
+        const uuid = await cutOff(() => new Uint8Array(0))
+        unreadable.add(pathOf(uuid, SampleStorage.Pending))
+        await expect(storage.loadPcm(uuid)).rejects.toThrow("locked")
+        expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(true)
+        expect(files.get(pathOf(uuid, SampleStorage.Commit))?.byteLength).toBe(1)
+        unreadable.clear()
+        await storage.loadPcm(uuid)
+        expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
+        expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
+    })
+    it("a replacement that cannot be written leaves the sample and no pending file", async () => {
+        const audio = exact()
+        const uuid = await put(audio, "float32")
+        unwritable.add(pathOf(uuid, SampleStorage.Pending))
+        await expect(storage.convert(uuid, "exact")).rejects.toThrow("quota")
+        unwritable.clear()
+        expect(files.has(pathOf(uuid, SampleStorage.Pending))).toBe(false)
+        expect(files.has(pathOf(uuid, SampleStorage.Commit))).toBe(false)
+        expect(headerOf(uuid)).toEqual({tag: 3, bits: 32})
         expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(audio))
     })
     it("a broken file with nothing left behind still fails", async () => {

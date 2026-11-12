@@ -3992,8 +3992,7 @@ pub extern "C" fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32 {
     }
 }
 
-/// As `host_resolve_sample`, the frames always as f32: for the script and plugin bridges, which hand samples on
-/// as floats. A 16 bit sample answers 0 until the engine has built its float copy.
+/// As `host_resolve_sample` with f32 frames, 0 until the float copy of a 16 bit sample is complete.
 #[no_mangle]
 pub extern "C" fn host_resolve_sample_floats(handle: u32, out_ptr: u32) -> u32 {
     match unsafe { SAMPLES.get() }.resolve_floats(handle) {

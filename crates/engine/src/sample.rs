@@ -105,8 +105,7 @@ impl SampleResource {
         self.float_budget = values;
     }
 
-    /// As `resolve`, the frames always as f32, for readers that cannot take 16 bit (scripts, plugins). A 16 bit
-    /// sample resolves once its float copy is complete, the copy is shared by everybody who asks.
+    /// As `resolve` with f32 frames: a 16 bit sample resolves once its shared float copy is complete.
     pub fn resolve_floats(&mut self, handle: u32) -> Option<SampleRef> {
         let at_once = self.float_budget == usize::MAX;
         let slot = self.slot_mut(handle)?;
@@ -115,9 +114,9 @@ impl SampleResource {
         }
         let total = slot.frame_count as usize * slot.channel_count as usize;
         if slot.format == abi::SAMPLE_FORMAT_I16 {
-            if !slot.floats_wanted {
-                slot.floats_wanted = true;
-                let _ = slot.floats.try_reserve_exact(total);
+            slot.floats_wanted = true;
+            if slot.floats.capacity() < total {
+                let _ = slot.floats.try_reserve_exact(total - slot.floats.len());
             }
             if at_once {
                 convert(slot, usize::MAX);

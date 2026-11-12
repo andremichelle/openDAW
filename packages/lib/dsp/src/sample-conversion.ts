@@ -24,9 +24,8 @@ export namespace SampleConversion {
     // only a sample above full scale is lowered, to full scale
     export const gainOf = ({kind, peak}: Verdict): number => kind === "scaling" ? FullScale / peak : 1.0
 
-    export const convert = (pcm: PcmData): Option<PcmData> => {
+    export const convert = (pcm: PcmData, verdict: Verdict = judge(pcm)): Option<PcmData> => {
         if (pcm.format === "int16") {return Option.None}
-        const verdict = judge(pcm)
         return isConvertible(verdict.kind) ? Option.wrap(PcmData.quantize(pcm, gainOf(verdict))) : Option.None
     }
 
