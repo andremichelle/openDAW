@@ -1,8 +1,9 @@
+import {AudioFadeFineMotion} from "./AudioFadeFineMotion"
 import {clamp, Editing} from "@opendaw/lib-std"
 import {FadingAdapter} from "@opendaw/studio-adapters"
 
 export interface AudioFadeLengthDrag {
-    update(pointer: number): void
+    update(pointer: number, fine?: boolean): void
     approve(): void
     cancel(): void
 }
@@ -12,20 +13,28 @@ export namespace AudioFadeLengthDrag {
                            startPointer: number, editing: Editing): AudioFadeLengthDrag => {
         const originalIn = fading.in, originalOut = fading.out
         const originalInSlope = fading.inSlope, originalOutSlope = fading.outSlope
+        const motion = AudioFadeFineMotion.create()
         return {
-            update: (pointer: number) => editing.modify(() => {
-                if (fadeIn) {
-                    const length = clamp(originalIn + pointer - startPointer, 0, duration)
-                    if (originalIn === 0) {fading.inSlopeField.setValue(length > 0 ? 0.5 : originalInSlope)}
-                    fading.inField.setValue(length)
-                    if (length + fading.out > duration) {fading.outField.setValue(duration - length)}
-                } else {
-                    const length = clamp(originalOut + startPointer - pointer, 0, duration)
-                    if (originalOut === 0) {fading.outSlopeField.setValue(length > 0 ? 0.5 : originalOutSlope)}
-                    fading.outField.setValue(length)
-                    if (fading.in + length > duration) {fading.inField.setValue(duration - length)}
-                }
-            }, false),
+            update: (pointer: number, fine: boolean = false) => {
+                const offset = motion(pointer - startPointer, 0, fine)
+                if (offset === undefined) {return}
+                const original = fadeIn ? originalIn : originalOut
+                const rawLength = clamp(original + (fadeIn ? offset.x : -offset.x), 0, duration)
+                const length = fine && duration > 0
+                    ? AudioFadeFineMotion.snap(rawLength / duration, true) * duration
+                    : rawLength
+                editing.modify(() => {
+                    if (fadeIn) {
+                        if (originalIn === 0) {fading.inSlopeField.setValue(length > 0 ? 0.5 : originalInSlope)}
+                        fading.inField.setValue(length)
+                        if (length + fading.out > duration) {fading.outField.setValue(duration - length)}
+                    } else {
+                        if (originalOut === 0) {fading.outSlopeField.setValue(length > 0 ? 0.5 : originalOutSlope)}
+                        fading.outField.setValue(length)
+                        if (fading.in + length > duration) {fading.inField.setValue(duration - length)}
+                    }
+                }, false)
+            },
             approve: () => editing.mark(),
             cancel: () => editing.modify(() => {
                 fading.inField.setValue(originalIn)
