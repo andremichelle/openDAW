@@ -170,7 +170,9 @@ Loop modes:
 - **Gate**: The loop repeats while the key is held. On release the sample plays on to its end.
 - **Always**: The loop keeps repeating through the release.
 
-A zone with **1 Shot** on never loops. Its **Loop** value is dimmed.
+**Alt** makes the loop alternate: forward to the loop end, backward to the loop start and so on. It starts in the direction **Rev** gives. An alternating loop needs no **Fade**.
+
+A zone with **1 Shot** on never loops. Its **Loop** and **Alt** values are dimmed.
 
 Drop samples on a row of the table to add zones to the range of that row.
 

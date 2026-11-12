@@ -5,14 +5,14 @@
 use abi::{Table, TableColumn};
 
 // WASM CONTRACT: the field keys of `SamplerZoneBox`, `SamplerGroupBox` and `SamplerModulationBox`.
-pub const ZONE_COLUMNS: [TableColumn; 24] = [
+pub const ZONE_COLUMNS: [TableColumn; 25] = [
     TableColumn::sample(2), TableColumn::target(3, 3), TableColumn::value(5),
     TableColumn::value(10), TableColumn::value(11), TableColumn::value(12), TableColumn::value(13),
     TableColumn::value(20), TableColumn::value(21), TableColumn::value(22),
     TableColumn::value(30), TableColumn::value(31), TableColumn::value(32),
     TableColumn::value(40), TableColumn::value(41), TableColumn::value(42), TableColumn::value(43), TableColumn::value(44),
     TableColumn::value(50), TableColumn::value(51), TableColumn::value(52), TableColumn::value(53), TableColumn::value(54),
-    TableColumn::value(55)
+    TableColumn::value(55), TableColumn::value(56)
 ];
 pub const GROUP_COLUMNS: [TableColumn; 4] =
     [TableColumn::value(3), TableColumn::value(10), TableColumn::value(11), TableColumn::value(12)];
@@ -51,7 +51,8 @@ pub struct Zone {
     pub loop_mode: i32,
     pub loop_start: i32,
     pub loop_end: i32,
-    pub loop_fade: f32 // seconds
+    pub loop_fade: f32, // seconds
+    pub loop_alternate: bool
 }
 
 impl Zone {
@@ -80,7 +81,8 @@ impl Zone {
             loop_mode: table.int(row, 20),
             loop_start: table.int(row, 21),
             loop_end: table.int(row, 22),
-            loop_fade: table.float(row, 23)
+            loop_fade: table.float(row, 23),
+            loop_alternate: table.bool(row, 24)
         }
     }
 
@@ -179,11 +181,11 @@ pub(crate) mod tests {
             sample: Some(1), group: None, enabled: true, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
             velocity_high: 127, velocity_fade: 0, transpose: 0, tune: 0.0, key_track: 1.0, gain: 0.0, panning: 0.0,
             sequence: 1, reverse: false, one_shot: false, sample_start: 0, sample_end: i32::MAX, loop_mode: LOOP_OFF,
-            loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0
+            loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0, loop_alternate: false
         }
     }
 
-    pub(crate) fn words(zone: &Zone) -> [u32; 24] {
+    pub(crate) fn words(zone: &Zone) -> [u32; 25] {
         [
             zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE), zone.enabled as u32,
             zone.key_low as u32, zone.key_high as u32, zone.key_fade as u32, zone.root_key as u32,
@@ -191,7 +193,7 @@ pub(crate) mod tests {
             zone.transpose as u32, zone.tune.to_bits(), zone.key_track.to_bits(),
             zone.gain.to_bits(), zone.panning.to_bits(), zone.sequence as u32, zone.reverse as u32, zone.one_shot as u32,
             zone.sample_start as u32, zone.sample_end as u32, zone.loop_mode as u32, zone.loop_start as u32,
-            zone.loop_end as u32, zone.loop_fade.to_bits()
+            zone.loop_end as u32, zone.loop_fade.to_bits(), zone.loop_alternate as u32
         ]
     }
 
@@ -215,7 +217,7 @@ pub(crate) mod tests {
             sample: Some(77), group: Some(3), enabled: true, key_low: 12, key_high: 24, key_fade: 2, root_key: 18, velocity_low: 5,
             velocity_high: 99, velocity_fade: 7, transpose: -12, tune: -37.5, key_track: 0.25, gain: -6.5, panning: -0.75,
             sequence: 4, reverse: true, one_shot: true, sample_start: 1_000, sample_end: 30_000_000, loop_mode: 2,
-            loop_start: 20_000_001, loop_end: 29_999_999, loop_fade: 0.125
+            loop_start: 20_000_001, loop_end: 29_999_999, loop_fade: 0.125, loop_alternate: true
         };
         assert_eq!(Zone::read(&table(&[zone(), written]), 1), written);
     }
@@ -248,7 +250,7 @@ pub(crate) mod tests {
         assert_eq!(ZONE_COLUMNS[0], TableColumn::sample(2));
         assert_eq!(ZONE_COLUMNS[1], TableColumn::target(3, 3), "the group pointer delivers the group's index");
         let keys: Vec<u16> = ZONE_COLUMNS[2..].iter().map(|column| column.key).collect();
-        assert_eq!(keys, [5, 10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55]);
+        assert_eq!(keys, [5, 10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55, 56]);
     }
 
     #[test]

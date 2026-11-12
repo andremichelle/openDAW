@@ -349,6 +349,7 @@ export namespace SamplerZones {
                 box.loopStart.setValue(zone.loopStart.getValue())
                 box.loopEnd.setValue(zone.loopEnd.getValue())
                 box.loopFade.setValue(zone.loopFade.getValue())
+                box.loopAlternate.setValue(zone.loopAlternate.getValue())
             })
             copies.push(copy)
             return copy

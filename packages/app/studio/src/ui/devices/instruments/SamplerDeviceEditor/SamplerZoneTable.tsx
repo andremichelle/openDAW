@@ -44,7 +44,8 @@ export namespace SamplerZoneTable {
 
     const MaxKey = SamplerZoneMap.NumKeys - 1
     const MaxFrame: int = 0x7FFFFFFF
-    const MaxRows = 200
+    const RowHeight = 16
+    const Overscan = 4
     const LoopNames: ReadonlyArray<string> = ["Off", "Gate", "Always"]
     const NoteOffsets: Readonly<Record<string, int>> = {c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11}
     const numberIn = (text: string): Option<number> => Option.wrap(SamplerValueLabel.numberIn(text))
@@ -73,8 +74,8 @@ export namespace SamplerZoneTable {
             get: zone => field(zone).getValue(), set: (zone, value) => field(zone).setValue(Math.round(value)),
             print: value => [String(Math.round(value)), unit], parse: text => numberIn(text)
         })
-        const toggle = (title: string, field: Func<Zone, BooleanField>): Column => ({
-            title, group: "Playback", kind: "toggle", min: 0, max: 1, step: 1,
+        const toggle = (title: string, group: string, field: Func<Zone, BooleanField>): Column => ({
+            title, group, kind: "toggle", min: 0, max: 1, step: 1,
             get: zone => field(zone).getValue() ? 1 : 0, set: (zone, value) => field(zone).setValue(value >= 0.5),
             print: value => [value >= 0.5 ? "On" : "Off", ""], parse: text => Option.wrap(/on|1|yes/i.test(text) ? 1 : 0)
         })
@@ -138,8 +139,8 @@ export namespace SamplerZoneTable {
                 print: value => [String(Math.round(value * 100)), "%"], parse: scaled(100)
             },
             {...whole("Turn", "Playback", 1, 128, "", zone => zone.box.sequence), single: true},
-            toggle("Rev", zone => zone.box.reverse),
-            toggle("1 Shot", zone => zone.box.oneShot),
+            toggle("Rev", "Playback", zone => zone.box.reverse),
+            toggle("1 Shot", "Playback", zone => zone.box.oneShot),
             position("Start", zone => zone.box.sampleStart, false, zone => zone.box.sampleEnd),
             position("End", zone => zone.box.sampleEnd, true, zone => zone.box.sampleStart),
             {
@@ -152,8 +153,10 @@ export namespace SamplerZoneTable {
                     return index >= 0 ? Option.wrap(index) : numberIn(text)
                 }
             },
+            {...toggle("Alt", "Waveform", zone => zone.box.loopAlternate), disabled: zone => zone.box.oneShot.getValue()},
             {
                 title: "Fade", group: "Waveform", kind: "value", min: 0, max: 1, step: 0.005,
+                disabled: zone => zone.box.loopAlternate.getValue(),
                 get: zone => zone.box.loopFade.getValue(), set: (zone, value) => zone.box.loopFade.setValue(value),
                 print: printSeconds, parse: parseSeconds
             },
@@ -167,12 +170,14 @@ export namespace SamplerZoneTable {
         const all = columns(model.framesOf)
         const groups = all.filter((column, index) => index === 0 || all[index - 1].group !== column.group).map(({group}) => group)
         const body: HTMLElement = <div className="body"/>
-        const more: HTMLElement = <div className="more hidden"/>
+        const before: HTMLElement = <div className="space before"/>
+        const after: HTMLElement = <div className="space after"/>
         const hint: HTMLElement = <div className="hint">Click a zone on the map or a sample in the list. Its zones show here with all their values.</div>
         const cells = new WeakMap<Element, Cell>()
         const names = new WeakMap<Element, Zone>()
         const removes = new WeakMap<Element, Zone>()
         let rows: ReadonlyArray<{ readonly zone: Zone, readonly element: HTMLElement, readonly values: ReadonlyArray<HTMLElement> }> = []
+        let listed: ReadonlyArray<Zone> = []
         let signature = ""
         const targets = (zone: Zone): ReadonlyArray<Zone> => {
             const selection = model.selection()
@@ -198,19 +203,22 @@ export namespace SamplerZoneTable {
                 Array.from(remove.querySelectorAll("*")).forEach(child => removes.set(child, zone))
                 return {zone, values, element: <div className="row">{name}{values}{remove}</div>}
             })
-            body.replaceChildren(...rows.map(({element}) => element), more, hint)
+            body.replaceChildren(before, ...rows.map(({element}) => element), after, hint)
         }
         const update = (): void => {
-            const zones = model.rows()
-            const shown = zones.slice(0, MaxRows)
-            const next = shown.map(zone => `${zone.address.toString()}/${model.nameOf(zone)}`).join("|")
+            listed = model.rows()
+            const inView = Math.ceil(Math.max(body.clientHeight, RowHeight * 4) / RowHeight)
+            const top = Math.max(0, Math.min(Math.floor(body.scrollTop / RowHeight), listed.length - inView))
+            const first = Math.max(0, top - Overscan), last = Math.min(listed.length, top + inView + Overscan)
+            const shown = listed.slice(first, last)
+            const next = `${first}/${listed.length}/${shown.map(zone => `${zone.address.toString()}/${model.nameOf(zone)}`).join("|")}`
             if (next !== signature) {
                 signature = next
+                before.style.height = `${first * RowHeight}px`
+                after.style.height = `${(listed.length - last) * RowHeight}px`
                 build(shown)
             }
-            more.textContent = `and ${zones.length - shown.length} more`
-            more.classList.toggle("hidden", zones.length <= shown.length)
-            hint.classList.toggle("hidden", zones.length > 0)
+            hint.classList.toggle("hidden", listed.length > 0)
             const selection = new Set(model.selection()), focused = model.focused()
             rows.forEach(({zone, element, values}) => {
                 element.classList.toggle("selected", selection.has(zone))
@@ -266,7 +274,10 @@ export namespace SamplerZoneTable {
                 update()
                 fade()
             }),
-            Events.subscribe(body, "scroll", fade),
+            Events.subscribe(body, "scroll", () => {
+                update()
+                fade()
+            }),
             Events.subscribe(body, "pointerdown", (event: PointerEvent) => {
                 if (event.button !== 0 || !(event.target instanceof Element)) {return}
                 const previous = lastPressed
@@ -279,7 +290,7 @@ export namespace SamplerZoneTable {
                 const named = names.get(event.target)
                 if (isDefined(named)) {
                     const anchor = model.focused()
-                    const zones = rows.map(({zone}) => zone)
+                    const zones = listed
                     const from = isDefined(anchor) ? zones.indexOf(anchor) : -1
                     if (event.shiftKey && from >= 0 && isDefined(anchor)) {
                         const to = zones.indexOf(named)

@@ -65,7 +65,8 @@ data and drawn waveforms. No box, adapter or engine yet. The layout rules that c
 1. A zone holds one sample with key range, velocity range, root key, crossfades, tuning, key tracking, gain, pan,
    start and end, reverse, one shot and its loop.
 2. Loop modes: Off, Gate (loops while the key is held and plays out on release), Always (keeps looping through the
-   release).
+   release). Alt (2026-11-12) makes either one alternate: forward, backward, forward, starting in the direction
+   of Rev, without the loop fade. A one shot never loops.
 3. Zones on the same keys and velocities in one group are round robins, Seq is their position.
 4. A fade applies only at an edge where another zone of the same group overlaps. Outer edges never fade. The map
    draws the fades.
@@ -125,7 +126,7 @@ the way every device does. Retries, timeouts and load order are revisited when r
    (60) and lfo-b (61) with shape, rate, delay, fade, sync, restart. All automatable.
 2. `SamplerZoneBox`: pointers device, file, group, then key range, velocity range, fades, root key, transpose,
    tune, key-track, gain, panning, sequence, reverse, one-shot, sample-start, sample-end, loop-mode, loop-start,
-   loop-end, loop-fade. Plain fields, not automatable.
+   loop-end, loop-fade, loop-alternate. Plain fields, not automatable.
 3. `SamplerGroupBox`: pointer device, hub zones, label, round-robin, choke, trigger.
 4. `SamplerModulationBox`: pointer device, source, target, amount.
 5. Sample positions (start, end, loop start, loop end) are frames, not fractions, so imported loops stay exact.

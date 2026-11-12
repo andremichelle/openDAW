@@ -45,7 +45,8 @@ export const SamplerZoneBox: BoxSchema<Pointers> = {
             55: {
                 type: "float32", name: "loop-fade",
                 value: 0.0, constraints: {min: 0.0, max: 1.0, scaling: "linear"}, unit: "s"
-            }
+            },
+            56: {type: "boolean", name: "loop-alternate", value: false}
         }
     },
     pointerRules: {accepts: [Pointers.Selection], mandatory: false}

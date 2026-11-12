@@ -235,6 +235,7 @@ pub struct Voice {
     pub loop_shift: f32,  // modulation of the loop start, in the loop's length
     prepared: bool,
     stale: bool,
+    backward: bool,
     position: f64,
     start: f64,
     end: f64,
@@ -292,6 +293,7 @@ impl Voice {
         self.loop_shift = 0.0;
         self.prepared = false;
         self.stale = false;
+        self.backward = zone.reverse;
         self.released = false;
         self.key_up = false;
         self.release_sample = false;
@@ -404,7 +406,6 @@ impl Voice {
         let step_left = (control.gain_left - self.gain_left) / frames as f32;
         let step_right = (control.gain_right - self.gain_right) / frames as f32;
         let release = if self.fast {fast_release} else {amp.release};
-        let reverse = self.zone.reverse;
         for index in 0..frames {
             let level = self.amp.tick(amp, release);
             self.modulation.tick(modulation, modulation.release);
@@ -413,8 +414,11 @@ impl Voice {
                 return;
             }
             let looping = self.loops();
+            let alternate = looping && self.zone.loop_alternate;
+            if !alternate {self.backward = self.zone.reverse;}
+            let reverse = self.backward;
             let (mut sample_left, mut sample_right) = read_stereo(planes, self.position);
-            if looping && self.loop_fade > 0.0 {
+            if looping && !alternate && self.loop_fade > 0.0 {
                 let length = self.loop_end - self.loop_start;
                 let into = if reverse {self.loop_start + self.loop_fade - self.position} else {self.position - (self.loop_end - self.loop_fade)};
                 if into > 0.0 {
@@ -448,7 +452,10 @@ impl Voice {
             if self.glide_position < self.glide_frames {self.glide_position += 1;}
             if reverse {
                 self.position -= control.increment;
-                if looping && self.position < self.loop_start {
+                if alternate && self.position < self.loop_start {
+                    self.position = (2.0 * self.loop_start - self.position).min(self.loop_end - 1.0);
+                    self.backward = false;
+                } else if looping && self.position < self.loop_start {
                     self.position = self.loop_end - (self.loop_start - self.position) % (self.loop_end - self.loop_start);
                 } else if self.position < self.start {
                     self.active = false;
@@ -456,7 +463,10 @@ impl Voice {
                 }
             } else {
                 self.position += control.increment;
-                if looping && self.position >= self.loop_end {
+                if alternate && self.position >= self.loop_end {
+                    self.position = (2.0 * (self.loop_end - 1.0) - self.position).max(self.loop_start);
+                    self.backward = true;
+                } else if looping && self.position >= self.loop_end {
                     self.position = self.loop_start + (self.position - self.loop_start) % (self.loop_end - self.loop_start);
                 } else if self.position >= self.end {
                     self.active = false;
@@ -855,6 +865,41 @@ mod tests {
         let mut voice = voice(crate::zones::Zone {reverse: true, ..looped(LOOP_ALWAYS, 0.0)});
         let rendered = play(&mut voice, &plane, &control(1.0), 12);
         assert_eq!(rendered, [15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 11.0, 10.0, 9.0, 8.0]);
+    }
+
+    #[test]
+    fn an_alternating_loop_turns_around_at_its_points() {
+        let plane = ramp(16);
+        let mut voice = voice(crate::zones::Zone {loop_alternate: true, ..looped(LOOP_ALWAYS, 0.0)});
+        let rendered = play(&mut voice, &plane, &control(1.0), 18);
+        assert_eq!(rendered[8..], [8.0, 9.0, 10.0, 11.0, 10.0, 9.0, 8.0, 9.0, 10.0, 11.0]);
+    }
+
+    #[test]
+    fn a_reversed_alternating_loop_starts_backwards() {
+        let plane = ramp(16);
+        let mut voice = voice(crate::zones::Zone {loop_alternate: true, reverse: true, ..looped(LOOP_ALWAYS, 0.0)});
+        let rendered = play(&mut voice, &plane, &control(1.0), 14);
+        assert_eq!(rendered, [15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 9.0, 10.0, 11.0, 10.0, 9.0, 8.0]);
+    }
+
+    #[test]
+    fn an_alternating_loop_needs_no_crossfade() {
+        let plane = ramp(16);
+        let mut voice = voice(crate::zones::Zone {loop_alternate: true, ..looped(LOOP_ALWAYS, 2.0 / SR)});
+        let rendered = play(&mut voice, &plane, &control(1.0), 14);
+        assert_eq!(rendered[8..], [8.0, 9.0, 10.0, 11.0, 10.0, 9.0]);
+    }
+
+    #[test]
+    fn a_released_gate_loop_leaves_in_the_direction_of_the_zone() {
+        let plane = ramp(16);
+        let mut voice = voice(crate::zones::Zone {loop_alternate: true, ..looped(LOOP_ON, 0.0)});
+        play(&mut voice, &plane, &control(1.0), 14);
+        voice.note_off();
+        assert_eq!(voice.position(), 8.0, "on its way back");
+        play(&mut voice, &plane, &control(1.0), 3);
+        assert_eq!(voice.position(), 11.0, "it went on backwards");
     }
 
     #[test]

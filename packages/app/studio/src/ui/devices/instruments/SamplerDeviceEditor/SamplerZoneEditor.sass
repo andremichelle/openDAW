@@ -245,7 +245,7 @@ component
     min-height: 0
     font-size: 9px
     color: var(--color-dark)
-    $columns: minmax(0, 1fr) 32px 32px 30px 30px 30px 30px 34px 38px 40px 50px 38px 40px 30px 30px 36px 50px 50px 42px 44px 50px 50px 16px
+    $columns: minmax(0, 1fr) 32px 32px 30px 30px 30px 30px 34px 38px 40px 50px 38px 40px 30px 30px 36px 50px 50px 42px 28px 44px 50px 50px 16px
 
     > div.head, > div.frame > div.body > div.row
       display: grid
@@ -311,15 +311,6 @@ component
       > div.row
         flex: 0 0 16px
 
-        &:first-child
-          border-radius: 2px 2px 0 0
-
-        &:has(+ div.more)
-          border-radius: 0 0 2px 2px
-
-        &:first-child:has(+ div.more)
-          border-radius: 2px
-
         > span
           overflow: hidden
           white-space: nowrap
@@ -334,7 +325,7 @@ component
           &[unit]:after
             flex: none
 
-          &.disabled
+          &.disabled, &.disabled:after
             color: var(--color-black)
 
           &.toggle
@@ -358,7 +349,19 @@ component
         &.selected
           background-color: rgba(white, 0.06)
 
-      > div.hint, > div.more
+      > div.before + div.row
+        border-radius: 2px 2px 0 0
+
+      > div.row:has(+ div.after)
+        border-radius: 0 0 2px 2px
+
+      > div.before + div.row:has(+ div.after)
+        border-radius: 2px
+
+      > div.space
+        flex: none
+
+      > div.hint
         padding: 4px 6px
         color: var(--color-shadow)
 

@@ -311,6 +311,7 @@ export namespace SamplerZoneMap {
             context.globalAlpha = 1.0
             context.fillRect(xLo, 0, scale, height)
             context.fillRect(xHi, 0, scale, height)
+            if (box.loopAlternate.getValue()) {return}
             const reverse = box.reverse.getValue()
             const rate = file.data.mapOr(data => data.sampleRate, 0)
             const room = reverse ? end - hi : lo - start

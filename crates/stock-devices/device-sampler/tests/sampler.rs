@@ -63,11 +63,11 @@ fn zone(sample: u32) -> Zone {
         sample: Some(sample), group: None, enabled: true, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
         velocity_high: 127, velocity_fade: 0, transpose: 0, tune: 0.0, key_track: 1.0, gain: 0.0, panning: 0.0,
         sequence: 1, reverse: false, one_shot: false, sample_start: 0, sample_end: i32::MAX, loop_mode: 0,
-        loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0
+        loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0, loop_alternate: false
     }
 }
 
-fn words(zone: &Zone) -> [u32; 24] {
+fn words(zone: &Zone) -> [u32; 25] {
     [
         zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE), zone.enabled as u32,
         zone.key_low as u32, zone.key_high as u32, zone.key_fade as u32, zone.root_key as u32,
@@ -75,7 +75,7 @@ fn words(zone: &Zone) -> [u32; 24] {
         zone.transpose as u32, zone.tune.to_bits(), zone.key_track.to_bits(),
         zone.gain.to_bits(), zone.panning.to_bits(), zone.sequence as u32, zone.reverse as u32, zone.one_shot as u32,
         zone.sample_start as u32, zone.sample_end as u32, zone.loop_mode as u32, zone.loop_start as u32,
-        zone.loop_end as u32, zone.loop_fade.to_bits()
+        zone.loop_end as u32, zone.loop_fade.to_bits(), zone.loop_alternate as u32
     ]
 }
 
