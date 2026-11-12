@@ -590,6 +590,10 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                         onClick={async () => (await import("./SamplerImporter")).SamplerImporter.browse(service, adapter)}>
                     <span>Import SFZ / SF2</span>
                 </Button>
+                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Saves this Sampler as a soundfont"}}
+                        onClick={async () => (await import("./SamplerExporter")).SamplerExporter.save(service, adapter)}>
+                    <span>Export SF2</span>
+                </Button>
             </header>
             <div className="tools">
                 <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Selects every sample zone of the shown group"}}

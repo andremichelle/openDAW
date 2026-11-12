@@ -190,20 +190,34 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
 7. Tests: 32 for import, soundfont and SFZ, 6 for the folder placement. The converter was also run on the stock
    Concert Harp soundfont (36 zones, 36 samples).
 
+## Export (done, uncommitted)
+
+1. Export SF2 in the window saves the Sampler as a soundfont with one preset. The exporter is loaded when the
+   button is used (`import("./SamplerExporter")`).
+2. `SamplerSoundfontExport` in the adapters: `describe` turns the device into the same description the import
+   uses, `encode` writes the file, `quantize` turns floats into 16 bit and counts what would clip. No library,
+   the writer is ours.
+3. Written: ranges, root key, tuning, key tracking, attenuation, pan, sample and loop offsets, loop mode, choke
+   as exclusive class, the amp envelope and a lowpass filter on every zone. A stereo sample becomes a linked left
+   and right pair. Zones that share a sample share its frames. A reversed zone gets a reversed copy of its
+   sample with mirrored points, so it sounds as it does in the Sampler.
+4. Left out: further round robins (the first of each is kept), release trigger groups, fades, One Shot,
+   the mod envelope, LFOs and modulation slots. The dialog names what is left out and asks before it clips.
+5. Tests: 20, most of them write a soundfont and read it back through the soundfont reader and the importer.
+   Not tried in the browser and not opened in another soundfont player yet.
+
 ## Next
 
-1. Export a Sampler as a soundfont (.sf2).
-2. Scripting API.
-3. Release notes with the DEV deploy.
-4. A preview in the import dialog. SFZ `#include`. A synced LFO still prints its rate in Hz. Groups cannot be
+1. Scripting API.
+2. Release notes with the DEV deploy.
+3. A preview in the import dialog. SFZ `#include`. Groups cannot be
    deleted yet.
 
 ## Decided 2026-11-12
 
 1. Velocity to Gain starts at 100%.
 2. Left and right samples that the soundfont does not mark as linked stay mono zones. No merging by name.
-3. 16 bit sources are to be kept as 16 bit in the OPFS and in memory, for the Sampler and for Nano. This reaches
-   the sample storage and the playback routines, so it gets its own plan before any code.
+3. Keeping the bit depth of the source is its own plan, `plans/sample-bits.md`. The Sampler stays on floats.
 4. The Groups list stays visible with a single group.
 
 ## Open

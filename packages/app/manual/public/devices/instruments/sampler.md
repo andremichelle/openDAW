@@ -159,3 +159,15 @@ Loop modes:
 - **Always**: The loop keeps repeating through the release.
 
 A value changes all selected zones at once.
+
+### 2.6 Import and export
+
+- **Import SFZ / SF2** reads one preset of a soundfont, or an SFZ file chosen together with the samples it names.
+  It replaces the sample zones of the Sampler. The samples are stored as local samples under
+  `Multi Samples/<file name>` in the sample browser.
+- **Export SF2** saves the Sampler as a soundfont with one preset. Samples are written as 16 bit, a stereo sample
+  as a left and right pair, a reversed zone with a reversed copy of its sample.
+
+A soundfont cannot hold everything a Sampler does. Left out on export: further round robins (the first of each is
+kept), zones of groups triggered on release, key and velocity fades, One Shot, the second envelope, the
+LFOs and the modulation list.
