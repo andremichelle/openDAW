@@ -489,6 +489,17 @@ and `acquire`. If you only supply a `SampleProvider`, which is the usual way, no
    sample keeps its uuid and its peaks. The cloud backup keeps its float copy.
 8. The Signalsmith stagger depends on the region's uuid, so a test must render both formats from one project.
 
+### Measured in node on the built engine (2026-11-12)
+
+Eight audio tracks reading one 20 s stereo sample at 44.1 kHz, median time per quantum, `test:bench`
+(`sixteen-bit-bench.test.ts`):
+
+1. Native read: float 13.0 us, 16 bit 13.2 us. Ratio 1.02.
+2. Granular stretch: 11.6 us both. Ratio 1.00.
+3. Signalsmith: float 158.6 us, 16 bit 161.3 us. Ratio 1.02.
+
+So reading 16 bit costs nothing that matters, and the float path is the code it was.
+
 ### Measured in the browser (2026-11-12)
 
 1. A project with 55 piano samples: the count of live sample buffers is 55 right after the load and 0 after the
