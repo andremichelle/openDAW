@@ -26,11 +26,10 @@ Not part of the Sampler (#538), which stays on floats until this lands.
 
 ## Format
 
-1. `AudioData` gets an optional field for the format: `"signed16" | "float32"`. Absent means `"float32"`, so
-   existing SDK code keeps working.
-2. `frames` has to carry `Int16Array` for `"signed16"`. How the type expresses that without breaking readers that
-   expect floats is the first design question.
-3. `abi::SampleRef` gets the format as well. Appending a field grows the struct, as `abi::Block` did.
+1. `AudioData` stays as it is, floats only (see "The main thread keeps floats" below). Superseded 2026-11-12:
+   a format field on `AudioData` and `Int16Array` frames.
+2. The format is a property of the stored file (its WAV header) and of `abi::SampleRef`, which gets a format
+   field. Appending a field grows the struct, as `abi::Block` did.
 
 ## Which format a sample gets
 
@@ -122,6 +121,48 @@ second reference in its cache, every new engine (offline render, bounce, freeze,
 the OPFS again, and `SampleLoader.data` is SDK surface, so letting go has to be a choice of the studio, not the
 default. The engine memory is not shared with the main thread, so it cannot serve as the copy to read from.
 
+## The main thread keeps floats and lets go of them (replaces 16 bit on the main thread)
+
+Decided 2026-11-12. The main thread never gets a second sample format. 16 bit lives in the OPFS and in the engine.
+
+```ts
+// lib-dsp
+export type AudioInfo = {
+    sampleRate: number
+    numberOfFrames: number
+    numberOfChannels: number
+}
+export type AudioData = AudioInfo & {
+    frames: ReadonlyArray<Float32Array<SharedArrayBuffer>>
+}
+
+// studio-adapters
+export type AudioLease = Terminable & { readonly data: AudioData }
+
+export interface SampleLoader {
+    get data(): Option<AudioData>   // unchanged
+    get info(): Option<AudioInfo>   // new: filled once loaded, stays filled
+    acquire(): Promise<AudioLease>  // new: the frames, for as long as the lease lives
+}
+```
+
+1. The loader counts its leases. The first `acquire` reads the frames from the OPFS, later ones share them.
+2. While a lease lives the frames stay: the sample editor while it is open, the engine while it copies, an export
+   while it runs.
+3. When the last lease ends the loader lets go and keeps a weak reference, so an `acquire` shortly after gets the
+   same data without reading the disk.
+4. A recording holds its data until the OPFS confirms the store. If storing fails it never lets go.
+5. The loader manager has the setting: `"always"` (default, today's behaviour, `data` stays filled) or
+   `"while-used"` (the studio, `data` is filled only while a lease lives). Its cache follows the same setting.
+6. The nine paint paths that read frame count, sample rate or channel count move from `data` to `info`.
+7. The four synchronous readers inside actions move to `acquire`.
+8. SDK: additions only. `AudioData` keeps its shape and its float frames. Nothing stored changes, so every
+   project opens as before.
+9. The engine gets a 16 bit sample as raw bytes from the OPFS file through a new call next to `fetchAudio`,
+   not as floats it would have to shrink again.
+10. To measure: the time a new engine (bounce, freeze, export, offline render) needs to read all samples of a
+    large project from the OPFS.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
@@ -129,12 +170,12 @@ default. The engine memory is not shared with the main thread, so it cannot serv
 3. Storage in source depth for new imports, decoded to floats on load.
 4. Engine format field, 16 bit inside the shared reader.
 5. Conversion of stored samples.
-6. `AudioData` format field on the main thread, or dropping its frames (see above).
+6. `AudioInfo`, leases and the `"while-used"` setting on the main thread.
 7. 24 bit and 8 bit, if decided.
 
 ## Open
 
-1. The type of `AudioData.frames` for 16 bit.
+1. ~~The type of `AudioData.frames` for 16 bit.~~ Not needed, the main thread keeps floats.
 2. Lossy sources: always float, or offered as 16 bit with a clip check.
 3. Depth of new recordings.
 4. 24 bit in memory: packed three bytes or widened to 32 bit integers.
