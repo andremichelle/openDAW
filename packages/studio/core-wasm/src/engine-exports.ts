@@ -8,6 +8,12 @@ import {decodeUtf8} from "./utf8"
 // WASM CONTRACT: `abi::SampleRef` (frames_ptr, frame_count, channel_count, sample_rate, format) and its formats.
 export const SAMPLE_REF_BYTES = 20
 export const SAMPLE_FORMAT_I16 = 1
+// how many values of a 16 bit sample a bridge turns into floats per block, so a long sample costs no dropout
+export const SAMPLE_CONVERSION_BUDGET = 1 << 15
+
+export const convertSamples = (source: Int16Array, target: Float32Array, from: number, to: number): void => {
+    for (let index = from; index < to; index++) {target[index] = source[index] / 32768}
+}
 
 // WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
 export enum FieldKind {Int = 0, Float = 1, Bool = 2}

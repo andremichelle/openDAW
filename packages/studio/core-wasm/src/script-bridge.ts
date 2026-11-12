@@ -16,9 +16,7 @@ import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
-import {SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "./engine-exports"
-
-const CONVERSION_BUDGET = 1 << 16
+import {convertSamples, SAMPLE_CONVERSION_BUDGET, SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "./engine-exports"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -89,7 +87,7 @@ class Bridge {
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
     // index -> float copy of a 16 bit sample, converted a part per block
-    readonly sampleFloats = new Map<number, {handle: number, source: number, done: number, frames: Array<Float32Array>}>()
+    readonly sampleFloats = new Map<number, {handle: number, source: number, done: number, planes: Float32Array}>()
     sidechains: ReadonlyArray<SidechainDecl> = []
     sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
@@ -203,6 +201,8 @@ export class ScriptBridges {
     readonly #keys = new Map<number, ScriptKey>()
     readonly #chords = new Map<number, ScriptChord>()
     #nextHandle = 1
+    // an offline render sets this to Infinity, it must not start without its samples
+    sampleBudget: number = SAMPLE_CONVERSION_BUDGET
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
                 onMessage: (uuid: string, message: string) => void = () => {},
@@ -573,29 +573,24 @@ export class ScriptBridges {
         const sampleRate = view.getFloat32(12, true)
         const frames: Array<Float32Array> = []
         if (view.getUint32(16, true) === SAMPLE_FORMAT_I16) {
+            const total = channelCount * frameCount
             let kept = bridge.sampleFloats.get(index)
-            if (!isDefined(kept) || kept.handle !== sampleHandle || kept.source !== framesPtr || kept.frames.length !== channelCount
-                || kept.frames[0]?.length !== frameCount) {
-                kept = {
-                    handle: sampleHandle, source: framesPtr, done: 0,
-                    frames: Array.from({length: channelCount}, () => new Float32Array(frameCount))
-                }
+            if (!isDefined(kept) || kept.handle !== sampleHandle || kept.source !== framesPtr || kept.planes.length !== total) {
+                kept = {handle: sampleHandle, source: framesPtr, done: 0, planes: new Float32Array(total)}
                 bridge.sampleFloats.set(index, kept)
             }
-            const total = channelCount * frameCount
             if (kept.done < total) {
-                const source = new Int16Array(this.#memory.buffer, framesPtr, total)
-                const end = Math.min(total, kept.done + CONVERSION_BUDGET)
-                for (let position = kept.done; position < end; position++) {
-                    kept.frames[Math.floor(position / frameCount)][position % frameCount] = source[position] / 32768
-                }
+                const end = Math.min(total, kept.done + this.sampleBudget)
+                convertSamples(new Int16Array(this.#memory.buffer, framesPtr, total), kept.planes, kept.done, end)
                 kept.done = end
                 if (end < total) {
                     bridge.proc.samples[label] = null
                     return
                 }
             }
-            frames.push(...kept.frames)
+            for (let channel = 0; channel < channelCount; channel++) {
+                frames.push(kept.planes.subarray(channel * frameCount, (channel + 1) * frameCount))
+            }
         } else {
             bridge.sampleFloats.delete(index)
             for (let channel = 0; channel < channelCount; channel++) {

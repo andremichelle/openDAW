@@ -5,7 +5,7 @@ import {
     WclapSaveCause, WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
-import {SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "../engine-exports"
+import {convertSamples, SAMPLE_CONVERSION_BUDGET, SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "../engine-exports"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
 import {createWasiImports, readMemoryImportLimits} from "./wasi-shim"
@@ -119,7 +119,6 @@ type PendingNote = { on: boolean, key: number, velocity: number }
 type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded>, converting: Nullable<Conversion> }
 // a 16 bit sample on its way into a plugin as floats, a part per block
 type Conversion = { loaded: Loaded, source: number, target: number, total: number, done: number }
-const CONVERSION_BUDGET = 1 << 16
 // the engine's resolution of a sample handle (Route F), attached once the engine exists
 export type WclapSampleResolver = {
     host_resolve_sample(handle: number, outPtr: number): number
@@ -179,6 +178,9 @@ export class WclapBridges {
     #nextHandle: number = 1
     #inProcess: boolean = false
     #resolver: Nullable<WclapSampleResolver> = null
+
+    // an offline render sets this to Infinity, it must not start without its samples
+    sampleBudget: number = SAMPLE_CONVERSION_BUDGET
 
     constructor(memory: WebAssembly.Memory, sampleRate: number, host: WclapHostCallbacks) {
         this.#memory = memory
@@ -982,10 +984,9 @@ export class WclapBridges {
                     conversion = {loaded, source: framesPtr, target, total, done: 0}
                     slot.converting = conversion
                 }
-                const end = Math.min(total, conversion.done + CONVERSION_BUDGET)
-                const source = new Int16Array(this.#memory.buffer, framesPtr, total)
-                const planes = new Float32Array(loaded.memory.buffer, conversion.target, total)
-                for (let index = conversion.done; index < end; index++) {planes[index] = source[index] / 32768}
+                const end = Math.min(total, conversion.done + this.sampleBudget)
+                convertSamples(new Int16Array(this.#memory.buffer, framesPtr, total),
+                    new Float32Array(loaded.memory.buffer, conversion.target, total), conversion.done, end)
                 conversion.done = end
                 if (end < total) {continue}
                 slot.converting = null

@@ -200,8 +200,11 @@ Communicator.executor<OfflineEngineProtocol>(
                 pending.add(guarded)
                 guarded.finally(() => pending.delete(guarded))
             }
-            const {engine} = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
-                createWclapBridges(memory, config.sampleRate, engineToClient, track))
+            const wclapBridges = createWclapBridges(memory, config.sampleRate, engineToClient, track)
+            const {engine, scriptBridges} = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient, wclapBridges)
+            // nothing here has a quantum to keep, and a render must not start without its samples
+            wclapBridges.sampleBudget = Number.POSITIVE_INFINITY
+            scriptBridges.sampleBudget = Number.POSITIVE_INFINITY
             // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
             // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
             // offline render has no host for, so they are settled once here (TS ExportMetronomeConfiguration).

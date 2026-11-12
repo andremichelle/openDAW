@@ -5,21 +5,18 @@ import {StorageInspectorProtocol} from "./StorageInspectorProtocol"
 import {StorageScan} from "./StorageScan"
 import {SampleFormats} from "./SampleFormats"
 
-const read = (root: FileSystemDirectoryHandle) => async (path: string): Promise<Uint8Array> => {
+const fileOf = async (root: FileSystemDirectoryHandle, path: string): Promise<File> => {
     const segments = path.split("/")
     const folder = await segments.slice(0, -1)
         .reduce((parent, segment) => parent.then(handle => handle.getDirectoryHandle(segment)), Promise.resolve(root))
-    const file = await (await folder.getFileHandle(segments[segments.length - 1])).getFile()
-    return new Uint8Array(await file.arrayBuffer())
+    return (await folder.getFileHandle(segments[segments.length - 1])).getFile()
 }
 
-const head = (root: FileSystemDirectoryHandle) => async (path: string, bytes: int): Promise<Uint8Array> => {
-    const segments = path.split("/")
-    const folder = await segments.slice(0, -1)
-        .reduce((parent, segment) => parent.then(handle => handle.getDirectoryHandle(segment)), Promise.resolve(root))
-    const file = await (await folder.getFileHandle(segments[segments.length - 1])).getFile()
-    return new Uint8Array(await file.slice(0, bytes).arrayBuffer())
-}
+const read = (root: FileSystemDirectoryHandle) => async (path: string): Promise<Uint8Array> =>
+    new Uint8Array(await (await fileOf(root, path)).arrayBuffer())
+
+const head = (root: FileSystemDirectoryHandle) => async (path: string, bytes: int): Promise<Uint8Array> =>
+    new Uint8Array(await (await fileOf(root, path)).slice(0, bytes).arrayBuffer())
 
 Communicator.executor(Messenger.for(self as unknown as Parameters<typeof Messenger.for>[0]).channel("storage"), new class implements StorageInspectorProtocol {
     async scan(walkProgress: Procedure<int>, scanProgress: Procedure<unitValue>): Promise<StorageScan.Report> {

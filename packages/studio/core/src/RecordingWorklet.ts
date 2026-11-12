@@ -104,9 +104,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     get firstQuantumTime(): Option<number> {return this.#firstQuantumTime}
     get meta(): Option<SampleMetaData> {return this.#meta}
     get data(): Option<AudioData> {return this.#data}
-    get info(): Option<AudioInfo> {
-        return this.#data.map(({sampleRate, numberOfFrames, numberOfChannels}) => ({sampleRate, numberOfFrames, numberOfChannels}))
-    }
+    get info(): Option<AudioInfo> {return this.#data.map(data => AudioInfo.of(data))}
     get peaks(): Option<Peaks> {return this.#peaks.isEmpty() ? Option.wrap(this.#peakWriter) : this.#peaks}
     get state(): SampleLoaderState {return this.#state}
 

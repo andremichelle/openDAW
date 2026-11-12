@@ -326,14 +326,15 @@ New in `@opendaw/lib-dsp`:
 
 New in `@opendaw/studio-adapters`:
 
-1. `SampleLoader.info`: the three numbers of a loaded sample.
-2. `SampleLoader.acquire(): Promise<AudioLease>`: the frames, kept for as long as the lease is not terminated.
-3. `SampleLoader.pcm?()`: optional, the frames as stored, for the engine.
-4. Helpers in the `SampleLoader` namespace: `use(loader, user)` leases for the run of a function and ends the
-   lease also when it throws, `frames(loader)`, `loaded(loader)`, `stored(loader)`, `infoOf(loader)`.
-5. `AudioFileBoxAdapter.info`.
-6. `EngineToClient.fetchSample?`, optional, next to `fetchAudio`.
-7. `SampleRetention`: `"always"` or `"while-used"`.
+1. Three optional members on `SampleLoader`: `info` (the three numbers of a loaded sample), `acquire()` (the
+   frames until the lease is terminated) and `pcm()` (the frames as stored, for the engine). Optional, so a
+   loader you wrote before still compiles and still works.
+2. The `SampleLoader` namespace is how they are read, it serves old and new loaders alike:
+   `acquire(loader)`, `use(loader, user)` (leases for the run of a function, ends the lease also when it
+   throws), `frames(loader)`, `loaded(loader)`, `stored(loader)`, `infoOf(loader)`.
+3. `AudioFileBoxAdapter.info`.
+4. `EngineToClient.fetchSample?`, optional, next to `fetchAudio`.
+5. `SampleRetention`: `"always"` or `"while-used"`.
 
 New in `@opendaw/studio-core`:
 
@@ -356,14 +357,13 @@ The two switches:
    2026-01 read them.
 2. `new GlobalSampleLoaderManager(provider, {retain: "while-used"})`: a loader holds frames only while they are
    leased and reads them back from the OPFS when asked again. Then:
-   1. "loaded" no longer means `loader.data` is filled. Replace `loader.data.unwrap()` by `acquire()` or
-      `SampleLoader.use`.
-   2. For sample rate, frame count and channel count read `loader.info`.
+   1. "loaded" no longer means `loader.data` is filled. Replace `loader.data.unwrap()` by
+      `SampleLoader.acquire(loader)` or `SampleLoader.use`.
+   2. For sample rate, frame count and channel count read `SampleLoader.infoOf(loader)`.
    3. End every lease. A lease that is never ended keeps its sample in memory.
    4. Samples must stay in the OPFS while the page runs. Do not clear `samples/v2` under a running project.
 
-One thing that asks for code whichever setting you use: a `SampleLoader` you implement yourself needs `info`
-and `acquire`. If you only supply a `SampleProvider`, which is the usual way, nothing changes for you.
+Nothing asks for code with the defaults, also not a `SampleLoader` you implement yourself.
 
 ## Findings of the three deep dives (2026-11-12)
 
@@ -488,6 +488,18 @@ and `acquire`. If you only supply a `SampleProvider`, which is the usual way, no
 7. The conversion page scans in the storage worker and reads only the header of 16 bit samples. A converted
    sample keeps its uuid and its peaks. The cloud backup keeps its float copy.
 8. The Signalsmith stagger depends on the region's uuid, so a test must render both formats from one project.
+
+### What the review rounds changed
+
+1. A stored sample whose file is gone is fetched from the provider again and stored (`"while-used"`).
+2. `replaceAudio` writes `audio.wav.commit` once the pending file is complete and verified. From then on the
+   pending file is the truth: a load completes the replacement, also over a torn file that still decodes. A
+   pending file without the mark is discarded. A mark without a pending file means the replacement had finished.
+3. Scripts and WebCLAP plugins get a 16 bit sample as floats a part per block (32768 values). An offline render
+   lifts the budget and has the sample in its first block.
+4. `SampleRef::plane` is private. `info` and `acquire` are optional on `SampleLoader`.
+5. A read that started before an `invalidate` no longer writes its frames back.
+6. The dawproject export leases only samples that are loaded.
 
 ### Measured in node on the built engine (2026-11-12)
 

@@ -15,15 +15,16 @@ export class DefaultSampleLoader implements SampleLoader {
     #data: Option<AudioData> = Option.None
     #peaks: Option<Peaks> = Option.None
     #state: SampleLoaderState = {type: "progress", progress: 0.0}
-    // what was let go, found again for as long as nothing collected it
+    // what was let go, found again until it is collected
     #released: Option<WeakRef<AudioData>> = Option.None
     #stored: Option<WeakRef<PcmData>> = Option.None
     #leases: int = 0
-    // reads under way, shared by everybody who asks meanwhile
+    // counts invalidations: a read that started before one must not write its result
+    #generation: int = 0
     #reading: Option<Promise<PcmData>> = Option.None
     #inflating: Option<Promise<AudioData>> = Option.None
 
-    // `restore` brings back a sample whose stored file is gone and answers with its frames
+    // `restore` brings back a sample whose stored file is gone
     constructor(uuid: UUID.Bytes, retention: SampleRetention = "always", restore?: Func<UUID.Bytes, Promise<PcmData>>) {
         this.#uuid = uuid
         this.#retention = retention
@@ -49,18 +50,16 @@ export class DefaultSampleLoader implements SampleLoader {
     get leases(): int {return this.#leases}
 
     setLoaded(data: AudioData, peaks: Peaks, meta: SampleMetaData): void {
-        const {sampleRate, numberOfFrames, numberOfChannels} = data
-        this.#info = Option.wrap({sampleRate, numberOfFrames, numberOfChannels})
+        this.#info = Option.wrap(AudioInfo.of(data))
         this.#released = Option.wrap(new WeakRef(data))
         this.#stored = Option.None
         this.#data = this.#holds() ? Option.wrap(data) : Option.None
         this.#finish(peaks, meta)
     }
 
-    // loaded without frames in memory: the sample is in storage and is read from there when leased
+    // loaded without frames in memory, they are read from storage when leased
     setStored(info: AudioInfo, peaks: Peaks, meta: SampleMetaData, fresh: Option<PcmData>): void {
-        const {sampleRate, numberOfFrames, numberOfChannels} = info
-        this.#info = Option.wrap({sampleRate, numberOfFrames, numberOfChannels})
+        this.#info = Option.wrap(AudioInfo.of(info))
         this.#released = Option.None
         this.#stored = fresh.map(pcm => new WeakRef(pcm))
         this.#data = this.#holds() ? fresh.map(pcm => PcmData.floats(pcm)) : Option.None
@@ -78,6 +77,7 @@ export class DefaultSampleLoader implements SampleLoader {
     }
 
     invalidate(): void {
+        this.#generation++
         this.#state = {type: "progress", progress: 0.0}
         this.#meta = Option.None
         this.#info = Option.None
@@ -93,12 +93,15 @@ export class DefaultSampleLoader implements SampleLoader {
     async acquire(): Promise<AudioLease> {
         await SampleLoader.loaded(this)
         this.#leases++
+        const generation = this.#generation
         const data = await this.#frames().catch((reason: unknown) => {
             this.#leases--
             return Promise.reject(reason)
         })
-        this.#data = Option.wrap(data)
-        this.#released = Option.wrap(new WeakRef(data))
+        if (generation === this.#generation) {
+            this.#data = Option.wrap(data)
+            this.#released = Option.wrap(new WeakRef(data))
+        }
         let terminated = false
         return {
             data,
@@ -145,12 +148,13 @@ export class DefaultSampleLoader implements SampleLoader {
         const known = this.#known()
         if (known.nonEmpty()) {return Promise.resolve(known.unwrap())}
         if (this.#inflating.isEmpty()) {
+            const generation = this.#generation
             const stored = this.#fresh()
             const inflating = (stored.nonEmpty() ? Promise.resolve(stored.unwrap()) : this.#read()).then(pcm => {
                 const audio = PcmData.floats(pcm)
-                this.#released = Option.wrap(new WeakRef(audio))
+                if (generation === this.#generation) {this.#released = Option.wrap(new WeakRef(audio))}
                 return audio
-            }).finally(() => this.#inflating = Option.None)
+            }).finally(() => {if (generation === this.#generation) {this.#inflating = Option.None}})
             this.#inflating = Option.wrap(inflating)
         }
         return this.#inflating.unwrap()
@@ -158,14 +162,15 @@ export class DefaultSampleLoader implements SampleLoader {
 
     #read(): Promise<PcmData> {
         if (this.#reading.isEmpty()) {
+            const generation = this.#generation
             const stored = SampleStorage.get().loadPcm(this.#uuid).catch((reason: unknown) => this.#restore.match({
                 none: () => Promise.reject(reason),
                 some: restore => restore(this.#uuid)
             }))
             const reading = stored.then(pcm => {
-                this.#stored = Option.wrap(new WeakRef(pcm))
+                if (generation === this.#generation) {this.#stored = Option.wrap(new WeakRef(pcm))}
                 return pcm
-            }).finally(() => this.#reading = Option.None)
+            }).finally(() => {if (generation === this.#generation) {this.#reading = Option.None}})
             this.#reading = Option.wrap(reading)
         }
         return this.#reading.unwrap()

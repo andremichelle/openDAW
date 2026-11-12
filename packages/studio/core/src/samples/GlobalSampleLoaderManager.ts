@@ -126,13 +126,11 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         const fetch = (): Promise<void> => this.#fetchFromApi(loader)
         const stored: Promise<void> = this.#retain === "always"
             ? SampleStorage.get().load(uuid).then(([data, peaks, meta]) => {
-                const {sampleRate, numberOfFrames, numberOfChannels} = data
-                this.#cache.add({uuid, data: Option.wrap(data), info: {sampleRate, numberOfFrames, numberOfChannels}, peaks, meta})
+                this.#cache.add({uuid, data: Option.wrap(data), info: AudioInfo.of(data), peaks, meta})
                 loader.setLoaded(data, peaks, meta)
             }, fetch)
             : SampleStorage.get().loadStored(uuid).then(([pcm, peaks, meta]) => {
-                const {sampleRate, numberOfFrames, numberOfChannels} = pcm
-                const info: AudioInfo = {sampleRate, numberOfFrames, numberOfChannels}
+                const info = AudioInfo.of(pcm)
                 this.#cache.add({uuid, data: Option.None, info, peaks, meta})
                 loader.setStored(info, peaks, meta, Option.wrap(pcm))
             }, fetch)
@@ -143,7 +141,6 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         this.#pending.add({uuid, promise})
     }
 
-    // a sample whose stored file is gone is fetched and stored again
     async #restore(uuid: UUID.Bytes): Promise<PcmData> {
         const [audio, meta] = await this.#provider.fetch(uuid, Progress.Empty)
         const peaks = await Workers.Peak.generateAsync(Progress.Empty, SamplePeaks.findBestFit(audio.numberOfFrames),
@@ -178,8 +175,7 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         const storeResult = await Promises.tryCatch(SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta}))
         if (storeResult.status === "resolved") {
             const peaks = SamplePeaks.from(new ByteArrayInput(peaksBuffer))
-            const {sampleRate, numberOfFrames, numberOfChannels} = audio
-            const info: AudioInfo = {sampleRate, numberOfFrames, numberOfChannels}
+            const info = AudioInfo.of(audio)
             if (this.#retain === "always") {
                 this.#cache.add({uuid, data: Option.wrap(audio), info, peaks, meta})
                 loader.setLoaded(audio, peaks, meta)

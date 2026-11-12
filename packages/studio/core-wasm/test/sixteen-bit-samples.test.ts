@@ -82,8 +82,13 @@ const play = (quanta: number): Run => (engine, memory) => {
     return Float32Array.from(output)
 }
 
-const render = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format, run: Run, rate: number = RATE): Promise<Float32Array> => {
-    const {engine, memory} = await loadFullEngine()
+const render = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format, run: Run, rate: number = RATE,
+                      offline: boolean = false): Promise<Float32Array> => {
+    const {engine, memory, scriptBridges, wclapBridges} = await loadFullEngine()
+    if (offline) {
+        scriptBridges.sampleBudget = Number.POSITIVE_INFINITY
+        wclapBridges.sampleBudget = Number.POSITIVE_INFINITY
+    }
     const sync = connectSyncToEngine(engine, memory, source)
     await sync.settle()
     engine.bind()
@@ -391,7 +396,7 @@ describe("16 bit samples reach scripts as floats", () => {
 })
 
 describe("a long 16 bit sample is converted for a script a part per block", () => {
-    // 400000 values, more than six blocks of conversion
+    // 400000 values, more than twelve blocks of conversion
     const LONG = noise(2, 200_000)
     const firstSounding = (output: Float32Array): number => {
         for (let quantum = 0; quantum * 256 < output.length; quantum++) {
@@ -406,9 +411,20 @@ describe("a long 16 bit sample is converted for a script a part per block", () =
         const [floatStart, intStart] = [firstSounding(asFloats), firstSounding(asInts)]
         expect(floatStart).toBe(0)
         expect(intStart, "the 16 bit sample needs some blocks").toBeGreaterThanOrEqual(3)
-        expect(intStart).toBeLessThanOrEqual(8)
+        expect(intStart).toBeLessThanOrEqual(16)
         const quanta = 20
         expectSame(asInts.slice(intStart * 256, (intStart + quanta) * 256), asFloats.slice(0, quanta * 256), "delayed start")
+    }, 120_000)
+})
+
+describe("an offline render does not start without its 16 bit samples", () => {
+    it("a script has a long 16 bit sample from the first block, the render equals the float one throughout", async () => {
+        const source = apparat()
+        const long = noise(2, 200_000)
+        const asFloats = await render(source, long, 2, "float32", play(60), RATE, true)
+        const asInts = await render(source, long, 2, "int16", play(60), RATE, true)
+        expect(asInts.subarray(0, 256).some(value => value !== 0.0), "the first block sounds").toBe(true)
+        expectSame(asInts, asFloats, "offline")
     }, 120_000)
 })
 
@@ -430,12 +446,14 @@ describe("16 bit samples reach WebCLAP plugins as floats", () => {
         return device
     }, "class Processor { process() {} }")
     // the plugin is loaded and ready before the sample arrives, so both runs start from the same state
-    const run = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format): Promise<Float32Array> => {
+    // `whole` hands the sample over in one block, as an offline render does
+    const run = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format, whole: boolean = true): Promise<Float32Array> => {
         const statuses: Array<WclapStatus> = []
-        const {engine, memory} = await loadFullEngine(48_000, () => {}, () => null, {
+        const {engine, memory, wclapBridges} = await loadFullEngine(48_000, () => {}, () => null, {
             loadBundle: () => Promise.resolve(bundle),
             sendStatus: (_uuid, status) => statuses.push(status)
         })
+        if (whole) {wclapBridges.sampleBudget = Number.POSITIVE_INFINITY}
         const sync = connectSyncToEngine(engine, memory, source)
         await sync.settle()
         engine.bind()
@@ -458,7 +476,7 @@ describe("16 bit samples reach WebCLAP plugins as floats", () => {
         expectSame(await run(source, STEREO, 2, "int16"), asFloats, "radar")
     }, 120_000)
     it("Radar gets a long 16 bit sample a part per block and plays it", async () => {
-        const output = await run(project(), noise(2, 200_000), 2, "int16")
+        const output = await run(project(), noise(2, 200_000), 2, "int16", false)
         expect(output.subarray(0, 256).every(value => value === 0.0), "nothing sounds before the sample is whole").toBe(true)
         expect(output.some(value => Math.abs(value) > 0.001)).toBe(true)
         expect(output.every(value => Number.isFinite(value))).toBe(true)

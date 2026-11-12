@@ -1,9 +1,10 @@
-import {ByteArrayInput, EmptyExec, Lazy, Progress, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, EmptyExec, isDefined, Lazy, Progress, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {Storage} from "../Storage"
 import {AudioData, PcmData, SampleConversion, WavFile} from "@opendaw/lib-dsp"
+import {Promises} from "@opendaw/lib-runtime"
 
 const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
     bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
@@ -30,12 +31,13 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     static get(): SampleStorage {return new SampleStorage()}
 
     format: SampleStorage.Format = "float32"
+    readonly #completing = new Map<string, Promise<Uint8Array>>()
 
     private constructor() {super(SampleStorage.Folder)}
 
     async save(sample: SampleStorage.NewSample): Promise<void> {return this.store(sample).then(EmptyExec)}
 
-    // saves the sample and returns the frames as they were written
+    // answers with the frames as they were written
     async store({uuid, audio, peaks, meta}: SampleStorage.NewSample): Promise<PcmData> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const floats: AudioData = {
@@ -75,7 +77,6 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         return this.#readOrRegeneratePeaks(path, bytes, () => audio)
     }
 
-    // the frames as they are stored, 16 bit stays 16 bit
     async loadPcm(uuid: UUID.Bytes): Promise<PcmData> {
         return WavFile.decodePcm(exactBuffer(await this.#audio(`${this.folder}/${UUID.toString(uuid)}`)))
     }
@@ -100,11 +101,12 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array([1]))
         await Workers.Opfs.write(`${path}/audio.wav`, bytes)
         if (!await written(`${path}/audio.wav`)) {return Promise.reject(new Error("The audio file could not be replaced"))}
+        await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array(0))
         await Workers.Opfs.delete(`${path}/${SampleStorage.Commit}`)
         await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
     }
 
-    // Rewrites a stored sample as 16 bit if it still is of the expected kind. Answers whether it was rewritten.
+    // rewrites the sample as 16 bit if it still is of the expected kind, answers whether it did
     async convert(uuid: UUID.Bytes, expected: SampleConversion.Kind): Promise<boolean> {
         const pcm = await this.loadPcm(uuid)
         if (SampleConversion.judge(pcm).kind !== expected) {return false}
@@ -142,7 +144,6 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         return [audio, peaks, meta]
     }
 
-    // as `load`, the frames left in the format they are stored in
     async loadStored(uuid: UUID.Bytes): Promise<[PcmData, Peaks, SampleMetaData]> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const [audioBytes, peaksBytes, metaBytes] = await Promise.all([
@@ -163,12 +164,22 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
             Workers.Opfs.exists(`${path}/${SampleStorage.Commit}`)
         ])
         if (!committed) {return bytes}
+        const running = this.#completing.get(path)
+        if (isDefined(running)) {return running}
+        const completing = this.#complete(path).finally(() => this.#completing.delete(path))
+        this.#completing.set(path, completing)
+        return completing
+    }
+
+    async #complete(path: string): Promise<Uint8Array> {
         console.warn(`completing the replacement of '${path}/audio.wav'`)
-        const pending = await Workers.Opfs.read(`${path}/${SampleStorage.Pending}`)
-        await Workers.Opfs.write(`${path}/audio.wav`, pending)
+        const pending = await Promises.tryCatch(Workers.Opfs.read(`${path}/${SampleStorage.Pending}`))
+        if (pending.status === "resolved") {await Workers.Opfs.write(`${path}/audio.wav`, pending.value)}
+        // an emptied mark no longer counts, should deleting it fail
+        await Workers.Opfs.write(`${path}/${SampleStorage.Commit}`, new Uint8Array(0))
         await Workers.Opfs.delete(`${path}/${SampleStorage.Commit}`)
         await Workers.Opfs.delete(`${path}/${SampleStorage.Pending}`)
-        return pending
+        return pending.status === "resolved" ? pending.value : Workers.Opfs.read(`${path}/audio.wav`)
     }
 
     async #readOrRegeneratePeaks(path: string,

@@ -679,8 +679,7 @@ pub struct SampleRef {
 pub const SAMPLE_FORMAT_F32: u32 = 0;
 pub const SAMPLE_FORMAT_I16: u32 = 1;
 
-/// Runs `$body` with the sample's two planes bound, once per resident format, so a generic reader is chosen
-/// where the sample is resolved and never per frame.
+/// Runs `$body` with the sample's two planes bound, expanded once per resident format.
 #[macro_export]
 macro_rules! with_planes {
     ($sample:expr, |$left:ident, $right:ident| $body:expr) => {

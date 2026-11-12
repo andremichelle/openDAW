@@ -99,12 +99,14 @@ export namespace WavFile {
         const {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset} = locate(view)
         if (audioFormat !== 1 || bitsPerSample !== 16) {return {format: "float32", ...decodeFloats(buffer)}}
         const frames = PcmData.createInt16(numberOfFrames, numberOfChannels)
-        for (let frame = 0, offset = dataOffset; frame < numberOfFrames; frame++) {
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                frames[channel][frame] = view.getInt16(offset, true)
-                offset += 2
+        // an odd data offset cannot be viewed as 16 bit words
+        const interleaved = dataOffset % 2 === 0 ? new Int16Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
+            : new Int16Array(buffer.slice(dataOffset, dataOffset + numberOfFrames * numberOfChannels * 2))
+        frames.forEach((plane, channel) => {
+            for (let frame = 0, index = channel; frame < numberOfFrames; frame++, index += numberOfChannels) {
+                plane[frame] = interleaved[index]
             }
-        }
+        })
         return {format: "int16", sampleRate, numberOfFrames, numberOfChannels, frames}
     }
 
@@ -127,12 +129,12 @@ export namespace WavFile {
         view.setUint16(34, 16, true)
         view.setUint32(36, MAGIC_DATA, true)
         view.setUint32(40, dataSize, true)
-        for (let frame = 0, offset = 44; frame < numberOfFrames; frame++) {
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                view.setInt16(offset, frames[channel][frame], true)
-                offset += 2
+        const interleaved = new Int16Array(view.buffer, 44, numberOfFrames * numberOfChannels)
+        frames.forEach((plane, channel) => {
+            for (let frame = 0, index = channel; frame < numberOfFrames; frame++, index += numberOfChannels) {
+                interleaved[index] = plane[frame]
             }
-        }
+        })
         return view.buffer as ArrayBuffer
     }
 
