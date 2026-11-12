@@ -143,6 +143,7 @@ export interface SampleLoader {
     get data(): Option<AudioData>   // unchanged
     get info(): Option<AudioInfo>   // new: filled once loaded, stays filled
     acquire(): Promise<AudioLease>  // new: the frames, for as long as the lease lives
+    use<T>(user: Func<AudioData, T | Promise<T>>): Promise<T> // new: acquire, run, end the lease
 }
 ```
 
@@ -285,9 +286,15 @@ Not sample data at all: `ShadertoyRunner.audioData` (a spectrum texture), `WebCo
 
 1. The memoized promise in `AudioFileBoxAdapter` is a hidden third reference besides loader and cache.
 2. A lease's end frees nothing by itself. Whoever still holds the `AudioData` keeps it alive, and whoever dropped
-   it without ending the lease only keeps the loader's strong reference. So the lease is the thing that can
-   leak. Simpler and leak-free: no lease, `frames(): Promise<AudioData>` on the loader, the loader holds a
-   `WeakRef` only, and a user keeps the frames by keeping the object. Open decision.
+   it without ending the lease only keeps the loader's strong reference. So a forgotten lease leaks quietly.
+   The alternative without leases (`frames(): Promise<AudioData>`, the loader holds a `WeakRef` only) was
+   offered and turned down. DECIDED 2026-11-12: with leases. What keeps them from leaking:
+   1. A lease is a `Terminable`. Inside the studio it is owned by a lifecycle (`lifecycle.own(lease)`), so it
+      ends with the editor, dialog or action that took it.
+   2. One-off users go through a helper that ends the lease whatever happens:
+      `loader.use(audio => encode(audio))`, built on `acquire`.
+   3. The loader counts its open leases. The count is shown next to `AudioData.count()` in the footer's debug
+      line and checked by the headless test.
 3. `getAudioData` is used as "wait until loaded" in two places. Under `"while-used"` that would read a file
    for nothing.
 4. `SampleLoader.data` changes meaning under `"while-used"`: loaded no longer implies `data` is filled. Every
@@ -297,6 +304,38 @@ Not sample data at all: `ShadertoyRunner.audioData` (a spectrum texture), `WebCo
 6. `sampleManager.invalidate` (sample editor overwrites a sample) already makes the engine fetch again. No change.
 7. A sample dropped into the engine while the engine's copy fails (`sample not loaded: ... does not fit`) leaves
    no main thread copy either. Preview and editor still work, they read the OPFS.
+
+## SDK update note
+
+For SDK consumers, to go out with the release that carries the change. Nothing here is shipped yet.
+
+### Samples: the main thread can let go of the frames
+
+What is new, all additions:
+
+1. `AudioInfo` in `@opendaw/lib-dsp`: `sampleRate`, `numberOfFrames`, `numberOfChannels`. `AudioData` is now
+   `AudioInfo & {frames}`, field for field what it was.
+2. `SampleLoader.info`: the three numbers of a loaded sample, filled once it is loaded and kept.
+3. `SampleLoader.acquire(): Promise<AudioLease>`: the frames, kept in memory for as long as the lease lives.
+   `lease.data` is the `AudioData`, `lease.terminate()` hands it back.
+4. `SampleLoader.use(user)`: takes a lease, runs the function, ends the lease, also when it throws.
+5. The sample loader manager takes a setting: `"always"` or `"while-used"`.
+
+What stays as it was:
+
+1. The default is `"always"`. A loaded sample keeps its frames and `loader.data` stays filled. Existing code
+   runs unchanged.
+2. `AudioData`, `frames` as float arrays, `getAudioData`, `AudioFileBoxAdapter.data` and `.audioData`.
+3. Project files and stored samples. Every project opens as before.
+
+What to do if you switch to `"while-used"` (the studio does, to halve its sample memory):
+
+1. `loader.data` is filled only while a lease lives. "loaded" no longer means `data` is there. Replace
+   `loader.data.unwrap()` by `acquire()` or `use()`.
+2. For sample rate, frame count and channel count read `loader.info`.
+3. End every lease. A lease that is never ended keeps its sample in memory.
+4. A custom `SampleLoader` (one you implement yourself) needs `info` and `acquire`. This is the one change that
+   asks for code: the interface grew by two members.
 
 ## Order
 
