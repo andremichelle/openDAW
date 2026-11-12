@@ -14,10 +14,11 @@ export namespace SampleFormats {
         // unknown for a sample that is 16 bit already, its frames are not read
         readonly peak: Nullable<number>
         readonly saving: int
-        // a replacement of the audio file was cut off
-        readonly pending: boolean
     }
-    export type Report = { readonly entries: ReadonlyArray<Entry>, readonly failures: ReadonlyArray<string> }
+    // leftovers: the ids of samples whose audio file was being replaced when the page went away
+    export type Report = {
+        readonly entries: ReadonlyArray<Entry>, readonly failures: ReadonlyArray<string>, readonly leftovers: ReadonlyArray<string>
+    }
     export type Reader = (path: string) => Promise<Uint8Array>
     export type HeadReader = (path: string, bytes: int) => Promise<Uint8Array>
 
@@ -41,15 +42,15 @@ export namespace SampleFormats {
                                progress: Procedure<unitValue>): Promise<Report> => {
         const audio = files.filter(({path}) => path.startsWith(Folder) && path.endsWith("/audio.wav")
             && path.split("/").length === 4)
-        const pending = new Set(files.filter(({path}) => path.startsWith(Folder)
-            && Leftovers.some(name => path.endsWith(`/${name}`))).map(({path}) => path.split("/")[2]))
+        const leftovers = Array.from(new Set(files.filter(({path}) => path.startsWith(Folder)
+            && Leftovers.some(name => path.endsWith(`/${name}`))).map(({path}) => path.split("/")[2])))
         const entries: Array<Entry> = []
         const failures: Array<string> = []
         for (const [index, {path, size}] of audio.entries()) {
             const id = path.split("/")[2]
             const folder = `${Folder}${id}`
             const {name, origin} = await metaOf(read, `${folder}/meta.json`)
-            const base = {id, name: name ?? id, origin, size, pending: pending.has(id)}
+            const base = {id, name: name ?? id, origin, size}
             const start = await Promises.tryCatch(head(path, HeadBytes))
             if (start.status === "resolved" && WavFile.isSixteenBit(start.value)) {
                 entries.push({...base, kind: "sixteen", peak: null, saving: 0})
@@ -68,12 +69,12 @@ export namespace SampleFormats {
             }
             progress((index + 1) / audio.length)
         }
-        return {entries, failures}
+        return {entries, failures, leftovers}
     }
 
     // the entry of a sample after its conversion
     export const converted = (entry: Entry): Entry =>
-        ({...entry, kind: "sixteen", peak: null, size: entry.size - entry.saving, saving: 0, pending: false})
+        ({...entry, kind: "sixteen", peak: null, size: entry.size - entry.saving, saving: 0})
 
     export const ofKind = (entries: ReadonlyArray<Entry>, kind: SampleConversion.Kind): ReadonlyArray<Entry> =>
         entries.filter(entry => entry.kind === kind).toSorted((left, right) => right.size - left.size

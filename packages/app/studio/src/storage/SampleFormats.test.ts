@@ -59,8 +59,7 @@ describe("SampleFormats.scan", () => {
         const store: Store = new Map()
         sample(store, "abc", floatFile(0.5, -0.75, 0.25, 0), {name: "Kick", origin: "openDAW", bpm: 120})
         const {report: {entries: [entry]}} = await scanOf(store)
-        expect(entry).toEqual({id: "abc", name: "Kick", origin: "openDAW", size: 44 + 16, kind: "exact", peak: 0.75,
-            saving: 8, pending: false})
+        expect(entry).toEqual({id: "abc", name: "Kick", origin: "openDAW", size: 44 + 16, kind: "exact", peak: 0.75, saving: 8})
     })
     it("frees nothing for samples that do not convert", async () => {
         const store: Store = new Map()
@@ -86,15 +85,19 @@ describe("SampleFormats.scan", () => {
         expect(report.failures).toEqual(["samples/v2/bad/audio.wav"])
         expect(report.entries.map(({id}) => id)).toEqual(["good"])
     })
-    it("flags a sample whose replacement was cut off", async () => {
+    it("names the samples whose replacement was cut off, readable or not", async () => {
         const store: Store = new Map()
         sample(store, "cut", floatFile(0.5))
         store.set("samples/v2/cut/audio.wav.pending", smallFile(0.5))
         sample(store, "marked", floatFile(0.5))
         store.set("samples/v2/marked/audio.wav.commit", new Uint8Array([1]))
+        sample(store, "torn", new Uint8Array(20))
+        store.set("samples/v2/torn/audio.wav.commit", new Uint8Array([1]))
+        store.set("samples/v2/torn/audio.wav.pending", smallFile(0.5))
         sample(store, "fine", floatFile(0.5))
         const {report} = await scanOf(store)
-        expect(report.entries.map(({id, pending}) => [id, pending])).toEqual([["cut", true], ["marked", true], ["fine", false]])
+        expect(report.leftovers).toEqual(["cut", "marked", "torn"])
+        expect(report.failures).toEqual(["samples/v2/torn/audio.wav"])
     })
     it("ignores files that are not a sample's audio", async () => {
         const store: Store = new Map()
@@ -117,20 +120,20 @@ describe("SampleFormats.scan", () => {
         expect(steps).toEqual([0.5, 1.0])
     })
     it("is empty for an empty storage", async () => {
-        expect((await scanOf(new Map())).report).toEqual({entries: [], failures: []})
+        expect((await scanOf(new Map())).report).toEqual({entries: [], failures: [], leftovers: []})
     })
 })
 
 describe("SampleFormats helpers", () => {
     const entry = (kind: SampleConversion.Kind, peak: number | null, size = 1000, saving = 400, name = "x"): SampleFormats.Entry =>
-        ({id: name, name, origin: null, size, kind, peak, saving, pending: false})
+        ({id: name, name, origin: null, size, kind, peak, saving})
     it("sorts a kind by size, largest first, then by name", () => {
         const entries = [entry("exact", 0.5, 10, 4, "b"), entry("exact", 0.5, 30, 4, "a"), entry("float", 2, 99), entry("exact", 0.5, 10, 4, "a2")]
         expect(SampleFormats.ofKind(entries, "exact").map(({name}) => name)).toEqual(["a", "a2", "b"])
     })
     it("an entry after its conversion is 16 bit, smaller and frees nothing more", () => {
         expect(SampleFormats.converted(entry("rounding", 0.5, 1000, 400)))
-            .toEqual({id: "x", name: "x", origin: null, size: 600, kind: "sixteen", peak: null, saving: 0, pending: false})
+            .toEqual({id: "x", name: "x", origin: null, size: 600, kind: "sixteen", peak: null, saving: 0})
     })
     it("sums sizes and savings", () => {
         const entries = [entry("exact", 0.5, 100, 40), entry("rounding", 0.5, 50, 20)]

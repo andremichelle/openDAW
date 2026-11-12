@@ -119,11 +119,10 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         const [rounded, lowered] = [count("rounding"), count("scaling")]
         const lines = [`${entries.length} sample${entries.length === 1 ? " becomes" : "s become"} 16 bit. `
         + `That frees ${Bytes.toString(SampleFormats.savingOf(entries))}.`]
-        if (rounded > 0) {lines.push(`${rounded} of them ${rounded === 1 ? "is" : "are"} rounded to 16 bit.`)}
-        if (lowered > 0) {lines.push(`${lowered} of them ${lowered === 1 ? "is" : "are"} lowered by up to 0.1 dB and rounded.`)}
-        lines.push(rounded + lowered > 0
-            ? "Rounding and lowering cannot be undone. Projects keep playing these samples."
-            : "No value changes. Projects keep playing these samples.")
+        if (rounded > 0) {lines.push(`Rounded to 16 bit: ${rounded}.`)}
+        if (lowered > 0) {lines.push(`Lowered by up to 0.1 dB, then rounded: ${lowered}.`)}
+        lines.push(rounded + lowered > 0 ? "This cannot be undone." : "No value changes.")
+        lines.push("Projects keep playing them.")
         if (!await RuntimeNotifier.approve({
             headline: "Convert Samples", message: lines.join("\n"), approveText: "Convert", cancelText: "Cancel"
         })) {return}
@@ -148,12 +147,14 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
             progress.setValue((index + 1) / entries.length)
         }
         dialog.terminate()
-        chosen.clear()
+        done.forEach(id => chosen.delete(id))
         const notes: Array<string> = []
         if (skipped > 0) {notes.push(`${skipped} changed since the scan and ${skipped === 1 ? "was" : "were"} left alone.`)}
         if (failed.length > 0) {notes.push(`${failed.length} could not be converted:\n${failed.join("\n")}`)}
         if (notes.length > 0) {await RuntimeNotifier.info({headline: "Not Everything Was Converted", message: notes.join("\n")})}
-        show({...report, entries: report.entries.map(entry => done.has(entry.id) ? SampleFormats.converted(entry) : entry)})
+        const next = {...report, entries: report.entries.map(entry => done.has(entry.id) ? SampleFormats.converted(entry) : entry)}
+        current.wrap(next)
+        renderReport(next)
     }
     const renderReport = (report: SampleFormats.Report): void => {
         reportTerminator.terminate()
@@ -182,7 +183,7 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
                                 }))}/>)
         reportTerminator.own(tab.catchupAndSubscribe(() => renderList(report)))
     }
-    const scan = async (): Promise<void> => {
+    const scan = async (settle: boolean = true): Promise<void> => {
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({headline: "Reading Samples", message: "Measuring every stored sample", progress})
         const result = await Promises.tryCatch(StorageInspector.scanSampleFormats(value => progress.setValue(value)))
@@ -191,13 +192,11 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
             return RuntimeNotifier.info({headline: "Could not read the samples", message: String(result.error)})
         }
         const report = result.value
-        for (const entry of report.entries.filter(({pending}) => pending)) {
-            await Promises.tryCatch(SampleStorage.get().settle(UUID.parse(entry.id)))
+        if (settle && report.leftovers.length > 0) {
+            for (const id of report.leftovers) {await Promises.tryCatch(SampleStorage.get().settle(UUID.parse(id)))}
+            return scan(false)
         }
-        show(report)
-    }
-    // the lossless conversions are chosen up front, the others are a decision
-    const show = (report: SampleFormats.Report): void => {
+        // the lossless conversions are chosen up front, the others are a decision
         chosen.clear()
         report.entries.filter(({kind}) => kind === "exact").forEach(({id}) => chosen.add(id))
         current.wrap(report)
