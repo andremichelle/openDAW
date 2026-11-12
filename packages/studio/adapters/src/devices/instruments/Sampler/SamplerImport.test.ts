@@ -11,7 +11,7 @@ import {SamplerZones} from "./SamplerZones"
 const zone = (overrides: Partial<SamplerImport.Zone> = {}): SamplerImport.Zone => ({
     sample: 0, group: 0, keyLow: 0, keyHigh: 127, velocityLow: 1, velocityHigh: 127, rootKey: 60, transpose: 0, tune: 0,
     keyTrack: 1, gain: 0, panning: 0, sequence: 1, reverse: false, oneShot: false, sampleStart: 0, sampleEnd: undefined,
-    loopMode: 0, loopStart: 0, loopEnd: undefined, ...overrides
+    loopMode: 0, loopStart: 0, loopEnd: undefined, loopAlternate: false, ...overrides
 })
 
 const setup = () => {
@@ -323,6 +323,12 @@ describe("SamplerSfz", () => {
         expect([zones[0].loopStart, zones[0].loopEnd]).toEqual([100, 200])
         expect([zones[2].oneShot, zones[2].reverse]).toEqual([true, true])
         expect([zones[4].loopStart, zones[4].loopEnd]).toEqual([3, 10])
+    })
+    it("reads an alternating loop", () => {
+        const zones = SamplerSfz.parse(
+            "<region> sample=a.wav loop_mode=loop_continuous loop_type=alternate\n<region> sample=a.wav loop_mode=loop_continuous loop_type=forward\n"
+            + "<region> sample=a.wav loop_mode=loop_continuous", "x").instrument.zones
+        expect(zones.map(entry => entry.loopAlternate)).toEqual([true, false, false])
     })
     it("groups regions by round robin, choke and trigger", () => {
         const {instrument} = SamplerSfz.parse(

@@ -71,7 +71,8 @@ export namespace SamplerSoundfontExport {
                     sequence: 1, reverse: zone.reverse.getValue(), oneShot: zone.oneShot.getValue(),
                     sampleStart: zone.sampleStart.getValue(), sampleEnd: sampleEnd >= MaxFrame ? undefined : sampleEnd,
                     loopMode: zone.loopMode.getValue(),
-                    loopStart: zone.loopStart.getValue(), loopEnd: loopEnd >= MaxFrame ? undefined : loopEnd
+                    loopStart: zone.loopStart.getValue(), loopEnd: loopEnd >= MaxFrame ? undefined : loopEnd,
+                    loopAlternate: zone.loopAlternate.getValue()
                 })
             })
         const {ampEnvelope, filterType, cutoff, resonance} = device

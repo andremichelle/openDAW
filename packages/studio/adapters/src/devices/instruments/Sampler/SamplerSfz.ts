@@ -122,7 +122,8 @@ export namespace SamplerSfz {
                 // loop points without a mode loop, as the format says
                 loopMode: mode === "loop_continuous" || (mode === "" && isDefined(loopEnd)) ? 2 : mode === "loop_sustain" ? 1 : 0,
                 loopStart: Math.max(0, loopStart ?? 0),
-                loopEnd: isDefined(loopEnd) ? loopEnd + 1 : undefined
+                loopEnd: isDefined(loopEnd) ? loopEnd + 1 : undefined,
+                loopAlternate: (region["loop_type"] ?? "").toLowerCase() === "alternate"
             })
             if (!isDefined(envelope)) {
                 envelope = {

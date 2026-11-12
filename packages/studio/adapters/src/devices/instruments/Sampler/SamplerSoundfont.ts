@@ -115,7 +115,7 @@ export namespace SamplerSoundfont {
                     oneShot: false,
                     sampleStart, sampleEnd,
                     loopMode: modes === 1 ? 2 : modes === 3 ? 1 : 0,
-                    loopStart, loopEnd
+                    loopStart, loopEnd, loopAlternate: false
                 })
                 if (!isDefined(envelope)) {
                     envelope = {

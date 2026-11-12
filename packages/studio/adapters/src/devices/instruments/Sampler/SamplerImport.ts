@@ -38,6 +38,7 @@ export namespace SamplerImport {
         readonly loopMode: int
         readonly loopStart: int
         readonly loopEnd: Optional<int>
+        readonly loopAlternate: boolean
     }
     export type Envelope = {
         readonly delay: number
@@ -100,6 +101,7 @@ export namespace SamplerImport {
             box.loopMode.setValue(clamp(zone.loopMode, 0, 2))
             box.loopStart.setValue(clamp(zone.loopStart, 0, MaxFrame))
             box.loopEnd.setValue(clamp(zone.loopEnd ?? MaxFrame, 0, MaxFrame))
+            box.loopAlternate.setValue(zone.loopAlternate)
             created++
         })
         SamplerZones.remove(oldZones)

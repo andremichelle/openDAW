@@ -11,7 +11,7 @@ import {SamplerZones} from "./SamplerZones"
 const zone = (overrides: Partial<SamplerImport.Zone> = {}): SamplerImport.Zone => ({
     sample: 0, group: 0, keyLow: 0, keyHigh: 127, velocityLow: 1, velocityHigh: 127, rootKey: 60, transpose: 0, tune: 0,
     keyTrack: 1, gain: 0, panning: 0, sequence: 1, reverse: false, oneShot: false, sampleStart: 0, sampleEnd: undefined,
-    loopMode: 0, loopStart: 0, loopEnd: undefined, ...overrides
+    loopMode: 0, loopStart: 0, loopEnd: undefined, loopAlternate: false, ...overrides
 })
 const ramp = (length: number, offset: number = 0): Int16Array => Int16Array.from({length}, (_, index) => index + offset)
 const group: SamplerImport.Group = {label: "Group 1", roundRobin: 0, choke: 0, trigger: 0}

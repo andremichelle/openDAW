@@ -5,6 +5,10 @@ groups and per-voice modulation.
 
 ---
 
+![screenshot](sampler.webp)
+
+---
+
 ## 0. Overview
 
 _Sampler_ plays sample libraries that were recorded note by note and at several dynamics. Each sample sits in a
@@ -170,7 +174,7 @@ Loop modes:
 - **Gate**: The loop repeats while the key is held. On release the sample plays on to its end.
 - **Always**: The loop keeps repeating through the release.
 
-**Alt** makes the loop alternate: forward to the loop end, backward to the loop start and so on. It starts in the direction **Rev** gives. An alternating loop needs no **Fade**.
+**Alt** makes the loop alternate: forward to the loop end, backward to the loop start and so on. It starts in the direction **Rev** gives. An alternating loop needs no **Fade**. An SFZ file with `loop_type=alternate` arrives with **Alt** on.
 
 A zone with **1 Shot** on never loops. Its **Loop** and **Alt** values are dimmed.
 
