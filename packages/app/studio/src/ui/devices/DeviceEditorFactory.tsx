@@ -20,6 +20,7 @@ import {
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
+    SamplerDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapInstrumentBox,
@@ -76,6 +77,7 @@ import {
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
+    SamplerDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
     WclapDeviceBoxAdapter,
     WclapInstrumentBoxAdapter,
@@ -126,6 +128,7 @@ import {TubularDeviceEditor} from "@/ui/devices/instruments/TubularDeviceEditor.
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
+import {SamplerDeviceEditor} from "./instruments/SamplerDeviceEditor"
 import {PlayfieldDeviceEditor} from "./instruments/PlayfieldDeviceEditor"
 import {InstrumentCompositeDeviceEditor} from "./instruments/InstrumentCompositeDeviceEditor"
 import {StereoToolDeviceEditor} from "./audio-effects/StereoToolDeviceEditor"
@@ -283,6 +286,12 @@ export namespace DeviceEditorFactory {
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, SoundfontDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
+            ),
+            visitSamplerDeviceBox: (box: SamplerDeviceBox): JsxValue => (
+                <SamplerDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, SamplerDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
             ),
             visitNanoDeviceBox: (box: NanoDeviceBox): JsxValue => (
                 <NanoDeviceEditor lifecycle={lifecycle}

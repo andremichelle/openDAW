@@ -154,11 +154,29 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
    engine (`packages/studio/core-wasm/test/sampler.test.ts`), plus the parameter mapping parity of all 36
    parameters.
 
+## Editor (done, uncommitted)
+
+1. `InstrumentFactories.Sampler` creates the device with one group and one modulation slot (Velocity to Gain at
+   80%).
+2. Device panel `SamplerDeviceEditor`: Play, Filter, Mix, tabbed Envelope and LFO groups with real automatable
+   parameters, the modulation list, Edit Sample Zones in the header.
+3. Sample zone window: a `FloatingWindow` like the plugin windows, one per device. Map, piano, groups, sample
+   zones, modulation list, waveform, zone fields, every panel parameter.
+4. `SamplerZones` in the adapters holds the tools (map by name, spread keys, spread velocity, crossfade, root to
+   low, duplicate, move to group, disable, clean up) with 29 tests.
+5. A sample file box cannot exist without a zone pointing at it. So Delete switches a zone off (`enabled`), it
+   stays in the list dimmed, Restore switches it on again and Clean Up removes the zones that are off, with their
+   samples.
+6. File name notes are scientific pitch: `C4` is key 60, as sample libraries write them. openDAW shows that key as
+   C3.
+7. Manual page `devices/instruments/sampler.md`.
+
 ## Next
 
-1. `InstrumentFactories` entry and the real editor (panel and sample zone window) from the preview.
-2. Add samples, map by name, SFZ and SF2 import.
-3. Scripting API, manual page, release notes.
+1. SFZ and SF2 import, and the Import button in the window.
+2. Scripting API.
+3. Release notes with the DEV deploy.
+4. A synced LFO still prints its rate in Hz. Groups cannot be renamed or deleted yet.
 
 ## Open
 

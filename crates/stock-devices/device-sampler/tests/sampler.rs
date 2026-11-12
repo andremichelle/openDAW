@@ -60,16 +60,16 @@ fn samples() {
 
 fn zone(sample: u32) -> Zone {
     Zone {
-        sample: Some(sample), group: None, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
+        sample: Some(sample), group: None, enabled: true, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
         velocity_high: 127, velocity_fade: 0, transpose: 0, tune: 0.0, key_track: 1.0, gain: 0.0, panning: 0.0,
         sequence: 1, reverse: false, one_shot: false, sample_start: 0, sample_end: i32::MAX, loop_mode: 0,
         loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0
     }
 }
 
-fn words(zone: &Zone) -> [u32; 23] {
+fn words(zone: &Zone) -> [u32; 24] {
     [
-        zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE),
+        zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE), zone.enabled as u32,
         zone.key_low as u32, zone.key_high as u32, zone.key_fade as u32, zone.root_key as u32,
         zone.velocity_low as u32, zone.velocity_high as u32, zone.velocity_fade as u32,
         zone.transpose as u32, zone.tune.to_bits(), zone.key_track.to_bits(),
@@ -172,6 +172,14 @@ fn a_sample_that_is_still_loading_is_silent_and_holds_no_voice() {
 fn a_zone_without_a_sample_is_skipped() {
     let mut rig = Rig::new();
     rig.zones(&[Zone {sample: None, ..zone(ONE)}, zone(QUARTER)]);
+    assert_eq!(rig.level(&[on(1, 60)]), 0.25);
+    assert_eq!(rig.voices(), 1);
+}
+
+#[test]
+fn a_disabled_zone_does_not_play() {
+    let mut rig = Rig::new();
+    rig.zones(&[Zone {enabled: false, ..zone(ONE)}, zone(QUARTER)]);
     assert_eq!(rig.level(&[on(1, 60)]), 0.25);
     assert_eq!(rig.voices(), 1);
 }

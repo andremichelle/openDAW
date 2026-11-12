@@ -1,0 +1,19 @@
+@use "@/mixins"
+@use "./SamplerDeviceEditor/shared"
+
+component
+  display: grid
+  grid-template-columns: shared.$pair * 4 216px
+  grid-template-rows: 82px 82px
+  column-gap: 8px
+  row-gap: 12px
+  @include mixins.Control
+  @include shared.stacks
+  @include shared.modulation
+
+  > div.modulation
+    grid-column: 2
+    grid-row: 1 / -1
+
+  button
+    font-size: 11px

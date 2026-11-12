@@ -5,8 +5,8 @@
 use abi::{Table, TableColumn};
 
 // WASM CONTRACT: the field keys of `SamplerZoneBox`, `SamplerGroupBox` and `SamplerModulationBox`.
-pub const ZONE_COLUMNS: [TableColumn; 23] = [
-    TableColumn::sample(2), TableColumn::target(3, 3),
+pub const ZONE_COLUMNS: [TableColumn; 24] = [
+    TableColumn::sample(2), TableColumn::target(3, 3), TableColumn::value(5),
     TableColumn::value(10), TableColumn::value(11), TableColumn::value(12), TableColumn::value(13),
     TableColumn::value(20), TableColumn::value(21), TableColumn::value(22),
     TableColumn::value(30), TableColumn::value(31), TableColumn::value(32),
@@ -30,6 +30,7 @@ pub const LOOP_ON: i32 = 1;
 pub struct Zone {
     pub sample: Option<u32>,
     pub group: Option<u32>, // the `index` of the group the zone belongs to
+    pub enabled: bool,
     pub key_low: i32,
     pub key_high: i32,
     pub key_fade: i32,
@@ -58,37 +59,38 @@ impl Zone {
         Self {
             sample: table.link(row, 0),
             group: table.link(row, 1),
-            key_low: table.int(row, 2),
-            key_high: table.int(row, 3),
-            key_fade: table.int(row, 4),
-            root_key: table.int(row, 5),
-            velocity_low: table.int(row, 6),
-            velocity_high: table.int(row, 7),
-            velocity_fade: table.int(row, 8),
-            transpose: table.int(row, 9),
-            tune: table.float(row, 10),
-            key_track: table.float(row, 11),
-            gain: table.float(row, 12),
-            panning: table.float(row, 13),
-            sequence: table.int(row, 14),
-            reverse: table.bool(row, 15),
-            one_shot: table.bool(row, 16),
-            sample_start: table.int(row, 17),
-            sample_end: table.int(row, 18),
-            loop_mode: table.int(row, 19),
-            loop_start: table.int(row, 20),
-            loop_end: table.int(row, 21),
-            loop_fade: table.float(row, 22)
+            enabled: table.bool(row, 2),
+            key_low: table.int(row, 3),
+            key_high: table.int(row, 4),
+            key_fade: table.int(row, 5),
+            root_key: table.int(row, 6),
+            velocity_low: table.int(row, 7),
+            velocity_high: table.int(row, 8),
+            velocity_fade: table.int(row, 9),
+            transpose: table.int(row, 10),
+            tune: table.float(row, 11),
+            key_track: table.float(row, 12),
+            gain: table.float(row, 13),
+            panning: table.float(row, 14),
+            sequence: table.int(row, 15),
+            reverse: table.bool(row, 16),
+            one_shot: table.bool(row, 17),
+            sample_start: table.int(row, 18),
+            sample_end: table.int(row, 19),
+            loop_mode: table.int(row, 20),
+            loop_start: table.int(row, 21),
+            loop_end: table.int(row, 22),
+            loop_fade: table.float(row, 23)
         }
     }
 
     pub fn accepts(&self, key: i32, velocity: i32) -> bool {
-        key >= self.key_low && key <= self.key_high && velocity >= self.velocity_low && velocity <= self.velocity_high
+        self.enabled && key >= self.key_low && key <= self.key_high && velocity >= self.velocity_low && velocity <= self.velocity_high
     }
 
     // on the same keys and velocities of the same group: the two are round robins of each other
     pub fn shares_range(&self, other: &Zone) -> bool {
-        self.group == other.group && self.key_low == other.key_low && self.key_high == other.key_high
+        self.enabled && other.enabled && self.group == other.group && self.key_low == other.key_low && self.key_high == other.key_high
             && self.velocity_low == other.velocity_low && self.velocity_high == other.velocity_high
     }
 }
@@ -147,7 +149,7 @@ pub fn fade_gain(zones: &Table, row: usize, zone: &Zone, key: i32, velocity: i32
         if fade <= 0 || distance >= fade {return}
         let covered = (0..zones.rows()).filter(|other_row| *other_row != row).any(|other_row| {
             let other = Zone::read(zones, other_row);
-            other.group == zone.group && !zone.shares_range(&other) && overlapped(&other)
+            other.enabled && other.group == zone.group && !zone.shares_range(&other) && overlapped(&other)
         });
         if covered {gain *= libm::sqrtf((distance + 1) as f32 / (fade + 1) as f32);}
     };
@@ -174,16 +176,16 @@ pub(crate) mod tests {
 
     pub(crate) fn zone() -> Zone {
         Zone {
-            sample: Some(1), group: None, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
+            sample: Some(1), group: None, enabled: true, key_low: 0, key_high: 127, key_fade: 0, root_key: 60, velocity_low: 1,
             velocity_high: 127, velocity_fade: 0, transpose: 0, tune: 0.0, key_track: 1.0, gain: 0.0, panning: 0.0,
             sequence: 1, reverse: false, one_shot: false, sample_start: 0, sample_end: i32::MAX, loop_mode: LOOP_OFF,
             loop_start: 0, loop_end: i32::MAX, loop_fade: 0.0
         }
     }
 
-    pub(crate) fn words(zone: &Zone) -> [u32; 23] {
+    pub(crate) fn words(zone: &Zone) -> [u32; 24] {
         [
-            zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE),
+            zone.sample.unwrap_or(TABLE_NONE), zone.group.unwrap_or(TABLE_NONE), zone.enabled as u32,
             zone.key_low as u32, zone.key_high as u32, zone.key_fade as u32, zone.root_key as u32,
             zone.velocity_low as u32, zone.velocity_high as u32, zone.velocity_fade as u32,
             zone.transpose as u32, zone.tune.to_bits(), zone.key_track.to_bits(),
@@ -210,12 +212,28 @@ pub(crate) mod tests {
     #[test]
     fn a_row_reads_back_every_field() {
         let written = Zone {
-            sample: Some(77), group: Some(3), key_low: 12, key_high: 24, key_fade: 2, root_key: 18, velocity_low: 5,
+            sample: Some(77), group: Some(3), enabled: true, key_low: 12, key_high: 24, key_fade: 2, root_key: 18, velocity_low: 5,
             velocity_high: 99, velocity_fade: 7, transpose: -12, tune: -37.5, key_track: 0.25, gain: -6.5, panning: -0.75,
             sequence: 4, reverse: true, one_shot: true, sample_start: 1_000, sample_end: 30_000_000, loop_mode: 2,
             loop_start: 20_000_001, loop_end: 29_999_999, loop_fade: 0.125
         };
         assert_eq!(Zone::read(&table(&[zone(), written]), 1), written);
+    }
+
+    #[test]
+    fn a_disabled_zone_answers_nothing_and_is_nobodys_round_robin() {
+        let off = Zone {enabled: false, ..ranged(Some(1), (40, 50), (20, 90))};
+        let on = ranged(Some(1), (40, 50), (20, 90));
+        assert!(!off.accepts(45, 55));
+        assert!(!off.shares_range(&on) && !on.shares_range(&off));
+        let zones = [on, off, on];
+        assert_eq!(robin_position(&table(&zones), 2, &zones[2]), (1, 2), "the stack counts only what is on the map");
+    }
+
+    #[test]
+    fn a_disabled_zone_fades_nobody() {
+        let zones = [Zone {key_fade: 3, ..ranged(None, (40, 50), (1, 127))}, Zone {enabled: false, ..ranged(None, (30, 42), (1, 127))}];
+        assert_eq!(fade_gain(&table(&zones), 0, &zones[0], 40, 64), 1.0);
     }
 
     #[test]
@@ -230,7 +248,7 @@ pub(crate) mod tests {
         assert_eq!(ZONE_COLUMNS[0], TableColumn::sample(2));
         assert_eq!(ZONE_COLUMNS[1], TableColumn::target(3, 3), "the group pointer delivers the group's index");
         let keys: Vec<u16> = ZONE_COLUMNS[2..].iter().map(|column| column.key).collect();
-        assert_eq!(keys, [10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55]);
+        assert_eq!(keys, [5, 10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55]);
     }
 
     #[test]

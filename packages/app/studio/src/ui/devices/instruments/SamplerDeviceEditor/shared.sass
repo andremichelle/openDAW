@@ -1,0 +1,191 @@
+$pair: 84px
+$gap: 6px
+
+// borrowed from ControlGroup
+@mixin group-label
+  height: 16px
+  padding: 2px 4px
+  font-size: 9px
+  line-height: 11px
+  font-weight: normal
+  white-space: nowrap
+  border-radius: 2px 2px 0 0
+  color: color-mix(in srgb, var(--color) 85%, transparent)
+  border-bottom: 1px solid color-mix(in srgb, var(--color) 60%, transparent)
+
+@mixin group-body
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--color) 6%, transparent), transparent 7px) no-repeat 0 16px
+
+// borrowed from ParameterLabel
+@mixin value-label
+  display: flex
+  column-gap: 0.25em
+  justify-content: end
+  padding: 0 0.5em
+  border-radius: 0.25em
+  font-size: 8px
+  line-height: 18px
+  white-space: nowrap
+  color: var(--color-gray)
+  touch-action: none
+
+  &[unit]:after
+    content: attr(unit)
+    color: var(--color-dark)
+
+  &.modifying
+    color: var(--color-blue)
+    box-shadow: 0 0 0 0.5px rgba(white, 0.1)
+    background-color: var(--color-black)
+
+@mixin list-rows
+  min-height: 0
+  display: flex
+  flex-direction: column
+  padding: 8px 0
+  overflow: hidden auto
+  scrollbar-width: none
+  mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+@mixin stacks
+  div.stacks
+    display: flex
+    color: var(--color-dark)
+
+  div.parameter-stack
+    display: grid
+    grid-template-rows: 16px
+    grid-auto-rows: 18px
+    row-gap: 4px
+    align-items: center
+    align-content: start
+    margin-right: $gap
+    --color: var(--color-shadow)
+    @include group-body
+
+    @for $count from 1 through 3
+      &.pairs-#{$count}
+        width: $pair * $count - $gap
+        grid-template-columns: repeat(#{$count}, 1fr 40px)
+
+        &:last-child
+          width: $pair * $count
+
+    &:last-child
+      margin-right: 0
+
+    &.orange
+      --color: var(--color-orange)
+
+    &.yellow
+      --color: var(--color-yellow)
+
+    &.green
+      --color: var(--color-green)
+
+    &.blue
+      --color: var(--color-blue)
+
+    &.purple
+      --color: var(--color-purple)
+
+    &.cream
+      --color: var(--color-cream)
+
+    > div.label
+      grid-column: 1 / -1
+      @include group-label
+
+    &.tabbed > div.label
+      display: flex
+      column-gap: 10px
+
+      > div.tab:not(.active)
+        color: color-mix(in srgb, var(--color-shadow) 50%, transparent)
+
+      > div.tab.highlight
+        color: var(--color-bright)
+
+    > div.body
+      display: contents
+
+    div.name
+      margin: 0 0 0 6px
+      font-size: 10px
+      white-space: nowrap
+      color: var(--color-shadow)
+
+      &.highlight
+        color: var(--color-bright)
+
+    label
+      justify-self: end
+      min-width: 40px
+
+    label.value
+      width: 40px
+      @include value-label
+
+    // borrowed from NanoDeviceEditor
+    .toggle
+      justify-self: end
+      margin-right: 4px
+
+      > label
+        width: 18px
+        height: 18px
+        min-width: 0
+        font-size: 13px
+        border-radius: 0.25em
+        display: flex
+        align-items: center
+        justify-content: center
+
+@mixin modulation
+  div.modulation
+    display: grid
+    grid-template-columns: 34% 40% 26%
+    grid-template-rows: 16px minmax(0, 1fr)
+    color: var(--color-dark)
+    --color: var(--color-cream)
+    @include group-body
+
+    > div.label
+      @include group-label
+
+    > div.rows
+      grid-column: 1 / -1
+      row-gap: 4px
+      @include list-rows
+      padding: 4px 0
+      mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 8px), transparent)
+
+      > div.slot
+        flex: 0 0 18px
+        height: 18px
+        display: grid
+        grid-template-columns: 34% 40% calc(26% - 16px) 16px
+        align-items: center
+
+        button
+          width: 100%
+          font-size: 12px
+
+        label
+          width: 100%
+          text-align: left
+
+        > label.value
+          @include value-label
+
+        > div.remove
+          display: flex
+          font-size: 8px
+          color: var(--color-shadow)
+
+      > div.add
+        flex: 0 0 18px
+        font-size: 9px
+        line-height: 18px
+        text-align: center
+        color: var(--color-shadow)

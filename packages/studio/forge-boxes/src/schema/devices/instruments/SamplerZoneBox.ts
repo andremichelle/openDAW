@@ -15,6 +15,7 @@ export const SamplerZoneBox: BoxSchema<Pointers> = {
             2: {type: "pointer", name: "file", pointerType: Pointers.AudioFile, mandatory: true},
             3: {type: "pointer", name: "group", pointerType: Pointers.SamplerGroupZone, mandatory: true},
             4: {type: "int32", name: "index", ...IndexConstraints},
+            5: {type: "boolean", name: "enabled", value: true}, // off, the zone keeps its sample but is not on the map
             10: {type: "int32", name: "key-low", value: 0, ...MidiNoteConstraints},
             11: {type: "int32", name: "key-high", value: 127, ...MidiNoteConstraints},
             12: {type: "int32", name: "key-fade", value: 0, constraints: {min: 0, max: 127}, unit: "st"},

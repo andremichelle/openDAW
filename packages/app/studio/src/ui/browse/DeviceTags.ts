@@ -9,6 +9,7 @@ export namespace DeviceTags {
         Tubular: ["synth", "subtractive"],
         MIDIOutput: ["midi", "hardware", "utility"],
         Nano: ["sampler"],
+        Sampler: ["sampler"],
         Playfield: ["drums", "sampler"],
         Soundfont: ["sampler", "general-midi"],
         Tape: ["audio", "playback"],

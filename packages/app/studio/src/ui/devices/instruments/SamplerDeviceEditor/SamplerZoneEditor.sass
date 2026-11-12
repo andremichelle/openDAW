@@ -1,0 +1,181 @@
+@use "./shared"
+
+component
+  display: grid
+  grid-template-columns: shared.$pair * 4 + 4px shared.$pair * 8
+  grid-template-rows: 2rem 18px 176px 28px 252px
+  column-gap: 12px
+  row-gap: 8px
+  padding: 0 8px 8px 8px
+  background-color: var(--color-panel-background)
+  @include shared.stacks
+  @include shared.modulation
+
+  button
+    font-size: 11px
+
+  [data-class='button'] > label
+    font-size: 10px
+    line-height: 16px
+
+  > header
+    grid-column: 1 / -1
+    display: flex
+    align-items: center
+    column-gap: 0.75em
+    margin: 0 -8px
+    padding: 0 0.5em
+    font-size: 11px
+    box-shadow: inset 0 -1px rgba(black, 0.2), 0 1px rgba(white, 0.03)
+
+    > span.preset
+      color: var(--color-cream)
+
+    > span.samples
+      font-size: 10px
+      color: var(--color-shadow)
+
+    > span.readout
+      margin-left: auto
+      width: 9em
+      font-size: 10px
+      text-align: right
+      color: var(--color-shadow)
+
+  > div.tools
+    grid-column: 1 / -1
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > button > label
+      display: flex
+      align-items: center
+      column-gap: 4px
+      font-size: 10px
+      line-height: 16px
+
+    > span.count
+      margin-left: auto
+      font-size: 10px
+      color: var(--color-shadow)
+
+  // borrowed from NanoDeviceEditor
+  div.display
+    position: relative
+    background-color: rgba(black, 0.1)
+    border-radius: 2px
+    box-shadow: 0 0.5px 1px 0 rgba(white, 0.1), 0 0.5px 1px 0 rgba(black, 0.1) inset
+
+    &.accept
+      outline: solid var(--color-green) 1px
+      background-color: rgba(white, 0.04)
+
+    > canvas
+      display: block
+      width: 100%
+      height: 100%
+      touch-action: none
+
+    > span.file-name
+      position: absolute
+      left: 50%
+      transform: translateX(-50%)
+      bottom: 2px
+      padding: 2px 3px
+      border-radius: 3px
+      background-color: rgba(black, 0.2)
+      font-size: 8px
+      color: var(--color-dark)
+      pointer-events: none
+      white-space: nowrap
+      box-shadow: 0 0.5px 1px 0 rgba(white, 0.04)
+
+  > div.map
+    grid-column: 1 / -1
+
+  > div.keys
+    grid-column: 1 / -1
+    margin-top: -4px
+
+    > canvas
+      display: block
+      width: 100%
+      height: 100%
+      touch-action: none
+
+  > div.side
+    display: grid
+    grid-template-columns: shared.$pair * 2 shared.$pair * 2
+    grid-template-rows: 116px 128px
+    column-gap: 4px
+    row-gap: 8px
+
+    > div.modulation
+      grid-column: 1 / -1
+
+    > div.list
+      display: grid
+      grid-template-rows: 16px minmax(0, 1fr)
+      --color: var(--color-dark)
+      @include shared.group-body
+
+      > h3
+        margin: 0
+        @include shared.group-label
+
+      > div.rows
+        position: relative
+        @include shared.list-rows
+
+        > div.row
+          flex: 0 0 16px
+          display: grid
+          grid-template-columns: 1fr auto
+          column-gap: 6px
+          align-items: center
+          padding: 0 6px
+          font-size: 9px
+          color: var(--color-dark)
+
+          &:has(> i)
+            grid-template-columns: 8px 1fr auto
+
+          > i
+            width: 8px
+            height: 8px
+            border-radius: 2px
+
+          > span
+            overflow: hidden
+            text-overflow: ellipsis
+            white-space: nowrap
+
+          > span.count
+            font-size: 8px
+            color: var(--color-shadow)
+
+          &.off
+            color: var(--color-black)
+
+          &.selected
+            background-color: rgba(white, 0.04)
+
+          &.active
+            color: var(--color-gray)
+            background-color: rgba(white, 0.08)
+
+        > div.add
+          flex: 0 0 16px
+          padding: 0 6px
+          font-size: 9px
+          line-height: 16px
+          color: var(--color-shadow)
+
+  > div.inspector
+    display: grid
+    grid-template-rows: 72px 82px 82px
+    row-gap: 8px
+
+    > div.waveform
+      padding: 8px 8px 16px 8px

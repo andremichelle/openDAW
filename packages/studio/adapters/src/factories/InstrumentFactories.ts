@@ -12,6 +12,8 @@ import {
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,
     PlayfieldDeviceBox,
+    SamplerDeviceBox,
+    SamplerModulationBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -25,6 +27,8 @@ import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
 import {TrackType} from "../timeline/TrackType"
 import {PlayfieldPads} from "../devices/instruments/Playfield/PlayfieldPads"
+import {SamplerModulation} from "../devices/instruments/Sampler/SamplerModulation"
+import {SamplerZones} from "../devices/instruments/Sampler/SamplerZones"
 
 export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
@@ -324,13 +328,42 @@ export namespace InstrumentFactories {
             })
     }
 
+    export const Sampler: InstrumentFactory<void, SamplerDeviceBox> = {
+        defaultName: "Sampler",
+        defaultIcon: IconSymbol.Waveform,
+        briefDescription: "Multi-Sample Instrument",
+        description: "Plays many samples by key and velocity, with round robins, groups and modulation",
+        manualPage: DeviceManualUrls.Sampler,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): SamplerDeviceBox => {
+            const device = SamplerDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+            SamplerZones.createGroup(boxGraph, device, "Group 1")
+            // velocity sets the level unless the user takes the slot away
+            SamplerModulationBox.create(boxGraph, UUID.generate(), box => {
+                box.device.refer(device.modulations)
+                box.source.setValue(SamplerModulation.Source.Velocity)
+                box.target.setValue(SamplerModulation.Target.Gain)
+                box.amount.setValue(0.8)
+            })
+            return device
+        }
+    }
+
     export const isPadInstrument = (factory: InstrumentFactory<any, any>): boolean =>
         isLayerInstrument(factory) && factory !== Playfield && factory !== InstrumentComposite
 
     export const fitsCell = (cell: InstrumentCompositeCellBox, factory: InstrumentFactory<any, any>): boolean =>
         PlayfieldPads.isPad(cell) ? isPadInstrument(factory) : isLayerInstrument(factory)
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
     export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
         .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))
