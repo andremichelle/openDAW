@@ -307,47 +307,63 @@ Not sample data at all: `ShadertoyRunner.audioData` (a spectrum texture), `WebCo
 
 ## SDK update note
 
-For SDK consumers, to go out with the release that carries the change. Nothing here is shipped yet.
+For SDK consumers, to go out with the release that carries the change. Written against what is built
+(branch `sample-bits`, 2026-11-12).
 
-### Samples: the main thread can let go of the frames
+### Samples take less memory and less storage, if you switch it on
 
-What is new, all additions:
+Nothing changes unless you ask for it. All of this is additions.
 
-1. `AudioInfo` in `@opendaw/lib-dsp`: `sampleRate`, `numberOfFrames`, `numberOfChannels`. `AudioData` is now
-   `AudioInfo & {frames}`, field for field what it was.
-2. `SampleLoader.info`: the three numbers of a loaded sample, filled once it is loaded and kept.
-3. `SampleLoader.acquire(): Promise<AudioLease>`: the frames, kept in memory for as long as the lease lives.
-   `lease.data` is the `AudioData`, `lease.terminate()` hands it back.
-4. `SampleLoader.use(user)`: takes a lease, runs the function, ends the lease, also when it throws.
-5. The sample loader manager takes a setting: `"always"` or `"while-used"`.
+New in `@opendaw/lib-dsp`:
 
-What stays as it was:
+1. `AudioInfo`: `sampleRate`, `numberOfFrames`, `numberOfChannels`. `AudioData` is `AudioInfo & {frames}`, field
+   for field what it was.
+2. `PcmData`: sample frames in the format they are stored in, `"float32"` or `"int16"`. `PcmData.isExact16`,
+   `smallest`, `floats`, `quantize`, `measure`.
+3. `WavFile.encodePcm` and `WavFile.decodePcm`. `encodeFloats`, `encodeInts16`, `encodeInts24` and `decodeFloats`
+   write and read exactly what they did.
+4. `SampleConversion`: what a float sample can become as 16 bit (`judge`, `convert`).
 
-1. The default is `"always"`. A loaded sample keeps its frames and `loader.data` stays filled. Existing code
-   runs unchanged.
-2. `AudioData`, `frames` as float arrays, `getAudioData`, `AudioFileBoxAdapter.data` and `.audioData`.
-3. Project files and stored samples. Every project opens as before.
+New in `@opendaw/studio-adapters`:
 
-What to do if you switch to `"while-used"` (the studio does, to halve its sample memory):
+1. `SampleLoader.info`: the three numbers of a loaded sample.
+2. `SampleLoader.acquire(): Promise<AudioLease>`: the frames, kept for as long as the lease is not terminated.
+3. `SampleLoader.pcm?()`: optional, the frames as stored, for the engine.
+4. Helpers in the `SampleLoader` namespace: `use(loader, user)` leases for the run of a function and ends the
+   lease also when it throws, `frames(loader)`, `loaded(loader)`, `stored(loader)`, `infoOf(loader)`.
+5. `AudioFileBoxAdapter.info`.
+6. `EngineToClient.fetchSample?`, optional, next to `fetchAudio`.
+7. `SampleRetention`: `"always"` or `"while-used"`.
 
-1. `loader.data` is filled only while a lease lives. "loaded" no longer means `data` is there. Replace
-   `loader.data.unwrap()` by `acquire()` or `use()`.
-2. For sample rate, frame count and channel count read `loader.info`.
-3. End every lease. A lease that is never ended keeps its sample in memory.
-4. A custom `SampleLoader` (one you implement yourself) needs `info` and `acquire`. This is the one change that
-   asks for code: the interface grew by two members.
+New in `@opendaw/studio-core`:
 
-Where consumers stand (checked 2026-11-12): a consumer supplies samples through a `SampleProvider`
-(`fetch(uuid, progress): Promise<[AudioData, SampleMetaData]>`, the same shape as `SampleFetcher` in
-`@opendaw/studio-p2p`) and hands it to `GlobalSampleLoaderManager`. Loaders, cache and the OPFS are inside the
-manager. So the separation exists already:
+1. `new GlobalSampleLoaderManager(provider, {retain})`. The second argument is optional, `"always"` is the default.
+2. `SampleStorage.get().format`: `"float32"` (default) or `"smallest"`.
+3. `SampleStorage`: `loadPcm`, `loadStored`, `store`, `replaceAudio`, `convert`, `settle`.
 
-1. The provider keeps its signature and is still called once per sample that is not stored yet. A later
-   `acquire` reads the manager's storage, never the provider.
-2. The OPFS stays out of sight. Reading the frames back happens inside the manager, the consumer only sees
-   `acquire`, `use` and `info`.
-3. Point 4 above only concerns somebody who implements `SampleLoader` or `SampleLoaderManager` by hand. Nobody
-   has to.
+What stays as it was with the defaults:
+
+1. A loaded sample keeps its frames, `loader.data` stays filled, a finished recording keeps its data.
+2. Samples are written as 32 bit float, the engine holds floats, renders are bit-identical.
+3. `AudioData`, `getAudioData`, `AudioFileBoxAdapter.data` and `.audioData`, the `SampleProvider` signature.
+4. Project files and stored samples. Every project opens as before.
+
+The two switches:
+
+1. `SampleStorage.get().format = "smallest"`: a sample whose every value is exact in 16 bit is written as 16 bit
+   PCM, half the size. Everything else stays float. The engine then holds such a sample as 16 bit too and plays
+   it bit-identically. Reading goes by the WAV header, so files of both kinds mix freely, and builds since
+   2026-01 read them.
+2. `new GlobalSampleLoaderManager(provider, {retain: "while-used"})`: a loader holds frames only while they are
+   leased and reads them back from the OPFS when asked again. Then:
+   1. "loaded" no longer means `loader.data` is filled. Replace `loader.data.unwrap()` by `acquire()` or
+      `SampleLoader.use`.
+   2. For sample rate, frame count and channel count read `loader.info`.
+   3. End every lease. A lease that is never ended keeps its sample in memory.
+   4. Samples must stay in the OPFS while the page runs. Do not clear `samples/v2` under a running project.
+
+One thing that asks for code whichever setting you use: a `SampleLoader` you implement yourself needs `info`
+and `acquire`. If you only supply a `SampleProvider`, which is the usual way, nothing changes for you.
 
 ## Findings of the three deep dives (2026-11-12)
 
@@ -447,13 +463,40 @@ manager. So the separation exists already:
 
 ### Steps
 
-1. S1 Rust generic readers, floats only. All existing tests unedited and green.
-2. S2 Rust and host 16 bit, bit-equality tests per reader, bridges.
-3. S3 `lib-dsp` types and codec with tests.
-4. S4 Storage setting, `loadPcm`, studio switch, SF2 lands as 16 bit.
-5. S5 Loader members, manager option, protocol, all readers.
-6. S6 Conversion page.
+1. ~~S1 Rust generic readers, floats only. All existing tests unedited and green.~~ 1556 tests, one test needed
+   a type hint (`read::<f32>(&[], 0.0)`).
+2. ~~S2 Rust and host 16 bit, bit-equality tests per reader, bridges.~~
+3. ~~S3 `lib-dsp` types and codec with tests.~~
+4. ~~S4 Storage setting, `loadPcm`, studio switch, SF2 lands as 16 bit.~~
+5. ~~S5 Loader members, manager option, protocol, all readers.~~
+6. ~~S6 Conversion page.~~
 7. S7 Review and browser rounds until clean.
+
+### What turned out differently while building
+
+1. `use` is a function in the `SampleLoader` namespace, not a member, so an implementer has two members to add.
+2. `fetchSample` and `pcm` are optional. A client or loader without them is served through `fetchAudio` and
+   its floats.
+3. The engine gets 16 bit only where `SampleStorage.format` is `"smallest"`, also under `"always"`: there the
+   loader converts its held floats, it never reads the OPFS for it.
+4. Under `"while-used"` the first load reads `audio.wav` once and hands the same frames to the engine's first
+   fetch. Requests at the same moment share one read.
+5. A recording keeps its frames for as long as its loader lives, under both settings. Letting them go after the
+   store is confirmed is open.
+6. `replaceAudio` writes the new file as `audio.wav.pending` first. A load that finds a broken `audio.wav` and a
+   good pending file completes the replacement.
+7. The conversion page scans in the storage worker and reads only the header of 16 bit samples. A converted
+   sample keeps its uuid and its peaks. The cloud backup keeps its float copy.
+8. The Signalsmith stagger depends on the region's uuid, so a test must render both formats from one project.
+
+### Measured in the browser (2026-11-12)
+
+1. A project with 55 piano samples: the count of live sample buffers is 55 right after the load and 0 after the
+   next garbage collection, about 20 seconds later.
+2. The same project plays, the sample zone window shows waveforms and lengths, Analyze Material, Flatten and
+   the sample editor work, each reading frames on demand.
+3. 131 stored samples: 100 convert without loss, 29 by rounding, 2 stay 32 bit. Converting all would free
+   119 of 241 MB.
 
 ## Order
 
@@ -468,6 +511,11 @@ manager. So the separation exists already:
 ## Open
 
 1. ~~The type of `AudioData.frames` for 16 bit.~~ Not needed, the main thread keeps floats.
-2. Lossy sources: always float, or offered as 16 bit with a clip check.
-3. Depth of new recordings.
-4. 24 bit in memory: packed three bytes or widened to 32 bit integers.
+2. ~~Lossy sources: always float, or offered as 16 bit with a clip check.~~ Float on import, the conversion
+   page offers rounding below 0 dB and lowering up to 0.1 dB over.
+3. Depth of new recordings. They are float today and can be converted on the page.
+4. 24 bit in memory: packed three bytes or widened to 32 bit integers. Not started.
+5. Recordings letting go of their frames once stored.
+6. Reading only the header on a first load under `"while-used"`. Needs a partial read in the OPFS protocol.
+7. Frozen tracks hold their audio on the main thread and in the engine.
+8. Soundfont device: its blob holds floats made from 16 bit data.
