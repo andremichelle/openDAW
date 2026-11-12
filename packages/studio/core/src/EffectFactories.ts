@@ -22,6 +22,7 @@ import {
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -68,9 +69,9 @@ export namespace EffectFactories {
     }
 
     export const NoteFilter: EffectFactory = {
-        defaultName: "Note Filter",
+        defaultName: "Filter",
         defaultIcon: IconSymbol.Piano,
-        briefDescription: "Note Filter",
+        briefDescription: "Filter",
         description: "Passes a key range and transposes or sets the keys",
         manualPage: DeviceManualUrls.NoteFilter,
         separatorBefore: false,
@@ -79,7 +80,7 @@ export namespace EffectFactories {
         boxName: "NoteFilterDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
-                box.label.setValue("Note Filter")
+                box.label.setValue("Filter")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -98,6 +99,24 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index) =>
             ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Scale Matrix")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const ChordKeys: EffectFactory = {
+        defaultName: "Chord Keys",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Chord Player",
+        description: "Plays the chords of a key from single keys",
+        manualPage: DeviceManualUrls.ChordKeys,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "ChordKeysDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            ChordKeysDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Chord Keys")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -676,6 +695,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {
         Arpeggio,
+        ChordKeys,
         NoteFilter,
         Pitch,
         ScaleMatrix,

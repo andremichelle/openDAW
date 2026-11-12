@@ -11,7 +11,8 @@ component
   row-gap: 1px
   min-width: 0
   border-radius: 0.25em
-  background-color: rgba(black, 0.25)
+  background-color: colors.$MIXER-SECTION-BACKGROUND
+  box-shadow: colors.$MIXER-SECTION-SHADOW
   padding: var(--mixer-device-padding)
 
   > div.body
@@ -51,8 +52,8 @@ component
     align-items: center
     justify-content: center
     border-radius: var(--mixer-device-inner-radius)
-    color: rgba(white, 0.3)
-    background-color: rgba(white, 0.03)
+    color: colors.$MIXER-ADD-COLOR
+    background-color: colors.$MIXER-ADD-BACKGROUND
     cursor: pointer
 
     > svg
@@ -60,7 +61,7 @@ component
 
     &:hover
       color: var(--color-cream)
-      background-color: rgba(white, 0.08)
+      background-color: colors.$MIXER-ADD-BACKGROUND-HOVER
 
   &.refuses > div.add
     display: none
@@ -93,7 +94,7 @@ component
       display: flex
 
   &.void
-    @include colors.panel-background-dark
+    @include colors.panel-background-stripes-dark
 
     > div.body, > div.add, > div.count
       display: none

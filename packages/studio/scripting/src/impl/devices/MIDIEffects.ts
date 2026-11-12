@@ -3,6 +3,7 @@ import {
     NoteFilterDeviceBox,
     PitchDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
@@ -19,6 +20,7 @@ import {
     NoteFilterEffect,
     PitchEffect,
     ScaleMatrixEffect,
+    ChordKeysEffect,
     ScriptParameter,
     ScriptSample,
     SpielwerkEffect,
@@ -37,7 +39,7 @@ export abstract class MIDIEffectFacade<B extends EffectDeviceBox = EffectDeviceB
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
-export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl
+export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl | ChordKeysEffectImpl
     | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
@@ -120,6 +122,19 @@ export class ScaleMatrixEffectImpl extends MIDIEffectFacade<ScaleMatrixDeviceBox
     }
 }
 
+export class ChordKeysEffectImpl extends MIDIEffectFacade<ChordKeysDeviceBox> implements ChordKeysEffect {
+    readonly key = "ChordKeys" as const
+    declare root: int
+    declare scale: int
+    declare follow: boolean
+    declare voiceLeading: boolean
+
+    constructor(context: Context, box: ChordKeysDeviceBox) {
+        super(context, box)
+        this.bind({root: box.root, scale: box.scale, follow: box.follow, voiceLeading: box.voiceLeading})
+    }
+}
+
 export class VelocityEffectImpl extends MIDIEffectFacade<VelocityDeviceBox> implements VelocityEffect {
     readonly key = "Velocity" as const
     declare magnetPosition: unitValue
@@ -171,6 +186,7 @@ export namespace MIDIEffectImpls {
         if (box instanceof PitchDeviceBox) {return new PitchEffectImpl(context, box)}
         if (box instanceof NoteFilterDeviceBox) {return new NoteFilterEffectImpl(context, box)}
         if (box instanceof ScaleMatrixDeviceBox) {return new ScaleMatrixEffectImpl(context, box)}
+        if (box instanceof ChordKeysDeviceBox) {return new ChordKeysEffectImpl(context, box)}
         if (box instanceof VelocityDeviceBox) {return new VelocityEffectImpl(context, box)}
         if (box instanceof ZeitgeistDeviceBox) {return new ZeitgeistEffectImpl(context, box)}
         if (box instanceof SpielwerkDeviceBox) {return new SpielwerkEffectImpl(context, box)}
@@ -179,6 +195,6 @@ export namespace MIDIEffectImpls {
 
     export const isBox = (box: Box): box is MIDIEffectBox =>
         box instanceof ArpeggioDeviceBox || box instanceof PitchDeviceBox || box instanceof VelocityDeviceBox
-        || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ZeitgeistDeviceBox
+        || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ChordKeysDeviceBox || box instanceof ZeitgeistDeviceBox
         || box instanceof SpielwerkDeviceBox
 }

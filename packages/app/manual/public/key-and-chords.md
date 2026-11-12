@@ -120,6 +120,8 @@ in the key at the play position and plays it on the armed instruments, in the oc
 
 - **[Scale Matrix](/manuals/devices/midi/scale-matrix)** with **Follow** moves every note onto the nearest key of
   the key at the note's position.
+- **[Chord Keys](/manuals/devices/midi/chord-keys)** with **Follow** plays the chords of the key at the note's
+  position from the white keys.
 - **[Autotune](/manuals/devices/audio/autotune)** with **Follow** corrects to the key at the play position.
 - The **[Cubed](/manuals/devices/instruments/cubed)** randomizer with **Project Key** draws its notes from the key.
 - Scripts in **Spielwerk**, **Apparat** and **Werkstatt** read the key and chord with `this.keyAt(position)` and

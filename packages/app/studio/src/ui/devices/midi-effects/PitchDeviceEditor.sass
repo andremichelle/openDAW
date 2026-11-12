@@ -1,4 +1,51 @@
 @use "@/mixins"
 
+// parameter-stack borrowed from NoteFilterDeviceEditor.sass
 component
-  @include mixins.ControlLayout(1)
+  height: 100%
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  color: var(--color-dark)
+  @include mixins.Control
+
+  div.name
+    color: var(--color-shadow)
+    margin: 0 0 0 0.375em
+    font-size: 0.625em
+    white-space: nowrap
+
+  div.parameter-stack
+    display: grid
+    grid-template-columns: 3.5em 46px
+    grid-template-rows: auto 18px 18px 18px
+    column-gap: 0.125em
+    row-gap: 0.25em
+    align-items: center
+    align-content: start
+    padding: 0 0 2px 0
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+    --color: var(--color-orange)
+    --edge: color-mix(in srgb, var(--color) 6%, transparent)
+    border: 1px var(--edge) solid
+    border-top: none
+    border-radius: 3px 3px 2px 2px
+
+    > div.label
+      grid-column: 1 / -1
+      align-self: start
+      margin: 0 -1px
+      padding: 1px 4px
+      font-size: 9px
+      letter-spacing: 0.2px
+      text-align: center
+      white-space: nowrap
+      border-radius: 3px 3px 0 0
+      color: rgba(black, 0.8)
+      background-color: color-mix(in srgb, var(--color) 66%, black)
+
+    label
+      justify-self: end
+      min-width: 46px
+      margin-right: 0.375em

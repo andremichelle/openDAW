@@ -23,5 +23,8 @@ export const HelpFeedback = () => (
         <a className="link" href={FEATURE} target="_blank" rel="noopener noreferrer">
             <Icon symbol={IconSymbol.Flask}/><span>Request a feature</span>
         </a>
+        <button className="link" onclick={() => RouteLocation.get().navigateTo("/changelog")}>
+            <Icon symbol={IconSymbol.NotePad}/><span>Changelog</span>
+        </button>
     </RailSection>
 )

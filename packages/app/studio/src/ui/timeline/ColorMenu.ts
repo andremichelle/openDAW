@@ -1,6 +1,6 @@
 import {MenuItem} from "@opendaw/studio-core"
 import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
-import {Procedure} from "@opendaw/lib-std"
+import {Optional, Procedure} from "@opendaw/lib-std"
 
 export namespace ColorMenu {
     const Colors: ReadonlyArray<{ label: string, hue: number }> = [
@@ -12,8 +12,9 @@ export namespace ColorMenu {
         {label: "Yellow", hue: 60.0}
     ].sort((a, b) => a.hue - b.hue)
 
-    export const createItem = (procedure: Procedure<number>) => MenuItem.default({label: "Color"})
-        .setRuntimeChildrenProcedure(parent => parent
-            .addMenuItem(...Colors.map(({label, hue}) => MenuItem.default({label})
-                .setTriggerProcedure(() => procedure(hue)))))
+    export const createPalette = (procedure: Procedure<number>, currentHue: Optional<number>) =>
+        MenuItem.colorPalette({colors: Colors.map(({label, hue}) => ({
+            label, color: `hsl(${hue}, 75%, 55%)`, checked: currentHue === hue,
+            select: () => procedure(hue)
+        }))})
 }

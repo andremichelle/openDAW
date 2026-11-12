@@ -20,6 +20,7 @@ import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {Checkbox} from "@/ui/components/Checkbox"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
 
 const className = Html.adoptStyleSheet(css, "AuxSendGroup")
 
@@ -106,13 +107,12 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter, mastering}: 
                             })
                         })
                     }, IconSymbol.Effects)))
-        })} style={{
-            position: "absolute",
-            bottom: "0.25em",
-            left: "50%",
-            transform: "translate(-50%, 0)",
-            fontSize: "0.66em"
-        }} appearance={{color: Colors.shadow}} pointer>
+        })} onInit={button => {
+            button.classList.add("add")
+            lifecycle.own(TextTooltip.default(button, () => "Add Send"))
+            button.addEventListener("pointerdown", () =>
+                project.userEditingManager.audioUnit.editIfDifferent(audioUnitAdapter.box.editing))
+        }} pointer>
             <Icon symbol={IconSymbol.Add}/>
         </MenuButton>
     )

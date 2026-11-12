@@ -1,7 +1,14 @@
 import css from "./Menu.sass?inline"
-import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@opendaw/studio-core"
+import {
+    ColorPaletteEntry,
+    ColorPaletteMenuData,
+    DefaultMenuData,
+    HeaderMenuData,
+    InputValueMenuData,
+    MenuItem
+} from "@opendaw/studio-core"
 import {createElement, Frag} from "@opendaw/lib-jsx"
-import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
+import {int, isDefined, Lifecycle, Nullable, Option, panic, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
@@ -64,6 +71,22 @@ export const ValueSliderMenuDataElement = (
         </div>
     )
 }
+
+export const ColorPaletteMenuDataElement = ({data, onSelect}: {
+    data: ColorPaletteMenuData,
+    onSelect: Procedure<ColorPaletteEntry>
+}) => (
+    <div className="color-palette"
+         role="group"
+         aria-label="Color">{
+        data.colors.map(entry => (
+            <button type="button" data-close-on-blur aria-label={entry.label} title={entry.label}
+                    aria-pressed={entry.checked} style={{"--swatch-color": entry.color}}
+                    onpointerdown={event => event.preventDefault()}
+                    onpointerup={() => onSelect(entry)}/>
+        ))}
+    </div>
+)
 
 type MenuHtmlStructure = {
     element: HTMLElement
@@ -263,6 +286,14 @@ export class Menu implements Terminable, Lifecycle {
                                     return <HeaderMenuDataElement data={item.data}/>
                                 } else if (item.data.type === "default") {
                                     return <DefaultMenuDataElement data={item.data}/>
+                                } else if (item.data.type === "color-palette") {
+                                    return <ColorPaletteMenuDataElement
+                                        data={item.data}
+                                        onSelect={(entry: ColorPaletteEntry) => {
+                                            if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
+                                            this.root.terminate()
+                                            entry.select()
+                                        }}/>
                                 } else if (item.data.type === "input-value") {
                                     return <ValueSliderMenuDataElement data={item.data} lifecycle={this}/>
                                 }
@@ -278,6 +309,7 @@ export class Menu implements Terminable, Lifecycle {
                     itemElement.onpointerenter = () => this.#onPointerEnter(item, itemElement)
                     itemElement.onpointerleave = (event: PointerEvent) => this.#onPointerLeave(item, itemElement, event)
                     itemElement.onpointerup = (event: PointerEvent) => {
+                        if (item.data.type === "color-palette") {return}
                         if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
                         this.#onPointerUp(item, itemElement, event)
                     }

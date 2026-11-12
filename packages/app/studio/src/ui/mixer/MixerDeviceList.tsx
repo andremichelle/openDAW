@@ -39,6 +39,7 @@ export const MixerDeviceList = ({lifecycle, service, unit, kind, collapsed}: Con
     const add: HTMLElement = (
         <div className="add" onclick={() => {
             if (frozen.getValue()) {return}
+            project.userEditingManager.audioUnit.editIfDifferent(unit.box.editing)
             DeviceDialog.open(service, {
                 type: "insert", host: unit, accepts: kind, index: chain.mapOr(collection => collection.adapters().length, 0)
             })

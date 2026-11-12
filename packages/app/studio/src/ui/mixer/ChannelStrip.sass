@@ -3,6 +3,7 @@
 @use "@/colors"
 
 $EDIT_WASH_START: 13%
+$EDIT_WASH_END: audio-unit.$EDIT_WASH_REST
 $EDIT_WASH_LENGTH: 16px
 
 component
@@ -62,7 +63,7 @@ component
     font-size: 18px
 
   &.editing
-    background-image: linear-gradient(to bottom, color-mix(in srgb, var(--color) $EDIT_WASH_START, transparent), color-mix(in srgb, var(--color) audio-unit.$EDIT_WASH_REST, transparent) $EDIT_WASH_LENGTH)
+    background-image: linear-gradient(to bottom, color-mix(in srgb, var(--color) $EDIT_WASH_START, transparent), color-mix(in srgb, var(--color) $EDIT_WASH_END, transparent) $EDIT_WASH_LENGTH)
 
   &.compact
     padding: 0.5em
