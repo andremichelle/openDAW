@@ -41,13 +41,14 @@ const assertMirrored = (facade: object, unused: ReadonlyArray<string> = []) => {
 describe("Schema parity", () => {
     it("mirrors every automatable instrument parameter", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Apparat", "InstrumentComposite"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Sampler", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Apparat", "InstrumentComposite"]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(project.addInstrumentUnit(key).instrument)})
         expect(plain).toEqual({
             Vaporisateur: [],
             Playfield: [],
             Nano: [],
+            Sampler: [],
             Soundfont: [],
             MIDIOutput: [],
             Tape: [],
@@ -93,6 +94,11 @@ describe("Schema parity", () => {
         const unit = project.addInstrumentUnit("Playfield")
         const slot = unit.instrument.addSample({uuid: "0aab1f52-7d7a-4f0b-9c2d-3e6f7a8b9c0d", name: "x", duration: 1, bpm: 0, sample_rate: 1})
         expect(assertMirrored(slot)).toEqual([])
+        const sampler = project.addInstrumentUnit("Sampler").instrument
+        const zone = sampler.addZone({uuid: "1aab1f52-7d7a-4f0b-9c2d-3e6f7a8b9c0d", name: "x", duration: 1, bpm: 0, sample_rate: 1})
+        expect(assertMirrored(zone)).toEqual([])
+        expect(assertMirrored(sampler.groups[0])).toEqual([])
+        expect(assertMirrored(sampler.modulations[0])).toEqual([])
         const entry = unit.addAudioEffect("Composite").addEntry()
         expect(assertMirrored(entry)).toEqual([])
         const layer = project.addInstrumentUnit("InstrumentComposite").instrument.addLayer("Nano")

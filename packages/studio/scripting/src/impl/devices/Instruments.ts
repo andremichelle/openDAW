@@ -10,6 +10,10 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     PlayfieldDeviceBox,
+    SamplerDeviceBox,
+    SamplerGroupBox,
+    SamplerModulationBox,
+    SamplerZoneBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -18,7 +22,14 @@ import {
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
-import {CellInstrument, CubedStep as CubedStepCodec, InstrumentFactories, InstrumentFactory, PlayfieldPads} from "@opendaw/studio-adapters"
+import {
+    CellInstrument,
+    CubedStep as CubedStepCodec,
+    InstrumentFactories,
+    InstrumentFactory,
+    PlayfieldPads,
+    SamplerZones
+} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, Option, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
@@ -50,6 +61,13 @@ import {
     Playfield,
     PlayfieldSlot,
     Sample,
+    Sampler,
+    SamplerEnvelope,
+    SamplerFilter,
+    SamplerGroup,
+    SamplerLFO,
+    SamplerModulation,
+    SamplerZone,
     ScriptParameter,
     ScriptSample,
     Soundfont,
@@ -108,7 +126,7 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 }
 
 export type AnyInstrumentImpl =
-    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | CubedImpl
+    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SamplerImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | CubedImpl
     | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
@@ -410,6 +428,196 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     }
 }
 
+export class SamplerGroupImpl extends Facade<SamplerGroupBox> implements SamplerGroup {
+    static wrap(context: Context, box: SamplerGroupBox): SamplerGroupImpl {
+        return context.facade(box, () => new SamplerGroupImpl(context, box))
+    }
+
+    declare label: string
+    declare roundRobin: 0 | 1 | 2
+    declare choke: int
+    declare trigger: 0 | 1
+
+    private constructor(context: Context, box: SamplerGroupBox) {
+        super(context, box)
+        this.bind({label: box.label, roundRobin: box.roundRobin, choke: box.choke, trigger: box.trigger})
+    }
+
+    get zones(): ReadonlyArray<SamplerZone> {
+        return this.box.zones.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, SamplerZoneBox))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+            .map(box => SamplerZoneImpl.wrap(this.context, box))
+    }
+
+    remove(): void {
+        this.context.edit(() => {
+            const device = asInstanceOf(this.box.device.targetVertex.unwrap("group has no sampler").box, SamplerDeviceBox)
+            if (!SamplerZones.removeGroup(device, this.box)) {return panic("The last group of a Sampler cannot be removed")}
+        })
+    }
+}
+
+export class SamplerZoneImpl extends Facade<SamplerZoneBox> implements SamplerZone {
+    static wrap(context: Context, box: SamplerZoneBox): SamplerZoneImpl {
+        return context.facade(box, () => new SamplerZoneImpl(context, box))
+    }
+
+    declare enabled: boolean
+    declare keyLow: int
+    declare keyHigh: int
+    declare keyFade: int
+    declare rootKey: int
+    declare velocityLow: int
+    declare velocityHigh: int
+    declare velocityFade: int
+    declare transpose: int
+    declare tune: float
+    declare keyTrack: unitValue
+    declare gain: float
+    declare panning: bipolar
+    declare sequence: int
+    declare reverse: boolean
+    declare oneShot: boolean
+    declare sampleStart: int
+    declare sampleEnd: int
+    declare loopMode: 0 | 1 | 2
+    declare loopStart: int
+    declare loopEnd: int
+    declare loopFade: float
+    declare loopAlternate: boolean
+
+    private constructor(context: Context, box: SamplerZoneBox) {
+        super(context, box)
+        this.bind({
+            enabled: box.enabled, keyLow: box.keyLow, keyHigh: box.keyHigh, keyFade: box.keyFade, rootKey: box.rootKey,
+            velocityLow: box.velocityLow, velocityHigh: box.velocityHigh, velocityFade: box.velocityFade,
+            transpose: box.transpose, tune: box.tune, keyTrack: box.keyTrack, gain: box.gain, panning: box.panning,
+            sequence: box.sequence, reverse: box.reverse, oneShot: box.oneShot, sampleStart: box.sampleStart,
+            sampleEnd: box.sampleEnd, loopMode: box.loopMode, loopStart: box.loopStart, loopEnd: box.loopEnd,
+            loopFade: box.loopFade, loopAlternate: box.loopAlternate
+        })
+    }
+
+    get sample(): Sample {
+        return AudioFiles.toSample(this.context, asInstanceOf(this.box.file.targetVertex.unwrap("zone has no file").box, AudioFileBox))
+    }
+    set sample(sample: Sample) {AudioFiles.assign(this.context, this.box.file, () => AudioFiles.use(this.context, sample))}
+    get group(): SamplerGroup {
+        return SamplerGroupImpl.wrap(this.context,
+            asInstanceOf(this.box.group.targetVertex.unwrap("zone has no group").box, SamplerGroupBox))
+    }
+    set group(group: SamplerGroup) {this.context.edit(() => this.box.group.refer(this.#groupBoxOf(group).zones))}
+
+    remove(): void {this.context.edit(() => SamplerZones.remove([this.box]))}
+
+    #groupBoxOf(group: SamplerGroup): SamplerGroupBox {
+        if (!(group instanceof SamplerGroupImpl)) {return panic(new TypeError(`group: expected a SamplerGroup, got ${Guard.describe(group)}`))}
+        const sameSampler = group.box.device.targetVertex.unwrapOrNull()?.box === this.box.device.targetVertex.unwrapOrNull()?.box
+        return sameSampler ? group.box : panic("group: belongs to another Sampler")
+    }
+}
+
+export class SamplerModulationImpl extends Facade<SamplerModulationBox> implements SamplerModulation {
+    static wrap(context: Context, box: SamplerModulationBox): SamplerModulationImpl {
+        return context.facade(box, () => new SamplerModulationImpl(context, box))
+    }
+
+    declare source: 0 | 1 | 2 | 3 | 4 | 5 | 6
+    declare target: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    declare amount: bipolar
+
+    private constructor(context: Context, box: SamplerModulationBox) {
+        super(context, box)
+        this.bind({source: box.source, target: box.target, amount: box.amount})
+    }
+}
+
+export class SamplerImpl extends InstrumentFacade<SamplerDeviceBox> implements Sampler {
+    readonly key = "Sampler" as const
+    declare voices: int
+    declare glide: float
+    declare legato: boolean
+    declare octave: int
+    declare transpose: int
+    declare tune: float
+    declare volume: float
+    declare panning: bipolar
+    declare mono: unitValue
+    declare readonly filter: SamplerFilter
+    declare readonly ampEnvelope: SamplerEnvelope
+    declare readonly modEnvelope: SamplerEnvelope
+    declare readonly lfos: ReadonlyArray<SamplerLFO>
+
+    constructor(context: Context, box: SamplerDeviceBox) {
+        super(context, box)
+        const envelope = (field: SamplerDeviceBox["ampEnvelope"] | SamplerDeviceBox["modEnvelope"]): FieldSpec => ({
+            delay: field.delay, attack: field.attack, hold: field.hold, decay: field.decay, sustain: field.sustain, release: field.release
+        })
+        const lfo = (field: SamplerDeviceBox["lfoA"] | SamplerDeviceBox["lfoB"]): FieldSpec => ({
+            shape: field.shape, rate: field.rate, delay: field.delay, fade: field.fade, sync: field.sync, restart: field.restart
+        })
+        this.bind({
+            voices: box.voices, glide: box.glide, legato: box.legato, octave: box.octave, transpose: box.transpose,
+            tune: box.tune, volume: box.volume, panning: box.panning, mono: box.mono,
+            filter: {type: box.filterType, cutoff: box.cutoff, resonance: box.resonance},
+            ampEnvelope: envelope(box.ampEnvelope), modEnvelope: envelope(box.modEnvelope),
+            lfos: [lfo(box.lfoA), lfo(box.lfoB)]
+        })
+    }
+
+    get groups(): ReadonlyArray<SamplerGroup> {
+        return this.#groupBoxes().map(box => SamplerGroupImpl.wrap(this.context, box))
+    }
+    get zones(): ReadonlyArray<SamplerZone> {
+        return SamplerZones.zonesOf(this.box)
+            .toSorted((left, right) => left.index.getValue() - right.index.getValue())
+            .map(box => SamplerZoneImpl.wrap(this.context, box))
+    }
+    get modulations(): ReadonlyArray<SamplerModulation> {
+        return this.#modulationBoxes().map(box => SamplerModulationImpl.wrap(this.context, box))
+    }
+
+    addGroup(props?: Partial<Pick<SamplerGroup, "label" | "roundRobin" | "choke" | "trigger">>): SamplerGroup {
+        return this.context.edit(() => {
+            const label = `Group ${this.#groupBoxes().length + 1}`
+            return Props.apply(SamplerGroupImpl.wrap(this.context, SamplerZones.createGroup(this.context.boxGraph, this.box, label)), props)
+        })
+    }
+
+    addZone(sample: Sample, props?: Partial<Omit<SamplerZone, "uuid" | "sample" | "remove">>): SamplerZone {
+        return this.context.edit(() => {
+            const fileBox = AudioFiles.use(this.context, sample)
+            const groupBox = this.#groupBoxes().at(0) ?? SamplerZones.createGroup(this.context.boxGraph, this.box, "Group 1")
+            const zoneBox = SamplerZones.create(this.context.boxGraph, this.box, groupBox, fileBox)
+            return Props.apply(SamplerZoneImpl.wrap(this.context, zoneBox), props)
+        })
+    }
+
+    addModulation(source: SamplerModulation["source"], target: SamplerModulation["target"], amount: bipolar): SamplerModulation {
+        return this.context.edit(() => {
+            const index = this.#modulationBoxes().reduce((highest, box) => Math.max(highest, box.index.getValue() + 1), 0)
+            const box = SamplerModulationBox.create(this.context.boxGraph, UUID.generate(), box => {
+                box.device.refer(this.box.modulations)
+                box.index.setValue(index)
+            })
+            return Props.apply(SamplerModulationImpl.wrap(this.context, box), {source, target, amount})
+        })
+    }
+
+    #groupBoxes(): ReadonlyArray<SamplerGroupBox> {
+        return this.box.groups.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, SamplerGroupBox))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+    }
+
+    #modulationBoxes(): ReadonlyArray<SamplerModulationBox> {
+        return this.box.modulations.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, SamplerModulationBox))
+            .sort((left, right) => left.index.getValue() - right.index.getValue())
+    }
+}
+
 export class SoundfontImpl extends InstrumentFacade<SoundfontDeviceBox> implements Soundfont {
     readonly key = "Soundfont" as const
     declare presetIndex: int
@@ -643,6 +851,7 @@ export namespace InstrumentImpls {
         if (box instanceof VaporisateurDeviceBox) {return new VaporisateurImpl(context, box)}
         if (box instanceof PlayfieldDeviceBox) {return new PlayfieldImpl(context, box)}
         if (box instanceof NanoDeviceBox) {return new NanoImpl(context, box)}
+        if (box instanceof SamplerDeviceBox) {return new SamplerImpl(context, box)}
         if (box instanceof SoundfontDeviceBox) {return new SoundfontImpl(context, box)}
         if (box instanceof MIDIOutputDeviceBox) {return new MIDIOutputImpl(context, box)}
         if (box instanceof TapeDeviceBox) {return new TapeImpl(context, box)}

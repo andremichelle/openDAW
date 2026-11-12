@@ -37,6 +37,8 @@ const pluck = await openDAW.addSample(audio, "Pluck")
 * {@link Playfield}: `addSample(sample, {note})` assigns a slot per note, each with
   envelope, pitch, start and end, its own effect chains.
 * {@link Nano}: one sample, played chromatically.
+* {@link Sampler}: many samples, `addZone(sample, {keyLow, keyHigh, rootKey})` maps each one to its keys
+  and velocities, with groups, loops and modulations.
 * {@link Tape}: audio tracks with regions and clips.
 
 ```ts

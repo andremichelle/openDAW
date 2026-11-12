@@ -1393,6 +1393,217 @@ export interface Soundfont extends Instrument {
 }
 
 /**
+ * Sampler envelope (delay, attack, hold, decay, sustain, release)
+ * @group Instrument Parts
+ */
+export interface SamplerEnvelope {
+    /** Delay in seconds (0 to 5, default 0) */
+    delay: float
+    /** Attack in seconds (0.001 to 8, default 0.001) */
+    attack: float
+    /** Hold in seconds (0 to 5, default 0) */
+    hold: float
+    /** Decay in seconds (0.001 to 8, default 0.5) */
+    decay: float
+    /** Sustain level (0.0 to 1.0, default 1.0 for the amp envelope, 0.0 for the mod envelope) */
+    sustain: unitValue
+    /** Release in seconds (0.001 to 8, default 0.25) */
+    release: float
+}
+
+/**
+ * Sampler LFO
+ * @group Instrument Parts
+ */
+export interface SamplerLFO {
+    /** Shape: 0 = sine, 1 = triangle, 2 = saw, 3 = square (default 0) */
+    shape: 0 | 1 | 2 | 3
+    /** Rate in Hz (0.01 to 30, default 5 for the first, 0.5 for the second). With sync on it snaps to the nearest note length */
+    rate: float
+    /** Delay in seconds (0 to 5, default 0) */
+    delay: float
+    /** Fade in seconds (0 to 5, default 0) */
+    fade: float
+    /** Follow the project tempo (default false) */
+    sync: boolean
+    /** Restart with every note (default true) */
+    restart: boolean
+}
+
+/**
+ * Sampler filter
+ * @group Instrument Parts
+ */
+export interface SamplerFilter {
+    /** Type: 0 = off, 1 = low-pass 12 dB, 2 = low-pass 24 dB, 3 = high-pass 12 dB (default 0) */
+    type: 0 | 1 | 2 | 3
+    /** Cutoff in Hz (20 to 20000, default 20000) */
+    cutoff: float
+    /** Resonance (0.0 to 1.0, default 0.0) */
+    resonance: unitValue
+}
+
+/**
+ * A group of Sampler zones. Zones of one group share round robin, choke and trigger
+ * @group Instrument Parts
+ */
+export interface SamplerGroup {
+    /** Unique id */
+    readonly uuid: string
+    /** Custom label */
+    label: string
+    /** Round robin: 0 = off, 1 = cycle, 2 = random (default 0) */
+    roundRobin: 0 | 1 | 2
+    /** Choke group (1 to 127), 0 is off (default 0). A note silences the other groups with the same number */
+    choke: int
+    /** Trigger: 0 = note on, 1 = note release (default 0) */
+    trigger: 0 | 1
+    /** The zones of this group */
+    readonly zones: ReadonlyArray<SamplerZone>
+    /** Remove the group with its zones. Throws for the last group of a Sampler */
+    remove(): void
+}
+
+/**
+ * One sample of a Sampler with the keys and velocities it plays on. Positions are sample frames
+ * @group Instrument Parts
+ */
+export interface SamplerZone {
+    /** Unique id */
+    readonly uuid: string
+    /** The sample */
+    sample: Sample
+    /** The group the zone belongs to */
+    group: SamplerGroup
+    /** Off keeps the sample but takes the zone off the map (default true) */
+    enabled: boolean
+    /** Lowest key (0 to 127, default 0) */
+    keyLow: int
+    /** Highest key (0 to 127, default 127) */
+    keyHigh: int
+    /** Crossfade into neighbouring zones in semitones (0 to 127, default 0) */
+    keyFade: int
+    /** The key that plays the sample at its native rate (0 to 127, default 60) */
+    rootKey: int
+    /** Lowest velocity (1 to 127, default 1) */
+    velocityLow: int
+    /** Highest velocity (1 to 127, default 127) */
+    velocityHigh: int
+    /** Velocity crossfade (0 to 127, default 0) */
+    velocityFade: int
+    /** Transpose in semitones (-24 to 24, default 0) */
+    transpose: int
+    /** Fine tune in cents (-100 to 100, default 0) */
+    tune: float
+    /** How far the pitch follows the key (0.0 to 1.0, default 1.0) */
+    keyTrack: unitValue
+    /** Gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Turn in the round robin of its group (1 to 128, default 1) */
+    sequence: int
+    /** Play backwards (default false) */
+    reverse: boolean
+    /** Ignore the note-off and play to the end (default false) */
+    oneShot: boolean
+    /** First frame (default 0) */
+    sampleStart: int
+    /** Frame the sample ends at (default 2147483647, the end of the sample) */
+    sampleEnd: int
+    /** Loop: 0 = off, 1 = while the note is held, 2 = always, also through the release (default 0) */
+    loopMode: 0 | 1 | 2
+    /** First frame of the loop (default 0) */
+    loopStart: int
+    /** Frame the loop ends at (default 2147483647, the end of the sample) */
+    loopEnd: int
+    /** Loop crossfade in seconds (0 to 1, default 0) */
+    loopFade: float
+    /** Play the loop forwards and backwards in turns (default false) */
+    loopAlternate: boolean
+    /** Remove the zone */
+    remove(): void
+}
+
+/**
+ * One modulation of a Sampler: a source, a target and how far it reaches
+ * @group Instrument Parts
+ */
+export interface SamplerModulation {
+    /** Unique id */
+    readonly uuid: string
+    /** Source: 0 = amp envelope, 1 = mod envelope, 2 = LFO 1, 3 = LFO 2, 4 = velocity, 5 = key, 6 = random */
+    source: 0 | 1 | 2 | 3 | 4 | 5 | 6
+    /** Target: 0 = pitch, 1 = cutoff, 2 = resonance, 3 = gain, 4 = pan, 5 = sample start, 6 = loop start, 7 = LFO 1 rate, 8 = LFO 2 rate, 9 = envelope depth */
+    target: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    /** Amount (-1.0 to 1.0, default 0.0). A full amount is 48 semitones for pitch, 4 octaves for the LFO rates, the full range otherwise */
+    amount: bipolar
+    /** Remove the modulation */
+    remove(): void
+}
+
+/**
+ * Multi-sample instrument: many samples mapped by key and velocity
+ * @group Instruments
+ */
+export interface Sampler extends Instrument {
+    /** Always "Sampler" */
+    readonly key: "Sampler"
+    /** Notes that sound at once (1 to 64, default 16) */
+    voices: int
+    /** Glide in seconds (0 to 5, default 0) */
+    glide: float
+    /** One voice that keeps its envelopes over tied notes (default false) */
+    legato: boolean
+    /** Octave shift (-3 to 3, default 0) */
+    octave: int
+    /** Transpose in semitones (-12 to 12, default 0) */
+    transpose: int
+    /** Fine tune in cents (-100 to 100, default 0) */
+    tune: float
+    /** Volume in dB (default -3) */
+    volume: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Mono amount (0.0 to 1.0, default 0.0) */
+    mono: unitValue
+    /** The filter */
+    readonly filter: SamplerFilter
+    /** The amp envelope */
+    readonly ampEnvelope: SamplerEnvelope
+    /** The mod envelope, a modulation source */
+    readonly modEnvelope: SamplerEnvelope
+    /** The two LFOs, modulation sources */
+    readonly lfos: ReadonlyArray<SamplerLFO>
+    /** All groups in order. A new Sampler has one */
+    readonly groups: ReadonlyArray<SamplerGroup>
+    /** All zones */
+    readonly zones: ReadonlyArray<SamplerZone>
+    /** All modulations in order. A new Sampler has velocity to gain at full amount */
+    readonly modulations: ReadonlyArray<SamplerModulation>
+    /** Add a group */
+    addGroup(props?: Partial<Pick<SamplerGroup, "label" | "roundRobin" | "choke" | "trigger">>): SamplerGroup
+    /**
+     * Add a zone playing the sample. Without a group it joins the first one
+     * @example
+     * ```ts
+     * const sampler = project.addInstrumentUnit("Sampler").instrument
+     * sampler.addZone(low, {keyLow: 0, keyHigh: 59, rootKey: 48})
+     * sampler.addZone(high, {keyLow: 60, keyHigh: 127, rootKey: 72, loopMode: 1})
+     * ```
+     */
+    addZone(sample: Sample, props?: Partial<Omit<SamplerZone, "uuid" | "sample" | "remove">>): SamplerZone
+    /**
+     * Add a modulation
+     * @example
+     * ```ts
+     * sampler.addModulation(2, 0, 0.01) // LFO 1 to pitch
+     * ```
+     */
+    addModulation(source: SamplerModulation["source"], target: SamplerModulation["target"], amount: bipolar): SamplerModulation
+}
+
+/**
  * A MIDI CC parameter of the MIDI output device
  * @group Instrument Parts
  */
@@ -1750,6 +1961,8 @@ export interface Instruments {
     "Playfield": Playfield
     /** {@link Nano} */
     "Nano": Nano
+    /** {@link Sampler} */
+    "Sampler": Sampler
     /** {@link Soundfont} */
     "Soundfont": Soundfont
     /** {@link MIDIOutput} */

@@ -1,7 +1,12 @@
 # Sampler scripting API
 
-An example script first, to find the shape that creates and edits every aspect of the Sampler. Nothing of this is
-implemented. Import and export (SFZ, SF2) stay out of scripts for now (decided 2026-11-12).
+An example script first, to find the shape that creates and edits every aspect of the Sampler.
+
+Implemented (2026-11-12): the panel values, `filter`, `ampEnvelope`, `modEnvelope`, `lfos`, `groups`, `zones`,
+`modulations`, `addGroup`, `addZone`, `addModulation` and `remove()` on each. Enumerations are the numbers the boxes
+store (`loopMode: 2`, `addModulation(6, 5, 1)`), as in the rest of the scripting API, not the strings of the example.
+`sampleEnd` and `loopEnd` are 2147483647 for the end of the sample, not null. Not implemented: `addSamples` and the
+window tools. Import and export (SFZ, SF2) stay out of scripts for now (decided 2026-11-12).
 
 ## Example
 
