@@ -3,15 +3,18 @@
 // (`sample_set_ready`) and once with 16 bit planes (`sample_set_ready_i16`), and the two outputs are compared
 // value by value.
 import {describe, expect, it} from "vitest"
+import * as path from "node:path"
+import {readFileSync} from "node:fs"
 import {UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
 import {AudioData, PcmData} from "@opendaw/lib-dsp"
 import {
     ApparatDeviceBox, AudioFileBox, AudioRegionBox, AudioSignalsmithBox, AudioTimeStretchBox, AudioUnitBox, CaptureMidiBox,
     ConvolverDeviceBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, SamplerDeviceBox, SamplerGroupBox,
-    SamplerZoneBox, TapeDeviceBox, TrackBox, TransientMarkerBox, ValueEventCollectionBox, WarpMarkerBox, WerkstattSampleBox
+    SamplerZoneBox, TapeDeviceBox, TrackBox, TransientMarkerBox, ValueEventCollectionBox, WarpMarkerBox, WclapDeviceBox,
+    WclapSampleBox, WerkstattSampleBox
 } from "@opendaw/studio-boxes"
-import {EngineToClient, ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
+import {EngineToClient, ProjectSkeleton, ScriptCompiler, TrackType, WclapBundle, WclapStatus} from "@opendaw/studio-adapters"
 import {TransientPlayMode} from "@opendaw/studio-enums"
 import {drainResourceRequests} from "../src/boot"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -385,6 +388,57 @@ describe("16 bit samples reach scripts as floats", () => {
         both("apparat", apparat, STEREO, 2, play(120)), 120_000)
     it("an Apparat script plays a mono 16 bit sample like its float twin", async () =>
         both("apparat mono", apparat, MONO, 1, play(120)), 120_000)
+})
+
+describe("16 bit samples reach WebCLAP plugins as floats", () => {
+    const bundle: WclapBundle = {files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(path.resolve(__dirname, "assets", "radar.wasm")))}]}
+    const project = (): BoxGraph => buildEffectProject(0.0, (source, unit) => {
+        const device = WclapDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+            box.url.setValue("radar")
+            box.clapId.setValue("com.andremichelle.radar")
+        })
+        const file = createFile(source, SECONDS)
+        WclapSampleBox.create(source, UUID.generate(), box => {
+            box.owner.refer(device.samples)
+            box.index.setValue(0)
+            box.file.refer(file)
+        })
+        return device
+    }, "class Processor { process() {} }")
+    // the plugin is loaded and ready before the sample arrives, so both runs start from the same state
+    const run = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format): Promise<Float32Array> => {
+        const statuses: Array<WclapStatus> = []
+        const {engine, memory} = await loadFullEngine(48_000, () => {}, () => null, {
+            loadBundle: () => Promise.resolve(bundle),
+            sendStatus: (_uuid, status) => statuses.push(status)
+        })
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle()
+        engine.bind()
+        await sync.settle()
+        engine.set_metronome_enabled(0)
+        for (let attempt = 0; attempt < 400 && !statuses.some(({state}) => state === "ready"); attempt++) {
+            engine.render()
+            await new Promise(resolve => setTimeout(resolve, 5))
+        }
+        expect(statuses.some(({state}) => state === "ready"), "the plugin loads").toBe(true)
+        expect(serve(engine, memory, planar, channels, RATE, format)).toBe(1)
+        await sync.settle()
+        return play(300)(engine, memory)
+    }
+    it("Radar plays a 16 bit sample like its float twin", async () => {
+        const source = project()
+        const asFloats = await run(source, STEREO, 2, "float32")
+        const again = await run(source, STEREO, 2, "float32")
+        expectSame(again, asFloats, "two float runs, the control")
+        expectSame(await run(source, STEREO, 2, "int16"), asFloats, "radar")
+    }, 120_000)
+    it("Radar plays a mono 16 bit sample like its float twin", async () => {
+        const source = project()
+        expectSame(await run(source, MONO, 1, "int16"), await run(source, MONO, 1, "float32"), "radar mono")
+    }, 120_000)
 })
 
 describe("16 bit samples through the worklet's sample drain", () => {

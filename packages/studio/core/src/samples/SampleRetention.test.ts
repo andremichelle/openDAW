@@ -3,7 +3,7 @@ import {Option, Progress, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {OpfsProtocol, SamplePeakWorker} from "@opendaw/lib-fusion"
 import {AudioData, PcmData, WavFile} from "@opendaw/lib-dsp"
-import {SampleLoader, SampleMetaData} from "@opendaw/studio-adapters"
+import {SampleLoader, SampleMetaData, SamplerImport} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {SampleStorage} from "./SampleStorage"
 import {DefaultSampleLoader} from "./DefaultSampleLoader"
@@ -162,6 +162,35 @@ describe("SampleStorage format", () => {
     it("rejects for a sample that is not stored", async () => {
         await expect(storage.loadPcm(UUID.generate())).rejects.toThrow()
         await expect(storage.loadStored(UUID.generate())).rejects.toThrow()
+    })
+})
+
+describe("a soundfont sample lands in storage as 16 bit", () => {
+    // every extreme a soundfont can hold, stereo
+    const sample: SamplerImport.Sample = {
+        name: "piano", sampleRate: 44_100,
+        channels: [Int16Array.from([0, 1, -1, 32_767, -32_768, 12_345]), Int16Array.from([-32_768, 32_767, 0, -2, 2, -12_345])]
+    }
+    it("the WAV the import builds decodes to frames 16 bit holds exactly", () => {
+        const audio = WavFile.decodeFloats(SamplerImport.encodeWav(sample))
+        expect(PcmData.isExact16(audio)).toBe(true)
+        expect([audio.sampleRate, audio.numberOfFrames, audio.numberOfChannels]).toEqual([44_100, 6, 2])
+    })
+    it("is stored as 16 bit with the very frames of the soundfont", async () => {
+        const audio = WavFile.decodeFloats(SamplerImport.encodeWav(sample))
+        const uuid = await put(audio, "smallest")
+        expect(headerOf(uuid)).toEqual({tag: 1, bits: 16})
+        const pcm = await storage.loadPcm(uuid)
+        expect(pcm.format === "int16" && pcm.frames.map(plane => Array.from(plane))).toEqual(sample.channels.map(plane => Array.from(plane)))
+    })
+    it("is stored as bytes equal to the WAV the import built", async () => {
+        const wav = SamplerImport.encodeWav(sample)
+        const uuid = await put(WavFile.decodeFloats(wav), "smallest")
+        expect(Array.from(audioFile(uuid))).toEqual(Array.from(new Uint8Array(wav)))
+    })
+    it("stays float where the setting is off", async () => {
+        const uuid = await put(WavFile.decodeFloats(SamplerImport.encodeWav(sample)), "float32")
+        expect(headerOf(uuid)).toEqual({tag: 3, bits: 32})
     })
 })
 
