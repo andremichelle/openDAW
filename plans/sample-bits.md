@@ -181,6 +181,123 @@ collector takes it.
    it must fall back to the number of leased samples. Runs in a headless browser with exposed gc.
 7. A copy made from the frames (a Web Audio buffer for preview) belongs to whoever made it.
 
+## Dry run: letting go of the frames on the main thread (2026-11-12)
+
+Walked through every source file that names `AudioData` (84 files) and every caller of `loader.data`,
+`file.data`, `file.audioData`, `getAudioData`, `getOrCreateLoader` and `SampleStorage.load`. Nothing was built.
+
+### A. What changes in the core
+
+1. `lib-dsp/audio-data.ts`: `AudioInfo` added, `AudioData = AudioInfo & {frames}`. `AudioData.create` and
+   `AudioData.count` stay.
+2. `adapters/sample/SampleLoader.ts`: `info` and `acquire` added.
+3. `core/samples/DefaultSampleLoader.ts`: `#info` (kept), `#data` strong only under `"always"` or while a lease
+   lives, else a `WeakRef`. `setLoaded` fills `#info` from the data. `invalidate` clears both.
+4. `core/samples/GlobalSampleLoaderManager.ts`:
+   1. The setting `"always"` | `"while-used"`.
+   2. `#cache` (`CachedSample.data`) is a second strong reference. Under `"while-used"` it keeps peaks, meta and
+      info only.
+   3. `#load` returns the load as a promise. An `acquire` that arrives while the load is pending is answered
+      from that load, so the engine's fetch at project start shares the one read. No grace timer.
+   4. `getAudioData` stays and answers through `acquire`.
+5. `core/samples/SampleStorage.ts`: `load` reads audio, peaks and meta in one go. A first load therefore always
+   reads the frames (peaks may have to be rebuilt from them). Later: a header-only read for `info`.
+6. `core/RecordingWorklet.ts` (its own `SampleLoader`): gets `info` and `acquire`. Holds `#data` strongly until
+   `importRecording` resolved, for ever when it was rejected.
+7. `app/perf/DeviceBenchmark.ts`: its injected loader keeps its data (never stored). Uses `setLoaded`, so the
+   default loader needs a way to be told "not in storage, keep".
+
+### B. Every reader of a loader's frames
+
+Needs the frames, becomes `acquire` (14):
+
+1. `core/EngineWorklet.ts:251` `fetchAudio`. Reads `handler.data.unwrap` on "loaded". The lease ends when the
+   promise handed the data to the port.
+2. `core/OfflineEngineRenderer.ts:96` `fetchAudio`, same shape. Every offline render reads all samples again.
+3. `adapters/audio/AudioFileBoxAdapter.ts:37` `#audioDataPromise`. MEMOIZED: the resolved promise holds the
+   frames for the life of the adapter. This alone would defeat the release. Must not memoize the data.
+4. `adapters/audio/AudioFileBoxAdapter.ts:77` `get audioData`, users below.
+5. `core/AudioMonoConversion.ts:62` `await file.audioData`, one mixdown.
+6. `core/project/audio/AudioContentModifier.ts:84` `await adapter.file.audioData`, transient detection in a worker.
+7. `core/project/AudioWavExport.ts:9` `owner.file.data.unwrap(...)`, synchronous in an async function.
+8. `core/dawproject/DawProjectExporter.ts:70` `sampleManager.getOrCreate(uuid).data.ifSome(encode)`, synchronous
+   inside a box visitor. The export has to collect the files first and await them.
+9. `app/service/SampleEditorService.ts:64` and `:71` open a sample. The `SampleDocument` keeps the audio while
+   the editor is open and replaces it by its own edits.
+10. `app/ui/timeline/tracks/audio-unit/TimelineDragAndDrop.ts:88` `getAudioData`, for transient detection in
+    `AudioFileBoxFactory.createModifier`.
+11. `app/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger.ts:18` `getAudioData`, the `ChopDialog` keeps
+    it while it is open.
+12. `app/service/WclapFrame.tsx:230` `getAudioData`, encodes a WAV for a drop into a WebCLAP.
+13. `app/ui/devices/instruments/SamplerDeviceEditor/SamplerExporter.ts:16` waits for the loader, then encodes.
+14. `app/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts:258` (Detect BPM) and `:271` (Analyze
+    Material), `region.file.data.ifSome(async ...)`.
+
+Asks for the frames but does not need them (4):
+
+1. `app/service/NeuralDemux.tsx:272` and `app/service/StudioService.ts:366` call `getAudioData` only to wait
+   until the sample is loaded. They become a wait for the loader state.
+2. `core/project/ProjectMigration.ts:75` with `migration/MigrateAudioFileBox.ts:17` waits for the frames to
+   compute seconds from frame count and sample rate. `info` is enough.
+3. `core/dawproject/DawProjectExporter.ts:186` reads duration, channels and sample rate. `info`.
+
+Reads frame count, sample rate or channel count on a paint or menu path, becomes `info` (10):
+
+1. `app/.../NanoDeviceEditor/WaveformPainter.ts:31`, `PlayheadPainter.ts:12`.
+2. `app/.../PlayfieldDeviceEditor/SlotEditor.tsx:116`, `BusySlot.tsx:122`.
+3. `app/.../SamplerDeviceEditor/SamplerZoneMap.ts:316`, `SamplerZoneEditor.tsx:112` and `:142` (`framesOf`),
+   `SamplerZoneTable.tsx:25` and `:65` (the type of `framesOf`).
+4. `core/AudioMonoConversion.ts:14` `canConvert`, decides a menu entry.
+
+Unchanged, reads the OPFS itself (7): `core/cloud/CloudBackupSamples.ts:82`, `core/cloud/SharedFolderSync.ts:231`,
+`core/project/ProjectBundle.ts:142`, `p2p/AssetServer.ts:161`, `app/ui/browse/SampleDialogs.tsx:148`,
+`app/service/SamplePlayback.ts:69`, `app/service/TestAudioProject.ts:36`.
+
+Unchanged, uses state, peaks or meta only: `AudioRegionBoxAdapter`, `AudioClipBoxAdapter`, `NanoDeviceBoxAdapter`,
+`PlayfieldSampleBoxAdapter`, `SamplerZoneBoxAdapter`, `NanoDeviceEditor.tsx:86`, `SampleDropZone.tsx:41`,
+`SlotUtils.ts:16`, `SampleView.tsx:46`, `AudioContentModifier.ts:150`, `Project.ts:632`, `RecordAudio.ts:217`,
+`BrowserAudioInput.ts:185` and `:428`.
+
+Unchanged, owns an `AudioData` that never was a loader's:
+
+1. Render results: `OfflineEngineRenderer` (create), `AudioBounce`, `AudioConsolidation`, `Mixdowns`,
+   `MasteringPanel` (keeps a mixdown per project), `Contest`, `AudioFormats`, scripting `mixdown`.
+2. Fresh decodes on import: `SampleService`, `SampleUploadPage`, `MetronomeControl` (click sounds),
+   `SampleEditorService#decode`, `SampleRecorder`, `OpenSampleAPI.load`, `boot.ts` provider, the p2p providers.
+3. The sample editor's own documents: `SampleDocument`, `SampleEdits`, `SamplePainter`, `SamplePlayer`.
+4. Frozen units: `AudioUnitFreeze` keeps its `audioData` and the engine holds a copy. A second case of two
+   copies, not part of this change.
+5. Scripts: `Api`, `ApiImpl`, `ScriptHostProtocol`, `ScriptWorker`, `ScriptRunner`, the code editor examples.
+   `addSample` takes data a script made. Werkstatt and Apparat `// @sample` read the engine's resident frames
+   (`core-wasm/script-bridge.ts`), not the main thread's.
+6. Engine protocols and commands: `protocols.ts`, `Engine`, `EngineFacade`, `EngineVariant`, `processor.ts`,
+   `offline-worker.ts` (`fetchAudio`, `loadClickSound`, `setFrozenAudio` signatures).
+
+Unchanged, functions that take an `AudioData` as an argument: `audio-splice`, `wav-file`, `transient-detection`,
+`audio-material`, `sample-effects/*`, the worker protocols, `Workers.ts`, `core-workers/*`, `AutoEq`,
+`AudioMaterialAnalyzer`, `WasmBpmDetector`, `BpmDetector`, `Matchering`, `AudioFileBoxFactory`, `SampleStorage.save`
+and `loadPeaks`. A worker that received the shared buffer holds it until its call returns.
+
+Not sample data at all: `ShadertoyRunner.audioData` (a spectrum texture), `WebCodecsVideoExporter` and
+`AudioFormats.ts:294` (the browser's own `AudioData`), `Footer.tsx:172` (shows `AudioData.count()`).
+
+### C. What the dry run turned up
+
+1. The memoized promise in `AudioFileBoxAdapter` is a hidden third reference besides loader and cache.
+2. A lease's end frees nothing by itself. Whoever still holds the `AudioData` keeps it alive, and whoever dropped
+   it without ending the lease only keeps the loader's strong reference. So the lease is the thing that can
+   leak. Simpler and leak-free: no lease, `frames(): Promise<AudioData>` on the loader, the loader holds a
+   `WeakRef` only, and a user keeps the frames by keeping the object. Open decision.
+3. `getAudioData` is used as "wait until loaded" in two places. Under `"while-used"` that would read a file
+   for nothing.
+4. `SampleLoader.data` changes meaning under `"while-used"`: loaded no longer implies `data` is filled. Every
+   `data.unwrap` after "loaded" is a crash there. The six such sites are all in the lists above.
+5. The offline renderer and every new engine read all samples from the OPFS. The read is one pass per sample
+   with a float decode. To measure on a large project before deciding the studio's setting.
+6. `sampleManager.invalidate` (sample editor overwrites a sample) already makes the engine fetch again. No change.
+7. A sample dropped into the engine while the engine's copy fails (`sample not loaded: ... does not fit`) leaves
+   no main thread copy either. Preview and editor still work, they read the OPFS.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
