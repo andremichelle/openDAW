@@ -255,12 +255,12 @@ export const installRegionContextMenu =
                     hidden: region.type !== "audio-region" || !Browser.isLocalHost()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
-                        region.file.data.ifSome(async data => {
+                        region.file.audioData.then(async data => {
                             const bpm = await TempoDetection.runOne(data.frames[0], data.sampleRate, region.label)
                             // null is cancel or failure, both of which runOne has already reported.
                             if (isNull(bpm)) {return}
                             await RuntimeNotifier.info({headline: region.label, message: `${bpm} bpm`})
-                        })
+                        }, EmptyExec)
                     }
                 }),
                 MenuItem.default({
@@ -268,7 +268,7 @@ export const installRegionContextMenu =
                     hidden: region.type !== "audio-region" || !Browser.isLocalHost()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
-                        region.file.data.ifSome(async data => {
+                        region.file.audioData.then(async data => {
                             const label = region.label.length === 0 ? "Audio" : region.label
                             const updater = RuntimeNotifier.progress({headline: "Analyzing material", message: label})
                             const {status, value, error} =
@@ -280,7 +280,7 @@ export const installRegionContextMenu =
                                 return
                             }
                             await AudioMaterialDialog.show(label, value, element)
-                        })
+                        }, EmptyExec)
                     }
                 }),
                 DebugMenus.debugBox(region.box)

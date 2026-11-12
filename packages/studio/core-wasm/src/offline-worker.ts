@@ -18,7 +18,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {AudioAnalyser, AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, dbToGain, PcmData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
@@ -158,6 +158,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                     deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
+                    fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                     fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}

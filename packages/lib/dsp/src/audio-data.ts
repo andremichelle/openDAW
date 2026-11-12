@@ -1,9 +1,12 @@
 import {Arrays, WeakRefSet} from "@opendaw/lib-std"
 
-export type AudioData = {
+export type AudioInfo = {
     sampleRate: number
     numberOfFrames: number
     numberOfChannels: number
+}
+
+export type AudioData = AudioInfo & {
     frames: ReadonlyArray<Float32Array<SharedArrayBuffer>>
 }
 

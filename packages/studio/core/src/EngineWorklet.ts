@@ -1,6 +1,7 @@
 import {
     Arrays,
     DefaultObservableValue,
+    Func,
     int,
     isDefined,
     isNull,
@@ -20,7 +21,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioData, AudioInfo, bpm, PcmData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
@@ -41,6 +42,7 @@ import {
     PERF_BUFFER_SIZE,
     PreferencesHost,
     ProcessorOptions,
+    SampleLoader,
     SignalGraph,
     TransportAnchor,
     WclapBundle,
@@ -238,6 +240,18 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 MIDIReceiver.outputClock(context, () => this.#compensationLatency.getValue() * 1000),
                 (deviceId, data, timestamp) => this.#project.sendMIDIFromEngine(deviceId, data, timestamp)))
         this.#commands.setupMIDI(port, sab)
+        const fetchSample = <T extends AudioInfo>(uuid: UUID.Bytes, fetch: Func<SampleLoader, Promise<T>>): Promise<T> => {
+            const record = (event: SampleLoadEvent): void => variant.recordSampleLoad?.(event)
+            record({type: "requested", uuid})
+            return fetch(project.sampleManager.getOrCreate(uuid)).then(data => {
+                const {numberOfFrames, numberOfChannels, sampleRate} = data
+                record({type: "delivered", uuid, numberOfFrames, numberOfChannels, sampleRate})
+                return data
+            }, (reason: unknown) => {
+                record({type: "failed", uuid})
+                return Promise.reject(reason)
+            })
+        }
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
                 error: (reason: unknown) => this.dispatchEvent(new ErrorEvent("error", {error: reason})),
@@ -248,26 +262,10 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                 },
                 ready: (): void => resolve(),
-                fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
-                    const record = (event: SampleLoadEvent): void => variant.recordSampleLoad?.(event)
-                    record({type: "requested", uuid})
-                    return new Promise((resolve, reject) => {
-                        const handler = project.sampleManager.getOrCreate(uuid)
-                        const subscription = handler.subscribe(state => {
-                            if (state.type === "error") {
-                                record({type: "failed", uuid})
-                                reject(new Error(state.reason))
-                                subscription.terminate()
-                            } else if (state.type === "loaded") {
-                                const data = handler.data.unwrap("handler.data")
-                                const {numberOfFrames, numberOfChannels, sampleRate} = data
-                                record({type: "delivered", uuid, numberOfFrames, numberOfChannels, sampleRate})
-                                resolve(data)
-                                subscription.terminate()
-                            }
-                        })
-                    })
-                },
+                fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> =>
+                    fetchSample(uuid, loader => SampleLoader.frames(loader)),
+                fetchSample: (uuid: UUID.Bytes): Promise<PcmData> =>
+                    fetchSample(uuid, loader => SampleLoader.stored(loader)),
                 fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundFont2> => {
                     return new Promise((resolve, reject) => {
                         const handler = project.soundfontManager.getOrCreate(uuid)

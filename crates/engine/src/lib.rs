@@ -4019,6 +4019,12 @@ pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count:
     unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
 }
 
+/// As `sample_set_ready`, for planes the loader wrote as 16 bit PCM (2 bytes per frame and channel).
+#[no_mangle]
+pub extern "C" fn sample_set_ready_i16(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
+    unsafe { SAMPLES.get() }.set_ready_as(handle, frame_count, channel_count, sample_rate, abi::SAMPLE_FORMAT_I16);
+}
+
 /// Resolve a soundfont handle for a device DURING render: write a `SoundfontRef` (ptr + len) to `out_ptr` and
 /// return 1 if the blob is resident (ready), else 0. Bound into each device's `env`; reads the `SOUNDFONTS`
 /// cell read-only, so it never aliases the `&mut Engine` the render path holds. Mirrors `host_resolve_sample`.

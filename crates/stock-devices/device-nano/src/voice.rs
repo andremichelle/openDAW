@@ -3,6 +3,8 @@
 //! region (start past end plays backwards) and optionally cycling a crossfaded loop range. Pure DSP over
 //! slices, heap-free and valid when zeroed (voices live in the device's zeroed state, a fixed pool).
 
+use math::Pcm;
+
 /// The device's live playback settings a voice renders against, refreshed every block.
 #[derive(Clone, Copy)]
 pub struct Playback {
@@ -138,7 +140,7 @@ impl NanoVoice {
 
     /// Render additively into the stereo chunk from the planar sample (`left` / `right`, mono passes the same
     /// slice for both). Returns `true` once finished (the region ran out unlooped, or the release elapsed).
-    pub fn process(&mut self, out_left: &mut [f32], out_right: &mut [f32], left: &[f32], right: &[f32], playback: &Playback) -> bool {
+    pub fn process<T: Pcm>(&mut self, out_left: &mut [f32], out_right: &mut [f32], left: &[T], right: &[T], playback: &Playback) -> bool {
         let num_frames = left.len();
         if num_frames < 2 {
             return true;
@@ -216,8 +218,8 @@ impl NanoVoice {
                 shaped
             };
             let env = faded * faded;
-            let mut sample_left = left[int_position] * (1.0 - frac) + left[partner] * frac;
-            let mut sample_right = right[int_position] * (1.0 - frac) + right[partner] * frac;
+            let mut sample_left = left[int_position].to_f32() * (1.0 - frac) + left[partner].to_f32() * frac;
+            let mut sample_right = right[int_position].to_f32() * (1.0 - frac) + right[partner].to_f32() * frac;
             if loop_enabled {
                 let cross = if backwards {
                     let zone_end = loop_lo + fade;
@@ -231,8 +233,8 @@ impl NanoVoice {
                     if other_int + 1 < num_frames {
                         let other_frac = (other_position - other_int as f64) as f32;
                         let mix = mix as f32;
-                        let other_left = left[other_int] * (1.0 - other_frac) + left[other_int + 1] * other_frac;
-                        let other_right = right[other_int] * (1.0 - other_frac) + right[other_int + 1] * other_frac;
+                        let other_left = left[other_int].to_f32() * (1.0 - other_frac) + left[other_int + 1].to_f32() * other_frac;
+                        let other_right = right[other_int].to_f32() * (1.0 - other_frac) + right[other_int + 1].to_f32() * other_frac;
                         sample_left = sample_left * (1.0 - mix) + other_left * mix;
                         sample_right = sample_right * (1.0 - mix) + other_right * mix;
                     }

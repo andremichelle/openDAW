@@ -5,6 +5,7 @@ import {
     WclapSaveCause, WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
+import {SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "../engine-exports"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
 import {createWasiImports, readMemoryImportLimits} from "./wasi-shim"
@@ -957,19 +958,25 @@ export class WclapBridges {
                 continue
             }
             if (isNull(resolver)) {continue}
-            const scratch = resolver.input_reserve(16)
+            const scratch = resolver.input_reserve(SAMPLE_REF_BYTES)
             if (resolver.host_resolve_sample(slot.handle, scratch) === 0) {continue} // not resident yet
-            const info = new DataView(this.#memory.buffer, scratch, 16)
+            const info = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
             const framesPtr = info.getUint32(0, true)
             const frameCount = info.getUint32(4, true)
             const channelCount = info.getUint32(8, true)
             const rate = info.getFloat32(12, true)
+            const format = info.getUint32(16, true)
             slot.delivered = loaded
             const target = this.#call(loaded, ext + ClapAbi.PluginSamples.PREPARE, loaded.plugin, key, frameCount, channelCount, rate)
             if (target === 0) {continue}
             // prepare may grow the plugin's memory: the views are taken after it
-            new Float32Array(loaded.memory.buffer, target, channelCount * frameCount)
-                .set(new Float32Array(this.#memory.buffer, framesPtr, channelCount * frameCount))
+            const planes = new Float32Array(loaded.memory.buffer, target, channelCount * frameCount)
+            if (format === SAMPLE_FORMAT_I16) {
+                const source = new Int16Array(this.#memory.buffer, framesPtr, channelCount * frameCount)
+                for (let index = 0; index < source.length; index++) {planes[index] = source[index] / 32768}
+            } else {
+                planes.set(new Float32Array(this.#memory.buffer, framesPtr, channelCount * frameCount))
+            }
             this.#call(loaded, ext + ClapAbi.PluginSamples.COMMIT, loaded.plugin, key)
         }
     }

@@ -16,6 +16,7 @@ import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
+import {SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "./engine-exports"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -85,6 +86,7 @@ class Bridge {
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
+    readonly sampleFloats = new Map<number, {handle: number, frames: Array<Float32Array>}>() // index -> float copy of 16 bit frames
     sidechains: ReadonlyArray<SidechainDecl> = []
     sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
@@ -549,22 +551,43 @@ export class ScriptBridges {
         return true
     }
 
-    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData view (no copy).
+    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData: float frames as
+    // views (no copy), 16 bit frames as a float copy kept for as long as the slot holds that handle.
     #deliverSample(bridge: Bridge, index: number, sampleHandle: number): void {
         if (bridge.proc === null) {return}
         const label = bridge.sampleLabels.get(index)
         if (label === undefined) {return}
-        if (sampleHandle < 0) {bridge.proc.samples[label] = null; return}
-        const scratch = this.#engine.input_reserve(16)
+        if (sampleHandle < 0) {
+            bridge.sampleFloats.delete(index)
+            bridge.proc.samples[label] = null
+            return
+        }
+        const scratch = this.#engine.input_reserve(SAMPLE_REF_BYTES)
         if (this.#engine.host_resolve_sample(sampleHandle, scratch) === 0) {bridge.proc.samples[label] = null; return}
-        const view = new DataView(this.#memory.buffer, scratch, 16)
+        const view = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
         const framesPtr = view.getUint32(0, true)
         const frameCount = view.getUint32(4, true)
         const channelCount = view.getUint32(8, true)
         const sampleRate = view.getFloat32(12, true)
-        const frames: Float32Array[] = []
-        for (let channel = 0; channel < channelCount; channel++) {
-            frames.push(new Float32Array(this.#memory.buffer, framesPtr + channel * frameCount * 4, frameCount))
+        const frames: Array<Float32Array> = []
+        if (view.getUint32(16, true) === SAMPLE_FORMAT_I16) {
+            const kept = bridge.sampleFloats.get(index)
+            if (kept !== undefined && kept.handle === sampleHandle) {
+                frames.push(...kept.frames)
+            } else {
+                for (let channel = 0; channel < channelCount; channel++) {
+                    const source = new Int16Array(this.#memory.buffer, framesPtr + channel * frameCount * 2, frameCount)
+                    const target = new Float32Array(frameCount)
+                    for (let frame = 0; frame < frameCount; frame++) {target[frame] = source[frame] / 32768}
+                    frames.push(target)
+                }
+                bridge.sampleFloats.set(index, {handle: sampleHandle, frames})
+            }
+        } else {
+            bridge.sampleFloats.delete(index)
+            for (let channel = 0; channel < channelCount; channel++) {
+                frames.push(new Float32Array(this.#memory.buffer, framesPtr + channel * frameCount * 4, frameCount))
+            }
         }
         bridge.proc.samples[label] = {sampleRate, numberOfFrames: frameCount, numberOfChannels: channelCount, frames}
     }

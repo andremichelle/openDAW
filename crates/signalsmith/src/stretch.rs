@@ -15,6 +15,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use crate::fft::Fft;
 use crate::approx;
+use math::Pcm;
 
 #[derive(Clone, Copy, Default)]
 struct Cplx { re: f32, im: f32 }
@@ -410,7 +411,7 @@ impl SignalsmithStretch {
     /// apart. Per band the higher-energy channel drives the horizontal phase advance and the peak
     /// lock; the other channel is rigidly offset by its *analysis-time* phase difference, so the
     /// output L/R phase difference equals the input's at every band.
-    pub fn process_stream_stereo(&mut self, left: &[f32], right: &[f32],
+    pub fn process_stream_stereo<T: Pcm>(&mut self, left: &[T], right: &[T],
                                  out_l: &mut [f32], out_r: &mut [f32],
                                  time_factor: f64, pitch: f32, resample: f64) {
         let block = self.block; let interval = self.interval as f64;
@@ -609,12 +610,12 @@ impl SignalsmithStretch {
 /// resample` converts the engine-rate window to the source rate, so the phase vocoder runs at the engine rate
 /// and the sample-rate conversion never touches the spectral pitch.
 #[inline]
-fn resample_read(input: &[f32], pos: f64) -> f32 {
+fn resample_read<T: Pcm>(input: &[T], pos: f64) -> f32 {
     if pos < 0.0 { return 0.0; }
     let i0 = pos as usize;
     let f = (pos - i0 as f64) as f32;
     let n = input.len();
-    if i0 + 1 < n { input[i0] * (1.0 - f) + input[i0 + 1] * f } else if i0 < n { input[i0] } else { 0.0 }
+    if i0 + 1 < n { input[i0].to_f32() * (1.0 - f) + input[i0 + 1].to_f32() * f } else if i0 < n { input[i0].to_f32() } else { 0.0 }
 }
 
 fn kaiser_ola_window(block: usize, interval: usize) -> Vec<f32> {

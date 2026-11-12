@@ -672,10 +672,54 @@ pub struct SampleRef {
     pub frames_ptr: u32,
     pub frame_count: u32,
     pub channel_count: u32,
-    pub sample_rate: f32
+    pub sample_rate: f32,
+    pub format: u32
+}
+
+pub const SAMPLE_FORMAT_F32: u32 = 0;
+pub const SAMPLE_FORMAT_I16: u32 = 1;
+
+/// Runs `$body` with the sample's two planes bound, once per resident format, so a generic reader is chosen
+/// where the sample is resolved and never per frame.
+#[macro_export]
+macro_rules! with_planes {
+    ($sample:expr, |$left:ident, $right:ident| $body:expr) => {
+        match $sample.view() {
+            $crate::SampleView::F32 {left: $left, right: $right} => $body,
+            $crate::SampleView::I16 {left: $left, right: $right} => $body
+        }
+    };
+}
+
+/// The two planes a reader plays, in the format they are resident in. A mono sample answers right with left.
+#[derive(Clone, Copy)]
+pub enum SampleView<'a> {
+    F32 {left: &'a [f32], right: &'a [f32]},
+    I16 {left: &'a [i16], right: &'a [i16]}
 }
 
 impl SampleRef {
+    #[inline]
+    pub fn view(&self) -> SampleView<'_> {
+        let other = if self.channel_count > 1 {1} else {0};
+        if self.format == SAMPLE_FORMAT_I16 {
+            SampleView::I16 {left: self.plane_i16(0), right: self.plane_i16(other)}
+        } else {
+            SampleView::F32 {left: self.plane(0), right: self.plane(other)}
+        }
+    }
+
+    #[inline]
+    fn plane_i16(&self, channel: u32) -> &[i16] {
+        #[cfg(target_family = "wasm")]
+        {
+            let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 2;
+            unsafe { slice::from_raw_parts(offset as *const i16, self.frame_count as usize) }
+        }
+        #[cfg(not(target_family = "wasm"))]
+        { native_samples::plane_i16(self.frames_ptr, channel, self.frame_count) }
+    }
+
     /// The PLANAR frames of `channel` (0-based) as a safe slice (`frame_count` f32 at
     /// `frames_ptr + channel * frame_count * 4`). The one `unsafe` stays here in the shim; device DSP reads
     /// frames as a slice. The slice borrows the resident sample memory, valid while the sample stays resident.
@@ -699,7 +743,7 @@ impl SampleRef {
 pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
     #[cfg(target_family = "wasm")]
     {
-        let mut out = SampleRef {frames_ptr: 0, frame_count: 0, channel_count: 0, sample_rate: 0.0};
+        let mut out = SampleRef {frames_ptr: 0, frame_count: 0, channel_count: 0, sample_rate: 0.0, format: SAMPLE_FORMAT_F32};
         if unsafe { host_resolve_sample(handle, &mut out as *mut SampleRef as u32) } != 0 {
             Some(out)
         } else {
@@ -717,6 +761,12 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
 #[cfg(not(target_family = "wasm"))]
 pub fn set_native_sample(handle: u32, planar: &'static [f32], channel_count: u32, sample_rate: f32) {
     native_samples::set(handle, planar, channel_count, sample_rate)
+}
+
+/// Native TEST SEAM: as [`set_native_sample`], the planes resident as 16 bit PCM.
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_sample_i16(handle: u32, planar: &'static [i16], channel_count: u32, sample_rate: f32) {
+    native_samples::set_i16(handle, planar, channel_count, sample_rate)
 }
 
 /// Native TEST SEAM: forget `handle`, so it resolves to `None` again (a sample removed while notes hold).
@@ -744,6 +794,7 @@ mod native_samples {
     static FRAMES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
     static CHANNELS: [AtomicU32; SLOTS] = [ZERO; SLOTS];
     static RATES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
+    static FORMATS: [AtomicU32; SLOTS] = [ZERO; SLOTS];
 
     fn slot(handle: u32) -> usize {
         assert!(handle >= 1 && handle as usize <= SLOTS, "native sample handle out of range: {handle}");
@@ -757,6 +808,18 @@ mod native_samples {
         FRAMES[index].store((planar.len() / channel_count as usize) as u32, Ordering::SeqCst);
         CHANNELS[index].store(channel_count, Ordering::SeqCst);
         RATES[index].store(sample_rate.to_bits(), Ordering::SeqCst);
+        FORMATS[index].store(super::SAMPLE_FORMAT_F32, Ordering::SeqCst);
+        PTRS[index].store(planar.as_ptr() as usize, Ordering::SeqCst);
+    }
+
+    pub fn set_i16(handle: u32, planar: &'static [i16], channel_count: u32, sample_rate: f32) {
+        assert!(channel_count >= 1, "a sample needs at least one channel");
+        assert_eq!(planar.len() % channel_count as usize, 0, "planar length must be a multiple of the channel count");
+        let index = slot(handle);
+        FRAMES[index].store((planar.len() / channel_count as usize) as u32, Ordering::SeqCst);
+        CHANNELS[index].store(channel_count, Ordering::SeqCst);
+        RATES[index].store(sample_rate.to_bits(), Ordering::SeqCst);
+        FORMATS[index].store(super::SAMPLE_FORMAT_I16, Ordering::SeqCst);
         PTRS[index].store(planar.as_ptr() as usize, Ordering::SeqCst);
     }
 
@@ -776,7 +839,8 @@ mod native_samples {
             frames_ptr: handle,
             frame_count: FRAMES[index].load(Ordering::SeqCst),
             channel_count: CHANNELS[index].load(Ordering::SeqCst),
-            sample_rate: f32::from_bits(RATES[index].load(Ordering::SeqCst))
+            sample_rate: f32::from_bits(RATES[index].load(Ordering::SeqCst)),
+            format: FORMATS[index].load(Ordering::SeqCst)
         })
     }
 
@@ -787,6 +851,15 @@ mod native_samples {
         assert!(channel < CHANNELS[index].load(Ordering::SeqCst), "channel {channel} out of range");
         let offset = base + channel as usize * frame_count as usize * core::mem::size_of::<f32>();
         unsafe { core::slice::from_raw_parts(offset as *const f32, frame_count as usize) }
+    }
+
+    pub fn plane_i16(handle: u32, channel: u32, frame_count: u32) -> &'static [i16] {
+        let index = slot(handle);
+        let base = PTRS[index].load(Ordering::SeqCst);
+        assert!(base != 0, "native sample {handle} is not registered");
+        assert!(channel < CHANNELS[index].load(Ordering::SeqCst), "channel {channel} out of range");
+        let offset = base + channel as usize * frame_count as usize * core::mem::size_of::<i16>();
+        unsafe { core::slice::from_raw_parts(offset as *const i16, frame_count as usize) }
     }
 }
 
@@ -2339,5 +2412,61 @@ mod table_tests {
         let columns = [TableColumn::target(3, 4), TableColumn::sample(2)];
         let wire = unsafe { core::slice::from_raw_parts(columns.as_ptr() as *const u16, 6) };
         assert_eq!(wire, [3, 2, 4, 2, 1, 0], "key, kind, target key, in that order");
+    }
+}
+
+#[cfg(test)]
+mod sample_view_tests {
+    use super::{resolve_sample, set_native_sample, set_native_sample_i16, SampleView, SAMPLE_FORMAT_F32, SAMPLE_FORMAT_I16};
+
+    extern crate std;
+    use std::boxed::Box;
+    use std::vec;
+
+    #[test]
+    fn a_float_sample_resolves_to_float_planes() {
+        set_native_sample(20, Box::leak(vec![0.1f32, 0.2, 0.3, 0.4].into_boxed_slice()), 2, 48_000.0);
+        let sample = resolve_sample(20).unwrap();
+        assert_eq!(sample.format, SAMPLE_FORMAT_F32);
+        let SampleView::F32 {left, right} = sample.view() else {panic!("float frames expected")};
+        assert_eq!((left, right), (&[0.1f32, 0.2][..], &[0.3f32, 0.4][..]));
+    }
+
+    #[test]
+    fn a_sixteen_bit_sample_resolves_to_its_own_planes() {
+        set_native_sample_i16(21, Box::leak(vec![1i16, -2, 3, -4, 5, -6].into_boxed_slice()), 2, 44_100.0);
+        let sample = resolve_sample(21).unwrap();
+        assert_eq!((sample.format, sample.frame_count, sample.channel_count, sample.sample_rate), (SAMPLE_FORMAT_I16, 3, 2, 44_100.0));
+        let SampleView::I16 {left, right} = sample.view() else {panic!("16 bit frames expected")};
+        assert_eq!((left, right), (&[1i16, -2, 3][..], &[-4i16, 5, -6][..]));
+    }
+
+    #[test]
+    fn a_mono_sample_answers_right_with_left() {
+        set_native_sample_i16(22, Box::leak(vec![7i16, 8].into_boxed_slice()), 1, 48_000.0);
+        let ints = resolve_sample(22).unwrap();
+        let SampleView::I16 {left, right} = ints.view() else {panic!("16 bit frames expected")};
+        assert_eq!(left, right);
+        set_native_sample(23, Box::leak(vec![0.5f32, 0.25].into_boxed_slice()), 1, 48_000.0);
+        let floats = resolve_sample(23).unwrap();
+        let SampleView::F32 {left, right} = floats.view() else {panic!("float frames expected")};
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn re_registering_a_handle_changes_its_format() {
+        set_native_sample_i16(24, Box::leak(vec![1i16].into_boxed_slice()), 1, 48_000.0);
+        set_native_sample(24, Box::leak(vec![1.0f32].into_boxed_slice()), 1, 48_000.0);
+        assert_eq!(resolve_sample(24).unwrap().format, SAMPLE_FORMAT_F32);
+    }
+
+    #[test]
+    fn with_planes_runs_the_body_for_the_resident_format() {
+        set_native_sample_i16(25, Box::leak(vec![16_384i16, -32_768].into_boxed_slice()), 1, 48_000.0);
+        set_native_sample(26, Box::leak(vec![0.5f32, -1.0].into_boxed_slice()), 1, 48_000.0);
+        fn first<T: math::Pcm>(plane: &[T]) -> [f32; 2] {[plane[0].to_f32(), plane[1].to_f32()]}
+        let ints = resolve_sample(25).unwrap();
+        let floats = resolve_sample(26).unwrap();
+        assert_eq!(crate::with_planes!(ints, |left, _right| first(left)), crate::with_planes!(floats, |left, _right| first(left)));
     }
 }

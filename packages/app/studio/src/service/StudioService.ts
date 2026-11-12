@@ -46,7 +46,7 @@ import {FooterLabel} from "@/service/FooterLabel"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
+import {ExportConfiguration, InstrumentFactories, SampleLoader} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -363,7 +363,7 @@ export class StudioService implements ProjectEnv {
                 continue
             }
             const uuid = UUID.parse(sample.uuid)
-            await Promises.tryCatch(this.sampleManager.getAudioData(uuid))
+            await Promises.tryCatch(SampleLoader.loaded(this.sampleManager.getOrCreate(uuid)))
             if (aborted) {break}
             editing.modify(() => {
                 const {trackBox, instrumentBox} = api.createInstrument(InstrumentFactories.Tape)

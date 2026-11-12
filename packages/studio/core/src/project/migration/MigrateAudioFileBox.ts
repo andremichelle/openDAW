@@ -1,5 +1,5 @@
 import {BoxGraph} from "@opendaw/lib-box"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioInfo} from "@opendaw/lib-dsp"
 import {AudioFileBox, BoxIO, TransientMarkerBox} from "@opendaw/studio-boxes"
 import {asInstanceOf} from "@opendaw/lib-std"
 
@@ -9,7 +9,7 @@ const isIntEncodedAsFloat = (v: number) =>
 export const migrateAudioFileBox = async (
     boxGraph: BoxGraph<BoxIO.TypeMap>,
     box: AudioFileBox,
-    loadAudioData: (uuid: Uint8Array) => Promise<AudioData>
+    loadAudioData: (uuid: Uint8Array) => Promise<AudioInfo>
 ): Promise<void> => {
     const {startInSeconds, endInSeconds, fileName} = box
     if (isIntEncodedAsFloat(startInSeconds.getValue()) || isIntEncodedAsFloat(endInSeconds.getValue()) || endInSeconds.getValue() === 0) {

@@ -1,5 +1,6 @@
 import {Arrays, int, panic} from "@opendaw/lib-std"
 import {AudioData} from "./audio-data"
+import {PcmData} from "./pcm-data"
 
 export namespace WavFile {
     const MAGIC_RIFF = 0x46464952
@@ -7,8 +8,16 @@ export namespace WavFile {
     const MAGIC_FMT = 0x20746d66
     const MAGIC_DATA = 0x61746164
 
-    export const decodeFloats = (buffer: ArrayBuffer): AudioData => {
-        const view = new DataView(buffer)
+    type Layout = {
+        readonly audioFormat: int
+        readonly bitsPerSample: int
+        readonly numberOfChannels: int
+        readonly sampleRate: number
+        readonly numberOfFrames: int
+        readonly dataOffset: int
+    }
+
+    const locate = (view: DataView): Layout => {
         if (view.getUint32(0, true) !== MAGIC_RIFF
             || view.getUint32(8, true) !== MAGIC_WAVE) {
             return panic("Not a RIFF/WAVE file")
@@ -40,6 +49,12 @@ export namespace WavFile {
             return panic("Invalid block alignment")
         }
         const numberOfFrames = Math.floor(dataSize / blockAlign)
+        return {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset}
+    }
+
+    export const decodeFloats = (buffer: ArrayBuffer): AudioData => {
+        const view = new DataView(buffer)
+        const {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset} = locate(view)
         const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
         if (audioFormat === 3 && bitsPerSample === 32) {
             const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
@@ -68,6 +83,49 @@ export namespace WavFile {
             return panic(`Unsupported WAV format: ${audioFormat}, ${bitsPerSample}-bit`)
         }
         return audioData
+    }
+
+    // 16 bit PCM stays 16 bit, everything else is decoded to floats
+    export const decodePcm = (buffer: ArrayBuffer): PcmData => {
+        const view = new DataView(buffer)
+        const {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset} = locate(view)
+        if (audioFormat !== 1 || bitsPerSample !== 16) {return {format: "float32", ...decodeFloats(buffer)}}
+        const frames = PcmData.createInt16(numberOfFrames, numberOfChannels)
+        for (let frame = 0, offset = dataOffset; frame < numberOfFrames; frame++) {
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                frames[channel][frame] = view.getInt16(offset, true)
+                offset += 2
+            }
+        }
+        return {format: "int16", sampleRate, numberOfFrames, numberOfChannels, frames}
+    }
+
+    // 16 bit frames as 16 bit PCM with nothing rounded, float frames as `encodeFloats` writes them
+    export const encodePcm = (pcm: PcmData): ArrayBuffer => {
+        if (pcm.format === "float32") {return encodeFloats(pcm)}
+        const {sampleRate, numberOfFrames, numberOfChannels, frames} = pcm
+        const dataSize = numberOfFrames * numberOfChannels * 2
+        const view = new DataView(new ArrayBuffer(44 + dataSize))
+        view.setUint32(0, MAGIC_RIFF, true)
+        view.setUint32(4, 36 + dataSize, true)
+        view.setUint32(8, MAGIC_WAVE, true)
+        view.setUint32(12, MAGIC_FMT, true)
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
+        view.setUint16(22, numberOfChannels, true)
+        view.setUint32(24, sampleRate, true)
+        view.setUint32(28, sampleRate * numberOfChannels * 2, true)
+        view.setUint16(32, numberOfChannels * 2, true)
+        view.setUint16(34, 16, true)
+        view.setUint32(36, MAGIC_DATA, true)
+        view.setUint32(40, dataSize, true)
+        for (let frame = 0, offset = 44; frame < numberOfFrames; frame++) {
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                view.setInt16(offset, frames[channel][frame], true)
+                offset += 2
+            }
+        }
+        return view.buffer as ArrayBuffer
     }
 
     type AudioBufferLike = {

@@ -17,6 +17,8 @@
 //!   indahouse "sounds very different after the first kick" bug: ~7x spikes pumping the master maximizer);
 //! - a zero-length window (`sign == 0`) ends the voice rather than leaving a stuck read head.
 
+use math::Pcm;
+
 const GATE_OFF: i32 = 0;
 const GATE_ON: i32 = 1;
 const GATE_LOOP: i32 = 2;
@@ -35,9 +37,9 @@ fn sign(value: f64) -> f32 {
 /// Linear interpolation of a planar buffer at a fractional position. The neighbour past the end reads 0.0
 /// (TS `inp[i + 1] ?? 0`); an out-of-range base index reads 0.0 too (defensive, the gate logic keeps the base
 /// in range before the voice ends).
-fn sample_at(buffer: &[f32], index: usize, frac: f32) -> f32 {
-    let here = buffer.get(index).copied().unwrap_or(0.0);
-    let next = buffer.get(index + 1).copied().unwrap_or(0.0);
+fn sample_at<T: Pcm>(buffer: &[T], index: usize, frac: f32) -> f32 {
+    let here = buffer.get(index).map_or(0.0, |value| value.to_f32());
+    let next = buffer.get(index + 1).map_or(0.0, |value| value.to_f32());
     here * (1.0 - frac) + next * frac
 }
 
@@ -149,7 +151,7 @@ impl SlotVoice {
     /// `true` once finished, so the device frees the slot. Mirrors TS `processAdd`, with the parity decisions
     /// noted in the module docs.
     #[allow(clippy::too_many_arguments)]
-    pub fn process(&mut self, out_left: &mut [f32], out_right: &mut [f32], left: &[f32], right: &[f32],
+    pub fn process<T: Pcm>(&mut self, out_left: &mut [f32], out_right: &mut [f32], left: &[T], right: &[T],
                    num_frames: usize, src_rate: f32, engine_rate: f32, pitch_cents: f32) -> bool {
         let pitch_factor = libm::exp2f(pitch_cents / 1200.0) as f64;
         let rate_ratio = (src_rate as f64 / engine_rate as f64) * self.sign as f64 * pitch_factor;

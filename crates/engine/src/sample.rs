@@ -22,7 +22,8 @@ enum State {
 
 struct Slot {
     uuid: Uuid,
-    storage: Vec<u8>, // planar f32 PCM; empty until `allocate`
+    storage: Vec<u8>, // planar PCM in `format`; empty until `allocate`
+    format: u32,
     frame_count: u32,
     channel_count: u32,
     sample_rate: f32,
@@ -82,7 +83,7 @@ impl SampleResource {
         if let Some(handle) = self.handle_of(uuid) {
             return handle;
         }
-        let slot = Slot {uuid, storage: Vec::new(), frame_count: 0, channel_count: 0, sample_rate: 0.0, state: State::Requested};
+        let slot = Slot {uuid, storage: Vec::new(), format: abi::SAMPLE_FORMAT_F32, frame_count: 0, channel_count: 0, sample_rate: 0.0, state: State::Requested};
         let index = match self.free_indices.pop() {
             Some(index) => {
                 self.entries[index as usize].slot = Some(slot);
@@ -158,12 +159,19 @@ impl SampleResource {
     /// Mark the slot ready once the host has written its frames: `channel_count` planes of `frame_count`
     /// f32 each, at `sample_rate`.
     pub fn set_ready(&mut self, handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
+        self.set_ready_as(handle, frame_count, channel_count, sample_rate, abi::SAMPLE_FORMAT_F32);
+    }
+
+    /// As [`Self::set_ready`], the planes written in `format` (`abi::SAMPLE_FORMAT_*`).
+    pub fn set_ready_as(&mut self, handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32, format: u32) {
         if let Some(slot) = self.slot_mut(handle) {
             if slot.state != State::Allocated {
                 return;
             }
-            let bytes = frame_count as usize * channel_count as usize * 4;
+            let width = if format == abi::SAMPLE_FORMAT_I16 {2} else {4};
+            let bytes = frame_count as usize * channel_count as usize * width;
             assert!(bytes <= slot.storage.len(), "sample frames ({bytes} bytes) exceed the allocation ({} bytes)", slot.storage.len());
+            slot.format = format;
             slot.frame_count = frame_count;
             slot.channel_count = channel_count;
             slot.sample_rate = sample_rate;
@@ -188,7 +196,8 @@ impl SampleResource {
             frames_ptr: slot.storage.as_ptr() as u32,
             frame_count: slot.frame_count,
             channel_count: slot.channel_count,
-            sample_rate: slot.sample_rate
+            sample_rate: slot.sample_rate,
+            format: slot.format
         })
     }
 
@@ -245,6 +254,48 @@ mod tests {
         let sample = resource.resolve(handle).expect("ready resolves");
         assert_eq!(sample.frames_ptr, pointer, "resolves to the allocated storage");
         assert_eq!((sample.frame_count, sample.channel_count, sample.sample_rate), (100, 2, 48_000.0));
+    }
+
+    #[test]
+    fn a_float_sample_resolves_as_float() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(30));
+        resource.allocate(handle, 100 * 4);
+        resource.set_ready(handle, 100, 1, 48_000.0);
+        assert_eq!(resource.resolve(handle).expect("ready resolves").format, abi::SAMPLE_FORMAT_F32);
+    }
+
+    #[test]
+    fn a_sixteen_bit_sample_takes_two_bytes_per_value_and_resolves_as_such() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(31));
+        let pointer = resource.allocate(handle, 2 * 100 * 2);
+        resource.set_ready_as(handle, 100, 2, 44_100.0, abi::SAMPLE_FORMAT_I16);
+        let sample = resource.resolve(handle).expect("ready resolves");
+        assert_eq!(sample.format, abi::SAMPLE_FORMAT_I16);
+        assert_eq!((sample.frames_ptr, sample.frame_count, sample.channel_count, sample.sample_rate), (pointer, 100, 2, 44_100.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "exceed the allocation")]
+    fn float_frames_do_not_fit_an_allocation_sized_for_sixteen_bit() {
+        let mut resource = SampleResource::new();
+        let handle = resource.request(uuid(32));
+        resource.allocate(handle, 100 * 2);
+        resource.set_ready(handle, 100, 1, 48_000.0);
+    }
+
+    #[test]
+    fn a_recycled_slot_forgets_the_format_of_its_last_sample() {
+        let mut resource = SampleResource::new();
+        let first = resource.request(uuid(33));
+        resource.allocate(first, 10 * 2);
+        resource.set_ready_as(first, 10, 1, 48_000.0, abi::SAMPLE_FORMAT_I16);
+        resource.free(uuid(33));
+        let second = resource.request(uuid(34));
+        resource.allocate(second, 10 * 4);
+        resource.set_ready(second, 10, 1, 48_000.0);
+        assert_eq!(resource.resolve(second).expect("ready resolves").format, abi::SAMPLE_FORMAT_F32);
     }
 
     #[test]

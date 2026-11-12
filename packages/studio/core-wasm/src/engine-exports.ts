@@ -5,6 +5,10 @@ import {EngineNotice, SignalGraph, SignalGraphEdge, SignalGraphNode} from "@open
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
 
+// WASM CONTRACT: `abi::SampleRef` (frames_ptr, frame_count, channel_count, sample_rate, format) and its formats.
+export const SAMPLE_REF_BYTES = 20
+export const SAMPLE_FORMAT_I16 = 1
+
 // WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
 export enum FieldKind {Int = 0, Float = 1, Bool = 2}
 
@@ -188,6 +192,7 @@ export type EngineExports = {
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
+    sample_set_ready_i16: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
     // Recording/loop/note preferences (TS settings.recording.allowTakes, settings.playback.pauseOnLoopDisabled,
     // settings.playback.truncateNotesAtRegionEnd): the loop-wrap gate, pause-at-loop-end, and live note
     // truncation the sequencers read per block.

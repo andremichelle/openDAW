@@ -2,6 +2,7 @@
 // the offline render worker. Links the engine + device side-modules (with the script/NAM bridges) and
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
 import {isDefined, Nullable, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {PcmData} from "@opendaw/lib-dsp"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {EngineToClient} from "@opendaw/studio-adapters"
 import {EngineExports, readPanicMessage} from "./engine-exports"
@@ -90,9 +91,12 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         const handle = engine.sample_take_request(outPtr)
         if (handle < 0) {break}
         const uuid = new Uint8Array(memory.buffer, outPtr, 16).slice() as UUID.Bytes
-        track(engineToClient.fetchAudio(uuid).then(data => {
-            const {numberOfFrames, numberOfChannels, sampleRate: dataRate, frames} = data
-            const bytesPerChannel = numberOfFrames * Float32Array.BYTES_PER_ELEMENT
+        const fetched: Promise<PcmData> = isDefined(engineToClient.fetchSample)
+            ? engineToClient.fetchSample(uuid)
+            : engineToClient.fetchAudio(uuid).then(audio => ({format: "float32", ...audio}))
+        track(fetched.then(data => {
+            const {numberOfFrames, numberOfChannels, sampleRate: dataRate} = data
+            const bytesPerChannel = numberOfFrames * (data.format === "int16" ? Int16Array.BYTES_PER_ELEMENT : Float32Array.BYTES_PER_ELEMENT)
             const byteLength = numberOfChannels * bytesPerChannel
             const pointer = byteLength <= 0xFFFFFFFF ? engine.sample_allocate(handle, byteLength) : 0
             // A dead handle (its slot was freed + generation-bumped between the request and this async
@@ -104,9 +108,17 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
                 engineToClient.log(`sample not loaded: removed or does not fit into the engine memory (${byteLength} bytes)`)
                 return
             }
+            if (data.format === "int16") {
+                for (let channel = 0; channel < numberOfChannels; channel++) {
+                    new Int16Array(memory.buffer, pointer + channel * bytesPerChannel, numberOfFrames)
+                        .set(data.frames[channel])
+                }
+                engine.sample_set_ready_i16(handle, numberOfFrames, numberOfChannels, dataRate)
+                return
+            }
             for (let channel = 0; channel < numberOfChannels; channel++) {
                 new Float32Array(memory.buffer, pointer + channel * bytesPerChannel, numberOfFrames)
-                    .set(frames[channel])
+                    .set(data.frames[channel])
             }
             engine.sample_set_ready(handle, numberOfFrames, numberOfChannels, dataRate)
         }, (reason: unknown) => {

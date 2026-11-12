@@ -12,7 +12,7 @@ import {
     TimeSpan,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, PcmData, ppqn} from "@opendaw/lib-dsp"
 import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Communicator, Messenger, Promises, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
@@ -27,7 +27,8 @@ import {
     NoteSignal,
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
-    OfflineEngineRenderConfig
+    OfflineEngineRenderConfig,
+    SampleLoader
 , ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
@@ -93,18 +94,8 @@ export class OfflineEngineRenderer {
             error: (reason: unknown) => console.error("OFFLINE-ENGINE", reason),
             notice: (notice: EngineNotice): void => console.warn("OFFLINE-ENGINE", notice),
             ready: (): void => {},
-            fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => new Promise((resolve, reject) => {
-                const handler = source.sampleManager.getOrCreate(uuid)
-                const subscription = handler.subscribe(state => {
-                    if (state.type === "error") {
-                        reject(new Error(state.reason))
-                        subscription.terminate()
-                    } else if (state.type === "loaded") {
-                        resolve(handler.data.unwrap("handler.data"))
-                        subscription.terminate()
-                    }
-                })
-            }),
+            fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => SampleLoader.frames(source.sampleManager.getOrCreate(uuid)),
+            fetchSample: (uuid: UUID.Bytes): Promise<PcmData> => SampleLoader.stored(source.sampleManager.getOrCreate(uuid)),
             fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundFont2> => new Promise((resolve, reject) => {
                 const handler = source.soundfontManager.getOrCreate(uuid)
                 const subscription = handler.subscribe(state => {

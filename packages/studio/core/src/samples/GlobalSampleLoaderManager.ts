@@ -1,8 +1,8 @@
-import {ByteArrayInput, int, Progress, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, int, Option, Progress, SortedSet, Terminable, UUID} from "@opendaw/lib-std"
 import {DefaultSampleLoader} from "./DefaultSampleLoader"
 import {SampleProvider} from "./SampleProvider"
-import {SampleLoader, SampleLoaderManager, SampleMetaData} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+import {SampleLoader, SampleLoaderManager, SampleMetaData, SampleRetention} from "@opendaw/studio-adapters"
+import {AudioData, AudioInfo} from "@opendaw/lib-dsp"
 import {SampleStorage} from "./SampleStorage"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Workers} from "../Workers"
@@ -10,7 +10,9 @@ import {Promises} from "@opendaw/lib-runtime"
 
 type CachedSample = {
     uuid: UUID.Bytes
-    data: AudioData
+    // absent where frames are only kept while they are used
+    data: Option<AudioData>
+    info: AudioInfo
     peaks: Peaks
     meta: SampleMetaData
 }
@@ -25,15 +27,21 @@ type PendingLoad = {
     promise: Promise<void>
 }
 
+export namespace GlobalSampleLoaderManager {
+    export type Options = { readonly retain?: SampleRetention }
+}
+
 export class GlobalSampleLoaderManager implements SampleLoaderManager, SampleProvider {
     readonly #provider: SampleProvider
+    readonly #retain: SampleRetention
     readonly #loaders: SortedSet<UUID.Bytes, SampleLoader>
     readonly #refCounts: SortedSet<UUID.Bytes, RefCount>
     readonly #cache: SortedSet<UUID.Bytes, CachedSample>
     readonly #pending: SortedSet<UUID.Bytes, PendingLoad>
 
-    constructor(provider: SampleProvider) {
+    constructor(provider: SampleProvider, options?: GlobalSampleLoaderManager.Options) {
         this.#provider = provider
+        this.#retain = options?.retain ?? "always"
         this.#loaders = UUID.newSet(({uuid}) => uuid)
         this.#refCounts = UUID.newSet(({uuid}) => uuid)
         this.#cache = UUID.newSet(({uuid}) => uuid)
@@ -91,58 +99,55 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
 
     getOrCreate(uuid: UUID.Bytes): SampleLoader {
         return this.#loaders.getOrCreate(uuid, uuid => {
-            const loader = new DefaultSampleLoader(uuid)
+            const loader = new DefaultSampleLoader(uuid, this.#retain)
             this.#load(loader)
             return loader
         })
     }
 
-    async getAudioData(uuid: UUID.Bytes): Promise<AudioData> {
-        const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
-        const loader = this.getOrCreate(uuid)
-        let subscription: Subscription
-        subscription = loader.subscribe(state => {
-            if (state.type === "error") {
-                queueMicrotask(() => subscription.terminate())
-                reject(new Error(state.reason))
-            } else if (loader.data.nonEmpty()) {
-                queueMicrotask(() => subscription.terminate())
-                resolve(loader.data.unwrap())
-            }
-        })
-        return promise
-    }
+    get retain(): SampleRetention {return this.#retain}
+
+    async getAudioData(uuid: UUID.Bytes): Promise<AudioData> {return SampleLoader.frames(this.getOrCreate(uuid))}
 
     #load(loader: DefaultSampleLoader): void {
         const {uuid} = loader
         const cached = this.#cache.opt(uuid)
         if (cached.nonEmpty()) {
-            const {data, peaks, meta} = cached.unwrap()
-            loader.setLoaded(data, peaks, meta)
+            this.#apply(loader, cached.unwrap())
             return
         }
         const pending = this.#pending.opt(uuid)
         if (pending.nonEmpty()) {
             pending.unwrap().promise.then(() => {
-                const cached = this.#cache.opt(uuid)
-                if (cached.nonEmpty()) {
-                    const {data, peaks, meta} = cached.unwrap()
-                    loader.setLoaded(data, peaks, meta)
-                }
+                this.#cache.opt(uuid).ifSome(cached => this.#apply(loader, cached))
             })
             return
         }
-        const promise = SampleStorage.get().load(uuid).then(
-            ([data, peaks, meta]) => {
-                this.#cache.add({uuid, data, peaks, meta})
+        const fetch = (): Promise<void> => this.#fetchFromApi(loader)
+        const stored: Promise<void> = this.#retain === "always"
+            ? SampleStorage.get().load(uuid).then(([data, peaks, meta]) => {
+                const {sampleRate, numberOfFrames, numberOfChannels} = data
+                this.#cache.add({uuid, data: Option.wrap(data), info: {sampleRate, numberOfFrames, numberOfChannels}, peaks, meta})
                 loader.setLoaded(data, peaks, meta)
-            },
-            () => this.#fetchFromApi(loader)
-        ).catch((error: unknown) => {
+            }, fetch)
+            : SampleStorage.get().loadStored(uuid).then(([pcm, peaks, meta]) => {
+                const {sampleRate, numberOfFrames, numberOfChannels} = pcm
+                const info: AudioInfo = {sampleRate, numberOfFrames, numberOfChannels}
+                this.#cache.add({uuid, data: Option.None, info, peaks, meta})
+                loader.setStored(info, peaks, meta, Option.wrap(pcm))
+            }, fetch)
+        const promise = stored.catch((error: unknown) => {
             console.warn("Unexpected error loading sample:", error)
             loader.setError(error instanceof Error ? error.message : String(error))
         }).finally(() => this.#pending.removeByKey(uuid))
         this.#pending.add({uuid, promise})
+    }
+
+    #apply(loader: DefaultSampleLoader, {data, info, peaks, meta}: CachedSample): void {
+        data.match({
+            some: audio => loader.setLoaded(audio, peaks, meta),
+            none: () => loader.setStored(info, peaks, meta, Option.None)
+        })
     }
 
     async #fetchFromApi(loader: DefaultSampleLoader): Promise<void> {
@@ -162,11 +167,18 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         const peaksBuffer = await Workers.Peak.generateAsync(
             peakProgress, shifts, audio.frames, audio.numberOfFrames, audio.numberOfChannels
         ) as ArrayBuffer
-        const storeResult = await Promises.tryCatch(SampleStorage.get().save({uuid, audio, peaks: peaksBuffer, meta}))
+        const storeResult = await Promises.tryCatch(SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta}))
         if (storeResult.status === "resolved") {
             const peaks = SamplePeaks.from(new ByteArrayInput(peaksBuffer))
-            this.#cache.add({uuid, data: audio, peaks, meta})
-            loader.setLoaded(audio, peaks, meta)
+            const {sampleRate, numberOfFrames, numberOfChannels} = audio
+            const info: AudioInfo = {sampleRate, numberOfFrames, numberOfChannels}
+            if (this.#retain === "always") {
+                this.#cache.add({uuid, data: Option.wrap(audio), info, peaks, meta})
+                loader.setLoaded(audio, peaks, meta)
+            } else {
+                this.#cache.add({uuid, data: Option.None, info, peaks, meta})
+                loader.setStored(info, peaks, meta, Option.wrap(storeResult.value))
+            }
         } else {
             const error = storeResult.error
             console.warn(error)

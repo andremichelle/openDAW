@@ -6,7 +6,7 @@ import {
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Files, Html, Keyboard} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioData, MidiKeys} from "@opendaw/lib-dsp"
+import {AudioInfo, MidiKeys} from "@opendaw/lib-dsp"
 import {Int32Field} from "@opendaw/lib-box"
 import {SamplerZoneBox} from "@opendaw/studio-boxes"
 import {
@@ -109,7 +109,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         sample: {
             uuid: UUID.toString(file.uuid), name: file.box.fileName.getValue(), bpm: 0,
             duration: file.box.endInSeconds.getValue(),
-            sample_rate: file.getOrCreateLoader().data.mapOr(data => data.sampleRate, 0), origin: "import"
+            sample_rate: file.info.mapOr(info => info.sampleRate, 0), origin: "import"
         }
     }), null)
     let zonesSignature = ""
@@ -138,8 +138,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const hasModifier = (event: MouseEvent): boolean => event.shiftKey || event.metaKey || event.ctrlKey
     const boxes = (): ReadonlyArray<SamplerZoneBox> => selection.map(zone => zone.box)
-    const framesOf = (zone: Zone): Optional<AudioData> =>
-        zone.file().flatMap(file => file.data).unwrapOrUndefined()
+    const framesOf = (zone: Zone): Optional<AudioInfo> =>
+        zone.file().flatMap(file => file.info).unwrapOrUndefined()
     const map: HTMLCanvasElement = <canvas/>
     const keys: HTMLCanvasElement = <canvas/>
     const waveform: HTMLCanvasElement = <canvas/>

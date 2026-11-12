@@ -119,7 +119,7 @@ export const BusySlot = ({
     let fileHandlerSubscription: Terminable = Terminable.Empty
     const instrumentLifecycle = lifecycle.own(new Terminator())
     const audioEffectsField = pad.box.audioEffects.pointerHub
-    const paintPlayheads = (array: Float32Array) => nano.flatMap(device => device.file()).flatMap(file => file.data).match({
+    const paintPlayheads = (array: Float32Array) => nano.flatMap(device => device.file()).flatMap(file => file.info).match({
         none: () => {
             playbackCanvas.width = playbackCanvas.clientWidth
             playbackCanvas.height = playbackCanvas.clientHeight

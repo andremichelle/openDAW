@@ -1,4 +1,5 @@
 import {
+    EmptyExec,
     int,
     Notifier,
     Observer,
@@ -11,10 +12,11 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData, AudioInfo} from "@opendaw/lib-dsp"
 import {Peaks} from "@opendaw/lib-fusion"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {
+    AudioLease,
     mergeChunkPlanes,
     RecordingProcessorChannel,
     RecordingProcessorToClient,
@@ -102,10 +104,19 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     get firstQuantumTime(): Option<number> {return this.#firstQuantumTime}
     get meta(): Option<SampleMetaData> {return this.#meta}
     get data(): Option<AudioData> {return this.#data}
+    get info(): Option<AudioInfo> {
+        return this.#data.map(({sampleRate, numberOfFrames, numberOfChannels}) => ({sampleRate, numberOfFrames, numberOfChannels}))
+    }
     get peaks(): Option<Peaks> {return this.#peaks.isEmpty() ? Option.wrap(this.#peakWriter) : this.#peaks}
     get state(): SampleLoaderState {return this.#state}
 
     invalidate(): void {}
+
+    // a recording keeps its frames for as long as it lives, storing them may have failed
+    async acquire(): Promise<AudioLease> {
+        await SampleLoader.loaded(this)
+        return {data: this.#data.unwrap("Recording has no data"), terminate: EmptyExec}
+    }
 
     subscribe(observer: Observer<SampleLoaderState>): Subscription {
         if (this.#state.type === "loaded") {
