@@ -349,6 +349,112 @@ manager. So the separation exists already:
 3. Point 4 above only concerns somebody who implements `SampleLoader` or `SampleLoaderManager` by hand. Nobody
    has to.
 
+## Findings of the three deep dives (2026-11-12)
+
+### Consumer: opendaw-test (SDK 0.0.184, fresh clone)
+
+1. Supplies samples through a `SampleProvider` object and `new GlobalSampleLoaderManager(provider)`. Implements
+   no sample interface, never reads a stored file. So: the manager's setting is an OPTIONAL constructor argument.
+2. Six sites read `loader.data.frames` right after "loaded", all on a finished `RecordingWorklet`. Under
+   `"always"` a recording keeps `data` filled for as long as it lives.
+3. Its export audit hashes renders over 308 rows and expects "identical". Holds, because only exact samples
+   become 16 bit and a 16 bit sample plays bit-identically.
+4. Its pages delete `samples/v2` on page load. Under the SDK defaults nothing may depend on reading a sample back
+   from storage. A failed read back falls back to the held floats.
+5. No PR needed. Their routine SDK upgrade PR refreshes docs that quote `SampleStorage.save` and `fetchAudio`.
+
+### Storage and import
+
+1. A sample's uuid is a hash of the bytes handed to `importFile` (or given), never of `audio.wav`. Changing the
+   stored format changes no uuid. Callers must keep their pre-encoding.
+2. `SampleStorage.save` is the one decision point: import, cloud download, provider fetch (stock, p2p).
+3. SF2 import already hands an exact 16 bit WAV to `importFile`, it only becomes float in `save`. No Sampler
+   change needed.
+4. `WavFile.encodeInts16` scales by 32767 and alters every value above -6 dB. Not usable. A new exact writer
+   (`* 32768`, no rounding, no clamp) is needed, the old function stays byte for byte.
+5. `-0.0` passes a naive exactness test and returns as `+0.0`. DECIDED: a sample holding `-0.0` is not exact.
+6. Every reader of `audio.wav` in `main` decodes by header (`decodeFloats`, 16 bit since 2026-01) or copies raw
+   bytes. Bundles, shared folder, cloud backup and live rooms work both ways between old and new builds.
+   8 bit and WAVE_FORMAT_EXTENSIBLE would break every current build. DECIDED: 8 bit is dropped. The header is
+   always canonical (tag 1, 44 bytes).
+7. No format field in `meta.json`. The WAV header is the single truth.
+8. `OpfsWorker.write` truncates in place. The conversion page needs a safe write: temp file, verify, replace.
+9. Raw copies from old builds (bundles, shared folder) bring float files back. Conversion must be repeatable.
+10. DECIDED: writing 16 bit is a setting the studio switches on. The SDK default keeps writing float.
+
+### Engine
+
+1. `SampleRef` (16 bytes, `repr(C)`) has three literals. Two JS bridges read it through a 16 byte scratch:
+   `script-bridge.ts:553` (Werkstatt, Apparat `// @sample`, zero-copy float views) and
+   `wclap/wclap-bridge.ts:944` (copies planes into the plugin). Both must follow a grown struct in one commit.
+2. Soundfont does not use `SampleRef` (own blob, f32). Out of scope. Frozen audio and click sounds too.
+3. The interpolations are not one formula: region player and Playfield are the same text, Nano, Soundfont and
+   Signalsmith differ at the last frame, granular and Convolver use `a + t * (b - a)`, Sampler is cubic. A shared
+   `linear()` would change bits. So the plan's `SampleView.linear/cubic` is dropped.
+4. DECIDED design: the format is matched once where a reader resolves its sample, the readers become generic
+   over the frame type (`trait Pcm { fn to_f32(self) -> f32 }` for `f32` and `i16`). For `f32` the code is what
+   it is today, expression for expression. Existing tests keep compiling unedited.
+5. `value as f32 * (1.0 / 32768.0)` equals `int16 / 32768` in JS for all 65536 values (checked).
+6. `sample_allocate` already takes bytes. A second export `sample_set_ready_i16` instead of a changed signature.
+
+## Final design (2026-11-12)
+
+### Rust
+
+1. `crates/math`: `trait Pcm: Copy { fn to_f32(self) -> f32 }`, `impl` for `f32` (identity) and `i16`.
+2. `crates/abi`: `SAMPLE_FORMAT_F32 = 0`, `SAMPLE_FORMAT_I16 = 1`, `SampleRef.format: u32` appended (20 bytes),
+   `enum SampleView<'a> { F32 {left, right}, I16 {left, right} }`, `SampleRef::view()` (mono answers right with
+   left), `set_native_sample_i16`. `plane()` stays for floats.
+3. `crates/engine/src/sample.rs`: `Slot.format`, `set_ready(…, format)`. Export `sample_set_ready_i16`.
+4. Generic readers: region player (`render_region`, `render_one_tail`, `interpolate`, the Signalsmith calls),
+   `time_stretch.rs` (`Source<T>`, `read_interp`), `signalsmith` (`process_stream_stereo`, `resample_read`),
+   `dsp::convolution` (`begin_load`, `load_step`, `read_resampled`), Sampler, Nano, Playfield sample voices.
+5. Proof: step A (floats only) by the existing suites unedited. Step B by rendering the same content as `f32`
+   and as `i16` through every reader and comparing `to_bits()`.
+
+### Host (`core-wasm`)
+
+1. `boot.ts` `drainResourceRequests`: asks `fetchSample(uuid)` (new, next to `fetchAudio`), writes `Int16Array`
+   planes and calls `sample_set_ready_i16`, or floats as today.
+2. `script-bridge.ts`: 20 byte scratch. A 16 bit sample is handed to scripts as a float copy, cached per handle.
+3. `wclap-bridge.ts`: 20 byte scratch, converts while copying.
+
+### TypeScript
+
+1. `lib-dsp`: `AudioInfo`, `AudioData = AudioInfo & {frames}`. `PcmData = AudioInfo & ({format: "float32", frames:
+   Float32Array[]} | {format: "int16", frames: Int16Array[]})` with `PcmData.exact16(audio)` (test),
+   `PcmData.smallest(audio)`, `PcmData.floats(pcm)`, `PcmData.measure(audio): {exact16, peak}`.
+   `WavFile.encodePcm(pcm)`, `WavFile.decodePcm(buffer)`. Existing `WavFile` functions untouched.
+2. `SampleStorage`: setting `format: "float32" | "smallest"` (default `"float32"`). `save` encodes by it.
+   `load` unchanged. `loadPcm(uuid)` reads `audio.wav` only and returns `PcmData` without inflating 16 bit.
+3. `SampleLoader`: `info`, `acquire()`, `use()`, optional `pcm?()`. `DefaultSampleLoader` and `RecordingWorklet`
+   implement them.
+4. `GlobalSampleLoaderManager(provider, options?)`: `{retain: "always" | "while-used"}`, default `"always"`.
+5. Protocol `EngineToClient.fetchSample(uuid): Promise<PcmData>` next to `fetchAudio`. `EngineWorklet` and
+   `OfflineEngineRenderer` answer it with `loader.pcm?.()` or the loader's floats.
+6. `DefaultSampleLoader.pcm()`: reads `SampleStorage.loadPcm`, on failure the held or acquired floats.
+7. The studio (`boot.ts`) switches on `"smallest"` and `"while-used"`.
+8. All readers move as listed in the dry run (14 to `use`/`acquire`, 4 to a state wait or `info`, 10 to `info`).
+   `AudioFileBoxAdapter` no longer memoizes the data.
+
+### Conversion page (`/storage/samples`, sibling of `/storage`)
+
+1. A one-off worker scans every stored sample: format from the header, `exact16`, peak.
+2. Classes: already 16 bit. Exact (converts without loss). Below 0 dB but not exact (converts by rounding, shown
+   apart, not preselected). Up to 0.1 dB over (converts by scaling to 0 dB, then rounding). Above: stays float.
+3. Convert: write `audio.wav.tmp`, read it back, compare against the expected floats, replace, invalidate the
+   loader. Repeatable, since old builds bring float files back.
+
+### Steps
+
+1. S1 Rust generic readers, floats only. All existing tests unedited and green.
+2. S2 Rust and host 16 bit, bit-equality tests per reader, bridges.
+3. S3 `lib-dsp` types and codec with tests.
+4. S4 Storage setting, `loadPcm`, studio switch, SF2 lands as 16 bit.
+5. S5 Loader members, manager option, protocol, all readers.
+6. S6 Conversion page.
+7. S7 Review and browser rounds until clean.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
