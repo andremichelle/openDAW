@@ -73,6 +73,17 @@ describe("StorageReport", () => {
         expect(StorageReport.sizeOf([])).toBe(0)
     })
 
+    it("lists the assets by kind, then by name", () => {
+        const assets: ReadonlyArray<StorageScan.Asset> = [
+            {...asset("w", []), kind: "wclap", name: "Alpha", size: 99},
+            {...asset("s1", []), name: "snare", size: 5},
+            {...asset("f", []), kind: "soundfont", name: "Piano", size: 1},
+            {...asset("s2", []), name: "Kick", size: 50},
+            {...asset("s3", []), name: "clap", size: 500}
+        ]
+        expect(StorageReport.assetsOf({...report, assets}).map(({id}) => id)).toEqual(["s3", "s2", "s1", "f", "w"])
+    })
+
     it("never lists an asset the open project uses as unused", () => {
         expect(StorageReport.unusedOf(report).map(({id}) => id)).toEqual(["b"])
         expect(StorageReport.unusedOf(StorageReport.withOpenProject(report, "p2", [{kind: "sample", id: "b"}]))).toEqual([])

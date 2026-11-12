@@ -59,7 +59,10 @@ export namespace StorageReport {
 
     export const AssetKinds: ReadonlyArray<StorageScan.AssetKind> = ["sample", "soundfont", "wclap"]
 
-    export const sizeOf = (entries: ReadonlyArray<{ size: number }>): number =>
+    export const assetsOf = (report: StorageScan.Report): ReadonlyArray<StorageScan.Asset> => report.assets
+        .toSorted((a, b) => AssetKinds.indexOf(a.kind) - AssetKinds.indexOf(b.kind) || a.name.localeCompare(b.name))
+
+    export const sizeOf =(entries: ReadonlyArray<{ size: number }>): number =>
         entries.reduce((sum, {size}) => sum + size, 0)
 
     export const unusedOf = (report: StorageScan.Report): ReadonlyArray<StorageScan.Asset> =>

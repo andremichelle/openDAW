@@ -150,7 +150,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         if (current === "assets") {
             list.className = "list assets"
             list.append(<h4>Name</h4>, <h4>Kind</h4>, <h4>Size</h4>, <h4>Used by</h4>, <h4/>)
-            report.assets.toSorted((a, b) => b.size - a.size).forEach(asset => list.append(
+            StorageReport.assetsOf(report).forEach(asset => list.append(
                 <div className="name" title={asset.id}>{preview(asset)}<span>{asset.name}</span></div>,
                 <div className="kind">{KindLabels[asset.kind]}</div>,
                 <div className="size">{Bytes.toString(asset.size)}</div>,
