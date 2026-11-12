@@ -170,6 +170,7 @@ extern "C" {
     fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_target_string(path_ptr: u32, path_len: u32, field_key: u32) -> u32;
+    fn host_observe_table(path_ptr: u32, path_len: u32, columns_ptr: u32, columns_len: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
@@ -885,6 +886,98 @@ pub fn observe_target_string(path: &[u16], field_key: u16) -> u32 {
     { unsafe { host_observe_target_string(path.as_ptr() as u32, path.len() as u32, field_key as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (path, field_key); 0 }
+}
+
+/// The child's own field as one 32-bit word: an int, the bits of a float, or a bool as 0 / 1.
+pub const TABLE_VALUE: u16 = 0;
+/// A pointer to an audio file: the sample handle to [`resolve_sample`], [`TABLE_NONE`] while unbound.
+pub const TABLE_SAMPLE: u16 = 1;
+/// A pointer to another box: that box's int field `target_key`, [`TABLE_NONE`] while unbound.
+pub const TABLE_TARGET: u16 = 2;
+/// The word of a pointer column with no target, and of a value column whose field does not exist.
+pub const TABLE_NONE: u32 = u32::MAX;
+
+/// One column of an observed table (WASM CONTRACT: three `u16`, read by the host as written).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TableColumn {
+    pub key: u16,
+    pub kind: u16,
+    pub target_key: u16
+}
+
+impl TableColumn {
+    pub const fn value(key: u16) -> Self {Self {key, kind: TABLE_VALUE, target_key: 0}}
+    pub const fn sample(key: u16) -> Self {Self {key, kind: TABLE_SAMPLE, target_key: 0}}
+    pub const fn target(key: u16, target_key: u16) -> Self {Self {key, kind: TABLE_TARGET, target_key}}
+}
+
+/// Observe the CHILD boxes under one of this device's hub fields (`hub_path`, e.g. `[10]` for the Sampler's
+/// `zones`) as a table: one row per child, one 32-bit word per entry of `columns`. Returns an id the device
+/// matches in [`Instrument::table_changed`]. The host watches the hub and every observed field, and delivers
+/// ONE snapshot per transaction (never during render): on catch-up, when a child joins or leaves, and when an
+/// observed field or pointer changes. Rows are ordered by the children's uuid, which is stable but carries no
+/// meaning, so a device that needs an order observes the field that holds it. A device calls this from
+/// `init`. Native stub returns 0.
+#[inline]
+pub fn observe_table(hub_path: &[u16], columns: &[TableColumn]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_table(hub_path.as_ptr() as u32, hub_path.len() as u32, columns.as_ptr() as u32, columns.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (hub_path, columns); 0 }
+}
+
+/// A table delivered through [`Instrument::table_changed`]. The words live in ENGINE memory and stay valid
+/// and unchanged until the next delivery for the same id, so a device keeps the `Table` in its state and
+/// reads it during render without copying. Rows may move between deliveries: anything that outlives one (a
+/// sounding voice) copies what it needs instead of keeping a row number.
+#[derive(Clone, Copy)]
+pub struct Table {
+    words: *const u32,
+    rows: u32,
+    columns: u32
+}
+
+impl Table {
+    pub const fn empty() -> Self {Self {words: core::ptr::null(), rows: 0, columns: 0}}
+
+    /// # Safety
+    /// `ptr` must point at `rows * columns` words that stay alive and unchanged until the next delivery.
+    #[inline]
+    pub unsafe fn from_wire(ptr: u32, rows: u32, columns: u32) -> Self {
+        Self {words: ptr as usize as *const u32, rows, columns}
+    }
+
+    /// A table over words the caller keeps alive, for native tests.
+    pub fn from_words(words: &'static [u32], columns: u32) -> Self {
+        assert!(columns > 0 && words.len() % columns as usize == 0, "words do not fill whole rows");
+        Self {words: words.as_ptr(), rows: words.len() as u32 / columns, columns}
+    }
+
+    #[inline]
+    pub fn rows(&self) -> usize {self.rows as usize}
+    #[inline]
+    pub fn columns(&self) -> usize {self.columns as usize}
+
+    #[inline]
+    pub fn word(&self, row: usize, column: usize) -> u32 {
+        assert!(row < self.rows as usize && column < self.columns as usize, "table cell out of range");
+        unsafe { *self.words.add(row * self.columns as usize + column) }
+    }
+
+    #[inline]
+    pub fn int(&self, row: usize, column: usize) -> i32 {self.word(row, column) as i32}
+    #[inline]
+    pub fn float(&self, row: usize, column: usize) -> f32 {f32::from_bits(self.word(row, column))}
+    #[inline]
+    pub fn bool(&self, row: usize, column: usize) -> bool {self.word(row, column) != 0}
+
+    /// A [`TABLE_SAMPLE`] or [`TABLE_TARGET`] cell, `None` while its pointer is unbound.
+    #[inline]
+    pub fn link(&self, row: usize, column: usize) -> Option<u32> {
+        let word = self.word(row, column);
+        if word == TABLE_NONE {None} else {Some(word)}
+    }
 }
 
 /// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box
@@ -1674,6 +1767,11 @@ pub trait Instrument {
     fn sample_changed(state: &mut Self::State, id: u32, sample: Option<u32>) {
         let _ = (state, id, sample);
     }
+    /// Take the new snapshot of an observed table for `id` (the value [`observe_table`] returned). Delivered
+    /// on catch-up and on every change, only inside a transaction. Default: nothing (no tables).
+    fn table_changed(state: &mut Self::State, id: u32, table: Table) {
+        let _ = (state, id, table);
+    }
     /// Apply this device's observed SOUNDFONT reference for `id` (the value [`observe_soundfont`] returned),
     /// storing the handle in `state`. `soundfont` is `Some(handle)` to later [`resolve_soundfont`] when the
     /// `file` pointer targets a `SoundfontFileBox`, or `None` when unbound. Delivered on catch-up and on
@@ -2146,5 +2244,100 @@ mod groove_tests {
         assert!(!groove_still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
         assert!(groove_still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
         assert!(!groove_still_wrapped(true, None, 8000.0));
+    }
+}
+
+#[cfg(test)]
+mod table_tests {
+    //! The device side of an observed table: cells are read back as the type the device knows the column has,
+    //! pointer cells report unbound, and the column layout the host reads is three `u16` as written.
+    use super::{Table, TableColumn, TABLE_NONE, TABLE_SAMPLE, TABLE_TARGET, TABLE_VALUE};
+
+    #[test]
+    fn an_empty_table_has_no_rows() {
+        let table = Table::empty();
+        assert_eq!((table.rows(), table.columns()), (0, 0));
+    }
+
+    #[test]
+    fn cells_read_as_int_float_and_bool() {
+        static WORDS: [u32; 6] = [7, 0x3FC0_0000, 1, 0xFFFF_FFFB, 0xBF00_0000, 0];
+        let table = Table::from_words(&WORDS, 3);
+        assert_eq!((table.rows(), table.columns()), (2, 3));
+        assert_eq!(table.int(0, 0), 7);
+        assert_eq!(table.float(0, 1), 1.5);
+        assert!(table.bool(0, 2));
+        assert_eq!(table.int(1, 0), -5, "a negative int survives the word");
+        assert_eq!(table.float(1, 1), -0.5);
+        assert!(!table.bool(1, 2));
+    }
+
+    #[test]
+    fn the_largest_int_is_exact() {
+        static WORDS: [u32; 2] = [0x7FFF_FFFF, 0x8000_0000];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.int(0, 0), i32::MAX, "frame positions beyond 2^24 are not rounded");
+        assert_eq!(table.int(1, 0), i32::MIN);
+    }
+
+    #[test]
+    fn a_float_keeps_its_bits() {
+        static WORDS: [u32; 3] = [0x7FC0_0001, 0x8000_0000, 0x0000_0001];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.float(0, 0).to_bits(), 0x7FC0_0001, "a NaN payload is not normalized");
+        assert_eq!(table.float(1, 0).to_bits(), 0x8000_0000, "negative zero stays negative");
+        assert_eq!(table.float(2, 0).to_bits(), 1, "a denormal stays");
+    }
+
+    #[test]
+    fn a_pointer_cell_reports_unbound() {
+        static WORDS: [u32; 3] = [0, 0x0001_0002, TABLE_NONE];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.link(0, 0), Some(0), "handle 0 is a handle, not unbound");
+        assert_eq!(table.link(1, 0), Some(0x0001_0002));
+        assert_eq!(table.link(2, 0), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn a_row_past_the_end_panics() {
+        static WORDS: [u32; 2] = [1, 2];
+        Table::from_words(&WORDS, 2).word(1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn a_column_past_the_end_panics() {
+        static WORDS: [u32; 2] = [1, 2];
+        Table::from_words(&WORDS, 2).word(0, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn reading_an_empty_table_panics() {
+        Table::empty().word(0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "words do not fill whole rows")]
+    fn words_that_do_not_fill_a_row_are_rejected() {
+        static WORDS: [u32; 3] = [1, 2, 3];
+        Table::from_words(&WORDS, 2);
+    }
+
+    #[test]
+    fn column_constructors_set_the_kind() {
+        assert_eq!(TableColumn::value(10), TableColumn {key: 10, kind: TABLE_VALUE, target_key: 0});
+        assert_eq!(TableColumn::sample(2), TableColumn {key: 2, kind: TABLE_SAMPLE, target_key: 0});
+        assert_eq!(TableColumn::target(3, 4), TableColumn {key: 3, kind: TABLE_TARGET, target_key: 4});
+    }
+
+    #[test]
+    fn a_column_is_three_u16_on_the_wire() {
+        assert_eq!(core::mem::size_of::<TableColumn>(), 6);
+        assert_eq!(core::mem::align_of::<TableColumn>(), 2);
+        let columns = [TableColumn::target(3, 4), TableColumn::sample(2)];
+        let wire = unsafe { core::slice::from_raw_parts(columns.as_ptr() as *const u16, 6) };
+        assert_eq!(wire, [3, 2, 4, 2, 1, 0], "key, kind, target key, in that order");
     }
 }

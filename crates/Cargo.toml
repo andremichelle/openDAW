@@ -77,6 +77,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-nano]
 opt-level = 3
+[profile.release.package.device-sampler]
+opt-level = 3
 [profile.release.package.device-neon]
 opt-level = 3
 [profile.release.package.device-tubular]

@@ -42,6 +42,7 @@ pub(crate) fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Ve
     unsafe { SAMPLE_OBS.get() }.clear();
     unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
+    unsafe { TABLE_OBS.get() }.clear();
     unsafe { SIDECHAIN_BIND.get() }.clear();
     unsafe { GROOVE_BINDS.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
@@ -357,6 +358,7 @@ impl Engine {
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
         let soundfont_paths = core::mem::take(unsafe { SOUNDFONT_OBS.get() }); // recorded by host_observe_soundfont during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
+        let table_obs = core::mem::take(unsafe { TABLE_OBS.get() }); // recorded by host_observe_table during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
         // The device's LIVE-DATA broadcast binds (`host_bind_broadcast` during init): create each slot, register
         // it at the device address + declared path (TS `broadcaster.broadcastFloats(adapter.address.append(...))`),
@@ -430,8 +432,14 @@ impl Engine {
         } else {
             None
         };
+        let tables = if table_obs.is_empty() {
+            None
+        } else {
+            let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            Some(self.bind_tables(device_uuid, reg, state_ptr, table_obs, signal))
+        };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots, groove_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, tables, broadcast_slots, groove_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -769,6 +777,9 @@ impl Engine {
             }
             if let Some(records) = params.records {
                 self.teardown_script_records(records);
+            }
+            if let Some(tables) = params.tables {
+                self.teardown_tables(tables);
             }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);

@@ -14,6 +14,10 @@ import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
+import {SamplerDeviceBox} from "./instruments/SamplerDeviceBox"
+import {SamplerZoneBox} from "./instruments/SamplerZoneBox"
+import {SamplerGroupBox} from "./instruments/SamplerGroupBox"
+import {SamplerModulationBox} from "./instruments/SamplerModulationBox"
 import {StereoToolDeviceBox} from "./audio-effects/StereoToolDeviceBox"
 import {ZeitgeistDeviceBox} from "./midi-effects/ZeitGeistDeviceBox"
 import {UnknownAudioEffectDevice} from "./audio-effects/UnknownAudioEffectDevice"
@@ -92,6 +96,10 @@ export const DeviceDefinitions = [
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
+    SamplerDeviceBox,
+    SamplerZoneBox,
+    SamplerGroupBox,
+    SamplerModulationBox,
     TapeDeviceBox,
     ArpeggioDeviceBox,
     PitchDeviceBox,

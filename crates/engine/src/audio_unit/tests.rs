@@ -157,7 +157,7 @@ fn stub_device(kind: u32) -> DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
         midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0,
-        sidechain_collection_field: 0, release_all_index: 0
+        sidechain_collection_field: 0, release_all_index: 0, table_changed_index: 0
     }
 }
 
@@ -664,7 +664,7 @@ fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_de
             device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
             paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
             observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(), sample_subs: Vec::new(),
-            param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
+            param_hub_sub: None, sample_hub_sub: None, records: None, tables: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
         }),
         _ => panic!("expected a leaf chain")
     }
@@ -2625,7 +2625,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, tables: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");

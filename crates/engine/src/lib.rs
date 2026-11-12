@@ -82,7 +82,8 @@ struct DeviceReg {
     // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
     buffer_collection_field: u16,
     data_changed_index: u32,
-    release_all_index: u32 // slot of a MIDI effect's `release_all` export; 0 if none
+    release_all_index: u32, // slot of a MIDI effect's `release_all` export; 0 if none
+    table_changed_index: u32 // slot of the device's `table_changed` export (observed tables); 0 if none
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -301,6 +302,50 @@ pub(crate) fn call_device_data_changed(data_changed_index: u32, state_ptr: u32, 
     let _ = (data_changed_index, state_ptr, collection, values, records, fields);
 }
 
+// Call a device's `table_changed(state_ptr, id, ptr, rows, columns)` export with the snapshot of an observed
+// table (`words` row-major, `rows * columns` long). Called only off-render (the unit reconcile).
+#[cfg(target_family = "wasm")]
+#[inline]
+pub(crate) fn call_device_table_changed(table_changed_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+    if table_changed_index == 0 {
+        return;
+    }
+    let table_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(table_changed_index as usize) };
+    table_changed(state_ptr, id, words.as_ptr() as u32, rows, columns);
+}
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn call_device_table_changed(table_changed_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+    #[cfg(test)]
+    native_table_changed::record(table_changed_index, state_ptr, id, words, rows, columns);
+    #[cfg(not(test))]
+    let _ = (table_changed_index, state_ptr, id, words, rows, columns);
+}
+
+// Native TEST SEAM: what `call_device_table_changed` delivered.
+#[cfg(all(test, not(target_family = "wasm")))]
+pub(crate) mod native_table_changed {
+    use alloc::vec::Vec;
+    #[derive(Clone, Debug, PartialEq)]
+    pub(crate) struct Delivery {
+        pub(crate) state_ptr: u32,
+        pub(crate) id: u32,
+        pub(crate) rows: u32,
+        pub(crate) columns: u32,
+        pub(crate) words: Vec<u32>,
+        pub(crate) ptr: usize
+    }
+    std::thread_local! {
+        static DELIVERIES: core::cell::RefCell<Vec<Delivery>> = const { core::cell::RefCell::new(Vec::new()) };
+    }
+    pub(crate) fn record(_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+        let delivery = Delivery {state_ptr, id, rows, columns, words: words.to_vec(), ptr: words.as_ptr() as usize};
+        DELIVERIES.with(|deliveries| deliveries.borrow_mut().push(delivery));
+    }
+    pub(crate) fn take() -> Vec<Delivery> {
+        DELIVERIES.with(|deliveries| core::mem::take(&mut *deliveries.borrow_mut()))
+    }
+}
+
 // Native TEST SEAM: what `call_device_data_changed` delivered.
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod native_data_changed {
@@ -427,6 +472,7 @@ pub(crate) mod broadcast;
 mod time_stretch;
 mod tempo_map;
 mod script_device;
+mod table;
 use audio_unit::{AudioUnitBinding, Members};
 mod composite;
 mod pad_route;
@@ -752,6 +798,12 @@ pub(crate) struct FieldObs {
 // re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
 shared_static! {
     static FIELD_OBS: Vec<FieldObs> = Vec::new();
+}
+
+// The table-observe recorder the `host_observe_table` export appends to. After `init` the engine watches each
+// hub and delivers its rows through the device's `table_changed` export. Its own cell (NOT `ENGINE`), as above.
+shared_static! {
+    static TABLE_OBS: Vec<table::TableObs> = Vec::new();
 }
 
 // The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
@@ -1191,6 +1243,22 @@ pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
     let obs = unsafe { FIELD_OBS.get() };
     obs.push(FieldObs {path: path.to_vec(), target_key: 0});
+    obs.len() as u32 - 1
+}
+
+/// Host import a device calls from its `init` to observe the child boxes under one of its hubs as a table
+/// (`abi::observe_table`). Only RECORDS the hub path and the columns (into `TABLE_OBS`) and returns the id.
+/// Touches no `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_observe_table(path_ptr: u32, path_len: u32, columns_ptr: u32, columns_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let columns = unsafe { core::slice::from_raw_parts(columns_ptr as *const abi::TableColumn, columns_len as usize) };
+    record_table_obs(path, columns)
+}
+
+fn record_table_obs(path: &[u16], columns: &[abi::TableColumn]) -> u32 {
+    let obs = unsafe { TABLE_OBS.get() };
+    obs.push(table::TableObs {path: path.to_vec(), columns: columns.to_vec()});
     obs.len() as u32 - 1
 }
 
@@ -1780,13 +1848,19 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0, table_changed_index: 0});
         id
     }
 
     fn set_device_release_all(&mut self, device_id: u32, release_all_index: u32) {
         if let Some(reg) = self.devices.get_mut(device_id as usize) {
             reg.release_all_index = release_all_index;
+        }
+    }
+
+    fn set_device_table_changed(&mut self, device_id: u32, table_changed_index: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.table_changed_index = table_changed_index;
         }
     }
 
@@ -3812,6 +3886,16 @@ pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.set_device_record_collection(device_id, record_field, buffer_field, data_changed_index);
+        }
+    }
+}
+
+/// Set the function-table slot of a registered device's `table_changed` export. Call after `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_table_changed(device_id: u32, table_changed_index: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_table_changed(device_id, table_changed_index);
         }
     }
 }

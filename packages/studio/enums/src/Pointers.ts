@@ -73,4 +73,8 @@ export enum Pointers {
     KeyTrack,
     ChordTrack,
     ViewState,
+    SamplerZone,
+    SamplerGroup,
+    SamplerGroupZone,
+    SamplerModulation,
 }

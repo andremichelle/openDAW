@@ -66,7 +66,7 @@ use crate::audio_region_player::AudioRegionPlayer;
 use crate::midi_output::{self, CcBinding, MidiOutControls, MidiOutProcessor};
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, GROOVE_BINDS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, GROOVE_BINDS, SAMPLE_OBS, TABLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 mod wiring;
 mod routing;
@@ -567,6 +567,8 @@ pub(crate) struct DeviceParams {
     pub(crate) sample_subs: Vec<SubscriptionId>,
     // SCRIPTABLE devices: the `@collection` records, flushed by the unit reconcile; `None` without a records hub
     pub(crate) records: Option<crate::script_device::RecordBinding>,
+    // the tables the device observes (`observe_table`), flushed by the unit reconcile; `None` without one
+    pub(crate) tables: Option<crate::table::TableBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
     pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>,
@@ -1066,6 +1068,7 @@ impl Engine {
         // a record / value edit raised the light flag: deliver each dirty `@collection` snapshot once
         if params_changed || automation_changed {
             self.flush_unit_records(unit);
+            self.flush_unit_tables(unit);
         }
         set_params_signal(None);
         crate::set_current_unit_note_bits(None);

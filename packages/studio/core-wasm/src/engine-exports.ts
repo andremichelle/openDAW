@@ -21,6 +21,7 @@ export type EngineExports = {
     device_set_sidechain_collection_field: (deviceId: number, field: number) => void
     device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
     device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
+    device_set_table_changed: (deviceId: number, tableChangedIndex: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
@@ -166,6 +167,9 @@ export type EngineExports = {
     // Observe a device's POINTER field and deliver the TARGET box's string field through `field_changed`
     // (the NeuralAmp's model JSON on its NeuralAmpModelBox); shares the `host_observe_field` id space.
     host_observe_target_string: (pathPtr: number, pathLen: number, fieldKey: number) => number
+    // Observe the child boxes under one of a device's hubs as a table of 32-bit words, delivered through
+    // `table_changed` (the Sampler's zones, groups and modulation slots).
+    host_observe_table: (pathPtr: number, pathLen: number, columnsPtr: number, columnsLen: number) => number
     // Route B/C (audio input ports). A device imports these: `host_bind_sidechain` declares a sidechain port by
     // its pointer field-key path (returns the port id 2+); `host_resolve_input` resolves a port id to its
     // stereo buffer during render (id 1 the through-signal).

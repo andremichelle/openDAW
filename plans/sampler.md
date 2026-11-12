@@ -117,8 +117,50 @@ A preset can reference a hundred samples and more. That is heavy on the network 
 known to hang sometimes when projects load. Decided 2026-11-12: no guesswork upfront. The Sampler loads its samples
 the way every device does. Retries, timeouts and load order are revisited when real issues show up.
 
+## Boxes (done, uncommitted)
+
+1. `SamplerDeviceBox`: hubs `zones` (10), `groups` (11), `modulations` (12). Parameters: voices, glide, legato,
+   octave, transpose, tune (20 to 25), filter-type, cutoff, resonance (30 to 32), volume, panning, mono (40 to 42),
+   objects amp-envelope (50) and mod-envelope (51) with delay, attack, hold, decay, sustain, release, objects lfo-a
+   (60) and lfo-b (61) with shape, rate, delay, fade, sync, restart. All automatable.
+2. `SamplerZoneBox`: pointers device, file, group, then key range, velocity range, fades, root key, transpose,
+   tune, key-track, gain, panning, sequence, reverse, one-shot, sample-start, sample-end, loop-mode, loop-start,
+   loop-end, loop-fade. Plain fields, not automatable.
+3. `SamplerGroupBox`: pointer device, hub zones, label, round-robin, choke, trigger.
+4. `SamplerModulationBox`: pointer device, source, target, amount.
+5. Sample positions (start, end, loop start, loop end) are frames, not fractions, so imported loops stay exact.
+6. Bend is not in the schema. openDAW has no pitch bend yet, add it with Mod Wheel and Aftertouch. Play has Octave
+   in its place.
+7. A full modulation amount reaches 48 semitones for Pitch, 4 octaves for the LFO rates, the full range elsewhere.
+
+Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAdapter`,
+`SamplerModulationBoxAdapter`, `SamplerModulation` (sources and targets). The device is not in
+`InstrumentFactories` yet, so it does not show up in the studio before the engine can play it.
+
+## Engine (done, uncommitted)
+
+1. `abi::observe_table(hub_path, columns)`: a device observes the child boxes under one of its hubs as rows of
+   32-bit words and gets each snapshot through `table_changed`. A column is a child's own field (int, float bits
+   or bool), a pointer to an audio file (delivered as the sample handle, loaded like any observed sample) or a
+   pointer to another box (delivered as an int field of that box). Nothing on the host names a box or a field.
+2. The engine side is `crates/engine/src/table.rs`. A change only raises a flag, the unit reconcile delivers one
+   snapshot per changed table. The words stay in engine memory until the next snapshot, so the device reads them
+   during render without a copy and without a limit on the number of zones.
+3. `crates/stock-devices/device-sampler`: zones, round robins (cycle, random), key and velocity crossfades,
+   release groups, choke, voice limit, legato and glide, cubic interpolation, loop with crossfade, two DAHDSR
+   envelopes, two LFOs with delay, fade, tempo sync and restart, a 12 or 24 dB filter, modulation slots. A voice
+   copies its zone when it starts, so a zone edit reaches the next note and never a sounding one.
+4. Tests: 11 for the abi table type, 37 for the engine binding, 124 for the device, 6 end to end through the wasm
+   engine (`packages/studio/core-wasm/test/sampler.test.ts`), plus the parameter mapping parity of all 36
+   parameters.
+
+## Next
+
+1. `InstrumentFactories` entry and the real editor (panel and sample zone window) from the preview.
+2. Add samples, map by name, SFZ and SF2 import.
+3. Scripting API, manual page, release notes.
+
 ## Open
 
 1. The design is signed off (2026-11-12). The user interface calls the zones "Sample Zones".
-2. Box schema for zones, groups and slots, adapter, engine crate, SFZ and SF2 import, mapping from file names: not
-   planned yet.
+2. A zone edit delivers the whole zone table again. Fine for hundreds of zones, to be measured for thousands.

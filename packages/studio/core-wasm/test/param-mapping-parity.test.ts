@@ -12,7 +12,7 @@ import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@ope
 import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
-    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
+    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, MaximizerDeviceBox, NanoDeviceBox, SamplerDeviceBox, NeuralAmpDeviceBox,
     NoteFilterDeviceBox, ScaleMatrixDeviceBox, ChordKeysDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
     ApparatDeviceBox, CubedDeviceBox, KorpusDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
@@ -21,7 +21,7 @@ import {
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
     ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
-    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
+    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, SamplerDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ChordKeysDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
@@ -136,6 +136,8 @@ const buildBoxes = () => {
     const tubularUnit = createUnit(30)
     const tubular = TubularDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(tubularUnit.input))
     const nano = NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(nanoUnit.input))
+    const samplerUnit = createUnit(40)
+    const sampler = SamplerDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(samplerUnit.input))
     const playfield = PlayfieldDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(playfieldUnit.input))
     const file = AudioFileBox.create(boxGraph, UUID.generate(), box => {
         box.startInSeconds.setValue(0.0)
@@ -165,7 +167,7 @@ const buildBoxes = () => {
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
     return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, velocity, vaporisateur, neon, tubular, nano, playfieldSample,
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, velocity, vaporisateur, neon, tubular, nano, sampler, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
@@ -263,6 +265,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new MaximizerDeviceBoxAdapter(context, boxes.maximizer), tsOnly: []},
     {name: "nano", file: "device_nano.wasm",
         createAdapter: context => new NanoDeviceBoxAdapter(context, boxes.nano), tsOnly: []},
+    {name: "sampler", file: "device_sampler.wasm",
+        createAdapter: context => new SamplerDeviceBoxAdapter(context, boxes.sampler), tsOnly: []},
     {name: "neural-amp", file: "device_neural_amp.wasm",
         createAdapter: context => new NeuralAmpDeviceBoxAdapter(context, boxes.neuralAmp), tsOnly: []},
     {name: "note-filter", file: "device_note_filter.wasm",

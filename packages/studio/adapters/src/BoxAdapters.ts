@@ -63,6 +63,10 @@ import {
     ModuleGainBox,
     ModuleMultiplierBox,
     NanoDeviceBox,
+    SamplerDeviceBox,
+    SamplerZoneBox,
+    SamplerGroupBox,
+    SamplerModulationBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
@@ -159,6 +163,10 @@ import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapt
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
+import {SamplerDeviceBoxAdapter} from "./devices/instruments/SamplerDeviceBoxAdapter"
+import {SamplerZoneBoxAdapter} from "./devices/instruments/Sampler/SamplerZoneBoxAdapter"
+import {SamplerGroupBoxAdapter} from "./devices/instruments/Sampler/SamplerGroupBoxAdapter"
+import {SamplerModulationBoxAdapter} from "./devices/instruments/Sampler/SamplerModulationBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {InstrumentCompositeBoxAdapter} from "./devices/instruments/InstrumentCompositeBoxAdapter"
 import {InstrumentCompositeCellBoxAdapter} from "./devices/instruments/InstrumentComposite/InstrumentCompositeCellBoxAdapter"
@@ -321,6 +329,10 @@ export class BoxAdapters implements Terminable {
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
             visitTubularDeviceBox: (box: TubularDeviceBox) => new TubularDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
+            visitSamplerDeviceBox: (box: SamplerDeviceBox) => new SamplerDeviceBoxAdapter(this.#context, box),
+            visitSamplerZoneBox: (box: SamplerZoneBox) => new SamplerZoneBoxAdapter(this.#context, box),
+            visitSamplerGroupBox: (box: SamplerGroupBox) => new SamplerGroupBoxAdapter(this.#context, box),
+            visitSamplerModulationBox: (box: SamplerModulationBox) => new SamplerModulationBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
             visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => new WclapMidiEffectBoxAdapter(this.#context, box),
