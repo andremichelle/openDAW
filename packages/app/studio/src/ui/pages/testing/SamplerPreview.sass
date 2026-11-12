@@ -1,0 +1,407 @@
+@use "@/mixins"
+
+$pair: 84px
+$gap: 6px
+
+// borrowed from ControlGroup
+@mixin group-label
+  height: 16px
+  padding: 2px 4px
+  font-size: 9px
+  line-height: 11px
+  font-weight: normal
+  white-space: nowrap
+  border-radius: 2px 2px 0 0
+  color: color-mix(in srgb, var(--color) 85%, transparent)
+  border-bottom: 1px solid color-mix(in srgb, var(--color) 60%, transparent)
+
+@mixin group-body
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--color) 6%, transparent), transparent 7px) no-repeat 0 16px
+
+// borrowed from ParameterLabel
+@mixin value-label
+  display: flex
+  column-gap: 0.25em
+  justify-content: end
+  padding: 0 0.5em
+  border-radius: 0.25em
+  font-size: 8px
+  line-height: 18px
+  white-space: nowrap
+  color: var(--color-gray)
+  touch-action: none
+
+  &[unit]:after
+    content: attr(unit)
+    color: var(--color-dark)
+
+  &.modifying
+    color: var(--color-blue)
+    box-shadow: 0 0 0 0.5px rgba(white, 0.1)
+    background-color: var(--color-black)
+
+@mixin list-rows
+  min-height: 0
+  display: flex
+  flex-direction: column
+  padding: 8px 0
+  overflow: hidden auto
+  scrollbar-width: none
+  mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  align-items: flex-start
+
+  > div.example
+    display: flex
+    align-items: center
+    column-gap: 0.75em
+    font-size: 11px
+    color: var(--color-dark)
+
+  > h3
+    margin: 0.75em 0 0 0
+    font-size: 10px
+    font-weight: normal
+    color: var(--color-shadow)
+
+  header
+    display: flex
+    align-items: center
+    column-gap: 0.375em
+    height: 2rem
+    padding: 0 0.5em
+    font-size: 11px
+    color: var(--color-green)
+    box-shadow: inset 0 -1px rgba(black, 0.2), 0 1px rgba(white, 0.03)
+
+    > h1
+      margin: 0
+      font-size: inherit
+      font-weight: normal
+      letter-spacing: 0.03em
+
+    > svg
+      font-size: 14px
+
+  // borrowed from NanoDeviceEditor
+  div.display
+    position: relative
+    background-color: rgba(black, 0.1)
+    border-radius: 2px
+    box-shadow: 0 0.5px 1px 0 rgba(white, 0.1), 0 0.5px 1px 0 rgba(black, 0.1) inset
+
+    > canvas
+      display: block
+      width: 100%
+      height: 100%
+
+    > span.file-name
+      position: absolute
+      left: 50%
+      transform: translateX(-50%)
+      bottom: 2px
+      padding: 2px 3px
+      border-radius: 3px
+      background-color: rgba(black, 0.2)
+      font-size: 8px
+      color: var(--color-dark)
+      pointer-events: none
+      white-space: nowrap
+      box-shadow: 0 0.5px 1px 0 rgba(white, 0.04)
+
+  div.stacks
+    display: flex
+    color: var(--color-dark)
+
+  div.parameter-stack
+    display: grid
+    grid-template-rows: 16px
+    grid-auto-rows: 18px
+    row-gap: 4px
+    align-items: center
+    align-content: start
+    margin-right: $gap
+    --color: var(--color-shadow)
+    @include group-body
+
+    @for $count from 1 through 3
+      &.pairs-#{$count}
+        width: $pair * $count - $gap
+        grid-template-columns: repeat(#{$count}, 1fr 40px)
+
+        &:last-child
+          width: $pair * $count
+
+    &:last-child
+      margin-right: 0
+
+    &.orange
+      --color: var(--color-orange)
+
+    &.yellow
+      --color: var(--color-yellow)
+
+    &.green
+      --color: var(--color-green)
+
+    &.blue
+      --color: var(--color-blue)
+
+    &.purple
+      --color: var(--color-purple)
+
+    &.cream
+      --color: var(--color-cream)
+
+    > div.label
+      grid-column: 1 / -1
+      @include group-label
+
+    &.tabbed > div.label
+      display: flex
+      column-gap: 10px
+
+      > div.tab:not(.active)
+        color: color-mix(in srgb, var(--color-shadow) 50%, transparent)
+
+      > div.tab.highlight
+        color: var(--color-bright)
+
+    > div.body
+      display: contents
+
+    div.name
+      margin: 0 0 0 6px
+      font-size: 10px
+      white-space: nowrap
+      color: var(--color-shadow)
+
+      &.highlight
+        color: var(--color-bright)
+
+    label.value
+      @include value-label
+
+    .toggle
+      justify-self: end
+      margin-right: 4px
+
+      > label
+        width: 18px
+        height: 18px
+        min-width: 0
+        font-size: 13px
+        border-radius: 0.25em
+        display: flex
+        align-items: center
+        justify-content: center
+
+  div.modulation
+    display: grid
+    grid-template-columns: 34% 40% 26%
+    grid-template-rows: 16px minmax(0, 1fr)
+    color: var(--color-dark)
+    --color: var(--color-cream)
+    @include group-body
+
+    > div.label
+      @include group-label
+
+    > div.rows
+      grid-column: 1 / -1
+      row-gap: 4px
+      @include list-rows
+      padding: 4px 0
+      mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 8px), transparent)
+
+      > div.slot
+        flex: 0 0 18px
+        height: 18px
+        display: grid
+        grid-template-columns: 34% 40% calc(26% - 16px) 16px
+        align-items: center
+
+        button
+          width: 100%
+          font-size: 12px
+
+        label
+          width: 100%
+          text-align: left
+
+        > label.value
+          @include value-label
+
+        > div.remove
+          display: flex
+          font-size: 8px
+          color: var(--color-shadow)
+
+      > div.add
+        flex: 0 0 18px
+        font-size: 9px
+        line-height: 18px
+        text-align: center
+        color: var(--color-shadow)
+
+  button
+    font-size: 11px
+
+  [data-class='button'] > label
+    font-size: 10px
+    line-height: 16px
+
+  > div.device
+    display: grid
+    grid-template-rows: 2rem auto
+    border-radius: 3px
+    background-color: var(--color-panel-background)
+    overflow: hidden
+
+    > header > [data-class='button']
+      margin-left: auto
+
+    > div.controls
+      display: grid
+      grid-template-columns: $pair * 4 216px
+      grid-template-rows: 82px 82px
+      column-gap: 8px
+      row-gap: 12px
+      @include mixins.Control
+
+      > div.modulation
+        grid-column: 2
+        grid-row: 1 / -1
+
+  > div.window
+    display: grid
+    grid-template-columns: $pair * 4 + 4px $pair * 8
+    grid-template-rows: 2rem 18px 176px 28px 252px
+    column-gap: 12px
+    row-gap: 8px
+    padding: 0 8px 8px 8px
+    border-radius: 3px
+    background-color: var(--color-panel-background)
+
+    > header
+      grid-column: 1 / -1
+      margin: 0 -8px
+      column-gap: 0.75em
+
+      > span.preset
+        color: var(--color-cream)
+
+      > span.samples
+        font-size: 10px
+        color: var(--color-shadow)
+
+      > span.readout
+        margin-left: auto
+        width: 9em
+        font-size: 10px
+        text-align: right
+        color: var(--color-shadow)
+
+    > div.tools
+      grid-column: 1 / -1
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+
+      > button > label
+        display: flex
+        align-items: center
+        column-gap: 4px
+        font-size: 10px
+        line-height: 16px
+
+      > span.count
+        margin-left: auto
+        font-size: 10px
+        color: var(--color-shadow)
+
+    > div.map
+      grid-column: 1 / -1
+
+      > canvas
+        touch-action: none
+
+    > div.keys
+      grid-column: 1 / -1
+      margin-top: -4px
+
+      > canvas
+        display: block
+        width: 100%
+        height: 100%
+        touch-action: none
+
+    > div.side
+      display: grid
+      grid-template-columns: $pair * 2 $pair * 2
+      grid-template-rows: 116px 128px
+      column-gap: 4px
+      row-gap: 8px
+
+      > div.modulation
+        grid-column: 1 / -1
+
+      > div.list
+        display: grid
+        grid-template-rows: 16px minmax(0, 1fr)
+        --color: var(--color-dark)
+        @include group-body
+
+        > h3
+          margin: 0
+          @include group-label
+
+        > div.rows
+          position: relative
+          @include list-rows
+
+          > div.row
+            flex: 0 0 16px
+            display: grid
+            grid-template-columns: 1fr auto
+
+            &:has(> i)
+              grid-template-columns: 8px 1fr auto
+            column-gap: 6px
+            align-items: center
+            padding: 0 6px
+            font-size: 9px
+            color: var(--color-dark)
+
+            > i
+              width: 8px
+              height: 8px
+              border-radius: 2px
+
+            > span
+              overflow: hidden
+              text-overflow: ellipsis
+              white-space: nowrap
+
+            > span.count
+              font-size: 8px
+              color: var(--color-shadow)
+
+            &.selected
+              background-color: rgba(white, 0.04)
+
+            &.active
+              color: var(--color-gray)
+              background-color: rgba(white, 0.08)
+
+    > div.inspector
+      display: grid
+      grid-template-rows: 72px 82px 82px
+      row-gap: 8px
+
+      > div.waveform
+        padding: 8px 8px 16px 8px

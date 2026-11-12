@@ -4,7 +4,7 @@ import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 import {BackButton} from "@/ui/pages/BackButton"
-import {ChordKeysPreview} from "@/ui/pages/testing/ChordKeysPreview"
+import {SamplerPreview} from "@/ui/pages/testing/SamplerPreview"
 
 const className = Html.adoptStyleSheet(css, "TestingPage")
 
@@ -14,8 +14,8 @@ export const TestingPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         <BackButton lifecycle={lifecycle} service={service}/>
         <h1>Testing</h1>
         <section>
-            <h2>Chord Keys</h2>
-            <ChordKeysPreview lifecycle={lifecycle} service={service}/>
+            <h2>Sampler</h2>
+            <SamplerPreview lifecycle={lifecycle}/>
         </section>
     </div>
 )
