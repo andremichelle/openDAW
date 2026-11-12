@@ -95,6 +95,33 @@ Decided 2026-11-12. Before any format work the engine gets one way to read sampl
 5. Dropping the main thread's frames once the engine has them, and reading them back from the OPFS on demand,
    would halve sample memory for every format. To be weighed against stage 3.
 
+### Checked 2026-11-12: can the main thread let go of the frames
+
+Every path to the frames goes through `SampleLoader.data`, `AudioFileBoxAdapter.data` / `.audioData` or
+`SampleLoaderManager.getAudioData`. 24 sites read them.
+
+1. Already asynchronous (9): engine `fetchAudio`, offline renderer, mono conversion, transient detection, sample
+   editor, project migration, Sampler export, cloud upload (reads the OPFS itself), `getAudioData`.
+2. Synchronous but inside an asynchronous action (4): WAV export of a region, Detect BPM, Analyze Material,
+   dawproject export. Each needs one `await`.
+3. Synchronous every animation frame, but only frame count, sample rate or channel count (9): Nano waveform and
+   playheads, Playfield slot and busy slot, Sampler map, editor and table, the stereo check of mono conversion.
+   These need the three numbers kept, not the frames.
+4. Nothing reads frames synchronously in a paint or audio path.
+
+Samples that are not in the OPFS:
+
+1. API, cloud and peer samples are stored before the loader reports loaded. A failed store is an error today.
+2. A running recording has no `AudioData` at all, its peaks come from a writer. When it ends the data is built
+   and stored. If storing fails the recording "stays playable until you close the tab": then the memory copy is
+   the only one and must stay.
+3. The device benchmark feeds synthetic data that is never stored.
+
+Rule that follows: frames may go only for a sample the OPFS confirmed. Costs: `GlobalSampleLoaderManager` keeps a
+second reference in its cache, every new engine (offline render, bounce, freeze, export) reads all samples from
+the OPFS again, and `SampleLoader.data` is SDK surface, so letting go has to be a choice of the studio, not the
+default. The engine memory is not shared with the main thread, so it cannot serve as the copy to read from.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
