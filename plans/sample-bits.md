@@ -337,6 +337,18 @@ What to do if you switch to `"while-used"` (the studio does, to halve its sample
 4. A custom `SampleLoader` (one you implement yourself) needs `info` and `acquire`. This is the one change that
    asks for code: the interface grew by two members.
 
+Where consumers stand (checked 2026-11-12): a consumer supplies samples through a `SampleProvider`
+(`fetch(uuid, progress): Promise<[AudioData, SampleMetaData]>`, the same shape as `SampleFetcher` in
+`@opendaw/studio-p2p`) and hands it to `GlobalSampleLoaderManager`. Loaders, cache and the OPFS are inside the
+manager. So the separation exists already:
+
+1. The provider keeps its signature and is still called once per sample that is not stored yet. A later
+   `acquire` reads the manager's storage, never the provider.
+2. The OPFS stays out of sight. Reading the frames back happens inside the manager, the consumer only sees
+   `acquire`, `use` and `info`.
+3. Point 4 above only concerns somebody who implements `SampleLoader` or `SampleLoaderManager` by hand. Nobody
+   has to.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
