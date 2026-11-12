@@ -1,6 +1,9 @@
-import {clamp, Editing, Func, isDefined, Lifecycle, Optional, Procedure, Provider, Subscription} from "@opendaw/lib-std"
+import {clamp, Editing, Func, int, isDefined, Lifecycle, Optional, Procedure, Provider, Subscription} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
+import {MenuItem} from "@opendaw/studio-core"
+import {Colors} from "@opendaw/studio-enums"
+import {MenuButton} from "@/ui/components/MenuButton"
 import {Surface} from "@/ui/surface/Surface"
 
 // A value that is a plain box field, not a parameter: shown like a parameter label and dragged to change.
@@ -16,6 +19,8 @@ export namespace SamplerValueLabel {
         readonly parse: Func<string, Optional<number>>
         readonly get: Provider<number>
         readonly set: Procedure<number>
+        // lowest and highest value when the edited things disagree
+        readonly spread?: Provider<Optional<readonly [number, number]>>
         // false while there is nothing to show (no selection)
         readonly available?: Provider<boolean>
     }
@@ -29,12 +34,41 @@ export namespace SamplerValueLabel {
     }
     const PixelsPerStep = 2
 
+    export type Choice = {
+        readonly names: ReadonlyArray<string>
+        readonly get: Provider<int>
+        readonly set: Procedure<int>
+        readonly available?: Provider<boolean>
+    }
+
+    // one of a few named values, picked from a menu
+    export const choice = (lifecycle: Lifecycle, observe: Func<Procedure<void>, Subscription>,
+                           {names, get, set, available}: Choice): HTMLElement => {
+        const label: HTMLElement = <label className="value"/>
+        const update = (): void => {label.textContent = available?.() === false ? Unavailable[0] : names[get()] ?? ""}
+        lifecycle.own(observe(update))
+        update()
+        return (
+            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
+                if (available?.() === false) {
+                    parent.addMenuItem(MenuItem.default({label: "Select a sample zone first", selectable: false}))
+                    return
+                }
+                names.forEach((name, index) => parent.addMenuItem(MenuItem.default({label: name, checked: index === get()})
+                    .setTriggerProcedure(() => set(index))))
+            })} appearance={{color: Colors.gray, activeColor: Colors.bright}}>{label}</MenuButton>
+        )
+    }
+
     export const create = (lifecycle: Lifecycle, editing: Editing, observe: Func<Procedure<void>, Subscription>,
                            field: Field): HTMLElement => {
         const label: HTMLElement = <label className="value"/>
         const update = (): void => {
+            const spread = field.available?.() === false ? undefined : field.spread?.()
             const [text, unit] = field.available?.() === false ? Unavailable : field.print(field.get())
             label.textContent = text
+            label.classList.toggle("spread", isDefined(spread))
+            label.title = isDefined(spread) ? `${field.print(spread[0]).join(" ")} to ${field.print(spread[1]).join(" ")}` : ""
             if (unit.length > 0) {label.setAttribute("unit", unit)} else {label.removeAttribute("unit")}
         }
         let drag: Optional<{ readonly y: number, readonly value: number }> = undefined

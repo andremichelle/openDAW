@@ -366,3 +366,247 @@ describe("SamplerZones.duplicate of a whole stack", () => {
         expect(copies.map(zone => zone.sequence.getValue())).toEqual([3, 4])
     })
 })
+
+describe("SamplerZones: samples without a note in their name", () => {
+    const sample = (name: string, uuid: UUID.Bytes = UUID.generate()) =>
+        ({uuid: UUID.toString(uuid), name, bpm: 0, duration: 1.5, sample_rate: 48000, origin: "import" as const})
+    it("a single one in an empty Sampler keeps the whole keyboard", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Pad.wav")]))
+        expect(keys(created[0])).toEqual([0, 60, 127])
+    })
+    it("several line up from C1, each on its own key", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav"), sample("Snare.wav"), sample("Hat.wav")]))
+        expect(created.map(keys)).toEqual([[36, 36, 36], [37, 37, 37], [38, 38, 38]])
+    })
+    it("a further one skips the keys that are taken", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav"), sample("Snare.wav")]))
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Hat.wav")]))
+        expect(keys(created[0])).toEqual([38, 38, 38])
+    })
+    it("starts at the key it was dropped on", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav"), sample("Snare.wav")], 60))
+        expect(created.map(keys)).toEqual([[60, 60, 60], [61, 61, 61]])
+    })
+    it("leaves named samples where their names put them and fills around them", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Tom C2.wav"), sample("Kick.wav"), sample("Snare.wav")]))
+        expect(created.map(keys)).toEqual([[36, 36, 36], [37, 37, 37], [38, 38, 38]])
+    })
+    it("keeps layers and round robins of one instrument on one key", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group,
+            [sample("Snare_v1_rr1.wav"), sample("Snare_v2_rr1.wav"), sample("Snare_v1_rr2.wav"), sample("Kick.wav")]))
+        expect(created.map(zone => zone.keyLow.getValue())).toEqual([36, 36, 36, 37])
+        expect(created.map(velocities)).toEqual([[1, 64], [65, 127], [1, 64], [1, 127]])
+        expect(created.map(zone => zone.sequence.getValue())).toEqual([1, 1, 2, 1])
+    })
+    it("gives a note-less sample its own key next to named ones dropped with it", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Tom C2.wav"), sample("Kick.wav")]))
+        expect(created.map(keys)).toEqual([[36, 36, 36], [37, 37, 37]])
+    })
+    it("looks below when every key above is taken, and stacks only when none is free", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        let pad: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            pad = SamplerZones.addSamples(boxGraph, device, group, [sample("Pad.wav")])
+            pad[0].keyLow.setValue(30)
+        })
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav")]))
+        expect(keys(created[0])).toEqual([29, 29, 29])
+        edit(() => {
+            pad[0].keyLow.setValue(0)
+            created[0].keyLow.setValue(0)
+            created[0].keyHigh.setValue(127)
+        })
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare.wav")]))
+        expect(created[0].keyLow.getValue()).toBe(36)
+    })
+    it("turns a lone whole-keyboard sample into the first key of a kit when a second one comes", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let first: ReadonlyArray<SamplerZoneBox> = [], second: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => first = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav")]))
+        edit(() => second = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare.wav")]))
+        expect(keys(first[0])).toEqual([36, 36, 36])
+        expect(keys(second[0])).toEqual([37, 37, 37])
+    })
+    it("leaves a lone sample alone that the user gave a range", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let first: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => first = SamplerZones.addSamples(boxGraph, device, group, [sample("Pad.wav")]))
+        edit(() => first[0].keyLow.setValue(48))
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav")]))
+        expect(keys(first[0])).toEqual([48, 60, 127])
+    })
+    it("takes the key that was pointed at even when it sounds at other velocities", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            const [high] = SamplerZones.addSamples(boxGraph, device, group, [sample("Hat.wav")], 60)
+            high.velocityLow.setValue(64)
+        })
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Soft.wav"), sample("Other.wav")], 60))
+        expect(created.map(zone => zone.keyLow.getValue())).toEqual([60, 61])
+    })
+    it("lets round robins named in the files take turns in a group that was empty", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Snare_rr1.wav"), sample("Snare_rr2.wav")]))
+        expect(group.roundRobin.getValue()).toBe(1)
+    })
+    it("does not change how a group with zones plays", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Piano C4.wav")]))
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Snare_rr1.wav"), sample("Snare_rr2.wav")]))
+        expect(group.roundRobin.getValue()).toBe(0)
+    })
+    it("groups an instrument whatever separates its name from the layer", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare.wav"), sample("Snare_v2.wav"), sample("Snare v3.wav")]))
+        expect(created.map(zone => zone.keyLow.getValue())).toEqual([36, 36, 36])
+    })
+    it("leaves a lone sample of another group on its keyboard", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let first: ReadonlyArray<SamplerZoneBox> = [], second: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => first = SamplerZones.addSamples(boxGraph, device, group, [sample("Pad.wav")]))
+        edit(() => second = SamplerZones.addSamples(boxGraph, device, SamplerZones.createGroup(boxGraph, device, "Release"), [sample("Noise.wav")]))
+        expect(keys(first[0])).toEqual([0, 60, 127])
+        expect(keys(second[0])).toEqual([36, 36, 36])
+    })
+    it("joins the key of its instrument when layers come one at a time", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let first: ReadonlyArray<SamplerZoneBox> = [], second: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => first = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare_rr1.wav")]))
+        edit(() => second = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare_rr2.wav")]))
+        expect(keys(first[0])).toEqual([36, 36, 36])
+        expect(keys(second[0])).toEqual([36, 36, 36])
+        expect(second[0].sequence.getValue()).toBe(2)
+        expect(group.roundRobin.getValue()).toBe(1)
+    })
+    it("makes a kit of a lone sample of its group even when other groups have zones", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let pad: ReadonlyArray<SamplerZoneBox> = [], kick: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => {
+            pad = SamplerZones.addSamples(boxGraph, device, group, [sample("Pad.wav")])
+            SamplerZones.addSamples(boxGraph, device, SamplerZones.createGroup(boxGraph, device, "Other"), [sample("Tom C5.wav")])
+        })
+        edit(() => kick = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav")]))
+        expect(keys(pad[0])).toEqual([36, 36, 36])
+        expect(keys(kick[0])).toEqual([37, 37, 37])
+    })
+    it("keeps off the keys other groups play", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let hats: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav"), sample("Snare.wav")]))
+        edit(() => hats = SamplerZones.addSamples(boxGraph, device, SamplerZones.createGroup(boxGraph, device, "Hats"),
+            [sample("Open.wav"), sample("Closed.wav")]))
+        expect(hats.map(zone => zone.keyLow.getValue())).toEqual([38, 39])
+    })
+    it("makes room for a drop on C1 when the lone sample would take it", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let first: ReadonlyArray<SamplerZoneBox> = [], second: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => first = SamplerZones.addSamples(boxGraph, device, group, [sample("Kick.wav")]))
+        edit(() => second = SamplerZones.addSamples(boxGraph, device, group, [sample("Snare.wav")], 36))
+        expect(first[0].keyLow.getValue()).toBe(37)
+        expect(second[0].keyLow.getValue()).toBe(36)
+    })
+    it("stops at the top of the keyboard", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addSamples(boxGraph, device, group, [sample("A.wav"), sample("B.wav"), sample("C.wav")], 126))
+        expect(created.map(zone => zone.keyLow.getValue())).toEqual([126, 127, 125])
+    })
+})
+
+describe("SamplerZones.addToStack", () => {
+    const sample = (name: string) => ({uuid: UUID.toString(UUID.generate()), name, bpm: 0, duration: 1, sample_rate: 48000, origin: "import" as const})
+    it("puts new zones on the range, root and group of the zone and counts the sequence on", () => {
+        const {boxGraph, device, zones, edit} = setup(["a.wav"])
+        edit(() => {
+            place(zones[0], 40, 45, 42)
+            layer(zones[0], 20, 90)
+        })
+        let created: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => created = SamplerZones.addToStack(boxGraph, device, zones[0], [sample("b.wav"), sample("c C4.wav")]))
+        expect(created.map(keys)).toEqual([[40, 42, 45], [40, 42, 45]])
+        expect(created.map(velocities)).toEqual([[20, 90], [20, 90]])
+        expect(created.map(zone => zone.sequence.getValue())).toEqual([2, 3])
+        expect(created.every(zone => SamplerZones.sharesRange(zone, zones[0]))).toBe(true)
+    })
+})
+
+describe("SamplerZones.replaceSample", () => {
+    const sample = (name: string, uuid: UUID.Bytes = UUID.generate()) =>
+        ({uuid: UUID.toString(uuid), name, bpm: 0, duration: 1, sample_rate: 48000, origin: "import" as const})
+    it("points the zone at the new sample, resets its positions and drops the sample nothing plays any more", () => {
+        const {boxGraph, zones, edit} = setup(["a.wav"])
+        const old = zones[0].file.targetVertex.unwrap().box
+        edit(() => {
+            zones[0].sampleStart.setValue(100)
+            zones[0].loopEnd.setValue(500)
+            SamplerZones.replaceSample(boxGraph, zones, sample("b.wav"))
+        })
+        const file = zones[0].file.targetVertex.unwrap().box as AudioFileBox
+        expect(file.fileName.getValue()).toBe("b.wav")
+        expect(old.isAttached()).toBe(false)
+        expect(zones[0].sampleStart.getValue()).toBe(0)
+        expect(zones[0].loopEnd.getValue()).toBe(0x7FFFFFFF)
+    })
+    it("keeps the old sample while another zone plays it", () => {
+        const {boxGraph, device, group, zones, edit} = setup(["a.wav"])
+        const old = zones[0].file.targetVertex.unwrap().box as AudioFileBox
+        edit(() => {
+            SamplerZones.create(boxGraph, device, group, old)
+            SamplerZones.replaceSample(boxGraph, zones, sample("b.wav"))
+        })
+        expect(old.isAttached()).toBe(true)
+    })
+    it("survives replacing a sample by itself", () => {
+        const {boxGraph, zones, edit} = setup(["a.wav"])
+        const old = zones[0].file.targetVertex.unwrap().box as AudioFileBox
+        edit(() => SamplerZones.replaceSample(boxGraph, zones, sample("a.wav", old.address.uuid)))
+        expect(old.isAttached()).toBe(true)
+        expect(zones[0].file.targetVertex.unwrap().box).toBe(old)
+    })
+})
+
+describe("SamplerZones.reorder and removeGroup", () => {
+    it("numbers the zones in the order given", () => {
+        const {zones, edit} = setup(["a.wav", "b.wav", "c.wav"])
+        edit(() => SamplerZones.reorder([zones[2], zones[0], zones[1]]))
+        expect(zones.map(zone => zone.sequence.getValue())).toEqual([2, 3, 1])
+    })
+    it("removes a group with its zones and their samples", () => {
+        const {boxGraph, device, group, zones, edit} = setup(["a.wav"])
+        const file = zones[0].file.targetVertex.unwrap().box
+        let removed = false
+        edit(() => {
+            SamplerZones.createGroup(boxGraph, device, "Second")
+            removed = SamplerZones.removeGroup(device, group)
+        })
+        expect(removed).toBe(true)
+        expect(group.isAttached()).toBe(false)
+        expect(zones[0].isAttached()).toBe(false)
+        expect(file.isAttached()).toBe(false)
+        expect(device.groups.pointerHub.size()).toBe(1)
+    })
+    it("keeps the last group", () => {
+        const {device, group, edit} = setup(["a.wav"])
+        let removed = true
+        edit(() => removed = SamplerZones.removeGroup(device, group))
+        expect(removed).toBe(false)
+        expect(group.isAttached()).toBe(true)
+    })
+})

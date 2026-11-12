@@ -94,14 +94,27 @@ A new Sampler starts with one connection: Velocity to Gain at 100%. Remove it to
 
 ### 2.1 Adding samples
 
-- **Add Samples** opens a file dialog. Several files can be chosen at once.
-- Samples from the sample browser and audio files can be dropped anywhere on the window. They join the group that
-  is shown.
-- They can also be dropped on the device panel, without opening the window.
+Samples come from the sample browser, from audio files dropped from the desktop, or from **Add Samples**. Where
+you drop them decides what happens:
 
-New samples are mapped from their file names: a note name (`C4`, `c#3`, `Bb2`) becomes the root key, a dynamic
-(`pp` to `fff`, or `v1`, `v2`) becomes a velocity layer and `rr1`, `rr2` number the round robins. Notes are read
-in scientific pitch, where `C4` is the middle C.
+- **On an empty place of the map**: The sample gets the key under the pointer. Several samples take the keys
+  above it, one each. Above or below a zone on that key it takes the velocities that are still free.
+- **On a zone of the map**: The sample joins that zone's keys and velocities, as a further layer or round robin.
+  A single sample that covers the whole keyboard is the exception: the drop takes the key under the pointer and
+  the first sample moves to C1.
+- **On the list "Zones on This Range"**: The same, for the zone that is selected.
+- **On the waveform**: The selected zone plays the new sample instead. Its start, end and loop go back to the
+  whole sample.
+- **Anywhere else on the window, on the device panel, or with Add Samples**: A single sample in an empty Sampler
+  gets the whole keyboard. Several samples line up from C1, one key each, like a drum kit. A second sample added
+  to that single one turns both into a kit: the first moves to C1.
+
+Where a sample gets keys of its own, its file name is read first: a note (`C4`, `c#3`, `Bb2`) becomes the root
+key and wins over the place of the drop. A dynamic (`pp` to `fff`, or `v1`, `v2`) becomes a velocity layer and
+`rr1`, `rr2` number the round robins, so `Snare v1 rr1` and `Snare v2 rr1` share one key, also when they are
+added one after the other. Notes are read in
+scientific pitch, where `C4` is the middle C. A sample dropped on a zone or on the list takes that range whatever
+its name says. Round robins numbered in the file names take turns at once when their group was empty.
 
 ### 2.2 The map
 
@@ -109,17 +122,33 @@ The map shows keys from left to right and velocity from bottom to top, with a pi
 is a rectangle.
 
 - **Click** a zone to select it. **Shift**, **Cmd** or **Ctrl** click adds a zone or takes it out again.
-- A zone on the map stands for every zone on the same keys and velocities. **Click** a name in the Sample Zones
-  list to select that one zone only.
 - **Click** empty space to deselect.
 - **Drag** on empty space to draw a selection rectangle.
 - **Drag** a zone to move it. Drag an edge to change its range. All selected zones follow.
 - Play the piano to hear the instrument. The zones that answer the key are selected.
 
-Zones on the same keys and velocities in one group are round robins. They show as one rectangle with their
-number.
+Several zones can lie on exactly the same keys and velocities. The map draws them as one rectangle and a click
+selects all of them. The list "Zones on This Range" shows them one by one.
 
-### 2.3 Tools
+### 2.3 Samples
+
+The **Samples** list has one row per sample with the number of zones that play it. Click a sample to select all
+its zones. Zones that were taken off the map show as a dimmed row of their own.
+
+### 2.4 Zones on one range
+
+Right of the waveform, **Zones on This Range** lists the zones that share the keys and velocities of the selected
+zone, with their pan and gain.
+
+- **Click** a row to work on that zone alone.
+- The menu in its head decides how they play: **Together** (layers, for example a left and a right sample),
+  **In Turn** (round robins, one per note in the order of the list) or **Random** (one per note, never the same
+  twice in a row). This is a setting of the group, so it holds for every range in it.
+- With In Turn, **drag** a row up or down to change the order.
+- The **×** takes a zone off the map.
+- **Drop** samples on the list to add zones to the range. To give a zone another sample, drop it on the waveform.
+
+### 2.5 Tools
 
 The tools act on the selected zones.
 
@@ -129,29 +158,35 @@ The tools act on the selected zones.
 - **Spread Velocity**: Splits the velocity range evenly between the layers on the same keys
 - **Crossfade**: Lets neighbours overlap and fade into each other
 - **Root to Low**: Sets the root key to the lowest key of the zone
-- **Duplicate**: Copies the zones as further round robins
+- **Duplicate**: Copies the zones onto the same range
 - **Move to Group**
-- **Delete**: Takes the zones off the map. They stay in the list, dimmed.
-- **Restore**: Puts them back
-- **Clean Up** (top right): Removes the zones that were taken off the map
+- **Delete**: Takes the zones off the map. Their samples stay in the Samples list, dimmed.
+- **Restore**: Puts them back. Click the dimmed sample first.
+- **Clean Up** (top right): Removes the zones that were taken off the map, and samples nothing plays any more
 
-### 2.4 Groups
+### 2.6 Groups
 
-A group collects zones that behave the same way. Click a group to show only its zones.
+A group collects zones that behave the same way. Click a group to show only its zones, double-click to rename it.
+The **×** deletes a group with its zones. The last group stays.
 
-- **Robin**: Off plays every zone that answers. Cycle plays the round robins in turn, Random picks one and never
-  the same twice in a row.
+- **Stacks**: How zones on the same range play: Together, In Turn or Random (see 2.4)
 - **Choke**: Zones with the same choke number cut each other. A closed hi-hat stops the open one.
 - **Trigger**: Attack plays when a key is pressed, Release when it is let go.
 
-### 2.5 Zone fields
+### 2.7 Zone fields
 
 - **Key**: Lowest and highest key, and the **Fade** in semitones
 - **Velocity**: Lowest and highest velocity, and the **Fade**
 - **Pitch**: The **Root** key that plays the sample at its own pitch, **Transp** and **Tune**
-- **Play**: **Gain**, **Pan**, **Track** (how far the keys move the pitch, 0% plays every key alike), **Seq** (the
-  place among the round robins), **Reverse** and **One Shot** (plays to the end and ignores the note off)
+- **Play**: **Gain**, **Pan**, **Track** (how far the keys move the pitch, 0% plays every key alike), **Turn** (the
+  place in the order, with In Turn), **Reverse** and **One Shot** (plays to the end and ignores the note off)
 - **Sample**: **Start** and **End**, the **Loop** mode, its **Fade** and its points **From** and **To**
+
+Drag a value to change it, double-click to type it. A value changes all selected zones at once. It turns cream
+when the selected zones disagree, hover it to see the lowest and the highest.
+
+The start, the end and the loop points can also be dragged in the waveform. Where a loop point sits on the start
+or the end, the upper half of the waveform grabs the loop point and the lower half the start or the end.
 
 A fade only works at an edge where another zone of the same group overlaps. The outer edges of an instrument
 never fade.
@@ -162,9 +197,7 @@ Loop modes:
 - **On**: The loop repeats while the key is held. On release the sample plays on to its end.
 - **Always**: The loop keeps repeating through the release.
 
-A value changes all selected zones at once.
-
-### 2.6 Import and export
+### 2.8 Import and export
 
 - **Import SFZ / SF2** reads one preset of a soundfont, or an SFZ file chosen together with the samples it names.
   It replaces the sample zones of the Sampler. The samples are stored as local samples under

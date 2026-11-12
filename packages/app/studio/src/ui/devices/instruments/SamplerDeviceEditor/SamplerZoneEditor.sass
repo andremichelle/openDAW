@@ -114,70 +114,118 @@ component
     > div.modulation
       grid-column: 1 / -1
 
-    > div.list
-      display: grid
-      grid-template-rows: 16px minmax(0, 1fr)
-      --color: var(--color-dark)
-      @include shared.group-body
+  div.list
+    display: grid
+    grid-template-rows: 16px minmax(0, 1fr)
+    --color: var(--color-dark)
+    @include shared.group-body
 
-      > h3
-        margin: 0
-        @include shared.group-label
+    > h3
+      margin: 0
+      @include shared.group-label
 
-      > div.rows
-        position: relative
-        @include shared.list-rows
+    > div.rows
+      position: relative
+      @include shared.list-rows
 
-        > div.row
-          flex: 0 0 16px
-          display: grid
-          grid-template-columns: 1fr auto
-          column-gap: 6px
-          align-items: center
-          padding: 0 6px
+      > div.row
+        flex: 0 0 16px
+        display: grid
+        grid-template-columns: 1fr auto
+        column-gap: 6px
+        align-items: center
+        padding: 0 6px
+        font-size: 9px
+        color: var(--color-dark)
+
+        &:has(> i)
+          grid-template-columns: 8px 1fr auto 12px
+
+        > div.remove
+          display: flex
+          justify-content: center
           font-size: 9px
-          color: var(--color-dark)
-
-          &:has(> i)
-            grid-template-columns: 8px 1fr auto
-
-          > i
-            width: 8px
-            height: 8px
-            border-radius: 2px
-
-          > span
-            overflow: hidden
-            text-overflow: ellipsis
-            white-space: nowrap
-
-          > span.count
-            font-size: 8px
-            color: var(--color-shadow)
-
-          &.off
-            color: var(--color-black)
-
-          &.selected
-            background-color: rgba(white, 0.04)
-
-          &.active
-            color: var(--color-gray)
-            background-color: rgba(white, 0.08)
-
-        > div.add
-          flex: 0 0 16px
-          padding: 0 6px
-          font-size: 9px
-          line-height: 16px
           color: var(--color-shadow)
+
+        > i
+          width: 8px
+          height: 8px
+          border-radius: 2px
+
+        > span
+          overflow: hidden
+          text-overflow: ellipsis
+          white-space: nowrap
+
+        > span.count
+          font-size: 8px
+          color: var(--color-shadow)
+
+        &.off
+          color: var(--color-black)
+
+        &.selected
+          background-color: rgba(white, 0.04)
+
+        &.active
+          color: var(--color-gray)
+          background-color: rgba(white, 0.08)
+
+      > div.add
+        flex: 0 0 16px
+        padding: 0 6px
+        font-size: 9px
+        line-height: 16px
+        color: var(--color-shadow)
 
   > div.inspector
     display: grid
     grid-template-rows: 72px 82px 82px
     row-gap: 8px
 
-    > div.waveform
+    > div.focus
+      display: grid
+      grid-template-columns: minmax(0, 1fr) 264px
+      grid-template-rows: 72px
+      column-gap: 8px
+
+      > div.stack
+        > h3
+          display: flex
+          justify-content: space-between
+          align-items: center
+
+          > button
+            font-size: 9px
+
+            > label.value
+              padding: 0
+              line-height: 11px
+              font-size: 9px
+              color: inherit
+
+        > div.rows
+          padding: 4px 0
+          mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 8px), transparent)
+
+          > div.row
+            grid-template-columns: 10px 1fr 34px 44px 12px
+            touch-action: none
+
+            > span.count
+              text-align: right
+
+            > span.turn
+              font-size: 8px
+              color: var(--color-shadow)
+
+          > div.hint
+            padding: 4px 6px
+            font-size: 9px
+            line-height: 13px
+            color: var(--color-shadow)
+
+    div.waveform
       padding: 8px 8px 16px 8px
 
       > canvas.playheads

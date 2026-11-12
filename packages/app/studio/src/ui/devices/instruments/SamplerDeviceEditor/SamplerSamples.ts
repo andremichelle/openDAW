@@ -1,4 +1,4 @@
-import {Arrays, DefaultObservableValue, isDefined, Optional, Procedure, Provider, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {Arrays, DefaultObservableValue, Func, isDefined, Optional, Procedure, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {SamplerGroupBox, SamplerZoneBox} from "@opendaw/studio-boxes"
 import {Sample, SamplerDeviceBoxAdapter, SamplerZones} from "@opendaw/studio-adapters"
@@ -46,18 +46,18 @@ export namespace SamplerSamples {
             isDefined(group) && group.isAttached() ? group : undefined, samples)).unwrapOrElse(Arrays.empty())
     }
 
-    // `highlight` shows that the drop is welcome, `group` is where the zones go, `added` hears about them
+    // `locate` reads where the drop lands, at once, and returns what takes the samples when they are ready
     export const installDrop = (target: HTMLElement, highlight: HTMLElement, service: StudioService,
-                                adapter: SamplerDeviceBoxAdapter, group: Provider<Optional<SamplerGroupBox>>,
-                                added: Procedure<ReadonlyArray<SamplerZoneBox>>): Terminable => {
+                                locate: Func<DragEvent, Procedure<ReadonlyArray<Sample>>>): Terminable => {
         const {project} = service
         return DragAndDrop.installTarget(target, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
-            drop: async (_event: DragEvent, data: AnyDragData): Promise<void> => {
+            drop: async (event: DragEvent, data: AnyDragData): Promise<void> => {
+                const place = locate(event)
                 if (data.type === "sample") {
-                    added(add(project, adapter, group(), [data.sample]))
+                    place([data.sample])
                 } else if (data.type === "file") {
-                    added(add(project, adapter, group(), await importFiles(service, project, data.files)))
+                    place(await importFiles(service, project, data.files))
                 }
             },
             enter: (allowDrop: boolean) => highlight.classList.toggle("accept", allowDrop),

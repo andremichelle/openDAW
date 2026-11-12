@@ -121,6 +121,14 @@ first draft to a design ready for production. Every rule below came from a concr
 7. Dragging moves a value in steps that fit its range. A pitch amount moves by cents, not by half semitones.
 8. The button that opens a device's window sits in the device header, in green, with a pointer cursor.
 9. A name the user gave (a group) is renamed by double-click.
+10. A value with a few named choices opens a menu. It is not dragged.
+11. Where a drop lands decides what it does: on an item it replaces or joins that item, on empty space it creates
+    one at that position.
+12. When several items share one place in a map, a list beside it shows them one by one. The map selects all of
+    them, the list picks one.
+13. A field that stands for several selected items with different values is tinted and names the range in its
+    tooltip. It still shows one value, so its width does not change.
+14. Positions shown in a display (start, end, loop points) are dragged in the display as well as in their fields.
 
 ## 12. Maps and keyboards
 

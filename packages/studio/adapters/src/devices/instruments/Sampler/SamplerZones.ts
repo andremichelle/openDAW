@@ -55,24 +55,124 @@ export namespace SamplerZones {
         return unused.length
     }
 
-    // New zones for the samples, mapped by what their names say. Without a group they join the first one.
+    const DrumKey: int = 36
+    const MaxFrame: int = 0x7FFFFFFF
+    const RobinCycle: int = 1
+
+    // the box of a sample in the project, created when no zone or region uses it yet
+    export const fileOf = (boxGraph: BoxGraph, sample: Sample): AudioFileBox => {
+        const uuid = UUID.parse(sample.uuid)
+        return boxGraph.findBox<AudioFileBox>(uuid).unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
+            box.fileName.setValue(sample.name)
+            box.endInSeconds.setValue(sample.duration)
+        }))
+    }
+
+    const firstGroup = (device: SamplerDeviceBox): Optional<SamplerGroupBox> => device.groups.pointerHub.incoming()
+        .map(({box}) => box as SamplerGroupBox)
+        .sort((left, right) => left.index.getValue() - right.index.getValue()).at(0)
+
+    // New zones for the samples. A note in a name sets the key, others get a free key from `startKey` (C1) upwards.
     export const addSamples = (boxGraph: BoxGraph, device: SamplerDeviceBox, group: Optional<SamplerGroupBox>,
-                               samples: ReadonlyArray<Sample>): ReadonlyArray<SamplerZoneBox> => {
+                               samples: ReadonlyArray<Sample>, startKey?: int): ReadonlyArray<SamplerZoneBox> => {
         if (samples.length === 0) {return Arrays.empty()}
-        const target = group ?? device.groups.pointerHub.incoming()
-            .map(({box}) => box as SamplerGroupBox)
-            .sort((left, right) => left.index.getValue() - right.index.getValue()).at(0)
-            ?? createGroup(boxGraph, device, "Group 1")
-        const created = samples.map(sample => {
-            const uuid = UUID.parse(sample.uuid)
-            const file = boxGraph.findBox<AudioFileBox>(uuid).unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
-                box.fileName.setValue(sample.name)
-                box.endInSeconds.setValue(sample.duration)
-            }))
-            return create(boxGraph, device, target, file)
+        const target = group ?? firstGroup(device) ?? createGroup(boxGraph, device, "Group 1")
+        const before = zonesOf(device).filter(zone => zone.enabled.getValue())
+        const created = samples.map(sample => create(boxGraph, device, target, fileOf(boxGraph, sample)))
+        const unnamed = created.filter(zone => !isDefined(parseName(fileNameOf(zone)).key))
+        mapByName(created.filter(zone => !unnamed.includes(zone)))
+        const inTarget = (zone: SamplerZoneBox): boolean => zone.group.targetVertex.unwrapOrNull() === target.zones
+        const numbered = created.some(zone => isDefined(parseName(fileNameOf(zone)).robin))
+        if (numbered && !before.some(inTarget)) {target.roundRobin.setValue(RobinCycle)}
+        if (created.length === 1 && before.length === 0 && !isDefined(startKey)) {return created}
+        const whole = (zone: SamplerZoneBox): boolean => zone.keyLow.getValue() === MinKey && zone.keyHigh.getValue() === MaxKey
+        const start = clamp(startKey ?? DrumKey, MinKey, MaxKey)
+        // a lone sample on the whole keyboard becomes the first key of a kit
+        const inGroup = before.filter(inTarget)
+        const alone = inGroup.length === 1 && unnamed.length > 0 ? inGroup[0] : undefined
+        if (isDefined(alone) && whole(alone) && !isDefined(parseName(fileNameOf(alone)).key)) {
+            const key = isDefined(startKey) && start === DrumKey ? DrumKey + 1 : DrumKey
+            alone.keyLow.setValue(key)
+            alone.keyHigh.setValue(key)
+            alone.rootKey.setValue(key)
+        }
+        const taken = new Set<int>()
+        before.concat(created.filter(zone => !unnamed.includes(zone))).filter(zone => inTarget(zone) || !whole(zone))
+            .forEach(zone => {
+                for (let key = zone.keyLow.getValue(); key <= zone.keyHigh.getValue(); key++) {taken.add(key)}
+            })
+        if (isDefined(startKey)) {taken.delete(start)}
+        const free = (): int => {
+            for (let key = start; key <= MaxKey; key++) {if (!taken.has(key)) {return key}}
+            for (let key = start - 1; key >= MinKey; key--) {if (!taken.has(key)) {return key}}
+            return start
+        }
+        const keys = new Map<string, int>()
+        inGroup.filter(zone => zone.keyLow.getValue() === zone.keyHigh.getValue() && !isDefined(parseName(fileNameOf(zone)).key))
+            .forEach(zone => {
+                const instrument = instrumentOf(fileNameOf(zone))
+                if (!keys.has(instrument)) {keys.set(instrument, zone.keyLow.getValue())}
+            })
+        unnamed.forEach(zone => {
+            const instrument = instrumentOf(fileNameOf(zone))
+            const key = keys.get(instrument) ?? free()
+            keys.set(instrument, key)
+            taken.add(key)
+            zone.keyLow.setValue(key)
+            zone.keyHigh.setValue(key)
+            zone.rootKey.setValue(key)
         })
-        mapByName(created)
+        layersByName(unnamed)
         return created
+    }
+
+    // new zones on the keys and velocities of `like`
+    export const addToStack = (boxGraph: BoxGraph, device: SamplerDeviceBox, like: SamplerZoneBox,
+                               samples: ReadonlyArray<Sample>): ReadonlyArray<SamplerZoneBox> => {
+        const group = like.group.targetVertex.unwrapOrNull()?.box
+        if (!(group instanceof SamplerGroupBox)) {return Arrays.empty()}
+        const stack = zonesOf(device).filter(zone => sharesRange(zone, like))
+        const last = stack.reduce((highest, zone) => Math.max(highest, zone.sequence.getValue()), 0)
+        return samples.map((sample, index) => {
+            const zone = create(boxGraph, device, group, fileOf(boxGraph, sample))
+            zone.keyLow.setValue(like.keyLow.getValue())
+            zone.keyHigh.setValue(like.keyHigh.getValue())
+            zone.keyFade.setValue(like.keyFade.getValue())
+            zone.rootKey.setValue(like.rootKey.getValue())
+            zone.velocityLow.setValue(like.velocityLow.getValue())
+            zone.velocityHigh.setValue(like.velocityHigh.getValue())
+            zone.velocityFade.setValue(like.velocityFade.getValue())
+            zone.keyTrack.setValue(like.keyTrack.getValue())
+            zone.sequence.setValue(clamp(last + index + 1, 1, 128))
+            return zone
+        })
+    }
+
+    // start, end and loop go back to the whole sample
+    export const replaceSample = (boxGraph: BoxGraph, zones: ReadonlyArray<SamplerZoneBox>, sample: Sample): void => {
+        const file = fileOf(boxGraph, sample)
+        const before = zones.map(zone => zone.file.targetVertex.unwrapOrNull()?.box)
+        zones.forEach(zone => {
+            zone.file.refer(file)
+            zone.sampleStart.setValue(0)
+            zone.sampleEnd.setValue(MaxFrame)
+            zone.loopStart.setValue(0)
+            zone.loopEnd.setValue(MaxFrame)
+        })
+        new Set(before).forEach(old => {
+            if (isDefined(old) && old !== file && old.isAttached() && old.pointerHub.isEmpty()) {old.delete()}
+        })
+    }
+
+    export const reorder = (zones: ReadonlyArray<SamplerZoneBox>): void =>
+        zones.forEach((zone, index) => zone.sequence.setValue(clamp(index + 1, 1, 128)))
+
+    // the last group stays
+    export const removeGroup = (device: SamplerDeviceBox, group: SamplerGroupBox): boolean => {
+        if (device.groups.pointerHub.size() < 2) {return false}
+        remove(zonesOf(device).filter(zone => zone.group.targetVertex.unwrapOrNull() === group.zones))
+        group.delete()
+        return true
     }
 
     export const zonesOf = (device: SamplerDeviceBox): ReadonlyArray<SamplerZoneBox> =>
@@ -109,13 +209,25 @@ export namespace SamplerZones {
     // Maps zones from their file names: the note becomes root and key, dynamics become velocity layers, round
     // robin numbers the sequence. Then the keys are spread, so no key between two samples stays empty.
     export const mapByName = (zones: ReadonlyArray<SamplerZoneBox>): void => {
+        zones.forEach(zone => {
+            const {key} = parseName(fileNameOf(zone))
+            if (!isDefined(key)) {return}
+            zone.rootKey.setValue(key)
+            zone.keyLow.setValue(key)
+            zone.keyHigh.setValue(key)
+        })
+        layersByName(zones)
+        spreadKeys(zones)
+    }
+
+    // a file name without its dynamic and round robin: "Snare_v2_rr1.wav" and "Snare v1" are one instrument
+    const instrumentOf = (name: string): string => name.replace(/\.[A-Za-z0-9]+$/, "")
+        .replace(/(^|[_\-\s.])(ppp|pp|p|mp|mf|ff|fff|f|vl?\d+|rr\d+)(?=$|[_\-\s.])/gi, "$1")
+        .replace(/[_\-\s.]+/g, " ").trim().toLowerCase()
+
+    const layersByName = (zones: ReadonlyArray<SamplerZoneBox>): void => {
         const parsed = zones.map(zone => ({zone, ...parseName(fileNameOf(zone))}))
-        parsed.forEach(({zone, key, robin}) => {
-            if (isDefined(key)) {
-                zone.rootKey.setValue(key)
-                zone.keyLow.setValue(key)
-                zone.keyHigh.setValue(key)
-            }
+        parsed.forEach(({zone, robin}) => {
             if (isDefined(robin)) {zone.sequence.setValue(clamp(robin, 1, 128))}
         })
         const layered = parsed.filter(({layer}) => isDefined(layer))
@@ -129,7 +241,6 @@ export namespace SamplerZones {
                 zone.velocityHigh.setValue(high)
             })
         })
-        spreadKeys(zones)
     }
 
     const layerRange = (index: int, count: int): [int, int] => [

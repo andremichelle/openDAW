@@ -33,6 +33,10 @@ $gap: 6px
     content: attr(unit)
     color: var(--color-dark)
 
+  &.spread
+    overflow: visible
+    color: var(--color-cream)
+
   &.modifying
     color: var(--color-blue)
     box-shadow: 0 0 0 0.5px rgba(white, 0.1)
@@ -128,6 +132,11 @@ $gap: 6px
     label.value
       width: 40px
       @include value-label
+
+    button
+      justify-self: end
+      min-width: 0
+      padding: 0
 
     label.framed
       padding-top: 2px

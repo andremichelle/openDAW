@@ -7,7 +7,7 @@ import {IndexedBoxAdapter, IndexedBoxAdapterCollection} from "../../../IndexedBo
 import {SamplerZoneBoxAdapter} from "./SamplerZoneBoxAdapter"
 
 export class SamplerGroupBoxAdapter implements IndexedBoxAdapter {
-    static readonly RoundRobinNames: ReadonlyArray<string> = ["Off", "Cycle", "Random"]
+    static readonly RoundRobinNames: ReadonlyArray<string> = ["Together", "In Turn", "Random"]
     static readonly TriggerNames: ReadonlyArray<string> = ["Attack", "Release"]
 
     readonly #box: SamplerGroupBox

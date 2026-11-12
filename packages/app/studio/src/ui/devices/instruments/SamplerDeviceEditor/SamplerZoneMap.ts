@@ -14,6 +14,7 @@ export namespace SamplerZoneMap {
     export type Entry = Range & {
         readonly zone: SamplerZoneBoxAdapter
         readonly group: int // the index of the zone's group, -1 without one
+        readonly robin: boolean // the group lets zones on the same range take turns
         readonly rootKey: int
         readonly keyFade: int
         readonly velocityFade: int
@@ -44,6 +45,7 @@ export namespace SamplerZoneMap {
             return {
                 zone,
                 group: zone.group().mapOr(group => group.indexField.getValue(), -1),
+                robin: zone.group().mapOr(group => group.box.roundRobin.getValue() !== 0, false),
                 keyLow: keyLow.getValue(), keyHigh: keyHigh.getValue(),
                 velocityLow: velocityLow.getValue(), velocityHigh: velocityHigh.getValue(),
                 rootKey: rootKey.getValue(), keyFade: keyFade.getValue(), velocityFade: velocityFade.getValue()
@@ -121,16 +123,17 @@ export namespace SamplerZoneMap {
             context.lineWidth = scale
             context.strokeRect(x0 + scale * 0.5, y0 + scale * 0.5, x1 - x0 - scale, y1 - y0 - scale)
             const robins = counts.get(range) ?? 1
-            if (robins > 1 && x1 - x0 >= 14 * scale && y1 - y0 >= 12 * scale) {
+            if (entry.robin && robins > 1 && x1 - x0 >= 14 * scale && y1 - y0 >= 12 * scale) {
                 context.fillStyle = (selected ? Colors.black : color).toString()
                 context.font = `${8 * scale}px sans-serif`
                 context.textAlign = "center"
                 context.textBaseline = "middle"
-                context.fillText(`×${robins}`, (x0 + x1) * 0.5, (y0 + y1) * 0.5)
+                context.fillText(`rr ${robins}`, (x0 + x1) * 0.5, (y0 + y1) * 0.5)
             }
         }
-        entries.filter(entry => !selection.has(entry.zone)).forEach(entry => paintEntry(entry, false))
-        entries.filter(entry => selection.has(entry.zone)).forEach(entry => paintEntry(entry, true))
+        const chosen = new Set(entries.filter(entry => selection.has(entry.zone)).map(rangeOf))
+        entries.filter(entry => !chosen.has(rangeOf(entry))).forEach(entry => paintEntry(entry, false))
+        entries.filter(entry => chosen.has(rangeOf(entry))).forEach(entry => paintEntry(entry, true))
         if (pressed >= 0) {
             context.fillStyle = Colors.orange.opacity(0.35).toString()
             context.fillRect(Math.round(pressed * keyWidth), 0, Math.round(keyWidth), height)
@@ -284,7 +287,7 @@ export namespace SamplerZoneMap {
             if (end < 1.0) {render(end, 1.0)}
             context.globalAlpha = 1.0
             if (box.loopMode.getValue() === 0) {return}
-            const lo = Math.max(unit(box.loopStart.getValue()), start)
+            const lo = Math.min(Math.max(unit(box.loopStart.getValue()), start), end)
             const hi = Math.min(Math.max(unit(box.loopEnd.getValue()), lo), end)
             const xLo = Math.round(lo * (width - scale)), xHi = Math.round(hi * (width - scale))
             context.fillStyle = Colors.green.toString()

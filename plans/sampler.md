@@ -213,8 +213,7 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
    first group.
 2. `SamplerZones.addSamples` in the adapters creates the zones and maps them by name. `SamplerSamples` in the app
    holds the file import and the drop target, the window and the panel share it.
-3. A row in the Sample Zones list selects that one zone. The map still selects every zone that shares a range.
-   Without this, three samples dropped without a note in their names could never be told apart.
+3. Superseded by the editor rework below.
 
 ## Review and test pass 2026-11-12 (done, uncommitted)
 
@@ -272,37 +271,87 @@ file dialog.
 
 1. A zone edit delivers the whole zone table again. Fine for hundreds of zones, to be measured for thousands.
 
-## Open questions for André (2026-11-12)
+## Editor rework 2026-11-12 (done, uncommitted)
+
+Goal: everything the engine understands can be edited in the window, and round robins are built by hand.
+
+1. **Samples** list replaces the per zone list: one row per sample with its number of zones, a click selects all
+   of them.
+2. **Zones on This Range**, right of the waveform: the zones on the keys and velocities of the selected zone, each
+   with pan and gain. Click focuses one zone. A menu in its head sets how they play (Together, In Turn, Random),
+   which is the group's round robin setting. With In Turn the rows are numbered and dragged into order. The ×
+   takes a zone off the map.
+3. **Drops decide by place**: empty map puts the sample on the key under the pointer, a rectangle or the range
+   list adds a zone to that range, the waveform replaces the sample of the focused zone. Elsewhere a single
+   sample in an empty Sampler gets the whole keyboard and several line up from C1. A second sample added to
+   that single one turns both into a kit.
+4. **Groups** can be deleted (× on the row, asks when the group has zones, the last group stays).
+5. **Choices are menus**: Stacks, Trigger and Loop open a menu instead of being dragged.
+6. **Sample markers**: start, end and the loop points are dragged in the waveform.
+7. **Disagreeing values**: a field turns cream when the selected zones differ, the tooltip names lowest and
+   highest.
+8. The map labels a range only when its zones take turns ("rr 3"). Layers are not labelled.
+9. Adapters: `SamplerZones.addToStack`, `replaceSample`, `reorder`, `removeGroup`, `fileOf`, and the key placement
+   in `addSamples`. 18 new tests.
+
+Every field of the boxes now has a control: all zone fields, the zone's sample (drop on the waveform), its group (Move
+to Group), enabled (Delete, Restore), the group's label, stacks, choke and trigger, the modulation slots and the
+device parameters.
+
+Review rounds on this rework: five, each followed by fixes. The last one found ten more, all in the edges of the
+drop rules and the range list. They are fixed, but that round was not followed by another review.
+
+Not confirmed in the browser: drops on the device panel, on the range list and on the waveform. The automated
+drag releases without a hover event, so those drops do not register. Drops on the map do. All drop rules are
+covered by the adapter tests (62 in `SamplerZones.test.ts`).
+
+Left open from the reviews: the range and turn order are computed twice per refresh, and the five older items
+under "Review and test pass".
+
+Decided without André, to confirm:
+
+1. A deleted group takes its zones with it. Moving them to another group would let release samples sound on
+   attack.
+2. Round robin stays a setting of the group, shown where the zones of a range are listed.
+3. × in the range list takes the zone off the map like Delete does. Clean Up removes it for good.
+4. Seq is called Turn and only shows a value with In Turn.
+5. Replacing a zone's sample resets its start, end and loop points to the whole sample.
+6. The names Together, In Turn and Random replace Off, Cycle and Random.
+7. Samples without a note in their name: one alone keeps the whole keyboard, a second one turns both into a kit
+   from C1, and layers or round robins of one instrument (`Snare v1`, `Snare rr2`) share its key.
+8. A drop on the waveform replaces the sample of the selected zone. The range list always adds.
+9. Round robins numbered in file names switch an empty group to In Turn.
+10. Keys that other groups play count as taken when a free key is searched, unless a zone there covers the whole
+    keyboard.
+
+## Open questions for André
 
 Design
 
-1. A row in the Sample Zones list now selects one zone, the map selects all zones on the same range. Keep it?
-2. Dropped samples without a note in their name all land on the full key range, on top of each other. Should
-   they instead take the next free key each, upwards from C1, like a drum kit?
-3. Envelope and LFO per zone as override boxes (see Later). Build it, and before or after the first release?
-4. Groups cannot be deleted yet. On delete, do the zones go with the group or move to the first group?
-5. Round robins now take turns per stack, across all keys the stack covers. Before, every key counted on its
-   own. Is per stack what you want?
-6. The window title is now just "Sample Zones", the instrument name is the first thing inside. Fine?
-7. The five code items left from the review (see above): fix them now or leave them?
+1. The ten decisions above.
+2. Envelope and LFO per zone as override boxes (see Later). Build it, and before or after the first release?
+3. Round robins take turns per range, across all keys the range covers. Before, every key counted on its own.
+4. The window title is just "Sample Zones", the instrument name is the first thing inside.
+5. In your Steinway `Piano.ff.C1L` is panned 100 R and `C1R` 100 L. Is the soundfont authored that way, or does the
+   import flip the pan? It needs the file to check.
 
 Import and export
 
-8. Export SF2 leaves out further round robins, release triggers, fades, One Shot, the mod envelope, LFOs and
+6. Export SF2 leaves out further round robins, release triggers, fades, One Shot, the mod envelope, LFOs and
    modulation. One Shot could be written as a long release, and LFO to pitch as SF2 vibrato. Worth it?
-9. Export clips samples louder than full scale after asking. Offer to normalise the whole instrument instead?
-10. Import takes the envelope and filter of the first zone for the whole instrument. Fine until per zone overrides
+7. Export clips samples louder than full scale after asking. Offer to normalise the whole instrument instead?
+8. Import takes the envelope and filter of the first zone for the whole instrument. Fine until per zone overrides
    exist?
-11. The Soundfont device stays next to the Sampler for now. When does it go, and are existing projects converted
+9. The Soundfont device stays next to the Sampler for now. When does it go, and are existing projects converted
    on load?
 
 Scripting
 
-12. The five points under Open in `plans/sampler-scripting.md`.
+10. The five points under Open in `plans/sampler-scripting.md`.
 
 Release
 
-13. The export was written against the soundfont reader we use. It has not been opened in another soundfont
+11. The export was written against the soundfont reader we use. It has not been opened in another soundfont
     player. Do you have one at hand to try a file?
-14. Which CC0 libraries ship first under `Multi Samples` in the cloud (VCSL, the mridangam set)?
-15. Release notes go in with the DEV deploy. Deploy to DEV now, or after the scripting API?
+12. Which CC0 libraries ship first under `Multi Samples` in the cloud (VCSL, the mridangam set)?
+13. Release notes go in with the DEV deploy. Deploy to DEV now, or after the scripting API?
