@@ -64,7 +64,7 @@ data and drawn waveforms. No box, adapter or engine yet. The layout rules that c
 
 1. A zone holds one sample with key range, velocity range, root key, crossfades, tuning, key tracking, gain, pan,
    start and end, reverse, one shot and its loop.
-2. Loop modes: Off, On (loops while the key is held and plays out on release), Always (keeps looping through the
+2. Loop modes: Off, Gate (loops while the key is held and plays out on release), Always (keeps looping through the
    release).
 3. Zones on the same keys and velocities in one group are round robins, Seq is their position.
 4. A fade applies only at an edge where another zone of the same group overlaps. Outer edges never fade. The map
@@ -149,7 +149,8 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
 3. `crates/stock-devices/device-sampler`: zones, round robins (cycle, random), key and velocity crossfades,
    release groups, choke, voice limit, legato and glide, cubic interpolation, loop with crossfade, two DAHDSR
    envelopes, two LFOs with delay, fade, tempo sync and restart, a 12 or 24 dB filter, modulation slots. A voice
-   copies its zone when it starts, so a zone edit reaches the next note and never a sounding one.
+   copies its zone when it starts. Since 2026-11-12 a sounding voice takes its edited row again when the zone table
+   changes, as long as the row still holds its sample. The play position stays.
 4. Tests: 11 for the abi table type, 37 for the engine binding, 124 for the device, 6 end to end through the wasm
    engine (`packages/studio/core-wasm/test/sampler.test.ts`), plus the parameter mapping parity of all 36
    parameters.
@@ -317,7 +318,7 @@ the focused zone, so what plays is seen, not heard:
 3. Together: every zone of the range plays on every note.
 4. Release trigger: silent while the key is held, plays on key up.
 5. Choke: a one shot is cut by another zone of the same choke.
-6. One Shot plays to the end after key up. Reverse runs from the end. Start and end trim. Loop On and Always
+6. One Shot plays to the end after key up. Reverse runs from the end. Start and end trim. Loop Gate and Always
    stay inside the loop points while held.
 7. Transpose 12 doubles the speed, a key an octave above the root too, Track 0% keeps the root speed.
 8. Velocity layers answer soft and loud notes separately.
@@ -329,10 +330,11 @@ the focused zone, so what plays is seen, not heard:
 Found and fixed in that pass:
 
 1. Release tails were not counted by Voices, so a long release piled voices up to the pool limit. Voices now
-   bounds everything that sounds. A new note takes its room from the quietest tail, and without a tail from the
-   oldest held note. A note goes with all its layers, a one shot whose key is up counts as ringing out, the
-   quietest is judged by zone gain and fade as well as the envelope, and release samples have a budget of their
-   own so they never cut the tail of their own note. Two earlier versions did not survive their reviews.
+   counts notes, a note with all its layers is one. When a note needs room, the one that has been ringing out
+   longest goes, and without one the oldest held note, never the one just played. A one shot whose key is up
+   rings out. Release samples have a budget of their own. In total no more than 64 voices sound. Legato carries
+   every layer and the key of the held note. Five versions that tried to pick the quietest note instead did not
+   survive their reviews (one of them was committed as 89f006be6), so the rule is the plain one by age now.
 2. A zone under another one could not be picked on the map. A second click on the same spot goes to the next.
 3. Singular wording ("1 sample", "1 sample zone").
 
@@ -344,6 +346,37 @@ Seen once and not reproduced: the Groups list had "Group 1" shown instead of "Al
 Not covered by the pass: Legato (the window's piano cannot hold two keys), the filter, the envelope stages
 other than release, LFO delay, fade, sync and restart, and the other modulation targets. They have engine tests
 only. Listening stays with André.
+
+Second rework after André tried it (2026-11-12): the blocks of zone fields looked like instrument controls and
+nothing showed which zone they edit. Now:
+
+1. A **zone table**, one row per zone with all 21 values as cells. A change sets the same value on every
+   selected row. The relative change before lost the distance between values at a limit. The table shows the
+   selected zones and the others on their range. It replaces "Zones on This Range" and the five field blocks.
+2. **One top row**: name, counts and a single Sample Zones menu with every action, import and export included.
+3. **Order**: top row, the instrument's controls with the modulation list, then the zone area (map, piano, table,
+   groups, samples, waveform, group settings). The window is 628 high.
+4. Dragging rows into order is gone with the old list. Turn is a cell of the table.
+
+Further changes the same day, from André trying the table:
+
+1. The menu is the first thing in the top row. The key and velocity readout sits in the corner of the map.
+2. A line separates the instrument's controls from the zone area. Labels above lines sit higher.
+3. The table shows four rows, has a frame, rounded first and last row, and fades only where rows lie beyond an
+   edge.
+4. The group settings are columns of the Groups list (Zones, Stacks, Choke, Trigger). The Group block is gone.
+5. Shift click on the map selects the rectangle between the last selected zone and the clicked one. Delete takes
+   the selected zones off the map. The window takes the key focus after its own actions, so Delete never reaches
+   the device panel.
+6. A row of the Samples list can be dragged onto the map to make another zone with that sample.
+7. "Clean Up" is "Delete Unused Samples". The add buttons are icons.
+8. The soundfont "Nice Steinway" pans its left samples right and its right samples left in the file. Checked
+   through reader, importer and engine: no bug, the pan stays as the file says.
+
+Known and left as they are: with one voice, going back to a held key only looks at the key below the top one.
+Lowering Voices to 1 while several keys are held forgets those keys. A note that was cut to make room, or the
+first key of a legato phrase, still plays its release sample when its key comes up. Room is made by age, so a
+loud tail that was let go first goes before a quiet one let go later.
 
 Decided without André, to confirm:
 

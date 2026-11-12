@@ -63,7 +63,7 @@ export const SamplerModulationList = ({lifecycle, editing, adapter, onHover}: Co
                 slot.index.setValue(adapter.modulations.adapters()
                     .reduce((highest, entry) => Math.max(highest, entry.indexField.getValue() + 1), 0))
             })
-        })}>Add</div>
+        })}><Icon symbol={IconSymbol.Add}/></div>
     )
     const rows: HTMLElement = <div className="rows">{add}</div>
     const entries = UUID.newSet<{ uuid: UUID.Bytes, row: HTMLElement, terminator: Terminator }>(entry => entry.uuid)

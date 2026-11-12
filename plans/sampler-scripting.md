@@ -50,7 +50,7 @@ const zone = sampler.addZone(find("Upright C4 mf"), {
     transpose: 0, tune: 0, keyTrack: 1,
     gain: 0, panning: 0, sequence: 1, reverse: false, oneShot: false,
     sampleStart: 0, sampleEnd: null, // frames, null is the end of the sample
-    loop: "on", loopStart: 12000, loopEnd: 48000, loopFade: 0.01 // "off" | "on" | "always"
+    loop: "gate", loopStart: 12000, loopEnd: 48000, loopFade: 0.01 // "off" | "gate" | "always"
 })
 
 // 5. zones from file names: note, dynamic and round robin are read from the name

@@ -26,9 +26,10 @@ that maps the samples.
 
 ### 1.1 Play
 
-- **Voices**: How many voices may sound at once, notes that are ringing out included. When a new one needs room,
-  the quietest note that is ringing out falls away with all its layers, and without one the oldest held note.
-  Release samples are counted on their own, up to the same number. One voice makes the instrument monophonic.
+- **Voices**: How many notes may sound at once, notes that are ringing out included. A note counts once, however
+  many layers it plays. When a new note needs room, the note that has been ringing out longest falls away, and
+  without one the oldest held note. Release samples are counted on their own, up to the same number. All in all
+  no more than 64 samples play at a time. One voice makes the instrument monophonic.
 - **Glide**: The time a note takes to slide from the pitch of the note before.
 - **Legato**: With one voice, a note played while another is held carries the sounding sample to the new key
   instead of starting it again.
@@ -103,7 +104,7 @@ you drop them decides what happens:
 - **On a zone of the map**: The sample joins that zone's keys and velocities, as a further layer or round robin.
   A single sample that covers the whole keyboard is the exception: the drop takes the key under the pointer and
   the first sample moves to C1.
-- **On the list "Zones on This Range"**: The same, for the zone that is selected.
+- **On the zone table**: The same, for the zone that is selected.
 - **On the waveform**: The selected zone plays the new sample instead. Its start, end and loop go back to the
   whole sample.
 - **Anywhere else on the window, on the device panel, or with Add Samples**: A single sample in an empty Sampler
@@ -122,40 +123,91 @@ its name says. Round robins numbered in the file names take turns at once when t
 The map shows keys from left to right and velocity from bottom to top, with a piano below it. Every sample zone
 is a rectangle.
 
-- **Click** a zone to select it. **Shift**, **Cmd** or **Ctrl** click adds a zone or takes it out again.
+- **Click** a zone to select it. **Cmd** or **Ctrl** click adds a zone or takes it out again.
+- **Shift** click selects every zone between the last selected zone and the clicked one: the row or the column
+  when both lie in one, else everything in the rectangle around the two.
+- **Delete** takes the selected zones off the map.
 - **Click** empty space to deselect.
 - **Drag** on empty space to draw a selection rectangle.
 - **Drag** a zone to move it. Drag an edge to change its range. All selected zones follow.
 - Play the piano to hear the instrument. The zones that answer the key are selected.
 
 Several zones can lie on exactly the same keys and velocities. The map draws them as one rectangle and a click
-selects all of them. The list "Zones on This Range" shows them one by one.
+selects all of them. The zone table shows them one by one.
 
 Where zones with different ranges, or of different groups, cover the same spot, click the spot again to reach
 the next one.
 
-### 2.3 Samples
+### 2.3 The zone table
+
+Below the piano is a table with one row per sample zone and all its values. It shows the zones you selected, and
+the other zones on the same keys and velocities.
+
+- **Click** a name to select that zone alone. **Shift** click selects the rows in between, **Cmd** or **Ctrl**
+  click adds a row or takes it out.
+- **Drag** a value up or down to change it, **double-click** to type it.
+- With several rows selected, a change sets the same value on all of them. **Turn** is the exception, it
+  belongs to its row alone.
+- **Rev** and **1 Shot** change with a click. **Loop** opens a menu.
+- The **×** at the end takes a zone off the map.
+
+The values:
+
+- **Key**: Lowest and highest key, and the **Fade** in semitones
+- **Velocity**: Lowest and highest velocity, and the **Fade**
+- **Pitch**: The **Root** key that plays the sample at its own pitch, **Transp** and **Tune**
+- **Playback**: **Gain**, **Pan**, **Track** (how far the keys move the pitch, 0% plays every key alike), **Turn**
+  (the place in the order when the zones of a range take turns), **Rev** (reverse) and **1 Shot** (plays to the
+  end and ignores the note off)
+- **Waveform**: **Start** and **End**, the **Loop** mode, its **Fade** and its points **From** and **To**
+
+A fade only works at an edge where another zone of the same group overlaps. The outer edges of an instrument
+never fade.
+
+Loop modes:
+
+- **Off**: The sample plays once.
+- **Gate**: The loop repeats while the key is held. On release the sample plays on to its end.
+- **Always**: The loop keeps repeating through the release.
+
+A zone with **1 Shot** on never loops. Its **Loop** value is dimmed.
+
+Drop samples on a row of the table to add zones to the range of that row.
+
+### 2.4 Samples and waveform
 
 The **Samples** list has one row per sample with the number of zones that play it. Click a sample to select all
 its zones. Zones that were taken off the map show as a dimmed row of their own.
 
-### 2.4 Zones on one range
+To use a sample of the instrument for another zone, **drag** it from the Samples list onto the map, like a
+sample from the browser.
 
-Right of the waveform, **Zones on This Range** lists the zones that share the keys and velocities of the selected
-zone, with their pan and gain.
+The waveform shows the sample of the selected zone. Its start, end and loop points can be dragged there. Where a
+loop point sits on the start or the end, the upper half of the waveform grabs the loop point and the lower half
+the start or the end. Drop a sample on the waveform to give the zone another sample.
 
-- **Click** a row to work on that zone alone.
-- The menu in its head decides how they play: **Together** (layers, for example a left and a right sample),
-  **In Turn** (round robins, one per note in the order of the list) or **Random** (one per note, never the same
-  twice in a row). This is a setting of the group, so it holds for every range in it.
-- With In Turn, **drag** a row up or down to change the order.
-- The **×** takes a zone off the map.
-- **Drop** samples on the list to add zones to the range. To give a zone another sample, drop it on the waveform.
+A loop **Fade** shows as two wedges: one rising into the loop start, one falling towards the loop end.
 
-### 2.5 Tools
+Edits reach the notes that are sounding. A held note follows new loop points, gain, pan and tuning at once.
 
-The tools act on the selected zones.
+### 2.5 Groups
 
+A group collects zones that behave the same way. Click a group to show only its zones, double-click to rename it.
+The **×** deletes a group with its zones. The last group stays. Each group's settings are columns in its row of
+the Groups list:
+
+- **Stacks**: How zones on the same keys and velocities play. **Together** plays all of them, for example a left
+  and a right sample. **In Turn** plays one per note in the order of their Turn values. **Random** plays one per
+  note and never the same twice in a row.
+- **Choke**: Zones with the same choke number cut each other. A closed hi-hat stops the open one.
+- **Trigger**: Attack plays when a key is pressed, Release when it is let go.
+
+### 2.6 The menu
+
+The **Sample Zones** menu at the top right holds every action. The ones below Select All act on the selected
+zones.
+
+- **Add Samples**, **Import SFZ / SF2**, **Export SF2**
 - **Select All**: Every zone of the shown group
 - **Map by Name**: Maps the zones from their file names again
 - **Spread Keys**: Extends each zone halfway to the neighbouring roots, so no key is left empty
@@ -166,42 +218,13 @@ The tools act on the selected zones.
 - **Move to Group**
 - **Delete**: Takes the zones off the map. Their samples stay in the Samples list, dimmed.
 - **Restore**: Puts them back. Click the dimmed sample first.
-- **Clean Up** (top right): Removes the zones that were taken off the map, and samples nothing plays any more
+- **Delete Unused Samples**: Removes the zones that were taken off the map, and with them the samples nothing
+  plays any more
 
-### 2.6 Groups
+Above the map the window repeats the controls of the device panel: Play, Filter, Mix, the envelopes, the LFOs and
+the modulation list.
 
-A group collects zones that behave the same way. Click a group to show only its zones, double-click to rename it.
-The **×** deletes a group with its zones. The last group stays.
-
-- **Stacks**: How zones on the same range play: Together, In Turn or Random (see 2.4)
-- **Choke**: Zones with the same choke number cut each other. A closed hi-hat stops the open one.
-- **Trigger**: Attack plays when a key is pressed, Release when it is let go.
-
-### 2.7 Zone fields
-
-- **Key**: Lowest and highest key, and the **Fade** in semitones
-- **Velocity**: Lowest and highest velocity, and the **Fade**
-- **Pitch**: The **Root** key that plays the sample at its own pitch, **Transp** and **Tune**
-- **Play**: **Gain**, **Pan**, **Track** (how far the keys move the pitch, 0% plays every key alike), **Turn** (the
-  place in the order, with In Turn), **Reverse** and **One Shot** (plays to the end and ignores the note off)
-- **Sample**: **Start** and **End**, the **Loop** mode, its **Fade** and its points **From** and **To**
-
-Drag a value to change it, double-click to type it. A value changes all selected zones at once. It turns cream
-when the selected zones disagree, hover it to see the lowest and the highest.
-
-The start, the end and the loop points can also be dragged in the waveform. Where a loop point sits on the start
-or the end, the upper half of the waveform grabs the loop point and the lower half the start or the end.
-
-A fade only works at an edge where another zone of the same group overlaps. The outer edges of an instrument
-never fade.
-
-Loop modes:
-
-- **Off**: The sample plays once.
-- **On**: The loop repeats while the key is held. On release the sample plays on to its end.
-- **Always**: The loop keeps repeating through the release.
-
-### 2.8 Import and export
+### 2.7 Import and export
 
 - **Import SFZ / SF2** reads one preset of a soundfont, or an SFZ file chosen together with the samples it names.
   It replaces the sample zones of the Sampler. The samples are stored as local samples under

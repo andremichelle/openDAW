@@ -909,6 +909,28 @@ fn a_synced_lfo_snaps_to_the_nearest_note_length() {
 }
 
 #[test]
+fn a_held_note_follows_its_edited_loop() {
+    let mut rig = Rig::new();
+    let looped = Zone {loop_mode: 2, loop_start: 100, loop_end: 200, ..zone(RAMP)};
+    rig.zones(&[looped]);
+    rig.left(&[on(1, 60)], 1_000);
+    rig.zones(&[Zone {loop_start: 300, loop_end: 400, ..looped}]);
+    let rendered = rig.left(&[], 1_000);
+    assert!(rendered[400..].iter().all(|value| (299.0..=401.0).contains(value)), "the note stayed in the old loop");
+}
+
+#[test]
+fn a_held_note_ignores_a_row_that_now_holds_another_sample() {
+    let mut rig = Rig::new();
+    let looped = Zone {loop_mode: 2, loop_start: 100, loop_end: 200, ..zone(RAMP)};
+    rig.zones(&[looped]);
+    rig.left(&[on(1, 60)], 1_000);
+    rig.zones(&[Zone {loop_start: 300, loop_end: 400, ..zone(ONE)}]);
+    let rendered = rig.left(&[], 1_000);
+    assert!(rendered.iter().all(|value| (99.0..=201.0).contains(value)), "the note took the values of another zone");
+}
+
+#[test]
 fn a_short_loop_stays_inside_its_points_far_above_the_root() {
     let mut rig = Rig::new();
     // the ramp holds its frame number, so the output shows where the read head is
@@ -992,25 +1014,6 @@ fn fewer_voices_take_effect_at_once() {
 }
 
 #[test]
-fn the_quietest_tail_makes_room_first() {
-    let mut rig = Rig::new();
-    rig.set(&VOICES, ParamValue::Int(2));
-    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
-    rig.zones(&[
-        Zone {key_low: 60, key_high: 60, gain: -30.0, ..zone(ONE)},
-        Zone {key_low: 62, key_high: 62, ..zone(HALF)},
-        Zone {key_low: 64, key_high: 64, ..zone(QUARTER)}
-    ]);
-    rig.left(&[on(1, 62)], 16);
-    rig.left(&[off(1, 62)], 16);
-    rig.left(&[on(2, 60)], 16);
-    rig.left(&[off(2, 60)], 16);
-    let level = rig.left(&[on(3, 64)], 2_400)[2_399];
-    assert_eq!(rig.voices(), 2);
-    assert!(level > 0.5, "the loud tail stays, the one 30 dB down goes although it was released later: {level}");
-}
-
-#[test]
 fn a_release_sample_leaves_the_tail_of_its_note_alone() {
     let mut rig = Rig::new();
     rig.set(&VOICES, ParamValue::Int(1));
@@ -1042,7 +1045,7 @@ fn a_one_shot_whose_key_is_up_goes_before_a_held_note() {
 #[test]
 fn the_layers_of_a_note_make_room_together() {
     let mut rig = Rig::new();
-    rig.set(&VOICES, ParamValue::Int(4));
+    rig.set(&VOICES, ParamValue::Int(2));
     rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
     rig.zones(&[
         Zone {key_low: 60, key_high: 62, panning: -1.0, ..zone(ONE)},
@@ -1055,4 +1058,310 @@ fn the_layers_of_a_note_make_room_together() {
     }
     rig.left(&[on(3, 64)], 2_400);
     assert_eq!(rig.voices(), 3, "one whole pair went, not one side of it");
+}
+
+#[test]
+fn a_note_with_more_layers_than_voices_sounds_whole() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.zones(&[Zone {panning: -1.0, ..zone(ONE)}, Zone {panning: 1.0, ..zone(ONE)}]);
+    let (left, right) = rig.run(&[on(1, 60)], 64);
+    assert_eq!(rig.voices(), 2);
+    assert!(left[63] > 0.5 && right[63] > 0.5, "both sides of the pair: {} {}", left[63], right[63]);
+    rig.run(&[on(2, 62)], 2_400);
+    assert_eq!(rig.voices(), 2, "the next note takes the place of the whole pair");
+}
+
+#[test]
+fn legato_starts_a_new_note_while_only_a_release_sample_plays() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&LEGATO, ParamValue::Bool(true));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[zone(ONE), Zone {group: Some(7), ..zone(QUARTER)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[off(1, 60)], 64);
+    let level = rig.left(&[on(2, 62)], 2_400)[2_399];
+    assert!(level >= 1.0, "the attack sample of the new note sounds: {level}");
+}
+
+#[test]
+fn a_layered_note_is_not_cut_by_the_release_sample_of_another() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[zone(ONE), zone(ONE), zone(ONE), Zone {group: Some(7), ..zone(QUARTER)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 62)], 64);
+    let level = rig.left(&[off(1, 60)], 2_400)[2_399];
+    assert!(level >= 3.0, "the three layers of the held note still sound: {level}");
+}
+
+#[test]
+fn release_samples_are_not_cut_by_a_note_that_adds_none() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[
+        Zone {group: Some(7), key_low: 60, key_high: 60, ..zone(ONE)},
+        Zone {group: Some(7), key_low: 60, key_high: 60, ..zone(ONE)}
+    ]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[off(1, 60)], 64);
+    let level = rig.left(&[on(2, 62)], 2_400)[2_399];
+    assert!(level >= 2.0, "both release samples ring on: {level}");
+}
+
+#[test]
+fn writing_the_voices_parameter_does_not_cut_a_layered_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.zones(&[zone(ONE), zone(ONE), zone(ONE)]);
+    rig.left(&[on(1, 60)], 64);
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&VOICES, ParamValue::Int(1));
+    let level = rig.left(&[], 2_400)[2_399];
+    assert_eq!(rig.voices(), 3);
+    assert!(level >= 3.0, "{level}");
+}
+
+#[test]
+fn legato_carries_every_layer_of_the_held_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&LEGATO, ParamValue::Bool(true));
+    rig.zones(&[Zone {panning: -1.0, ..zone(RAMP)}, Zone {panning: 1.0, ..zone(RAMP)}]);
+    rig.run(&[on(1, 60)], 64);
+    let (left, right) = rig.run(&[on(2, 72)], 64);
+    assert!(close(speed(&left), 2.0) && close(speed(&right), 2.0), "both sides play an octave up: {} {}", speed(&left), speed(&right));
+    let (left, right) = rig.run(&[off(1, 60)], 64);
+    assert_eq!(rig.voices(), 2, "the first key going up ends neither side");
+    assert!(left[63] > 0.0 && right[63] > 0.0);
+}
+
+#[test]
+fn the_note_that_rang_out_longest_makes_room_first() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, ..zone(QUARTER)},
+        Zone {key_low: 62, key_high: 62, ..zone(ONE)},
+        Zone {key_low: 64, key_high: 64, ..zone(HALF)}
+    ]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[off(1, 60)], 64);
+    rig.left(&[on(2, 62)], 64);
+    rig.left(&[off(2, 62)], 64);
+    let level = rig.left(&[on(3, 64)], 2_400)[2_399];
+    assert_eq!(rig.voices(), 2);
+    assert!(level > 1.4, "the newer tail and the new note sound: {level}");
+}
+
+#[test]
+fn a_one_shot_whose_key_is_up_rings_out_like_a_tail() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(2));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, one_shot: true, ..zone(QUARTER)},
+        Zone {key_low: 62, key_high: 62, ..zone(ONE)},
+        Zone {key_low: 64, key_high: 64, ..zone(HALF)}
+    ]);
+    rig.left(&[on(1, 62)], 64);
+    rig.left(&[on(2, 60)], 64);
+    rig.left(&[off(2, 60)], 64);
+    let level = rig.left(&[on(3, 64)], 2_400)[2_399];
+    assert!(close(level, 1.5), "the held note stays although it is the oldest: {level}");
+}
+
+#[test]
+fn going_back_to_a_held_key_does_not_stack_the_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.zones(&[Zone {key_low: 60, key_high: 60, ..zone(ONE)}]);
+    rig.left(&[on(1, 60)], 64);
+    for tap in 2..8 {
+        rig.left(&[on(tap, 90)], 16);
+        rig.left(&[off(tap, 90)], 16);
+    }
+    let level = rig.left(&[], 2_400)[2_399];
+    assert_eq!(rig.voices(), 1);
+    assert!(close(level, 1.0), "{level}");
+}
+
+#[test]
+fn after_a_legato_move_the_release_sample_is_the_one_of_the_new_key() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&LEGATO, ParamValue::Bool(true));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 72, ..zone(QUARTER)},
+        Zone {group: Some(7), key_low: 60, key_high: 60, ..zone(ONE)},
+        Zone {group: Some(7), key_low: 72, key_high: 72, ..zone(HALF)}
+    ]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 72)], 64);
+    rig.left(&[off(1, 60)], 64);
+    let level = rig.left(&[off(2, 72)], 2_400)[2_399];
+    assert!(close(level, 0.5), "the release zone of the key that went up last: {level}");
+}
+
+#[test]
+fn layered_notes_and_their_release_samples_stay_inside_the_pool() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(16));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[
+        zone(ONE), zone(ONE), zone(ONE),
+        Zone {group: Some(7), ..zone(QUARTER)}, Zone {group: Some(7), ..zone(QUARTER)}, Zone {group: Some(7), ..zone(QUARTER)}
+    ]);
+    rig.left(&[on(1, 60)], 64);
+    for note in 2..40 {
+        rig.left(&[on(note, 62)], 16);
+        rig.left(&[off(note, 62)], 16);
+    }
+    let level = rig.left(&[], 4_800)[4_799];
+    assert!(rig.voices() <= 64, "{} voices", rig.voices());
+    assert!(level >= 3.0, "the held note keeps its three layers: {level}");
+}
+
+#[test]
+fn the_tail_of_a_note_held_long_is_not_the_first_to_go() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(3));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 48, key_high: 48, ..zone(ONE)},
+        Zone {key_low: 60, key_high: 72, ..zone(QUARTER)}
+    ]);
+    rig.left(&[on(1, 48)], 64);
+    for (note, key) in [(2, 60), (3, 62)] {
+        rig.left(&[on(note, key)], 64);
+        rig.left(&[off(note, key)], 4_800);
+    }
+    rig.left(&[off(1, 48)], 480);
+    let level = rig.left(&[on(4, 64)], 2_400)[2_399];
+    assert!(level > 0.9, "the bass was let go last and rings on: {level}");
+}
+
+#[test]
+fn a_chord_of_layered_notes_does_not_cut_a_held_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(32));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.zones(&[
+        Zone {key_low: 36, key_high: 36, ..zone(ONE)},
+        Zone {key_low: 48, key_high: 96, ..zone(QUARTER)},
+        Zone {key_low: 48, key_high: 96, ..zone(QUARTER)},
+        Zone {key_low: 48, key_high: 96, ..zone(QUARTER)}
+    ]);
+    rig.left(&[on(1, 36)], 64);
+    for note in 0..24 {
+        rig.left(&[on(100 + note, 48 + note)], 16);
+        rig.left(&[off(100 + note, 48 + note)], 16);
+    }
+    let chord: Vec<EventRecord> = (0..6).map(|note| on(200 + note, 80 + note)).collect();
+    rig.left(&chord, 64);
+    let off_all: Vec<EventRecord> = (0..6).map(|note| off(200 + note, 80 + note)).collect();
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    let level = rig.left(&off_all, 9_600)[9_599];
+    assert!(level > 0.9, "the bass key is still down and still sounds: {level}");
+}
+
+#[test]
+fn a_held_note_stops_following_once_zones_come_or_go() {
+    let mut rig = Rig::new();
+    let looped = Zone {loop_mode: 2, loop_start: 100, loop_end: 200, ..zone(RAMP)};
+    rig.zones(&[looped]);
+    rig.left(&[on(1, 60)], 1_000);
+    let other = Zone {loop_start: 300, loop_end: 400, ..looped};
+    rig.zones(&[other, looped]);
+    rig.zones(&[other, Zone {loop_start: 500, loop_end: 600, ..looped}]);
+    let rendered = rig.left(&[], 1_000);
+    assert!(rendered.iter().all(|value| (99.0..=201.0).contains(value)), "the note took the values of another zone");
+}
+
+#[test]
+fn a_one_shot_never_loops() {
+    for mode in [1, 2] {
+        let mut rig = Rig::new();
+        rig.zones(&[Zone {one_shot: true, loop_mode: mode, loop_start: 100, loop_end: 200, ..zone(RAMP)}]);
+        rig.left(&[on(1, 60)], 64);
+        rig.left(&[off(1, 60)], 48_000);
+        assert_eq!(rig.voices(), 0, "loop mode {mode} kept the one shot alive");
+    }
+}
+
+#[test]
+fn a_looped_release_sample_ends() {
+    let mut rig = Rig::new();
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[Zone {group: Some(7), loop_mode: 2, loop_start: 100, loop_end: 200, ..zone(ONE)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[off(1, 60)], 64);
+    rig.left(&[], FRAMES + 4_800);
+    assert_eq!(rig.voices(), 0);
+}
+
+#[test]
+fn a_note_gone_back_to_plays_its_release_sample() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[Zone {key_low: 60, key_high: 72, ..zone(QUARTER)}, Zone {group: Some(7), ..zone(ONE)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 62)], 64);
+    rig.left(&[off(2, 62)], 2_400);
+    let level = rig.left(&[off(1, 60)], 2_400)[2_399];
+    assert!(close(level, 1.0), "the release sample of the key that was held all along: {level}");
+}
+
+#[test]
+fn two_notes_on_one_key_both_play_their_release_sample() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[zone(QUARTER), Zone {group: Some(7), ..zone(ONE)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 60)], 64);
+    rig.left(&[off(1, 60)], 64);
+    let level = rig.left(&[off(2, 60)], 2_400)[2_399];
+    assert!(close(level, 1.0), "{level}");
+}
+
+#[test]
+fn glide_starts_from_the_note_that_sounds_not_from_a_key_without_a_zone() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&GLIDE, ParamValue::Float(0.5));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.zones(&[Zone {key_low: 48, key_high: 72, ..zone(RAMP)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 96)], 16);
+    rig.left(&[off(2, 96)], 16);
+    rig.left(&[off(1, 60)], 2_400);
+    let rendered = rig.left(&[on(3, 62)], 64);
+    assert!(speed(&rendered) < 1.05, "the glide starts at key 60, not at key 96: {}", speed(&rendered));
+}
+
+#[test]
+fn at_the_ceiling_a_key_going_up_cuts_no_held_note() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(64));
+    rig.set(&AMP_RELEASE, ParamValue::Float(8.0));
+    rig.groups(&[[7, 0, 0, 1]]);
+    rig.zones(&[zone(ONE), Zone {group: Some(7), ..zone(QUARTER)}, Zone {group: Some(7), ..zone(QUARTER)}]);
+    for note in 0..63 {
+        rig.left(&[on(note, 30 + note)], 16);
+    }
+    rig.left(&[off(62, 92)], 2_400);
+    let held = rig.left(&[], 64)[63];
+    assert!(held >= 62.0, "all 62 keys that are still down sound: {held}");
 }

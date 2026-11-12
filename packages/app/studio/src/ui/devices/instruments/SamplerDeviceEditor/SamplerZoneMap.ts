@@ -301,7 +301,7 @@ export namespace SamplerZoneMap {
             if (start > 0.0) {render(0.0, start)}
             if (end < 1.0) {render(end, 1.0)}
             context.globalAlpha = 1.0
-            if (box.loopMode.getValue() === 0) {return}
+            if (box.loopMode.getValue() === 0 || box.oneShot.getValue()) {return}
             const lo = Math.min(Math.max(unit(box.loopStart.getValue()), start), end)
             const hi = Math.min(Math.max(unit(box.loopEnd.getValue()), lo), end)
             const xLo = Math.round(lo * (width - scale)), xHi = Math.round(hi * (width - scale))
@@ -311,6 +311,35 @@ export namespace SamplerZoneMap {
             context.globalAlpha = 1.0
             context.fillRect(xLo, 0, scale, height)
             context.fillRect(xHi, 0, scale, height)
+            const reverse = box.reverse.getValue()
+            const rate = file.data.mapOr(data => data.sampleRate, 0)
+            const room = reverse ? end - hi : lo - start
+            const fade = Math.max(0.0, Math.min(box.loopFade.getValue() * rate / numFrames, hi - lo, room))
+            const reach = Math.round(fade * (width - scale))
+            if (reach < 2) {return}
+            const wedge = (base: number, tip: number): void => {
+                context.beginPath()
+                context.moveTo(base, height)
+                context.lineTo(tip, 0)
+                context.lineTo(tip, height)
+                context.closePath()
+                context.fill()
+                context.beginPath()
+                context.moveTo(base, height)
+                context.lineTo(tip, 0)
+                context.stroke()
+            }
+            context.strokeStyle = Colors.green.toString()
+            context.lineWidth = scale
+            context.globalAlpha = 0.3
+            if (reverse) {
+                wedge(xHi + reach, xHi)
+                wedge(xLo, xLo + reach)
+            } else {
+                wedge(xLo - reach, xLo)
+                wedge(xHi, xHi - reach)
+            }
+            context.globalAlpha = 1.0
         }))
     }
 }

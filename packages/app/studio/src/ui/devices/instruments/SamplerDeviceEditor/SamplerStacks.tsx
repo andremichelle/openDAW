@@ -13,7 +13,7 @@ export namespace SamplerStacks {
     export type Highlights = Map<object, Array<HTMLElement>>
 
     export const value = (context: ControlContext, parameter: AutomatableParameterFieldAdapter): Cell =>
-        ({name: parameter.name, control: createParameterInput(context, parameter), key: parameter})
+        ({name: parameter.name, control: createParameterInput(context, parameter, true), key: parameter})
 
     export const toggle = (context: ControlContext, parameter: AutomatableParameterFieldAdapter<boolean>): Cell =>
         ({name: parameter.name, control: createParameterToggle(context, parameter), key: parameter})

@@ -8,7 +8,7 @@ import {SamplerZoneEditor} from "./SamplerZoneEditor"
 // The floating window that edits a Sampler's sample zones, one per device.
 export namespace SamplerZoneWindow {
     const Width = 1040
-    const Height = 546
+    const Height = 556
     const windows = UUID.newSet<{ uuid: UUID.Bytes, handle: FloatingWindowHandle }>(entry => entry.uuid)
 
     export const open = (service: StudioService, adapter: SamplerDeviceBoxAdapter, deviceHost: DeviceHost): void => {

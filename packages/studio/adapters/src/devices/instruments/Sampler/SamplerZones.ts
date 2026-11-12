@@ -108,7 +108,9 @@ export namespace SamplerZones {
             return start
         }
         const keys = new Map<string, int>()
-        inGroup.filter(zone => zone.keyLow.getValue() === zone.keyHigh.getValue() && !isDefined(parseName(fileNameOf(zone)).key))
+        // a key that was pointed at wins over the key the instrument already has
+        const known = isDefined(startKey) ? [] : inGroup
+        known.filter(zone => zone.keyLow.getValue() === zone.keyHigh.getValue() && !isDefined(parseName(fileNameOf(zone)).key))
             .forEach(zone => {
                 const instrument = instrumentOf(fileNameOf(zone))
                 if (!keys.has(instrument)) {keys.set(instrument, zone.keyLow.getValue())}

@@ -1,13 +1,13 @@
 import css from "./SamplerZoneEditor.sass?inline"
 import {
-    Arrays, clamp, Exec, Func, int, isDefined, Lifecycle, MutableObservableValue, Notifier, ObservableValue, Observer,
-    Optional, Point, Procedure, RuntimeNotifier, Subscription, UUID
+    Arrays, clamp, Exec, int, isDefined, Lifecycle, Notifier, Nullable, Optional, Point, Procedure, RuntimeNotifier, Subscription,
+    Terminator, UUID
 } from "@opendaw/lib-std"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {Events, Files, Html} from "@opendaw/lib-dom"
+import {createElement} from "@opendaw/lib-jsx"
+import {Events, Files, Html, Keyboard} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {MidiKeys} from "@opendaw/lib-dsp"
-import {BooleanField, Float32Field, Int32Field} from "@opendaw/lib-box"
+import {AudioData, MidiKeys} from "@opendaw/lib-dsp"
+import {Int32Field} from "@opendaw/lib-box"
 import {SamplerZoneBox} from "@opendaw/studio-boxes"
 import {
     DeviceHost, NoteSignal, NoteStreamReceiver, Sample, SamplerDeviceBoxAdapter, SamplerGroupBoxAdapter, SamplerZoneBoxAdapter, SamplerZones
@@ -16,18 +16,18 @@ import {CanvasPainter, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-co
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
-import {Button} from "@/ui/components/Button"
-import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {ControlContext} from "../NanoDeviceEditor/ParameterControls"
+import {DragAndDrop} from "@/ui/DragAndDrop"
+import {DragSample} from "@/ui/AnyDragData"
 import {SamplerModulationList} from "./SamplerModulationList"
 import {SamplerSamples} from "./SamplerSamples"
-import {SamplerStacks} from "./SamplerStacks"
 import {SamplerText} from "./SamplerText"
 import {SamplerValueLabel} from "./SamplerValueLabel"
 import {SamplerVoiceStacks} from "./SamplerVoiceStacks"
 import {SamplerZoneMap} from "./SamplerZoneMap"
+import {SamplerZoneTable} from "./SamplerZoneTable"
 
 const className = Html.adoptStyleSheet(css, "SamplerZoneEditor")
 
@@ -39,7 +39,6 @@ type Construct = {
 }
 
 type Zone = SamplerZoneBoxAdapter
-type NumberField = Int32Field | Float32Field
 
 type Origin = {
     readonly zone: Zone
@@ -74,47 +73,10 @@ const Cursors: Readonly<Record<SamplerZoneMap.Edge, string>> =
 const EdgeReach = 5
 const MaxKey = SamplerZoneMap.NumKeys - 1
 const {RoundRobinNames, TriggerNames} = SamplerGroupBoxAdapter
-const RobinCycle = 1
 const MarkerReach = 6
 const ClickReach = 3
-const LoopModeNames: ReadonlyArray<string> = ["Off", "On", "Always"]
 
-type Format = { readonly print: Func<number, SamplerValueLabel.Printed>, readonly parse: Func<string, Optional<number>> }
-
-const NoteOffsets: Readonly<Record<string, int>> = {c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11}
 const {numberIn} = SamplerValueLabel
-// a key as the studio writes it (C3 is key 60), or as a number
-const parseKey = (text: string): Optional<number> => {
-    const note = /^\s*([a-g])(#?)(-?\d)\s*$/i.exec(text)
-    return isDefined(note) ? NoteOffsets[note[1].toLowerCase()] + (note[2] === "#" ? 1 : 0) + (parseInt(note[3]) + 2) * 12 : numberIn(text)
-}
-const printSeconds = (value: number): SamplerValueLabel.Printed =>
-    value < 1.0 ? [String(Math.round(value * 1000)), "ms"] : [value.toFixed(2), "s"]
-const parseSeconds = (text: string): Optional<number> => {
-    const value = numberIn(text)
-    return !isDefined(value) ? undefined : /ms/i.test(text) || (!/s/i.test(text) && value >= 10) ? value / 1000 : value
-}
-const format = {
-    integer: (unit: string): Format => ({print: value => [String(Math.round(value)), unit], parse: text => numberIn(text)}),
-    fixed: (digits: int, unit: string): Format => ({print: value => [value.toFixed(digits), unit], parse: text => numberIn(text)}),
-    percent: {
-        print: value => [String(Math.round(value * 100)), "%"],
-        parse: text => {
-            const value = numberIn(text)
-            return isDefined(value) ? value / 100 : undefined
-        }
-    } satisfies Format,
-    key: {print: value => [MidiKeys.toFullString(Math.round(value)), ""], parse: parseKey} satisfies Format,
-    pan: {
-        print: value => Math.round(value * 100) === 0 ? ["C", ""] : [String(Math.abs(Math.round(value * 100))), value < 0 ? "L" : "R"],
-        parse: text => {
-            const value = numberIn(text)
-            return /^\s*c\s*$/i.test(text) ? 0.0 : !isDefined(value) ? undefined : (/l/i.test(text) ? -Math.abs(value) : value) / 100
-        }
-    } satisfies Format,
-    seconds: {print: printSeconds, parse: parseSeconds} satisfies Format
-}
-
 // The content of the sample zone window: the key × velocity map with its piano, the groups, sample zones and
 // modulation slots, the focused zone's sample and fields, and every parameter of the device panel.
 export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
@@ -131,10 +93,25 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     let pressed: int = -1
     let drag: Optional<Drag> = undefined
     let dragMoved: boolean = false
+    let tableZones: ReadonlyArray<Zone> = []
+    let ownDrag = false
+    // a menu gives the focus back to where it was before, so the window takes it after its own actions
+    const takeFocus = (): void => queueMicrotask(() => element.focus({preventScroll: true}))
     let lastClick: Optional<Point> = undefined
     let band: Optional<Band> = undefined
     let rect: Optional<SamplerZoneMap.Range> = undefined
     let groupsSignature = ""
+    const groupControls = lifecycle.own(new Terminator())
+    const sampleControls = lifecycle.own(new Terminator())
+    // a sample of the instrument as the sample browser hands one over, to drop it on the map again
+    const sampleOf = (zone: Zone): Nullable<DragSample> => zone.file().mapOr(file => ({
+        type: "sample",
+        sample: {
+            uuid: UUID.toString(file.uuid), name: file.box.fileName.getValue(), bpm: 0,
+            duration: file.box.endInSeconds.getValue(),
+            sample_rate: file.getOrCreateLoader().data.mapOr(data => data.sampleRate, 0), origin: "import"
+        }
+    }), null)
     let zonesSignature = ""
     let sampleRows: ReadonlyArray<[ReadonlyArray<Zone>, HTMLElement]> = []
     const state = (): SamplerZoneMap.State => ({
@@ -145,12 +122,13 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         .filter(zone => !isDefined(shownGroup) || zone.group().contains(shownGroup))
     const union = (first: ReadonlyArray<Zone>, second: ReadonlyArray<Zone>): ReadonlyArray<Zone> =>
         [...first, ...second.filter(zone => !first.includes(zone))]
-    const select = (zones: ReadonlyArray<Zone>, focus?: Zone): void => {
+    const select = (zones: ReadonlyArray<Zone>, focus?: Zone, relist: boolean = true): void => {
         selection = zones
         lastClick = undefined
         focused = focus ?? (isDefined(focused) && zones.includes(focused) ? focused : zones.at(0))
+        if (relist) {listRows()}
     }
-    // shift, cmd or ctrl adds the zones or takes them out again
+    // cmd or ctrl adds the zones or takes them out again
     const toggleSelect = (zones: ReadonlyArray<Zone>): void => {
         if (zones.every(zone => selection.includes(zone))) {
             select(selection.filter(zone => !zones.includes(zone)))
@@ -160,113 +138,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const hasModifier = (event: MouseEvent): boolean => event.shiftKey || event.metaKey || event.ctrlKey
     const boxes = (): ReadonlyArray<SamplerZoneBox> => selection.map(zone => zone.box)
-    const framesOf = (zone: Zone): Optional<{ numberOfFrames: int, sampleRate: number }> =>
+    const framesOf = (zone: Zone): Optional<AudioData> =>
         zone.file().flatMap(file => file.data).unwrapOrUndefined()
-    const zoneField = (name: string, field: Func<SamplerZoneBox, NumberField>, min: number, max: number, step: number,
-                       {print, parse}: Format, settle?: Procedure<SamplerZoneBox>): SamplerValueLabel.Field => ({
-        name, min, max, step, print, parse,
-        available: () => isDefined(focused),
-        spread: () => {
-            const values = selection.map(({box}) => field(box).getValue())
-            const low = Math.min(...values), high = Math.max(...values)
-            return values.length > 1 && low !== high ? [low, high] : undefined
-        },
-        get: () => isDefined(focused) ? field(focused.box).getValue() : 0,
-        set: value => {
-            if (!isDefined(focused)) {return}
-            const delta = value - field(focused.box).getValue()
-            selection.forEach(({box}) => {
-                const target = field(box)
-                target.setValue(clamp(target.getValue() + delta, min, max))
-                settle?.(box)
-            })
-        }
-    })
-    // a position in the sample, edited as a share of its length and stored in frames
-    const frameField = (name: string, field: Func<SamplerZoneBox, Int32Field>): SamplerValueLabel.Field => {
-        const unitOf = (zone: Zone): number => {
-            const frames = framesOf(zone)
-            return isDefined(frames) && frames.numberOfFrames > 0
-                ? Math.min(field(zone.box).getValue(), frames.numberOfFrames) / frames.numberOfFrames : 0.0
-        }
-        return {
-            name, min: 0.0, max: 1.0, step: 0.002,
-            print: unit => {
-                const frames = isDefined(focused) ? framesOf(focused) : undefined
-                return isDefined(frames) ? printSeconds(unit * frames.numberOfFrames / frames.sampleRate) : SamplerValueLabel.Unavailable
-            },
-            parse: text => {
-                const frames = isDefined(focused) ? framesOf(focused) : undefined
-                const seconds = parseSeconds(text)
-                return isDefined(frames) && isDefined(seconds) && frames.numberOfFrames > 0
-                    ? seconds * frames.sampleRate / frames.numberOfFrames : undefined
-            },
-            available: () => isDefined(focused) && isDefined(framesOf(focused)),
-            spread: () => {
-                const units = selection.filter(zone => isDefined(framesOf(zone))).map(unitOf)
-                const low = Math.min(...units), high = Math.max(...units)
-                return units.length > 1 && low !== high ? [low, high] : undefined
-            },
-            get: () => isDefined(focused) ? unitOf(focused) : 0.0,
-            set: value => {
-                if (!isDefined(focused)) {return}
-                const delta = value - unitOf(focused)
-                selection.forEach(zone => {
-                    const frames = framesOf(zone)
-                    if (!isDefined(frames)) {return}
-                    field(zone.box).setValue(Math.round(clamp(unitOf(zone) + delta, 0.0, 1.0) * frames.numberOfFrames))
-                })
-            }
-        }
-    }
-    const currentGroup = (): Optional<SamplerGroupBoxAdapter> => focused?.group().unwrapOrUndefined() ?? shownGroup
-    const groupField = (name: string, field: Func<SamplerGroupBoxAdapter, Int32Field>, max: number,
-                        {print, parse}: Format): SamplerValueLabel.Field => ({
-        name, min: 0, max, step: 1, print, parse,
-        available: () => isDefined(currentGroup()),
-        get: () => {
-            const group = currentGroup()
-            return isDefined(group) ? field(group).getValue() : 0
-        },
-        set: value => {
-            const group = currentGroup()
-            if (isDefined(group)) {field(group).setValue(Math.round(value))}
-        }
-    })
-    const choice = (name: string, names: ReadonlyArray<string>, model: Omit<SamplerValueLabel.Choice, "names">): SamplerStacks.Cell =>
-        ({name, control: SamplerValueLabel.choice(lifecycle, observe, {names, ...model})})
-    const groupChoice = (field: Func<SamplerGroupBoxAdapter, Int32Field>): Omit<SamplerValueLabel.Choice, "names"> => ({
-        available: () => isDefined(currentGroup()),
-        get: () => {
-            const group = currentGroup()
-            return isDefined(group) ? field(group).getValue() : 0
-        },
-        set: index => {
-            const group = currentGroup()
-            if (isDefined(group)) {editing.modify(() => field(group).setValue(index))}
-        }
-    })
-    const value = (field: SamplerValueLabel.Field): SamplerStacks.Cell =>
-        ({name: field.name, control: SamplerValueLabel.create(lifecycle, editing, observe, field)})
-    const toggle = (name: string, field: Func<SamplerZoneBox, BooleanField>): SamplerStacks.Cell => {
-        const model = new class implements MutableObservableValue<boolean> {
-            getValue(): boolean {return isDefined(focused) && field(focused.box).getValue()}
-            setValue(value: boolean): void {editing.modify(() => selection.forEach(({box}) => field(box).setValue(value)))}
-            subscribe(observer: Observer<ObservableValue<boolean>>): Subscription {return refresh.subscribe(() => observer(this))}
-            catchupAndSubscribe(observer: Observer<ObservableValue<boolean>>): Subscription {
-                observer(this)
-                return this.subscribe(observer)
-            }
-        }
-        return {
-            name, control: (
-                <Checkbox lifecycle={lifecycle} model={model} className="toggle"
-                          appearance={{color: Colors.shadow, activeColor: Colors.green}}>
-                    <Icon symbol={IconSymbol.Checkbox}/>
-                </Checkbox>
-            )
-        }
-    }
     const map: HTMLCanvasElement = <canvas/>
     const keys: HTMLCanvasElement = <canvas/>
     const waveform: HTMLCanvasElement = <canvas/>
@@ -295,12 +168,10 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const addGroup: HTMLElement = (
         <div className="add" onclick={() => editing.modify(() =>
-            SamplerZones.createGroup(boxGraph, adapter.box, newGroupName()))}>Add</div>
+            SamplerZones.createGroup(boxGraph, adapter.box, newGroupName()))}><Icon symbol={IconSymbol.Add}/></div>
     )
     const groupList: HTMLElement = <div className="rows"/>
     const zoneList: HTMLElement = <div className="rows"/>
-    const stackList: HTMLElement = <div className="rows"/>
-    const stackTitle: HTMLElement = <span/>
     const waveformDisplay: HTMLElement = (
         <div className="display waveform">
             {waveform}
@@ -308,9 +179,6 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             {sampleLabel}
         </div>
     )
-    const stackHint: HTMLElement = <div className="hint">Click a zone on the map. Drop samples here to add them to its range.</div>
-    let stackRows: ReadonlyArray<[Zone, HTMLElement]> = []
-    let stackSignature = ""
     const painters: ReadonlyArray<CanvasPainter> = [
         new CanvasPainter(map, ({context, actualWidth, actualHeight, devicePixelRatio}) =>
             SamplerZoneMap.paint(context, actualWidth, actualHeight, devicePixelRatio, state())),
@@ -336,6 +204,27 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             `${group.indexField.getValue()}/${group.box.label.getValue()}/${group.zones.adapters().length}`).join("|") + `|${zones.length}`
         if (signature === groupsSignature) {return}
         groupsSignature = signature
+        groupControls.terminate()
+        const stop = (event: Event): void => event.stopPropagation()
+        const pick = (group: SamplerGroupBoxAdapter, names: ReadonlyArray<string>, field: Int32Field): HTMLElement => (
+            <span className="setting" onclick={stop} ondblclick={stop}>
+                {SamplerValueLabel.choice(groupControls, observe, {
+                    names, get: () => field.getValue(), set: index => editing.modify(() => field.setValue(index)),
+                    available: () => group.box.isAttached()
+                })}
+            </span>
+        )
+        const choke = (group: SamplerGroupBoxAdapter): HTMLElement => (
+            <span className="setting" onclick={stop} ondblclick={stop}>
+                {SamplerValueLabel.create(groupControls, editing, observe, {
+                    name: "Choke", min: 0, max: 16, step: 1,
+                    print: value => value === 0 ? ["Off", ""] : [String(value), ""],
+                    parse: text => /off/i.test(text) ? 0 : numberIn(text),
+                    get: () => group.box.choke.getValue(), set: value => group.box.choke.setValue(Math.round(value)),
+                    available: () => group.box.isAttached()
+                })}
+            </span>
+        )
         const row = (group: Optional<SamplerGroupBoxAdapter>, name: string, count: int): HTMLElement => (
             <div className={Html.buildClassList("row", group === shownGroup && "active")} onclick={() => {
                 shownGroup = group
@@ -352,6 +241,9 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 <i style={{backgroundColor: SamplerZoneMap.groupColor(group?.indexField.getValue() ?? -1).toString()}}/>
                 <span>{name}</span>
                 <span className="count">{String(count)}</span>
+                {isDefined(group) ? pick(group, RoundRobinNames, group.box.roundRobin) : <span/>}
+                {isDefined(group) ? choke(group) : <span/>}
+                {isDefined(group) ? pick(group, TriggerNames, group.box.trigger) : <span/>}
                 {isDefined(group) && groups.length > 1 && (
                     <div className="remove" onclick={(event: MouseEvent) => {
                         event.stopPropagation()
@@ -374,8 +266,16 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             `${sample}/${fileNameOf(zones[0])}/${zones.map(zone => `${UUID.toString(zone.uuid)}${zone.box.enabled.getValue()}`).join(",")}`).join("|")
         if (signature !== zonesSignature) {
             zonesSignature = signature
+            sampleControls.terminate()
             sampleRows = Array.from(samples, ([_, zones]) => [zones, (
                 <div className={Html.buildClassList("row", zones.every(zone => !zone.box.enabled.getValue()) && "off")}
+                     onInit={element => sampleControls.ownAll(
+                         DragAndDrop.installSource(element, () => {
+                             const sample = sampleOf(zones[0])
+                             ownDrag = isDefined(sample)
+                             return sample
+                         }),
+                         Events.subscribe(element, "dragend", () => ownDrag = false))}
                      onclick={(event: MouseEvent) => {
                          if (hasModifier(event)) {toggleSelect(zones)} else {select(zones, zones[0])}
                          refresh.notify()
@@ -399,88 +299,36 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             }
         }
     }
-    const robinMode = (): int => focused?.group().mapOr(group => group.box.roundRobin.getValue(), 0) ?? 0
     const turnOrder = (zone: Zone): ReadonlyArray<Zone> => SamplerZoneMap.robinsOf(state(), zone)
         .toSorted((left, right) => left.box.sequence.getValue() - right.box.sequence.getValue()
             || UUID.Comparator(left.uuid, right.uuid))
-    // the zones on the focused zone's range in their turn order: picked, reordered, taken off, given another sample
-    const updateStack = (): void => {
-        const mode = robinMode()
-        const zones = isDefined(focused) ? turnOrder(focused) : []
-        stackTitle.textContent = zones.length === 0 ? "Zones on This Range"
-            : `${SamplerText.count(zones.length, "Zone", "Zones")} on This Range`
-        stackHint.classList.toggle("hidden", zones.length > 0)
-        const signature = `${mode}|` + zones.map(zone => `${UUID.toString(zone.uuid)}/${fileNameOf(zone)}/`
-            + `${zone.box.panning.getValue()}/${zone.box.gain.getValue()}`).join("|")
-        if (signature !== stackSignature) {
-            stackSignature = signature
-            buildStack(zones, mode)
-        }
-        stackRows.forEach(([zone, row]) => {
-            row.classList.toggle("active", zone === focused)
-            row.classList.toggle("selected", selection.includes(zone))
-        })
+    // the rows are listed when the selection is made, so an edit neither reorders them nor drops one
+    const listRows = (): void => {
+        entries = SamplerZoneMap.entries(adapter)
+        const shown = new Set(selection)
+        if (isDefined(focused)) {turnOrder(focused).forEach(zone => shown.add(zone))}
+        tableZones = Array.from(shown)
+            .toSorted((left, right) => left.box.keyLow.getValue() - right.box.keyLow.getValue()
+                || left.box.velocityLow.getValue() - right.box.velocityLow.getValue()
+                || left.box.sequence.getValue() - right.box.sequence.getValue() || UUID.Comparator(left.uuid, right.uuid))
     }
-    const buildStack = (zones: ReadonlyArray<Zone>, mode: int): void => {
-        stackRows = zones.map((zone, index) => {
-            let grab: Optional<{ readonly y: number, moved: boolean }> = undefined
-            const row: HTMLElement = (
-                <div className="row"
-                     onpointerdown={(event: PointerEvent) => {
-                         if (event.button !== 0) {return}
-                         row.setPointerCapture(event.pointerId)
-                         grab = {y: event.clientY, moved: false}
-                     }}
-                     onpointermove={(event: PointerEvent) => {
-                         if (!isDefined(grab) || mode !== RobinCycle || zones.length < 2) {return}
-                         const delta = event.clientY - grab.y
-                         if (Math.abs(delta) > 3) {grab.moved = true}
-                         if (grab.moved) {row.style.transform = `translateY(${delta}px)`}
-                     }}
-                     onpointerup={(event: PointerEvent) => {
-                         const released = grab
-                         grab = undefined
-                         row.style.transform = ""
-                         if (!isDefined(released)) {return}
-                         const to = clamp(index + Math.round((event.clientY - released.y) / row.offsetHeight), 0, zones.length - 1)
-                         if (released.moved && to !== index) {
-                             const order = zones.filter(other => other !== zone)
-                             order.splice(to, 0, zone)
-                             editing.modify(() => SamplerZones.reorder(order.map(other => other.box)))
-                         } else {
-                             select([zone], zone)
-                         }
-                         refresh.notify()
-                     }}
-                     onpointercancel={() => {
-                         grab = undefined
-                         row.style.transform = ""
-                         refresh.notify()
-                     }}>
-                    <span className="turn">{mode === RobinCycle && zones.length > 1 ? String(index + 1) : ""}</span>
-                    <span>{fileNameOf(zone).replace(/\.[A-Za-z0-9]+$/, "")}</span>
-                    <span className="count">{format.pan.print(zone.box.panning.getValue()).join(" ")}</span>
-                    <span className="count">{`${zone.box.gain.getValue().toFixed(1)} dB`}</span>
-                    <div className="remove" onpointerdown={(event: PointerEvent) => event.stopPropagation()} onclick={() => {
-                        editing.modify(() => SamplerZones.disable([zone.box]))
-                        select(zones.filter(other => other !== zone), zones.find(other => other !== zone))
-                        refresh.notify()
-                    }}><Icon symbol={IconSymbol.Close}/></div>
-                </div>
-            )
-            return [zone, row]
-        })
-        stackList.replaceChildren(...stackRows.map(([_, row]) => row), stackHint)
+    const tableRows = (): ReadonlyArray<Zone> => {
+        tableZones = tableZones.filter(zone => zone.box.isAttached())
+        return tableZones
     }
     // on the waveform a drop replaces the sample, on a range it joins, on the empty map it takes the key
     const dropped = (event: DragEvent): Procedure<ReadonlyArray<Sample>> => {
         const target = event.target
         const within = (element: HTMLElement): boolean => target instanceof Node && element.contains(target)
         const row = within(waveformDisplay) ? focused : undefined
-        const onStack = within(stackPanel) ? focused : undefined
+        const onStack = isDefined(target) && within(zoneTable.element)
+            ? zoneTable.zoneAt(target).unwrapOrUndefined() ?? focused : undefined
         const group = shownGroup?.box
         const {x, y, width, height} = pointerOf(map, event)
         const onMap = within(mapDisplay)
+        // a sample of the instrument let go anywhere but on a place for it is a drag that was given up
+        const own = ownDrag
+        ownDrag = false
         const hit = onMap ? SamplerZoneMap.hit(state(), x, y, width, height, 0).mapOr(({zones}) => zones.at(0), undefined) : undefined
         const key = onMap ? SamplerZoneMap.keyAt(x, width) : undefined
         const velocity = SamplerZoneMap.velocityAt(y, height)
@@ -496,6 +344,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }
         return samples => {
             if (samples.length === 0 || !adapter.box.isAttached()) {return}
+            if (own && !onMap && !isDefined(row) && !isDefined(onStack)) {return}
             if (isDefined(row)) {
                 if (!row.box.isAttached()) {return}
                 added(editing.modify(() => {
@@ -510,7 +359,9 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 const created = SamplerZones.addSamples(boxGraph, adapter.box, isDefined(group) && group.isAttached() ? group : undefined, samples, key)
                 if (isDefined(key) && !covering) {
                     const [low, high] = gapAt(created, key)
-                    created.filter(zone => zone.keyLow.getValue() === key && low <= high).forEach(zone => {
+                    const whole = (zone: SamplerZoneBox): boolean => zone.velocityLow.getValue() === SamplerZoneMap.MinVelocity
+                        && zone.velocityHigh.getValue() === SamplerZoneMap.MaxVelocity
+                    created.filter(zone => zone.keyLow.getValue() === key && low <= high && whole(zone)).forEach(zone => {
                         zone.velocityLow.setValue(low)
                         zone.velocityHigh.setValue(high)
                     })
@@ -537,11 +388,11 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const markers = (zone: Zone): ReadonlyArray<Marker> => {
         const frames = framesOf(zone)
         if (!isDefined(frames) || frames.numberOfFrames === 0) {return Arrays.empty()}
-        const {sampleStart, sampleEnd, loopStart, loopEnd, loopMode} = zone.box
+        const {sampleStart, sampleEnd, loopStart, loopEnd, loopMode, oneShot} = zone.box
         const unit = (field: Int32Field): number => Math.min(field.getValue(), frames.numberOfFrames) / frames.numberOfFrames
         const start = unit(sampleStart), end = Math.max(start, unit(sampleEnd))
         const edges: ReadonlyArray<Marker> = [{field: sampleStart, unit: start}, {field: sampleEnd, unit: end}]
-        if (loopMode.getValue() === 0) {return edges}
+        if (loopMode.getValue() === 0 || oneShot.getValue()) {return edges}
         const from = clamp(unit(loopStart), start, end), to = clamp(unit(loopEnd), from, end)
         return [{field: loopStart, unit: from}, {field: loopEnd, unit: to}, ...edges]
     }
@@ -594,7 +445,6 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         if (isDefined(shownGroup) && !shownGroup.box.isAttached()) {shownGroup = undefined}
         updateGroups()
         updateZones()
-        updateStack()
         updateLabels()
         painters.forEach(painter => painter.requestUpdate())
     }
@@ -648,6 +498,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const added = (created: ReadonlyArray<SamplerZoneBox>): void => {
         if (created.length === 0) {return}
+        takeFocus()
         select(adapter.zones.adapters().filter(zone => created.includes(zone.box)))
         refresh.notify()
     }
@@ -655,12 +506,6 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const {status, value: files} = await Promises.tryCatch(Files.open({...FilePickerAcceptTypes.WavFiles, multiple: true}))
         if (status === "resolved") {added(SamplerSamples.add(project, adapter, shownGroup?.box, await SamplerSamples.importFiles(service, project, files)))}
     }
-    const tool = (label: string, tooltip: string, action: Exec): JsxValue => (
-        <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip}} onClick={() => {
-            editing.modify(action)
-            refresh.notify()
-        }}><span>{label}</span></Button>
-    )
     const context: ControlContext = {lifecycle, editing, midiLearning, deviceHost}
     const voice = SamplerVoiceStacks.create(context, adapter, project.timelineBox.bpm)
     lifecycle.ownAll(
@@ -693,6 +538,17 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                     select(band.keep)
                 },
                 some: ({zones, edge}) => {
+                    const anchor = focused
+                    if (event.shiftKey && isDefined(anchor) && anchor.box.enabled.getValue() && !zones.includes(anchor)) {
+                        const from = anchor.box, to = zones[0].box
+                        select(SamplerZoneMap.within(state(), {
+                            keyLow: Math.min(from.keyLow.getValue(), to.keyLow.getValue()),
+                            keyHigh: Math.max(from.keyHigh.getValue(), to.keyHigh.getValue()),
+                            velocityLow: Math.min(from.velocityLow.getValue(), to.velocityLow.getValue()),
+                            velocityHigh: Math.max(from.velocityHigh.getValue(), to.velocityHigh.getValue())
+                        }), anchor)
+                        return
+                    }
                     if (hasModifier(event)) {
                         toggleSelect(zones)
                         return
@@ -726,10 +582,13 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 const current = drag
                 editing.modify(() => applyDrag(current, key, velocity), false)
             } else if (isDefined(band)) {
-                rect = {
+                const next = {
                     keyLow: Math.min(band.key, key), keyHigh: Math.max(band.key, key),
                     velocityLow: Math.min(band.velocity, velocity), velocityHigh: Math.max(band.velocity, velocity)
                 }
+                if (isDefined(rect) && next.keyLow === rect.keyLow && next.keyHigh === rect.keyHigh
+                    && next.velocityLow === rect.velocityLow && next.velocityHigh === rect.velocityHigh) {return}
+                rect = next
                 select(union(band.keep, SamplerZoneMap.within(state(), rect)))
                 refresh.notify()
             } else {
@@ -762,7 +621,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             lastClick = undefined
             refresh.notify()
         }),
-        Events.subscribe(map, "pointerleave", () => readout.textContent = "Key / Velocity"),
+        Events.subscribe(map, "pointerleave", () => readout.textContent = ""),
         Events.subscribe(waveform, "pointerdown", (event: PointerEvent) => {
             const marker = markerAt(event)
             if (!isDefined(marker) || event.button !== 0) {return}
@@ -809,146 +668,102 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         Events.subscribe(keys, "pointercancel", release),
         {terminate: release}
     )
-    readout.textContent = "Key / Velocity"
+    mapDisplay.appendChild(readout)
     update()
-    const stackPanel: HTMLElement = (
-        <div className="list stack">
-            <h3>
-                {stackTitle}
-                {SamplerValueLabel.choice(lifecycle, observe, {names: RoundRobinNames, ...groupChoice(group => group.box.roundRobin)})}
-            </h3>
-            {stackList}
-        </div>
-    )
+    const zoneTable = SamplerZoneTable.create(lifecycle, editing, observe, {
+        rows: tableRows,
+        selection: () => selection,
+        focused: () => focused,
+        select: (zones, focus) => {
+            select(zones, focus, false)
+            refresh.notify()
+        },
+        toggle: zone => {
+            const kept = selection.includes(zone) ? selection.filter(other => other !== zone) : [...selection, zone]
+            select(kept, selection.includes(zone) ? undefined : zone, false)
+            refresh.notify()
+        },
+        remove: zone => {
+            editing.modify(() => SamplerZones.disable([zone.box]))
+            tableZones = tableZones.filter(other => other !== zone)
+            select(selection.filter(other => other !== zone), undefined, false)
+            refresh.notify()
+        },
+        framesOf,
+        nameOf: zone => fileNameOf(zone).replace(/\.[A-Za-z0-9]+$/, "")
+    })
+    const act = (label: string, action: Exec, separatorBefore: boolean = false): MenuItem =>
+        MenuItem.default({label, separatorBefore}).setTriggerProcedure(() => {
+            editing.modify(action)
+            refresh.notify()
+            takeFocus()
+        })
+    const menu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+        MenuItem.default({label: "Add Samples..."}).setTriggerProcedure(browse),
+        MenuItem.default({label: "Import SFZ / SF2..."})
+            .setTriggerProcedure(async () => (await import("./SamplerImporter")).SamplerImporter.browse(service, adapter)),
+        MenuItem.default({label: "Export SF2..."})
+            .setTriggerProcedure(async () => (await import("./SamplerExporter")).SamplerExporter.save(service, adapter)),
+        MenuItem.default({label: "Select All", separatorBefore: true}).setTriggerProcedure(() => {
+            select(shownZones().filter(zone => zone.box.enabled.getValue()))
+            refresh.notify()
+            takeFocus()
+        }),
+        act("Map by Name", () => SamplerZones.mapByName(boxes()), true),
+        act("Spread Keys", () => SamplerZones.spreadKeys(boxes())),
+        act("Spread Velocity", () => SamplerZones.spreadVelocity(boxes())),
+        act("Crossfade", () => SamplerZones.crossfade(boxes())),
+        act("Root to Low", () => SamplerZones.rootToLow(boxes())),
+        MenuItem.default({label: "Duplicate", separatorBefore: true}).setTriggerProcedure(() =>
+            added(editing.modify(() => SamplerZones.duplicate(boxGraph, adapter.box, boxes())).unwrapOrElse(Arrays.empty()))),
+        MenuItem.default({label: "Move to Group"}).setRuntimeChildrenProcedure(sub => sub.addMenuItem(
+            ...adapter.groups.adapters().map(group => act(group.box.label.getValue(), () => SamplerZones.moveToGroup(boxes(), group.box))))),
+        act("Delete", () => SamplerZones.disable(boxes())),
+        act("Restore", () => boxes().forEach(box => box.enabled.setValue(true))),
+        act("Delete Unused Samples", () => {SamplerZones.cleanUp(adapter.box)}, true)
+    ))
     const element: HTMLElement = (
         <div className={className}>
             <header>
+                <MenuButton root={menu} appearance={{color: Colors.shadow, activeColor: Colors.gray}}>
+                    <label><span>Sample Zones</span><Icon symbol={IconSymbol.Dropdown}/></label>
+                </MenuButton>
                 {presetName}
                 {sampleCount}
-                {readout}
-                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Removes the sample zones that were taken off the map"}}
-                        onClick={() => {
-                            editing.modify(() => SamplerZones.cleanUp(adapter.box))
-                            refresh.notify()
-                        }}><span>Clean Up</span></Button>
-                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Adds samples and maps them from their file names"}}
-                        onClick={browse}><span>Add Samples</span></Button>
-                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Imports a soundfont preset, or an SFZ file chosen together with its samples"}}
-                        onClick={async () => (await import("./SamplerImporter")).SamplerImporter.browse(service, adapter)}>
-                    <span>Import SFZ / SF2</span>
-                </Button>
-                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Saves this Sampler as a soundfont"}}
-                        onClick={async () => (await import("./SamplerExporter")).SamplerExporter.save(service, adapter)}>
-                    <span>Export SF2</span>
-                </Button>
-            </header>
-            <div className="tools">
-                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Selects every sample zone of the shown group"}}
-                        onClick={() => {
-                            select(shownZones().filter(zone => zone.box.enabled.getValue()))
-                            refresh.notify()
-                        }}><span>Select All</span></Button>
-                {tool("Map by Name", "Reads note, dynamic and round robin from the file names (C4, pp to fff, v1, rr1) and maps the selected zones",
-                    () => SamplerZones.mapByName(boxes()))}
-                {tool("Spread Keys", "Extends each selected zone halfway to the neighbouring roots, so no key is left empty",
-                    () => SamplerZones.spreadKeys(boxes()))}
-                {tool("Spread Velocity", "Splits the velocity range evenly between the selected layers on the same keys",
-                    () => SamplerZones.spreadVelocity(boxes()))}
-                {tool("Crossfade", "Lets selected neighbours overlap and fade into each other, over keys and velocities",
-                    () => SamplerZones.crossfade(boxes()))}
-                {tool("Root to Low", "Sets the root key of each selected zone to its lowest key", () => SamplerZones.rootToLow(boxes()))}
-                {tool("Duplicate", "Copies the selected zones onto the same keys, as further round robins",
-                    () => {SamplerZones.duplicate(boxGraph, adapter.box, boxes())})}
-                <MenuButton appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Moves the selected zones into another group"}}
-                            root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                                ...adapter.groups.adapters().map(group => MenuItem.default({label: group.box.label.getValue()})
-                                    .setTriggerProcedure(() => {
-                                        editing.modify(() => SamplerZones.moveToGroup(boxes(), group.box))
-                                        refresh.notify()
-                                    }))))}>
-                    <label><span>Move to Group</span><Icon symbol={IconSymbol.Dropdown}/></label>
-                </MenuButton>
-                {tool("Delete", "Takes the selected zones off the map, they stay in the list until Clean Up",
-                    () => SamplerZones.disable(boxes()))}
-                {tool("Restore", "Puts the selected zones back on the map", () => boxes().forEach(box => box.enabled.setValue(true)))}
                 {selectionLabel}
+            </header>
+            <div className="device">
+                <div className="stacks">{voice.stacks}</div>
+                <SamplerModulationList lifecycle={lifecycle} editing={editing} adapter={adapter} onHover={voice.highlight}/>
             </div>
             {mapDisplay}
             <div className="keys">{keys}</div>
+            {zoneTable.element}
             <div className="side">
-                <div className="list">
-                    <h3>Groups</h3>
+                <div className="list groups">
+                    <h3><span>Groups</span><span>Zones</span><span>Stacks</span><span>Choke</span><span>Trigger</span><span/></h3>
                     {groupList}
                 </div>
-                <div className="list">
+                <div className="list samples">
                     <h3>Samples</h3>
-                    {zoneList}
+                    <div className="frame">{zoneList}</div>
                 </div>
-                <SamplerModulationList lifecycle={lifecycle} editing={editing} adapter={adapter} onHover={voice.highlight}/>
-            </div>
-            <div className="inspector">
-                <div className="focus">
-                    {waveformDisplay}
-                    {stackPanel}
-                </div>
-                <div className="stacks">
-                    {SamplerStacks.stack("red", "Group", 1, [
-                        choice("Stacks", RoundRobinNames, groupChoice(group => group.box.roundRobin)),
-                        value(groupField("Choke", group => group.box.choke, 16, {
-                            print: choke => choke === 0 ? ["Off", ""] : [String(choke), ""],
-                            parse: text => /off/i.test(text) ? 0 : numberIn(text)
-                        })),
-                        choice("Trigger", TriggerNames, groupChoice(group => group.box.trigger))
-                    ])}
-                    {SamplerStacks.stack("orange", "Key", 1, [
-                        value(zoneField("Low", box => box.keyLow, 0, MaxKey, 1, format.key,
-                            box => {if (box.keyLow.getValue() > box.keyHigh.getValue()) {box.keyLow.setValue(box.keyHigh.getValue())}})),
-                        value(zoneField("High", box => box.keyHigh, 0, MaxKey, 1, format.key,
-                            box => {if (box.keyHigh.getValue() < box.keyLow.getValue()) {box.keyHigh.setValue(box.keyLow.getValue())}})),
-                        value(zoneField("Fade", box => box.keyFade, 0, 24, 1, format.integer("st")))
-                    ])}
-                    {SamplerStacks.stack("yellow", "Velocity", 1, [
-                        value(zoneField("Low", box => box.velocityLow, 1, 127, 1, format.integer(""),
-                            box => {if (box.velocityLow.getValue() > box.velocityHigh.getValue()) {box.velocityLow.setValue(box.velocityHigh.getValue())}})),
-                        value(zoneField("High", box => box.velocityHigh, 1, 127, 1, format.integer(""),
-                            box => {if (box.velocityHigh.getValue() < box.velocityLow.getValue()) {box.velocityHigh.setValue(box.velocityLow.getValue())}})),
-                        value(zoneField("Fade", box => box.velocityFade, 0, 64, 1, format.integer("")))
-                    ])}
-                    {SamplerStacks.stack("green", "Pitch", 1, [
-                        value(zoneField("Root", box => box.rootKey, 0, MaxKey, 1, format.key)),
-                        value(zoneField("Transp", box => box.transpose, -24, 24, 1, format.integer("st"))),
-                        value(zoneField("Tune", box => box.tune, -100, 100, 1, format.integer("ct")))
-                    ])}
-                    {SamplerStacks.stack("blue", "Play", 2, [
-                        value(zoneField("Gain", box => box.gain, -72, 12, 0.5, format.fixed(1, "dB"))),
-                        value(zoneField("Pan", box => box.panning, -1, 1, 0.01, format.pan)),
-                        value(zoneField("Track", box => box.keyTrack, 0, 1, 0.01, format.percent)),
-                        value({
-                            ...zoneField("Turn", box => box.sequence, 1, 128, 1, format.integer("")),
-                            available: () => isDefined(focused) && robinMode() === RobinCycle,
-                            spread: () => undefined,
-                            set: turn => focused?.box.sequence.setValue(clamp(Math.round(turn), 1, 128))
-                        }),
-                        toggle("Reverse", box => box.reverse),
-                        toggle("One Shot", box => box.oneShot)
-                    ])}
-                    {SamplerStacks.stack("purple", "Sample", 2, [
-                        value(frameField("Start", box => box.sampleStart)),
-                        value(frameField("End", box => box.sampleEnd)),
-                        choice("Loop", LoopModeNames, {
-                            available: () => isDefined(focused),
-                            get: () => focused?.box.loopMode.getValue() ?? 0,
-                            set: mode => editing.modify(() => selection.forEach(({box}) => box.loopMode.setValue(mode)))
-                        }),
-                        value(zoneField("Fade", box => box.loopFade, 0, 1, 0.005, format.seconds)),
-                        value(frameField("From", box => box.loopStart)),
-                        value(frameField("To", box => box.loopEnd))
-                    ])}
-                </div>
-                <div className="stacks">{voice.stacks}</div>
+                {waveformDisplay}
             </div>
         </div>
     )
-    lifecycle.own(SamplerSamples.installDrop(element, mapDisplay, service, dropped))
+    element.tabIndex = -1
+    requestAnimationFrame(takeFocus)
+    lifecycle.ownAll(
+        SamplerSamples.installDrop(element, mapDisplay, service, dropped),
+        Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
+            if (!Keyboard.isDelete(event) || selection.length === 0 || Events.isTextInput(document.activeElement)) {return}
+            event.preventDefault()
+            event.stopPropagation()
+            editing.modify(() => SamplerZones.disable(boxes()))
+            select([])
+            refresh.notify()
+        })
+    )
     return element
 }

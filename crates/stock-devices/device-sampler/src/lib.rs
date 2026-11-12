@@ -32,7 +32,7 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 pub const MAX_VOICES: usize = 64; // the range of the `voices` parameter
-const POOL: usize = MAX_VOICES + 16; // room for voices that still fall after they were stolen
+const POOL: usize = MAX_VOICES * 2; // room for voices that still fall after they were stolen
 const CONTROL_FRAMES: usize = 16;
 const FAST_RELEASE_SECONDS: f32 = 0.005;
 const KEYS: usize = 128;
@@ -216,7 +216,16 @@ impl Instrument for Sampler {
         } else if id == state.groups_id && table.columns() == GROUP_COLUMNS.len() {
             state.groups = table;
         } else if id == state.zones_id && table.columns() == ZONE_COLUMNS.len() {
+            let shifted = table.rows() != state.zones.rows();
             state.zones = table;
+            if shifted {
+                // rows moved: a sounding voice no longer knows its zone
+                state.voices.iter_mut().filter(|voice| voice.is_active()).for_each(|voice| voice.row = u32::MAX);
+            }
+            for voice in state.voices.iter_mut().filter(|voice| voice.is_active() && (voice.row as usize) < table.rows()) {
+                let zone = Zone::read(&table, voice.row as usize);
+                if zone.sample == Some(voice.sample) {voice.follow(zone);}
+            }
         }
     }
 
@@ -267,7 +276,7 @@ fn apply_parameter(state: &mut SamplerState, index: usize, value: ParamValue) {
     match index {
         VOICES => {
             state.max_voices = int_value(value, &VOICES_MAPPING);
-            limit_voices(state);
+            limit_voices(state, None);
         }
         GLIDE => state.glide = float_value(value, &SECONDS_MAPPING),
         LEGATO => state.legato = bool_value(value),
@@ -352,30 +361,66 @@ fn free_voice(state: &mut SamplerState) -> usize {
     if let Some(free) = state.voices.iter().position(|voice| !voice.is_active()) {
         return free;
     }
-    let mut oldest = 0;
-    for (index, voice) in state.voices.iter().enumerate() {
-        if voice.seq < state.voices[oldest].seq {oldest = index;}
-    }
-    oldest
+    let voices = || state.voices.iter().enumerate();
+    voices().filter(|(_, voice)| voice.is_fading()).min_by(|(_, left), (_, right)| left.amp.level().total_cmp(&right.amp.level()))
+        .or_else(|| voices().filter(|(_, voice)| voice.is_ringing_out()).min_by_key(|(_, voice)| (voice.ringing_since, voice.seq)))
+        .or_else(|| voices().min_by_key(|(_, voice)| voice.seq))
+        .map_or(0, |(index, _)| index)
 }
 
-// a note goes with all its layers, release samples have a budget of their own
-fn limit_voices(state: &mut SamplerState) {
+fn stamp_ringing(state: &mut SamplerState) {
+    let stamp = state.seq;
+    let mut stamped = false;
+    for voice in state.voices.iter_mut().filter(|voice| voice.is_active() && voice.is_ringing_out() && voice.ringing_since == u64::MAX) {
+        voice.ringing_since = stamp;
+        stamped = true;
+    }
+    if stamped {state.seq += 1;}
+}
+
+// voices counts notes with all their layers, release samples on their own; the longest ringing note makes room
+fn limit_voices(state: &mut SamplerState, current: Option<u32>) {
     for release_samples in [false, true] {
         loop {
             let counted = |voice: &&Voice| voice.is_active() && !voice.is_fading() && voice.release_sample == release_samples;
-            if state.voices.iter().filter(counted).count() as i32 <= state.max_voices {break}
-            let loudness = |voice: &Voice| voice.amp.level() * voice.amp.level() * db_to_gain(voice.zone.gain) * voice.fade_gain;
-            let ringing = state.voices.iter().filter(|voice| counted(voice) && voice.is_ringing_out())
-                .min_by(|left, right| loudness(left).total_cmp(&loudness(right)).then(left.seq.cmp(&right.seq)));
-            let Some(victim) = ringing.or_else(|| state.voices.iter().filter(counted).min_by_key(|voice| voice.seq)) else {break};
-            let (id, ringing_out) = (victim.id, victim.is_ringing_out());
-            state.voices.iter_mut()
-                .filter(|voice| voice.is_active() && voice.id == id && voice.release_sample == release_samples
-                    && voice.is_ringing_out() == ringing_out)
-                .for_each(Voice::fast_release);
+            let notes = state.voices.iter().enumerate().filter(|(index, voice)| counted(voice)
+                && !state.voices[..*index].iter().any(|earlier| counted(&earlier) && earlier.id == voice.id)).count();
+            if notes as i32 <= state.max_voices || !steal(state, current, Some(release_samples)) {break}
         }
     }
+    while state.voices.iter().filter(|voice| voice.is_active() && !voice.is_fading()).count() > MAX_VOICES {
+        if !steal(state, current, None) {break}
+    }
+}
+
+fn steal(state: &mut SamplerState, current: Option<u32>, release_samples: Option<bool>) -> bool {
+    let other = |voice: &&Voice| voice.is_active() && !voice.is_fading()
+        && (Some(voice.id) != current || (release_samples.is_none() && voice.is_ringing_out()))
+        && release_samples.is_none_or(|kind| voice.release_sample == kind);
+    let victim = state.voices.iter().filter(|voice| other(voice) && voice.is_ringing_out())
+        .min_by_key(|voice| (voice.ringing_since, voice.seq))
+        .or_else(|| state.voices.iter().filter(other).min_by_key(|voice| voice.seq));
+    let Some((id, kind, ringing_out)) = victim.map(|voice| (voice.id, voice.release_sample, voice.is_ringing_out())) else {
+        return false
+    };
+    state.voices.iter_mut()
+        .filter(|voice| voice.is_active() && voice.id == id && voice.release_sample == kind && voice.is_ringing_out() == ringing_out)
+        .for_each(Voice::fast_release);
+    true
+}
+
+fn carry(state: &mut SamplerState, id: u32, key: i32, pitch: f32, glide: u32) -> bool {
+    let Some(held) = state.voices.iter().find(|voice| voice.is_active() && !voice.is_ringing_out()).map(|voice| voice.id) else {
+        return false
+    };
+    for voice in state.voices.iter_mut().filter(|voice| voice.is_active() && !voice.is_ringing_out() && voice.id == held) {
+        let from = voice.current_pitch();
+        voice.id = id;
+        voice.key = key;
+        voice.pitch = pitch;
+        voice.glide(from, glide);
+    }
+    true
 }
 
 fn note_on(state: &mut SamplerState, event: &EventRecord) {
@@ -395,11 +440,7 @@ fn note_on(state: &mut SamplerState, event: &EventRecord) {
     // one voice and legato: a held note is carried to the new key instead of starting again
     if state.legato && state.max_voices == 1 {
         let glide = (state.glide * state.sample_rate) as u32;
-        if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_active() && !voice.is_released()) {
-            let from = voice.current_pitch();
-            voice.id = event.id;
-            voice.pitch = pitch;
-            voice.glide(from, glide);
+        if carry(state, event.id, key, pitch, glide) {
             state.last_pitch = pitch;
             state.has_last_pitch = true;
             return;
@@ -423,16 +464,17 @@ fn return_to_held(state: &mut SamplerState, id: u32) -> bool {
     let previous = state.held[state.held_count - 1];
     let glide = (state.glide * state.sample_rate) as u32;
     if state.legato {
-        if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_active() && !voice.is_released()) {
-            let from = voice.current_pitch();
-            voice.id = previous.id;
-            voice.pitch = previous.pitch;
-            voice.glide(from, glide);
+        if carry(state, previous.id, previous.key, previous.pitch, glide) {
             state.last_pitch = previous.pitch;
             return true;
         }
     }
     state.voices.iter_mut().filter(|voice| voice.is_active() && voice.id == id && !voice.is_released()).for_each(Voice::note_off);
+    // the held note may still sound when the key that went up never started a voice
+    if state.voices.iter().any(|voice| voice.is_active() && voice.id == previous.id && !voice.is_ringing_out()) {
+        state.last_pitch = previous.pitch;
+        return true;
+    }
     trigger(state, previous.id, previous.key, previous.pitch, previous.velocity, TRIGGER_ATTACK);
     state.last_pitch = previous.pitch;
     true
@@ -440,6 +482,7 @@ fn return_to_held(state: &mut SamplerState, id: u32) -> bool {
 
 fn note_off(state: &mut SamplerState, event: &EventRecord) {
     if return_to_held(state, event.id) {
+        stamp_ringing(state);
         return;
     }
     let mut released: Option<(i32, f32)> = None;
@@ -449,6 +492,7 @@ fn note_off(state: &mut SamplerState, event: &EventRecord) {
     }
     let key = released.map_or((event.pitch as i32).clamp(0, KEYS as i32 - 1), |(key, _)| key);
     let pitch = released.map_or(key as f32, |(_, pitch)| pitch);
+    stamp_ringing(state);
     let velocity = state.velocities[key as usize] as f32 / 127.0;
     if velocity > 0.0 {trigger(state, event.id, key, pitch, velocity, TRIGGER_RELEASE);}
 }
@@ -493,17 +537,17 @@ fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f3
         let voice = &mut state.voices[index];
         voice.start(id, seq, key, pitch, velocity, random, zone, sample, fade, group.choke, phases);
         voice.row = row as u32;
-        if trigger == TRIGGER_RELEASE {
-            voice.zone.one_shot = true;
-            voice.release_sample = true;
-        }
+        if trigger == TRIGGER_RELEASE {voice.mark_release_sample();}
         if glide > 0 && has_last && trigger == TRIGGER_ATTACK {voice.glide(last, glide);}
         let sums = sums_of(state, index);
         state.voices[index].start_shift = sums.start;
         state.voices[index].loop_shift = sums.loop_start;
         started = true;
     }
-    if started {limit_voices(state);}
+    if started {
+        stamp_ringing(state);
+        limit_voices(state, Some(id));
+    }
 }
 
 fn source_value(state: &SamplerState, voice: &Voice, source: i32) -> f32 {

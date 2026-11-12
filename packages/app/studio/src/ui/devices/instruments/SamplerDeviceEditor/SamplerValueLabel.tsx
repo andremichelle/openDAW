@@ -1,4 +1,6 @@
-import {clamp, Editing, Func, int, isDefined, Lifecycle, Optional, Procedure, Provider, Subscription} from "@opendaw/lib-std"
+import {clamp, Editing, Func, int, isDefined, Lifecycle, Option, Optional, Procedure, Provider, Subscription} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
 import {MenuItem} from "@opendaw/studio-core"
@@ -33,6 +35,15 @@ export namespace SamplerValueLabel {
         return isDefined(match) ? parseFloat(match[0].replace(",", ".")) : undefined
     }
     const PixelsPerStep = 2
+    const DeadZone = 3
+
+    // a typed text, or none when the input was left or cancelled
+    export const ask = async (element: HTMLElement, {clientX, clientY}: MouseEvent, shown: string): Promise<Option<string>> => {
+        const resolvers = Promise.withResolvers<string>()
+        Surface.get(element).flyout.appendChild(FloatingTextInput({position: {x: clientX, y: clientY}, value: shown, resolvers}))
+        const {status, value} = await Promises.tryCatch(resolvers.promise)
+        return status === "resolved" ? Option.wrap(value) : Option.None
+    }
 
     export type Choice = {
         readonly names: ReadonlyArray<string>
@@ -41,7 +52,6 @@ export namespace SamplerValueLabel {
         readonly available?: Provider<boolean>
     }
 
-    // one of a few named values, picked from a menu
     export const choice = (lifecycle: Lifecycle, observe: Func<Procedure<void>, Subscription>,
                            {names, get, set, available}: Choice): HTMLElement => {
         const label: HTMLElement = <label className="value"/>
@@ -60,6 +70,54 @@ export namespace SamplerValueLabel {
         )
     }
 
+    export type Subject = {
+        readonly element: HTMLElement
+        readonly min: number
+        readonly max: number
+        readonly step: number
+        readonly get: Provider<number>
+        readonly set: Procedure<number>
+    }
+    export type Gesture = {
+        readonly begin: (subject: Subject, event: PointerEvent) => void
+        readonly move: Procedure<PointerEvent>
+        // returns the subject that was pressed without being dragged, a click
+        readonly end: Func<boolean, Option<Subject>>
+    }
+
+    export const gesture = (editing: Editing): Gesture => {
+        let active: Optional<{ readonly subject: Subject, y: number, readonly value: number, moved: boolean }> = undefined
+        return {
+            begin: (subject, event) => {
+                subject.element.classList.add("modifying")
+                active = {subject, y: event.clientY, value: subject.get(), moved: false}
+            },
+            move: event => {
+                if (!isDefined(active)) {return}
+                const {subject, value} = active
+                if (!active.moved) {
+                    const slipped = active.y - event.clientY
+                    if (Math.abs(slipped) < DeadZone) {return}
+                    active.y -= Math.sign(slipped) * DeadZone
+                    active.moved = true
+                }
+                const steps = Math.round((active.y - event.clientY) / PixelsPerStep)
+                const next = clamp(value + steps * subject.step, subject.min, subject.max)
+                if (next === subject.get()) {return}
+                editing.modify(() => subject.set(next), false)
+            },
+            end: commit => {
+                if (!isDefined(active)) {return Option.None}
+                const {subject, moved} = active
+                active = undefined
+                subject.element.classList.remove("modifying")
+                if (!moved) {return commit ? Option.wrap(subject) : Option.None}
+                if (commit) {editing.mark()} else {editing.revertPending()}
+                return Option.None
+            }
+        }
+    }
+
     export const create = (lifecycle: Lifecycle, editing: Editing, observe: Func<Procedure<void>, Subscription>,
                            field: Field): HTMLElement => {
         const label: HTMLElement = <label className="value"/>
@@ -71,39 +129,29 @@ export namespace SamplerValueLabel {
             label.title = isDefined(spread) ? `${field.print(spread[0]).join(" ").trim()} to ${field.print(spread[1]).join(" ").trim()}` : ""
             if (unit.length > 0) {label.setAttribute("unit", unit)} else {label.removeAttribute("unit")}
         }
-        let drag: Optional<{ readonly y: number, readonly value: number }> = undefined
-        const end = (commit: boolean): void => {
-            if (!isDefined(drag)) {return}
-            drag = undefined
-            label.classList.remove("modifying")
-            if (commit) {editing.mark()} else {editing.revertPending()}
-        }
+        const subject: Subject = {element: label, min: field.min, max: field.max, step: field.step, get: field.get, set: field.set}
+        const drag = gesture(editing)
         lifecycle.ownAll(
             observe(update),
             Events.subscribe(label, "pointerdown", (event: PointerEvent) => {
                 if (field.available?.() === false || event.button !== 0) {return}
                 label.setPointerCapture(event.pointerId)
-                label.classList.add("modifying")
-                drag = {y: event.clientY, value: field.get()}
+                drag.begin(subject, event)
             }),
-            Events.subscribe(label, "pointermove", (event: PointerEvent) => {
-                if (!isDefined(drag)) {return}
-                const steps = Math.round((drag.y - event.clientY) / PixelsPerStep)
-                const next = clamp(drag.value + steps * field.step, field.min, field.max)
-                if (next !== field.get()) {editing.modify(() => field.set(next), false)}
-            }),
-            Events.subscribe(label, "pointerup", () => end(true)),
+            Events.subscribe(label, "pointermove", drag.move),
+            Events.subscribe(label, "pointerup", () => drag.end(true)),
             Events.subscribeDblDwn(label, async event => {
                 if (field.available?.() === false) {return}
-                end(false)
+                drag.end(false)
                 const [text, unit] = field.print(field.get())
-                const typed = await Surface.get(label).requestFloatingTextInput(event, unit.length > 0 ? `${text} ${unit}` : text)
-                const value = field.parse(typed)
+                const typed = await ask(label, event, unit.length > 0 ? `${text} ${unit}` : text)
+                if (typed.isEmpty()) {return}
+                const value = field.parse(typed.unwrap())
                 if (isDefined(value) && Number.isFinite(value)) {
                     editing.modify(() => field.set(clamp(value, field.min, field.max)))
                 }
             }),
-            Events.subscribe(label, "pointercancel", () => end(false))
+            Events.subscribe(label, "pointercancel", () => drag.end(false))
         )
         update()
         return label

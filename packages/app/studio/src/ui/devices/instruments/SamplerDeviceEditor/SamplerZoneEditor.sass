@@ -3,11 +3,12 @@
 component
   display: grid
   grid-template-columns: shared.$pair * 4 + 4px shared.$pair * 8
-  grid-template-rows: 2rem 18px 176px 28px 252px
+  grid-template-rows: 2rem 90px 140px 28px 102px 116px
   column-gap: 12px
   row-gap: 8px
   padding: 0 8px 8px 8px
   background-color: var(--color-panel-background)
+  outline: none
   @include shared.stacks
   @include shared.modulation
 
@@ -35,18 +36,9 @@ component
       font-size: 10px
       color: var(--color-shadow)
 
-    > span.readout
-      margin-left: auto
-      width: 9em
+    > span.count
       font-size: 10px
-      text-align: right
       color: var(--color-shadow)
-
-  > div.tools
-    grid-column: 1 / -1
-    display: flex
-    align-items: center
-    column-gap: 1.25em
 
     > button > label
       display: flex
@@ -55,10 +47,25 @@ component
       font-size: 10px
       line-height: 16px
 
-    > span.count
-      margin-left: auto
-      font-size: 10px
-      color: var(--color-shadow)
+  > div.device
+    grid-column: 1 / -1
+    display: grid
+    grid-template-columns: minmax(0, 1fr) 216px
+    column-gap: 12px
+    min-height: 0
+    margin: 0 -8px
+    padding: 0 8px 8px 8px
+    box-shadow: inset 0 -1px rgba(black, 0.2), 0 1px rgba(white, 0.03)
+
+    > div.stacks > div.parameter-stack
+      width: auto
+      flex: 1 1 0
+
+      &.pairs-2
+        flex-grow: 2
+
+      &:last-child
+        width: auto
 
   // borrowed from NanoDeviceEditor
   div.display
@@ -70,6 +77,14 @@ component
     &.accept
       outline: solid var(--color-green) 1px
       background-color: rgba(white, 0.04)
+
+    > span.readout
+      position: absolute
+      top: 3px
+      right: 6px
+      font-size: 9px
+      color: var(--color-shadow)
+      pointer-events: none
 
     > canvas
       display: block
@@ -106,13 +121,49 @@ component
 
   > div.side
     display: grid
-    grid-template-columns: shared.$pair * 2 shared.$pair * 2
-    grid-template-rows: 116px 128px
-    column-gap: 4px
-    row-gap: 8px
+    grid-template-columns: 300px 168px minmax(0, 1fr)
+    grid-template-rows: 116px
+    column-gap: 8px
+    $group-columns: 8px minmax(0, 1fr) 26px 54px 28px 48px 12px
 
-    > div.modulation
-      grid-column: 1 / -1
+    > div.groups
+      > h3
+        display: grid
+        grid-template-columns: $group-columns
+        column-gap: 6px
+        padding: 0 6px
+
+        > span
+          text-align: center
+
+        > span:first-child
+          grid-column: 1 / 3
+          text-align: left
+
+      div.rows > div.row
+        grid-template-columns: $group-columns
+
+        > span.count
+          text-align: center
+
+        > span.setting
+          display: flex
+          justify-content: center
+          overflow: visible
+
+          button
+            min-width: 0
+            padding: 0
+            font-size: 9px
+
+          label.value
+            @include shared.value-label
+            width: auto
+            min-width: 0
+            padding: 0
+            font-size: 9px
+            line-height: 16px
+            justify-content: center
 
   div.list
     display: grid
@@ -124,7 +175,13 @@ component
       margin: 0
       @include shared.group-label
 
-    > div.rows
+    > div.frame
+      display: grid
+      min-height: 0
+      border-radius: 2px
+      background-color: rgba(black, 0.08)
+
+    div.rows
       position: relative
       @include shared.list-rows
 
@@ -173,65 +230,153 @@ component
 
       > div.add
         flex: 0 0 16px
+        display: flex
+        align-items: center
         padding: 0 6px
-        font-size: 9px
-        line-height: 16px
+        font-size: 10px
         color: var(--color-shadow)
 
-  > div.inspector
+  > div.zone-table
+    grid-row: 5
+    grid-column: 1 / -1
     display: grid
-    grid-template-rows: 72px 82px 82px
-    row-gap: 8px
+    grid-template-rows: 16px 14px minmax(0, 1fr)
+    margin-top: -2px
+    min-height: 0
+    font-size: 9px
+    color: var(--color-dark)
+    $columns: minmax(0, 1fr) 32px 32px 30px 30px 30px 30px 34px 38px 40px 50px 38px 40px 30px 30px 36px 50px 50px 42px 44px 50px 50px 16px
 
-    > div.focus
+    > div.head, > div.frame > div.body > div.row
       display: grid
-      grid-template-columns: minmax(0, 1fr) 264px
-      grid-template-rows: 72px
-      column-gap: 8px
+      grid-template-columns: $columns
+      column-gap: 2px
+      align-items: center
+      padding: 0 6px
 
-      > div.stack
-        > h3
-          display: flex
-          justify-content: space-between
-          align-items: center
+    > div.head
+      color: var(--color-shadow)
 
-          > button
-            font-size: 9px
+      > span
+        white-space: nowrap
+        text-align: center
 
-            > label.value
-              padding: 0
-              line-height: 11px
-              font-size: 9px
-              color: inherit
+      > span.name
+        text-align: left
 
-        > div.rows
-          padding: 4px 0
-          mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 8px), transparent)
+      > span.group
+        align-self: start
+        box-sizing: border-box
+        height: 15px
+        line-height: 9px
+        border-bottom: 1px solid color-mix(in srgb, var(--color) 60%, transparent)
+        color: color-mix(in srgb, var(--color) 85%, transparent)
 
-          > div.row
-            grid-template-columns: 10px 1fr 34px 44px 12px
-            touch-action: none
+    span.key
+      --color: var(--color-orange)
 
-            > span.count
-              text-align: right
+    span.velocity
+      --color: var(--color-yellow)
 
-            > span.turn
-              font-size: 8px
+    span.pitch
+      --color: var(--color-green)
+
+    span.playback
+      --color: var(--color-blue)
+
+    span.waveform
+      --color: var(--color-purple)
+
+    > div.frame
+      display: grid
+      min-height: 0
+      padding: 1px
+      border-radius: 3px
+      background-color: rgba(black, 0.11)
+
+    > div.frame > div.body
+      @include shared.list-rows
+      padding: 0
+      mask-image: none
+
+      &.more-above
+        mask-image: linear-gradient(to bottom, transparent, black 8px)
+
+      &.more-below
+        mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
+
+      &.more-above.more-below
+        mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+      > div.row
+        flex: 0 0 16px
+
+        &:first-child
+          border-radius: 2px 2px 0 0
+
+        &:has(+ div.more)
+          border-radius: 0 0 2px 2px
+
+        &:first-child:has(+ div.more)
+          border-radius: 2px
+
+        > span
+          overflow: hidden
+          white-space: nowrap
+          text-overflow: ellipsis
+
+        > span.cell
+          @include shared.value-label
+          justify-content: center
+          padding: 0
+          border-radius: 2px
+
+          &[unit]:after
+            flex: none
+
+          &.disabled
+            color: var(--color-black)
+
+          &.toggle
+            font-size: 12px
+            color: var(--color-green)
+
+            &:not(.on)
               color: var(--color-shadow)
 
-          > div.hint
-            padding: 4px 6px
-            font-size: 9px
-            line-height: 13px
-            color: var(--color-shadow)
+            > svg
+              pointer-events: none
 
-    div.waveform
-      padding: 8px 8px 16px 8px
+        > div.remove
+          display: flex
+          justify-content: center
+          color: var(--color-shadow)
 
-      > canvas.playheads
-        position: absolute
-        top: 8px
-        left: 8px
-        width: calc(100% - 16px)
-        height: calc(100% - 24px)
-        pointer-events: none
+        &.off > span
+          color: var(--color-black)
+
+        &.selected
+          background-color: rgba(white, 0.06)
+
+      > div.hint, > div.more
+        padding: 4px 6px
+        color: var(--color-shadow)
+
+      > div.hint
+        margin: auto
+        text-align: center
+
+  > div.side
+    grid-row: 6
+    grid-column: 1 / -1
+
+  div.waveform
+    padding: 8px 8px 16px 8px
+
+    > canvas.playheads
+      position: absolute
+      top: 8px
+      left: 8px
+      width: calc(100% - 16px)
+      height: calc(100% - 24px)
+      pointer-events: none

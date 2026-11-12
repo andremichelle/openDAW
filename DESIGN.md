@@ -97,7 +97,8 @@ first draft to a design ready for production. Every rule below came from a concr
 
 ## 10. Lists
 
-1. A scrolling list fades out at its top and bottom edge, it never cuts rows hard.
+1. A scrolling list fades out at its top and bottom edge, it never cuts rows hard. A list whose rows start
+   right at its edge fades only where rows lie beyond that edge, so the rows in view stay fully visible.
 2. List heads use the group header style.
 3. A list of controls next to groups uses the same top offset and the same row pitch (18px rows, 4px gap), so its
    rows line up with the rows of the groups.
@@ -129,6 +130,10 @@ first draft to a design ready for production. Every rule below came from a concr
 13. A field that stands for several selected items with different values is tinted and names the range in its
     tooltip. It still shows one value, so its width does not change.
 14. Positions shown in a display (start, end, loop points) are dragged in the display as well as in their fields.
+15. Values of items in a list are cells in the row of their item, not controls somewhere else that follow a
+    selection. A control block is only for the one thing the whole view is about.
+16. A change with several rows selected sets the same value on all of them. It is never relative.
+17. Actions go into one menu. A row of buttons costs height and every further action costs width.
 
 ## 12. Maps and keyboards
 

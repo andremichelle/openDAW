@@ -522,6 +522,15 @@ describe("SamplerZones: samples without a note in their name", () => {
         expect(first[0].keyLow.getValue()).toBe(37)
         expect(second[0].keyLow.getValue()).toBe(36)
     })
+    it("puts a sample the instrument already plays on the key it is dropped on", () => {
+        const {boxGraph, device, group, edit} = setup([])
+        const kick = sample("Kick.wav")
+        let again: ReadonlyArray<SamplerZoneBox> = []
+        edit(() => SamplerZones.addSamples(boxGraph, device, group, [kick], 36))
+        edit(() => again = SamplerZones.addSamples(boxGraph, device, group, [kick], 60))
+        expect(keys(again[0])).toEqual([60, 60, 60])
+        expect(SamplerZones.zonesOf(device)).toHaveLength(2)
+    })
     it("stops at the top of the keyboard", () => {
         const {boxGraph, device, group, edit} = setup([])
         let created: ReadonlyArray<SamplerZoneBox> = []

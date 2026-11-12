@@ -3,7 +3,7 @@
 //! was triggered while the zone table changes underneath.
 
 use core::f32::consts::PI;
-use crate::zones::{Zone, LOOP_ON};
+use crate::zones::{Zone, LOOP_OFF, LOOP_ON};
 
 const SILENCE: f32 = 1.0e-4;
 const MIN_LOOP_FRAMES: f64 = 4.0;
@@ -234,6 +234,7 @@ pub struct Voice {
     pub start_shift: f32, // modulation of the sample start, in the zone's length
     pub loop_shift: f32,  // modulation of the loop start, in the loop's length
     prepared: bool,
+    stale: bool,
     position: f64,
     start: f64,
     end: f64,
@@ -243,6 +244,8 @@ pub struct Voice {
     released: bool,
     key_up: bool,
     pub release_sample: bool,
+    // when its key went up, in the order of the device's events
+    pub ringing_since: u64,
     fast: bool,
     pub amp: Envelope,
     pub modulation: Envelope,
@@ -259,6 +262,12 @@ impl Voice {
     pub fn is_fading(&self) -> bool {self.fast}
     // the key is up: a tail, or a one shot that plays on by itself
     pub fn is_ringing_out(&self) -> bool {self.key_up}
+    pub fn mark_release_sample(&mut self) {
+        self.release_sample = true;
+        self.key_up = true;
+        self.zone.one_shot = true;
+        self.zone.loop_mode = LOOP_OFF;
+    }
     pub fn position(&self) -> f64 {self.position}
 
     #[allow(clippy::too_many_arguments)]
@@ -282,9 +291,11 @@ impl Voice {
         self.start_shift = 0.0;
         self.loop_shift = 0.0;
         self.prepared = false;
+        self.stale = false;
         self.released = false;
         self.key_up = false;
         self.release_sample = false;
+        self.ringing_since = u64::MAX;
         self.fast = false;
         self.amp.start();
         self.modulation.start();
@@ -332,8 +343,23 @@ impl Voice {
 
     pub fn stop(&mut self) {self.active = false;}
 
+    pub fn follow(&mut self, zone: Zone) {
+        self.zone = zone;
+        if self.release_sample {
+            self.zone.one_shot = true;
+            self.zone.loop_mode = LOOP_OFF;
+        }
+        self.stale = true;
+    }
+
     // Resolve the zone's frames against the sample that is now resident.
     fn prepare(&mut self, frame_count: usize, sample_rate: f32) {
+        self.resolve(frame_count, sample_rate);
+        self.position = if self.zone.reverse {(self.end - 1.0).max(self.start)} else {self.start};
+        self.prepared = true;
+    }
+
+    fn resolve(&mut self, frame_count: usize, sample_rate: f32) {
         let frames = frame_count as f64;
         let start = (self.zone.sample_start as f64).clamp(0.0, frames);
         let end = (self.zone.sample_end as f64).clamp(start, frames);
@@ -348,12 +374,11 @@ impl Voice {
         let length = self.loop_end - self.loop_start;
         let room = if self.zone.reverse {self.end - self.loop_end} else {self.loop_start - start};
         self.loop_fade = (self.zone.loop_fade as f64 * sample_rate as f64).min(length).min(room).max(0.0);
-        self.position = if self.zone.reverse {(self.end - 1.0).max(self.start)} else {self.start};
-        self.prepared = true;
+        self.stale = false;
     }
 
     fn loops(&self) -> bool {
-        self.loop_end - self.loop_start >= MIN_LOOP_FRAMES
+        !self.zone.one_shot && self.loop_end - self.loop_start >= MIN_LOOP_FRAMES
             && (self.zone.loop_mode > LOOP_ON || (self.zone.loop_mode == LOOP_ON && !self.released))
     }
 
@@ -361,7 +386,11 @@ impl Voice {
     #[allow(clippy::too_many_arguments)]
     pub fn render(&mut self, planes: [&[f32]; 2], source_rate: f32, control: &Control, amp: &EnvelopeParams,
                   modulation: &EnvelopeParams, fast_release: f32, left: &mut [f32], right: &mut [f32]) {
-        if !self.prepared {self.prepare(planes[0].len(), source_rate);}
+        if !self.prepared {
+            self.prepare(planes[0].len(), source_rate);
+        } else if self.stale {
+            self.resolve(planes[0].len(), source_rate);
+        }
         if self.end - self.start < 1.0 {
             self.active = false;
             return;
@@ -826,6 +855,27 @@ mod tests {
         let mut voice = voice(crate::zones::Zone {reverse: true, ..looped(LOOP_ALWAYS, 0.0)});
         let rendered = play(&mut voice, &plane, &control(1.0), 12);
         assert_eq!(rendered, [15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 11.0, 10.0, 9.0, 8.0]);
+    }
+
+    #[test]
+    fn a_sounding_voice_follows_its_edited_loop() {
+        let plane = ramp(16);
+        let mut voice = voice(looped(LOOP_ALWAYS, 0.0));
+        assert_eq!(play(&mut voice, &plane, &control(1.0), 10), [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        voice.follow(crate::zones::Zone {loop_start: 4, loop_end: 14, ..looped(LOOP_ALWAYS, 0.0)});
+        assert_eq!(play(&mut voice, &plane, &control(1.0), 6), [10.0, 11.0, 12.0, 13.0, 4.0, 5.0], "the position stays, the new loop wraps");
+        voice.follow(crate::zones::Zone {loop_start: 4, loop_end: 8, ..looped(LOOP_ALWAYS, 0.0)});
+        voice.follow(looped(LOOP_OFF, 0.0));
+        play(&mut voice, &plane, &control(1.0), 20);
+        assert!(!voice.is_active(), "with the loop switched off it plays to the end");
+    }
+
+    #[test]
+    fn a_release_sample_stays_a_one_shot_when_its_zone_is_edited() {
+        let mut voice = voice(looped(LOOP_OFF, 0.0));
+        voice.mark_release_sample();
+        voice.follow(looped(LOOP_ALWAYS, 0.0));
+        assert!(voice.zone.one_shot && voice.zone.loop_mode == LOOP_OFF);
     }
 
     #[test]
