@@ -163,6 +163,24 @@ export interface SampleLoader {
 10. To measure: the time a new engine (bounce, freeze, export, offline render) needs to read all samples of a
     large project from the OPFS.
 
+## How the main thread releases the frames
+
+JavaScript has no free. Releasing means no reference points at the shared buffer any more, then the garbage
+collector takes it.
+
+1. References to a sample's frames today: the loader (`#data`), the loader manager's cache, whoever asked for
+   the data and kept it, and the other threads the shared buffer was sent to (audio thread, peak worker).
+2. When the last lease ends, loader and cache replace their reference by a `WeakRef`.
+3. The engine drops its reference by itself once it has copied the frames into its memory. A worker drops its
+   reference when its task ends.
+4. Not immediate: the browser decides when it collects. Until then `acquire` gets the same data back through
+   the weak reference without reading the disk.
+5. A reference kept after the lease ended keeps the data alive. Nothing breaks, it is only not freed. A leak is
+   quiet.
+6. The test: `AudioData.count()` already counts live buffers through weak references. After every user is gone
+   it must fall back to the number of leased samples. Runs in a headless browser with exposed gc.
+7. A copy made from the frames (a Web Audio buffer for preview) belongs to whoever made it.
+
 ## Order
 
 1. One reader in Rust, floats only, bit-identical.
