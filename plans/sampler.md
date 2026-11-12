@@ -96,6 +96,21 @@ The catalogue is the folder tree in `assets.opendaw.studio/samples/index.json`. 
    browser as single files, like any other sample.
 3. A preset references its samples from the catalogue, the way projects do.
 
+## Soundfont import
+
+The soundfont is processed once and then dropped from memory. It is not stored. Its samples become ordinary local
+samples in the OPFS.
+
+1. One preset at a time. The dialog lists the presets of the file and the user picks one.
+2. Only the samples that preset uses are extracted. Left and right linked samples become one stereo file. Each
+   sample keeps its soundfont name.
+3. The samples go to `Multi Samples/<Soundfont name>/` in the Local tab of the sample browser, mirroring the cloud
+   folder. One folder per soundfont, not per preset, because presets of one soundfont share samples.
+4. A sample is never stored twice. Importing another preset of the same soundfont reuses what is already there.
+5. The preset becomes the sample zones of one Sampler: ranges, root key, tuning, loop points, pan, attenuation.
+6. SFZ and folder imports use the same path: `Multi Samples/<Instrument name>/`.
+7. Eventually the import dialog needs a preview, to hear a preset before importing it.
+
 ## Loading
 
 A preset can reference a hundred samples and more. That is heavy on the network and on the OPFS, and the OPFS is
