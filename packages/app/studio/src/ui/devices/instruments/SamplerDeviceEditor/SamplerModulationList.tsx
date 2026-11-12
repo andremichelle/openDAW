@@ -1,4 +1,4 @@
-import {Editing, int, Lifecycle, MutableObservableValue, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {Editing, int, isDefined, Lifecycle, Optional, MutableObservableValue, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Int32Field} from "@opendaw/lib-box"
 import {SamplerModulationBox} from "@opendaw/studio-boxes"
@@ -26,6 +26,21 @@ const editable = (editing: Editing, field: Int32Field): MutableObservableValue<i
             return this.subscribe(observer)
         }
     }
+
+// a typed amount in the unit the target shows: cents or semitones for pitch, octaves for a rate, percent else
+const parseAmount = (target: int, text: string): Optional<number> => {
+    const value = SamplerValueLabel.numberIn(text)
+    if (!isDefined(value)) {return undefined}
+    if (target === SamplerModulation.Target.Pitch) {
+        return (/st/i.test(text) ? value : value / 100) / SamplerModulation.PitchRange
+    }
+    if (target === SamplerModulation.Target.LfoARate || target === SamplerModulation.Target.LfoBRate) {
+        return value / SamplerModulation.RateRange
+    }
+    return value / 100
+}
+
+const PitchStep = 5 / 100 / SamplerModulation.PitchRange // five cents
 
 const printAmount = (target: int, amount: number): SamplerValueLabel.Printed => {
     if (target === SamplerModulation.Target.Pitch) {
@@ -68,8 +83,10 @@ export const SamplerModulationList = ({lifecycle, editing, adapter, onHover}: Co
                 {chooser(box.target, SamplerModulation.TargetNames)}
                 {SamplerValueLabel.create(terminator, editing,
                     update => Terminable.many(box.amount.subscribe(() => update()), box.target.subscribe(() => update())), {
-                        name: "Amount", min: -1.0, max: 1.0, step: 0.01,
+                        name: "Amount", min: -1.0, max: 1.0,
+                        get step(): number {return box.target.getValue() === SamplerModulation.Target.Pitch ? PitchStep : 0.01},
                         print: amount => printAmount(box.target.getValue(), amount),
+                        parse: text => parseAmount(box.target.getValue(), text),
                         get: () => box.amount.getValue(),
                         set: amount => box.amount.setValue(amount)
                     })}

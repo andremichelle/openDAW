@@ -86,7 +86,7 @@ Targets:
 - **LFO 1 Rate**, **LFO 2 Rate**: A full amount reaches four octaves
 - **Env Depth**: Scales everything the Mod Envelope does
 
-A new Sampler starts with one connection: Velocity to Gain at 80%. Remove it to play every note at full level.
+A new Sampler starts with one connection: Velocity to Gain at 100%. Remove it to play every note at full level.
 
 ---
 

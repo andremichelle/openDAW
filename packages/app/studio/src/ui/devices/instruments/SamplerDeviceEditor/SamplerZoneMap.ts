@@ -1,4 +1,4 @@
-import {Color, int, isDefined, Option, Optional} from "@opendaw/lib-std"
+import {Color, Func, int, isDefined, Option, Optional} from "@opendaw/lib-std"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {SamplerDeviceBoxAdapter, SamplerZoneBoxAdapter} from "@opendaw/studio-adapters"
@@ -25,6 +25,8 @@ export namespace SamplerZoneMap {
         readonly group: int // the group that is shown, -1 for all
         readonly pressed: int
         readonly rect: Optional<Range>
+        // whether a key sounds right now, played here or coming in
+        readonly isNoteOn: Func<int, boolean>
     }
 
     const GroupColors: ReadonlyArray<Color> = [Colors.blue, Colors.green, Colors.yellow, Colors.purple, Colors.orange, Colors.cream]
@@ -69,10 +71,16 @@ export namespace SamplerZoneMap {
             context.fillStyle = Colors.shadow.toString()
             context.fillText(String(velocity), 3 * scale, Math.round(yOf(velocity)) + 3 * scale)
         }
-        const painted: Array<Entry> = []
+        // zones on the same range are painted once, with their number
+        const rangeOf = (entry: Entry): string =>
+            `${entry.group}/${entry.keyLow}/${entry.keyHigh}/${entry.velocityLow}/${entry.velocityHigh}`
+        const counts = new Map<string, int>()
+        entries.forEach(entry => counts.set(rangeOf(entry), (counts.get(rangeOf(entry)) ?? 0) + 1))
+        const painted = new Set<string>()
         const paintEntry = (entry: Entry, selected: boolean): void => {
-            if (painted.some(other => sameRange(other, entry))) {return}
-            painted.push(entry)
+            const range = rangeOf(entry)
+            if (painted.has(range)) {return}
+            painted.add(range)
             const color = groupColor(entry.group)
             const x0 = Math.round(entry.keyLow * keyWidth) + scale
             const x1 = Math.round((entry.keyHigh + 1) * keyWidth)
@@ -83,7 +91,8 @@ export namespace SamplerZoneMap {
             context.fillRect(x0, y0, x1 - x0, y1 - y0)
             if (dimmed) {return}
             // an edge fades only where a zone of the same group overlaps it
-            const others = entries.filter(other => other.group === entry.group && !sameRange(other, entry))
+            const fades = entry.keyFade > 0 || entry.velocityFade > 0
+            const others = fades ? entries.filter(other => other.group === entry.group && !sameRange(other, entry)) : []
             const beside = others.filter(other => other.velocityLow <= entry.velocityHigh && other.velocityHigh >= entry.velocityLow)
             const stacked = others.filter(other => other.keyLow <= entry.keyHigh && other.keyHigh >= entry.keyLow)
             const shade = (fromX: number, fromY: number, toX: number, toY: number): void => {
@@ -111,7 +120,7 @@ export namespace SamplerZoneMap {
             context.strokeStyle = (selected ? Colors.white : color.opacity(0.6)).toString()
             context.lineWidth = scale
             context.strokeRect(x0 + scale * 0.5, y0 + scale * 0.5, x1 - x0 - scale, y1 - y0 - scale)
-            const robins = entries.filter(other => sameRange(other, entry)).length
+            const robins = counts.get(range) ?? 1
             if (robins > 1 && x1 - x0 >= 14 * scale && y1 - y0 >= 12 * scale) {
                 context.fillStyle = (selected ? Colors.black : color).toString()
                 context.font = `${8 * scale}px sans-serif`
@@ -180,11 +189,18 @@ export namespace SamplerZoneMap {
     // black keys sit on their semitone column to line up with the map, white keys split below their centres
     export const paintKeyboard = (context: CanvasRenderingContext2D, width: number, height: number, scale: number,
                                   state: State): void => {
-        const {entries, selection, pressed} = state
+        const {entries, selection, isNoteOn} = state
         const keyWidth = width / NumKeys
         const roots = new Set<int>(entries.filter(entry => selection.has(entry.zone)).map(entry => entry.rootKey))
-        const fill = (key: int, black: boolean): string => (key === pressed ? Colors.orange : roots.has(key) ? Colors.blue
-            : black ? Colors.black : Colors.gray).toString()
+        const fill = (key: int, black: boolean): string => (roots.has(key) ? Colors.blue : black ? Colors.black : Colors.gray).toString()
+        // a sounding key gets a dot, so the colours of the selection stay readable
+        const dot = (key: int, centerX: number, centerY: number): void => {
+            if (!isNoteOn(key)) {return}
+            context.fillStyle = Colors.orange.toString()
+            context.beginPath()
+            context.arc(centerX, centerY, 2.5 * scale, 0.0, Math.PI * 2.0)
+            context.fill()
+        }
         context.clearRect(0, 0, width, height)
         for (let key = 0; key < NumKeys; key++) {
             if (MidiKeys.isBlackKey(key)) {continue}
@@ -192,6 +208,7 @@ export namespace SamplerZoneMap {
             const white = WhiteKeys.indexOf(key % 12)
             const x0 = Math.round((octave * 12 + WhiteEdges[white]) * keyWidth)
             const x1 = Math.round((octave * 12 + WhiteEdges[white + 1]) * keyWidth)
+            const centerX = (x0 + x1 + scale) * 0.5
             context.fillStyle = fill(key, false)
             context.fillRect(x0 + scale, 0, x1 - x0 - scale, height - scale)
             if (key % 12 === 0 && key >= 24) {
@@ -199,13 +216,28 @@ export namespace SamplerZoneMap {
                 context.font = `${7 * scale}px sans-serif`
                 context.textAlign = "center"
                 context.textBaseline = "alphabetic"
-                context.fillText(MidiKeys.toFullString(key), x0 + keyWidth * 0.75 + scale, height - 3 * scale)
+                context.fillText(MidiKeys.toFullString(key), centerX, height - 3 * scale)
             }
+            dot(key, centerX, height - 5.5 * scale)
         }
         for (let key = 0; key < NumKeys; key++) {
             if (!MidiKeys.isBlackKey(key)) {continue}
             context.fillStyle = fill(key, true)
             context.fillRect(Math.round(key * keyWidth), 0, Math.round(keyWidth), Math.round(height * BlackKeyHeight))
+            dot(key, (key + 0.5) * keyWidth, height * BlackKeyHeight * 0.72)
+        }
+    }
+
+    // the read head of every voice that plays the zone: `positions` holds row and frame pairs, a row of -1 ends them
+    export const paintPlayheads = (context: CanvasRenderingContext2D, width: number, height: number, scale: number,
+                                   positions: Float32Array, row: int, numberOfFrames: int): void => {
+        context.clearRect(0, 0, width, height)
+        if (row < 0 || numberOfFrames <= 0) {return}
+        context.fillStyle = Colors.bright.toString()
+        for (let index = 0; index + 1 < positions.length; index += 2) {
+            if (positions[index] < 0) {break}
+            if (positions[index] !== row) {continue}
+            context.fillRect(Math.round(positions[index + 1] / numberOfFrames * (width - scale)), 0, scale, height)
         }
     }
 

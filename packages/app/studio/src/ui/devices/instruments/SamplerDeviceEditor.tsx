@@ -27,16 +27,18 @@ export const SamplerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
     const context: ControlContext = {lifecycle, editing, midiLearning, deviceHost}
-    const {stacks, highlight} = SamplerVoiceStacks.create(context, adapter)
+    const {stacks, highlight} = SamplerVoiceStacks.create(context, adapter, project.timelineBox.bpm)
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
                       populateMenu={parent => MenuItems.forAudioUnitInput(parent, service, deviceHost)}
                       populateHeader={() => (
-                          <Button lifecycle={lifecycle} appearance={{framed: true, color: Colors.shadow}}
+                          // 12px makes the button 18px high: at the header's 11px it is 16.5px and sits half a pixel off the icons
+                          <Button lifecycle={lifecycle} appearance={{color: Colors.green, activeColor: Colors.bright, cursor: "pointer"}}
+                                  style={{fontSize: "12px", position: "relative", top: "1px"}}
                                   onClick={() => SamplerZoneWindow.open(service, adapter, deviceHost)}>
-                              <span>Edit Sample Zones</span>
+                              <span style={{fontSize: "11px"}}>Edit Sample Zones</span>
                           </Button>
                       )}
                       populateControls={() => (

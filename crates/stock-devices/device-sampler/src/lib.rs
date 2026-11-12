@@ -36,6 +36,9 @@ const POOL: usize = MAX_VOICES + 16; // room for voices that still fall after th
 const CONTROL_FRAMES: usize = 16;
 const FAST_RELEASE_SECONDS: f32 = 0.005;
 const KEYS: usize = 128;
+const HELD_NOTES: usize = 16; // the keys one voice remembers to go back to, as the monophonic synths do
+const POSITION_VOICES: usize = 16; // the editor paints up to 16 read heads
+const POSITIONS_PATH: [u16; 1] = [1001];
 
 // WASM CONTRACT: the field keys of `SamplerDeviceBox`.
 const ZONES_HUB: [u16; 1] = [10];
@@ -104,6 +107,15 @@ const CENTER_KEY: f32 = 60.0;
 // The lengths a synced LFO snaps to, in bars. WASM CONTRACT: `LfoModulatorBoxAdapter.Rates`.
 const SYNC_BARS: [f32; 12] = [8.0, 4.0, 2.0, 1.0, 1.0 / 2.0, 1.0 / 4.0, 1.0 / 6.0, 1.0 / 8.0, 1.0 / 12.0, 1.0 / 16.0, 1.0 / 24.0, 1.0 / 32.0];
 
+/// A key that is held while one voice plays another.
+#[derive(Clone, Copy)]
+struct HeldNote {
+    id: u32,
+    key: i32,
+    pitch: f32,
+    velocity: f32
+}
+
 /// What the modulation slots add up to for one voice at one moment.
 #[derive(Clone, Copy, Default)]
 struct Sums {
@@ -147,6 +159,10 @@ pub struct SamplerState {
     lfo_phases: [f32; 2],  // free running, what a voice starts from when its LFO does not restart
     robins: [u8; KEYS],
     velocities: [u8; KEYS], // the velocity each held key was played with, a release trigger answers to it
+    held: [HeldNote; HELD_NOTES],
+    held_count: usize,
+    positions_id: u32,
+    positions_ptr: u32,
     last_pitch: f32,
     has_last_pitch: bool,
     fast_release: f32,
@@ -185,6 +201,7 @@ impl Instrument for Sampler {
         state.zones_id = abi::observe_table(&ZONES_HUB, &ZONE_COLUMNS);
         state.groups_id = abi::observe_table(&GROUPS_HUB, &GROUP_COLUMNS);
         state.modulations_id = abi::observe_table(&MODULATIONS_HUB, &MODULATION_COLUMNS);
+        state.positions_id = abi::bind_broadcast(&POSITIONS_PATH, POSITION_VOICES as u32 * 2);
     }
 
     fn parameter_changed(state: &mut SamplerState, id: u32, value: ParamValue) {
@@ -226,11 +243,14 @@ impl Instrument for Sampler {
             render_interval(state, &mut out_left[from..to], &mut out_right[from..to]);
             from = to;
         }
+        publish_positions(state);
     }
 
     fn reset(state: &mut SamplerState) {
         state.voices.iter_mut().for_each(Voice::stop);
         state.has_last_pitch = false;
+        state.held_count = 0;
+        publish_positions(state);
     }
 }
 
@@ -285,9 +305,44 @@ fn lfo_hertz(state: &SamplerState, lfo: usize) -> f32 {
     if !state.lfo_sync[lfo] {
         return state.lfo_rates[lfo];
     }
-    let unit = RATE_MAPPING.x(state.lfo_rates[lfo]);
-    let index = (libm::roundf(unit * (SYNC_BARS.len() - 1) as f32) as usize).min(SYNC_BARS.len() - 1);
-    state.bpm / 240.0 / SYNC_BARS[index]
+    synced_hertz(state.lfo_rates[lfo], state.bpm)
+}
+
+/// The rate of the note length that is nearest to `hertz` at this tempo, compared as musical intervals.
+pub fn synced_hertz(hertz: f32, bpm: f32) -> f32 {
+    let mut nearest = bpm / 240.0 / SYNC_BARS[0];
+    for bars in SYNC_BARS.iter().skip(1) {
+        let candidate = bpm / 240.0 / bars;
+        if libm::fabsf(libm::log2f(candidate / hertz)) < libm::fabsf(libm::log2f(nearest / hertz)) {nearest = candidate;}
+    }
+    nearest
+}
+
+/// Publish the read heads to the `[1001]` float broadcast the editor paints on the waveform: for each voice
+/// the row of its zone and its position in source frames, a row of `-1` ends the list. Skipped until the
+/// engine has drained the slot.
+fn publish_positions(state: &mut SamplerState) {
+    if state.positions_ptr == 0 {
+        state.positions_ptr = abi::broadcast_ptr(state.positions_id);
+    }
+    if state.positions_ptr == 0 {
+        return;
+    }
+    let slots = unsafe { core::slice::from_raw_parts_mut(state.positions_ptr as *mut f32, POSITION_VOICES * 2) };
+    write_positions(&state.voices, slots);
+}
+
+fn write_positions(voices: &[Voice], slots: &mut [f32]) {
+    let mut count = 0usize;
+    for voice in voices.iter().filter(|voice| voice.is_active()) {
+        if count * 2 + 1 >= slots.len() {break}
+        slots[count * 2] = voice.row as f32;
+        slots[count * 2 + 1] = voice.position() as f32;
+        count += 1;
+    }
+    if count * 2 < slots.len() {
+        slots[count * 2] = -1.0;
+    }
 }
 
 fn free_voice(state: &mut SamplerState) -> usize {
@@ -322,6 +377,16 @@ fn note_on(state: &mut SamplerState, event: &EventRecord) {
     let key = (event.pitch as i32).clamp(0, KEYS as i32 - 1);
     let pitch = key as f32 + event.cent / 100.0;
     state.velocities[key as usize] = midi_velocity(event.velocity) as u8;
+    if state.max_voices == 1 {
+        if state.held_count == HELD_NOTES {
+            state.held.copy_within(1.., 0);
+            state.held_count -= 1;
+        }
+        state.held[state.held_count] = HeldNote {id: event.id, key, pitch, velocity: event.velocity};
+        state.held_count += 1;
+    } else {
+        state.held_count = 0;
+    }
     // one voice and legato: a held note is carried to the new key instead of starting again
     if state.legato && state.max_voices == 1 {
         let glide = (state.glide * state.sample_rate) as u32;
@@ -340,7 +405,38 @@ fn note_on(state: &mut SamplerState, event: &EventRecord) {
     state.has_last_pitch = true;
 }
 
+// One voice: letting go of the last key that was pressed goes back to the one still held below it. Returns
+// whether the note off was taken care of.
+fn return_to_held(state: &mut SamplerState, id: u32) -> bool {
+    let Some(position) = state.held[..state.held_count].iter().position(|note| note.id == id) else { return false };
+    let was_top = position == state.held_count - 1;
+    state.held.copy_within(position + 1..state.held_count, position);
+    state.held_count -= 1;
+    if !was_top || state.held_count == 0 || state.max_voices != 1 {
+        return false;
+    }
+    let previous = state.held[state.held_count - 1];
+    let glide = (state.glide * state.sample_rate) as u32;
+    if state.legato {
+        if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_active() && !voice.is_released()) {
+            let from = voice.current_pitch();
+            voice.id = previous.id;
+            voice.pitch = previous.pitch;
+            voice.glide(from, glide);
+            state.last_pitch = previous.pitch;
+            return true;
+        }
+    }
+    state.voices.iter_mut().filter(|voice| voice.is_active() && voice.id == id && !voice.is_released()).for_each(Voice::note_off);
+    trigger(state, previous.id, previous.key, previous.pitch, previous.velocity, TRIGGER_ATTACK);
+    state.last_pitch = previous.pitch;
+    true
+}
+
 fn note_off(state: &mut SamplerState, event: &EventRecord) {
+    if return_to_held(state, event.id) {
+        return;
+    }
     let mut released: Option<(i32, f32)> = None;
     for voice in state.voices.iter_mut().filter(|voice| voice.is_active() && voice.id == event.id && !voice.is_released()) {
         released = Some((voice.key, voice.pitch));
@@ -387,6 +483,7 @@ fn trigger(state: &mut SamplerState, id: u32, key: i32, pitch: f32, velocity: f3
         let last = state.last_pitch;
         let voice = &mut state.voices[index];
         voice.start(id, seq, key, pitch, velocity, random, zone, sample, fade, group.choke, phases);
+        voice.row = row as u32;
         if trigger == TRIGGER_RELEASE {voice.zone.one_shot = true;}
         if glide > 0 && has_last && trigger == TRIGGER_ATTACK {voice.glide(last, glide);}
         let sums = sums_of(state, index);
@@ -581,4 +678,55 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
 #[no_mangle]
 pub extern "C" fn reset(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, |state| <Sampler as Instrument>::reset(state)) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::zones::tests::zone;
+
+    fn voices(positions: &[(u32, usize)]) -> Vec<Voice> {
+        let plane: Vec<f32> = vec![0.0; 64];
+        positions.iter().map(|(row, frames)| {
+            let mut voice: Voice = unsafe { core::mem::zeroed() };
+            voice.start(1, 0, 60, 60.0, 1.0, 0.0, zone(), 1, 1.0, 0, [0.0, 0.0]);
+            voice.row = *row;
+            let open = SvfCoefficients::new(1_000.0, 0.707, 48_000.0);
+            let control = Control {increment: 1.0, filter_type: FILTER_OFF, filter: open, filter_second: open, gain_left: 1.0, gain_right: 1.0, mono: 0.0};
+            let envelope = EnvelopeParams {delay: 0, attack: 1, hold: 0, decay: 0.5, sustain: 1.0, release: 0.5};
+            let (mut left, mut right) = (vec![0.0f32; *frames], vec![0.0f32; *frames]);
+            voice.render([&plane, &plane], 48_000.0, &control, &envelope, &envelope, 0.5, &mut left, &mut right);
+            voice
+        }).collect()
+    }
+
+    #[test]
+    fn positions_are_row_and_frame_pairs_ended_by_minus_one() {
+        let mut slots = [9.0f32; 8];
+        write_positions(&voices(&[(3, 5), (7, 12)]), &mut slots);
+        assert_eq!(slots, [3.0, 5.0, 7.0, 12.0, -1.0, 9.0, 9.0, 9.0]);
+    }
+
+    #[test]
+    fn no_voice_is_an_empty_list() {
+        let mut slots = [9.0f32; 4];
+        write_positions(&[], &mut slots);
+        assert_eq!(slots[0], -1.0);
+    }
+
+    #[test]
+    fn idle_voices_are_left_out() {
+        let mut pool = voices(&[(1, 2), (2, 2), (3, 2)]);
+        pool[1].stop();
+        let mut slots = [9.0f32; 6];
+        write_positions(&pool, &mut slots);
+        assert_eq!(slots, [1.0, 2.0, 3.0, 2.0, -1.0, 9.0]);
+    }
+
+    #[test]
+    fn more_voices_than_slots_fill_the_slots_without_an_end_mark() {
+        let mut slots = [9.0f32; 4];
+        write_positions(&voices(&[(1, 2), (2, 2), (3, 2)]), &mut slots);
+        assert_eq!(slots, [1.0, 2.0, 2.0, 2.0]);
+    }
 }

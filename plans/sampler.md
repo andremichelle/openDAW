@@ -33,7 +33,7 @@ data and drawn waveforms. No box, adapter or engine yet. The layout rules that c
 1. Sources: Amp Env, Mod Env, LFO 1, LFO 2, Velocity, Key, Random.
 2. Targets: Pitch, Cutoff, Reso, Gain, Pan, Start, Loop, LFO 1 Rate, LFO 2 Rate, Env Depth.
 3. Env Depth scales the amounts of the Mod Env slots.
-4. Velocity to Gain is a default slot (80%), there is no fixed velocity sensitivity.
+4. Velocity to Gain is a default slot (100%), there is no fixed velocity sensitivity.
 5. No fixed number of slots in the design. A limit, if the engine needs one, is André's call.
 
 ## Zone window
@@ -157,7 +157,7 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
 ## Editor (done, uncommitted)
 
 1. `InstrumentFactories.Sampler` creates the device with one group and one modulation slot (Velocity to Gain at
-   80%).
+   100%).
 2. Device panel `SamplerDeviceEditor`: Play, Filter, Mix, tabbed Envelope and LFO groups with real automatable
    parameters, the modulation list, Edit Sample Zones in the header.
 3. Sample zone window: a `FloatingWindow` like the plugin windows, one per device. Map, piano, groups, sample
@@ -171,12 +171,40 @@ Adapters: `SamplerDeviceBoxAdapter`, `SamplerZoneBoxAdapter`, `SamplerGroupBoxAd
    C3.
 7. Manual page `devices/instruments/sampler.md`.
 
+## Import (done, uncommitted)
+
+1. Import SFZ / SF2 in the window opens one file dialog. A `.sf2` asks for the preset, an `.sfz` is chosen
+   together with the samples it names.
+2. The importer is loaded when the button is used (`import("./SamplerImporter")`), the soundfont reader through
+   `ExternalLib.SoundFont2`. Nothing of it is in the boot bundle.
+3. `SamplerImport` in the adapters describes an instrument before it becomes boxes and applies it: it replaces
+   the zones and groups of the device, names it, and sets the amp envelope and the filter.
+4. `SamplerSoundfont` converts one preset: ranges, root key, tuning, key tracking, attenuation, pan, sample and
+   loop offsets, loop mode, exclusive class as choke groups. Preset generators add to the instrument's. A linked
+   left and right sample on the same keys become one stereo sample. Each sample is stored once.
+5. `SamplerSfz` reads headers, inherited opcodes, `#define`, `default_path`, keys as names or numbers, velocity,
+   tuning, volume, pan, offsets, loop modes, round robins (`seq_*`, `lorand`), `group` with `off_by` as choke,
+   `trigger=release`, `direction=reverse`, the amp envelope and the filter.
+6. Samples are stored as local samples (found again by their content, never stored twice) and filed under
+   `Multi Samples/<file name>` with `ResourceStructures.place`.
+7. Tests: 32 for import, soundfont and SFZ, 6 for the folder placement. The converter was also run on the stock
+   Concert Harp soundfont (36 zones, 36 samples).
+
 ## Next
 
-1. SFZ and SF2 import, and the Import button in the window.
+1. Export a Sampler as a soundfont (.sf2).
 2. Scripting API.
 3. Release notes with the DEV deploy.
-4. A synced LFO still prints its rate in Hz. Groups cannot be renamed or deleted yet.
+4. A preview in the import dialog. SFZ `#include`. A synced LFO still prints its rate in Hz. Groups cannot be
+   deleted yet.
+
+## Decided 2026-11-12
+
+1. Velocity to Gain starts at 100%.
+2. Left and right samples that the soundfont does not mark as linked stay mono zones. No merging by name.
+3. 16 bit sources are to be kept as 16 bit in the OPFS and in memory, for the Sampler and for Nano. This reaches
+   the sample storage and the playback routines, so it gets its own plan before any code.
+4. The Groups list stays visible with a single group.
 
 ## Open
 

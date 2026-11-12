@@ -351,7 +351,7 @@ export namespace InstrumentFactories {
                 box.device.refer(device.modulations)
                 box.source.setValue(SamplerModulation.Source.Velocity)
                 box.target.setValue(SamplerModulation.Target.Gain)
-                box.amount.setValue(0.8)
+                box.amount.setValue(1.0)
             })
             return device
         }

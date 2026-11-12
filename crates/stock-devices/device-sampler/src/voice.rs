@@ -230,6 +230,7 @@ pub struct Voice {
     pub choke: i32,
     pub zone: Zone,
     pub sample: u32,
+    pub row: u32, // the zone's row in the table when the voice started, the editor finds the zone by it
     pub start_shift: f32, // modulation of the sample start, in the zone's length
     pub loop_shift: f32,  // modulation of the loop start, in the loop's length
     prepared: bool,
@@ -272,6 +273,7 @@ impl Voice {
         self.choke = choke;
         self.zone = zone;
         self.sample = sample;
+        self.row = 0;
         self.start_shift = 0.0;
         self.loop_shift = 0.0;
         self.prepared = false;

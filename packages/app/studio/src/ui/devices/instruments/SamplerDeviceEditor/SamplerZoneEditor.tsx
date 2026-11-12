@@ -10,11 +10,12 @@ import {MidiKeys} from "@opendaw/lib-dsp"
 import {BooleanField, Float32Field, Int32Field} from "@opendaw/lib-box"
 import {AudioFileBox, SamplerZoneBox} from "@opendaw/studio-boxes"
 import {
-    DeviceHost, NoteSignal, Sample, SamplerDeviceBoxAdapter, SamplerGroupBoxAdapter, SamplerZoneBoxAdapter, SamplerZones
+    DeviceHost, NoteSignal, NoteStreamReceiver, Sample, SamplerDeviceBoxAdapter, SamplerGroupBoxAdapter, SamplerZoneBoxAdapter, SamplerZones
 } from "@opendaw/studio-adapters"
 import {CanvasPainter, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
+import {Surface} from "@/ui/surface/Surface"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Button} from "@/ui/components/Button"
@@ -72,23 +73,55 @@ const RoundRobinNames: ReadonlyArray<string> = ["Off", "Cycle", "Random"]
 const TriggerNames: ReadonlyArray<string> = ["Attack", "Release"]
 const LoopModeNames: ReadonlyArray<string> = ["Off", "On", "Always"]
 
-const print = {
-    integer: (unit: string): Func<number, SamplerValueLabel.Printed> => value => [String(Math.round(value)), unit],
-    fixed: (digits: int, unit: string): Func<number, SamplerValueLabel.Printed> => value => [value.toFixed(digits), unit],
-    percent: (value: number): SamplerValueLabel.Printed => [String(Math.round(value * 100)), "%"],
-    key: (value: number): SamplerValueLabel.Printed => [MidiKeys.toFullString(Math.round(value)), ""],
-    pan: (value: number): SamplerValueLabel.Printed =>
-        Math.round(value * 100) === 0 ? ["C", ""] : [String(Math.abs(Math.round(value * 100))), value < 0 ? "L" : "R"],
-    seconds: (value: number): SamplerValueLabel.Printed =>
-        value < 1.0 ? [String(Math.round(value * 1000)), "ms"] : [value.toFixed(2), "s"],
-    choice: (names: ReadonlyArray<string>): Func<number, SamplerValueLabel.Printed> => value => [names[Math.round(value)] ?? "", ""]
+type Format = { readonly print: Func<number, SamplerValueLabel.Printed>, readonly parse: Func<string, Optional<number>> }
+
+const NoteOffsets: Readonly<Record<string, int>> = {c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11}
+const {numberIn} = SamplerValueLabel
+// a key as the studio writes it (C3 is key 60), or as a number
+const parseKey = (text: string): Optional<number> => {
+    const note = /^\s*([a-g])(#?)(-?\d)\s*$/i.exec(text)
+    return isDefined(note) ? NoteOffsets[note[1].toLowerCase()] + (note[2] === "#" ? 1 : 0) + (parseInt(note[3]) + 2) * 12 : numberIn(text)
+}
+const printSeconds = (value: number): SamplerValueLabel.Printed =>
+    value < 1.0 ? [String(Math.round(value * 1000)), "ms"] : [value.toFixed(2), "s"]
+const parseSeconds = (text: string): Optional<number> => {
+    const value = numberIn(text)
+    return !isDefined(value) ? undefined : /ms/i.test(text) || (!/s/i.test(text) && value >= 10) ? value / 1000 : value
+}
+const format = {
+    integer: (unit: string): Format => ({print: value => [String(Math.round(value)), unit], parse: text => numberIn(text)}),
+    fixed: (digits: int, unit: string): Format => ({print: value => [value.toFixed(digits), unit], parse: text => numberIn(text)}),
+    percent: {
+        print: value => [String(Math.round(value * 100)), "%"],
+        parse: text => {
+            const value = numberIn(text)
+            return isDefined(value) ? value / 100 : undefined
+        }
+    } satisfies Format,
+    key: {print: value => [MidiKeys.toFullString(Math.round(value)), ""], parse: parseKey} satisfies Format,
+    pan: {
+        print: value => Math.round(value * 100) === 0 ? ["C", ""] : [String(Math.abs(Math.round(value * 100))), value < 0 ? "L" : "R"],
+        parse: text => {
+            const value = numberIn(text)
+            return /^\s*c\s*$/i.test(text) ? 0.0 : !isDefined(value) ? undefined : (/l/i.test(text) ? -Math.abs(value) : value) / 100
+        }
+    } satisfies Format,
+    seconds: {print: printSeconds, parse: parseSeconds} satisfies Format,
+    choice: (names: ReadonlyArray<string>): Format => ({
+        print: value => [names[Math.round(value)] ?? "", ""],
+        parse: text => {
+            const index = names.findIndex(name => name.toLowerCase() === text.trim().toLowerCase())
+            return index >= 0 ? index : numberIn(text)
+        }
+    })
 }
 
 // The content of the sample zone window: the key × velocity map with its piano, the groups, sample zones and
 // modulation slots, the focused zone's sample and fields, and every parameter of the device panel.
 export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {editing, midiLearning, boxGraph, engine} = project
+    const {editing, midiLearning, boxGraph, engine, liveStreamReceiver} = project
+    const notes = lifecycle.own(new NoteStreamReceiver(liveStreamReceiver, deviceHost.audioUnitBoxAdapter().address))
     const refresh = lifecycle.own(new Notifier<void>())
     const observe = (update: Procedure<void>): Subscription => refresh.subscribe(update)
     const unitUuid = deviceHost.audioUnitBoxAdapter().uuid
@@ -105,7 +138,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     let zonesSignature = ""
     let zoneRows: ReadonlyArray<[Zone, HTMLElement]> = []
     const state = (): SamplerZoneMap.State => ({
-        entries, selection: new Set(selection), group: shownGroup?.indexField.getValue() ?? -1, pressed, rect
+        entries, selection: new Set(selection), group: shownGroup?.indexField.getValue() ?? -1, pressed, rect,
+        isNoteOn: key => notes.isNoteOn(key)
     })
     const shownZones = (): ReadonlyArray<Zone> => adapter.zones.adapters()
         .filter(zone => !isDefined(shownGroup) || zone.group().contains(shownGroup))
@@ -128,9 +162,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const framesOf = (zone: Zone): Optional<{ numberOfFrames: int, sampleRate: number }> =>
         zone.file().flatMap(file => file.data).unwrapOrUndefined()
     const zoneField = (name: string, field: Func<SamplerZoneBox, NumberField>, min: number, max: number, step: number,
-                       printer: Func<number, SamplerValueLabel.Printed>,
-                       settle?: Procedure<SamplerZoneBox>): SamplerValueLabel.Field => ({
-        name, min, max, step, print: printer,
+                       {print, parse}: Format, settle?: Procedure<SamplerZoneBox>): SamplerValueLabel.Field => ({
+        name, min, max, step, print, parse,
         available: () => isDefined(focused),
         get: () => isDefined(focused) ? field(focused.box).getValue() : 0,
         set: value => {
@@ -154,7 +187,13 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             name, min: 0.0, max: 1.0, step: 0.002,
             print: unit => {
                 const frames = isDefined(focused) ? framesOf(focused) : undefined
-                return isDefined(frames) ? print.seconds(unit * frames.numberOfFrames / frames.sampleRate) : SamplerValueLabel.Unavailable
+                return isDefined(frames) ? printSeconds(unit * frames.numberOfFrames / frames.sampleRate) : SamplerValueLabel.Unavailable
+            },
+            parse: text => {
+                const frames = isDefined(focused) ? framesOf(focused) : undefined
+                const seconds = parseSeconds(text)
+                return isDefined(frames) && isDefined(seconds) && frames.numberOfFrames > 0
+                    ? seconds * frames.sampleRate / frames.numberOfFrames : undefined
             },
             available: () => isDefined(focused) && isDefined(framesOf(focused)),
             get: () => isDefined(focused) ? unitOf(focused) : 0.0,
@@ -171,8 +210,8 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const currentGroup = (): Optional<SamplerGroupBoxAdapter> => shownGroup ?? focused?.group().unwrapOrUndefined()
     const groupField = (name: string, field: Func<SamplerGroupBoxAdapter, Int32Field>, max: number,
-                        printer: Func<number, SamplerValueLabel.Printed>): SamplerValueLabel.Field => ({
-        name, min: 0, max, step: 1, print: printer,
+                        {print, parse}: Format): SamplerValueLabel.Field => ({
+        name, min: 0, max, step: 1, print, parse,
         available: () => isDefined(currentGroup()),
         get: () => {
             const group = currentGroup()
@@ -180,7 +219,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         },
         set: value => {
             const group = currentGroup()
-            if (isDefined(group)) {field(group).setValue(value)}
+            if (isDefined(group)) {field(group).setValue(Math.round(value))}
         }
     })
     const value = (field: SamplerValueLabel.Field): SamplerStacks.Cell =>
@@ -207,9 +246,20 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const map: HTMLCanvasElement = <canvas/>
     const keys: HTMLCanvasElement = <canvas/>
     const waveform: HTMLCanvasElement = <canvas/>
+    const playheads: HTMLCanvasElement = <canvas className="playheads"/>
+    // the zones in the order of the device's table rows
+    let rows: ReadonlyArray<Zone> = []
     const mapDisplay: HTMLElement = <div className="display map">{map}</div>
     const sampleLabel: HTMLElement = <span className="file-name"/>
-    const presetName: HTMLElement = <span className="preset"/>
+    const presetName: HTMLElement = (
+        <span className="preset" ondblclick={async (event: MouseEvent) => {
+            const label = adapter.labelField
+            const typed = (await Surface.get(presetName).requestFloatingTextInput(event, label.getValue())).trim()
+            if (typed.length > 0 && typed !== label.getValue() && adapter.box.isAttached()) {
+                editing.modify(() => label.setValue(typed))
+            }
+        }}/>
+    )
     const sampleCount: HTMLElement = <span className="samples"/>
     const selectionLabel: HTMLElement = <span className="count"/>
     const readout: HTMLElement = <span className="readout"/>
@@ -248,6 +298,13 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             <div className={Html.buildClassList("row", group === shownGroup && "active")} onclick={() => {
                 shownGroup = group
                 refresh.notify()
+            }} ondblclick={async (event: MouseEvent) => {
+                if (!isDefined(group)) {return}
+                const label = group.box.label
+                const typed = (await Surface.get(groupList).requestFloatingTextInput(event, label.getValue())).trim()
+                if (typed.length > 0 && typed !== label.getValue() && group.box.isAttached()) {
+                    editing.modify(() => label.setValue(typed))
+                }
             }}>
                 <i style={{backgroundColor: SamplerZoneMap.groupColor(group?.indexField.getValue() ?? -1).toString()}}/>
                 <span>{name}</span>
@@ -295,8 +352,10 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         selectionLabel.textContent = `${selection.length} of ${zones.length} sample zones selected`
         const zone = focused
         const robins = isDefined(zone) ? SamplerZoneMap.robinsOf(state(), zone) : []
+        // zones on the same range take turns when their group has a round robin, else they sound together
+        const role = isDefined(zone) && zone.group().mapOr(group => group.box.roundRobin.getValue() !== 0, false) ? "round robin" : "layer"
         sampleLabel.textContent = !isDefined(zone) ? "No sample zone selected" : robins.length > 1
-            ? `${fileNameOf(zone)} (round robin ${robins.indexOf(zone) + 1} of ${robins.length})` : fileNameOf(zone)
+            ? `${fileNameOf(zone)} (${role} ${robins.indexOf(zone) + 1} of ${robins.length})` : fileNameOf(zone)
     }
     // a sample that finishes loading brings its waveform and its length
     const watched = UUID.newSet<UUID.Bytes>(uuid => uuid)
@@ -309,6 +368,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }))
     const update = (): void => {
         entries = SamplerZoneMap.entries(adapter)
+        rows = adapter.zones.adapters().toSorted((a, b) => UUID.Comparator(a.uuid, b.uuid))
         watchLoaders()
         const attached = selection.filter(zone => zone.box.isAttached())
         if (attached.length !== selection.length) {select(attached)}
@@ -387,7 +447,13 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         refresh.notify()
     }
     const importFiles = async (files: ReadonlyArray<File>): Promise<void> => {
-        const imported = await service.sampleService.importFiles(files)
+        const imported: Array<Sample> = []
+        for (const file of files) {
+            // a tempo of 0 is "none": no detection, these are notes and hits, not loops
+            const {status, value} = await Promises.tryCatch(file.arrayBuffer()
+                .then(arrayBuffer => service.sampleService.importFile({name: file.name, arrayBuffer, bpm: 0})))
+            if (status === "resolved") {imported.push(value)}
+        }
         imported.forEach(sample => project.trackUserCreatedSample(UUID.parse(sample.uuid)))
         addZones(imported)
     }
@@ -396,16 +462,27 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         if (status === "resolved") {await importFiles(files)}
     }
     const tool = (label: string, tooltip: string, action: Exec): JsxValue => (
-        <Button lifecycle={lifecycle} appearance={{framed: true, color: Colors.shadow, tooltip}} onClick={() => {
+        <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip}} onClick={() => {
             editing.modify(action)
             refresh.notify()
         }}><span>{label}</span></Button>
     )
     const context: ControlContext = {lifecycle, editing, midiLearning, deviceHost}
-    const voice = SamplerVoiceStacks.create(context, adapter)
+    const voice = SamplerVoiceStacks.create(context, adapter, project.timelineBox.bpm)
     lifecycle.ownAll(
         ...painters,
         refresh.subscribe(update),
+        notes.subscribe(() => painters[1].requestUpdate()),
+        liveStreamReceiver.subscribeFloats(adapter.positionsAddress, positions => {
+            const context = playheads.getContext("2d")
+            if (!isDefined(context)) {return}
+            const scale = devicePixelRatio
+            playheads.width = playheads.clientWidth * scale
+            playheads.height = playheads.clientHeight * scale
+            const frames = isDefined(focused) ? framesOf(focused) : undefined
+            SamplerZoneMap.paintPlayheads(context, playheads.width, playheads.height, scale, positions,
+                isDefined(focused) ? rows.indexOf(focused) : -1, frames?.numberOfFrames ?? 0)
+        }),
         boxGraph.subscribeToAllUpdates({onUpdate: schedule}),
         adapter.labelField.subscribe(schedule),
         Events.subscribe(map, "pointerdown", (event: PointerEvent) => {
@@ -502,16 +579,20 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 {presetName}
                 {sampleCount}
                 {readout}
-                <Button lifecycle={lifecycle} appearance={{framed: true, color: Colors.shadow, tooltip: "Removes the sample zones that were taken off the map"}}
+                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Removes the sample zones that were taken off the map"}}
                         onClick={() => {
                             editing.modify(() => SamplerZones.cleanUp(adapter.box))
                             refresh.notify()
                         }}><span>Clean Up</span></Button>
-                <Button lifecycle={lifecycle} appearance={{framed: true, color: Colors.shadow, tooltip: "Adds samples and maps them from their file names"}}
+                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Adds samples and maps them from their file names"}}
                         onClick={browse}><span>Add Samples</span></Button>
+                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Imports a soundfont preset, or an SFZ file chosen together with its samples"}}
+                        onClick={async () => (await import("./SamplerImporter")).SamplerImporter.browse(service, adapter)}>
+                    <span>Import SFZ / SF2</span>
+                </Button>
             </header>
             <div className="tools">
-                <Button lifecycle={lifecycle} appearance={{framed: true, color: Colors.shadow, tooltip: "Selects every sample zone of the shown group"}}
+                <Button lifecycle={lifecycle} appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Selects every sample zone of the shown group"}}
                         onClick={() => {
                             select(shownZones().filter(zone => zone.box.enabled.getValue()))
                             refresh.notify()
@@ -527,7 +608,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 {tool("Root to Low", "Sets the root key of each selected zone to its lowest key", () => SamplerZones.rootToLow(boxes()))}
                 {tool("Duplicate", "Copies the selected zones onto the same keys, as further round robins",
                     () => {SamplerZones.duplicate(boxGraph, adapter.box, boxes())})}
-                <MenuButton appearance={{framed: true, color: Colors.shadow, tooltip: "Moves the selected zones into another group"}}
+                <MenuButton appearance={{color: Colors.shadow, activeColor: Colors.gray, tooltip: "Moves the selected zones into another group"}}
                             root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                                 ...adapter.groups.adapters().map(group => MenuItem.default({label: group.box.label.getValue()})
                                     .setTriggerProcedure(() => {
@@ -557,46 +638,50 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
             <div className="inspector">
                 <div className="display waveform">
                     {waveform}
+                    {playheads}
                     {sampleLabel}
                 </div>
                 <div className="stacks">
-                    {SamplerStacks.stack("orange", "Group", 1, [
-                        value(groupField("Robin", group => group.box.roundRobin, 2, print.choice(RoundRobinNames))),
-                        value(groupField("Choke", group => group.box.choke, 16, choke => choke === 0 ? ["Off", ""] : [String(choke), ""])),
-                        value(groupField("Trigger", group => group.box.trigger, 1, print.choice(TriggerNames)))
+                    {SamplerStacks.stack("red", "Group", 1, [
+                        value(groupField("Robin", group => group.box.roundRobin, 2, format.choice(RoundRobinNames))),
+                        value(groupField("Choke", group => group.box.choke, 16, {
+                            print: choke => choke === 0 ? ["Off", ""] : [String(choke), ""],
+                            parse: text => /off/i.test(text) ? 0 : numberIn(text)
+                        })),
+                        value(groupField("Trigger", group => group.box.trigger, 1, format.choice(TriggerNames)))
                     ])}
-                    {SamplerStacks.stack("yellow", "Key", 1, [
-                        value(zoneField("Low", box => box.keyLow, 0, MaxKey, 1, print.key,
+                    {SamplerStacks.stack("orange", "Key", 1, [
+                        value(zoneField("Low", box => box.keyLow, 0, MaxKey, 1, format.key,
                             box => {if (box.keyLow.getValue() > box.keyHigh.getValue()) {box.keyLow.setValue(box.keyHigh.getValue())}})),
-                        value(zoneField("High", box => box.keyHigh, 0, MaxKey, 1, print.key,
+                        value(zoneField("High", box => box.keyHigh, 0, MaxKey, 1, format.key,
                             box => {if (box.keyHigh.getValue() < box.keyLow.getValue()) {box.keyHigh.setValue(box.keyLow.getValue())}})),
-                        value(zoneField("Fade", box => box.keyFade, 0, 24, 1, print.integer("st")))
+                        value(zoneField("Fade", box => box.keyFade, 0, 24, 1, format.integer("st")))
                     ])}
-                    {SamplerStacks.stack("green", "Velocity", 1, [
-                        value(zoneField("Low", box => box.velocityLow, 1, 127, 1, print.integer(""),
+                    {SamplerStacks.stack("yellow", "Velocity", 1, [
+                        value(zoneField("Low", box => box.velocityLow, 1, 127, 1, format.integer(""),
                             box => {if (box.velocityLow.getValue() > box.velocityHigh.getValue()) {box.velocityLow.setValue(box.velocityHigh.getValue())}})),
-                        value(zoneField("High", box => box.velocityHigh, 1, 127, 1, print.integer(""),
+                        value(zoneField("High", box => box.velocityHigh, 1, 127, 1, format.integer(""),
                             box => {if (box.velocityHigh.getValue() < box.velocityLow.getValue()) {box.velocityHigh.setValue(box.velocityLow.getValue())}})),
-                        value(zoneField("Fade", box => box.velocityFade, 0, 64, 1, print.integer("")))
+                        value(zoneField("Fade", box => box.velocityFade, 0, 64, 1, format.integer("")))
                     ])}
-                    {SamplerStacks.stack("blue", "Pitch", 1, [
-                        value(zoneField("Root", box => box.rootKey, 0, MaxKey, 1, print.key)),
-                        value(zoneField("Transp", box => box.transpose, -24, 24, 1, print.integer("st"))),
-                        value(zoneField("Tune", box => box.tune, -100, 100, 1, print.integer("ct")))
+                    {SamplerStacks.stack("green", "Pitch", 1, [
+                        value(zoneField("Root", box => box.rootKey, 0, MaxKey, 1, format.key)),
+                        value(zoneField("Transp", box => box.transpose, -24, 24, 1, format.integer("st"))),
+                        value(zoneField("Tune", box => box.tune, -100, 100, 1, format.integer("ct")))
                     ])}
-                    {SamplerStacks.stack("purple", "Play", 2, [
-                        value(zoneField("Gain", box => box.gain, -72, 12, 0.5, print.fixed(1, "dB"))),
-                        value(zoneField("Pan", box => box.panning, -1, 1, 0.01, print.pan)),
-                        value(zoneField("Track", box => box.keyTrack, 0, 1, 0.01, print.percent)),
-                        value(zoneField("Seq", box => box.sequence, 1, 128, 1, print.integer(""))),
+                    {SamplerStacks.stack("blue", "Play", 2, [
+                        value(zoneField("Gain", box => box.gain, -72, 12, 0.5, format.fixed(1, "dB"))),
+                        value(zoneField("Pan", box => box.panning, -1, 1, 0.01, format.pan)),
+                        value(zoneField("Track", box => box.keyTrack, 0, 1, 0.01, format.percent)),
+                        value(zoneField("Seq", box => box.sequence, 1, 128, 1, format.integer(""))),
                         toggle("Reverse", box => box.reverse),
                         toggle("One Shot", box => box.oneShot)
                     ])}
-                    {SamplerStacks.stack("cream", "Sample", 2, [
+                    {SamplerStacks.stack("purple", "Sample", 2, [
                         value(frameField("Start", box => box.sampleStart)),
                         value(frameField("End", box => box.sampleEnd)),
-                        value(zoneField("Loop", box => box.loopMode, 0, 2, 1, print.choice(LoopModeNames))),
-                        value(zoneField("Fade", box => box.loopFade, 0, 1, 0.005, print.seconds)),
+                        value(zoneField("Loop", box => box.loopMode, 0, 2, 1, format.choice(LoopModeNames))),
+                        value(zoneField("Fade", box => box.loopFade, 0, 1, 0.005, format.seconds)),
                         value(frameField("From", box => box.loopStart)),
                         value(frameField("To", box => box.loopEnd))
                     ])}

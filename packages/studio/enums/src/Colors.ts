@@ -45,7 +45,7 @@ export const Colors = {
     yellow: new Color(60, 100, 84),
     cream: new Color(65, 37, 83),
     orange: new Color(31, 100, 73),
-    red: new Color(354, 100, 65),
+    red: new Color(350, 85, 75),
     purple: new Color(314, 100, 78),
     menuActive: new Color(210, 90, 40),
     get bright(): Color {return neutral("bright")},

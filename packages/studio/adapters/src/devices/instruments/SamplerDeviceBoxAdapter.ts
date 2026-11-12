@@ -1,6 +1,6 @@
 import {SamplerAmpEnvelope, SamplerDeviceBox, SamplerLfoA, SamplerLfoB, SamplerModEnvelope} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
-import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -17,6 +17,17 @@ import {SamplerModulationBoxAdapter} from "./Sampler/SamplerModulationBoxAdapter
 export class SamplerDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     static readonly FilterTypeNames: ReadonlyArray<string> = ["Off", "LP 12", "LP 24", "HP 12"]
     static readonly LfoShapeNames: ReadonlyArray<string> = ["Sine", "Tri", "Saw", "Square"]
+    // The note lengths a synced LFO snaps to, in bars. WASM CONTRACT: `SYNC_BARS` of the device.
+    static readonly SyncBars: ReadonlyArray<number> = [8, 4, 2, 1, 1 / 2, 1 / 4, 1 / 6, 1 / 8, 1 / 12, 1 / 16, 1 / 24, 1 / 32]
+    static readonly SyncNames: ReadonlyArray<string> =
+        ["8 bars", "4 bars", "2 bars", "1 bar", "1/2", "1/4", "1/6", "1/8", "1/12", "1/16", "1/24", "1/32"]
+
+    // the note length nearest to a rate at this tempo, compared as musical intervals
+    static syncIndex(hertz: number, bpm: number): int {
+        const distance = (bars: number): number => Math.abs(Math.log2(bpm / 240.0 / bars / hertz))
+        return SamplerDeviceBoxAdapter.SyncBars.reduce((nearest, bars, index, all) =>
+            distance(bars) < distance(all[nearest]) ? index : nearest, 0)
+    }
 
     readonly type = "instrument"
     readonly accepts = "midi"
@@ -53,6 +64,8 @@ export class SamplerDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return true}
+    // for each voice the row of its zone (zones ordered by uuid) and its read position in frames, -1 ends the list
+    get positionsAddress(): Address {return this.#box.address.append(1001)}
     get zones(): IndexedBoxAdapterCollection<SamplerZoneBoxAdapter, Pointers.SamplerZone> {return this.#zones}
     get groups(): IndexedBoxAdapterCollection<SamplerGroupBoxAdapter, Pointers.SamplerGroup> {return this.#groups}
     get modulations(): IndexedBoxAdapterCollection<SamplerModulationBoxAdapter, Pointers.SamplerModulation> {

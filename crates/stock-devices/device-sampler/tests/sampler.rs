@@ -788,3 +788,122 @@ fn the_parity_probe_maps_every_parameter() {
     }
     assert!(map_parameter(36, 0.5).is_nan());
 }
+
+fn mono_rig(legato: bool) -> Rig {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&LEGATO, ParamValue::Bool(legato));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.zones(&[
+        Zone {key_low: 60, key_high: 60, ..zone(ONE)}, Zone {key_low: 62, key_high: 62, ..zone(HALF)},
+        Zone {key_low: 64, key_high: 64, ..zone(QUARTER)}
+    ]);
+    rig
+}
+
+#[test]
+fn one_voice_goes_back_to_the_key_still_held() {
+    let mut rig = mono_rig(false);
+    rig.left(&[on(1, 60)], 64);
+    assert_eq!(rig.left(&[on(2, 62)], 2_400)[2_399], 0.5);
+    assert_eq!(rig.left(&[off(2, 62)], 2_400)[2_399], 1.0, "the first key is still down, its sample plays again");
+    assert_eq!(rig.voices(), 1);
+    rig.left(&[off(1, 60)], 2_400);
+    assert_eq!(rig.voices(), 0, "its own note off ends it");
+}
+
+#[test]
+fn one_voice_walks_back_through_every_held_key() {
+    let mut rig = mono_rig(false);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 62)], 64);
+    assert_eq!(rig.left(&[on(3, 64)], 2_400)[2_399], 0.25);
+    assert_eq!(rig.left(&[off(3, 64)], 2_400)[2_399], 0.5);
+    assert_eq!(rig.left(&[off(2, 62)], 2_400)[2_399], 1.0);
+    rig.left(&[off(1, 60)], 2_400);
+    assert_eq!(rig.voices(), 0);
+}
+
+#[test]
+fn letting_go_of_a_key_below_the_sounding_one_changes_nothing() {
+    let mut rig = mono_rig(false);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 62)], 2_400);
+    assert_eq!(rig.left(&[off(1, 60)], 2_400)[2_399], 0.5, "the sounding key plays on");
+    rig.left(&[off(2, 62)], 2_400);
+    assert_eq!(rig.voices(), 0, "nothing is held any more, nothing comes back");
+}
+
+#[test]
+fn a_key_played_again_is_only_held_once_it_is_down() {
+    let mut rig = mono_rig(false);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[off(1, 60)], 2_400);
+    rig.left(&[on(2, 62)], 64);
+    rig.left(&[off(2, 62)], 2_400);
+    assert_eq!(rig.voices(), 0, "the released first key does not come back");
+}
+
+#[test]
+fn going_back_keeps_the_velocity_the_key_was_played_with() {
+    let mut rig = mono_rig(false);
+    rig.slots(&[(VELOCITY, GAIN, 1.0)]);
+    rig.left(&[on_at(1, 60, 0.5)], 64);
+    rig.left(&[on(2, 62)], 2_400);
+    assert!(close(rig.left(&[off(2, 62)], 2_400)[2_399], 0.25));
+}
+
+#[test]
+fn legato_glides_back_to_the_key_still_held() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&LEGATO, ParamValue::Bool(true));
+    rig.zones(&[zone(RAMP)]);
+    rig.left(&[on(1, 60)], 64);
+    assert_eq!(speed(&rig.left(&[on(2, 72)], 64)), 2.0);
+    let back = rig.left(&[off(2, 72)], 64);
+    assert_eq!(speed(&back), 1.0, "the same voice, back at the first key");
+    assert!(back[0] > 100.0, "the sample was not started again");
+    assert_eq!(rig.voices(), 1);
+    rig.left(&[off(1, 60)], 24_000);
+    assert_eq!(rig.voices(), 0);
+}
+
+#[test]
+fn several_voices_never_go_back() {
+    let mut rig = Rig::new();
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.zones(&[Zone {key_low: 60, key_high: 60, ..zone(ONE)}, Zone {key_low: 62, key_high: 62, ..zone(HALF)}]);
+    rig.left(&[on(1, 60)], 64);
+    rig.left(&[on(2, 62)], 64);
+    assert_eq!(rig.left(&[off(2, 62)], 2_400)[2_399], 1.0, "the first note simply plays on");
+    assert_eq!(rig.voices(), 1);
+}
+
+#[test]
+fn more_held_keys_than_the_stack_remembers_drop_the_oldest() {
+    let mut rig = Rig::new();
+    rig.set(&VOICES, ParamValue::Int(1));
+    rig.set(&AMP_RELEASE, ParamValue::Float(0.001));
+    rig.zones(&[Zone {key_track: 0.0, ..zone(ONE)}]);
+    for note in 0..20 {
+        rig.left(&[on(note, 40 + note)], 16);
+    }
+    for note in (4..20).rev() {
+        rig.left(&[off(note, 40 + note)], 2_400);
+    }
+    assert_eq!(rig.voices(), 0, "sixteen keys were remembered, the four oldest are forgotten");
+}
+
+#[test]
+fn a_synced_lfo_snaps_to_the_nearest_note_length() {
+    use device_sampler::synced_hertz;
+    assert!(close(synced_hertz(2.0, 120.0), 2.0), "a quarter note at 120 bpm");
+    assert!(close(synced_hertz(2.3, 120.0), 2.0));
+    assert!(close(synced_hertz(3.5, 120.0), 4.0), "nearer to the eighth, as an interval");
+    assert!(close(synced_hertz(0.5, 120.0), 0.5), "one bar");
+    assert!(close(synced_hertz(0.001, 120.0), 0.0625), "never slower than eight bars");
+    assert!(close(synced_hertz(500.0, 120.0), 16.0), "never faster than a thirty-second");
+    assert!(close(synced_hertz(2.0, 60.0), 2.0), "at 60 bpm the same rate is an eighth");
+    assert!(close(synced_hertz(3.0, 120.0), 3.0), "a dotted value sits on the sixth");
+}

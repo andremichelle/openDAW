@@ -110,13 +110,17 @@ first draft to a design ready for production. Every rule below came from a concr
 
 1. Go very easy on custom cursors. Values, toggles, list rows, keyboards and canvases keep the default cursor. A
    resize cursor at a draggable edge is fine.
-2. Buttons that trigger an action are a dim gray at rest. A bright outline means active.
+2. Buttons that trigger an action are plain text in a dim gray, without a frame.
 3. Selection follows the common pattern: a click selects one item, a click on empty space deselects all, shift, cmd
    or ctrl click toggles an item, dragging on empty space draws a selection rectangle that replaces the selection
    (with a modifier it adds), and a click on one of several selected items collapses the selection to it.
 4. An editor for many items offers tools that act on the whole selection, and value changes apply to every selected
    item.
 5. With nothing selected the value fields stay in place and show a dash.
+6. Every value that can be dragged can also be typed after a double-click, in the unit it shows.
+7. Dragging moves a value in steps that fit its range. A pitch amount moves by cents, not by half semitones.
+8. The button that opens a device's window sits in the device header, in green, with a pointer cursor.
+9. A name the user gave (a group) is renamed by double-click.
 
 ## 12. Maps and keyboards
 

@@ -207,7 +207,7 @@ export namespace Dialogs {
             <Dialog headline={headline} icon={IconSymbol.System} cancelable={true} buttons={buttons}>
                 <div style={{padding: "1em 0", display: "flex", flexDirection: "column", rowGap: "0.75em"}}>
                     <p style={{whiteSpace: "pre-line"}}>{message}</p>
-                    <div style={{display: "flex"}}>
+                    <div style={{display: "flex", fontSize: "1.3333em"}}>
                         <DropDown lifecycle={lifecycle} owner={selected} provider={() => choices}
                                   mapping={choice => choice.text} width="16em"/>
                     </div>
