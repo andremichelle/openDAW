@@ -289,7 +289,7 @@ export class ScriptBridges {
                 // Re-apply the parameters + samples the engine pushed before this swap (re-mapping each raw value
                 // through the new script's @param mapping).
                 for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
-                for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+                this.#deliverSamples(bridge)
                 bridge.collections = registry.collections ?? []
                 bridge.buffers = registry.buffers ?? []
                 this.#syncData(bridge, true)
@@ -356,9 +356,7 @@ export class ScriptBridges {
         const block = {index, p0, p1, s0, s1, bpm, flags}
         if (!this.#syncData(bridge, false) || !this.#deliverMessages(bridge)) {return mute()}
         // resolving a sample may grow the engine memory, so the views are taken after it
-        const delivered = tryCatch(() => {
-            for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
-        })
+        const delivered = tryCatch(() => this.#deliverSamples(bridge))
         if (delivered.status === "failure") {
             this.#silence(bridge, `Runtime error: ${delivered.error}`)
             return mute()
@@ -449,7 +447,7 @@ export class ScriptBridges {
         if (bridge === undefined) {return}
         const resolved = present !== 0 ? sampleHandle : -1
         bridge.sampleHandles.set(index, resolved)
-        this.#deliverSample(bridge, index, resolved)
+        this.#deliverSamples(bridge)
     }
 
     #notes(handle: number, inPtr: number, inCount: number, outPtr: number, outMax: number,
@@ -552,6 +550,14 @@ export class ScriptBridges {
             return false
         }
         return true
+    }
+
+    // a float copy may grow the memory and detach the views handed out before it, so those are taken again
+    #deliverSamples(bridge: Bridge): void {
+        const buffer = this.#memory.buffer
+        for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+        if (buffer === this.#memory.buffer) {return}
+        for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
     }
 
     // hands the proc a view of the float frames (no copy), null until they are resident

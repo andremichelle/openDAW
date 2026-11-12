@@ -180,9 +180,9 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     async #complete(path: string): Promise<Uint8Array> {
         console.warn(`completing the replacement of '${path}/audio.wav'`)
         const pending = await Promises.tryCatch(Workers.Opfs.read(`${path}/${SampleStorage.Pending}`))
-        if (pending.status === "rejected"
-            && (await Workers.Opfs.list(path)).some(entry => entry.name === SampleStorage.Pending)) {
-            return Promise.reject(pending.error)
+        if (pending.status === "rejected") {
+            const names = (await Workers.Opfs.list(path)).map(entry => entry.name)
+            if (!names.includes("audio.wav") || names.includes(SampleStorage.Pending)) {return Promise.reject(pending.error)}
         }
         if (pending.status === "resolved") {await Workers.Opfs.write(`${path}/audio.wav`, pending.value)}
         // an emptied mark no longer counts, should deleting it fail
