@@ -5,7 +5,7 @@ import {
     WclapSaveCause, WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
-import {convertSamples, SAMPLE_CONVERSION_BUDGET, SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "../engine-exports"
+import {resolveFloats, SAMPLE_REF_BYTES} from "../engine-exports"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
 import {createWasiImports, readMemoryImportLimits} from "./wasi-shim"
@@ -116,12 +116,11 @@ type Loaded = {
 
 type PendingNote = { on: boolean, key: number, velocity: number }
 // a slot's sample as the engine delivered it, and the plugin instance that has it already
-type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded>, converting: Nullable<Conversion> }
-// a 16 bit sample on its way into a plugin as floats, a part per block
-type Conversion = { loaded: Loaded, source: number, target: number, total: number, done: number }
+type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded> }
 // the engine's resolution of a sample handle (Route F), attached once the engine exists
 export type WclapSampleResolver = {
     host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_sample_floats?(handle: number, outPtr: number): number
     input_reserve(length: number): number
 }
 type NoteOut = { offset: number, on: boolean, key: number, velocity: number }
@@ -178,9 +177,6 @@ export class WclapBridges {
     #nextHandle: number = 1
     #inProcess: boolean = false
     #resolver: Nullable<WclapSampleResolver> = null
-
-    // an offline render sets this to Infinity, it must not start without its samples
-    sampleBudget: number = SAMPLE_CONVERSION_BUDGET
 
     constructor(memory: WebAssembly.Memory, sampleRate: number, host: WclapHostCallbacks) {
         this.#memory = memory
@@ -941,7 +937,7 @@ export class WclapBridges {
         if (!isDefined(plugin)) {return}
         const known = plugin.samples.get(key)
         if (isDefined(known) && known.present === present && (!present || known.handle === sampleHandle)) {return}
-        plugin.samples.set(key, {handle: sampleHandle, present, delivered: null, converting: null})
+        plugin.samples.set(key, {handle: sampleHandle, present, delivered: null})
     }
 
     // Before a process call: the slots this plugin instance does not have yet, a sample once the engine holds its
@@ -964,41 +960,18 @@ export class WclapBridges {
             }
             if (isNull(resolver)) {continue}
             const scratch = resolver.input_reserve(SAMPLE_REF_BYTES)
-            if (resolver.host_resolve_sample(slot.handle, scratch) === 0) {continue} // not resident yet
+            if (resolveFloats(resolver, slot.handle, scratch) === 0) {continue} // not resident yet
             const info = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
             const framesPtr = info.getUint32(0, true)
             const frameCount = info.getUint32(4, true)
             const channelCount = info.getUint32(8, true)
             const rate = info.getFloat32(12, true)
-            const format = info.getUint32(16, true)
-            const total = channelCount * frameCount
-            if (format === SAMPLE_FORMAT_I16) {
-                let conversion = slot.converting
-                if (isNull(conversion) || conversion.loaded !== loaded || conversion.source !== framesPtr || conversion.total !== total) {
-                    const target = this.#call(loaded, ext + ClapAbi.PluginSamples.PREPARE, loaded.plugin, key, frameCount, channelCount, rate)
-                    if (target === 0) {
-                        slot.converting = null
-                        slot.delivered = loaded
-                        continue
-                    }
-                    conversion = {loaded, source: framesPtr, target, total, done: 0}
-                    slot.converting = conversion
-                }
-                const end = Math.min(total, conversion.done + this.sampleBudget)
-                convertSamples(new Int16Array(this.#memory.buffer, framesPtr, total),
-                    new Float32Array(loaded.memory.buffer, conversion.target, total), conversion.done, end)
-                conversion.done = end
-                if (end < total) {continue}
-                slot.converting = null
-                slot.delivered = loaded
-                this.#call(loaded, ext + ClapAbi.PluginSamples.COMMIT, loaded.plugin, key)
-                continue
-            }
             slot.delivered = loaded
             const target = this.#call(loaded, ext + ClapAbi.PluginSamples.PREPARE, loaded.plugin, key, frameCount, channelCount, rate)
             if (target === 0) {continue}
             // prepare may grow the plugin's memory: the views are taken after it
-            new Float32Array(loaded.memory.buffer, target, total).set(new Float32Array(this.#memory.buffer, framesPtr, total))
+            new Float32Array(loaded.memory.buffer, target, channelCount * frameCount)
+                .set(new Float32Array(this.#memory.buffer, framesPtr, channelCount * frameCount))
             this.#call(loaded, ext + ClapAbi.PluginSamples.COMMIT, loaded.plugin, key)
         }
     }

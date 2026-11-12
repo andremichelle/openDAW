@@ -62,6 +62,7 @@ const GONIO_PAIRS = 512
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
     readonly #memory: WebAssembly.Memory
+    readonly #fetchSample: boolean
     readonly #engine: EngineExports
     readonly #hrClock: HRClock
     readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
@@ -111,6 +112,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
+        this.#fetchSample = processorOptions.fetchSample === true
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
         this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
@@ -640,7 +642,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes / SoundfontFileBox targets; dispatch their loads.
         drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources,
-            sampleRate, error => this.#fail(error))
+            sampleRate, error => this.#fail(error), this.#fetchSample)
     }
 
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a

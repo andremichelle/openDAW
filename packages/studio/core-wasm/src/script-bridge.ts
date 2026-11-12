@@ -16,7 +16,7 @@ import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
-import {convertSamples, SAMPLE_CONVERSION_BUDGET, SAMPLE_FORMAT_I16, SAMPLE_REF_BYTES} from "./engine-exports"
+import {resolveFloats, SAMPLE_REF_BYTES} from "./engine-exports"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -58,6 +58,7 @@ type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArr
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
     host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_sample_floats?(handle: number, outPtr: number): number
     host_resolve_input(id: number, outPtr: number): number
     input_reserve(length: number): number
     host_harmony_at(pulse: number, outPtr: number): void
@@ -86,8 +87,6 @@ class Bridge {
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
-    // index -> float copy of a 16 bit sample, converted a part per block
-    readonly sampleFloats = new Map<number, {handle: number, source: number, done: number, planes: Float32Array}>()
     sidechains: ReadonlyArray<SidechainDecl> = []
     sidechainViews: Record<string, ReadonlyArray<Float32Array>> = {}
     sidechainLookup: Record<string, ReadonlyArray<Float32Array>> = {}
@@ -201,8 +200,6 @@ export class ScriptBridges {
     readonly #keys = new Map<number, ScriptKey>()
     readonly #chords = new Map<number, ScriptChord>()
     #nextHandle = 1
-    // an offline render sets this to Infinity, it must not start without its samples
-    sampleBudget: number = SAMPLE_CONVERSION_BUDGET
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
                 onMessage: (uuid: string, message: string) => void = () => {},
@@ -554,48 +551,23 @@ export class ScriptBridges {
         return true
     }
 
-    // hands the proc float views of a float sample, a float copy of a 16 bit one once it is converted
+    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData view (no copy). A
+    // 16 bit sample resolves once the engine has built its float copy.
     #deliverSample(bridge: Bridge, index: number, sampleHandle: number): void {
         if (bridge.proc === null) {return}
         const label = bridge.sampleLabels.get(index)
         if (label === undefined) {return}
-        if (sampleHandle < 0) {
-            bridge.sampleFloats.delete(index)
-            bridge.proc.samples[label] = null
-            return
-        }
+        if (sampleHandle < 0) {bridge.proc.samples[label] = null; return}
         const scratch = this.#engine.input_reserve(SAMPLE_REF_BYTES)
-        if (this.#engine.host_resolve_sample(sampleHandle, scratch) === 0) {bridge.proc.samples[label] = null; return}
+        if (resolveFloats(this.#engine, sampleHandle, scratch) === 0) {bridge.proc.samples[label] = null; return}
         const view = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
         const framesPtr = view.getUint32(0, true)
         const frameCount = view.getUint32(4, true)
         const channelCount = view.getUint32(8, true)
         const sampleRate = view.getFloat32(12, true)
-        const frames: Array<Float32Array> = []
-        if (view.getUint32(16, true) === SAMPLE_FORMAT_I16) {
-            const total = channelCount * frameCount
-            let kept = bridge.sampleFloats.get(index)
-            if (!isDefined(kept) || kept.handle !== sampleHandle || kept.source !== framesPtr || kept.planes.length !== total) {
-                kept = {handle: sampleHandle, source: framesPtr, done: 0, planes: new Float32Array(total)}
-                bridge.sampleFloats.set(index, kept)
-            }
-            if (kept.done < total) {
-                const end = Math.min(total, kept.done + this.sampleBudget)
-                convertSamples(new Int16Array(this.#memory.buffer, framesPtr, total), kept.planes, kept.done, end)
-                kept.done = end
-                if (end < total) {
-                    bridge.proc.samples[label] = null
-                    return
-                }
-            }
-            for (let channel = 0; channel < channelCount; channel++) {
-                frames.push(kept.planes.subarray(channel * frameCount, (channel + 1) * frameCount))
-            }
-        } else {
-            bridge.sampleFloats.delete(index)
-            for (let channel = 0; channel < channelCount; channel++) {
-                frames.push(new Float32Array(this.#memory.buffer, framesPtr + channel * frameCount * 4, frameCount))
-            }
+        const frames: Float32Array[] = []
+        for (let channel = 0; channel < channelCount; channel++) {
+            frames.push(new Float32Array(this.#memory.buffer, framesPtr + channel * frameCount * 4, frameCount))
         }
         bridge.proc.samples[label] = {sampleRate, numberOfFrames: frameCount, numberOfChannels: channelCount, frames}
     }

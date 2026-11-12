@@ -333,14 +333,15 @@ New in `@opendaw/studio-adapters`:
    `acquire(loader)`, `use(loader, user)` (leases for the run of a function, ends the lease also when it
    throws), `frames(loader)`, `loaded(loader)`, `stored(loader)`, `infoOf(loader)`.
 3. `AudioFileBoxAdapter.info`.
-4. `EngineToClient.fetchSample?`, optional, next to `fetchAudio`.
+4. `EngineToClient.fetchSample?`, optional, next to `fetchAudio`, announced by `fetchSample: true` in
+   `EngineProcessorAttachment` and `OfflineEngineInitializeConfig`.
 5. `SampleRetention`: `"always"` or `"while-used"`.
 
 New in `@opendaw/studio-core`:
 
 1. `new GlobalSampleLoaderManager(provider, {retain})`. The second argument is optional, `"always"` is the default.
 2. `SampleStorage.get().format`: `"float32"` (default) or `"smallest"`.
-3. `SampleStorage`: `loadPcm`, `loadStored`, `store`, `replaceAudio`, `convert`, `settle`.
+3. `SampleStorage`: `loadPcm`, `loadStored`, `readAudio`, `store`, `replaceAudio`, `convert`, `settle`.
 
 What stays as it was with the defaults:
 
@@ -495,11 +496,19 @@ Nothing asks for code with the defaults, also not a `SampleLoader` you implement
 2. `replaceAudio` writes `audio.wav.commit` once the pending file is complete and verified. From then on the
    pending file is the truth: a load completes the replacement, also over a torn file that still decodes. A
    pending file without the mark is discarded. A mark without a pending file means the replacement had finished.
-3. Scripts and WebCLAP plugins get a 16 bit sample as floats a part per block (32768 values). An offline render
-   lifts the budget and has the sample in its first block.
+3. Scripts and WebCLAP plugins read floats. The engine keeps one float copy of a 16 bit sample once such a
+   reader asks (`host_resolve_sample_floats`), shared by all of them, built with a budget of 32768 values per
+   render block over all samples. Until it is complete the sample counts as not loaded yet, as while loading.
+   An offline render lifts the budget (`set_sample_float_budget`) and has the sample at the first ask. Both
+   bridges are the float code they were. Such a sample costs 2 + 4 bytes per value.
 4. `SampleRef::plane` is private. `info` and `acquire` are optional on `SampleLoader`.
 5. A read that started before an `invalidate` no longer writes its frames back.
-6. The dawproject export leases only samples that are loaded.
+6. The dawproject export leases only samples that are loaded, and gates the file and its reference on the
+   same data again.
+7. The host announces `fetchSample` in the processor options and the offline config. A worklet paired with a
+   host that does not is asked for floats, so mixed package versions keep loading samples.
+8. `SampleStorage.readAudio` completes a cut-off replacement for the readers that pass the file on (project
+   bundle, shared folder, live room).
 
 ### Measured in node on the built engine (2026-11-12)
 

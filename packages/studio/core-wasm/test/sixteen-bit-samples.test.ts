@@ -84,11 +84,8 @@ const play = (quanta: number): Run => (engine, memory) => {
 
 const render = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format, run: Run, rate: number = RATE,
                       offline: boolean = false): Promise<Float32Array> => {
-    const {engine, memory, scriptBridges, wclapBridges} = await loadFullEngine()
-    if (offline) {
-        scriptBridges.sampleBudget = Number.POSITIVE_INFINITY
-        wclapBridges.sampleBudget = Number.POSITIVE_INFINITY
-    }
+    const {engine, memory} = await loadFullEngine()
+    if (offline) {engine.set_sample_float_budget(0xFFFFFFFF)}
     const sync = connectSyncToEngine(engine, memory, source)
     await sync.settle()
     engine.bind()
@@ -389,10 +386,13 @@ describe("16 bit samples render bit-identical: Convolver", () => {
 })
 
 describe("16 bit samples reach scripts as floats", () => {
-    it("an Apparat script plays a 16 bit sample like its float twin", async () =>
-        both("apparat", apparat, STEREO, 2, play(120)), 120_000)
-    it("an Apparat script plays a mono 16 bit sample like its float twin", async () =>
-        both("apparat mono", apparat, MONO, 1, play(120)), 120_000)
+    const offline = async (name: string, planar: Int16Array, channels: number): Promise<void> => {
+        const source = apparat()
+        expectSame(await render(source, planar, channels, "int16", play(120), RATE, true),
+            await render(source, planar, channels, "float32", play(120), RATE, true), name)
+    }
+    it("an Apparat script plays a 16 bit sample like its float twin", async () => offline("apparat", STEREO, 2), 120_000)
+    it("an Apparat script plays a mono 16 bit sample like its float twin", async () => offline("apparat mono", MONO, 1), 120_000)
 })
 
 describe("a long 16 bit sample is converted for a script a part per block", () => {
@@ -449,11 +449,11 @@ describe("16 bit samples reach WebCLAP plugins as floats", () => {
     // `whole` hands the sample over in one block, as an offline render does
     const run = async (source: BoxGraph, planar: Int16Array, channels: number, format: Format, whole: boolean = true): Promise<Float32Array> => {
         const statuses: Array<WclapStatus> = []
-        const {engine, memory, wclapBridges} = await loadFullEngine(48_000, () => {}, () => null, {
+        const {engine, memory} = await loadFullEngine(48_000, () => {}, () => null, {
             loadBundle: () => Promise.resolve(bundle),
             sendStatus: (_uuid, status) => statuses.push(status)
         })
-        if (whole) {wclapBridges.sampleBudget = Number.POSITIVE_INFINITY}
+        if (whole) {engine.set_sample_float_budget(0xFFFFFFFF)}
         const sync = connectSyncToEngine(engine, memory, source)
         await sync.settle()
         engine.bind()
@@ -502,7 +502,7 @@ describe("16 bit samples through the worklet's sample drain", () => {
         return {format: "float32", ...audio}
     }
     const project = sampler({tune: 17})()
-    const drained = async (client: (pcm: PcmData) => Partial<EngineToClient>, format: Format): Promise<Float32Array> => {
+    const drained = async (client: (pcm: PcmData) => Partial<EngineToClient>, format: Format, announced?: boolean): Promise<Float32Array> => {
         const {engine, memory} = await loadFullEngine()
         const sync = connectSyncToEngine(engine, memory, project)
         await sync.settle()
@@ -512,7 +512,7 @@ describe("16 bit samples through the worklet's sample drain", () => {
         const pending = new Set<Promise<unknown>>()
         const errors: Array<unknown> = []
         drainResourceRequests(engine, memory, {log: () => {}, ...client(pcmOf(format))} as unknown as EngineToClient, pending, 48_000,
-            error => errors.push(error))
+            error => errors.push(error), announced)
         expect(pending.size, "the project asks for its sample").toBe(1)
         await Promise.all([...pending])
         expect(errors).toEqual([])
@@ -528,6 +528,24 @@ describe("16 bit samples through the worklet's sample drain", () => {
         const viaAudio = await drained(pcm => ({fetchAudio: async () => PcmData.floats(pcm)}), "float32")
         const viaSample = await drained(pcm => ({fetchSample: async () => pcm}), "float32")
         expectSame(viaAudio, viaSample, "fetchAudio fallback")
+    }, 120_000)
+    it("a host that does not announce fetchSample is asked for its floats, whatever the proxy offers", async () => {
+        const asked: Array<string> = []
+        const client = (pcm: PcmData): Partial<EngineToClient> => ({
+            fetchSample: async () => {
+                asked.push("sample")
+                return pcm
+            },
+            fetchAudio: async () => {
+                asked.push("audio")
+                return PcmData.floats(pcm)
+            }
+        })
+        const viaAudio = await drained(client, "float32", false)
+        expect(asked).toEqual(["audio"])
+        const viaSample = await drained(client, "float32", true)
+        expect(asked).toEqual(["audio", "sample"])
+        expectSame(viaAudio, viaSample, "announced or not")
     }, 120_000)
     it("fetchSample wins when both are answered", async () => {
         const silent = AudioData.create(RATE, STEREO.length / 2, 2)

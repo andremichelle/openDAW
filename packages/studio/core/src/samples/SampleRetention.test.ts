@@ -251,9 +251,15 @@ describe("SampleStorage.replaceAudio", () => {
         expect(bitsOf((await storage.load(uuid))[0])).toEqual(bitsOf(exact()))
         expect(Array.from(audioFile(uuid))).toEqual(Array.from(new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact())))))
     })
-    it("loadPcm, loadStored and settle complete it as well", async () => {
+    it("readAudio hands on the completed file, never the torn one", async () => {
+        const uuid = await cutOff(bytes => bytes.slice(0, 51))
+        const bytes = await storage.readAudio(uuid)
+        expect(Array.from(bytes)).toEqual(Array.from(new Uint8Array(WavFile.encodePcm(PcmData.smallest(exact())))))
+        expect(Array.from(await storage.readAudio(uuid))).toEqual(Array.from(bytes))
+    })
+    it("loadPcm, loadStored, readAudio and settle complete it as well", async () => {
         const reads: ReadonlyArray<(uuid: UUID.Bytes) => Promise<unknown>> = [
-            uuid => storage.loadPcm(uuid), uuid => storage.loadStored(uuid), uuid => storage.settle(uuid)]
+            uuid => storage.loadPcm(uuid), uuid => storage.loadStored(uuid), uuid => storage.readAudio(uuid), uuid => storage.settle(uuid)]
         for (const read of reads) {
             const uuid = await cutOff(() => new Uint8Array(0))
             await read(uuid)

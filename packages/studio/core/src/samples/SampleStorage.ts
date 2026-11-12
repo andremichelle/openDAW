@@ -77,6 +77,9 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         return this.#readOrRegeneratePeaks(path, bytes, () => audio)
     }
 
+    // the bytes of the audio file, for whoever passes the file on as it is
+    async readAudio(uuid: UUID.Bytes): Promise<Uint8Array> {return this.#audio(`${this.folder}/${UUID.toString(uuid)}`)}
+
     async loadPcm(uuid: UUID.Bytes): Promise<PcmData> {
         return WavFile.decodePcm(exactBuffer(await this.#audio(`${this.folder}/${UUID.toString(uuid)}`)))
     }

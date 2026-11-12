@@ -220,7 +220,8 @@ export class OfflineEngineRenderer {
                 controlFlagsBuffer,
                 project: source.toArrayBuffer(),
                 exportConfiguration: optExportConfiguration.unwrapOrUndefined(),
-                variant: engine.attachment
+                variant: engine.attachment,
+                fetchSample: true
             })
         }
         const {promise: abortPromise, reject: rejectOnAbort} = Promise.withResolvers<never>()

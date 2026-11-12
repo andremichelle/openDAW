@@ -153,7 +153,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     project: project.toArrayBuffer(),
                     exportConfiguration,
                     options,
-                    variant: variant.attachment
+                    variant: variant.attachment,
+                    fetchSample: true
                 } satisfies EngineProcessorAttachment
             }
         )

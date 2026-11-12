@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Errors, isDefined, Optional, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isDefined, Option, Optional, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -13,8 +13,8 @@ export namespace SamplerExporter {
 
     const stem = (name: string): string => name.replace(/\.[A-Za-z0-9]+$/, "")
 
-    const loaded = (loader: SampleLoader): Promise<Optional<AudioData>> =>
-        SampleLoader.frames(loader).then(audio => audio, () => undefined)
+    const loaded = (loader: SampleLoader): Promise<Option<AudioData>> =>
+        SampleLoader.frames(loader).then(audio => Option.wrap(audio), () => Option.None)
 
     export const save = async (service: StudioService, adapter: SamplerDeviceBoxAdapter): Promise<void> => {
         const {sampleManager} = service.project
@@ -30,11 +30,12 @@ export namespace SamplerExporter {
         for (const [index, file] of files.entries()) {
             progress.setValue(index / files.length)
             dialog.message = file.fileName.getValue()
-            const audio = await loaded(sampleManager.getOrCreate(file.address.uuid))
-            if (!isDefined(audio)) {
+            const optAudio = await loaded(sampleManager.getOrCreate(file.address.uuid))
+            if (optAudio.isEmpty()) {
                 samples.push(undefined)
                 continue
             }
+            const audio = optAudio.unwrap()
             const channels = audio.frames.slice(0, 2).map(frames => {
                 const quantized = SamplerSoundfontExport.quantize(frames)
                 clipped += quantized.clipped

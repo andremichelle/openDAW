@@ -52,7 +52,7 @@ import {
     ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
-import {ColorCodes, DeviceBoxUtils, InterpolationFieldAdapter, ProjectSkeleton, SampleLoader, SampleLoaderManager} from "@opendaw/studio-adapters"
+import {ColorCodes, DeviceBoxUtils, InterpolationFieldAdapter, ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
 import {AudioUnitExportLayout} from "./AudioUnitExportLayout"
 import {DeviceIO} from "./DeviceIO"
 import {WavFile} from "@opendaw/lib-dsp"
@@ -183,7 +183,7 @@ export namespace DawProjectExporter {
 
         const writeAudioRegion = (region: AudioRegionBox): ClipsSchema => {
             const audioFileBox = asInstanceOf(region.file.targetVertex.unwrap("No file at region").box, AudioFileBox)
-            const audioElement = SampleLoader.infoOf(sampleManager.getOrCreate(audioFileBox.address.uuid))
+            const audioElement = sampleManager.getOrCreate(audioFileBox.address.uuid).data
                 .map(({numberOfFrames, sampleRate, numberOfChannels}) => Xml.element({
                     duration: numberOfFrames / sampleRate,
                     channels: numberOfChannels,

@@ -73,9 +73,12 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
         const convertible = SampleConversion.isConvertible(kind)
         note.textContent = TabNotes[kind]
         list.className = convertible ? "list convertible" : "list"
+        const all = listTerminator.own(new DefaultObservableValue(entries.length > 0 && entries.every(({id}) => chosen.has(id))))
+        // a row follows the box above it, the box follows its rows: neither answers the other's change
+        let following = false
         if (convertible) {
-            const all = listTerminator.own(new DefaultObservableValue(entries.length > 0 && entries.every(({id}) => chosen.has(id))))
             listTerminator.own(all.subscribe(owner => {
+                if (following) {return}
                 toggle(entries, owner.getValue())
                 renderList(report)
                 updateConvertLabel()
@@ -93,6 +96,9 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
                 const model = listTerminator.own(new DefaultObservableValue(chosen.has(entry.id)))
                 listTerminator.own(model.subscribe(owner => {
                     toggle([entry], owner.getValue())
+                    following = true
+                    all.setValue(entries.every(({id}) => chosen.has(id)))
+                    following = false
                     updateConvertLabel()
                 }))
                 list.append(

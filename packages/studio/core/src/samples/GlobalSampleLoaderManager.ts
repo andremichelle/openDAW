@@ -141,11 +141,18 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         this.#pending.add({uuid, promise})
     }
 
-    async #restore(uuid: UUID.Bytes): Promise<PcmData> {
-        const [audio, meta] = await this.#provider.fetch(uuid, Progress.Empty)
-        const peaks = await Workers.Peak.generateAsync(Progress.Empty, SamplePeaks.findBestFit(audio.numberOfFrames),
+    #restore(uuid: UUID.Bytes): Promise<PcmData> {
+        return this.#fetchAndStore(uuid, Progress.Empty, Progress.Empty).then(({pcm}) => pcm)
+    }
+
+    // provider to storage: the one way a sample that is not stored gets there
+    async #fetchAndStore(uuid: UUID.Bytes, fetchProgress: Progress.Handler, peakProgress: Progress.Handler)
+        : Promise<{ audio: AudioData, pcm: PcmData, peaks: Peaks, meta: SampleMetaData }> {
+        const [audio, meta] = await this.#provider.fetch(uuid, fetchProgress)
+        const peaksBuffer = await Workers.Peak.generateAsync(peakProgress, SamplePeaks.findBestFit(audio.numberOfFrames),
             audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
-        return SampleStorage.get().store({uuid, audio, peaks, meta})
+        const pcm = await SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta})
+        return {audio, pcm, peaks: SamplePeaks.from(new ByteArrayInput(peaksBuffer)), meta}
     }
 
     #apply(loader: DefaultSampleLoader, {data, info, peaks, meta}: CachedSample): void {
@@ -160,33 +167,21 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         const [fetchProgress, peakProgress] = Progress.split(
             progress => loader.setProgress(0.1 + 0.9 * progress), 2
         )
-        const fetchResult = await Promises.tryCatch(this.#provider.fetch(uuid, fetchProgress))
-        if (fetchResult.status === "rejected") {
-            const error = fetchResult.error
+        const result = await Promises.tryCatch(this.#fetchAndStore(uuid, fetchProgress, peakProgress))
+        if (result.status === "rejected") {
+            const error = result.error
             console.warn(error)
             loader.setError(error instanceof Error ? error.message : String(error))
             return
         }
-        const [audio, meta] = fetchResult.value
-        const shifts = SamplePeaks.findBestFit(audio.numberOfFrames)
-        const peaksBuffer = await Workers.Peak.generateAsync(
-            peakProgress, shifts, audio.frames, audio.numberOfFrames, audio.numberOfChannels
-        ) as ArrayBuffer
-        const storeResult = await Promises.tryCatch(SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta}))
-        if (storeResult.status === "resolved") {
-            const peaks = SamplePeaks.from(new ByteArrayInput(peaksBuffer))
-            const info = AudioInfo.of(audio)
-            if (this.#retain === "always") {
-                this.#cache.add({uuid, data: Option.wrap(audio), info, peaks, meta})
-                loader.setLoaded(audio, peaks, meta)
-            } else {
-                this.#cache.add({uuid, data: Option.None, info, peaks, meta})
-                loader.setStored(info, peaks, meta, Option.wrap(storeResult.value))
-            }
+        const {audio, pcm, peaks, meta} = result.value
+        const info = AudioInfo.of(audio)
+        if (this.#retain === "always") {
+            this.#cache.add({uuid, data: Option.wrap(audio), info, peaks, meta})
+            loader.setLoaded(audio, peaks, meta)
         } else {
-            const error = storeResult.error
-            console.warn(error)
-            loader.setError(error instanceof Error ? error.message : String(error))
+            this.#cache.add({uuid, data: Option.None, info, peaks, meta})
+            loader.setStored(info, peaks, meta, Option.wrap(pcm))
         }
     }
 }

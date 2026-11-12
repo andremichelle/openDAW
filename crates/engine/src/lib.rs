@@ -3275,6 +3275,7 @@ pub extern "C" fn init(sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn render() {
     unsafe {
+        SAMPLES.get().convert_floats();
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
@@ -3989,6 +3990,25 @@ pub extern "C" fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32 {
         }
         None => 0
     }
+}
+
+/// As `host_resolve_sample`, the frames always as f32: for the script and plugin bridges, which hand samples on
+/// as floats. A 16 bit sample answers 0 until the engine has built its float copy.
+#[no_mangle]
+pub extern "C" fn host_resolve_sample_floats(handle: u32, out_ptr: u32) -> u32 {
+    match unsafe { SAMPLES.get() }.resolve_floats(handle) {
+        Some(sample_ref) => {
+            unsafe { *(out_ptr as *mut abi::SampleRef) = sample_ref; }
+            1
+        }
+        None => 0
+    }
+}
+
+/// How many values of 16 bit samples become floats per render block, `u32::MAX` for all at once (offline).
+#[no_mangle]
+pub extern "C" fn set_sample_float_budget(values: u32) {
+    unsafe { SAMPLES.get() }.set_float_budget(if values == u32::MAX {usize::MAX} else {values as usize});
 }
 
 /// Pop the next sample awaiting a load (the engine queued it on seeing an `AudioFileBox`): write its 16-byte

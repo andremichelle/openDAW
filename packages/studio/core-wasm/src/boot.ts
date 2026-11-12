@@ -80,7 +80,8 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
 // an unhandled rejection in the host's global scope, so it routes into `onError`.
 export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly.Memory,
                                       engineToClient: EngineToClient, pending: Set<Promise<unknown>>,
-                                      fallbackSampleRate: number, onError: Procedure<unknown>): void => {
+                                      fallbackSampleRate: number, onError: Procedure<unknown>,
+                                      fetchSample: boolean = isDefined(engineToClient.fetchSample)): void => {
     const track = (promise: Promise<unknown>): void => {
         const guarded = promise.catch(onError)
         pending.add(guarded)
@@ -91,7 +92,8 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         const handle = engine.sample_take_request(outPtr)
         if (handle < 0) {break}
         const uuid = new Uint8Array(memory.buffer, outPtr, 16).slice() as UUID.Bytes
-        const fetched: Promise<PcmData> = isDefined(engineToClient.fetchSample)
+        // a host written before `fetchSample` is asked for its floats
+        const fetched: Promise<PcmData> = fetchSample && isDefined(engineToClient.fetchSample)
             ? engineToClient.fetchSample(uuid)
             : engineToClient.fetchAudio(uuid).then(audio => ({format: "float32", ...audio}))
         track(fetched.then(data => {
