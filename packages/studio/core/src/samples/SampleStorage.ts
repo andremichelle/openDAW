@@ -48,7 +48,7 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         }
         const pcm: PcmData = this.format === "smallest" ? PcmData.smallest(floats) : {format: "float32", ...floats}
         const data = new Uint8Array(pcm.format === "int16" ? WavFile.encodePcm(pcm) : WavFile.encodeFloats(floats))
-        console.debug(`save sample '${path}'`)
+        console.debug(`${await Workers.Opfs.exists(`${path}/audio.wav`) ? "override" : "save"} sample '${path}'`)
         return Promise.all([
             Workers.Opfs.write(`${path}/audio.wav`, data),
             Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(peaks)),
