@@ -1,4 +1,3 @@
-import {duplicateSelectedRegions} from "./duplicateSelectedRegions"
 import {Editing, EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
 import {
@@ -17,6 +16,7 @@ import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/Regio
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionTransformer.ts"
+import {RegionDuplication} from "@/ui/timeline/tracks/audio-unit/regions/RegionDuplication.ts"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
@@ -81,7 +81,7 @@ export const installRegionContextMenu =
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
                 MenuItem.default({label: "Duplicate", shortcut: RegionsShortcuts["duplicate-regions"].shortcut.format()})
-                    .setTriggerProcedure(() => duplicateSelectedRegions(project)),
+                    .setTriggerProcedure(() => RegionDuplication.duplicateSelected(project)),
                 MenuItem.default({
                     label: "Mute",
                     checked: region.mute,
