@@ -10,6 +10,8 @@ import {
     Lifecycle,
     Nullable,
     Option,
+    PrintValue,
+    Provider,
     Unhandled
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -110,8 +112,6 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
 
     const pointer = {clientX: 0, clientY: 0, inside: false}
     let fadeDragging = false
-    const fadeValue: HTMLElement = <div className={`${className}-fade-value`} role="tooltip"/>
-    lifecycle.own({terminate: () => fadeValue.remove()})
     const hoverAudioRegion = (target: Nullable<RegionCaptureTarget>, clientX: number) => {
         if (fadeDragging) {return}
         const unit = range.xToUnit(clientX - element.getBoundingClientRect().left)
@@ -119,29 +119,21 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         manager.hoveredAudioRegion.wrap(isInstanceOf(region, AudioRegionBoxAdapter)
             && region.position <= unit && unit < region.complete ? region : null)
     }
-    const holdFadeHover = (process: Dragging.Process, readValue: () => string): Option<Dragging.Process> => {
+    const holdFadeHover = (process: Dragging.Process, readValue: Provider<PrintValue>): Option<Dragging.Process> => {
         fadeDragging = true
         const layers = Layers.get(element)
         layers.textTooltip.forceHide()
-        let lastX = NaN, lastY = NaN
+        const at = {clientX: pointer.clientX, clientY: pointer.clientY}
+        layers.valueTooltip.show(() => ({...readValue(), clientX: at.clientX + 12, clientY: at.clientY + 16}))
         return Option.wrap({
             ...process,
             update: event => {
                 process.update(event)
-                const text = readValue()
-                const changed = fadeValue.textContent !== text
-                if (fadeValue.isConnected && !changed && event.clientX === lastX && event.clientY === lastY) {return}
-                if (!fadeValue.isConnected) {layers.flyout.appendChild(fadeValue)}
-                if (changed) {fadeValue.textContent = text}
-                lastX = event.clientX
-                lastY = event.clientY
-                const origin = layers.origin
-                const x = clamp(event.clientX - origin.x + 12, 0, Math.max(0, layers.width - fadeValue.offsetWidth))
-                const y = clamp(event.clientY - origin.y + 16, 0, Math.max(0, layers.height - fadeValue.offsetHeight))
-                fadeValue.style.transform = `translate(${x}px, ${y}px)`
+                at.clientX = event.clientX
+                at.clientY = event.clientY
             },
             finally: () => {
-                fadeValue.remove()
+                layers.valueTooltip.forceHide()
                 fadeDragging = false
                 if (pointer.inside) {
                     hoverAudioRegion(capturing.capturePoint(pointer.clientX, pointer.clientY), pointer.clientX)
@@ -414,7 +406,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                                     dragEvent.clientX - startX, dragEvent.clientY - startY, dragEvent.shiftKey),
                                 approve: () => drag.approve(),
                                 cancel: () => drag.cancel()
-                            }, () => `Curve: ${((isFadeIn ? fading.inSlope : fading.outSlope) * 100).toFixed(1)}%`)
+                            }, () => ({value: ((isFadeIn ? fading.inSlope : fading.outSlope) * 100.0).toFixed(1), unit: "%"}))
                         }
                         const startPointer = range.xToUnit(event.clientX - clientRect.left)
                         const drag = AudioFadeLengthDrag.create(fading, duration, isFadeIn, startPointer, editing)
@@ -425,8 +417,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                             cancel: () => drag.cancel()
                         }, () => {
                             const length = isFadeIn ? fading.in : fading.out
-                            const percent = duration > 0 ? length / duration * 100 : 0
-                            return `${isFadeIn ? "Fade in" : "Fade out"}: ${percent.toFixed(1)}%`
+                            return {value: (duration > 0 ? length / duration * 100.0 : 0.0).toFixed(1), unit: "%"}
                         })
                     }
                     default: {

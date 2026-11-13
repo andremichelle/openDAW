@@ -1,8 +1,8 @@
-import {AudioFadeFineMotion} from "./AudioFadeFineMotion"
 import {Editing} from "@opendaw/lib-std"
 import {AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
 import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
+import {AudioFadeFineMotion} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeFineMotion.ts"
 
 export interface AudioFadeCurveDrag {
     update(deltaX: number, deltaY: number, fine?: boolean): void
@@ -25,8 +25,9 @@ export namespace AudioFadeCurveDrag {
         const motion = AudioFadeFineMotion.create()
         return {
             update: (deltaX: number, deltaY: number, fine: boolean = false) => {
-                const offset = motion(AudioFadeHandles.SlopeOnCenterAxis ? 0 : deltaX, deltaY, fine)
-                if (offset === undefined) {return}
+                const moved = motion(AudioFadeHandles.SlopeOnCenterAxis ? 0 : deltaX, deltaY, fine)
+                if (moved.isEmpty()) {return}
+                const offset = moved.unwrap()
                 if (offset.x === 0 && offset.y === 0) {
                     restore(false)
                     return

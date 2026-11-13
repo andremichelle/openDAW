@@ -1,6 +1,6 @@
-import {AudioFadeFineMotion} from "./AudioFadeFineMotion"
 import {clamp, Editing} from "@opendaw/lib-std"
 import {FadingAdapter} from "@opendaw/studio-adapters"
+import {AudioFadeFineMotion} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeFineMotion.ts"
 
 export interface AudioFadeLengthDrag {
     update(pointer: number, fine?: boolean): void
@@ -16,8 +16,9 @@ export namespace AudioFadeLengthDrag {
         const motion = AudioFadeFineMotion.create()
         return {
             update: (pointer: number, fine: boolean = false) => {
-                const offset = motion(pointer - startPointer, 0, fine)
-                if (offset === undefined) {return}
+                const moved = motion(pointer - startPointer, 0, fine)
+                if (moved.isEmpty()) {return}
+                const offset = moved.unwrap()
                 const original = fadeIn ? originalIn : originalOut
                 const rawLength = clamp(original + (fadeIn ? offset.x : -offset.x), 0, duration)
                 const length = fine && duration > 0
