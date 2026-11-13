@@ -488,6 +488,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-surgeon"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+ "surgeon-lab",
+]
+
+[[package]]
 name = "device-tidal"
 version = "0.0.0"
 dependencies = [
@@ -862,6 +871,14 @@ name = "studio-boxes"
 version = "0.0.0"
 dependencies = [
  "boxgraph",
+]
+
+[[package]]
+name = "surgeon-lab"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
 ]
 
 [[package]]

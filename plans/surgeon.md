@@ -1,16 +1,17 @@
 # Surgeon
 
 Status 2026-11-13: design settled in listening rounds with André, editor layout drawn and accepted as an
-arrangement. Lab crate `crates/surgeon-lab` built. No engine crate, no box, no editor, no preview on `/testing`.
+arrangement. Lab crate `crates/surgeon-lab` built. Engine core `crates/stock-devices/device-surgeon` built and
+checked against the lab (uncommitted). No device ABI wrapper, no box, no editor, no preview on `/testing`.
 
 Branch: `surgeon`, in its own checkout `../openDAW-surgeon` (a git worktree, created 2026-11-13 from
 `9fee779f6`). Committed, not pushed. The main checkout holds other work and must stay free of these files.
 1. Files of this work: `plans/surgeon.md`, `plans/surgeon-architecture.svg`, `plans/surgeon-editor.svg`,
    `crates/surgeon-lab/`. Renders in `crates/target/surgeon-lab` (ignored).
-2. The lab stands alone: it is not a member of the `crates` workspace (its `Cargo.toml` carries its own
-   `[workspace]`), so no shared manifest changes on this branch.
-3. `hit_envelope.rs` and `svf.rs` in the lab are copies of the openDrum blocks from the `opendrum` branch, which
-   are not in `dsp` yet. The engine phase uses the `dsp` versions once they have landed.
+2. The lab is a workspace member through the engine crate's dev-dependency, and the engine crate through the
+   `stock-devices/*` glob. `crates/Cargo.toml` is unchanged on this branch, only `Cargo.lock` gains the two crates.
+3. `hit_envelope.rs` and `svf.rs` in the lab and in the engine crate are copies of the openDrum blocks from the
+   `opendrum` branch, which are not in `dsp` yet. Both switch to the `dsp` versions once those have landed.
 
 Diagram: `plans/surgeon-architecture.svg`.
 
@@ -247,11 +248,11 @@ Our own engine and controls. No circuit, parameter set, layout or preset name of
    `Performance` (patterns fired on bars, Off).
 4. `figure.rs`: the fixed figures of the first rounds and the decimator.
 5. `wash.rs`: ping pong delay into the Dattorro plate, for listening only.
-6. `bin/render_ab.rs`: writes all renders. Run from `crates/surgeon-lab`:
-   `cargo run --release --bin render_ab -- ../target/surgeon-lab`.
+6. `bin/render_ab.rs`: writes all renders. Run from `crates`:
+   `cargo run -p surgeon-lab --release --bin render_ab`, output in `target/surgeon-lab`.
    `bin/render_random.rs` writes only Random all patterns into `listen`:
-   `cargo run --release --bin render_random -- ../target/surgeon-lab [first seed] [count]`.
-7. Tests (29, run `cargo test --release` in `crates/surgeon-lab`): sideband positions, slide without retrigger, held notes, sine layer, determinism, mutation,
+   `cargo run -p surgeon-lab --release --bin render_random -- target/surgeon-lab [first seed] [count]`.
+7. Tests (41, `cargo test -p surgeon-lab --release`): sideband positions, slide without retrigger, held notes, sine layer, determinism, mutation,
    mapping sums and limits, switches, bar switching, Off, joining in phase, and the favourite as a pattern
    against its earlier render.
 
@@ -270,14 +271,36 @@ profile gives the same loop and the same parameter values but samples that diffe
 rendered while the lab was a workspace member. Do not render over them without need, and compare the engine to
 the lab by notes, parameter values and spectra, never sample by sample.
 
-## Engine notes
+## Engine
 
-1. One device crate in `crates/stock-devices`, registered like the other stock devices.
-2. The voice runs oversampled (the lab uses 2x), FM at high depth and the fold alias otherwise.
-3. From `dsp`: `hit_envelope`, `svf`, `resampler`. New shared blocks in `dsp`: fold and a phase modulation
-   operator, both also wanted by openDrum.
-4. The loop reads the transport position of the block and computes its steps from it, no stored sequence.
-5. Patterns are data in the box, 8 snapshots of about 108 values each.
+`crates/stock-devices/device-surgeon`, the engine core: plain Rust, heap free, builds for the browser target. It
+is not in the wasm build list yet and has no device ABI wrapper, that comes with the box.
+
+1. `hash.rs`: the rolls, identical to the lab's. `pattern.rs`: `PitchLoop`, `Lane`, `Pattern` (base and amounts for
+   the 16 mappable sound parameters), `Pattern::random`, and `event(step)`, what a step plays.
+2. `voice.rs`: the voice, ported from the lab with `libm`.
+3. `engine.rs`: `Engine` with 8 patterns, Tune and Volume. `process(p0, p1, playing, discontinuous, output)` renders
+   one block from the block's pulse range, 2x oversampled through `dsp::resampler`. It keeps no sequence: every
+   step is computed from the song position.
+4. Behaviour: a step starts when the position crosses its sixteenth. A fired slot (pattern or Off) takes over at
+   the next bar line. A start exactly on a step plays it, a start inside a step waits for the next. A stop or a
+   jump lets go of held notes, the tail rings out. Positions before zero are silent.
+5. Tune is held as a MIDI number with fractions internally, the editor shows Hz.
+
+Checked against the lab (`tests/parity.rs`, 14 tests, `cargo test -p device-surgeon --release`):
+1. The rolls are the lab's rolls.
+2. The favourite plays the lab's notes and parameter values over 4000 steps.
+3. Random all draws exactly like the lab for 300 seeds.
+4. The voice matches the lab's voice within rounding while the phases have not drifted, and by level afterwards.
+5. The engine plays the favourite at the lab's levels, bar by bar within 1.5 dB.
+6. Bar switching, Off, firing the active slot again, stop, start on and inside a step, locate, block size,
+   determinism, all random patterns finite and bounded.
+
+Open in the engine:
+1. Rate: only sixteenths so far.
+2. Tune and Volume changes are not smoothed.
+3. The device ABI wrapper: parameter binding, automation of every value, the pattern data and the fired slot
+   coming from the box.
 
 ## Parts
 
@@ -293,8 +316,8 @@ the lab by notes, parameter values and spectra, never sample by sample.
 1. ~~Lab: prototype voice, generated loops, lanes, mapping, patterns, listening rounds.~~
 2. Editor layout and design. Layout drawn (`plans/surgeon-editor.svg`). A preview on `/testing` only when
    André asks for it.
-3. Engine crate with node render tests, checked against the lab renders.
-4. Box, adapter, real editor. Browser checkpoint.
+3. ~~Engine core, checked against the lab.~~
+4. Box, adapter, device ABI wrapper, real editor. Browser checkpoint.
 5. Presets: patterns, and the chain with Delay and Dattorro Reverb.
 6. Manual page, scripting API.
 

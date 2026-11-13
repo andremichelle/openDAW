@@ -1,0 +1,16 @@
+[package]
+name = "device-surgeon"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# the engine core of Surgeon (plans/surgeon.md). The device ABI wrapper follows with the box.
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+dsp = {path = "../../dsp"}
+libm = "0.2"
+
+[dev-dependencies]
+surgeon-lab = {path = "../../surgeon-lab"}

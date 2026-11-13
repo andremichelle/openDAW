@@ -5,10 +5,8 @@ edition = "2021"
 publish = false
 
 # dev only: prototype voice and A/B renders for Surgeon (plans/surgeon.md), never built for the browser
-# stands alone (not a workspace member), build it from this folder. hit_envelope.rs and svf.rs are copies of
-# the openDrum dsp blocks until those land in `dsp`
-[workspace]
-
+# a workspace member through device-surgeon's dev-dependency. hit_envelope.rs and svf.rs are copies of the
+# openDrum dsp blocks until those land in `dsp`
 [lib]
 crate-type = ["lib"]
 
