@@ -4,6 +4,7 @@ import {
     KorpusDeviceBox,
     NeonDeviceBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -24,6 +25,7 @@ export type InstrumentBox =
     | NeonDeviceBox
     | WclapInstrumentBox
     | TubularDeviceBox
+    | SurgeonDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox
     | SamplerDeviceBox

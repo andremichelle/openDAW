@@ -7,6 +7,7 @@ export namespace DeviceTags {
         InstrumentComposite: ["layer", "utility"],
         Neon: ["synth", "phase-distortion"],
         Tubular: ["synth", "subtractive"],
+        Surgeon: ["synth", "fm"],
         MIDIOutput: ["midi", "hardware", "utility"],
         Nano: ["sampler"],
         Sampler: ["sampler"],

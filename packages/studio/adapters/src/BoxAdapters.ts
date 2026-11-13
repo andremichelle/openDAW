@@ -51,6 +51,7 @@ import {
     ChordEventBox,
     NeonDeviceBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
     MaximizerDeviceBox,
     MasteringDeviceBox,
     MIDIOutputDeviceBox,
@@ -162,6 +163,7 @@ import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter
 import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
+import {SurgeonDeviceBoxAdapter} from "./devices/instruments/SurgeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {SamplerDeviceBoxAdapter} from "./devices/instruments/SamplerDeviceBoxAdapter"
 import {SamplerZoneBoxAdapter} from "./devices/instruments/Sampler/SamplerZoneBoxAdapter"
@@ -328,6 +330,7 @@ export class BoxAdapters implements Terminable {
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
             visitTubularDeviceBox: (box: TubularDeviceBox) => new TubularDeviceBoxAdapter(this.#context, box),
+            visitSurgeonDeviceBox: (box: SurgeonDeviceBox) => new SurgeonDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
             visitSamplerDeviceBox: (box: SamplerDeviceBox) => new SamplerDeviceBoxAdapter(this.#context, box),
             visitSamplerZoneBox: (box: SamplerZoneBox) => new SamplerZoneBoxAdapter(this.#context, box),

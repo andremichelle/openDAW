@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 780" width="1280" height="780" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#9aa4b2"/>
+    </marker>
+  </defs>
+  <rect width="1280" height="780" fill="#14171c"/>
+  <text x="40" y="46" fill="#f2f4f7" font-size="22" font-weight="600">Surgeon</text>
+  <text x="180" y="46" fill="#9aa4b2" font-size="14">one instrument: a loop that plays its own voice (plan state 2026-11-13)</text>
+
+  <g>
+    <g fill="#232831" stroke="#3a4250">
+      <rect x="40" y="70" width="26" height="26" rx="4" fill="#5bc0eb" stroke="#5bc0eb"/>
+      <rect x="72" y="70" width="26" height="26" rx="4"/>
+      <rect x="104" y="70" width="26" height="26" rx="4"/>
+      <rect x="136" y="70" width="26" height="26" rx="4"/>
+      <rect x="168" y="70" width="26" height="26" rx="4"/>
+      <rect x="200" y="70" width="26" height="26" rx="4"/>
+      <rect x="232" y="70" width="26" height="26" rx="4"/>
+      <rect x="264" y="70" width="26" height="26" rx="4"/>
+    </g>
+    <rect x="304" y="70" width="44" height="26" rx="4" fill="#232831" stroke="#3a4250"/>
+    <text x="326" y="88" fill="#c8d0db" font-size="12" text-anchor="middle">Off</text>
+    <text x="364" y="82" fill="#f2f4f7" font-size="14" font-weight="600">8 patterns and Off, switched on the bar</text>
+    <text x="364" y="99" fill="#9aa4b2" font-size="13">plays with the transport, a pattern stores a loop together with its sound</text>
+  </g>
+
+  <rect x="40" y="126" width="400" height="614" rx="10" fill="#1b1f26" stroke="#3a4250"/>
+  <text x="60" y="152" fill="#f2f4f7" font-size="15" font-weight="600">LOOP</text>
+  <text x="112" y="152" fill="#9aa4b2" font-size="13">computed from the song position, replays on locate</text>
+
+  <rect x="60" y="168" width="360" height="112" rx="8" fill="#232831" stroke="#5bc0eb"/>
+  <text x="76" y="192" fill="#f2f4f7" font-size="15" font-weight="600">Note loop</text>
+  <text x="76" y="214" fill="#c8d0db" font-size="13">Seed · Steps 1 to 32 · Rate · Mutate</text>
+  <text x="76" y="234" fill="#c8d0db" font-size="13">Range · Density · Tie · Accent</text>
+  <text x="76" y="262" fill="#9aa4b2" font-size="13">free pitch, never quantised to notes or scales</text>
+
+  <text x="60" y="308" fill="#f2f4f7" font-size="14" font-weight="600">Lanes</text>
+  <text x="112" y="308" fill="#9aa4b2" font-size="13">four, generic and interchangeable</text>
+
+  <g font-size="14">
+    <rect x="60" y="322" width="360" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <circle cx="82" cy="349" r="7" fill="#ff6b6b"/>
+    <text x="100" y="345" fill="#f2f4f7" font-weight="600">Lane A</text>
+    <text x="100" y="364" fill="#9aa4b2" font-size="13">Steps (own length) · Seed · Mutate</text>
+    <text x="404" y="354" fill="#c8d0db" font-size="13" text-anchor="end">0 to 1</text>
+    <rect x="60" y="388" width="360" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <circle cx="82" cy="415" r="7" fill="#ffb347"/>
+    <text x="100" y="411" fill="#f2f4f7" font-weight="600">Lane B</text>
+    <text x="100" y="430" fill="#9aa4b2" font-size="13">Steps (own length) · Seed · Mutate</text>
+    <text x="404" y="420" fill="#c8d0db" font-size="13" text-anchor="end">0 to 1</text>
+    <rect x="60" y="454" width="360" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <circle cx="82" cy="481" r="7" fill="#ffe66d"/>
+    <text x="100" y="477" fill="#f2f4f7" font-weight="600">Lane C</text>
+    <text x="100" y="496" fill="#9aa4b2" font-size="13">Steps (own length) · Seed · Mutate</text>
+    <text x="404" y="486" fill="#c8d0db" font-size="13" text-anchor="end">0 to 1</text>
+    <rect x="60" y="520" width="360" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <circle cx="82" cy="547" r="7" fill="#6bd490"/>
+    <text x="100" y="543" fill="#f2f4f7" font-weight="600">Lane D</text>
+    <text x="100" y="562" fill="#9aa4b2" font-size="13">Steps (own length) · Seed · Mutate</text>
+    <text x="404" y="552" fill="#c8d0db" font-size="13" text-anchor="end">0 to 1</text>
+  </g>
+  <rect x="60" y="596" width="360" height="132" rx="8" fill="none" stroke="#3a4250" stroke-dasharray="5 4"/>
+  <text x="76" y="618" fill="#f2f4f7" font-size="14" font-weight="600">Mapping</text>
+  <text x="142" y="618" fill="#9aa4b2" font-size="12">every sound parameter, lanes add up</text>
+  <text x="262" y="636" fill="#ff6b6b" font-size="12" font-weight="600" text-anchor="middle">A</text>
+  <text x="302" y="636" fill="#ffb347" font-size="12" font-weight="600" text-anchor="middle">B</text>
+  <text x="342" y="636" fill="#ffe66d" font-size="12" font-weight="600" text-anchor="middle">C</text>
+  <text x="382" y="636" fill="#6bd490" font-size="12" font-weight="600" text-anchor="middle">D</text>
+  <text x="76" y="654" fill="#c8d0db" font-size="12">Feedback</text>
+  <circle cx="262" cy="650" r="5.2" fill="#ff6b6b"/>
+  <circle cx="302" cy="650" r="1.2" fill="#4a5361"/>
+  <circle cx="342" cy="650" r="1.2" fill="#4a5361"/>
+  <circle cx="382" cy="650" r="1.2" fill="#4a5361"/>
+  <text x="76" y="667" fill="#c8d0db" font-size="12">Strike</text>
+  <circle cx="262" cy="663" r="1.2" fill="#4a5361"/>
+  <circle cx="302" cy="663" r="4.4" fill="#ffb347"/>
+  <circle cx="342" cy="663" r="3.2" fill="#ffe66d"/>
+  <circle cx="382" cy="663" r="1.2" fill="#4a5361"/>
+  <text x="76" y="680" fill="#c8d0db" font-size="12">Fold</text>
+  <circle cx="262" cy="676" r="1.2" fill="#4a5361"/>
+  <circle cx="302" cy="676" r="1.2" fill="#4a5361"/>
+  <circle cx="342" cy="676" r="4.8" fill="#ffe66d"/>
+  <circle cx="382" cy="676" r="1.2" fill="#4a5361"/>
+  <text x="76" y="693" fill="#c8d0db" font-size="12">Length</text>
+  <circle cx="262" cy="689" r="4.0" fill="#ff6b6b"/>
+  <circle cx="302" cy="689" r="1.2" fill="#4a5361"/>
+  <circle cx="342" cy="689" r="1.2" fill="#4a5361"/>
+  <circle cx="382" cy="689" r="3.6" fill="#6bd490"/>
+  <text x="76" y="706" fill="#c8d0db" font-size="12">Ratio</text>
+  <circle cx="262" cy="702" r="1.2" fill="#4a5361"/>
+  <circle cx="302" cy="702" r="1.2" fill="#4a5361"/>
+  <circle cx="342" cy="702" r="1.2" fill="#4a5361"/>
+  <circle cx="382" cy="702" r="4.5" fill="none" stroke="#6bd490" stroke-width="1.5"/>
+  <text x="76" y="719" fill="#c8d0db" font-size="12">Modulator 2 depth</text>
+  <circle cx="262" cy="715" r="1.2" fill="#4a5361"/>
+  <circle cx="302" cy="715" r="4.0" fill="#ffb347"/>
+  <circle cx="342" cy="715" r="1.2" fill="#4a5361"/>
+  <circle cx="382" cy="715" r="1.2" fill="#4a5361"/>
+
+  <path d="M420 480H498" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="460" y="456" fill="#9aa4b2" font-size="12" text-anchor="middle">lane</text>
+  <text x="460" y="470" fill="#9aa4b2" font-size="12" text-anchor="middle">values</text>
+
+  <rect x="500" y="126" width="740" height="452" rx="10" fill="#1b1f26" stroke="#3a4250"/>
+  <text x="520" y="152" fill="#f2f4f7" font-size="15" font-weight="600">VOICE</text>
+  <text x="578" y="152" fill="#9aa4b2" font-size="13">monophonic, tied steps slide to the next pitch</text>
+
+  <path d="M420 224H498" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="460" y="186" fill="#9aa4b2" font-size="12" text-anchor="middle">pitch</text>
+  <text x="460" y="200" fill="#9aa4b2" font-size="12" text-anchor="middle">velocity</text>
+  <text x="460" y="214" fill="#9aa4b2" font-size="12" text-anchor="middle">tie</text>
+
+  <g font-size="14">
+    <rect x="530" y="184" width="180" height="78" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="546" y="210" fill="#f2f4f7" font-weight="600">Modulator 1</text>
+    <text x="546" y="232" fill="#c8d0db" font-size="13">Ratio · Feedback</text>
+    <circle cx="672" cy="204" r="6" fill="#ff6b6b"/>
+    <circle cx="690" cy="204" r="5" fill="none" stroke="#6bd490" stroke-width="1.5"/>
+    <path d="M620 262C620 286 580 286 580 264" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    <text x="630" y="284" fill="#9aa4b2" font-size="12">feedback</text>
+
+    <rect x="530" y="310" width="180" height="78" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="546" y="336" fill="#f2f4f7" font-weight="600">Modulator 2</text>
+    <text x="546" y="358" fill="#c8d0db" font-size="13">Ratio · Depth (blend)</text>
+    <text x="546" y="376" fill="#9aa4b2" font-size="12">adds overtones, zero is off</text>
+    <circle cx="690" cy="330" r="6" fill="#ffb347"/>
+
+    <rect x="770" y="240" width="180" height="92" rx="8" fill="#232831" stroke="#5bc0eb"/>
+    <text x="786" y="266" fill="#f2f4f7" font-weight="600">Carrier</text>
+    <text x="786" y="288" fill="#c8d0db" font-size="13">Wave · Depth</text>
+    <text x="786" y="306" fill="#c8d0db" font-size="13">Strike · Strike Decay</text>
+    <text x="786" y="323" fill="#9aa4b2" font-size="12">velocity adds strike</text>
+    <circle cx="912" cy="260" r="6" fill="#ffb347"/>
+    <circle cx="930" cy="260" r="6" fill="#ffe66d"/>
+
+    <rect x="1010" y="240" width="200" height="92" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="1026" y="266" fill="#f2f4f7" font-weight="600">Fold</text>
+    <text x="1026" y="288" fill="#c8d0db" font-size="13">Amount</text>
+    <text x="1026" y="306" fill="#c8d0db" font-size="13">Place: before or after the gate</text>
+    <circle cx="1190" cy="260" r="6" fill="#ffe66d"/>
+
+    <rect x="1010" y="392" width="200" height="78" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="1026" y="418" fill="#f2f4f7" font-weight="600">Low pass gate</text>
+    <text x="1026" y="440" fill="#c8d0db" font-size="13">Length · Held share</text>
+    <text x="1026" y="457" fill="#c8d0db" font-size="13">level and brightness</text>
+    <circle cx="1172" cy="412" r="6" fill="#ff6b6b"/>
+    <circle cx="1190" cy="412" r="6" fill="#6bd490"/>
+
+    <rect x="770" y="392" width="180" height="78" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="786" y="418" fill="#f2f4f7" font-weight="600">Parallel sine</text>
+    <text x="786" y="440" fill="#c8d0db" font-size="13">Level</text>
+    <text x="786" y="457" fill="#c8d0db" font-size="13">at the pitch or octave below</text>
+    <text x="786" y="492" fill="#9aa4b2" font-size="12">takes the gate's level,</text>
+    <text x="786" y="507" fill="#9aa4b2" font-size="12">skips filter and fold</text>
+
+    <rect x="1010" y="508" width="200" height="48" rx="8" fill="#232831" stroke="#5bc0eb"/>
+    <text x="1110" y="538" fill="#f2f4f7" font-weight="600" text-anchor="middle">Output</text>
+  </g>
+
+  <path d="M950 431H962V532" stroke="#9aa4b2" stroke-width="1.5" fill="none"/>
+  <path d="M1008 431H975" stroke="#9aa4b2" stroke-width="1.2" stroke-dasharray="4 3" fill="none"/>
+  <text x="979" y="424" fill="#9aa4b2" font-size="11">level</text>
+  <g stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <path d="M710 223C740 223 740 270 768 270"/>
+    <path d="M710 349C740 349 740 302 768 302"/>
+    <path d="M950 286H1008"/>
+    <path d="M1110 332V390"/>
+    <path d="M962 532H1008"/>
+    <path d="M1110 470V506"/>
+  </g>
+
+  <rect x="500" y="612" width="740" height="128" rx="10" fill="none" stroke="#3a4250" stroke-dasharray="6 5"/>
+  <text x="520" y="638" fill="#f2f4f7" font-size="15" font-weight="600">OUTSIDE THE DEVICE</text>
+  <text x="696" y="638" fill="#9aa4b2" font-size="13">existing effects as a preset chain, they make the wash</text>
+  <g font-size="14">
+    <rect x="770" y="662" width="180" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="860" y="694" fill="#f2f4f7" font-weight="600" text-anchor="middle">Delay</text>
+    <rect x="530" y="662" width="180" height="54" rx="8" fill="#232831" stroke="#3a4250"/>
+    <text x="620" y="694" fill="#f2f4f7" font-weight="600" text-anchor="middle">Dattorro Reverb</text>
+  </g>
+  <g stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <path d="M1110 556V689H952"/>
+    <path d="M770 689H712"/>
+  </g>
+
+  <text x="1240" y="766" fill="#9aa4b2" font-size="12" text-anchor="end">Every value is automatable, automation wins over a fired pattern. Mapping rows are examples.</text>
+</svg>

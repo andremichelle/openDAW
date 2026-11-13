@@ -12,6 +12,7 @@ import {ChordKeysDeviceBox} from "./midi-effects/ChordKeysDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
+import {SurgeonDeviceBox} from "./instruments/SurgeonDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {SamplerDeviceBox} from "./instruments/SamplerDeviceBox"
@@ -133,5 +134,6 @@ export const DeviceDefinitions = [
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
     FrequencySplitBox,
-    AudioSinkDeviceBox
+    AudioSinkDeviceBox,
+    SurgeonDeviceBox
 ]

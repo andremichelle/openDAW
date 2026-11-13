@@ -1,0 +1,221 @@
+@use "@/mixins"
+
+$tile: 22px
+$circle: 20px
+$table: 156px
+$row-gap: 2px
+$loop-row: ($table - $row-gap * 3) * 0.25
+$control: 31px
+$title: 12px
+$column: 50px
+
+@keyframes surgeon-waiting
+  from
+    opacity: 1
+  to
+    opacity: 0.25
+
+component
+  --color: var(--color-green)
+  display: grid
+  grid-template-columns: ($circle * 3 + 4px) 180px auto
+  grid-template-rows: 172px
+  column-gap: 1em
+  align-content: start
+  @include mixins.Control
+
+  div.button
+    display: flex
+    align-items: center
+    justify-content: center
+    align-self: center
+    box-sizing: border-box
+    height: 18px
+    margin: 0 6px
+    border-radius: 9px
+    font-size: 9px
+    cursor: pointer
+    color: rgba(white, 0.6)
+    border: 1px solid color-mix(in srgb, var(--color) 40%, transparent)
+
+    &:hover, &.pressed
+      color: rgba(white, 0.9)
+      border-color: var(--color)
+
+    &.roll
+      width: 60px
+      margin: 0
+      justify-self: center
+
+  // borrowed from TubularDeviceEditor (round tab tiles)
+  div.tile
+    display: flex
+    align-items: center
+    justify-content: center
+    width: $circle
+    height: $circle
+    border-radius: 50%
+    font-size: 10px
+    line-height: 1
+    cursor: pointer
+    color: rgba(white, 0.6)
+    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &.off
+      font-size: 8px
+      --color: var(--color-shadow)
+
+    &.active
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+    &.fired
+      animation: surgeon-waiting 0.22s linear infinite alternate
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+  nav.patterns
+    display: flex
+    flex-direction: column
+    justify-content: space-between
+
+    > div.circles
+      display: grid
+      grid-template-columns: repeat(3, $circle)
+      grid-auto-rows: $circle
+      gap: 2px
+
+    > div.values
+      display: grid
+      row-gap: 5px
+
+      > div.control
+        row-gap: 0
+
+  div.display
+    display: grid
+    grid-template-rows: minmax(0, 1fr)
+    margin-bottom: 1px
+    min-width: 0
+    min-height: 0
+
+    > canvas
+      width: 100%
+      height: 100%
+      min-height: 0
+
+  div.sections
+    display: grid
+    grid-template-rows: 14px minmax(0, 1fr)
+    row-gap: 2px
+
+    > header
+      grid-area: 1 / 1
+      display: flex
+      column-gap: 4px
+      margin-right: $title + $row-gap
+      --color: var(--color-cream)
+
+    > section
+      grid-area: 2 / 1
+      display: grid
+      grid-template-columns: repeat(8, $column) $title
+      column-gap: 2px
+      row-gap: 2px
+      position: relative
+
+      &.loops
+        grid-template-rows: repeat(4, 1fr)
+
+      &.sound
+        grid-template-rows: 18px repeat(5, 1fr)
+
+  h3
+    margin: 0
+    font-weight: 400
+
+  // borrowed from DelayDeviceEditor (h3.head), selectable
+  h3.tab
+    flex: 1
+    display: flex
+    align-items: center
+    justify-content: center
+    font-size: 9px
+    line-height: 1
+    letter-spacing: 0.2px
+    white-space: nowrap
+    cursor: pointer
+    border-radius: 2px 2px 1px 1px
+    color: rgba(white, 0.6)
+    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &.selected
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+  // borrowed from DelayDeviceEditor (section overlays and rotated titles)
+  div.band
+    pointer-events: none
+    border-radius: 2px
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+
+  h3.rotated
+    font-size: 9px
+    letter-spacing: 0.2px
+    padding: 0 1px
+    text-align: center
+    white-space: nowrap
+    writing-mode: vertical-rl
+    justify-self: end
+    border-radius: 0 2px 2px 0
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
+  .pitch, .base
+    --color: var(--color-cream)
+
+  .lanes
+    --color: var(--color-purple)
+
+  .roll
+    --color: var(--color-dark)
+
+  h3.caption
+    align-self: start
+    margin-top: ($loop-row - $control) * 0.5
+    height: 12px
+    font-size: 9px
+    letter-spacing: 0.5px
+    text-align: center
+    white-space: nowrap
+    color: var(--color-shadow)
+
+  // borrowed from TubularDeviceEditor section.sass (label control)
+  div.control
+    display: grid
+    grid-auto-rows: auto
+    row-gap: 1px
+    align-self: center
+    justify-items: stretch
+    position: relative
+    min-width: 0
+
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
+      text-align: center
+      white-space: nowrap
+      color: var(--color-shadow)
+
+  div.cell
+    display: grid
+    align-content: center
+    min-width: 0
+
+  div.cell.amount
+    color: var(--color)
+
+    &.zero
+      opacity: 0.35

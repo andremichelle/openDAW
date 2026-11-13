@@ -47,6 +47,7 @@ export namespace DeviceManualUrls {
     export const Vaporisateur = "manuals/devices/instruments/vaporisateur"
     export const Neon = "manuals/devices/instruments/neon"
     export const Tubular = "manuals/devices/instruments/tubular"
+    export const Surgeon = "manuals/devices/instruments/surgeon"
     export const MIDIOutput = "manuals/devices/instruments/midioutput"
     export const Soundfont = "manuals/devices/instruments/soundfont"
     export const FrequencySplit = "manuals/devices/audio/frequency-split"

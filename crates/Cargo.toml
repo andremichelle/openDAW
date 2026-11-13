@@ -93,3 +93,5 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-cubed]
 opt-level = 3
+[profile.release.package.device-surgeon]
+opt-level = 3
