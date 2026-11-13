@@ -723,6 +723,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "opendrum"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+]
+
+[[package]]
+name = "opendrum-lab"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+ "math",
+ "opendrum",
+]
+
+[[package]]
+name = "opendrum-wasm"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"

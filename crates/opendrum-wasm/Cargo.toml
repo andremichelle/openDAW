@@ -1,0 +1,12 @@
+[package]
+name = "opendrum-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# standalone preview module for the /testing page: renders one openDrum hit with the real engine
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opendrum = {path = "../opendrum"}

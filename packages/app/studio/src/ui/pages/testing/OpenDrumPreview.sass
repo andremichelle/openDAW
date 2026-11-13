@@ -1,0 +1,133 @@
+@use "@/mixins"
+
+$column: 78px
+$gap: 6px
+
+component
+  display: grid
+  grid-template-rows: 64px 104px
+  row-gap: 8px
+  @include mixins.Control
+
+  // borrowed from NanoDeviceEditor
+  div.display
+    position: relative
+    background-color: rgba(black, 0.1)
+    border-radius: 2px
+    box-shadow: 0 0.5px 1px 0 rgba(white, 0.1), 0 0.5px 1px 0 rgba(black, 0.1) inset
+
+    > canvas
+      display: block
+      width: 100%
+      height: 100%
+
+    > span.length
+      position: absolute
+      right: 3px
+      bottom: 2px
+      font-size: 8px
+      color: var(--color-dark)
+      pointer-events: none
+
+  div.groups
+    display: flex
+    column-gap: $gap
+    color: var(--color-dark)
+
+  // borrowed from the Sampler preview stacks
+  div.parameter-group
+    display: grid
+    grid-template-rows: 16px
+    grid-auto-rows: 18px
+    gap: 4px $gap
+    align-items: center
+    align-content: start
+    --color: var(--color-shadow)
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--color) 6%, transparent), transparent 7px) no-repeat 0 16px
+
+    @for $count from 1 through 2
+      &.columns-#{$count}
+        grid-template-columns: repeat(#{$count}, $column)
+
+    > div.cell
+      display: grid
+      grid-template-columns: 1fr 40px
+      align-items: center
+      height: 18px
+
+      > button
+        justify-self: end
+        width: 40px
+        min-width: 0
+        padding: 0
+        font-size: 11px
+
+    &.orange
+      --color: var(--color-orange)
+
+    &.yellow
+      --color: var(--color-yellow)
+
+    &.green
+      --color: var(--color-green)
+
+    &.blue
+      --color: var(--color-blue)
+
+    &.purple
+      --color: var(--color-purple)
+
+    &.cream
+      --color: var(--color-cream)
+
+    > div.label
+      grid-column: 1 / -1
+      height: 16px
+      padding: 2px 4px
+      font-size: 9px
+      line-height: 11px
+      white-space: nowrap
+      border-radius: 2px 2px 0 0
+      color: color-mix(in srgb, var(--color) 85%, transparent)
+      border-bottom: 1px solid color-mix(in srgb, var(--color) 60%, transparent)
+
+    div.name
+      margin: 0 0 0 6px
+      font-size: 10px
+      white-space: nowrap
+      color: var(--color-shadow)
+
+    label.value
+      display: flex
+      column-gap: 0.25em
+      justify-content: end
+      padding: 0 0.5em
+      border-radius: 0.25em
+      font-size: 8px
+      line-height: 18px
+      white-space: nowrap
+      color: var(--color-gray)
+      touch-action: none
+
+      &[unit]:after
+        content: attr(unit)
+        color: var(--color-dark)
+
+      &.modifying
+        color: var(--color-blue)
+        box-shadow: 0 0 0 0.5px rgba(white, 0.1)
+        background-color: var(--color-black)
+
+    .toggle
+      justify-self: end
+      margin-right: 4px
+
+      > label
+        width: 18px
+        height: 18px
+        min-width: 0
+        font-size: 13px
+        border-radius: 0.25em
+        display: flex
+        align-items: center
+        justify-content: center

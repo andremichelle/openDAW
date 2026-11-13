@@ -1,5 +1,6 @@
 import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
 import {extname, resolve} from "path"
+import {homedir} from "os"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
@@ -140,6 +141,21 @@ export default defineConfig(({command}) => {
                         fileName: `wasm-engine/${name}`,
                         source: readFileSync(resolve(sourceDir, name))
                     }))
+                }
+            },
+            {
+                // Dev only: the local 808 / 909 reference hits the openDrum preview on /testing compares against.
+                // Never bundled, the samples stay on this machine.
+                name: "opendrum-references",
+                configureServer(server) {
+                    const root = process.env.OPENDRUM_REFERENCES ?? resolve(homedir(), "Documents/Resources/samples")
+                    server.middlewares.use("/opendrum-references", (req, res, next) => {
+                        const name = decodeURIComponent((req.url ?? "").split("?")[0].replace(/^\//, ""))
+                        const file = resolve(root, name)
+                        if (!/\.wav$/i.test(name) || !file.startsWith(root) || !existsSync(file)) {return next()}
+                        res.setHeader("Content-Type", "audio/wav")
+                        res.end(readFileSync(file))
+                    })
                 }
             },
             {
