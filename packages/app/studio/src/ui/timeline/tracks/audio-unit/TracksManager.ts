@@ -42,6 +42,7 @@ import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
 import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
+import {AudioFadeReveal} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeReveal.ts"
 
 type AudioUnitEntry = {
     uuid: UUID.Bytes
@@ -68,6 +69,7 @@ export interface TrackFactory {
 export class TracksManager implements Terminable {
     readonly groupClipSelection: GroupClipSelection
     readonly hoveredAudioRegion: MutableObservableOption<AudioRegionBoxAdapter>
+    readonly fadeReveal: AudioFadeReveal
     readonly #service: StudioService
     readonly #project: Project
     readonly #scrollContainer: Element
@@ -107,6 +109,7 @@ export class TracksManager implements Terminable {
 
         this.#terminator = new Terminator()
         this.hoveredAudioRegion = this.#terminator.own(new MutableObservableOption<AudioRegionBoxAdapter>())
+        this.fadeReveal = this.#terminator.own(new AudioFadeReveal(this.hoveredAudioRegion))
         this.groupClipSelection = this.#terminator.own(new GroupClipSelection(service.project))
         this.#audioUnits = UUID.newSet(({uuid}) => uuid)
         this.#modulators = UUID.newSet(({uuid}) => uuid)

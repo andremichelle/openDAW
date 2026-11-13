@@ -2,8 +2,9 @@ import {AudioFadeCurveDrag} from "./AudioFadeCurveDrag"
 import {AudioFadeAnchors} from "./AudioFadeAnchors"
 import {AudioFadeLengthDrag} from "./AudioFadeLengthDrag"
 import {AudioFadeHandles} from "./AudioFadeHandles"
+import {RegionLabel} from "@/ui/timeline/RegionLabel"
 import {describe, expect, it} from "vitest"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {Curve, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioRegionBoxAdapter, ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {FadingEnvelope, TimeBase} from "@opendaw/lib-dsp"
@@ -149,6 +150,65 @@ describe("movable fade curve points", () => {
         expect(AudioFadeAnchors.read(left.box)).toEqual({in: 0.5, out: 0.5})
         expect(left.fading.inSlope).toBe(slope)
         expect(project.boxGraph.boxes()).toHaveLength(boxCount)
+        project.terminate()
+    })
+})
+
+describe("fine fade adjustment", () => {
+    it.each([0.25, 0.5, 0.75])("snaps length near %s of the clip only during fine movement", async detent => {
+        const {project, left} = await setup()
+        const original = left.fading.in
+        const rawLength = left.duration * (detent + 0.01)
+        const delta = rawLength - original
+        const drag = AudioFadeLengthDrag.create(left.fading, left.duration, true, 0, project.editing)
+        drag.update(delta)
+        expect(left.fading.in).toBeCloseTo(rawLength, 3)
+        drag.update(delta, true)
+        expect(left.fading.in).toBeCloseTo(rawLength, 3)
+        drag.update(delta - left.duration * 0.02, true)
+        expect(left.fading.in).toBe(left.duration * detent)
+        drag.update(delta - left.duration * 0.02)
+        expect(left.fading.in).toBe(left.duration * detent)
+        drag.approve()
+        expect(project.editing.undo()).toBe(true)
+        expect(left.fading.in).toBe(original)
+        project.terminate()
+    })
+
+    it.each([true, false])("uses one fifth movement for length and restores on cancel, fadeIn=%s", async fadeIn => {
+        const {project, left} = await setup()
+        const read = () => fadeIn ? left.fading.in : left.fading.out
+        const original = read()
+        const drag = AudioFadeLengthDrag.create(left.fading, left.duration, fadeIn, 0, project.editing)
+        const direction = fadeIn ? 1 : -1
+        drag.update(direction * 50, true)
+        // The fade-out begins at 25%, so use a movement beyond the detent for both directions.
+        drag.update(direction * 500, true)
+        expect(read()).toBe(original + 100)
+        drag.cancel()
+        expect(read()).toBe(original)
+        project.terminate()
+    })
+
+    it.each([true, false])("snaps curve to linear and leaves the lengths unchanged, fadeIn=%s", async fadeIn => {
+        const {project, left} = await setup()
+        const originalLengths = fades(left)
+        const read = () => fadeIn ? left.fading.inSlope : left.fading.outSlope
+        const originalSlope = read()
+        const height = 55
+        const direction = fadeIn ? -1 : 1
+        const drag = AudioFadeCurveDrag.create(left, fadeIn, 100, height, project.editing)
+        const curveHeight = height - RegionLabel.labelHeight() - 1
+        const delta = direction * (Curve.normalizedAt(0.5, 0.51) - Curve.normalizedAt(0.5, originalSlope)) * curveHeight
+        drag.update(0, delta)
+        expect(read()).toBeCloseTo(0.51, 4)
+        drag.update(0, delta, true)
+        expect(read()).toBeCloseTo(0.51, 4)
+        drag.update(0, delta - direction, true)
+        expect(read()).toBe(0.5)
+        expect(fades(left)).toEqual(originalLengths)
+        drag.cancel()
+        expect(read()).toBe(originalSlope)
         project.terminate()
     })
 })

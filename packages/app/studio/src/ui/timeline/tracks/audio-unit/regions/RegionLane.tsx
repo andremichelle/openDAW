@@ -48,6 +48,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
             if (ownsRegion(hoveredRegion) || ownsRegion(next)) {requestUpdate()}
             hoveredRegion = next
         }),
+        trackManager.fadeReveal.subscribe(region => {if (region.trackBoxAdapter.contains(adapter)) {requestUpdate()}}),
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),

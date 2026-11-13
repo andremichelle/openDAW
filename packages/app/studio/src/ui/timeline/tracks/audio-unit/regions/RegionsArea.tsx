@@ -117,16 +117,56 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         manager.hoveredAudioRegion.wrap(isInstanceOf(region, AudioRegionBoxAdapter)
             && region.position <= unit && unit < region.complete ? region : null)
     }
-    const holdFadeHover = (process: Dragging.Process): Option<Dragging.Process> => {
+    const fadeHandleOf = (target: Nullable<RegionCaptureTarget>): Nullable<{ region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part }> => {
+        if (!isDefined(target) || target.type !== "region") {return null}
+        switch (target.part) {
+            case "fading-in":
+            case "fading-in-slope":
+            case "fading-out":
+            case "fading-out-slope":
+                return {region: target.region, part: target.part}
+            default:
+                return null
+        }
+    }
+    const fadeHover: { handle: Nullable<{ region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part }> } = {handle: null}
+    const showFadeValue = (region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part): void => {
+        const layers = Layers.get(element)
+        layers.textTooltip.forceHide()
+        layers.valueTooltip.show(() => ({
+            ...AudioFadeHandles.printValue(region, part), clientX: pointer.clientX + 12, clientY: pointer.clientY + 16
+        }))
+    }
+    // as a knob: the value shows while the pointer rests on a fade handle and stays through its drag
+    const hoverFadeHandle = (target: Nullable<RegionCaptureTarget>): void => {
+        if (fadeDragging) {return}
+        const handle = fadeHandleOf(target)
+        const current = fadeHover.handle
+        if (handle?.region === current?.region && handle?.part === current?.part) {return}
+        fadeHover.handle = handle
+        if (isDefined(handle)) {showFadeValue(handle.region, handle.part)} else {Layers.get(element).valueTooltip.hide()}
+    }
+    const holdFadeHover = (process: Dragging.Process, region: AudioRegionBoxAdapter,
+                           part: AudioFadeHandles.Part): Option<Dragging.Process> => {
         fadeDragging = true
+        fadeHover.handle = {region, part}
+        showFadeValue(region, part)
         return Option.wrap({
             ...process,
+            update: event => {
+                process.update(event)
+                pointer.clientX = event.clientX
+                pointer.clientY = event.clientY
+            },
             finally: () => {
                 fadeDragging = false
                 if (pointer.inside) {
-                    hoverAudioRegion(capturing.capturePoint(pointer.clientX, pointer.clientY), pointer.clientX)
+                    const target = capturing.capturePoint(pointer.clientX, pointer.clientY)
+                    hoverAudioRegion(target, pointer.clientX)
+                    hoverFadeHandle(target)
                 } else {
                     manager.hoveredAudioRegion.clear()
+                    hoverFadeHandle(null)
                 }
             }
         })
@@ -200,6 +240,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             pointer.inside = true
             const target = capturing.captureEvent(event)
             hoverAudioRegion(target, event.clientX)
+            if (fadeDragging) {return}
+            hoverFadeHandle(target)
             const tooltip = Layers.get(element).textTooltip
             if (TextTooltip.enabled && StudioPreferences.settings.visibility["visible-help-hints"] && target?.type === "track" && target.track.trackBoxAdapter.type === TrackType.Notes
                 && target.track.trackBoxAdapter.regions.collection.length() === 0) {
@@ -211,6 +253,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         Events.subscribe(element, "pointerleave", () => {
             pointer.inside = false
             if (!fadeDragging) {manager.hoveredAudioRegion.clear()}
+            hoverFadeHandle(null)
             Layers.get(element).textTooltip.hide()
         }),
         Events.subscribe(scrollContainer, "scroll", () => {
@@ -382,40 +425,27 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         const isFadeIn = target.part === "fading-in" || target.part === "fading-in-slope"
                         const {duration, fading} = audioRegion
                         const slopeHandle = target.part === "fading-in-slope" || target.part === "fading-out-slope"
-                        if (slopeHandle || event.shiftKey) {
-                            const slopeField = isFadeIn ? fading.inSlopeField : fading.outSlopeField
-                            const originalSlope = slopeField.getValue()
+                        if (slopeHandle) {
                             const startX = event.clientX, startY = event.clientY
-                            if (slopeHandle) {
-                                const fadeLength = (isFadeIn ? fading.in : fading.out) * AudioFadeHandles.scale(fading, duration)
-                                const fadeWidth = Math.abs(range.unitToX(audioRegion.position + fadeLength)
-                                    - range.unitToX(audioRegion.position))
-                                const drag = AudioFadeCurveDrag.create(audioRegion, isFadeIn, fadeWidth, track.size, editing)
-                                return holdFadeHover({
-                                    update: (dragEvent: Dragging.Event) =>
-                                        drag.update(dragEvent.clientX - startX, dragEvent.clientY - startY),
-                                    approve: () => drag.approve(),
-                                    cancel: () => drag.cancel()
-                                } satisfies Dragging.Process)
-                            }
+                            const fadeLength = (isFadeIn ? fading.in : fading.out) * AudioFadeHandles.scale(fading, duration)
+                            const fadeWidth = Math.abs(range.unitToX(audioRegion.position + fadeLength)
+                                - range.unitToX(audioRegion.position))
+                            const drag = AudioFadeCurveDrag.create(audioRegion, isFadeIn, fadeWidth, track.size, editing)
                             return holdFadeHover({
-                                update: (dragEvent: Dragging.Event) => {
-                                    const deltaY = startY - dragEvent.clientY
-                                    const newSlope = clamp(originalSlope + deltaY * 0.01, 0.001, 0.999)
-                                    editing.modify(() => slopeField.setValue(newSlope), false)
-                                },
-                                approve: () => editing.mark(),
-                                cancel: () => editing.modify(() => slopeField.setValue(originalSlope))
-                            } satisfies Dragging.Process)
+                                update: dragEvent => drag.update(
+                                    dragEvent.clientX - startX, dragEvent.clientY - startY, dragEvent.shiftKey),
+                                approve: () => drag.approve(),
+                                cancel: () => drag.cancel()
+                            }, audioRegion, target.part)
                         }
                         const startPointer = range.xToUnit(event.clientX - clientRect.left)
                         const drag = AudioFadeLengthDrag.create(fading, duration, isFadeIn, startPointer, editing)
                         return holdFadeHover({
                             update: (dragEvent: Dragging.Event) =>
-                                drag.update(range.xToUnit(dragEvent.clientX - clientRect.left)),
+                                drag.update(range.xToUnit(dragEvent.clientX - clientRect.left), dragEvent.shiftKey),
                             approve: () => drag.approve(),
                             cancel: () => drag.cancel()
-                        } satisfies Dragging.Process)
+                        }, audioRegion, target.part)
                     }
                     default: {
                         return Unhandled(target)

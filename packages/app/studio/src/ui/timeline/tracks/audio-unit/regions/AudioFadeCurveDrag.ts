@@ -2,9 +2,10 @@ import {Editing} from "@opendaw/lib-std"
 import {AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
 import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
+import {AudioFadeFineMotion} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeFineMotion.ts"
 
 export interface AudioFadeCurveDrag {
-    update(deltaX: number, deltaY: number): void
+    update(deltaX: number, deltaY: number, fine?: boolean): void
     approve(): void
     cancel(): void
 }
@@ -21,16 +22,20 @@ export namespace AudioFadeCurveDrag {
             field.setValue(originalSlope)
             if (stored) {AudioFadeAnchors.store(region.box, anchors)} else {AudioFadeAnchors.clear(region.box)}
         }, mark)
+        const motion = AudioFadeFineMotion.create()
         return {
-            update: (deltaX: number, deltaY: number) => {
-                if (deltaX === 0 && deltaY === 0) {
+            update: (deltaX: number, deltaY: number, fine: boolean = false) => {
+                const moved = motion(AudioFadeHandles.SlopeOnCenterAxis ? 0 : deltaX, deltaY, fine)
+                if (moved.isEmpty()) {return}
+                const offset = moved.unwrap()
+                if (offset.x === 0 && offset.y === 0) {
                     restore(false)
                     return
                 }
                 const point = AudioFadeHandles.curveAfterDrag(originalSlope, originalPosition,
-                    deltaX, deltaY, width, height, fadeIn)
+                    offset.x, offset.y, width, height, fadeIn)
                 editing.modify(() => {
-                    field.setValue(point.slope)
+                    field.setValue(AudioFadeFineMotion.snap(point.slope, fine))
                     if (AudioFadeHandles.SlopeOnCenterAxis) {return}
                     AudioFadeAnchors.store(region.box, fadeIn ? {...anchors, in: point.position} : {...anchors, out: point.position})
                 }, false)
