@@ -629,3 +629,41 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    the body's envelope instead was 20 to 30 dB too loud late in the hit). 909 presets Air 35 %: above 10 kHz now
    within 2 to 4 dB, 5 to 10 kHz still 5 to 10 dB short. While this was built the served wasm was one parameter
    behind the page, so Volume did nothing in the preview (it landed on Velocity); fixed by serving the new build.
+   The Tom was accepted on 2026-11-13 ("all good"), committed e00abd07a.
+6. openDrum Rim. Analysed first (scratchpad rim_measure.py: partials with their swell and decay, level over time,
+   bands): 808 rimshot tones at 476 and 1713 Hz (the upper one rings 33 ms, the lower 168 ms), cut hard after about
+   10 ms (-33 dB at 12 ms), in-between tones at 740, 931, 1263 Hz from overdriving the two together, a bright
+   2 ms attack; 808 claves one tone at 2422 Hz, -0.91 dB/ms; 909 rim tones at 220, 459 (-7 dB), 899 Hz (-23 dB), a
+   broadband attack, the file only 40 ms long. Every tone swells in over 2 to 5 of its own cycles. Engine
+   `crates/opendrum/src/rim.rs` (4 tests), 14 parameters: Tones Tune, Ratio, Balance, High (a third tone at Ratio
+   squared); Shape Ring, Ring Hi, Decay, Punch, Drive; Strike Click, Cut; Play Volume, Velocity, Mode. Fixed: the
+   swell over 3 cycles per tone. Presets: 808 Tune 476, Ratio 3.6, Balance 100 %, Ring 0.17 s, Ring Hi 35 ms, Decay
+   12 ms, Punch 70 %, Drive 12 dB, Cut 300 Hz; 909 Tune 220, Ratio 2.09, Balance 25 %, High 5 %, Ring 90 ms, Ring
+   Hi 0.19 s, Decay 50 ms; claves Tune 2422, Ring 0.1 s, Decay 50 ms. Measured on our renders: tone frequencies,
+   swell times and decays match (808 peaks at 6.2 and 2.6 ms against 6.3 and 2.5), the 808 level curve within 2 dB.
+   Off: the 808's in-between tones are 10 to 15 dB weak, its attack above 3 kHz is darker and our click rings on
+   to 30 ms, the 909 level holds about 5 dB too high around 10 ms. Not judged by ear yet.
+   He: 808 rim and claves fine (claves must not change), the 909 rim off. Damped sinusoid analysis (matrix pencil,
+   scratchpad damped.py, it works here because the tones do not sweep): the 909 rim has a strong third tone at
+   about 1145 Hz (-8 dB early, -2.3 dB/ms), products near 656 and 900 Hz, its attack sits at 1.1 to 2.5 kHz, and
+   its low tone is there from the start. Ours had the third tone at Ratio squared (961 Hz, 5 %), a click at 3 kHz
+   and a low tone swelling in over 13 ms. Now 16 parameters: the third tone has its own ratio (Ratio Hi) and rings
+   half of Ring Hi, the click sits at the third tone's pitch, Swell (cycles) is a parameter (808 rim and claves 3
+   as before, their renders unchanged; 909 1). 909 preset: Tune 220, Ratio 2.08, Balance 60 %, High 30 %, Ratio Hi
+   5.2, Ring 70 ms, Ring Hi 60 ms, Decay 0.11 s, Punch 30 %, Drive 6 dB, Click 18 %, Swell 1, Cut 60 Hz. Bands
+   within about 3 to 6 dB in the first 30 ms, level curve within 3 dB; above 3 kHz ours stays 8 to 20 dB too loud
+   after the first 3 ms (the shared click lasts 6 ms).
+   The preview shows the engine name above every device. He: the 909 rim too shallow, then still off. New general
+   tool, scratchpad specdiff.py: third octaves x short time frames, ours minus reference, and a coordinate fitter
+   on it (rim_fit.py). The waveform itself showed the cause: the first cycles of the 909 rim are hard clipped
+   (flat tops at full scale, a square-like wave with odd harmonics at 1046, 1747, 2475 Hz), relaxing into the
+   separate tones after about 8 ms. So the tones are driven far into the clipper, there is no separate click.
+   909 preset now: Balance 41 %, High 26 %, Ring 60 ms, Ring Hi 46 ms, Decay 0.12 s, Punch -30 %, Drive 24 dB,
+   Click 0, Swell 0.8, Cut 20 Hz. Fine grid: within 0 to 6 dB in the first 4 ms and after 16 ms; from 4 to 16 ms
+   ours stays saturated longer (+8 to +14 dB at 300 to 500 Hz, +10 to +17 dB at 1 to 3 kHz). Engine unchanged,
+   808 rim and claves untouched.
+   He: too dark and a little crunchy. The shared soft drive keeps adding grit while the level falls and rounds the
+   edges. New `Clipper` in common.rs (2x oversampled, blends tanh to a hard clip) and a Rim parameter Hard (17
+   parameters; at 0 the shared drive runs as before, 808 rim and claves render byte identical). Fitted with Hard:
+   909 Balance 100 %, High 62.5 %, Ring 77.5 ms, Ring Hi 40 ms, Decay 0.205 s, Punch -19 %, Drive 12 dB, Hard 40 %,
+   Swell 0.4, Cut 60 Hz, fine grid 3.14 dB (was 4.04).

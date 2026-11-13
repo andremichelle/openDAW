@@ -1,17 +1,25 @@
 component
   display: flex
-  align-items: center
-  column-gap: 1em
+  flex-direction: column
+  row-gap: 0.25em
 
-  > :first-child
-    flex: 1 1 0
-    min-width: 0
+  > .engine
+    opacity: 0.6
 
-  > .reference
-    flex: 0 0 auto
+  > .row
     display: flex
-    flex-direction: column
-    row-gap: 0.5em
+    align-items: center
+    column-gap: 1em
 
-    > audio
-      height: 28px
+    > :first-child
+      flex: 1 1 0
+      min-width: 0
+
+    > .reference
+      flex: 0 0 auto
+      display: flex
+      flex-direction: column
+      row-gap: 0.5em
+
+      > audio
+        height: 28px

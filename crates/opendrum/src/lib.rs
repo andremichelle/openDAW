@@ -6,5 +6,6 @@
 pub mod clap;
 pub mod common;
 pub mod kick;
+pub mod rim;
 pub mod snare;
 pub mod tom;

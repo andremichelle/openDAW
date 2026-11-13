@@ -86,3 +86,31 @@ impl Drive {
         }
     }
 }
+
+/// A symmetric clipper, 2x oversampled, that blends from the soft curve of `Drive` to a hard clip: bright while it
+/// clips and clean as soon as the level falls under the ceiling.
+pub struct Clipper {
+    oversampler: ResamplerMono,
+    oversampled: [f32; RENDER_QUANTUM * 2]
+}
+
+impl Default for Clipper {
+    fn default() -> Self {Self::new()}
+}
+
+impl Clipper {
+    pub fn new() -> Self {Self {oversampler: ResamplerMono::new(2), oversampled: [0.0; RENDER_QUANTUM * 2]}}
+
+    /// `input` holds at least `output.len()` samples, at most one render quantum. `drive` in dB, `hard` 0 to 1.
+    pub fn process(&mut self, drive: f32, hard: f32, input: &[f32], output: &mut [f32]) {
+        let frames = output.len();
+        let gain = libm::powf(10.0, drive / 20.0);
+        self.oversampler.upsample(input, &mut self.oversampled, 0, frames);
+        for value in self.oversampled[..frames * 2].iter_mut() {
+            let driven = *value * gain;
+            let soft = libm::tanhf(driven);
+            *value = soft + (driven.clamp(-1.0, 1.0) - soft) * hard;
+        }
+        self.oversampler.downsample(&self.oversampled, output, 0, frames);
+    }
+}

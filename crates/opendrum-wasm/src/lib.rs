@@ -8,12 +8,14 @@ use opendrum::kick::{Kick, KickParams, Play};
 use opendrum::snare::{Snare, SnareParams};
 use opendrum::clap::{Clap, ClapParams};
 use opendrum::tom::{Tom, TomParams};
+use opendrum::rim::{Rim, RimParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
 pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
 pub const TOM_PARAMS: usize = 20;
+pub const RIM_PARAMS: usize = 17;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -120,4 +122,25 @@ pub extern "C" fn render_tom(params: *const f32, velocity: f32, sample_rate: f32
     let mut tom = Tom::new(sample_rate);
     tom.note_on(0, velocity, 0.0, &params);
     tom.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn rim_param_count() -> usize {RIM_PARAMS}
+
+/// Params: tune, ratio, balance, high, high ratio, ring, ring high, decay, punch, drive, hard, click, swell,
+/// cut,
+/// volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, RIM_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = RimParams {
+        tune: values[0], ratio: values[1], balance: values[2], high: values[3], high_ratio: values[4],
+        ring: values[5], ring_high: values[6], decay: values[7], punch: values[8], drive: values[9], hard: values[10],
+        click: values[11], swell: values[12], cut: values[13], volume: values[14], velocity: values[15],
+        play: play_of(values[16])
+    };
+    let mut rim = Rim::new(sample_rate);
+    rim.note_on(0, velocity, 0.0, &params);
+    rim.process(&params, output);
 }
