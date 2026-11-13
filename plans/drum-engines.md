@@ -590,3 +590,42 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    (414). Presets: 808 Tone 1055 Hz, Reso 100 %, Last 0.71, Attack 0.75 ms, Decay 19 ms, Snap 60 %, Room -1.25 dB
    0.41 s, Tail 50 %; 909 Tone 865 Hz, Reso 36 %, Last 0.885, Decay 25.5 ms, Snap 0, Room -3.25 dB 0.72 s, Tail 0.
    Open: the highs above 6 kHz per burst fit worse than before (6.5 and 5.2 dB), the 808's top 10 % too bright.
+   The Clap was accepted on 2026-11-13 ("close enough"), committed 86a8868b7, next-release merged in.
+5. openDrum Tom, then Rim, Hats and the rest (his order 2026-11-13: engines first, devices later). Tom engine built
+   2026-11-13 (`crates/opendrum/src/tom.rs`, 5 tests, 18 parameters: Body Tune, Pitch, Sweep, Decay, Punch, Shape,
+   Sub, Ratio; Strike Click, Tone, Drive; Noise Level, Decay, Color; Play Volume, Velocity, Mode, Glide). Measured
+   (scratchpad tom_measure.py): 808 toms one sine with a 2 % fall, -60 dB after about 650 ms (low) and 330 ms
+   (high), a dark noise layer; 909 toms fall 4 to 6 semitones in 20 to 50 ms, harmonics 2 to 5 at -20, -14, -30,
+   -28 dB (Shape 1 is exactly that), mid and high toms carry a second oscillator at 0.61 to 0.69 of the main one,
+   7 to 10 dB down (Sub, Ratio), attack noise above 2 kHz at about -25 dB. Presets set from the numbers: 808 LT50
+   Tune 88, Pitch 0.4, Sweep 50 ms, Decay 0.62, Noise -30 dB 0.7 s Color 20 %; 909 LT3D3 Tune 81, Pitch 6.5, Sweep
+   20 ms, Decay 0.65, Shape 100 %, Noise -26 dB 80 ms Color 80 %; 909 HT3D3 Tune 119, Pitch 4.3, Sweep 35 ms, Decay
+   0.46, Shape 100 %, Sub 35 %, Ratio 0.69. Pitch track, partials and levels within 1 to 3 dB of the references.
+   Not judged by ear yet.
+   He: the 808 not too far, the 909 not even close, build the tools. Published sources give only the outline (three
+   VCOs per tom, one hobbyist ratio 1 : 1.5 : 2.77, a board revision enlarging the tom noise). New tool, scratchpad
+   osc_fit.py: analysis by synthesis, up to 3 oscillators on one shared two-stage pitch fall, 5 harmonics each, every
+   partial free over time (ridge regularised, partials grouped by frequency), the residual per band as the noise.
+   Result, the same for LT3D3, MT3D3, HT3D3: pitch starts 6 to 6.4 st high, 4.2 to 4.8 st fall in 22 to 25 ms plus
+   2.1 to 2.5 st over 80 to 200 ms; the main body; a lower body at 0.60 to 0.69, 10 to 14 dB down and as long (the
+   low tom has it too); an upper body at 1.72 to 1.85, as loud as the main one at the start (-2 dB), -10 dB at
+   20 ms, gone by 80 ms, rich in harmonics; the main body's harmonics 2, 3, 5 at -10, -9, -11 dB in the attack
+   settling to -22, -14, -30; noise strongest at 0.3 to 2.5 kHz for about 60 ms. The first engine had none of the
+   upper body, the drift, the attack edge. Rebuilt, 19 parameters: Body Tune, Pitch, Sweep, Drift (falls 4x slower
+   than Sweep), Decay, Punch, Shape (plus a fixed attack edge for 60 ms), Drive; Layers Sub, Ratio, Top (ratio fixed
+   1.78, own fixed harmonics), Length; Noise Level, Decay, Color; Play as before. Click and Tone are gone. Presets
+   from the analysis: 909 low Tune 74.4, Pitch 4.8, Sweep 24.6 ms, Drift 2.1, Decay 0.7, Shape 100 %, Sub 30 %,
+   Ratio 0.67, Top 80 %, Length 0.2 s, Noise -16 dB 0.18 s Color 40 %; 909 high Tune 113.1, Pitch 4.3, Sweep 25.4 ms,
+   Drift 2.2, Decay 0.5, Sub 25 %, Ratio 0.69, Top 70 %. The same tool on our renders: pitch curves equal, partials
+   within 1 to 5 dB over time. Still off: the level falls 2 to 4 dB faster in the first 100 ms.
+   He: much better, the 909 reference a bit brighter. A first band comparison without a window misled (the strong
+   low tone leaked into every band); with a Hann window (scratchpad bright.py, 8 bands x 4 time windows) and a grid
+   search over the noise (tom_noise_grid.py): the noise band now runs from half its centre to 3x the centre with a
+   gentle top (Q 0.5). 909 low Noise -16 dB 0.25 s Color 30 % (mean error 2.75 dB), 909 high -30 dB 0.25 s Color
+   50 % (1.86 dB), 808 low -34 dB 0.7 s Color 0 (4.98 dB). Left: all references carry 8 to 19 dB more above 10 kHz
+   (about -50 dB re the hit, following the body), the 808 has 11 to 18 dB more at 150 to 600 Hz late in the hit (its
+   dark layer is narrower than our band).
+   He: could still be brighter. Noise got Air (20 parameters): noise above 3.5 kHz on the noise envelope (following
+   the body's envelope instead was 20 to 30 dB too loud late in the hit). 909 presets Air 35 %: above 10 kHz now
+   within 2 to 4 dB, 5 to 10 kHz still 5 to 10 dB short. While this was built the served wasm was one parameter
+   behind the page, so Volume did nothing in the preview (it landed on Velocity); fixed by serving the new build.

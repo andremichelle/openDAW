@@ -116,6 +116,46 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         return {name, color: Colors.green, groups, refresh, reference, poly: () => snare.play === 1,
             render: () => renderer.map(loaded => loaded.renderSnare(snare))}
     }
+    const tomDevice = (name: string, tom: OpenDrumSynth.Tom, reference: string): Device => {
+        const refresh = lifecycle.own(new Notifier<void>())
+        const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
+                       key: keyof OpenDrumSynth.Tom): OpenDrumControls.Field =>
+            ({name, get: () => tom[key], set: value => tom[key] = value, range: {min, max, step, format}})
+        const choice = (name: string, choices: ReadonlyArray<string>, key: keyof OpenDrumSynth.Tom): OpenDrumControls.Field =>
+            ({name, get: () => tom[key], set: value => tom[key] = value, choices})
+        const groups: ReadonlyArray<HTMLElement> = [
+            group(lifecycle, refresh, "orange", "Body", 2, [
+                field("Tune", 40, 800, 0.5, Formats.fixed(1, "Hz"), "tune"),
+                field("Pitch", 0, 24, 0.1, Formats.fixed(1, "st"), "pitch"),
+                field("Sweep", 0.001, 0.2, 0.001, Formats.seconds, "sweep"),
+                field("Drift", 0, 12, 0.1, Formats.fixed(1, "st"), "drift"),
+                field("Decay", 0.02, 3, 0.01, Formats.seconds, "decay"),
+                field("Punch", -1, 1, 0.01, Formats.percent, "punch"),
+                field("Shape", 0, 1, 0.01, Formats.percent, "shape"),
+                field("Drive", 0, 36, 0.5, Formats.decibel, "drive")
+            ]),
+            group(lifecycle, refresh, "yellow", "Layers", 1, [
+                field("Sub", 0, 1, 0.01, Formats.percent, "sub"),
+                field("Ratio", 0.5, 1, 0.01, Formats.fixed(2, ""), "ratio"),
+                field("Top", 0, 1, 0.01, Formats.percent, "top"),
+                field("Length", 0.02, 1, 0.01, Formats.seconds, "length")
+            ]),
+            group(lifecycle, refresh, "green", "Noise", 1, [
+                field("Level", -48, 0, 0.5, Formats.decibel, "noise"),
+                field("Decay", 0.02, 3, 0.01, Formats.seconds, "noiseDecay"),
+                field("Color", 0, 1, 0.01, Formats.percent, "color"),
+                field("Air", 0, 1, 0.01, Formats.percent, "air")
+            ]),
+            group(lifecycle, refresh, "cream", "Play", 1, [
+                field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
+                field("Velocity", 0, 1, 0.01, Formats.percent, "velocity"),
+                choice("Mode", PlayModes, "play"),
+                field("Glide", 0, 1, 0.005, Formats.seconds, "glide")
+            ])
+        ]
+        return {name, color: Colors.blue, groups, refresh, reference, poly: () => tom.play === 1,
+            render: () => renderer.map(loaded => loaded.renderTom(tom))}
+    }
     const clapDevice = (name: string, clap: OpenDrumSynth.Clap, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
         const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
@@ -158,6 +198,21 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
     let status: string = "loading the engine"
     // newest engine on top
     const devices: ReadonlyArray<Device> = [
+        // set from the measured pitch fall, decay, harmonics and noise of the references (2026-11-13)
+        tomDevice("Tom (808 low)", {
+            tune: 88, pitch: 0.4, sweep: 0.05, drift: 0, decay: 0.62, punch: 0, shape: 0, drive: 0, sub: 0, ratio: 0.67,
+            top: 0, length: 0.2, noise: -34, noiseDecay: 0.7, color: 0, air: 0, volume: 0, velocity: 0.5, play: 0, glide: 0
+        }, "TR808WAV/LT/LT50.WAV"),
+        tomDevice("Tom (909 low)", {
+            tune: 74.4, pitch: 4.8, sweep: 0.0246, drift: 2.1, decay: 0.7, punch: 0, shape: 1, drive: 0, sub: 0.3,
+            ratio: 0.67, top: 0.8, length: 0.2, noise: -16, noiseDecay: 0.25, color: 0.3, air: 0.35, volume: -2, velocity: 0.5,
+            play: 0, glide: 0
+        }, "Roland TR-909/LT3D3.WAV"),
+        tomDevice("Tom (909 high)", {
+            tune: 113.1, pitch: 4.3, sweep: 0.0254, drift: 2.2, decay: 0.5, punch: 0, shape: 1, drive: 0, sub: 0.25,
+            ratio: 0.69, top: 0.7, length: 0.2, noise: -30, noiseDecay: 0.25, color: 0.5, air: 0.35, volume: -2, velocity: 0.5,
+            play: 0, glide: 0
+        }, "Roland TR-909/HT3D3.WAV"),
         // fitted to CP and HANDCLP1: band and high envelopes, spectra of bursts and room (scratchpad clap_fit2.py)
         clapDevice("Clap (808)", {
             hands: 4, gap: 0.0115, last: 0.71, spread: 0, attack: 0.00075, decay: 0.019, snap: 0.6, drive: 0,

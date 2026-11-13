@@ -31,6 +31,12 @@ export namespace OpenDrumSynth {
         room: number, roomDecay: number, tail: number
         volume: number, velocity: number, play: number
     }
+    export type Tom = {
+        tune: number, pitch: number, sweep: number, drift: number, decay: number, punch: number, shape: number
+        drive: number, sub: number, ratio: number, top: number, length: number
+        noise: number, noiseDecay: number, color: number, air: number
+        volume: number, velocity: number, play: number, glide: number
+    }
     type Contour = {
         readonly pitch: number, readonly sweep: number, readonly drift: number, readonly decay: number
         readonly punch: number, readonly velocity: number
@@ -45,6 +51,7 @@ export namespace OpenDrumSynth {
         renderKick(kick: Kick, bpm: number): Hit
         renderSnare(snare: Snare): Hit
         renderClap(clap: Clap): Hit
+        renderTom(tom: Tom): Hit
     }
 
     type Exports = {
@@ -53,14 +60,17 @@ export namespace OpenDrumSynth {
         kick_param_count(): int
         snare_param_count(): int
         clap_param_count(): int
+        tom_param_count(): int
         render_kick(params: int, velocity: number, bpm: number, sampleRate: number, output: int, frames: int): void
         render_snare(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_clap(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
+        render_tom(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
     }
 
     const isExports = (value: WebAssembly.Exports): value is WebAssembly.Exports & Exports =>
         value.memory instanceof WebAssembly.Memory && typeof value.render_kick === "function"
         && typeof value.render_snare === "function" && typeof value.render_clap === "function"
+        && typeof value.render_tom === "function"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
     const curves = (kick: Contour, frames: int): Pick<Hit, "envelope" | "pitch" | "softPitch"> => {
@@ -90,7 +100,8 @@ export namespace OpenDrumSynth {
         const {instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {})
         const exports = instance.exports
         if (!isExports(exports)) {return Promise.reject(new Error(`${ModuleUrl} has unexpected exports`))}
-        const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count())
+        const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count(),
+            exports.tom_param_count())
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
         const output = exports.alloc_floats(frames)
@@ -119,6 +130,14 @@ export namespace OpenDrumSynth {
                 new Float32Array(exports.memory.buffer, params, values.length).set(values)
                 exports.render_snare(params, 1.0, SampleRate, output, frames)
                 return collect({...snare, drift: 0})
+            },
+            renderTom: (tom: Tom): Hit => {
+                const values = [tom.tune, tom.pitch, tom.sweep, tom.drift, tom.decay, tom.punch, tom.shape, tom.sub,
+                    tom.ratio, tom.top, tom.length, tom.drive, tom.noise, tom.noiseDecay, tom.color, tom.air,
+                    tom.volume, tom.velocity, tom.play, tom.glide]
+                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                exports.render_tom(params, 1.0, SampleRate, output, frames)
+                return collect(tom)
             },
             renderClap: (clap: Clap): Hit => {
                 const values = [clap.hands, clap.gap, clap.last, clap.spread, clap.attack, clap.decay, clap.snap,

@@ -15,7 +15,7 @@ export const TestingPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         <h1>Testing</h1>
         <section>
             <h2>openDrum</h2>
-            <p>openDrum Clap, Snare and Kick, played by the real engines, each next to the 808 or 909 reference it is
+            <p>openDrum Tom, Clap, Snare and Kick, played by the real engines, each next to the 808 or 909 reference it is
                 fitted to. Drag a value up or down, click the display to hear the hit.</p>
             <OpenDrumPreview lifecycle={lifecycle} audioContext={service.audioContext}/>
         </section>

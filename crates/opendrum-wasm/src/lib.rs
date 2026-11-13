@@ -7,11 +7,13 @@ use alloc::vec::Vec;
 use opendrum::kick::{Kick, KickParams, Play};
 use opendrum::snare::{Snare, SnareParams};
 use opendrum::clap::{Clap, ClapParams};
+use opendrum::tom::{Tom, TomParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
 pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
+pub const TOM_PARAMS: usize = 20;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -98,4 +100,24 @@ pub extern "C" fn render_clap(params: *const f32, velocity: f32, sample_rate: f3
     let mut clap = Clap::new(sample_rate);
     clap.note_on(0, velocity, 0.0, &params);
     clap.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn tom_param_count() -> usize {TOM_PARAMS}
+
+/// Params: tune, pitch, sweep, drift, decay, punch, shape, sub, ratio, top, length, drive, noise (dB), noise decay,
+/// color, air, volume (dB), velocity, play (0 mono, 1 poly, 2 gate), glide (seconds).
+#[no_mangle]
+pub extern "C" fn render_tom(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, TOM_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = TomParams {
+        tune: values[0], pitch: values[1], sweep: values[2], drift: values[3], decay: values[4], punch: values[5],
+        shape: values[6], sub: values[7], ratio: values[8], top: values[9], length: values[10], drive: values[11],
+        noise: values[12], noise_decay: values[13], color: values[14], air: values[15], volume: values[16],
+        velocity: values[17], play: play_of(values[18]), glide: values[19]
+    };
+    let mut tom = Tom::new(sample_rate);
+    tom.note_on(0, velocity, 0.0, &params);
+    tom.process(&params, output);
 }
