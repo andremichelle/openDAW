@@ -117,6 +117,34 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         return {name, engine: "Snare", color: Colors.green, groups, refresh, reference, poly: () => snare.play === 1,
             render: () => renderer.map(loaded => loaded.renderSnare(snare))}
     }
+    const hatDevice = (name: string, hat: OpenDrumSynth.Hat, reference: string): Device => {
+        const refresh = lifecycle.own(new Notifier<void>())
+        const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
+                       key: keyof OpenDrumSynth.Hat): OpenDrumControls.Field =>
+            ({name, get: () => hat[key], set: value => hat[key] = value, range: {min, max, step, format}})
+        const choice = (name: string, choices: ReadonlyArray<string>, key: keyof OpenDrumSynth.Hat): OpenDrumControls.Field =>
+            ({name, get: () => hat[key], set: value => hat[key] = value, choices})
+        const groups: ReadonlyArray<HTMLElement> = [
+            group(lifecycle, refresh, "orange", "Source", 1, [
+                field("Tune", 0.25, 4, 0.01, Formats.fixed(2, ""), "tune"),
+                field("Noise", 0, 1, 0.01, Formats.percent, "noise")
+            ]),
+            group(lifecycle, refresh, "yellow", "Filter", 1, [
+                field("Color", 200, 16000, 50, Formats.hertz, "color")
+            ]),
+            group(lifecycle, refresh, "green", "Shape", 1, [
+                field("Hold", 0, 0.5, 0.005, Formats.seconds, "hold"),
+                field("Decay", 0.005, 4, 0.005, Formats.seconds, "decay")
+            ]),
+            group(lifecycle, refresh, "cream", "Play", 1, [
+                field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
+                field("Velocity", 0, 1, 0.01, Formats.percent, "velocity"),
+                choice("Mode", PlayModes, "play")
+            ])
+        ]
+        return {name, engine: "Hat", color: Colors.cream, groups, refresh, reference, poly: () => hat.play === 1,
+            render: () => renderer.map(loaded => loaded.renderHat(hat))}
+    }
     const rimDevice = (name: string, rim: OpenDrumSynth.Rim, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
         const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
@@ -129,20 +157,22 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 field("Tune", 100, 4000, 1, Formats.hertz, "tune"),
                 field("Ratio", 1, 5, 0.01, Formats.fixed(2, ""), "ratio"),
                 field("Balance", 0, 1, 0.01, Formats.percent, "balance"),
-                field("High", 0, 1, 0.01, Formats.percent, "high"),
-                field("Ratio Hi", 1, 12, 0.01, Formats.fixed(2, ""), "highRatio")
+                field("Ring", 0.005, 1, 0.005, Formats.seconds, "ring")
             ]),
-            group(lifecycle, refresh, "yellow", "Shape", 1, [
-                field("Ring", 0.005, 1, 0.005, Formats.seconds, "ring"),
-                field("Ring Hi", 0.005, 1, 0.005, Formats.seconds, "ringHigh"),
+            group(lifecycle, refresh, "yellow", "High", 1, [
+                field("Level", 0, 1, 0.01, Formats.percent, "high"),
+                field("Ratio", 1, 12, 0.01, Formats.fixed(2, ""), "highRatio"),
+                field("Ring", 0.005, 1, 0.005, Formats.seconds, "ringHigh"),
+                field("Swell", 0, 8, 0.1, Formats.fixed(1, ""), "swell")
+            ]),
+            group(lifecycle, refresh, "green", "Shape", 1, [
                 field("Decay", 0.002, 0.5, 0.001, Formats.seconds, "decay"),
                 field("Punch", -1, 1, 0.01, Formats.percent, "punch"),
                 field("Drive", 0, 36, 0.5, Formats.decibel, "drive"),
                 field("Hard", 0, 1, 0.01, Formats.percent, "hard")
             ]),
-            group(lifecycle, refresh, "green", "Strike", 1, [
+            group(lifecycle, refresh, "purple", "Strike", 1, [
                 field("Click", 0, 1, 0.01, Formats.percent, "click"),
-                field("Swell", 0, 8, 0.1, Formats.fixed(1, ""), "swell"),
                 field("Cut", 20, 4000, 10, Formats.hertz, "cut")
             ]),
             group(lifecycle, refresh, "cream", "Play", 1, [
@@ -236,6 +266,13 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
     let status: string = "loading the engine"
     // newest engine on top
     const devices: ReadonlyArray<Device> = [
+        // set from the measured spectrum and decays of the 808 hats (2026-11-13)
+        hatDevice("Hat (808 closed)", {
+            tune: 1, noise: 0, color: 6300, hold: 0, decay: 0.13, volume: 0, velocity: 0.5, play: 0
+        }, "TR808WAV/CH/CH.WAV"),
+        hatDevice("Hat (808 open)", {
+            tune: 1, noise: 0, color: 6200, hold: 0.03, decay: 0.15, volume: 0, velocity: 0.5, play: 0
+        }, "TR808WAV/OH/OH00.WAV"),
         // set from the measured tones, envelope and bands of the references (2026-11-13)
         rimDevice("Rim (808)", {
             tune: 476, ratio: 3.6, balance: 1, high: 0, highRatio: 6.3, ring: 0.17, ringHigh: 0.035, decay: 0.012,
@@ -377,8 +414,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 context.setLineDash(dash.map(value => value * devicePixelRatio))
                 context.beginPath()
                 for (let x = 0; x < width; x++) {
-                    const index = Math.floor(x / width * frames)
-                    if (index >= values.length) {break}
+                    const index = Math.min(Math.floor(x / width * frames), values.length - 1)
                     const y = middle - values[index] * scale * (middle - devicePixelRatio)
                     if (x === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
                 }

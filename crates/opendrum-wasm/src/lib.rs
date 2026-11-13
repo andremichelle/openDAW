@@ -9,6 +9,7 @@ use opendrum::snare::{Snare, SnareParams};
 use opendrum::clap::{Clap, ClapParams};
 use opendrum::tom::{Tom, TomParams};
 use opendrum::rim::{Rim, RimParams};
+use opendrum::hat::{Hat, HatParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
@@ -16,6 +17,7 @@ pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
 pub const TOM_PARAMS: usize = 20;
 pub const RIM_PARAMS: usize = 17;
+pub const HAT_PARAMS: usize = 8;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -143,4 +145,21 @@ pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32
     let mut rim = Rim::new(sample_rate);
     rim.note_on(0, velocity, 0.0, &params);
     rim.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn hat_param_count() -> usize {HAT_PARAMS}
+
+/// Params: tune, noise, color, hold, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_hat(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, HAT_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = HatParams {
+        tune: values[0], noise: values[1], color: values[2], hold: values[3], decay: values[4], volume: values[5],
+        velocity: values[6], play: play_of(values[7])
+    };
+    let mut hat = Hat::new(sample_rate);
+    hat.note_on(0, velocity, 0.0, &params);
+    hat.process(&params, output);
 }

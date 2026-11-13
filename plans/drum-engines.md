@@ -667,3 +667,24 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    parameters; at 0 the shared drive runs as before, 808 rim and claves render byte identical). Fitted with Hard:
    909 Balance 100 %, High 62.5 %, Ring 77.5 ms, Ring Hi 40 ms, Decay 0.205 s, Punch -19 %, Drive 12 dB, Hard 40 %,
    Swell 0.4, Cut 60 Hz, fine grid 3.14 dB (was 4.04).
+   The Rim was committed b5ebbdd61 on his "commit. next".
+7. openDrum Hat, 808 only (his decision 2026-11-13: "leave the 909 hats", they are recordings of a real cymbal).
+   Measured (scratchpad hat_measure.py): a dense cluster of lines at 5.8 to 8.5 kHz, almost everything above 5 kHz
+   (peak 6.4 to 12.8 kHz, about 23 dB/oct below), the closed hat -18 dB at 40 ms and -40 at 80, its top above
+   10 kHz fading fastest, the open hat holding about 30 ms, then fading (short at Decay 0, -9 dB at 300 ms at
+   Decay 75), its top darker than the closed one. Engine `crates/opendrum/src/hat.rs` (4 tests), 10 parameters:
+   Source Tune, Noise; Filter Color (4-pole high-pass), Top (low-pass); Decay Closed, Open, Pedal (runs the length
+   from Closed to Open and adds up to 30 ms of hold); Play Volume, Velocity, Mode. Six polyBLEP squares at 205.3,
+   304.4, 369.6, 522.7, 540, 800 Hz (the published 808 values) scaled by Tune; a new hit chokes the ringing one in
+   Mono. Presets: closed Color 6300 Hz, Top 18 kHz, Closed 0.13 s (fine grid 3.84 dB); open (OH00) Color 6200 Hz,
+   Top 11 kHz, Open 0.15 s, Pedal 100 %. The line cluster of this unit's samples sits at slightly other
+   frequencies than the published oscillator values give. Not judged by ear yet.
+   He: just a hold and a decay. Closed, Open and Pedal became Shape Hold and Decay (9 parameters): closed Hold 0,
+   Decay 0.13 s; open Hold 30 ms, Decay 0.15 s. The renders are the same as before.
+   Top is gone too (it did little above 12 kHz and silenced the hat below Color): the low-pass is fixed at 14 kHz,
+   8 parameters: Source Tune, Noise; Filter Color; Shape Hold, Decay; Play Volume, Velocity, Mode.
+   Noise clipped (plain noise was 7x louder than the squares behind the filters): it now crossfades at equal
+   power with the noise matched in level (x0.14).
+   The Rim's preview columns had grown to 5 and 6 fields; regrouped to at most 4: Tones Tune, Ratio, Balance,
+   Ring; High Level, Ratio, Ring, Swell; Shape Decay, Punch, Drive, Hard; Strike Click, Cut; Play. Rule for the
+   coming engines: at most 4 fields a column.
