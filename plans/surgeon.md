@@ -2,7 +2,8 @@
 
 Status 2026-11-13: design settled in listening rounds with André, editor layout drawn and accepted as an
 arrangement. Lab crate `crates/surgeon-lab` built. Engine core `crates/stock-devices/device-surgeon` built and
-checked against the lab (uncommitted). No device ABI wrapper, no box, no editor, no preview on `/testing`.
+checked against the lab. Editor draft on `/testing` built (uncommitted, not yet seen in a browser). No device ABI
+wrapper, no box, no real editor.
 
 Branch: `surgeon`, in its own checkout `../openDAW-surgeon` (a git worktree, created 2026-11-13 from
 `9fee779f6`). Committed, not pushed. The main checkout holds other work and must stay free of these files.
@@ -296,10 +297,13 @@ Checked against the lab (`tests/parity.rs`, 14 tests, `cargo test -p device-surg
 6. Bar switching, Off, firing the active slot again, stop, start on and inside a step, locate, block size,
    determinism, all random patterns finite and bounded.
 
+Rate: a pattern has a rate (eighth, sixteenth, thirty-second) shared by the pitch loop and the lanes. Bars are
+counted in pulses, so patterns of different rates switch on the same bar lines. `select` switches a slot at once,
+for a stopped transport.
+
 Open in the engine:
-1. Rate: only sixteenths so far.
-2. Tune and Volume changes are not smoothed.
-3. The device ABI wrapper: parameter binding, automation of every value, the pattern data and the fired slot
+1. Tune and Volume changes are not smoothed.
+2. The device ABI wrapper: parameter binding, automation of every value, the pattern data and the fired slot
    coming from the box.
 
 ## Parts
@@ -314,8 +318,12 @@ Open in the engine:
 ## Phases
 
 1. ~~Lab: prototype voice, generated loops, lanes, mapping, patterns, listening rounds.~~
-2. Editor layout and design. Layout drawn (`plans/surgeon-editor.svg`). A preview on `/testing` only when
-   André asks for it.
+2. Editor layout and design. Layout drawn (`plans/surgeon-editor.svg`). Draft on `/testing`:
+   `packages/app/studio/src/ui/pages/testing/SurgeonPreview.tsx`, every control works on a TypeScript model of the
+   loops (`surgeon/SurgeonModel.ts`, tested against values printed by the engine), the display follows a preview
+   clock. It sits in the `PreviewDevicePanel` frame copied from the `opendrum` branch. Sound: the real engine
+   core as `crates/surgeon-wasm` (`surgeon_wasm.wasm`, built by `build-wasm.sh`) inside an audio worklet
+   (`surgeon/SurgeonWorklet.js`, `surgeon/SurgeonAudio.ts`), which also reports the position the display follows.
 3. ~~Engine core, checked against the lab.~~
 4. Box, adapter, device ABI wrapper, real editor. Browser checkpoint.
 5. Presets: patterns, and the chain with Delay and Dattorro Reverb.
@@ -324,5 +332,6 @@ Open in the engine:
 ## Open
 
 1. How the 110 values are shown in the editor.
-2. Rate: which step lengths besides sixteenths.
+2. Merge note: this branch adds `surgeon-wasm` to the members in `crates/Cargo.toml` and to `build-wasm.sh`, the
+   `opendrum` branch edits the same lines for `opendrum-wasm`.
 

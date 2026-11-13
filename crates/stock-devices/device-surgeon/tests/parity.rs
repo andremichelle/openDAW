@@ -272,6 +272,45 @@ fn every_random_pattern_stays_finite_and_bounded() {
     }
 }
 
+// counts the note starts in a signal by its level rising through a threshold
+fn onsets(signal: &[f32]) -> usize {
+    let window = 96;
+    let levels: Vec<f32> = signal.chunks(window).map(rms).collect();
+    let peak = levels.iter().fold(0.0f32, |max, level| max.max(*level));
+    let mut above = false;
+    let mut count = 0;
+    for level in levels {
+        if !above && level > peak * 0.3 {
+            above = true;
+            count += 1;
+        } else if above && level < peak * 0.1 {
+            above = false;
+        }
+    }
+    count
+}
+
+#[test]
+fn the_rate_sets_how_many_steps_a_bar_has() {
+    let mut pattern = Pattern::new(PitchLoop {steps: 5, seed: 9, mutate: 0.0, range: 0.0, density: 1.0, tie: 0.0, accent: 0.0}, [Lane::default(); 4]);
+    pattern.set(Param::Length, 0.0).set(Param::Feedback, 0.0).set(Param::Strike, 0.0).set(Param::Depth, 0.0);
+    for (rate, expected) in [(0, 16), (1, 32), (2, 64)] {
+        pattern.rate = rate;
+        let mut engine = engine_with(&[pattern]);
+        let output = play(&mut engine, 0.0, bar_frames() * 2, MAX_FRAMES, true, false);
+        let count = onsets(&output);
+        assert!((count as i32 - expected).abs() <= 1, "rate {rate}: {count} note starts in two bars, expected {expected}");
+    }
+}
+
+#[test]
+fn a_selected_slot_takes_over_at_once() {
+    let mut engine = engine_with(&[favourite(), favourite()]);
+    engine.fire(Slot::Off);
+    engine.select(Slot::Pattern(1));
+    assert_eq!((engine.active(), engine.fired()), (Slot::Pattern(1), None));
+}
+
 #[test]
 fn positions_before_zero_are_silent() {
     let mut engine = engine_with(&[favourite()]);

@@ -882,6 +882,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "surgeon-wasm"
+version = "0.0.0"
+dependencies = [
+ "device-surgeon",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"

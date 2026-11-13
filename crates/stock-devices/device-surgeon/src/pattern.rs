@@ -4,6 +4,9 @@ use crate::voice::{FoldPlace, Patch, Wave};
 
 pub const LANES: usize = 4;
 pub const MAX_STEPS: u32 = 32;
+/// Pulses per step for an eighth, a sixteenth and a thirty-second.
+pub const RATE_PULSES: [f64; 3] = [480.0, 240.0, 120.0];
+pub const SIXTEENTH: u32 = 1;
 
 const HOLD_RELEASE: f32 = 0.1;
 const SHORTEST: f32 = 0.05;
@@ -84,6 +87,8 @@ pub struct Note {
 /// both in the parameter's 0 to 1 position.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Pattern {
+    /// Step length as an index into `RATE_PULSES`, shared by the pitch loop and the lanes.
+    pub rate: u32,
     pub pitch: PitchLoop,
     pub lanes: [Lane; LANES],
     pub base: [f32; PARAMS],
@@ -92,7 +97,7 @@ pub struct Pattern {
 
 impl Pattern {
     pub fn new(pitch: PitchLoop, lanes: [Lane; LANES]) -> Self {
-        let mut pattern = Self {pitch, lanes, base: [0.0; PARAMS], amounts: [[0.0; LANES]; PARAMS]};
+        let mut pattern = Self {rate: SIXTEENTH, pitch, lanes, base: [0.0; PARAMS], amounts: [[0.0; LANES]; PARAMS]};
         pattern.set(Param::Ratio1, 2.41).set(Param::Feedback, 0.25).set(Param::Ratio2, 5.19).set(Param::Depth, 0.6)
             .set(Param::Strike, 4.0).set(Param::StrikeDecay, 0.14).set(Param::Length, 0.7).set(Param::Glide, 0.04)
             .set(Param::Velocity, 0.7);
@@ -153,6 +158,8 @@ impl Pattern {
         let added: f32 = (0..LANES).map(|lane| self.amounts[param as usize][lane] * self.lanes[lane].value(position)).sum();
         (self.base[param as usize] + added).clamp(0.0, 1.0)
     }
+
+    pub fn step_pulses(&self) -> f64 {RATE_PULSES[(self.rate as usize).min(RATE_PULSES.len() - 1)]}
 
     pub fn patch(&self, position: u32) -> Patch {
         let lanes = self.lanes.map(|lane| lane.value(position));

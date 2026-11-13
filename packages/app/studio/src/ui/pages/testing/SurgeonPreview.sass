@@ -1,0 +1,201 @@
+@use "@/mixins"
+@use "@/ui/devices/instruments/SamplerDeviceEditor/shared"
+
+$tile: 22px
+$column: 45px
+
+@keyframes surgeon-waiting
+  from
+    opacity: 1
+  to
+    opacity: 0.25
+
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+
+  div.transport
+    display: flex
+    align-items: center
+    column-gap: 1em
+    font-size: 11px
+    color: var(--color-dark)
+
+  div.button
+    display: flex
+    align-items: center
+    justify-content: center
+    align-self: center
+    height: 18px
+    margin: 0 2px
+    border-radius: 9px
+    font-size: 9px
+    cursor: pointer
+    color: rgba(white, 0.6)
+    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &:hover
+      color: rgba(white, 0.9)
+      background-color: color-mix(in srgb, var(--color) 18%, transparent)
+
+    &.play
+      --color: var(--color-green)
+      width: 64px
+      margin: 0
+
+  div.surgeon
+    --color: var(--color-green)
+    display: grid
+    grid-template-columns: 94px 180px $tile auto
+    grid-template-rows: 172px
+    column-gap: 1em
+    align-content: start
+    @include mixins.Control
+
+  // borrowed from TubularDeviceEditor (tab tiles)
+  div.tile, div.tab
+    display: flex
+    align-items: center
+    justify-content: center
+    height: $tile
+    border-radius: 11px
+    font-size: 10px
+    line-height: 1
+    cursor: pointer
+    color: rgba(white, 0.6)
+    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &.active, &.selected
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+    &.fired
+      animation: surgeon-waiting 0.22s linear infinite alternate
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+  div.tile.off
+    grid-column: 1 / -1
+    --color: var(--color-shadow)
+
+  nav.patterns
+    display: grid
+    grid-template-columns: repeat(2, 1fr)
+    grid-template-rows: repeat(5, $tile) minmax(0, 1fr)
+    gap: 2px
+
+  nav.tabs
+    display: grid
+    grid-auto-rows: $tile
+    row-gap: 2px
+    align-content: start
+    --color: var(--color-blue)
+
+  // borrowed from TubularDeviceEditor section.sass (display)
+  div.display
+    display: grid
+    grid-template-rows: minmax(0, 1fr)
+    padding: 2px
+    border-radius: 6px
+    outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.08)
+    min-width: 0
+    min-height: 0
+
+    > canvas
+      width: 100%
+      height: 100%
+      min-height: 0
+      border-radius: 4px
+      box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
+
+  div.sections
+    display: grid
+
+    > section
+      grid-area: 1 / 1
+      display: grid
+      grid-template-columns: 12px repeat(8, $column)
+      column-gap: 2px
+      row-gap: 2px
+      position: relative
+
+      &.loops
+        grid-template-rows: repeat(4, 1fr)
+
+      &.sound
+        grid-template-rows: 12px repeat(5, 1fr)
+
+  // borrowed from TubularDeviceEditor section.sass (bands, rotated titles, label controls)
+  div.label
+    pointer-events: none
+    border-radius: 2px
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+
+  h3
+    margin: 0
+    font-weight: 400
+
+  h3.rotated, h3.lane
+    font-size: 9px
+    letter-spacing: 0.2px
+    text-align: center
+    white-space: nowrap
+    border-radius: 2px
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
+  h3.rotated
+    writing-mode: vertical-rl
+    transform: rotate(180deg)
+    padding: 0 1px
+
+  h3.lane
+    display: flex
+    align-items: center
+    justify-content: center
+
+  h3.caption
+    font-size: 9px
+    height: 12px
+    letter-spacing: 0.5px
+    text-align: center
+    white-space: nowrap
+    overflow: hidden
+    color: var(--color-shadow)
+
+  div.control
+    display: grid
+    grid-auto-rows: auto
+    row-gap: 1px
+    align-self: center
+    justify-items: stretch
+    position: relative
+    min-width: 0
+
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
+      text-align: center
+      white-space: nowrap
+      color: var(--color-shadow)
+
+  div.cell
+    display: grid
+    align-content: center
+    min-width: 0
+
+  label.value
+    @include shared.value-label
+    justify-content: center
+    height: 18px
+    cursor: ns-resize
+
+  div.cell.amount label.value
+    color: var(--color)
+
+    &.zero
+      color: var(--color-shadow)
+      opacity: 0.5
