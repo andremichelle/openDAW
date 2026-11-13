@@ -22,7 +22,7 @@ const IgnoredErrors = [
 // awaited object was handed to us from outside the page (extension content script / hardening shim).
 const BrowserInternalPatterns = ["feature named", "window.__firefox__",
     "Permission denied to access property", "Permission denied to access object"]
-const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker"]
+const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker", "ts.worker"]
 // A lazily-loaded chunk could not be fetched (transient network / CDN / deploy hiccup), not a logic bug.
 // Cross-browser variants: Chrome/Edge, Firefox, Safari.
 const ChunkLoadPatterns = [
