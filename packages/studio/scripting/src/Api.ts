@@ -3223,6 +3223,144 @@ export interface MixdownOptions {
 }
 
 /**
+ * One choice of a dropdown in {@link Api.showDialog}
+ * @group Dialogs
+ */
+export interface DialogOption<V extends string | number = string | number> {
+    /** Text shown in the list */
+    label: string
+    /** Value returned when chosen */
+    value: V
+}
+
+/**
+ * A group title spanning the dialog. Returns no value
+ * @group Dialogs
+ */
+export interface DialogSection {
+    /** Always "section" */
+    type: "section"
+    /** The title */
+    label: string
+}
+
+/**
+ * A single line of text
+ * @group Dialogs
+ */
+export interface DialogText {
+    /** Always "text" */
+    type: "text"
+    /** Text in front of the control */
+    label: string
+    /** Initial text */
+    value: string
+}
+
+/**
+ * A number typed in by the user
+ * @group Dialogs
+ */
+export interface DialogNumber {
+    /** Always "number" */
+    type: "number"
+    /** Text in front of the control */
+    label: string
+    /** Initial value */
+    value: number
+    /** Lowest value (default unbounded) */
+    min?: number
+    /** Highest value (default unbounded) */
+    max?: number
+    /** The value snaps to multiples of it. Without it the value is free and the arrow keys change it by 1 */
+    step?: number
+    /** Shown behind the value */
+    unit?: string
+}
+
+/**
+ * A number chosen on a slider
+ * @group Dialogs
+ */
+export interface DialogSlider {
+    /** Always "slider" */
+    type: "slider"
+    /** Text in front of the control */
+    label: string
+    /** Initial value */
+    value: number
+    /** Lowest value */
+    min: number
+    /** Highest value */
+    max: number
+    /** The value snaps to multiples of it */
+    step?: number
+    /** How the slider travels between min and max: "linear" (default), "exp" (needs min > 0) or "int" (whole numbers) */
+    mapping?: "linear" | "exp" | "int"
+    /** Shown behind the value */
+    unit?: string
+}
+
+/**
+ * An on/off switch
+ * @group Dialogs
+ */
+export interface DialogCheckbox {
+    /** Always "checkbox" */
+    type: "checkbox"
+    /** Text in front of the control */
+    label: string
+    /** Initial state */
+    value: boolean
+}
+
+/**
+ * A list of choices
+ * @group Dialogs
+ */
+export interface DialogDropdown<V extends string | number = string | number> {
+    /** Always "dropdown" */
+    type: "dropdown"
+    /** Text in front of the control */
+    label: string
+    /** Initial choice, must be the value of one option */
+    value: V
+    /** The choices, at least one */
+    options: ReadonlyArray<DialogOption<V>>
+}
+
+/**
+ * A row of {@link Api.showDialog}
+ * @group Dialogs
+ */
+export type DialogField = DialogSection | DialogText | DialogNumber | DialogSlider | DialogCheckbox | DialogDropdown
+
+/**
+ * The dialog {@link Api.showDialog} opens
+ * @group Dialogs
+ */
+export interface DialogSpec<F extends Record<string, DialogField> = Record<string, DialogField>> {
+    /** Title of the dialog */
+    headline: string
+    /** Text of the confirm button (default "Ok") */
+    okText?: string
+    /** The rows by name, shown in this order. Avoid names that are whole numbers, they move to the front */
+    fields: F
+}
+
+/**
+ * What {@link Api.showDialog} returns: one value under the name of every field, sections left out
+ * @group Dialogs
+ */
+export type DialogValues<F extends Record<string, DialogField>> = {
+    [K in keyof F as F[K] extends DialogSection ? never : K]:
+    F[K] extends DialogText ? string
+        : F[K] extends DialogCheckbox ? boolean
+            : F[K] extends DialogDropdown<infer V> ? V
+                : number
+}
+
+/**
  * The global `openDAW` object, entry point of every script
  * @group Essentials
  */
@@ -3251,6 +3389,28 @@ export interface Api {
     getProject(): Promise<Project>
     /** Show an info dialog in the studio and wait until it is closed */
     showInfo(headline: string, message: string): Promise<void>
+    /**
+     * Ask the user for values in a dialog. Resolves with the values, or with null when the dialog was cancelled
+     * @example
+     * ```ts
+     * const values = await openDAW.showDialog({
+     *     headline: "New Pad",
+     *     okText: "Create",
+     *     fields: {
+     *         name: {type: "text", label: "Name", value: "Pad"},
+     *         voices: {type: "number", label: "Voices", value: 32, min: 1, max: 64, step: 1},
+     *         sound: {type: "section", label: "Sound"},
+     *         bandwidth: {type: "slider", label: "Bandwidth", value: 45, min: 1, max: 200, mapping: "exp", unit: "ct"},
+     *         zone: {type: "dropdown", label: "Semitones per zone", value: 3,
+     *             options: [{label: "One", value: 1}, {label: "Three", value: 3}, {label: "Six", value: 6}]},
+     *         randomStart: {type: "checkbox", label: "Random start", value: true}
+     *     }
+     * })
+     * if (values === null) {return}
+     * const project = openDAW.newProject(values.name)
+     * ```
+     */
+    showDialog<const F extends Record<string, DialogField>>(dialog: DialogSpec<F>): Promise<Nullable<DialogValues<F>>>
     /**
      * Create a sample in the studio from raw audio data
      * @example

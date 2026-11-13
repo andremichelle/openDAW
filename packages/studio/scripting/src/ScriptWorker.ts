@@ -4,7 +4,8 @@ import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptRunner} from "./ScriptRunner"
-import {ScriptHostProtocol} from "./ScriptHostProtocol"
+import {Nullable} from "@opendaw/lib-std"
+import {DialogRequest, DialogValue, ScriptHostProtocol} from "./ScriptHostProtocol"
 import {MixdownOptions, Sample} from "./Api"
 
 const messenger: Messenger = Messenger.for(self)
@@ -25,6 +26,9 @@ const hostProtocol = Communicator.sender<ScriptHostProtocol>(messenger.channel("
         }
         showInfo(headline: string, message: string): Promise<void> {
             return dispatcher.dispatchAndReturn(this.showInfo, headline, message)
+        }
+        showDialog(request: DialogRequest): Promise<Nullable<ReadonlyArray<DialogValue>>> {
+            return dispatcher.dispatchAndReturn(this.showDialog, request)
         }
         addSample(data: AudioData, name: string): Promise<Sample> {
             return dispatcher.dispatchAndReturn(this.addSample, data, name)

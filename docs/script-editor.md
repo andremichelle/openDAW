@@ -33,6 +33,11 @@ seams are. Package: `packages/studio/scripting` (`@opendaw/studio-scripting`), p
   events) mirror the studio factories, including index bookkeeping, unique names and default tracks.
 - `AudioFiles` resolves `Sample` and `SoundfontFile` handles to file boxes and deletes orphaned file boxes on
   reassignment.
+- `Api.showDialog` asks the user for values. `impl/DialogSpecs` validates the description in the worker and
+  hands the host a plain `DialogRequest` (`ScriptHostProtocol.showDialog`), never markup. The studio builds the
+  form from its own components (`src/script/ScriptFormDialog.tsx`, value rules in `ScriptFormValues.ts`) and
+  answers with the values in field order, or `null` on cancel. `ScriptHost` closes its progress dialog while
+  the form is open and shows it again afterwards.
 
 ## Editing is a history step
 
@@ -74,7 +79,7 @@ replays the tasks inside `project.editing.modify`, so the script's changes are o
 `packages/studio/scripting/src/test`: `Parity.test.ts` walks every device box and asserts each automatable
 field is reachable, `Roundtrip.test.ts` covers encode, delta replay and the checksum guard, `Examples.test.ts`
 runs every stock example through esbuild and an `AsyncFunction` against `FakeHost`, `Runner.test.ts` covers the
-function-body execution. `packages/studio/core/src/scripts/ScriptStorage.test.ts` covers storage and stock
+function-body execution, `Dialog.test.ts` covers `showDialog` and every rejected description. `packages/studio/core/src/scripts/ScriptStorage.test.ts` covers storage and stock
 seeding. Monaco compile problems can be reproduced without the studio: a `noLib` tsconfig with `library.d.ts`,
 `api.declaration.d.ts` and the script, `moduleDetection: "force"`.
 

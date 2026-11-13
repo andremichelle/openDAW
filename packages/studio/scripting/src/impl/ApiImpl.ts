@@ -1,10 +1,11 @@
 import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {isDefined, isNull, panic} from "@opendaw/lib-std"
-import {Api, Project, Sample} from "../Api"
+import {isDefined, isNull, Nullable, panic} from "@opendaw/lib-std"
+import {Api, DialogField, DialogSpec, DialogValues, Project, Sample} from "../Api"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
 import {ProjectImpl} from "./ProjectImpl"
 import {Guard} from "./Guard"
+import {DialogSpecs} from "./DialogSpecs"
 
 export class ApiImpl implements Api {
     readonly #protocol: ScriptHostProtocol
@@ -20,6 +21,12 @@ export class ApiImpl implements Api {
 
     showInfo(headline: string, message: string): Promise<void> {
         return this.#protocol.showInfo(Guard.string(headline, "headline"), Guard.string(message, "message"))
+    }
+
+    async showDialog<const F extends Record<string, DialogField>>(dialog: DialogSpec<F>): Promise<Nullable<DialogValues<F>>> {
+        const {request, names} = DialogSpecs.normalize(dialog)
+        const values = await this.#protocol.showDialog(request)
+        return isNull(values) ? null : DialogSpecs.collect(names, values) as DialogValues<F>
     }
 
     async getProject(): Promise<Project> {
