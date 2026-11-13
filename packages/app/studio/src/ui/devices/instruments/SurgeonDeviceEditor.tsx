@@ -9,7 +9,8 @@ import {
     InstrumentFactories,
     Surgeon,
     SurgeonDeviceBoxAdapter,
-    SurgeonModel
+    SurgeonModel,
+    TrackType
 } from "@opendaw/studio-adapters"
 import {CanvasPainter, ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
@@ -46,7 +47,6 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {box, namedParameter} = adapter
     const {Lanes, PatternCount, Off, LaneNames} = Surgeon
     const rollSeed = (): int => Math.floor(Math.random() * 100_000)
-    // a button action is its own undo step: a pending interface change (edit mode, selection) is closed first
     const act = (action: Procedure<void>): void => {
         editing.mark()
         editing.modify(action)
@@ -98,22 +98,40 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         offTile.classList.toggle("active", active === Off)
         offTile.classList.toggle("fired", fired === Off)
     }
+    const slotItems = (): ReadonlyArray<MenuItem> => {
+        const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
+        const {slot} = namedParameter
+        return [tracks.controls(slot.field).isEmpty()
+            ? MenuItem.default({label: "Create Automation"}).setTriggerProcedure(() => editing.modify(() => {
+                if (slot.track.isEmpty()) {tracks.create(TrackType.Value, slot.field)}
+            }))
+            : MenuItem.default({label: "Remove Automation"}).setTriggerProcedure(() => editing.modify(() =>
+                slot.track.ifSome(track => tracks.delete(track))))]
+    }
     tiles.forEach((tile, index) => lifecycle.ownAll(
         Events.subscribe(tile, "click", () => act(() => adapter.select(index))),
         ContextMenu.subscribe(tile, collector => collector.addItems(
-            MenuItem.default({label: "Copy pattern"}).setTriggerProcedure(() => clipboard.pattern = adapter.patternModel(index)),
+            ...slotItems(),
+            MenuItem.default({label: "Copy pattern", separatorBefore: true}).setTriggerProcedure(() => clipboard.pattern = adapter.patternModel(index)),
             MenuItem.default({label: "Paste pattern", selectable: isDefined(clipboard.pattern)}).setTriggerProcedure(() => {
                 const {pattern} = clipboard
                 if (isDefined(pattern)) {act(() => adapter.writePattern(index, pattern))}
             })))))
-    lifecycle.own(Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))))
+    lifecycle.ownAll(
+        Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))),
+        ContextMenu.subscribe(offTile, collector => collector.addItems(...slotItems())))
     const canvas: HTMLCanvasElement = <canvas/>
+    const painted = {step: -1, fontFamily: ""}
+    const stepPulses = (): number =>
+        SurgeonModel.RatePulses[clamp(adapter.live(Surgeon.Rate.key).getValue(), 0, SurgeonModel.RatePulses.length - 1)]
+    const playingStep = (): int => Math.max(0, Math.floor(engine.position.getValue() / stepPulses()))
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight, devicePixelRatio}) => {
         const pattern = adapter.liveModel()
         const playing = engine.isPlaying.getValue()
         const sounding = box.slot.getValue() !== Off
-        const stepPulses = SurgeonModel.RatePulses[clamp(pattern.rate, 0, SurgeonModel.RatePulses.length - 1)]
-        const position = Math.max(0, Math.floor(engine.position.getValue() / stepPulses))
+        const position = playingStep()
+        painted.step = position
+        if (painted.fontFamily === "") {painted.fontFamily = getComputedStyle(canvas).fontFamily}
         const thickness = devicePixelRatio * 4
         const pitchBottom = actualHeight * 0.5
         const middle = pitchBottom / 2
@@ -160,7 +178,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         }
         const laneHeight = (actualHeight - pitchBottom) / Surgeon.LaneCount
         const letter = devicePixelRatio * 12
-        context.font = `${8 * devicePixelRatio}px ${getComputedStyle(canvas).fontFamily}`
+        context.font = `${8 * devicePixelRatio}px ${painted.fontFamily}`
         context.textBaseline = "middle"
         lanes.forEach((lane, laneIndex) => {
             const top = pitchBottom + laneIndex * laneHeight
@@ -195,7 +213,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
             state.reported = true
             updateTiles()
         }),
-        AnimationFrame.add(() => {if (engine.isPlaying.getValue()) {painter.requestUpdate()}})
+        AnimationFrame.add(() => {if (engine.isPlaying.getValue() && playingStep() !== painted.step) {painter.requestUpdate()}})
     )
     const rollModel = (keys: ReadonlyArray<int>, change: Procedure<SurgeonModel.Pattern>) => () => act(() => {
         const model = adapter.liveModel()

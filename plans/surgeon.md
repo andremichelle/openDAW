@@ -2,8 +2,7 @@
 
 Status 2026-11-13: Surgeon is a real stock instrument. It is in the device browser, plays in the studio and in
 the headless engine, has its editor, a manual page and tests. The `/testing` preview and its own module are
-removed. Scripts can use it. The default volume is -3 dB. Open: presets, a screenshot for the manual (see
-"Device" below).
+removed. Scripts can use it. The default volume is -3 dB. Open: presets (see "Device" below).
 
 Branch: `surgeon`, in its own checkout `../openDAW-surgeon` (a git worktree, created 2026-11-13 from
 `9fee779f6`). Committed, not pushed. The main checkout holds other work and must stay free of these files.
@@ -287,12 +286,15 @@ One spec list generates both the live parameters and the pattern fields, so they
 
 ### Who uses what
 
-1. The engine plays the stored patterns. A live control only counts while it is automated or modulated, then its
-   value replaces that value in every pattern. So an automation lane keeps acting whichever pattern plays.
-2. An edit of a live control is written into the pattern it belongs to in the same transaction (the adapter
-   mirrors it). That is why an edit is heard at once and is kept, with one undo step.
-3. Selecting a pattern sets `slot` and `pattern` and copies the pattern into the live controls. The engine takes
-   over at the next bar, the bar comes from the signature track.
+1. The live controls are the selected pattern (`pattern`): the engine plays them for that pattern and the stored
+   values for the other seven. A live control that is automated or modulated replaces that value in every
+   pattern, so an automation lane keeps acting whichever pattern plays.
+2. Nothing copies behind the history. An edit of a live control is one field write, heard at once, with one undo
+   step. The stored values of the selected pattern are brought up to date when it is left.
+3. Selecting another pattern stores the live controls into the pattern that is left, loads the new one into the
+   live controls and sets `slot` and `pattern`, as plain writes in one undo step. The engine takes over at the
+   next bar, the bar comes from the signature track. A slot changed while the transport is stopped, starts or
+   jumps is taken at once, and a slot still waiting for its bar is taken when the transport stops.
 4. The engine reports the playing slot and the slot that waits for its bar. The editor shows the flash from it.
 
 ### Files
@@ -322,15 +324,11 @@ One spec list generates both the live parameters and the pattern fields, so they
 ### Open
 
 1. Presets, and the chain with Delay and Dattorro Reverb.
-2. The manual page has no screenshot.
-3. `crates/Cargo.toml` has no `opt-level = 3` entry for the crate (a shared file, the other synths have one).
-4. If the slot is automated, the playing pattern can differ from the one the live controls belong to. Edits then
+2. If the slot is automated, the playing pattern can differ from the one the live controls belong to. Edits then
    go to the pattern the controls show, not to the one that plays.
-5. The engine delivers at most 32 automation changes per update position to one device. With more than 32
+3. The engine delivers at most 32 automation changes per update position to one device. With more than 32
    controls automated at once, the rest is dropped.
-6. Tune and Volume changes are not smoothed.
-7. A script that writes a `live` value is only kept in a pattern while the project is open in the studio (the
-   adapter does the keeping). Scripts should write `patterns`.
+4. Tune and Volume changes are not smoothed.
 
 ## Lab
 

@@ -54,7 +54,7 @@ describe("Schema parity", () => {
             Tape: [],
             Neon: [],
             Tubular: ["voiceLoad"],
-            Surgeon: [],
+            Surgeon: ["pattern"], // read only, changed through select
             // patterns are exposed as CubedPattern objects (length + unpacked steps), not through the field binder
             Cubed: Array.from({length: 16}, (_, pattern) => [
                 `patterns.${pattern}.length`,

@@ -29,6 +29,24 @@ describe("Surgeon", () => {
         expect(instrument.slot).toBe(3)
         expect(instrument.tune).toBe(220)
     })
+    it("selects a pattern: the live values become it and the pattern left keeps its edits", () => {
+        const {project} = createFixture()
+        const {instrument} = project.addInstrumentUnit("Surgeon")
+        const second = instrument.patterns[1].seed
+        instrument.live.seed = 4711
+        expect(instrument.patterns[0].seed).toBe(4711)
+        instrument.select(1)
+        expect(instrument.slot).toBe(1)
+        expect(instrument.pattern).toBe(1)
+        expect(instrument.live.seed).toBe(second)
+        expect(instrument.patterns[0].seed).toBe(4711)
+        instrument.patterns[1].seed = 815
+        expect(instrument.live.seed).toBe(815)
+        instrument.select(0)
+        expect(instrument.live.seed).toBe(4711)
+        expect(instrument.patterns[1].seed).toBe(815)
+        expect(() => instrument.select(8)).toThrow()
+    })
     it("starts the other patterns as rolled patterns with Mutate at zero", () => {
         const {project} = createFixture()
         const {instrument: {patterns}} = project.addInstrumentUnit("Surgeon")

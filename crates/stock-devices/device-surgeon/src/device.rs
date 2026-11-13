@@ -1,6 +1,7 @@
 //! The device wrapper: binds the engine core to the `SurgeonDeviceBox`. The box holds 101 live parameters (the
-//! editor's controls, key 20) and 8 patterns of the same 101 plain values (key 30). The device plays the patterns.
-//! A live parameter only counts while it is automated or modulated, then it replaces that value in every pattern.
+//! editor's controls, key 20) and 8 patterns of the same 101 plain values (key 30). The live parameters are the
+//! selected pattern (key 13), the other patterns play their stored values. A live parameter that is automated or
+//! modulated replaces that value in every pattern.
 
 use crate::engine::{Engine, Slot, MAX_FRAMES, PATTERNS};
 use crate::param::{Param, PARAMS};
@@ -15,6 +16,7 @@ pub const PARAMETERS: usize = 3 + VALUES;
 const TUNE: [u16; 1] = [10];
 const VOLUME: [u16; 1] = [11];
 const SLOT: [u16; 1] = [12];
+const SELECTED: [u16; 1] = [13];
 const LIVE: u16 = 20;
 const STORED: u16 = 30;
 const STATE: [u16; 1] = [0xFFF];
@@ -105,6 +107,9 @@ pub struct SurgeonState {
     live: [f32; VALUES],
     stored: [[f32; VALUES]; PATTERNS],
     slot: i32,
+    slot_changed: bool,
+    selected: usize,
+    selected_id: u32,
     playing: bool,
     dirty: bool,
     state_id: u32
@@ -115,16 +120,15 @@ impl SurgeonState {
         for pattern in 0..PATTERNS {
             let mut values = self.stored[pattern];
             for index in 0..VALUES {
-                if self.driven[index] {values[index] = self.live[index];}
+                if pattern == self.selected || self.driven[index] {values[index] = self.live[index];}
             }
             self.engine.patterns[pattern] = pattern_of(&values);
         }
         self.dirty = false;
     }
 
-    fn apply_slot(&mut self) {
-        let slot = if self.slot < 0 {Slot::Off} else {Slot::Pattern((self.slot as usize).min(PATTERNS - 1))};
-        if self.playing {self.engine.fire(slot);} else {self.engine.select(slot);}
+    fn slot(&self) -> Slot {
+        if self.slot < 0 {Slot::Off} else {Slot::Pattern((self.slot as usize).min(PATTERNS - 1))}
     }
 }
 
@@ -148,6 +152,7 @@ impl Instrument for Surgeon {
                 state.field_ids[pattern][index] = abi::observe_field(&[STORED, pattern as u16, key]);
             }
         }
+        state.selected_id = abi::observe_field(&SELECTED);
         state.state_id = abi::bind_broadcast_int_array(&STATE, 2);
         state.dirty = true;
     }
@@ -158,6 +163,11 @@ impl Instrument for Surgeon {
         let [out_left, out_right] = output;
         if state.dirty {state.compose();}
         let playing = block.flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
+        if state.slot_changed {
+            state.slot_changed = false;
+            let slot = state.slot();
+            if playing && state.playing && !block.flags.discontinuous() {state.engine.fire(slot);} else {state.engine.select(slot);}
+        }
         state.playing = playing;
         let frames = out_left.len();
         let pulses_per_frame = if frames > 0 {(block.p1 - block.p0) / frames as f64} else {0.0};
@@ -193,7 +203,7 @@ impl Instrument for Surgeon {
             1 => state.engine.volume = math::db_to_gain(float_value(value, &VOLUME_MAPPING)),
             2 => {
                 state.slot = int_value(value, &Values::new(&SLOT_VALUES));
-                state.apply_slot();
+                state.slot_changed = true;
             }
             _ => {
                 let (_, kind) = spec(index - 3);
@@ -205,6 +215,12 @@ impl Instrument for Surgeon {
     }
 
     fn field_changed(state: &mut SurgeonState, id: u32, value: FieldValue) {
+        if id == state.selected_id {
+            let FieldValue::Int(selected) = value else {panic!("Surgeon selected pattern kind mismatch")};
+            state.selected = (selected.max(0) as usize).min(PATTERNS - 1);
+            state.dirty = true;
+            return;
+        }
         for pattern in 0..PATTERNS {
             let Some(index) = state.field_ids[pattern].iter().position(|bound| *bound == id) else {continue;};
             state.stored[pattern][index] = match value {
@@ -219,6 +235,8 @@ impl Instrument for Surgeon {
 
     fn reset(state: &mut SurgeonState) {
         state.engine.stop();
+        state.engine.select(state.slot());
+        state.slot_changed = false;
         state.playing = false;
     }
 }

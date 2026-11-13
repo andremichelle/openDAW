@@ -1965,9 +1965,8 @@ export interface SurgeonValues {
 
 /**
  * Plays metallic FM themes for raw techno by itself, from loops that mutate and patterns fired on the bar.
- * The device plays the stored `patterns`. `live` holds the editor's controls: while the project is open in the
- * studio a change of a live value is kept in the pattern named by `pattern`, and an automated live value
- * replaces that value in every pattern.
+ * `live` holds the editor's controls, they are the selected pattern. An automated live value replaces that value
+ * in every pattern.
  * @group Instruments
  */
 export interface Surgeon extends Instrument {
@@ -1979,12 +1978,14 @@ export interface Surgeon extends Instrument {
     volume: float
     /** The pattern that plays (0 to 7), -1 is off. A change takes over at the next bar */
     slot: int
-    /** The pattern the live values belong to (0 to 7) */
-    pattern: int
-    /** The editor's controls */
+    /** The selected pattern (0 to 7), the one the live values are. Change it with `select` */
+    readonly pattern: int
+    /** The editor's controls, the values of the selected pattern */
     readonly live: SurgeonValues
-    /** The eight stored patterns */
+    /** The eight patterns */
     readonly patterns: ReadonlyArray<SurgeonValues>
+    /** Selects a pattern (0 to 7): it plays from the next bar and the live values become its values */
+    select(pattern: int): void
 }
 
 /**

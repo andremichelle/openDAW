@@ -1,4 +1,4 @@
-import {Arrays, clamp, int, isDefined, Option, StringMapping, Subscription, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Arrays, asDefined, clamp, int, isDefined, Option, panic, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SurgeonDeviceBox, SurgeonPattern, SurgeonPatternFields, SurgeonSound, SurgeonSoundFields} from "@opendaw/studio-boxes"
 import {Address, BooleanField, Float32Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
@@ -121,7 +121,10 @@ export namespace Surgeon {
         ...amounts.flatMap((row, index) => row.map((amount, lane): readonly [int, number] => [Amounts[index][lane].key, amount]))
     ]
 
-    export const patternField = (pattern: SurgeonPattern, key: int): PlainField => pattern.getField(key as keyof SurgeonPatternFields)
+    const Keys: ReadonlySet<int> = new Set(All.map(({key}) => key))
+
+    export const patternField = (pattern: SurgeonPattern, key: int): PlainField =>
+        Keys.has(key) ? pattern.getField(key as keyof SurgeonPatternFields) : panic(`Surgeon has no value with key ${key}`)
 
     export const readPattern = (pattern: SurgeonPattern): SurgeonModel.Pattern =>
         modelOf({get: key => patternField(pattern, key).getValue()})
@@ -141,7 +144,6 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly #parametric: ParameterAdapterSet
     readonly #live: Map<int, AutomatableParameterFieldAdapter<number>>
-    readonly #mirror: Subscription
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: SurgeonDeviceBox) {
@@ -151,9 +153,6 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#live = new Map(Surgeon.All.map(({key, name, mapping, strings}) =>
             [key, this.#parametric.createParameter<number>(SurgeonDeviceBoxAdapter.#liveField(box.live, key), mapping, strings, name)]))
         this.namedParameter = this.#wrapParameters(box)
-        // an edit of a live control is kept in the pattern it belongs to, in the same transaction
-        this.#mirror = Terminable.many(...Surgeon.All.map(({key}) => SurgeonDeviceBoxAdapter.#liveField(box.live, key)
-            .subscribe(owner => this.patternField(box.pattern.getValue(), key).setValue(owner.getValue()))))
     }
 
     static #liveField(sound: SurgeonSound, key: int): ParameterField {return sound.getField(key as keyof SurgeonSoundFields)}
@@ -170,7 +169,9 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return false}
 
-    live(key: int): AutomatableParameterFieldAdapter<number> {return this.#live.get(key) ?? this.namedParameter.tune}
+    live(key: int): AutomatableParameterFieldAdapter<number> {
+        return asDefined(this.#live.get(key), `Surgeon has no value with key ${key}`)
+    }
 
     pattern(index: int): SurgeonPattern {return this.#box.patterns.fields()[clamp(index, 0, Surgeon.PatternCount - 1)]}
 
@@ -179,9 +180,12 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     // the live controls as the loop model, what the display draws
     liveModel(): SurgeonModel.Pattern {return Surgeon.modelOf({get: key => this.live(key).getValue()})}
 
-    patternModel(pattern: int): SurgeonModel.Pattern {return Surgeon.readPattern(this.pattern(pattern))}
+    // the live controls are the selected pattern, its stored values are only brought up to date when it is left
+    patternModel(pattern: int): SurgeonModel.Pattern {
+        return pattern === this.#box.pattern.getValue() ? this.liveModel() : Surgeon.readPattern(this.pattern(pattern))
+    }
 
-    // call inside a transaction: writes a model into the live controls, which keeps it in their pattern too
+    // call inside a transaction
     writeLive(model: SurgeonModel.Pattern): void {
         Surgeon.valuesOf(model).forEach(([key, value]) => SurgeonDeviceBoxAdapter.#liveField(this.#box.live, key).setValue(value))
     }
@@ -201,10 +205,14 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     // call inside a transaction: a pattern, or Surgeon.Off. The engine takes over at the next bar
     select(slot: int): void {
         this.#box.slot.setValue(slot)
-        if (slot === Surgeon.Off) {return}
+        const left = this.#box.pattern.getValue()
+        if (slot === Surgeon.Off || slot === left) {return}
+        Surgeon.All.forEach(({key}) => {
+            const live = SurgeonDeviceBoxAdapter.#liveField(this.#box.live, key)
+            this.patternField(left, key).setValue(live.getValue())
+            live.setValue(this.patternField(slot, key).getValue())
+        })
         this.#box.pattern.setValue(slot)
-        Surgeon.All.forEach(({key}) => SurgeonDeviceBoxAdapter.#liveField(this.#box.live, key)
-            .setValue(this.patternField(slot, key).getValue()))
     }
 
     deviceHost(): DeviceHost {
@@ -219,7 +227,6 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     }
 
     terminate(): void {
-        this.#mirror.terminate()
         this.#parametric.terminate()
     }
 

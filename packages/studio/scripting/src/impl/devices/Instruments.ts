@@ -85,7 +85,7 @@ import {
 } from "../../Api"
 import {Context} from "../Context"
 import {Accessors, Facade, Props} from "../Common"
-import {Fields, FieldSpec} from "../Fields"
+import {AnyPrimitiveField, Fields, FieldSpec} from "../Fields"
 import {Guard} from "../Guard"
 import {GrooveImpls} from "../Grooves"
 import {AudioFiles} from "../AudioFiles"
@@ -814,15 +814,40 @@ export class SurgeonImpl extends InstrumentFacade<SurgeonDeviceBox> implements S
     declare tune: float
     declare volume: float
     declare slot: int
-    declare pattern: int
     declare readonly live: SurgeonValues
     declare readonly patterns: ReadonlyArray<SurgeonValues>
 
     constructor(context: Context, box: SurgeonDeviceBox) {
         super(context, box)
-        this.bind({
-            tune: box.tune, volume: box.volume, slot: box.slot, pattern: box.pattern,
-            live: surgeonValues(box.live), patterns: box.patterns.fields().map(surgeonValues)
+        const live = surgeonValues(box.live)
+        const stored = box.patterns.fields().map(surgeonValues)
+        const selected = new Map<AnyPrimitiveField, readonly [int, AnyPrimitiveField]>(stored.flatMap((pattern, index) =>
+            Object.entries(pattern).map(([key, field]): [AnyPrimitiveField, readonly [int, AnyPrimitiveField]] =>
+                [field, [index, live[key as keyof typeof live]]])))
+        this.bind({tune: box.tune, volume: box.volume, slot: box.slot, live})
+        Fields.bind(context, this, {patterns: stored}, "", field => {
+            const entry = selected.get(field)
+            return isDefined(entry) && entry[0] === box.pattern.getValue() ? entry[1] : field
+        })
+    }
+
+    get pattern(): int {return this.box.pattern.getValue()}
+
+    select(pattern: int): void {
+        const index = Guard.int32({length: this.box.patterns.fields().length}, pattern, "select")
+        this.context.edit(() => {
+            const {slot, pattern: selected, live, patterns} = this.box
+            const left = selected.getValue()
+            slot.setValue(index)
+            if (index === left) {return}
+            const from = surgeonValues(patterns.fields()[left])
+            const into = surgeonValues(patterns.fields()[index])
+            Object.entries(surgeonValues(live)).forEach(([name, field]) => {
+                const key = name as keyof typeof from
+                from[key].setValue(field.getValue())
+                field.setValue(into[key].getValue())
+            })
+            selected.setValue(index)
         })
     }
 }

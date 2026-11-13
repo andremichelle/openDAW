@@ -8,7 +8,7 @@ import {connectSyncToEngine} from "./helpers/connect-sync"
 
 const SAMPLES_PER_BAR = 3840 * 25 // 48k, 120 bpm, 960 per quarter
 
-const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>): Promise<Float32Array> => {
+const session = async (setup: Procedure<SurgeonDeviceBox>) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -18,7 +18,7 @@ const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>): Promise<Fl
         box.output.refer(primaryAudioBusBox.input)
         box.index.setValue(1)
     })
-    SurgeonDeviceBox.create(source, UUID.generate(), box => {
+    const device = SurgeonDeviceBox.create(source, UUID.generate(), box => {
         box.host.refer(unit.input)
         setup(box)
     })
@@ -28,15 +28,41 @@ const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>): Promise<Fl
     await sync.settle(); engine.bind(); await sync.settle()
     engine.set_metronome_enabled(0)
     const half = (engine.output_len() >>> 0) >>> 1
-    engine.stop(); engine.play()
-    const quanta = Math.ceil(bars * SAMPLES_PER_BAR / half)
-    const left = new Float32Array(quanta * half)
-    for (let index = 0; index < quanta; index++) {
-        engine.render()
-        left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), index * half)
+    return {
+        engine, half,
+        render: (frames: int): Float32Array => {
+            const quanta = Math.ceil(frames / half)
+            const left = new Float32Array(quanta * half)
+            for (let index = 0; index < quanta; index++) {
+                engine.render()
+                left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), index * half)
+            }
+            return left
+        },
+        edit: async (procedure: Procedure<SurgeonDeviceBox>): Promise<void> => {
+            source.beginTransaction()
+            procedure(device)
+            source.endTransaction()
+            await sync.settle()
+        },
+        close: () => sync.close()
     }
-    sync.close()
+}
+
+const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>): Promise<Float32Array> => {
+    const {engine, render, close} = await session(setup)
+    engine.stop(); engine.play()
+    const left = render(bars * SAMPLES_PER_BAR)
+    close()
     return left
+}
+
+// FNV-1a over the bit patterns of the samples
+const fingerprint = (samples: Float32Array): string => {
+    const words = new Uint32Array(samples.buffer, samples.byteOffset, samples.length)
+    let hash = 0xcbf29ce484222325n
+    words.forEach(word => {hash = BigInt.asUintN(64, (hash ^ BigInt(word)) * 0x100000001b3n)})
+    return hash.toString(16)
 }
 
 const rms = (samples: Float32Array, from: int, to: int): number => {
@@ -67,10 +93,57 @@ describe("Surgeon in the full engine", () => {
         expect(rms(second, 0, SAMPLES_PER_BAR)).toBeGreaterThan(0.01)
         expect(second.some((value, index) => value !== first[index])).toBe(true)
     }, 300000)
-    it("ignores a live control that is not automated", async () => {
+    it("keeps its sound: the fingerprints were taken before the live controls became the selected pattern", async () => {
+        expect(fingerprint(await render(2, () => {}))).toBe("6155579d367bcbb5")
+        expect(fingerprint(await render(2, box => {
+            box.slot.setValue(1)
+            box.patterns.fields()[1].seed.setValue(4711)
+        }))).toBe("f0af644e597563a3")
+    }, 300000)
+    it("plays the live controls for the selected pattern, not its stored values", async () => {
         const first = await render(1, () => {})
-        const edited = await render(1, box => box.live.seed.setValue(4711))
+        const live = await render(1, box => box.live.seed.setValue(4711))
+        expect(live.some((value, index) => value !== first[index])).toBe(true)
+        const stored = await render(1, box => box.patterns.fields()[0].seed.setValue(4711))
+        expect(stored.every((value, index) => value === first[index])).toBe(true)
+        const moved = await render(1, box => {
+            box.pattern.setValue(1)
+            box.patterns.fields()[0].seed.setValue(4711)
+        })
+        expect(moved.every((value, index) => value === live[index])).toBe(true)
+    }, 300000)
+    it("plays the stored values of a pattern that is not selected", async () => {
+        const first = await render(1, box => box.slot.setValue(1))
+        const edited = await render(1, box => {
+            box.slot.setValue(1)
+            box.live.seed.setValue(4711)
+        })
         expect(edited.every((value, index) => value === first[index])).toBe(true)
+    }, 300000)
+    it("a slot changed while playing takes over at the bar", async () => {
+        const reference = await render(2, () => {})
+        const {engine, render: play, edit, close} = await session(() => {})
+        engine.stop(); engine.play()
+        const start = play(SAMPLES_PER_BAR / 2)
+        await edit(box => box.slot.setValue(-1))
+        const rest = play(2 * SAMPLES_PER_BAR - start.length)
+        close()
+        const untilBar = SAMPLES_PER_BAR - start.length
+        expect(start.every((value, index) => value === reference[index])).toBe(true)
+        expect(rest.subarray(0, untilBar).every((value, index) => value === reference[start.length + index])).toBe(true)
+        expect(rms(rest, untilBar + SAMPLES_PER_BAR / 2, rest.length)).toBeLessThan(rms(reference, SAMPLES_PER_BAR * 1.5, reference.length) * 0.1)
+    }, 300000)
+    it("a slot that waits for its bar is taken at once when the transport stops", async () => {
+        const {engine, render: play, edit, close} = await session(() => {})
+        engine.stop(); engine.play()
+        play(SAMPLES_PER_BAR / 2)
+        await edit(box => box.slot.setValue(-1))
+        engine.stop()
+        play(4 * SAMPLES_PER_BAR)
+        engine.play()
+        const output = play(SAMPLES_PER_BAR)
+        close()
+        expect(rms(output, 0, output.length)).toBe(0.0)
     }, 300000)
     it("follows the volume", async () => {
         const full = await render(1, () => {})

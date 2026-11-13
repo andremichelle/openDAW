@@ -5,6 +5,10 @@ from a seed, lets them drift over time and switches between eight stored pattern
 
 ---
 
+![screenshot](surgeon.webp)
+
+---
+
 ## 0. Overview
 
 _Surgeon_ takes no notes from its track. While the transport plays, it plays its own loop:
@@ -35,7 +39,8 @@ The circles 1 to 8 are the patterns, **Off** silences the device.
 2. With the transport stopped it takes over at once.
 3. The editor always shows the pattern you selected. Every edit is heard at once and is kept in that pattern.
 4. Right click a pattern to copy or paste it.
-5. The pattern is an automatable parameter, so pattern changes can be drawn on the timeline.
+5. The pattern is an automatable parameter. Right click a pattern or **Off** and choose **Create Automation** to
+   draw pattern changes on the timeline.
 
 Below the circles:
 
