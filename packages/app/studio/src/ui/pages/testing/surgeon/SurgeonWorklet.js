@@ -1,5 +1,4 @@
-// The audio worklet of the Surgeon preview on /testing: runs surgeon_wasm.wasm (the real engine core) on its own
-// clock and reports the position and the playing slot back to the page.
+// runs surgeon_wasm.wasm (the real engine core) on its own clock and reports position and playing slot to the page
 const ReportEveryBlocks = 4
 
 class SurgeonProcessor extends AudioWorkletProcessor {
@@ -13,6 +12,7 @@ class SurgeonProcessor extends AudioWorkletProcessor {
         this.output = this.engine.alloc_floats(128)
         this.bpm = bpm
         this.playing = false
+        this.alive = true
         this.pulses = 0.0
         this.blocks = 0
         this.port.onmessage = ({data}) => {
@@ -26,6 +26,8 @@ class SurgeonProcessor extends AudioWorkletProcessor {
                 this.pulses = 0.0
                 const waiting = this.engine.fired()
                 if (!this.playing && waiting !== -2) {this.engine.select(waiting)}
+            } else if (data.type === "stop") {
+                this.alive = false
             } else if (data.type === "tune") {
                 this.engine.set_tune(data.midi)
             } else if (data.type === "volume") {
@@ -35,6 +37,7 @@ class SurgeonProcessor extends AudioWorkletProcessor {
     }
 
     process(_inputs, outputs) {
+        if (!this.alive) {return false}
         const channels = outputs[0]
         const frames = channels[0].length
         const advance = this.playing ? frames * this.bpm / 60.0 * 960.0 / sampleRate : 0.0

@@ -47,7 +47,7 @@ export namespace SurgeonAudio {
                 return {terminate: () => observers.delete(observer)}
             },
             terminate: () => {
-                node.port.postMessage({type: "play", playing: false})
+                node.port.postMessage({type: "stop"})
                 node.disconnect()
                 observers.clear()
             }

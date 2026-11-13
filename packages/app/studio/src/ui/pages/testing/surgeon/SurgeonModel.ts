@@ -1,7 +1,6 @@
-import {Arrays, clamp, Func, int} from "@opendaw/lib-std"
+import {Arrays, clamp, Func, int, isDefined} from "@opendaw/lib-std"
 
-// The loops of Surgeon as the engine computes them (`crates/stock-devices/device-surgeon`), so the editor draws
-// what plays. Every roll must match the engine's, in 32 bit float.
+// the loops as the engine (crates/stock-devices/device-surgeon) computes them, every roll in 32 bit float
 export namespace SurgeonModel {
     export const Lanes = 4
     export const MaxSteps = 32
@@ -77,13 +76,21 @@ export namespace SurgeonModel {
         return (hashed >>> 8) / 0x1000000
     }
 
-    // how often a step has been replaced after `pass` passes
+    const counted = new Map<string, { pass: int, count: int }>()
+
+    // how often a step has been replaced after `pass` passes, carried forward so a long song stays cheap
     export const generation = (seed: int, step: int, pass: int, mutate: number): int => {
         const chance = float(mutate)
-        let count = 0
-        for (let index = 1; index <= pass; index++) {
+        if (chance <= 0.0) {return 0}
+        const key = `${seed}:${step}:${chance}`
+        const known = counted.get(key)
+        const from = isDefined(known) && known.pass <= pass ? known : {pass: 0, count: 0}
+        let count = from.count
+        for (let index = from.pass + 1; index <= pass; index++) {
             if (unit(seed, step, index, 0) < chance) {count++}
         }
+        if (counted.size > 4096) {counted.clear()}
+        counted.set(key, {pass, count})
         return count
     }
 
@@ -117,7 +124,7 @@ export namespace SurgeonModel {
     }
 
     const setValue = (pattern: Pattern, param: int, value: number): void => {
-        const offset = Params[param].choices === undefined ? 0.0 : 0.5
+        const offset = isDefined(Params[param].choices) ? 0.5 : 0.0
         pattern.base[param] = unitOf(Params[param], float(value + offset))
     }
 
@@ -193,8 +200,7 @@ export namespace SurgeonModel {
         return pattern
     }
 
-    // what the All button does to a pattern: `random`, plus a Slide chance drawn on its own so `random` stays as
-    // approved. Mutate and Rate are never rolled, they stay as they are
+    // the All button: the approved `random` plus its own Slide roll, Mutate and Rate stay as they are
     export const rollAll = (current: Pattern, seed: int): Pattern => {
         const pattern = random(seed)
         pattern.pitch.slide = float(MaxRandomSlide * unit(seed, 8, 0, 7))

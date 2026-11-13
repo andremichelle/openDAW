@@ -115,7 +115,9 @@ fn random_all_draws_exactly_like_the_lab() {
 
 #[test]
 fn the_voice_matches_the_labs_voice_without_feedback() {
-    let lab_patch = LabPatch {feedback: 0.0, fold: 0.3, sub: 0.6, second_ratio: 5.19, second_depth: 0.6, wave: LabWave::Rectified, ..LabPatch::BASE};
+    // the decay is short enough that the last note starts from silence: over a ringing note the engine settles its
+    // step changes within 2 ms where the lab jumps
+    let lab_patch = LabPatch {feedback: 0.0, fold: 0.3, sub: 0.6, second_ratio: 5.19, second_depth: 0.6, wave: LabWave::Rectified, decay: 0.2, ..LabPatch::BASE};
     let patch = Patch {
         ratio: lab_patch.ratio, depth: lab_patch.depth, strike: lab_patch.strike, strike_decay: lab_patch.strike_decay, feedback: 0.0,
         wave: Wave::Rectified, fold: 0.3, fold_place: FoldPlace::BeforeGate, decay: lab_patch.decay, glide: lab_patch.glide,
@@ -237,6 +239,93 @@ fn the_all_button_rolls_the_approved_pattern_plus_a_slide_chance_and_keeps_mutat
         assert_eq!(all.lanes.map(|lane| lane.mutate), current.lanes.map(|lane| lane.mutate));
     }
     assert!(drawn.iter().any(|slide| *slide < 0.1) && drawn.iter().any(|slide| *slide > 0.4));
+}
+
+// a fingerprint of every sample bit
+fn fingerprint(signal: &[f32]) -> u64 {
+    signal.iter().fold(0xCBF2_9CE4_8422_2325u64, |hash, sample| (hash ^ sample.to_bits() as u64).wrapping_mul(0x0000_0100_0000_01B3))
+}
+
+// short notes that have fully faded before the next step starts
+fn separated() -> Pattern {
+    let mut pattern = favourite();
+    pattern.pitch.tie = 0.0;
+    pattern.amounts[Param::Length as usize] = [0.0; 4];
+    pattern.set(Param::Length, 0.0).set(Param::HeldShare, 0.0);
+    pattern
+}
+
+#[test]
+fn notes_that_start_from_silence_keep_every_sample() {
+    // the fingerprint was taken before step changes were smoothed: smoothing only acts over a ringing note
+    let mut engine = engine_with(&[separated()]);
+    assert_eq!(fingerprint(&play(&mut engine, 0.0, bar_frames() * 4, MAX_FRAMES, true, false)), 0x5F35_2788_143A_1FB7);
+}
+
+fn mixed() -> Vec<f32> {
+    let mut engine = engine_with(&[favourite(), Pattern::random(9)]);
+    engine.fire(Slot::Pattern(1));
+    let mut output = play(&mut engine, 0.0, bar_frames() * 3, MAX_FRAMES, true, false);
+    output.extend(play(&mut engine, 3840.0 * 40.0, bar_frames() * 2, MAX_FRAMES, true, true));
+    output.extend(play(&mut engine, 3840.0 * 7.0, bar_frames() * 2, MAX_FRAMES, true, true));
+    output
+}
+
+#[test]
+fn mutating_patterns_with_jumps_keep_every_sample() {
+    // the fingerprint was taken while every step counted its replacements from the song start
+    assert_eq!(fingerprint(&mixed()), 0xAB52_7807_A53D_FA43);
+}
+
+#[test]
+fn full_length_without_a_held_share_is_the_longest_decay_not_a_held_note() {
+    let mut pattern = separated();
+    pattern.set(Param::Length, 1.0).set(Param::HeldShare, 0.0);
+    let longest = pattern.patch(0);
+    assert!(!longest.hold && (longest.decay - 0.9).abs() < 1e-4, "{longest:?}");
+    pattern.set(Param::Length, 0.99);
+    assert!(pattern.patch(0).decay < longest.decay && pattern.patch(0).decay > 0.8);
+    pattern.set(Param::Length, 1.0).set(Param::HeldShare, 0.1);
+    assert!(pattern.patch(0).hold, "with a held share the top of the range still holds");
+}
+
+#[test]
+fn a_changed_rate_waits_for_its_next_line() {
+    let mut pattern = separated();
+    pattern.pitch.density = 1.0;
+    let mut engine = engine_with(&[pattern]);
+    let step = bar_frames() / 16;
+    play(&mut engine, 0.0, step * 2 + step / 4, MAX_FRAMES, true, false);
+    let before = play(&mut engine, 240.0 * 2.25, step / 8, MAX_FRAMES, true, false);
+    engine.patterns[0].rate = 0;
+    let after = play(&mut engine, 240.0 * 2.375, step / 2, MAX_FRAMES, true, false);
+    assert!(rms(&after) < rms(&before) * 1.5 + 1e-4, "no note starts inside the step: {} then {}", rms(&before), rms(&after));
+    let next_line = play(&mut engine, 240.0 * 2.875, step * 2, MAX_FRAMES, true, false);
+    assert!(rms(&next_line) > 0.01, "the next eighth plays");
+}
+
+// how far a sample lands from the straight continuation of the two before it
+fn largest_jump(signal: &[f32]) -> f32 {
+    signal.windows(3).map(|three| (three[2] - (2.0 * three[1] - three[0])).abs()).fold(0.0, f32::max)
+}
+
+#[test]
+fn a_new_note_over_a_ringing_one_does_not_click() {
+    let patch = Patch {ratio: 1.0, strike_decay: 0.1, decay: 2.0, velocity: 1.0, second_ratio: 1.0, sine: 1.0, sine_ratio: 1.0, ..Patch::default()};
+    let mut voice = Voice::default();
+    voice.init(RATE * 2.0);
+    voice.set_patch(patch);
+    voice.note_on(45.0, 1.0, 0);
+    voice.note_off();
+    let ringing: Vec<f32> = (0..20_000).map(|_| voice.next()).collect();
+    let usual = largest_jump(&ringing[10_000..]);
+    voice.set_patch(Patch {sine: 0.2, depth: 2.0, strike: 6.0, fold: 0.5, ..patch});
+    voice.note_on(45.0, 0.3, 0);
+    let after: Vec<f32> = (0..400).map(|_| voice.next()).collect();
+    let joined: Vec<f32> = ringing[19_990..].iter().chain(after.iter()).copied().collect();
+    // unsmoothed, the level alone would step by more than 0.3 here. What remains is a bend, not a step
+    assert!(usual < 0.001 && largest_jump(&joined) < 0.03, "jump {} against the usual {usual}", largest_jump(&joined));
+    assert!(rms(&ringing[19_000..]) > 0.2, "the first note still rings when the second starts");
 }
 
 #[test]

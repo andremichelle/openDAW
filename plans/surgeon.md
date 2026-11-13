@@ -333,6 +333,19 @@ Rate: a pattern has a rate (eighth, sixteenth, thirty-second) shared by the pitc
 counted in pulses, so patterns of different rates switch on the same bar lines. `select` switches a slot at once,
 for a stopped transport.
 
+No clicks (2026-11-13): when a step starts while the previous note still rings, the level, the strike, the
+depth, the feedback, the second modulator, the fold and the sine gain reach their new value within about 2 ms
+instead of one sample. A note that starts from silence is untouched, a fingerprint test proves it sample for
+sample. `examples/clicks.rs` measures the jumps: before, up to 174 of 256 step starts jumped in a Random all
+pattern, none at note ends. André confirmed by ear on the rebuilt preview that the crackle is gone.
+
+Cost: replacement counts are carried forward step by step in the engine (and in the editor's copy), they are no
+longer counted from the song start on every step. A changed Rate waits for its next grid line instead of
+starting a note inside a step.
+
+Fixed with André's yes (2026-11-13), the one deliberate change to the frozen sound: with Held at 0 % a Length of
+exactly 100 % used to play as a held note with a short release. It now gives the longest decay.
+
 Open in the engine:
 1. Tune and Volume changes are not smoothed.
 2. The device ABI wrapper: parameter binding, automation of every value, the pattern data and the fired slot
@@ -364,6 +377,9 @@ Open in the engine:
 ## Open
 
 1. How the 110 values are shown in the editor.
-2. Merge note: this branch adds `surgeon-wasm` to the members in `crates/Cargo.toml` and to `build-wasm.sh`, the
+2. The preview module `surgeon_wasm.wasm` is copied into the engine package's `dist/wasm`, which the SDK publishes
+   and PROD bundles. It should be served from a place of its own before a release. The `opendrum` branch does
+   the same with its preview module, so both want one answer.
+3. Merge note: this branch adds `surgeon-wasm` to the members in `crates/Cargo.toml` and to `build-wasm.sh`, the
    `opendrum` branch edits the same lines for `opendrum-wasm`.
 

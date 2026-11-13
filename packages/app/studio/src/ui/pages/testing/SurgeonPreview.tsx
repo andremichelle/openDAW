@@ -25,8 +25,7 @@ const LaneColors = [Colors.blue, Colors.green, Colors.yellow, Colors.orange]
 const ToneParams: ReadonlyArray<int> = [0, 1, 2, 3, 4, 5, 6, 7]
 const ShapeParams: ReadonlyArray<int> = [8, 9, 10, 11, 12, 13, 14, 15]
 
-// a draft of the Surgeon editor: every control works on the pattern model, the real engine core plays it in an
-// audio worklet and reports the position the display follows
+// a draft of the Surgeon editor, played by the real engine core in an audio worklet
 export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
     const {Lanes, PatternCount, Params, Index, Rates, RatePulses, BarPulses, Kind} = SurgeonModel
     const {Prints, Parses, value, choice, control, button} = SurgeonControls
@@ -38,8 +37,10 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
         tune: number, volume: number, clipboard: Optional<SurgeonModel.Pattern>
     } = {shown: 0, active: 0, fired: undefined, playing: false, start: 0.0, pulses: 0.0, bar: 0, tune: 50.0, volume: 0.0, clipboard: undefined}
     let player: Option<SurgeonAudio.Player> = Option.None
+    let terminated = false
+    const sendPattern = (index: int) => player.ifSome(loaded => loaded.pattern(index, patterns[index]))
     const sendSound = () => player.ifSome(loaded => {
-        patterns.forEach((pattern, index) => loaded.pattern(index, pattern))
+        loaded.pattern(state.shown, patterns[state.shown])
         loaded.tune(state.tune)
         loaded.volume(dbToGain(state.volume))
     })
@@ -85,6 +86,7 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
             MenuItem.default({label: "Paste pattern", selectable: isDefined(state.clipboard)}).setTriggerProcedure(() => {
                 if (!isDefined(state.clipboard)) {return}
                 patterns[index] = SurgeonModel.copy(state.clipboard)
+                sendPattern(index)
                 refresh.notify()
             })))))
     lifecycle.own(Events.subscribe(offTile, "click", () => fire(Off)))
@@ -188,14 +190,22 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
             }
             painter.requestUpdate()
         }),
-        {terminate: () => player.ifSome(loaded => loaded.terminate())}
+        {
+            terminate: () => {
+                terminated = true
+                player.ifSome(loaded => loaded.terminate())
+            }
+        }
     )
     SurgeonAudio.load(audioContext, PreviewBpm).then(loaded => {
+        if (terminated) {return loaded.terminate()}
         player = Option.wrap(loaded)
         status.textContent = `Played by the real engine at ${PreviewBpm} bpm`
+        patterns.forEach((_pattern, index) => sendPattern(index))
         sendSound()
         loaded.fire(state.active)
         loaded.play(state.playing)
+        if (isDefined(state.fired)) {loaded.fire(state.fired)}
         lifecycle.own(loaded.subscribe(({pulses, active, fired}) => {
             if (!state.playing) {return}
             state.pulses = pulses

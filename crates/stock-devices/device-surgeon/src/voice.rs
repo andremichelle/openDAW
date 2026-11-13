@@ -57,6 +57,18 @@ const GATE_FLOOR_HZ: f32 = 80.0;
 const GATE_SPAN: f32 = 200.0;
 const GATE_ATTACK: f32 = 0.001;
 const FOLD_GAIN: f32 = 7.0;
+// a step change settles within about 2 ms while the previous note still rings (no click)
+const SETTLE: f32 = 0.0005;
+
+// the values that would click when they step: level, strike depth, depth, feedback, second depth, fold, sine gain
+const LEVEL: usize = 0;
+const STRIKE: usize = 1;
+const DEPTH: usize = 2;
+const FEEDBACK: usize = 3;
+const SECOND: usize = 4;
+const FOLD: usize = 5;
+const SINE: usize = 6;
+const SMOOTHED: usize = 7;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Voice {
@@ -73,8 +85,9 @@ pub struct Voice {
     strike_envelope: HitEnvelope,
     gate_envelope: HitEnvelope,
     gate_filter: Svf,
-    level: f32,
-    strike_level: f32,
+    targets: [f32; SMOOTHED],
+    values: [f32; SMOOTHED],
+    settle: f32,
     held: u32,
     sounding: bool,
     slide_remaining: u32,
@@ -86,11 +99,17 @@ impl Voice {
     pub fn init(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
         self.glide_factor = 1.0;
+        self.settle = 1.0 - libm::expf(-1.0 / (SETTLE * sample_rate));
     }
 
-    /// Takes effect at once, the envelopes keep their current value.
+    /// Takes effect at once when nothing sounds, otherwise the values that would click settle within 2 ms. The
+    /// envelopes keep their current value.
     pub fn set_patch(&mut self, patch: Patch) {
         self.patch = patch;
+        for (index, target) in [(DEPTH, patch.depth), (FEEDBACK, patch.feedback), (SECOND, patch.second_depth), (FOLD, patch.fold), (SINE, patch.sine)] {
+            self.targets[index] = target;
+            if !self.sounding {self.values[index] = target;}
+        }
         self.glide_factor = if patch.glide > 0.0 {1.0 - libm::expf(-1.0 / (patch.glide * self.sample_rate))} else {1.0};
         self.strike_envelope.set(0.0, 0.0, patch.strike_decay, self.sample_rate);
         self.gate_envelope.set(GATE_ATTACK, 0.0, patch.decay, self.sample_rate);
@@ -108,8 +127,12 @@ impl Voice {
         self.started = true;
         if legato {return;}
         if !sliding {self.pitch = pitch;}
-        self.level = velocity;
-        self.strike_level = self.patch.strike * (1.0 - self.patch.velocity + self.patch.velocity * velocity);
+        let strike = self.patch.strike * (1.0 - self.patch.velocity + self.patch.velocity * velocity);
+        for (index, target) in [(LEVEL, velocity), (STRIKE, strike)] {
+            self.targets[index] = target;
+            if !self.sounding {self.values[index] = target;}
+        }
+        if self.sounding {self.strike_envelope.set(SETTLE * 4.0, 0.0, self.patch.strike_decay, self.sample_rate);}
         self.strike_envelope.trigger(1.0);
         if self.patch.hold {self.gate_envelope.trigger_held(1.0);} else {self.gate_envelope.trigger(1.0);}
         self.sounding = true;
@@ -130,12 +153,15 @@ impl Voice {
 
     #[inline]
     fn fold(&self, input: f32) -> f32 {
-        if self.patch.fold <= 0.0 {input} else {libm::sinf(input * (1.0 + self.patch.fold * FOLD_GAIN) * FRAC_PI_2)}
+        let fold = self.values[FOLD];
+        if fold <= 0.0 {input} else {libm::sinf(input * (1.0 + fold * FOLD_GAIN) * FRAC_PI_2)}
     }
 
     #[inline]
     pub fn next(&mut self) -> f32 {
-        let Patch {ratio, depth, feedback, wave, second_ratio, second_depth, fold_place, sine, sine_ratio, ..} = self.patch;
+        let Patch {ratio, wave, second_ratio, fold_place, sine_ratio, ..} = self.patch;
+        for index in 0..SMOOTHED {self.values[index] += (self.targets[index] - self.values[index]) * self.settle;}
+        let [level, strike, depth, feedback, second_depth, _, sine] = self.values;
         if self.slide_remaining > 0 {
             self.pitch += (self.target_pitch - self.pitch) / self.slide_remaining as f32;
             self.slide_remaining -= 1;
@@ -146,7 +172,7 @@ impl Voice {
         let step = frequency / self.sample_rate;
         let gate = self.gate_envelope.next();
         if self.gate_envelope.is_idle() {self.sounding = false;}
-        let index = depth + self.strike_envelope.next() * self.strike_level;
+        let index = depth + self.strike_envelope.next() * strike;
         let feedback_phase = feedback * (self.feedback_state[0] + self.feedback_state[1]) * 0.5;
         let modulator = wave.at(self.modulator_phase + feedback_phase);
         self.feedback_state = [self.feedback_state[1], modulator];
@@ -159,7 +185,7 @@ impl Voice {
         self.sine_phase = fract(self.sine_phase + step * sine_ratio);
         let cutoff = GATE_FLOOR_HZ * libm::powf(GATE_SPAN, libm::sqrtf(gate));
         let coefficients = SvfCoefficients::new(cutoff, 0.6, self.sample_rate);
-        let level = gate * self.level;
+        let level = gate * level;
         match fold_place {
             FoldPlace::BeforeGate => (self.gate_filter.process(self.fold(carrier), &coefficients).low + body) * level,
             FoldPlace::AfterGate => {

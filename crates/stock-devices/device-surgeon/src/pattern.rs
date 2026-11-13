@@ -3,6 +3,8 @@ use crate::param::{Param, PARAMS};
 use crate::voice::{FoldPlace, Patch, Wave};
 
 pub const LANES: usize = 4;
+/// The pitch loop and the lanes.
+pub const LOOPS: usize = LANES + 1;
 pub const MAX_STEPS: u32 = 32;
 /// Pulses per step for an eighth, a sixteenth and a thirty-second.
 pub const RATE_PULSES: [f64; 3] = [480.0, 240.0, 120.0];
@@ -50,8 +52,12 @@ pub struct PitchLoop {
 impl PitchLoop {
     pub fn step(&self, position: u32) -> Step {
         let steps = self.steps.clamp(1, MAX_STEPS);
-        let (pass, step) = (position / steps, position % steps);
-        let generation = generation(self.seed, step, pass, self.mutate);
+        self.step_with(position, generation(self.seed, position % steps, position / steps, self.mutate))
+    }
+
+    /// `generation`: how often this step has been replaced so far.
+    pub fn step_with(&self, position: u32, generation: u32) -> Step {
+        let step = position % self.steps.clamp(1, MAX_STEPS);
         let roll = |channel: u32| unit(self.seed, step, generation, channel);
         let kind = if roll(2) >= self.density {Kind::Rest} else if roll(3) < self.tie {Kind::Tie} else {Kind::Play};
         Step {offset: (roll(1) * 2.0 - 1.0) * self.range, velocity: 1.0 - self.accent * roll(4), kind, slide: roll(5) < self.slide}
@@ -69,8 +75,11 @@ pub struct Lane {
 impl Lane {
     pub fn value(&self, position: u32) -> f32 {
         let steps = self.steps.clamp(1, MAX_STEPS);
-        let (pass, step) = (position / steps, position % steps);
-        unit(self.seed, step, generation(self.seed, step, pass, self.mutate), 1)
+        self.value_with(position, generation(self.seed, position % steps, position / steps, self.mutate))
+    }
+
+    pub fn value_with(&self, position: u32, generation: u32) -> f32 {
+        unit(self.seed, position % self.steps.clamp(1, MAX_STEPS), generation, 1)
     }
 }
 
@@ -179,16 +188,35 @@ impl Pattern {
 
     pub fn step_pulses(&self) -> f64 {RATE_PULSES[(self.rate as usize).min(RATE_PULSES.len() - 1)]}
 
-    pub fn patch(&self, position: u32) -> Patch {
-        let lanes = self.lanes.map(|lane| lane.value(position));
+    /// The seed, mutate chance and length of every loop, the pitch loop first.
+    pub fn loops(&self) -> [(u32, f32, u32); LOOPS] {
+        let mut loops = [(self.pitch.seed, self.pitch.mutate, self.pitch.steps); LOOPS];
+        for (index, lane) in self.lanes.iter().enumerate() {loops[index + 1] = (lane.seed, lane.mutate, lane.steps);}
+        loops
+    }
+
+    /// How often the step at `position` has been replaced in every loop, counted from the song start.
+    pub fn generations(&self, position: u32) -> [u32; LOOPS] {
+        self.loops().map(|(seed, mutate, steps)| {
+            let steps = steps.clamp(1, MAX_STEPS);
+            generation(seed, position % steps, position / steps, mutate)
+        })
+    }
+
+    pub fn patch(&self, position: u32) -> Patch {self.patch_with(position, &self.generations(position))}
+
+    pub fn patch_with(&self, position: u32, generations: &[u32; LOOPS]) -> Patch {
+        let mut lanes = [0.0; LANES];
+        for (index, lane) in self.lanes.iter().enumerate() {lanes[index] = lane.value_with(position, generations[index + 1]);}
         let unit = |param: Param| -> f32 {
             let added: f32 = (0..LANES).map(|lane| self.amounts[param as usize][lane] * lanes[lane]).sum();
             (self.base[param as usize] + added).clamp(0.0, 1.0)
         };
         let value = |param: Param| param.range().value(unit(param));
-        let from = 1.0 - value(Param::HeldShare);
+        let held = value(Param::HeldShare);
+        let from = 1.0 - held;
         let length = unit(Param::Length);
-        let hold = length >= from;
+        let hold = held > 0.0 && length >= from;
         Patch {
             ratio: value(Param::Ratio1),
             depth: value(Param::Depth),
@@ -209,9 +237,12 @@ impl Pattern {
         }
     }
 
-    pub fn event(&self, position: u32) -> StepEvent {
-        let patch = self.patch(position);
-        let Step {offset, velocity, kind, slide} = self.pitch.step(position);
+    pub fn event(&self, position: u32) -> StepEvent {self.event_with(position, &self.generations(position))}
+
+    /// `event` with the replacement counts supplied, so the engine can keep them up to date step by step.
+    pub fn event_with(&self, position: u32, generations: &[u32; LOOPS]) -> StepEvent {
+        let patch = self.patch_with(position, generations);
+        let Step {offset, velocity, kind, slide} = self.pitch.step_with(position, generations[0]);
         let note = match kind {
             Kind::Rest => None,
             Kind::Tie => Some(Note {offset, velocity, length: TIE_SHARE, slide}),

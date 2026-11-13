@@ -16,5 +16,6 @@ pub fn unit(seed: u32, first: u32, second: u32, third: u32) -> f32 {
 
 /// How often a step has been replaced after `pass` passes: every pass rolls once per step against `mutate`.
 pub fn generation(seed: u32, step: u32, pass: u32, mutate: f32) -> u32 {
+    if mutate <= 0.0 {return 0;}
     (1..=pass).filter(|index| unit(seed, step, *index, 0) < mutate).count() as u32
 }

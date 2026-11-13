@@ -17,6 +17,7 @@ export namespace SurgeonControls {
     }
 
     const PixelsPerStep = 2
+    const DeadZone = 3
     const {numberIn} = SamplerValueLabel
     const scaled = (factor: number): Func<string, Optional<number>> => text => {
         const parsed = numberIn(text)
@@ -53,7 +54,7 @@ export namespace SurgeonControls {
             if (unit.length > 0) {label.setAttribute("unit", unit)} else {label.removeAttribute("unit")}
             decorate?.(label, get())
         }
-        let drag: Optional<{ readonly y: number, readonly value: number }> = undefined
+        let drag: Optional<{ y: number, readonly value: number, moved: boolean }> = undefined
         const release = () => {
             label.classList.remove("modifying")
             drag = undefined
@@ -64,10 +65,16 @@ export namespace SurgeonControls {
                 if (event.button !== 0) {return}
                 label.setPointerCapture(event.pointerId)
                 label.classList.add("modifying")
-                drag = {y: event.clientY, value: get()}
+                drag = {y: event.clientY, value: get(), moved: false}
             }),
             Events.subscribe(label, "pointermove", (event: PointerEvent) => {
                 if (!isDefined(drag)) {return}
+                if (!drag.moved) {
+                    const slipped = drag.y - event.clientY
+                    if (Math.abs(slipped) < DeadZone) {return}
+                    drag.y -= Math.sign(slipped) * DeadZone
+                    drag.moved = true
+                }
                 const next = clamp(drag.value + Math.round((drag.y - event.clientY) / PixelsPerStep) * step, min, max)
                 if (next === get()) {return}
                 set(next)
