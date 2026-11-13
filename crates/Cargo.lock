@@ -819,6 +819,7 @@ name = "signalsmith"
 version = "0.0.0"
 dependencies = [
  "libm",
+ "math",
  "signalsmith-stretch",
 ]
 

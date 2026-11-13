@@ -3275,6 +3275,7 @@ pub extern "C" fn init(sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn render() {
     unsafe {
+        SAMPLES.get().convert_floats();
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
@@ -3991,6 +3992,24 @@ pub extern "C" fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32 {
     }
 }
 
+/// As `host_resolve_sample` with f32 frames, 0 until the float copy of a 16 bit sample is complete.
+#[no_mangle]
+pub extern "C" fn host_resolve_sample_floats(handle: u32, out_ptr: u32) -> u32 {
+    match unsafe { SAMPLES.get() }.resolve_floats(handle) {
+        Some(sample_ref) => {
+            unsafe { *(out_ptr as *mut abi::SampleRef) = sample_ref; }
+            1
+        }
+        None => 0
+    }
+}
+
+/// How many values of 16 bit samples become floats per render block, `u32::MAX` for all at once (offline).
+#[no_mangle]
+pub extern "C" fn set_sample_float_budget(values: u32) {
+    unsafe { SAMPLES.get() }.set_float_budget(if values == u32::MAX {usize::MAX} else {values as usize});
+}
+
 /// Pop the next sample awaiting a load (the engine queued it on seeing an `AudioFileBox`): write its 16-byte
 /// uuid to `out_ptr` and return its handle, or return -1 when none are pending. The worklet drains these
 /// after applying a transaction and dispatches each to the main-thread loader. Off-render.
@@ -4017,6 +4036,12 @@ pub extern "C" fn sample_allocate(handle: u32, byte_len: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
     unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
+}
+
+/// As `sample_set_ready`, for planes the loader wrote as 16 bit PCM (2 bytes per frame and channel).
+#[no_mangle]
+pub extern "C" fn sample_set_ready_i16(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
+    unsafe { SAMPLES.get() }.set_ready_as(handle, frame_count, channel_count, sample_rate, abi::SAMPLE_FORMAT_I16);
 }
 
 /// Resolve a soundfont handle for a device DURING render: write a `SoundfontRef` (ptr + len) to `out_ptr` and

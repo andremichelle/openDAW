@@ -640,3 +640,36 @@ fn consecutive_instances_never_share_a_partition_phase() {
         assert_eq!(l2.len(), 8, "eight consecutive instances share an L2 phase: {group:?}");
     }
 }
+
+// A 16 bit impulse response must load to the very same convolver as the floats a 16 bit WAV decodes to.
+#[test]
+fn a_sixteen_bit_impulse_response_loads_bit_identical() {
+    let mut seed = 0x51ED_270Bu32;
+    let mut next = || {
+        seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (seed >> 16) as i16
+    };
+    let frames = 9_000;
+    let ints: [Vec<i16>; 2] = [(0..frames).map(|_| next() / 8).collect(), (0..frames).map(|_| next() / 8).collect()];
+    let floats: [Vec<f32>; 2] = [ints[0].iter().map(|value| *value as f32 / 32768.0).collect(),
+        ints[1].iter().map(|value| *value as f32 / 32768.0).collect()];
+    let length = 128 * 200;
+    let mut rng = Rng(99);
+    let input = noise(&mut rng, length);
+    for (stereo, normalize, reverse, ratio) in [(true, false, false, 1.0f32), (false, false, false, 1.0), (true, true, false, 1.0),
+        (true, false, true, 1.0), (true, false, false, 0.91875), (true, true, true, 1.0884354), (false, true, true, 0.5)] {
+        let mut from_floats = boxed_convolver();
+        from_floats.begin_load(&floats[0], &floats[1], stereo, normalize, reverse, ratio);
+        while from_floats.load_step(&floats[0], &floats[1], 64) {}
+        let mut from_ints = boxed_convolver();
+        from_ints.begin_load(&ints[0], &ints[1], stereo, normalize, reverse, ratio);
+        while from_ints.load_step(&ints[0], &ints[1], 64) {}
+        let expected = run_convolver(&mut from_floats, &input, length);
+        let actual = run_convolver(&mut from_ints, &input, length);
+        assert!(expected[0].iter().any(|value| *value != 0.0), "silent, the comparison would prove nothing");
+        for channel in 0..2 {
+            let same = expected[channel].iter().zip(&actual[channel]).all(|(float, int)| float.to_bits() == int.to_bits());
+            assert!(same, "stereo {stereo} normalize {normalize} reverse {reverse} ratio {ratio}: channel {channel} differs");
+        }
+    }
+}

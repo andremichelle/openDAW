@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use dsp::ppqn::pulses_to_seconds;
 use engine_env::audio_buffer::AudioBuffer;
 use engine_env::block::Block;
-use math::round;
+use math::{round, Pcm};
 
 const VOICE_FADE_DURATION: f64 = 0.020;
 const LOOP_FADE_DURATION: f64 = 0.010;
@@ -126,7 +126,7 @@ impl Voice {
         }
     }
 
-    fn process(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
+    fn process<T: Pcm>(&mut self, source: &Source<T>, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
         match self {
             Voice::Once(voice) => voice.process(source, output, buffer_start, buffer_count, fading_gain),
             Voice::Repeat(voice) => voice.process(source, output, buffer_start, buffer_count, fading_gain),
@@ -136,9 +136,9 @@ impl Voice {
 }
 
 /// The source planes a voice reads, threaded in per call (the voices are stateless about the buffer identity).
-pub(crate) struct Source<'a> {
-    pub(crate) left: &'a [f32],
-    pub(crate) right: &'a [f32],
+pub(crate) struct Source<'a, T> {
+    pub(crate) left: &'a [T],
+    pub(crate) right: &'a [T],
     pub(crate) num_frames: usize
 }
 
@@ -216,15 +216,15 @@ impl Fade {
 /// Linear interpolation of a planar source at a fractional frame, or `None` when out of `[0, num_frames - 1)`
 /// (TS `readInt >= 0 && readInt < numberOfFrames - 1`). Truncation matches the TS `readPosition | 0`.
 #[inline]
-fn read_interp(buffer: &[f32], num_frames: usize, position: f64) -> Option<f32> {
+fn read_interp<T: Pcm>(buffer: &[T], num_frames: usize, position: f64) -> Option<f32> {
     let read_int = position as i64;
     if read_int < 0 || (read_int as usize) >= num_frames.saturating_sub(1) {
         return None;
     }
     let index = read_int as usize;
     let alpha = (position - read_int as f64) as f32;
-    let here = buffer[index];
-    Some(here + alpha * (buffer[index + 1] - here))
+    let here = buffer[index].to_f32();
+    Some(here + alpha * (buffer[index + 1].to_f32() - here))
 }
 
 /// Plays a segment once, no looping: read start -> segment end, then silence (TS `OnceVoice`).
@@ -245,7 +245,7 @@ impl OnceVoice {
         self.fade.start_fade_out(block_offset);
     }
 
-    fn process(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
+    fn process<T: Pcm>(&mut self, source: &Source<T>, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
         if self.fade.state == VoiceState::Done {
             return;
         }
@@ -305,7 +305,7 @@ impl RepeatVoice {
         self.fade.start_fade_out(block_offset);
     }
 
-    fn process(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
+    fn process<T: Pcm>(&mut self, source: &Source<T>, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
         if self.fade.state == VoiceState::Done {
             return;
         }
@@ -382,7 +382,7 @@ impl PingpongVoice {
         self.fade.start_fade_out(block_offset);
     }
 
-    fn process(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
+    fn process<T: Pcm>(&mut self, source: &Source<T>, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
         if self.fade.state == VoiceState::Done {
             return;
         }
@@ -476,10 +476,10 @@ impl TimeStretchSequencer {
     /// come from the `AudioTimeStretchBox`; `fading_gain` is the region fade envelope for this cycle, indexed by
     /// the within-cycle sample. `engine_rate`/`file_rate` are the output and source sample rates.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn process(
+    pub(crate) fn process<T: Pcm>(
         &mut self,
         output: &mut AudioBuffer,
-        source: &Source,
+        source: &Source<T>,
         file_rate: f32,
         transients: &[f64],
         config: &TimeStretchConfig,
@@ -551,7 +551,7 @@ impl TimeStretchSequencer {
     /// crossfades with the next region's fade-in) or past a transport stop (so a pause does not hard-cut). Renders
     /// `[buffer_start, buffer_start + buffer_count)`; `fading_gain` is a unity buffer of at least that length (the
     /// voices' own fade-out shapes the ramp). Returns whether any voice is still sounding (drive again next block).
-    pub(crate) fn render_release(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) -> bool {
+    pub(crate) fn render_release<T: Pcm>(&mut self, source: &Source<T>, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) -> bool {
         for voice in &mut self.voices {
             if !voice.is_fading_out() {
                 voice.start_fade_out(0);
@@ -570,8 +570,8 @@ impl TimeStretchSequencer {
     /// The OnceVoice maintenance pass (TS lines 82-130): fade out voices that reached their segment end, and,
     /// when looping is needed to fill the remaining output, replace them with a looping voice.
     #[allow(clippy::too_many_arguments)]
-    fn maintain_once_voices(
-        &mut self, source: &Source, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
+    fn maintain_once_voices<T: Pcm>(
+        &mut self, source: &Source<T>, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
         effective_playback_rate: f64, waveform_offset: f64, bpm: f32, engine_rate: f32, file_rate: f32, buffer_count: usize
     ) {
         self.spawn.clear();
@@ -619,8 +619,8 @@ impl TimeStretchSequencer {
     /// TS `#handleTransientBoundary`: continue a voice across the boundary when drift is small (so transients
     /// already in flight aren't re-attacked), else fade everything and spawn a fresh voice at the new segment.
     #[allow(clippy::too_many_arguments)]
-    fn handle_transient_boundary(
-        &mut self, source: &Source, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
+    fn handle_transient_boundary<T: Pcm>(
+        &mut self, source: &Source<T>, transients: &[f64], warp: &[(f64, f64)], mode: TransientPlayMode,
         playback_rate: f64, waveform_offset: f64, bpm: f32, engine_rate: f32, file_rate: f32,
         transient_index: i32, transient_seconds: f64, file_seconds_start: f64
     ) {
@@ -858,5 +858,74 @@ mod tests {
         let src = Source {left: &source, right: &source, num_frames: source.len()};
         sequencer.process(&mut output, &src, 48_000.0, &transients, &config, 0.0, &block, 100.0, 100.0, 340.0, &fading_gain, 48_000.0);
         assert_eq!(output.left[0], 0.0, "content past the warp range is silent");
+    }
+
+    #[test]
+    fn sixteen_bit_frames_render_bit_identical_in_every_play_mode() {
+        let mut seed = 0x9E37_79B9u32;
+        let ints: vec::Vec<i16> = (0..48_000).map(|_| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 16) as i16
+        }).collect();
+        let floats: vec::Vec<f32> = ints.iter().map(|value| *value as f32 / 32768.0).collect();
+        let transients = [0.0, 0.11, 0.27, 0.5, 0.74];
+        let fading_gain = [1.0f32; 128];
+        for mode in [TransientPlayMode::Once, TransientPlayMode::Repeat, TransientPlayMode::Pingpong] {
+            for (playback_rate, seconds) in [(1.0f32, 1.0f64), (0.5, 0.4), (2.0, 0.9)] {
+                let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (3840.0, seconds)], transient_play_mode: mode, playback_rate};
+                let render = |left: &mut vec::Vec<u32>, release: &mut vec::Vec<u32>, run: &mut dyn FnMut(&mut TimeStretchSequencer, &mut AudioBuffer, &Block, f64, f64)| {
+                    let mut sequencer = TimeStretchSequencer::new();
+                    for index in 0..48 {
+                        let (p0, p1) = (index as f64 * 80.0, (index + 1) as f64 * 80.0);
+                        let block = Block {index, flags: BlockFlags::create(true, index == 0, true, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
+                        let mut output = AudioBuffer::new();
+                        run(&mut sequencer, &mut output, &block, p0, p1);
+                        left.extend(output.left[..128].iter().map(|value| value.to_bits()));
+                        release.extend(output.right[..128].iter().map(|value| value.to_bits()));
+                    }
+                };
+                let (mut float_left, mut float_right, mut int_left, mut int_right) = (vec::Vec::new(), vec::Vec::new(), vec::Vec::new(), vec::Vec::new());
+                render(&mut float_left, &mut float_right, &mut |sequencer, output, block, p0, p1| {
+                    let source = Source {left: &floats[..], right: &floats[..], num_frames: floats.len()};
+                    sequencer.process(output, &source, 48_000.0, &transients, &config, 0.0, block, p0, p0, p1, &fading_gain, 48_000.0);
+                });
+                render(&mut int_left, &mut int_right, &mut |sequencer, output, block, p0, p1| {
+                    let source = Source {left: &ints[..], right: &ints[..], num_frames: ints.len()};
+                    sequencer.process(output, &source, 48_000.0, &transients, &config, 0.0, block, p0, p0, p1, &fading_gain, 48_000.0);
+                });
+                assert!(float_left.iter().any(|value| *value != 0), "silent, the comparison would prove nothing");
+                assert_eq!(int_left, float_left, "left differs at rate {playback_rate}");
+                assert_eq!(int_right, float_right, "right differs at rate {playback_rate}");
+            }
+        }
+    }
+
+    #[test]
+    fn sixteen_bit_frames_ring_out_bit_identical() {
+        let ints: vec::Vec<i16> = (0..24_000).map(|index| ((index * 7919) % 65_536 - 32_768) as i16).collect();
+        let floats: vec::Vec<f32> = ints.iter().map(|value| *value as f32 / 32768.0).collect();
+        let transients = [0.0, 0.2, 0.4];
+        let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (3840.0, 0.5)], transient_play_mode: TransientPlayMode::Repeat, playback_rate: 1.0};
+        let fading_gain = [1.0f32; 128];
+        let block = playing_block();
+        let mut outputs = vec::Vec::new();
+        for use_ints in [false, true] {
+            let mut sequencer = TimeStretchSequencer::new();
+            let mut output = AudioBuffer::new();
+            let mut tail = AudioBuffer::new();
+            if use_ints {
+                let source = Source {left: &ints[..], right: &ints[..], num_frames: ints.len()};
+                sequencer.process(&mut output, &source, 48_000.0, &transients, &config, 0.0, &block, 0.0, 0.0, 240.0, &fading_gain, 48_000.0);
+                sequencer.render_release(&source, &mut tail, 0, 128, &fading_gain);
+            } else {
+                let source = Source {left: &floats[..], right: &floats[..], num_frames: floats.len()};
+                sequencer.process(&mut output, &source, 48_000.0, &transients, &config, 0.0, &block, 0.0, 0.0, 240.0, &fading_gain, 48_000.0);
+                sequencer.render_release(&source, &mut tail, 0, 128, &fading_gain);
+            }
+            outputs.push((output.left[..64].iter().map(|value| value.to_bits()).collect::<vec::Vec<u32>>(),
+                          tail.left[..128].iter().map(|value| value.to_bits()).collect::<vec::Vec<u32>>()));
+        }
+        assert!(outputs[0].1.iter().any(|value| *value != 0), "the release is silent, the comparison would prove nothing");
+        assert_eq!(outputs[1], outputs[0]);
     }
 }

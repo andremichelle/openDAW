@@ -142,7 +142,7 @@ export namespace ProjectBundle {
     const pipeSampleLoaderInto = async (loader: SampleLoader, zip: JSZip): Promise<void> => {
         const exec: Exec = async () => {
             const path = `${SampleStorage.Folder}/${UUID.toString(loader.uuid)}`
-            zip.file("audio.wav", await Workers.Opfs.read(`${path}/audio.wav`), {binary: true})
+            zip.file("audio.wav", await SampleStorage.get().readAudio(loader.uuid), {binary: true})
             zip.file("peaks.bin", await Workers.Opfs.read(`${path}/peaks.bin`), {binary: true})
             zip.file("meta.json", await Workers.Opfs.read(`${path}/meta.json`))
         }

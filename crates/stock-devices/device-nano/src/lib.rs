@@ -199,8 +199,6 @@ impl Instrument for Nano {
             publish_positions(state);
             return;
         };
-        let left = sample.plane(0);
-        let right = if sample.channel_count > 1 {sample.plane(1)} else {left};
         let loop_fade_frames = if state.loop_enabled {
             (state.loop_fade_seconds as f64 * sample.sample_rate as f64).max(1.0)
         } else {
@@ -225,11 +223,11 @@ impl Instrument for Nano {
             tail: state.tail,
             end_fade: (FAST_RELEASE_SECONDS * state.sample_rate) as u32
         };
-        for voice in state.voices.iter_mut() {
+        abi::with_planes!(sample, |left, right| for voice in state.voices.iter_mut() {
             if voice.is_active() && voice.process(out_left, out_right, left, right, &playback) {
                 voice.force_stop();
             }
-        }
+        });
         apply_panning(state, out_left, out_right);
         publish_positions(state);
     }

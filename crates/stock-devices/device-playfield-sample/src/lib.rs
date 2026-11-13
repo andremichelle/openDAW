@@ -183,17 +183,15 @@ impl Instrument for PlayfieldSlot {
             }
             return;
         };
-        let left = sample.plane(0);
-        let right = if sample.channel_count > 1 {sample.plane(1)} else {left};
         let num_frames = sample.frame_count as usize;
         let src_rate = sample.sample_rate;
         let engine_rate = state.sample_rate;
         let pitch = state.pitch_cents; // the one parameter read live while a voice runs
-        for voice in state.voices.iter_mut() {
+        abi::with_planes!(sample, |left, right| for voice in state.voices.iter_mut() {
             if voice.is_used() && voice.process(out_left, out_right, left, right, num_frames, src_rate, engine_rate, pitch) {
                 voice.free();
             }
-        }
+        });
         if state.positions_ptr == 0 {
             state.positions_ptr = abi::broadcast_ptr(state.positions_id);
         }

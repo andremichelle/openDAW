@@ -18,7 +18,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {AudioAnalyser, AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, dbToGain, PcmData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
@@ -158,6 +158,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                     deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
+                    fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                     fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
@@ -201,6 +202,8 @@ Communicator.executor<OfflineEngineProtocol>(
             }
             const {engine} = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
                 createWclapBridges(memory, config.sampleRate, engineToClient, track))
+            // nothing here has a quantum to keep, and a render must not start without its samples
+            engine.set_sample_float_budget(0xFFFFFFFF)
             // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
             // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
             // offline render has no host for, so they are settled once here (TS ExportMetronomeConfiguration).
@@ -296,7 +299,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 })
             ]
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
-                reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
+                reason => engineToClient.error(describeEngineTrap(engine, memory, reason)), config.fetchSample === true)
             const stateSender = SyncStream.writer(EngineStateSchema(), config.syncStreamBuffer, engineState => {
                 const statePtr = engine.engine_state_ptr()
                 const view = new DataView(memory.buffer, statePtr, engine.engine_state_len())

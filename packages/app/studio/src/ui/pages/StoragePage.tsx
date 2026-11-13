@@ -2,7 +2,7 @@ import css from "./StoragePage.sass?inline"
 import {
     Bytes, DefaultObservableValue, EmptyExec, MutableObservableOption, Option, RuntimeNotifier, Terminator, UUID
 } from "@opendaw/lib-std"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {StorageScan} from "@/storage/StorageScan"
@@ -203,6 +203,10 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             ),
             <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
                 <span>Rescan</span>
+            </Button>,
+            <Button lifecycle={reportTerminator} onClick={() => RouteLocation.get().navigateTo("/storage/samples")}
+                    appearance={{color: Colors.blue, framed: true}}>
+                <span>Sample formats...</span>
             </Button>)
         navigator.storage.estimate().then(({usage, quota}) => {
             const estimate = summary.querySelector("span.estimate")

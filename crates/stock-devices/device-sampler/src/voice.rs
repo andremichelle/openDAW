@@ -3,6 +3,7 @@
 //! was triggered while the zone table changes underneath.
 
 use core::f32::consts::PI;
+use math::Pcm;
 use crate::zones::{Zone, LOOP_OFF, LOOP_ON};
 
 const SILENCE: f32 = 1.0e-4;
@@ -386,7 +387,7 @@ impl Voice {
 
     /// Render `left.len()` frames of this voice onto the output, its gains gliding to the control's.
     #[allow(clippy::too_many_arguments)]
-    pub fn render(&mut self, planes: [&[f32]; 2], source_rate: f32, control: &Control, amp: &EnvelopeParams,
+    pub fn render<T: Pcm>(&mut self, planes: [&[T]; 2], source_rate: f32, control: &Control, amp: &EnvelopeParams,
                   modulation: &EnvelopeParams, fast_release: f32, left: &mut [f32], right: &mut [f32]) {
         if !self.prepared {
             self.prepare(planes[0].len(), source_rate);
@@ -478,13 +479,13 @@ impl Voice {
 }
 
 #[inline]
-fn read_stereo(planes: [&[f32]; 2], position: f64) -> (f32, f32) {
+fn read_stereo<T: Pcm>(planes: [&[T]; 2], position: f64) -> (f32, f32) {
     (read(planes[0], position), read(planes[1], position))
 }
 
 /// Cubic (Hermite) interpolation at a fractional frame, the frames beyond either end repeat the last one.
 #[inline]
-pub fn read(plane: &[f32], position: f64) -> f32 {
+pub fn read<T: Pcm>(plane: &[T], position: f64) -> f32 {
     let last = plane.len() as isize - 1;
     if last < 0 {
         return 0.0;
@@ -492,7 +493,7 @@ pub fn read(plane: &[f32], position: f64) -> f32 {
     let floor = libm::floor(position);
     let index = floor as isize;
     let fraction = (position - floor) as f32;
-    let at = |offset: isize| plane[(index + offset).clamp(0, last) as usize];
+    let at = |offset: isize| plane[(index + offset).clamp(0, last) as usize].to_f32();
     let (before, here, next, after) = (at(-1), at(0), at(1), at(2));
     let c1 = 0.5 * (next - before);
     let c2 = before - 2.5 * here + 2.0 * next - 0.5 * after;
@@ -731,7 +732,7 @@ mod tests {
         let plane = [0.5, 0.75];
         assert_eq!(read(&plane, -3.0), 0.5);
         assert_eq!(read(&plane, 40.0), 0.75);
-        assert_eq!(read(&[], 0.0), 0.0, "an empty sample is silence");
+        assert_eq!(read::<f32>(&[], 0.0), 0.0, "an empty sample is silence");
         assert_eq!(read(&[0.25], 0.5), 0.25, "a one frame sample is that frame");
     }
 

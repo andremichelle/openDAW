@@ -1,7 +1,7 @@
 import {clamp, Editing, Func, int, isDefined, Lifecycle, Option, Optional, Procedure, Provider, Subscription} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
-import {AudioData, MidiKeys} from "@opendaw/lib-dsp"
+import {AudioInfo, MidiKeys} from "@opendaw/lib-dsp"
 import {BooleanField, Int32Field} from "@opendaw/lib-box"
 import {SamplerZoneBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -22,7 +22,7 @@ export namespace SamplerZoneTable {
         readonly select: (zones: ReadonlyArray<Zone>, focus: Zone) => void
         readonly toggle: Procedure<Zone>
         readonly remove: Procedure<Zone>
-        readonly framesOf: Func<Zone, Optional<AudioData>>
+        readonly framesOf: Func<Zone, Optional<AudioInfo>>
         readonly nameOf: Func<Zone, string>
     }
     type Column = {
@@ -62,7 +62,7 @@ export namespace SamplerZoneTable {
         numberIn(text).map(value => /ms/i.test(text) || (!/s/i.test(text) && value >= 10) ? value / 1000 : value)
     const scaled = (factor: number): Func<string, Option<number>> => text => numberIn(text).map(value => value / factor)
 
-    const columns = (framesOf: Func<Zone, Optional<AudioData>>): ReadonlyArray<Column> => {
+    const columns = (framesOf: Func<Zone, Optional<AudioInfo>>): ReadonlyArray<Column> => {
         const key = (title: string, field: Func<Zone, Int32Field>): Column => ({
             title, group: "Key", kind: "value", min: 0, max: MaxKey, step: 1,
             get: zone => field(zone).getValue(), set: (zone, value) => field(zone).setValue(Math.round(value)),

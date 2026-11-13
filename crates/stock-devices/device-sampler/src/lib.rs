@@ -634,11 +634,11 @@ fn render_interval(state: &mut SamplerState, left: &mut [f32], right: &mut [f32]
             gain_right: gain * pan_right,
             mono: state.mono
         };
-        let planes = [sample.plane(0), sample.plane(if sample.channel_count > 1 {1} else {0})];
         let (amp, modulation, fast_release, sample_rate) = (state.envelopes[0], state.envelopes[1], state.fast_release, state.sample_rate);
         let hertz = [state.lfos[0].hertz * libm::exp2f(sums.rates[0]), state.lfos[1].hertz * libm::exp2f(sums.rates[1])];
         let voice = &mut state.voices[index];
-        voice.render(planes, sample.sample_rate, &control, &amp, &modulation, fast_release, left, right);
+        abi::with_planes!(sample, |first, second|
+            voice.render([first, second], sample.sample_rate, &control, &amp, &modulation, fast_release, left, right));
         voice.lfos[0].advance(hertz[0], frames, sample_rate);
         voice.lfos[1].advance(hertz[1], frames, sample_rate);
     }

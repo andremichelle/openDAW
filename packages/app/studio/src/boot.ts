@@ -41,7 +41,7 @@ import {ReportNames} from "@/errors/ReportNames"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {SampleGarbage, StudioPreferences, WclapStorage} from "@opendaw/studio-core"
+import {SampleGarbage, SampleStorage, StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
@@ -131,7 +131,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const chainedWclapProvider = new ChainedWclapProvider()
     WclapStorage.installRemote(id => WclapCatalog.get().load(id)
         .catch(() => chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty)))
-    const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
+    SampleStorage.get().format = "smallest"
+    const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider, {retain: "while-used"})
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",

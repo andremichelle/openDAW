@@ -313,7 +313,7 @@ export namespace SamplerZoneMap {
             context.fillRect(xHi, 0, scale, height)
             if (box.loopAlternate.getValue()) {return}
             const reverse = box.reverse.getValue()
-            const rate = file.data.mapOr(data => data.sampleRate, 0)
+            const rate = file.info.mapOr(info => info.sampleRate, 0)
             const room = reverse ? end - hi : lo - start
             const fade = Math.max(0.0, Math.min(box.loopFade.getValue() * rate / numFrames, hi - lo, room))
             const reach = Math.round(fade * (width - scale))
