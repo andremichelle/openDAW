@@ -1,5 +1,5 @@
 import {int, Nullable, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, PcmData, ppqn} from "@opendaw/lib-dsp"
 import {ClipSequencingUpdates} from "./ClipNotifications"
 import {NoteSignal} from "./NoteSignal"
 import type {SoundFont2} from "soundfont2"
@@ -106,6 +106,8 @@ export interface EngineToClient {
     notice(notice: EngineNotice): void
     deviceMessage(uuid: string, message: string): void
     fetchAudio(uuid: UUID.Bytes): Promise<AudioData>
+    // the sample in the format it is stored in, asked for instead of `fetchAudio` where it is answered
+    fetchSample?(uuid: UUID.Bytes): Promise<PcmData>
     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2>
     fetchNamWasm(): Promise<ArrayBuffer>
     fetchWclapBundle(url: string): Promise<WclapBundle>

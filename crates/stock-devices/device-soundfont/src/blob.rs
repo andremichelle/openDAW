@@ -8,7 +8,7 @@
 //!                     preset_count u32 | samples_off u32 | regions_off u32 | presets_off u32
 //! SampleDesc (24):    pcm_off u32 | frame_count u32 | sample_rate f32 | loop_start u32 | loop_end u32 | root u32
 //! RegionDesc (40):    key_lo u8 | key_hi u8 | vel_lo u8 | vel_hi u8 | sample_index u32 | root_key u32 |
-//!                     loop_mode u32 | pan f32 | attack f32 | decay f32 | sustain f32 | release f32 | _pad u32
+//!                     loop_mode u32 | pan f32 | attack f32 | decay f32 | sustain f32 | release f32 | tune f32
 //! PresetDesc (8):     region_start u32 | region_count u32
 //! PCM: concatenated normalized f32, each SampleDesc.pcm_off points to its plane (mono).
 //! ```
@@ -43,7 +43,8 @@ pub struct Region {
     pub attack: f32,
     pub decay: f32,
     pub sustain: f32,
-    pub release: f32
+    pub release: f32,
+    pub tune: f32 // cents on top of the root key
 }
 
 impl Region {
@@ -140,7 +141,8 @@ impl<'a> Soundfont<'a> {
             attack: read_f32(self.bytes, base + 20),
             decay: read_f32(self.bytes, base + 24),
             sustain: read_f32(self.bytes, base + 28),
-            release: read_f32(self.bytes, base + 32)
+            release: read_f32(self.bytes, base + 32),
+            tune: read_f32(self.bytes, base + 36)
         }
     }
 

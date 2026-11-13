@@ -5,6 +5,7 @@ import {
     WclapSaveCause, WclapStatus
 } from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
+import {resolveFloats, SAMPLE_REF_BYTES} from "../engine-exports"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
 import {createWasiImports, readMemoryImportLimits} from "./wasi-shim"
@@ -119,6 +120,7 @@ type SampleSlot = { handle: number, present: boolean, delivered: Nullable<Loaded
 // the engine's resolution of a sample handle (Route F), attached once the engine exists
 export type WclapSampleResolver = {
     host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_sample_floats?(handle: number, outPtr: number): number
     input_reserve(length: number): number
 }
 type NoteOut = { offset: number, on: boolean, key: number, velocity: number }
@@ -957,9 +959,9 @@ export class WclapBridges {
                 continue
             }
             if (isNull(resolver)) {continue}
-            const scratch = resolver.input_reserve(16)
-            if (resolver.host_resolve_sample(slot.handle, scratch) === 0) {continue} // not resident yet
-            const info = new DataView(this.#memory.buffer, scratch, 16)
+            const scratch = resolver.input_reserve(SAMPLE_REF_BYTES)
+            if (resolveFloats(resolver, slot.handle, scratch) === 0) {continue} // not resident yet
+            const info = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
             const framesPtr = info.getUint32(0, true)
             const frameCount = info.getUint32(4, true)
             const channelCount = info.getUint32(8, true)

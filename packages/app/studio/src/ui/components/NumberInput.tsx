@@ -23,10 +23,11 @@ type Construct = {
     maxChars?: int
     step?: number
     guard?: ValueGuard<number>
+    decimal?: boolean
 }
 
 export const NumberInput = ({
-                                lifecycle, model, negativeWarning, className, maxChars, mapper, step, guard
+                                lifecycle, model, negativeWarning, className, maxChars, mapper, step, guard, decimal
                             }: Construct) => {
     step ??= 1.0
     maxChars ??= 3
@@ -112,6 +113,12 @@ export const NumberInput = ({
                 case "NumpadSubtract":
                 case "Backspace": {
                     break // Allow
+                }
+                case "Period":
+                case "Comma":
+                case "NumpadDecimal": {
+                    if (decimal !== true) {event.preventDefault()}
+                    break
                 }
                 default: {
                     console.debug("ignore", event.code)

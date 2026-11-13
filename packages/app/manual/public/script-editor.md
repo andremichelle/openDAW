@@ -15,6 +15,9 @@ available, with a short description for each property and method.
 Press **Run**. A script that creates a project opens it in the studio. A script that edits the open project applies
 its changes as a single undo step, so you can take them back with one undo.
 
+A script can ask you for values before it starts its work. It then opens a dialog with text fields, numbers,
+sliders, checkboxes and dropdowns. Cancel ends the script without changing anything.
+
 ## Saving scripts
 
 Scripts are saved in your browser with a name and a description and are included in the [cloud backup](/manuals/cloud-backup).

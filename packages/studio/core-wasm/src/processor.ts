@@ -8,7 +8,7 @@
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AudioAnalyser, AudioData, LowBandAnalyser, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, LowBandAnalyser, PcmData, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -62,6 +62,7 @@ const GONIO_PAIRS = 512
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
     readonly #memory: WebAssembly.Memory
+    readonly #fetchSample: boolean
     readonly #engine: EngineExports
     readonly #hrClock: HRClock
     readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
@@ -111,6 +112,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
+        this.#fetchSample = processorOptions.fetchSample === true
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
         this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
@@ -122,6 +124,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                 deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
+                fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
                 fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
@@ -639,7 +642,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes / SoundfontFileBox targets; dispatch their loads.
         drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources,
-            sampleRate, error => this.#fail(error))
+            sampleRate, error => this.#fail(error), this.#fetchSample)
     }
 
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a

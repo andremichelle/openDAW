@@ -6,7 +6,7 @@ import {AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapte
 export namespace AudioWavExport {
     export const toFile = async (owner: AudioRegionBoxAdapter | AudioClipBoxAdapter,
                                  suggestedName: string = "audio.wav") => {
-        const data = owner.file.data.unwrap("Audio data is not loaded")
+        const data = await owner.file.audioData
         return Promises.tryCatch(Files.save(WavFile.encodeFloats(data) as ArrayBuffer, {
             types: [{
                 description: "Wav File",
