@@ -9,6 +9,9 @@ import {
     NanoDeviceBox,
     NeonDeviceBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
+    SurgeonPattern,
+    SurgeonSound,
     PlayfieldDeviceBox,
     SamplerDeviceBox,
     SamplerGroupBox,
@@ -54,6 +57,8 @@ import {
     NeonEnvelope,
     NeonLine,
     NeonVibrato,
+    Surgeon,
+    SurgeonValues,
     Tubular,
     TubularLfo,
     TubularOperator,
@@ -126,7 +131,7 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 }
 
 export type AnyInstrumentImpl =
-    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SamplerImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | CubedImpl
+    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SamplerImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | SurgeonImpl | CubedImpl
     | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
@@ -771,6 +776,57 @@ export class TubularImpl extends InstrumentFacade<TubularDeviceBox> implements T
     }
 }
 
+// the fields of a Surgeon value set, the live controls and a stored pattern have the same ones
+const surgeonValues = (source: SurgeonSound | SurgeonPattern) => ({
+        rate: source.rate, steps: source.steps, seed: source.seed, mutate: source.mutate, range: source.range,
+        density: source.density, tie: source.tie, slide: source.slide, accent: source.accent,
+        laneASteps: source.laneASteps, laneASeed: source.laneASeed, laneAMutate: source.laneAMutate,
+        laneBSteps: source.laneBSteps, laneBSeed: source.laneBSeed, laneBMutate: source.laneBMutate,
+        laneCSteps: source.laneCSteps, laneCSeed: source.laneCSeed, laneCMutate: source.laneCMutate,
+        laneDSteps: source.laneDSteps, laneDSeed: source.laneDSeed, laneDMutate: source.laneDMutate,
+        firstRatio: source.firstRatio, feedback: source.feedback, secondRatio: source.secondRatio,
+        secondDepth: source.secondDepth, wave: source.wave, depth: source.depth, strike: source.strike,
+        strikeDecay: source.strikeDecay, fold: source.fold, foldPlace: source.foldPlace, length: source.length,
+        held: source.held, sineGain: source.sineGain, sinePitch: source.sinePitch, glide: source.glide,
+        velocity: source.velocity, firstRatioA: source.firstRatioA, firstRatioB: source.firstRatioB,
+        firstRatioC: source.firstRatioC, firstRatioD: source.firstRatioD, feedbackA: source.feedbackA,
+        feedbackB: source.feedbackB, feedbackC: source.feedbackC, feedbackD: source.feedbackD,
+        secondRatioA: source.secondRatioA, secondRatioB: source.secondRatioB, secondRatioC: source.secondRatioC,
+        secondRatioD: source.secondRatioD, secondDepthA: source.secondDepthA, secondDepthB: source.secondDepthB,
+        secondDepthC: source.secondDepthC, secondDepthD: source.secondDepthD, waveA: source.waveA,
+        waveB: source.waveB, waveC: source.waveC, waveD: source.waveD, depthA: source.depthA, depthB: source.depthB,
+        depthC: source.depthC, depthD: source.depthD, strikeA: source.strikeA, strikeB: source.strikeB,
+        strikeC: source.strikeC, strikeD: source.strikeD, strikeDecayA: source.strikeDecayA,
+        strikeDecayB: source.strikeDecayB, strikeDecayC: source.strikeDecayC, strikeDecayD: source.strikeDecayD,
+        foldA: source.foldA, foldB: source.foldB, foldC: source.foldC, foldD: source.foldD,
+        foldPlaceA: source.foldPlaceA, foldPlaceB: source.foldPlaceB, foldPlaceC: source.foldPlaceC,
+        foldPlaceD: source.foldPlaceD, lengthA: source.lengthA, lengthB: source.lengthB, lengthC: source.lengthC,
+        lengthD: source.lengthD, heldA: source.heldA, heldB: source.heldB, heldC: source.heldC, heldD: source.heldD,
+        sineGainA: source.sineGainA, sineGainB: source.sineGainB, sineGainC: source.sineGainC,
+        sineGainD: source.sineGainD, sinePitchA: source.sinePitchA, sinePitchB: source.sinePitchB,
+        sinePitchC: source.sinePitchC, sinePitchD: source.sinePitchD, glideA: source.glideA, glideB: source.glideB,
+        glideC: source.glideC, glideD: source.glideD, velocityA: source.velocityA, velocityB: source.velocityB,
+        velocityC: source.velocityC, velocityD: source.velocityD
+})
+
+export class SurgeonImpl extends InstrumentFacade<SurgeonDeviceBox> implements Surgeon {
+    readonly key = "Surgeon" as const
+    declare tune: float
+    declare volume: float
+    declare slot: int
+    declare pattern: int
+    declare readonly live: SurgeonValues
+    declare readonly patterns: ReadonlyArray<SurgeonValues>
+
+    constructor(context: Context, box: SurgeonDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, volume: box.volume, slot: box.slot, pattern: box.pattern,
+            live: surgeonValues(box.live), patterns: box.patterns.fields().map(surgeonValues)
+        })
+    }
+}
+
 const createCubedStep = (context: Context, field: Int32Field, name: string): CubedStep => {
     const read = () => CubedStepCodec.unpack(field.getValue())
     const write = (step: CubedStep) => context.edit(() => field.setValue(CubedStepCodec.pack(step)))
@@ -857,6 +913,7 @@ export namespace InstrumentImpls {
         if (box instanceof TapeDeviceBox) {return new TapeImpl(context, box)}
         if (box instanceof NeonDeviceBox) {return new NeonImpl(context, box)}
         if (box instanceof TubularDeviceBox) {return new TubularImpl(context, box)}
+        if (box instanceof SurgeonDeviceBox) {return new SurgeonImpl(context, box)}
         if (box instanceof CubedDeviceBox) {return new CubedImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
         if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}

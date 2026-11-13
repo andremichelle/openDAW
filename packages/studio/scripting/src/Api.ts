@@ -1755,6 +1755,239 @@ export interface Neon extends Instrument {
 }
 
 /**
+ * The values of one Surgeon pattern: the rate, the pitch loop, the four lanes, the sound and its lane amounts
+ * @group Instruments
+ */
+export interface SurgeonValues {
+    /** Step length: 0 = eighth, 1 = sixteenth, 2 = thirty-second */
+    rate: int
+    /** Length of the pitch loop (1 to 32) */
+    steps: int
+    /** Seed of the pitch loop (0 to 99999), the same seed gives the same loop */
+    seed: int
+    /** Chance per step and pass that a pitch step is replaced (0.0 to 1.0) */
+    mutate: unitValue
+    /** Pitch spread around the tune, in semitones (0 to 36) */
+    range: float
+    /** Share of steps that sound (0.0 to 1.0) */
+    density: unitValue
+    /** Share of notes that run into the next note (0.0 to 1.0) */
+    tie: unitValue
+    /** Chance that the pitch glides from the previous pitch over one step (0.0 to 1.0) */
+    slide: unitValue
+    /** Velocity spread (0.0 to 1.0) */
+    accent: unitValue
+    /** Length of lane A (1 to 32) */
+    laneASteps: int
+    /** Seed of lane A (0 to 99999) */
+    laneASeed: int
+    /** Chance per step and pass that a step of lane A is replaced (0.0 to 1.0) */
+    laneAMutate: unitValue
+    /** Length of lane B (1 to 32) */
+    laneBSteps: int
+    /** Seed of lane B (0 to 99999) */
+    laneBSeed: int
+    /** Chance per step and pass that a step of lane B is replaced (0.0 to 1.0) */
+    laneBMutate: unitValue
+    /** Length of lane C (1 to 32) */
+    laneCSteps: int
+    /** Seed of lane C (0 to 99999) */
+    laneCSeed: int
+    /** Chance per step and pass that a step of lane C is replaced (0.0 to 1.0) */
+    laneCMutate: unitValue
+    /** Length of lane D (1 to 32) */
+    laneDSteps: int
+    /** Seed of lane D (0 to 99999) */
+    laneDSeed: int
+    /** Chance per step and pass that a step of lane D is replaced (0.0 to 1.0) */
+    laneDMutate: unitValue
+    /** Frequency of the first modulator against the note (0.25 to 8) */
+    firstRatio: float
+    /** Feedback of the first modulator, clean to noisy (0.0 to 1.0) */
+    feedback: unitValue
+    /** Frequency of the second modulator against the note (0.25 to 16) */
+    secondRatio: float
+    /** Depth of the second modulator, 0 is off (0 to 1.5) */
+    secondDepth: float
+    /** Oscillator wave: 0 = sine, 1 = half, 2 = rectified, 3 = burst */
+    wave: int
+    /** Resting modulation depth (0 to 4) */
+    depth: float
+    /** Extra modulation depth at the start of a note (0 to 8) */
+    strike: float
+    /** How fast the strike falls back, in seconds (0.02 to 1) */
+    strikeDecay: float
+    /** Wave folder amount (0.0 to 1.0) */
+    fold: unitValue
+    /** Place of the folder: 0 = before the gate, 1 = after the gate */
+    foldPlace: int
+    /** Note length, from a short hit to a long decay (0.0 to 1.0) */
+    length: unitValue
+    /** Share of the longest notes that hold their whole step (0.0 to 1.0) */
+    held: unitValue
+    /** Level of the plain sine under the sound (0 to 1.5) */
+    sineGain: float
+    /** Pitch of the plain sine: 0 = an octave below, 1 = at the pitch */
+    sinePitch: int
+    /** How fast a tied note reaches its pitch, in seconds (0 to 0.3) */
+    glide: float
+    /** How much the velocity of a note changes its strike (0.0 to 1.0) */
+    velocity: unitValue
+    /** How much lane A adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioA: float
+    /** How much lane B adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioB: float
+    /** How much lane C adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioC: float
+    /** How much lane D adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioD: float
+    /** How much lane A adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackA: float
+    /** How much lane B adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackB: float
+    /** How much lane C adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackC: float
+    /** How much lane D adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackD: float
+    /** How much lane A adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioA: float
+    /** How much lane B adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioB: float
+    /** How much lane C adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioC: float
+    /** How much lane D adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioD: float
+    /** How much lane A adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthA: float
+    /** How much lane B adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthB: float
+    /** How much lane C adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthC: float
+    /** How much lane D adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthD: float
+    /** How much lane A adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveA: float
+    /** How much lane B adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveB: float
+    /** How much lane C adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveC: float
+    /** How much lane D adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveD: float
+    /** How much lane A adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthA: float
+    /** How much lane B adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthB: float
+    /** How much lane C adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthC: float
+    /** How much lane D adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthD: float
+    /** How much lane A adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeA: float
+    /** How much lane B adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeB: float
+    /** How much lane C adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeC: float
+    /** How much lane D adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeD: float
+    /** How much lane A adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayA: float
+    /** How much lane B adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayB: float
+    /** How much lane C adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayC: float
+    /** How much lane D adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayD: float
+    /** How much lane A adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldA: float
+    /** How much lane B adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldB: float
+    /** How much lane C adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldC: float
+    /** How much lane D adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldD: float
+    /** How much lane A adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceA: float
+    /** How much lane B adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceB: float
+    /** How much lane C adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceC: float
+    /** How much lane D adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceD: float
+    /** How much lane A adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthA: float
+    /** How much lane B adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthB: float
+    /** How much lane C adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthC: float
+    /** How much lane D adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthD: float
+    /** How much lane A adds to held, as a share of its range (-1.0 to 1.0) */
+    heldA: float
+    /** How much lane B adds to held, as a share of its range (-1.0 to 1.0) */
+    heldB: float
+    /** How much lane C adds to held, as a share of its range (-1.0 to 1.0) */
+    heldC: float
+    /** How much lane D adds to held, as a share of its range (-1.0 to 1.0) */
+    heldD: float
+    /** How much lane A adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainA: float
+    /** How much lane B adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainB: float
+    /** How much lane C adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainC: float
+    /** How much lane D adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainD: float
+    /** How much lane A adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchA: float
+    /** How much lane B adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchB: float
+    /** How much lane C adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchC: float
+    /** How much lane D adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchD: float
+    /** How much lane A adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideA: float
+    /** How much lane B adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideB: float
+    /** How much lane C adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideC: float
+    /** How much lane D adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideD: float
+    /** How much lane A adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityA: float
+    /** How much lane B adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityB: float
+    /** How much lane C adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityC: float
+    /** How much lane D adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityD: float
+}
+
+/**
+ * Plays metallic FM themes for raw techno by itself, from loops that mutate and patterns fired on the bar.
+ * The device plays the stored `patterns`. `live` holds the editor's controls: while the project is open in the
+ * studio a change of a live value is kept in the pattern named by `pattern`, and an automated live value
+ * replaces that value in every pattern.
+ * @group Instruments
+ */
+export interface Surgeon extends Instrument {
+    /** Always "Surgeon" */
+    readonly key: "Surgeon"
+    /** Centre pitch in Hz (20 to 2000) */
+    tune: float
+    /** Volume in dB (up to 0) */
+    volume: float
+    /** The pattern that plays (0 to 7), -1 is off. A change takes over at the next bar */
+    slot: int
+    /** The pattern the live values belong to (0 to 7) */
+    pattern: int
+    /** The editor's controls */
+    readonly live: SurgeonValues
+    /** The eight stored patterns */
+    readonly patterns: ReadonlyArray<SurgeonValues>
+}
+
+/**
  * One Tubular operator (DX7 panel values, hardware ranges)
  * @group Instrument Parts
  */
@@ -1973,6 +2206,8 @@ export interface Instruments {
     "Neon": Neon
     /** {@link Tubular} */
     "Tubular": Tubular
+    /** {@link Surgeon} */
+    "Surgeon": Surgeon
     /** {@link Cubed} */
     "Cubed": Cubed
     /** {@link Apparat} */

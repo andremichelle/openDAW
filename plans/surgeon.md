@@ -2,7 +2,8 @@
 
 Status 2026-11-13: Surgeon is a real stock instrument. It is in the device browser, plays in the studio and in
 the headless engine, has its editor, a manual page and tests. The `/testing` preview and its own module are
-removed. Open: scripting API, presets, a screenshot for the manual (see "Device" below).
+removed. Scripts can use it. The default volume is -3 dB. Open: presets, a screenshot for the manual (see
+"Device" below).
 
 Branch: `surgeon`, in its own checkout `../openDAW-surgeon` (a git worktree, created 2026-11-13 from
 `9fee779f6`). Committed, not pushed. The main checkout holds other work and must stay free of these files.
@@ -313,20 +314,23 @@ One spec list generates both the live parameters and the pattern fields, so they
    pattern plays its stored values, a live control that is not automated is ignored, the volume acts.
 3. `adapters/.../Surgeon/SurgeonModel.test.ts` and `SurgeonValues.test.ts`: the loop model against the engine's
    values, and box values against the model.
-4. In the studio (checked in Chrome): the device is in the browser with its description, the editor renders, the
+4. `scripting/src/test/Surgeon.test.ts` and the scripting parity test: scripts reach tune, volume, slot,
+   pattern, the live controls and all eight patterns with every value.
+5. In the studio (checked in Chrome): the device is in the browser with its description, the editor renders, the
    transport plays it, a fired pattern flashes and takes over at the bar, Off silences it, no console errors.
 
 ### Open
 
-1. Scripting API: Surgeon is not in the scripting package yet.
-2. Presets, and the chain with Delay and Dattorro Reverb.
-3. The manual page has no screenshot.
-4. `crates/Cargo.toml` has no `opt-level = 3` entry for the crate (a shared file, the other synths have one).
-5. If the slot is automated, the playing pattern can differ from the one the live controls belong to. Edits then
+1. Presets, and the chain with Delay and Dattorro Reverb.
+2. The manual page has no screenshot.
+3. `crates/Cargo.toml` has no `opt-level = 3` entry for the crate (a shared file, the other synths have one).
+4. If the slot is automated, the playing pattern can differ from the one the live controls belong to. Edits then
    go to the pattern the controls show, not to the one that plays.
-6. The engine delivers at most 32 automation changes per update position to one device. With more than 32
+5. The engine delivers at most 32 automation changes per update position to one device. With more than 32
    controls automated at once, the rest is dropped.
-7. Tune and Volume changes are not smoothed.
+6. Tune and Volume changes are not smoothed.
+7. A script that writes a `live` value is only kept in a pattern while the project is open in the studio (the
+   adapter does the keeping). Scripts should write `patterns`.
 
 ## Lab
 

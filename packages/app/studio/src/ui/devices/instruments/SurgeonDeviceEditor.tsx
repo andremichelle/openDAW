@@ -46,6 +46,11 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {box, namedParameter} = adapter
     const {Lanes, PatternCount, Off, LaneNames} = Surgeon
     const rollSeed = (): int => Math.floor(Math.random() * 100_000)
+    // a button action is its own undo step: a pending interface change (edit mode, selection) is closed first
+    const act = (action: Procedure<void>): void => {
+        editing.mark()
+        editing.modify(action)
+    }
     const laneColor = (index: int): string => LaneColors[index].toString()
     const dragging = (parameter: AutomatableParameterFieldAdapter<number>) => (
         <AutomationControl lifecycle={lifecycle}
@@ -94,14 +99,14 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         offTile.classList.toggle("fired", fired === Off)
     }
     tiles.forEach((tile, index) => lifecycle.ownAll(
-        Events.subscribe(tile, "click", () => editing.modify(() => adapter.select(index))),
+        Events.subscribe(tile, "click", () => act(() => adapter.select(index))),
         ContextMenu.subscribe(tile, collector => collector.addItems(
             MenuItem.default({label: "Copy pattern"}).setTriggerProcedure(() => clipboard.pattern = adapter.patternModel(index)),
             MenuItem.default({label: "Paste pattern", selectable: isDefined(clipboard.pattern)}).setTriggerProcedure(() => {
                 const {pattern} = clipboard
-                if (isDefined(pattern)) {editing.modify(() => adapter.writePattern(index, pattern))}
+                if (isDefined(pattern)) {act(() => adapter.writePattern(index, pattern))}
             })))))
-    lifecycle.own(Events.subscribe(offTile, "click", () => editing.modify(() => adapter.select(Off))))
+    lifecycle.own(Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))))
     const canvas: HTMLCanvasElement = <canvas/>
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight, devicePixelRatio}) => {
         const pattern = adapter.liveModel()
@@ -192,7 +197,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         }),
         AnimationFrame.add(() => {if (engine.isPlaying.getValue()) {painter.requestUpdate()}})
     )
-    const rollModel = (keys: ReadonlyArray<int>, change: Procedure<SurgeonModel.Pattern>) => () => editing.modify(() => {
+    const rollModel = (keys: ReadonlyArray<int>, change: Procedure<SurgeonModel.Pattern>) => () => act(() => {
         const model = adapter.liveModel()
         change(model)
         adapter.writeLiveKeys(model, keys)
@@ -217,7 +222,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         base.forEach((position, index) => model.base[index] = position)
         amounts.forEach((row, index) => model.amounts[index] = row)
     }), "4 / 5 / 5 / 7", "roll")
-    const rollAll = presses(button("All", () => editing.modify(() =>
+    const rollAll = presses(button("All", () => act(() =>
             adapter.writeLive(SurgeonModel.rollAll(adapter.liveModel(), rollSeed()))), "4 / 7 / 5 / 9", "roll"),
         [rollPitch, rollLanes, rollSound, ...laneRolls])
     const loops: HTMLElement = (

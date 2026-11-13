@@ -41,7 +41,7 @@ const assertMirrored = (facade: object, unused: ReadonlyArray<string> = []) => {
 describe("Schema parity", () => {
     it("mirrors every automatable instrument parameter", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Sampler", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Apparat", "InstrumentComposite"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Sampler", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Surgeon", "Cubed", "Apparat", "InstrumentComposite"]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(project.addInstrumentUnit(key).instrument)})
         expect(plain).toEqual({
@@ -54,6 +54,7 @@ describe("Schema parity", () => {
             Tape: [],
             Neon: [],
             Tubular: ["voiceLoad"],
+            Surgeon: [],
             // patterns are exposed as CubedPattern objects (length + unpacked steps), not through the field binder
             Cubed: Array.from({length: 16}, (_, pattern) => [
                 `patterns.${pattern}.length`,
