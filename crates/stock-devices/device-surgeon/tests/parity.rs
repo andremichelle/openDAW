@@ -47,7 +47,7 @@ fn lab_favourite() -> LabPattern {
 }
 
 fn favourite() -> Pattern {
-    let pitch = PitchLoop {steps: 7, seed: 1, mutate: 0.12, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6};
+    let pitch = PitchLoop {steps: 7, seed: 1, mutate: 0.12, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6, slide: 0.0};
     let lane = |steps: u32, seed: u32| Lane {steps, seed, mutate: 0.15};
     let mut pattern = Pattern::new(pitch, [lane(5, 21), lane(9, 22), lane(4, 23), lane(11, 24)]);
     pattern.set(Param::Wave, 2.0).set(Param::SineLevel, 0.6).set(Param::Depth2, 0.6).set(Param::HeldShare, 0.08)
@@ -129,11 +129,11 @@ fn the_voice_matches_the_labs_voice_without_feedback() {
     for index in 0..48_000 {
         if index == 0 {
             lab.note_on(50.3, 0.9);
-            voice.note_on(50.3, 0.9);
+            voice.note_on(50.3, 0.9, 0);
         }
         if index == 9_000 {
             lab.note_on(57.8, 0.5);
-            voice.note_on(57.8, 0.5);
+            voice.note_on(57.8, 0.5, 0);
         }
         if index == 12_000 || index == 14_000 {
             lab.note_off();
@@ -141,7 +141,7 @@ fn the_voice_matches_the_labs_voice_without_feedback() {
         }
         if index == 30_000 {
             lab.note_on(44.1, 1.0);
-            voice.note_on(44.1, 1.0);
+            voice.note_on(44.1, 1.0, 0);
         }
         first.push(lab.next());
         second.push(voice.next());
@@ -170,6 +170,85 @@ fn the_engine_plays_the_favourite_at_the_labs_levels() {
         let (expected, actual) = (decibel(rms(&lab[range.clone()])), decibel(rms(&output[range])));
         assert!((expected - actual).abs() < 1.5, "bar {bar}: lab {expected:.1} dB, engine {actual:.1} dB");
     }
+}
+
+// the frequency of a plain tone, from its zero crossings
+fn frequency(signal: &[f32], rate: f32) -> f32 {
+    let crossings = signal.windows(2).filter(|pair| pair[0] <= 0.0 && pair[1] > 0.0).count();
+    crossings as f32 * rate / signal.len() as f32
+}
+
+#[test]
+fn a_slide_glides_evenly_over_its_time_and_still_strikes() {
+    let patch = Patch {ratio: 1.0, strike_decay: 0.1, decay: 2.0, velocity: 0.0, second_ratio: 1.0, sine_ratio: 1.0, ..Patch::default()};
+    let mut voice = Voice::default();
+    voice.init(RATE);
+    voice.set_patch(patch);
+    voice.note_on(69.0, 1.0, 9_600);
+    voice.note_off();
+    let first: Vec<f32> = (0..9_600).map(|_| voice.next()).collect();
+    assert!((frequency(&first, RATE) - 440.0).abs() < 12.0, "the first note has nothing to slide from");
+    voice.note_on(81.0, 1.0, 9_600);
+    voice.note_off();
+    let gliding: Vec<f32> = (0..9_600).map(|_| voice.next()).collect();
+    let (early, middle, late) = (frequency(&gliding[..2_400], RATE), frequency(&gliding[3_600..6_000], RATE), frequency(&gliding[7_200..], RATE));
+    assert!(early > 440.0 && early < middle && middle < late && late < 880.0, "{early} {middle} {late}");
+    assert!((middle - 622.0).abs() < 40.0, "halfway in pitch at half time: {middle}");
+    assert!(rms(&gliding[..2_400]) > rms(&first[7_200..]), "the sliding note is struck again");
+    let arrived: Vec<f32> = (0..4_800).map(|_| voice.next()).collect();
+    assert!((frequency(&arrived, RATE) - 880.0).abs() < 15.0);
+}
+
+#[test]
+fn slide_is_the_chance_that_a_step_slides_and_leaves_the_loop_alone() {
+    let events = |slide: f32| {
+        let mut pattern = favourite();
+        pattern.pitch.slide = slide;
+        (0..400).map(|step| pattern.event(step)).collect::<Vec<_>>()
+    };
+    let (none, some, all) = (events(0.0), events(0.3), events(1.0));
+    let sliding = |events: &[device_surgeon::pattern::StepEvent]| events.iter().filter(|event| event.note.is_some_and(|note| note.slide)).count();
+    let sounding = none.iter().filter(|event| event.note.is_some()).count();
+    assert_eq!(sliding(&none), 0);
+    assert_eq!(sliding(&all), sounding);
+    assert!((sounding * 2 / 10..=sounding * 4 / 10).contains(&sliding(&some)), "{} of {sounding}", sliding(&some));
+    for index in 0..400 {
+        let (plain, slid) = (none[index].note, all[index].note);
+        assert_eq!(plain.map(|note| (note.offset, note.velocity, note.length)), slid.map(|note| (note.offset, note.velocity, note.length)));
+    }
+}
+
+#[test]
+fn the_all_button_rolls_the_approved_pattern_plus_a_slide_chance_and_keeps_mutate_and_rate() {
+    let mut current = favourite();
+    current.rate = 2;
+    current.pitch.mutate = 0.07;
+    current.lanes[2].mutate = 0.33;
+    let mut drawn = Vec::new();
+    for seed in 0..200 {
+        let (approved, all) = (Pattern::random(seed), current.roll_all(seed));
+        assert_eq!(approved.pitch.slide, 0.0);
+        assert!((0.0..=0.5).contains(&all.pitch.slide));
+        drawn.push(all.pitch.slide);
+        assert_eq!((all.base, all.amounts), (approved.base, approved.amounts));
+        assert_eq!((all.pitch.steps, all.pitch.seed, all.pitch.tie, all.pitch.range), (approved.pitch.steps, approved.pitch.seed, approved.pitch.tie, approved.pitch.range));
+        assert_eq!(all.lanes.map(|lane| (lane.steps, lane.seed)), approved.lanes.map(|lane| (lane.steps, lane.seed)));
+        assert_eq!((all.rate, all.pitch.mutate), (2, 0.07));
+        assert_eq!(all.lanes.map(|lane| lane.mutate), current.lanes.map(|lane| lane.mutate));
+    }
+    assert!(drawn.iter().any(|slide| *slide < 0.1) && drawn.iter().any(|slide| *slide > 0.4));
+}
+
+#[test]
+fn without_slides_the_engine_sounds_exactly_as_before() {
+    let render = |slide: Option<f32>| {
+        let mut pattern = favourite();
+        if let Some(slide) = slide {pattern.pitch.slide = slide;}
+        let mut engine = engine_with(&[pattern]);
+        play(&mut engine, 0.0, bar_frames() * 2, MAX_FRAMES, true, false)
+    };
+    assert_eq!(render(None), render(Some(0.0)));
+    assert_ne!(render(None), render(Some(1.0)));
 }
 
 #[test]
@@ -292,7 +371,7 @@ fn onsets(signal: &[f32]) -> usize {
 
 #[test]
 fn the_rate_sets_how_many_steps_a_bar_has() {
-    let mut pattern = Pattern::new(PitchLoop {steps: 5, seed: 9, mutate: 0.0, range: 0.0, density: 1.0, tie: 0.0, accent: 0.0}, [Lane::default(); 4]);
+    let mut pattern = Pattern::new(PitchLoop {steps: 5, seed: 9, mutate: 0.0, range: 0.0, density: 1.0, tie: 0.0, accent: 0.0, slide: 0.0}, [Lane::default(); 4]);
     pattern.set(Param::Length, 0.0).set(Param::Feedback, 0.0).set(Param::Strike, 0.0).set(Param::Depth, 0.0);
     for (rate, expected) in [(0, 16), (1, 32), (2, 64)] {
         pattern.rate = rate;

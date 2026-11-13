@@ -17,7 +17,7 @@ const TAIL: f64 = 3.0;
 const LEVEL: f32 = 0.1;
 
 fn favourite() -> Pattern {
-    let pitch = PitchLoop {steps: 7, seed: 1, mutate: 0.12, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6};
+    let pitch = PitchLoop {steps: 7, seed: 1, mutate: 0.12, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6, slide: 0.0};
     let lane = |steps: u32, seed: u32| Lane {steps, seed, mutate: 0.15};
     let mut pattern = Pattern::new(pitch, [lane(5, 21), lane(9, 22), lane(4, 23), lane(11, 24)]);
     pattern.set(Param::Wave, 2.0).set(Param::SineLevel, 0.6).set(Param::Depth2, 0.6).set(Param::HeldShare, 0.08)

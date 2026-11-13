@@ -25,5 +25,6 @@ fn main() {
         println!("  base: [{}]", bases.join(", "));
         println!("  amounts: [{}]", amounts.join(", "));
         println!("  feedback at 37: {}", pattern.unit(Param::Feedback, 37));
+        println!("  slide of the All button: {}", Pattern::default().roll_all(seed).pitch.slide);
     }
 }

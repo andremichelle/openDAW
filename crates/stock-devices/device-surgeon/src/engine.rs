@@ -84,13 +84,13 @@ impl Engine {
         self.off_count = 0;
     }
 
-    fn enter(&mut self, step: i64, step_pulses: f64) {
+    fn enter(&mut self, step: i64, step_pulses: f64, step_samples: f64) {
         if step < 0 {return;}
         let Some(pattern) = self.pattern() else {return;};
         let event = pattern.event(step as u32);
         self.voice.set_patch(event.patch);
         let Some(note) = event.note else {return;};
-        self.voice.note_on(self.tune + note.offset, note.velocity);
+        self.voice.note_on(self.tune + note.offset, note.velocity, if note.slide {step_samples as u32} else {0});
         if self.off_count == MAX_OFFS {
             self.voice.note_off();
             self.offs.copy_within(1.., 0);
@@ -138,7 +138,7 @@ impl Engine {
                     let step = libm::floor(pulse / step_pulses) as i64;
                     if step != self.step {
                         self.step = step;
-                        self.enter(step, step_pulses);
+                        self.enter(step, step_pulses, if advance > 0.0 {step_pulses / advance} else {0.0});
                     }
                 }
                 let mut read = 0;

@@ -7,6 +7,7 @@ pub const MAX_STEPS: u32 = 32;
 /// Pulses per step for an eighth, a sixteenth and a thirty-second.
 pub const RATE_PULSES: [f64; 3] = [480.0, 240.0, 120.0];
 pub const SIXTEENTH: u32 = 1;
+pub const MAX_RANDOM_SLIDE: f32 = 0.5;
 
 const HOLD_RELEASE: f32 = 0.1;
 const SHORTEST: f32 = 0.05;
@@ -27,7 +28,9 @@ pub struct Step {
     /// Semitones from Tune, never rounded to a note.
     pub offset: f32,
     pub velocity: f32,
-    pub kind: Kind
+    pub kind: Kind,
+    /// The pitch glides to this step over one step.
+    pub slide: bool
 }
 
 /// The loop that makes the pitches. `range` in semitones.
@@ -39,7 +42,9 @@ pub struct PitchLoop {
     pub range: f32,
     pub density: f32,
     pub tie: f32,
-    pub accent: f32
+    pub accent: f32,
+    /// The chance that a step slides. At zero nothing slides.
+    pub slide: f32
 }
 
 impl PitchLoop {
@@ -49,7 +54,7 @@ impl PitchLoop {
         let generation = generation(self.seed, step, pass, self.mutate);
         let roll = |channel: u32| unit(self.seed, step, generation, channel);
         let kind = if roll(2) >= self.density {Kind::Rest} else if roll(3) < self.tie {Kind::Tie} else {Kind::Play};
-        Step {offset: (roll(1) * 2.0 - 1.0) * self.range, velocity: 1.0 - self.accent * roll(4), kind}
+        Step {offset: (roll(1) * 2.0 - 1.0) * self.range, velocity: 1.0 - self.accent * roll(4), kind, slide: roll(5) < self.slide}
     }
 }
 
@@ -80,7 +85,8 @@ pub struct StepEvent {
 pub struct Note {
     pub offset: f32,
     pub velocity: f32,
-    pub length: f64
+    pub length: f64,
+    pub slide: bool
 }
 
 /// A pitch loop, four lanes and the sound with its mapping: every parameter has a base and an amount per lane,
@@ -120,7 +126,7 @@ impl Pattern {
     }
 
     // WASM CONTRACT: Random all must keep drawing exactly like this (the ranges were approved by ear). The roll
-    // indices and the order of the draws are part of it.
+    // indices and the order of the draws are part of it. Slide is not drawn, it stays at zero.
     pub fn random(seed: u32) -> Self {
         let roll = |index: u32| unit(seed, index, 0, 7);
         let between = |index: u32, low: f32, high: f32| low + (high - low) * roll(index);
@@ -131,7 +137,8 @@ impl Pattern {
             range: between(3, 5.0, 19.0),
             density: between(4, 0.55, 0.95),
             tie: between(5, 0.0, 0.4),
-            accent: between(6, 0.3, 0.8)
+            accent: between(6, 0.3, 0.8),
+            slide: 0.0
         };
         let lane = |index: u32| Lane {steps: between(10 + index, 2.0, 17.0) as u32, seed: (roll(20 + index) * 100_000.0) as u32, mutate: between(30 + index, 0.05, 0.3)};
         let mut pattern = Pattern::new(pitch, [lane(0), lane(1), lane(2), lane(3)]);
@@ -150,6 +157,17 @@ impl Pattern {
             let index = 80 + index as u32 * 4;
             if roll(index) < 0.4 {pattern.amounts[param as usize][pick(index + 1)] += between(index + 2, -0.35, 0.35);}
         }
+        pattern
+    }
+
+    /// What the All button does to a pattern: `random`, plus a Slide chance drawn on its own so `random` stays as
+    /// approved. Mutate and Rate are never rolled, they stay as they are.
+    pub fn roll_all(&self, seed: u32) -> Self {
+        let mut pattern = Self::random(seed);
+        pattern.pitch.slide = MAX_RANDOM_SLIDE * unit(seed, 8, 0, 7);
+        pattern.pitch.mutate = self.pitch.mutate;
+        pattern.rate = self.rate;
+        for (rolled, current) in pattern.lanes.iter_mut().zip(self.lanes.iter()) {rolled.mutate = current.mutate;}
         pattern
     }
 
@@ -193,11 +211,11 @@ impl Pattern {
 
     pub fn event(&self, position: u32) -> StepEvent {
         let patch = self.patch(position);
-        let Step {offset, velocity, kind} = self.pitch.step(position);
+        let Step {offset, velocity, kind, slide} = self.pitch.step(position);
         let note = match kind {
             Kind::Rest => None,
-            Kind::Tie => Some(Note {offset, velocity, length: TIE_SHARE}),
-            Kind::Play => Some(Note {offset, velocity, length: if patch.hold {HOLD_SHARE} else {GATE_SHARE}})
+            Kind::Tie => Some(Note {offset, velocity, length: TIE_SHARE, slide}),
+            Kind::Play => Some(Note {offset, velocity, length: if patch.hold {HOLD_SHARE} else {GATE_SHARE}, slide})
         };
         StepEvent {patch, note}
     }

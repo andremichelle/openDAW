@@ -18,6 +18,12 @@ Diagram: `plans/surgeon-architecture.svg`.
 
 Name: Surgeon (decided 2026-11-13).
 
+## Rule: the sound is frozen
+
+Nothing may change the sound any more (André 2026-11-13). Every further feature must leave existing patterns
+bit for bit as they are when it is not used. A new control starts at a value that changes nothing, and a test
+proves it (as for Slide: at 0 % the engine renders the same samples as before).
+
 ## Goal
 
 1. One instrument that produces metallic, inharmonic FM themes for techno: a loop that plays its own voice.
@@ -57,15 +63,22 @@ The loop has Steps steps and repeats. Every step is a note, a tied note or a res
 | Mutate | 0 to 100 % | chance per step and pass that the step is replaced by a new random one |
 | Range | octaves | how far pitches spread above and below Tune |
 | Density | 0 to 100 % | share of steps that sound |
-| Tie | 0 to 100 % | share of sounding steps that tie into the next and slide |
+| Tie | 0 to 100 % | share of sounding steps that tie into the next, which then gets no new strike |
+| Slide | 0 to 100 % | chance that a step slides: its pitch glides from the previous pitch over one step. 0 % changes nothing, at 100 % every note slides |
 | Accent | 0 to 100 % | how far velocities spread below full |
 
 Rules:
 1. Pitches are free. They are never rounded to notes and there is no scale (a scale blend was tried and dropped,
    "does not sound like I expected").
-2. A tied step lasts a little longer than its step, so it overlaps the next note and the voice slides.
-3. An untied step lasts half a step, a held step (see Length) almost the whole step.
-4. Lab values of the favourite: 7 steps, Range 13, Density 80 %, Tie 25 %, Accent 60 %, Mutate 12 %.
+2. A tied step lasts a little longer than its step, so it overlaps the next note, which gets no new strike and
+   reaches its pitch over Glide.
+   The All button rolls Slide too, between 0 and 50 % (`Pattern::roll_all`). It never rolls Mutate or Rate, they
+   stay as they are (André 2026-11-13: "Mutate should not be randomized"). The approved draw `Pattern::random`
+   itself stays untouched, so a seed still gives the loops and the sound that were approved by ear.
+3. A slide is separate from a tie (decided 2026-11-13): the pitch glides evenly from the previous pitch to the
+   step's own pitch over exactly one step. The note is struck as usual unless it is also tied into.
+4. A step that is not tied lasts half a step, a held step (see Length) almost the whole step.
+5. Lab values of the favourite: 7 steps, Range 13, Density 80 %, Tie 25 %, Accent 60 %, Mutate 12 %.
 
 ### Lanes
 
@@ -100,7 +113,7 @@ Signal flow:
    the decay.
 6. Parallel sine at the loop's pitch or an octave below. It takes the gate's level only and skips the filter and
    the fold, so the body stays full while the top darkens.
-7. Monophonic. A tied step slides to the next pitch over Glide and does not restart the envelopes.
+7. Monophonic. A tied step runs into the next note without restarting the envelopes.
 
 | Value | Lab range | Meaning |
 |---|---|---|
@@ -117,9 +130,9 @@ Signal flow:
 | Fold Place | before, after | place of the fold against the gate |
 | Length | 50 ms to 900 ms, then held | from a short punch to a long decay |
 | Held share | 0 to 100 % | top share of Length that holds the whole step. Lab: 8 % |
-| Sine Level | 0 to 1.5 | parallel sine. Lab: 0.6 |
+| Sine Gain | 0 to 1.5 | parallel sine. Lab: 0.6 |
 | Sine Pitch | octave below, at pitch | pitch of the parallel sine |
-| Glide | 0 to 300 ms | slide time of tied steps. Lab: 40 ms |
+| Glide | 0 to 300 ms | how fast a tied note reaches its pitch. Lab: 40 ms |
 | Velocity | 0 to 1 | how much velocity scales the strike. Lab: 0.7 |
 | Volume | 0 to 1 | output level |
 
@@ -159,7 +172,26 @@ Fixed, no control: the gate's filter curve, the length of untied, tied and held 
 No value is dropped for count. They do not all need to be visible at all times, the editor finds the way to show
 them (André 2026-11-13).
 
-## Editor (layout proposal 2026-11-13, not decided)
+## Editor
+
+The draft on `/testing` is the reference since 2026-11-13, it has moved on from the wireframe
+(`plans/surgeon-editor.svg`) after André's review:
+1. Pattern tiles are circles: a 3 x 3 grid of 1 to 8 and Off, with Tune and Volume below it.
+2. The display has no outline.
+3. Tabs are text tabs above the section, LOOPS, TONE and SHAPE, in the style of Delay's heads.
+4. Every row sits on a tinted band with its rotated title at the right edge, as in Delay and Tubular: PITCH,
+   LANES and ROLL on the loops tab, BASE and A to D (in the lane colours) on the sound tabs.
+5. Columns are 50 px so no caption is cut.
+6. Mutate starts at 0 % in every pattern and is never rolled by any button.
+8. The pitch row is Seed, Steps, Mutate, Range, Density, Tie, Slide, Accent. Rate sits under the pattern circles
+   above Tune and Volume, because the row has eight columns.
+9. On the sound tabs the base row is titled 0 and the rows are lower, which gives the caption row more height.
+   Captions stay on one line, a name that does not fit is abbreviated (Strike Dec, Held).
+7. Table buttons are outlines in their row's colour, pressed looks like hover. Holding Lanes highlights the four
+   lane Roll buttons, holding All highlights Pitch, Lanes, Sound and the lane Rolls.
+
+The earlier layout notes follow.
+
 
 Wireframe in true pixels: `plans/surgeon-editor.svg`. Body 172 px high like Tubular, 720 px wide. Built from
 existing device conventions only: Tubular's round tab tiles, label control cells, tinted bands and rotated
@@ -184,7 +216,7 @@ Tab L, loops:
 Tabs T and S, sound: a grid of 8 parameters by 5 rows. Row 1 is the base value, rows A to D the lane amounts in
 the lane's colour. Zero amounts stay dim.
 1. T: Ratio 1, Feedback, Ratio 2, Depth 2, Wave, Depth, Strike, Strike Decay.
-2. S: Fold, Fold Place, Length, Held share, Sine Level, Sine Pitch, Glide, Velocity.
+2. S: Fold, Fold Place, Length, Held share, Sine Gain, Sine Pitch, Glide, Velocity.
 
 Decided 2026-11-13:
 1. Every edit is audible at once. No Apply, no Revert (André rejected both, 2026-11-13).
@@ -261,7 +293,7 @@ The favourite as a pattern (`listen/1-favourite-as-pattern`):
 1. Notes: seed 1, 7 steps, Range 13, Density 80 %, Tie 25 %, Accent 60 %, Mutate 12 %.
 2. Lanes: A 5 steps seed 21, B 9 steps seed 22, C 4 steps seed 23, D 11 steps seed 24, all Mutate 15 %.
 3. Sound: Tune 50, Ratio 1 2.41, Ratio 2 5.19, Depth 2 0.6, Wave rectified, Depth 0.6, Strike Decay 140 ms,
-   Fold Place before, Held share 8 %, Sine Level 0.6 an octave below, Glide 40 ms, Velocity 0.7.
+   Fold Place before, Held share 8 %, Sine Gain 0.6 an octave below, Glide 40 ms, Velocity 0.7.
 4. Mapping: Feedback 0 to 0.8 on A, Strike 1 to 7 on B, Fold 0 to 0.5 on C, Length full range on D.
 
 Never change the rolls in `Seeded::step` or `GenericLane::value`, the favourite loops depend on them. The engine

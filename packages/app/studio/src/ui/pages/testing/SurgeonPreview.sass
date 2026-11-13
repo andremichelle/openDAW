@@ -2,7 +2,13 @@
 @use "@/ui/devices/instruments/SamplerDeviceEditor/shared"
 
 $tile: 22px
-$column: 45px
+$circle: 20px
+$table: 156px
+$row-gap: 2px
+$loop-row: ($table - $row-gap * 3) * 0.25
+$control: 31px
+$title: 12px
+$column: 50px
 
 @keyframes surgeon-waiting
   from
@@ -27,46 +33,57 @@ component
     align-items: center
     justify-content: center
     align-self: center
+    box-sizing: border-box
     height: 18px
-    margin: 0 2px
+    margin: 0 6px
     border-radius: 9px
     font-size: 9px
     cursor: pointer
     color: rgba(white, 0.6)
-    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+    border: 1px solid color-mix(in srgb, var(--color) 40%, transparent)
 
-    &:hover
+    &:hover, &.pressed
       color: rgba(white, 0.9)
-      background-color: color-mix(in srgb, var(--color) 18%, transparent)
+      border-color: var(--color)
 
     &.play
       --color: var(--color-green)
       width: 64px
       margin: 0
 
+    &.roll
+      width: 60px
+      margin: 0
+      justify-self: center
+
   div.surgeon
     --color: var(--color-green)
     display: grid
-    grid-template-columns: 94px 180px $tile auto
+    grid-template-columns: ($circle * 3 + 4px) 180px auto
     grid-template-rows: 172px
     column-gap: 1em
     align-content: start
     @include mixins.Control
 
-  // borrowed from TubularDeviceEditor (tab tiles)
-  div.tile, div.tab
+  // borrowed from TubularDeviceEditor (round tab tiles)
+  div.tile
     display: flex
     align-items: center
     justify-content: center
-    height: $tile
-    border-radius: 11px
+    width: $circle
+    height: $circle
+    border-radius: 50%
     font-size: 10px
     line-height: 1
     cursor: pointer
     color: rgba(white, 0.6)
     background-color: color-mix(in srgb, var(--color) 10%, transparent)
 
-    &.active, &.selected
+    &.off
+      font-size: 8px
+      --color: var(--color-shadow)
+
+    &.active
       color: rgba(black, 0.95)
       background-color: var(--color)
 
@@ -75,30 +92,33 @@ component
       color: rgba(black, 0.95)
       background-color: var(--color)
 
-  div.tile.off
-    grid-column: 1 / -1
-    --color: var(--color-shadow)
-
   nav.patterns
-    display: grid
-    grid-template-columns: repeat(2, 1fr)
-    grid-template-rows: repeat(5, $tile) minmax(0, 1fr)
-    gap: 2px
+    display: flex
+    flex-direction: column
+    justify-content: space-between
 
-  nav.tabs
-    display: grid
-    grid-auto-rows: $tile
-    row-gap: 2px
-    align-content: start
-    --color: var(--color-blue)
+    > div.circles
+      display: grid
+      grid-template-columns: repeat(3, $circle)
+      grid-auto-rows: $circle
+      gap: 2px
 
-  // borrowed from TubularDeviceEditor section.sass (display)
+    > div.values
+      display: grid
+      row-gap: 5px
+
+      label.value
+        height: 13px
+        padding-top: 0
+        line-height: 13px
+
+      > div.control
+        row-gap: 0
+
   div.display
     display: grid
     grid-template-rows: minmax(0, 1fr)
-    padding: 2px
-    border-radius: 6px
-    outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.08)
+    margin-bottom: 1px
     min-width: 0
     min-height: 0
 
@@ -106,16 +126,23 @@ component
       width: 100%
       height: 100%
       min-height: 0
-      border-radius: 4px
-      box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
 
   div.sections
     display: grid
+    grid-template-rows: 14px minmax(0, 1fr)
+    row-gap: 2px
+
+    > header
+      grid-area: 1 / 1
+      display: flex
+      column-gap: 4px
+      margin-right: $title + $row-gap
+      --color: var(--color-cream)
 
     > section
-      grid-area: 1 / 1
+      grid-area: 2 / 1
       display: grid
-      grid-template-columns: 12px repeat(8, $column)
+      grid-template-columns: repeat(8, $column) $title
       column-gap: 2px
       row-gap: 2px
       position: relative
@@ -124,47 +151,71 @@ component
         grid-template-rows: repeat(4, 1fr)
 
       &.sound
-        grid-template-rows: 12px repeat(5, 1fr)
-
-  // borrowed from TubularDeviceEditor section.sass (bands, rotated titles, label controls)
-  div.label
-    pointer-events: none
-    border-radius: 2px
-    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
-    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+        grid-template-rows: 18px repeat(5, 1fr)
 
   h3
     margin: 0
     font-weight: 400
 
-  h3.rotated, h3.lane
-    font-size: 9px
-    letter-spacing: 0.2px
-    text-align: center
-    white-space: nowrap
-    border-radius: 2px
-    color: rgba(black, 0.8)
-    background-color: color-mix(in srgb, var(--color) 66%, black)
-
-  h3.rotated
-    writing-mode: vertical-rl
-    transform: rotate(180deg)
-    padding: 0 1px
-
-  h3.lane
+  // borrowed from DelayDeviceEditor (h3.head), selectable
+  h3.tab
+    flex: 1
     display: flex
     align-items: center
     justify-content: center
-
-  h3.caption
     font-size: 9px
+    line-height: 1
+    letter-spacing: 0.2px
+    white-space: nowrap
+    cursor: pointer
+    border-radius: 2px 2px 1px 1px
+    color: rgba(white, 0.6)
+    background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &.selected
+      color: rgba(black, 0.95)
+      background-color: var(--color)
+
+  // borrowed from DelayDeviceEditor (section overlays and rotated titles)
+  div.band
+    pointer-events: none
+    border-radius: 2px
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+
+  h3.rotated
+    font-size: 9px
+    letter-spacing: 0.2px
+    padding: 0 1px
+    text-align: center
+    white-space: nowrap
+    writing-mode: vertical-rl
+    justify-self: end
+    border-radius: 0 2px 2px 0
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
+  .pitch, .base
+    --color: var(--color-cream)
+
+  .lanes
+    --color: var(--color-purple)
+
+  .roll
+    --color: var(--color-dark)
+
+  // sits where the captions of the first row on the loops tab sit, so switching tabs does not move them
+  h3.caption
+    align-self: start
+    margin-top: ($loop-row - $control) * 0.5
     height: 12px
+    font-size: 9px
     letter-spacing: 0.5px
     text-align: center
     white-space: nowrap
-    overflow: hidden
     color: var(--color-shadow)
 
+  // borrowed from TubularDeviceEditor section.sass (label control)
   div.control
     display: grid
     grid-auto-rows: auto

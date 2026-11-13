@@ -21,7 +21,7 @@ export namespace SurgeonAudio {
 
     // the order `set_pattern` in crates/surgeon-wasm reads
     const flatten = ({rate, pitch, lanes, base, amounts}: SurgeonModel.Pattern): Float32Array => Float32Array.from([
-        rate, pitch.steps, pitch.seed, pitch.mutate, pitch.range, pitch.density, pitch.tie, pitch.accent,
+        rate, pitch.steps, pitch.seed, pitch.mutate, pitch.range, pitch.density, pitch.tie, pitch.accent, pitch.slide,
         ...lanes.flatMap(({steps, seed, mutate}) => [steps, seed, mutate]), ...base, ...amounts.flat()
     ])
 

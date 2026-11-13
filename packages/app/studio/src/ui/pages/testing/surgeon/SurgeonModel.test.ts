@@ -3,7 +3,7 @@ import {SurgeonModel} from "./SurgeonModel"
 
 // reference values printed by the engine: cargo run -p device-surgeon --example vectors (in crates)
 describe("SurgeonModel against the engine", () => {
-    const {unit, generation, random, step, laneValue, unitAt, Index, Kind} = SurgeonModel
+    const {unit, generation, random, rollAll, favourite, step, laneValue, unitAt, Index, Kind} = SurgeonModel
     it("rolls like the engine", () => {
         expect(unit(1, 0, 0, 1)).toBe(Math.fround(0.50477314))
         expect(unit(21, 3, 2, 1)).toBe(Math.fround(0.28574818))
@@ -31,6 +31,22 @@ describe("SurgeonModel against the engine", () => {
         expect(five.lanes.map(({steps, seed}) => [steps, seed])).toEqual([[8, 88686], [6, 13438], [12, 84779], [11, 59241]])
         const twelve = random(12)
         expect([twelve.pitch.steps, twelve.pitch.seed]).toEqual([12, 89564])
+    })
+    it("the All button adds the engine's slide chance and keeps Mutate and Rate", () => {
+        const current = favourite()
+        current.rate = 2
+        current.pitch.mutate = 0.07
+        current.lanes[2].mutate = 0.33
+        expect(random(1).pitch.slide).toBe(0)
+        expect(rollAll(current, 1).pitch.slide).toBeCloseTo(0.02338326, 6)
+        expect(rollAll(current, 5).pitch.slide).toBeCloseTo(0.18679655, 6)
+        expect(rollAll(current, 12).pitch.slide).toBeCloseTo(0.4517516, 6)
+        const {pitch, lanes, base, amounts, rate} = rollAll(current, 5)
+        const approved = random(5)
+        expect({base, amounts}).toEqual({base: approved.base, amounts: approved.amounts})
+        expect({...pitch, slide: 0, mutate: 0}).toEqual({...approved.pitch, mutate: 0})
+        expect(lanes.map(({steps, seed}) => [steps, seed])).toEqual(approved.lanes.map(({steps, seed}) => [steps, seed]))
+        expect([rate, pitch.mutate, lanes.map(lane => lane.mutate)]).toEqual([2, 0.07, [0, 0, 0.33, 0]])
     })
     it("Random all draws the engine's steps", () => {
         const expected: ReadonlyArray<readonly [number, number, number]> = [

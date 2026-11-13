@@ -9,12 +9,15 @@ export namespace SurgeonModel {
     export const Rates: ReadonlyArray<string> = ["1/8", "1/16", "1/32"]
     export const RatePulses: ReadonlyArray<number> = [480, 240, 120]
     export const BarPulses = 3840
+    export const MaxRandomSlide = 0.5
 
     export enum Kind {Play, Tie, Rest}
 
-    export type PitchLoop = { steps: int, seed: int, mutate: number, range: number, density: number, tie: number, accent: number }
+    export type PitchLoop = {
+        steps: int, seed: int, mutate: number, range: number, density: number, tie: number, accent: number, slide: number
+    }
     export type Lane = { steps: int, seed: int, mutate: number }
-    export type Step = { readonly offset: number, readonly velocity: number, readonly kind: Kind }
+    export type Step = { readonly offset: number, readonly velocity: number, readonly kind: Kind, readonly slide: boolean }
     export type Pattern = {
         readonly pitch: PitchLoop
         readonly lanes: Array<Lane>
@@ -48,7 +51,7 @@ export namespace SurgeonModel {
         choice("Fold Place", ["Before", "After"]),
         linear("Length", 0.0, 1.0),
         linear("Held", 0.0, 1.0),
-        linear("Sine", 0.0, 1.5),
+        linear("Sine Gain", 0.0, 1.5),
         choice("Sine Pitch", ["-1 oct", "Pitch"]),
         linear("Glide", 0.0, 0.3),
         linear("Velocity", 0.0, 1.0)
@@ -84,14 +87,14 @@ export namespace SurgeonModel {
         return count
     }
 
-    export const step = ({steps, seed, mutate, range, density, tie, accent}: PitchLoop, position: int): Step => {
+    export const step = ({steps, seed, mutate, range, density, tie, accent, slide}: PitchLoop, position: int): Step => {
         const length = clamp(steps, 1, MaxSteps)
         const index = position % length
         const replaced = generation(seed, index, Math.floor(position / length), mutate)
         const roll: Func<int, number> = channel => unit(seed, index, replaced, channel)
         const kind = roll(2) >= float(density) ? Kind.Rest : roll(3) < float(tie) ? Kind.Tie : Kind.Play
         const offset = float(float(float(roll(1) * 2.0) - 1.0) * float(range))
-        return {offset, velocity: float(1.0 - float(float(accent) * roll(4))), kind}
+        return {offset, velocity: float(1.0 - float(float(accent) * roll(4))), kind, slide: roll(5) < float(slide)}
     }
 
     export const laneValue = ({steps, seed, mutate}: Lane, position: int): number => {
@@ -142,7 +145,7 @@ export namespace SurgeonModel {
         return pattern
     }
 
-    // Random all: must draw exactly like the engine's `Pattern::random`
+    // Random all: must draw exactly like the engine's `Pattern::random`. Slide is not drawn, it stays at zero
     export const random = (seed: int): Pattern => {
         const roll: Func<int, number> = index => unit(seed, index, 0, 7)
         const between = (index: int, low: number, high: number): number => float(low + float(float(high - low) * roll(index)))
@@ -153,7 +156,8 @@ export namespace SurgeonModel {
             range: between(3, 5.0, 19.0),
             density: between(4, 0.55, 0.95),
             tie: between(5, 0.0, 0.4),
-            accent: between(6, 0.3, 0.8)
+            accent: between(6, 0.3, 0.8),
+            slide: 0.0
         }
         const lane: Func<int, Lane> = index => ({
             steps: Math.trunc(between(10 + index, 2.0, 17.0)),
@@ -189,11 +193,22 @@ export namespace SurgeonModel {
         return pattern
     }
 
-    // the favourite of the listening rounds
+    // what the All button does to a pattern: `random`, plus a Slide chance drawn on its own so `random` stays as
+    // approved. Mutate and Rate are never rolled, they stay as they are
+    export const rollAll = (current: Pattern, seed: int): Pattern => {
+        const pattern = random(seed)
+        pattern.pitch.slide = float(MaxRandomSlide * unit(seed, 8, 0, 7))
+        pattern.pitch.mutate = current.pitch.mutate
+        pattern.rate = current.rate
+        pattern.lanes.forEach((lane, index) => lane.mutate = current.lanes[index].mutate)
+        return pattern
+    }
+
+    // the favourite of the listening rounds, locked: Mutate starts at zero
     export const favourite = (): Pattern => {
-        const pattern = create({steps: 7, seed: 1, mutate: 0.12, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6}, [
-            {steps: 5, seed: 21, mutate: 0.15}, {steps: 9, seed: 22, mutate: 0.15},
-            {steps: 4, seed: 23, mutate: 0.15}, {steps: 11, seed: 24, mutate: 0.15}])
+        const pattern = create({steps: 7, seed: 1, mutate: 0.0, range: 13.0, density: 0.8, tie: 0.25, accent: 0.6, slide: 0.0}, [
+            {steps: 5, seed: 21, mutate: 0.0}, {steps: 9, seed: 22, mutate: 0.0},
+            {steps: 4, seed: 23, mutate: 0.0}, {steps: 11, seed: 24, mutate: 0.0}])
         setValue(pattern, Index.Wave, 2.0)
         setValue(pattern, Index.SineLevel, 0.6)
         setValue(pattern, Index.Depth2, 0.6)

@@ -31,7 +31,7 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
     const {Lanes, PatternCount, Params, Index, Rates, RatePulses, BarPulses, Kind} = SurgeonModel
     const {Prints, Parses, value, choice, control, button} = SurgeonControls
     const patterns: Array<SurgeonModel.Pattern> = Arrays.create(index =>
-        index === 0 ? SurgeonModel.favourite() : SurgeonModel.random(index), PatternCount)
+        index === 0 ? SurgeonModel.favourite() : SurgeonModel.rollAll(SurgeonModel.favourite(), index), PatternCount)
     const refresh = lifecycle.own(new Notifier<void>())
     const state: {
         shown: int, active: int, fired: Optional<int>, playing: boolean, start: number, pulses: number, bar: int,
@@ -56,6 +56,7 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
     const field = (source: SurgeonControls.Field) => value(lifecycle, refresh, source)
     const tiles: ReadonlyArray<HTMLElement> = Arrays.create(index => <div className="tile">{String(index + 1)}</div>, PatternCount)
     const offTile: HTMLElement = <div className="tile off">Off</div>
+    const laneColor = (index: int): string => LaneColors[index].toString()
     const updateTiles = () => {
         tiles.forEach((tile, index) => {
             tile.classList.toggle("active", state.active === index)
@@ -92,43 +93,51 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
         const pattern = current()
         const sounding = state.active !== Off
         const position = Math.max(0, Math.floor(state.pulses / RatePulses[pattern.rate]))
-        const padding = devicePixelRatio * 6
-        const inner = actualWidth - padding * 2
+        const thickness = devicePixelRatio * 4
         const pitchBottom = actualHeight * 0.5
-        const middle = (padding + pitchBottom) / 2
-        const reach = (pitchBottom - padding) / 2 - devicePixelRatio * 3
+        const middle = pitchBottom / 2
+        const reach = middle - thickness / 2
         context.clearRect(0, 0, actualWidth, actualHeight)
         context.globalAlpha = sounding ? 1.0 : 0.35
         context.strokeStyle = DisplayPaint.gridStyle(0.3)
         context.lineWidth = devicePixelRatio
         context.setLineDash([2 * devicePixelRatio, 3 * devicePixelRatio])
         context.beginPath()
-        context.moveTo(padding, middle)
-        context.lineTo(actualWidth - padding, middle)
+        context.moveTo(0, middle)
+        context.lineTo(actualWidth, middle)
         context.stroke()
         context.setLineDash([])
         const {pitch, lanes} = pattern
         const steps = clamp(pitch.steps, 1, SurgeonModel.MaxSteps)
         const first = Math.floor(position / steps) * steps
-        const width = inner / steps
-        const thickness = devicePixelRatio * 4
+        const width = actualWidth / steps
         for (let index = 0; index < steps; index++) {
-            const {offset, kind} = SurgeonModel.step(pitch, first + index)
+            const {offset, kind, slide} = SurgeonModel.step(pitch, first + index)
             const playing = state.playing && sounding && index === position % steps
-            const x = padding + index * width
+            const x = index * width
             if (kind === Kind.Rest) {
                 context.fillStyle = DisplayPaint.gridStyle(playing ? 0.6 : 0.25)
                 context.fillRect(x + devicePixelRatio, middle - devicePixelRatio, width - devicePixelRatio * 2, devicePixelRatio * 2)
                 continue
             }
             const y = middle - offset / Math.max(pitch.range, 1.0) * reach
+            if (slide && first + index > 0) {
+                const from = SurgeonModel.step(pitch, first + index - 1)
+                if (from.kind !== Kind.Rest) {
+                    context.strokeStyle = DisplayPaint.strokeStyle(0.5)
+                    context.beginPath()
+                    context.moveTo(x - width * 0.5, middle - from.offset / Math.max(pitch.range, 1.0) * reach)
+                    context.lineTo(x + devicePixelRatio, y)
+                    context.stroke()
+                }
+            }
             context.fillStyle = playing ? Colors.white.toString() : DisplayPaint.strokeStyle(0.8)
             context.beginPath()
             context.roundRect(x + devicePixelRatio, y - thickness / 2,
                 (width - devicePixelRatio * 2) * (kind === Kind.Tie ? 1.0 : 0.5), thickness, thickness / 2)
             context.fill()
         }
-        const laneHeight = (actualHeight - pitchBottom - padding) / Lanes
+        const laneHeight = (actualHeight - pitchBottom) / Lanes
         const letter = devicePixelRatio * 12
         context.font = `${8 * devicePixelRatio}px ${getComputedStyle(canvas).fontFamily}`
         context.textBaseline = "middle"
@@ -136,16 +145,18 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
             const top = pitchBottom + laneIndex * laneHeight
             const count = clamp(lane.steps, 1, SurgeonModel.MaxSteps)
             const start = Math.floor(position / count) * count
-            const barWidth = (inner - letter) / count
+            const barWidth = (actualWidth - letter) / count
             const height = laneHeight - devicePixelRatio * 3
             context.fillStyle = LaneColors[laneIndex].toString()
-            context.fillText(LaneNames[laneIndex], padding, top + laneHeight / 2)
+            context.fillText(LaneNames[laneIndex], 0, top + (laneHeight + devicePixelRatio * 3) / 2)
             for (let index = 0; index < count; index++) {
                 const amount = SurgeonModel.laneValue(lane, start + index)
                 const playing = state.playing && sounding && index === position % count
                 context.fillStyle = playing ? Colors.white.toString() : LaneColors[laneIndex].opacity(0.75).toString()
-                context.fillRect(padding + letter + index * barWidth, top + height - amount * height + devicePixelRatio,
-                    Math.max(devicePixelRatio, barWidth - devicePixelRatio), Math.max(devicePixelRatio, amount * height))
+                const filled = Math.max(devicePixelRatio, amount * height)
+                const last = index === count - 1
+                context.fillRect(letter + index * barWidth, top + laneHeight - filled,
+                    Math.max(devicePixelRatio, last ? barWidth : barWidth - devicePixelRatio), filled)
             }
         })
         context.globalAlpha = 1.0
@@ -197,47 +208,64 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
             painter.requestUpdate()
         }))
     }, reason => status.textContent = `No sound, the engine did not load (${reason instanceof Error ? reason.message : String(reason)})`)
+    const laneRolls: ReadonlyArray<HTMLElement> = Arrays.create(index =>
+        button(lifecycle, "Roll", edit(pattern => pattern.lanes[index].seed = rollSeed()), `3 / ${index * 2 + 2}`, "lanes"), Lanes)
+    // a button that rolls more than itself shows it on the buttons it stands for while it is held
+    const presses = (element: HTMLElement, others: ReadonlyArray<HTMLElement>): HTMLElement => {
+        const press = (pressed: boolean) => () => others.forEach(other => other.classList.toggle("pressed", pressed))
+        lifecycle.ownAll(
+            Events.subscribe(element, "pointerdown", press(true)),
+            Events.subscribe(element, "pointerup", press(false)),
+            Events.subscribe(element, "pointerleave", press(false)),
+            Events.subscribe(element, "pointercancel", press(false)))
+        return element
+    }
     const laneControls = Arrays.create(index => {
-        const column = 2 + index * 2
+        const column = 1 + index * 2
         const lane = () => current().lanes[index]
         return [
-            <div className="label" style={{gridArea: `2 / ${column} / 4 / ${column + 2}`, "--color": LaneColors[index].toString()}}/>,
-            control(`${LaneNames[index]} Steps`, field(whole(1, SurgeonModel.MaxSteps, () => lane().steps, steps => lane().steps = steps)), `2 / ${column}`),
+            control(`${LaneNames[index]} Steps`, field(whole(1, SurgeonModel.MaxSteps, () => lane().steps, steps => lane().steps = steps)), `2 / ${column}`, laneColor(index)),
             control("Seed", field(whole(0, 99_999, () => lane().seed, seed => lane().seed = seed)), `2 / ${column + 1}`),
             control("Mutate", field(percent(() => lane().mutate, mutate => lane().mutate = mutate)), `3 / ${column}`),
-            button(lifecycle, "Roll", edit(pattern => pattern.lanes[index].seed = rollSeed()), `3 / ${column + 1}`)
+            laneRolls[index]
         ]
     }, Lanes)
     const pitch = () => current().pitch
+    const rollPitch = button(lifecycle, "Pitch", edit(pattern => pattern.pitch.seed = rollSeed()), "4 / 1 / 5 / 3", "roll")
+    const rollLanes = presses(button(lifecycle, "Lanes",
+        edit(pattern => pattern.lanes.forEach(lane => lane.seed = rollSeed())), "4 / 3 / 5 / 5", "roll"), laneRolls)
+    const rollSound = button(lifecycle, "Sound", edit(pattern => {
+        const {base, amounts} = SurgeonModel.random(rollSeed())
+        base.forEach((position, index) => pattern.base[index] = position)
+        amounts.forEach((row, index) => pattern.amounts[index] = row)
+    }), "4 / 5 / 5 / 7", "roll")
     const loops: HTMLElement = (
         <section className="loops">
-            <h3 className="rotated" style={{gridArea: "1 / 1"}}>PITCH</h3>
-            <div className="label" style={{gridArea: "1 / 2 / 2 / -1"}}/>
-            {control("Seed", field(whole(0, 99_999, () => pitch().seed, seed => pitch().seed = seed)), "1 / 2")}
-            {control("Steps", field(whole(1, SurgeonModel.MaxSteps, () => pitch().steps, steps => pitch().steps = steps)), "1 / 3")}
-            {control("Rate", choice(lifecycle, refresh, Rates, () => current().rate, rate => current().rate = rate), "1 / 4")}
-            {control("Mutate", field(percent(() => pitch().mutate, mutate => pitch().mutate = mutate)), "1 / 5")}
+            <div className="band pitch" style={{gridArea: "1 / 1 / 2 / -1"}}/>
+            <div className="band lanes" style={{gridArea: "2 / 1 / 4 / -1"}}/>
+            <div className="band roll" style={{gridArea: "4 / 1 / 5 / -1"}}/>
+            <h3 className="rotated pitch" style={{gridArea: "1 / -2"}}>PITCH</h3>
+            {control("Seed", field(whole(0, 99_999, () => pitch().seed, seed => pitch().seed = seed)), "1 / 1")}
+            {control("Steps", field(whole(1, SurgeonModel.MaxSteps, () => pitch().steps, steps => pitch().steps = steps)), "1 / 2")}
+            {control("Mutate", field(percent(() => pitch().mutate, mutate => pitch().mutate = mutate)), "1 / 3")}
             {control("Range", field({
                 min: 0.0, max: 36.0, step: 0.25, print: Prints.octaves, parse: Parses.octaves,
                 get: () => pitch().range, set: range => pitch().range = range
-            }), "1 / 6")}
-            {control("Density", field(percent(() => pitch().density, density => pitch().density = density)), "1 / 7")}
-            {control("Tie", field(percent(() => pitch().tie, tie => pitch().tie = tie)), "1 / 8")}
-            {control("Accent", field(percent(() => pitch().accent, accent => pitch().accent = accent)), "1 / 9")}
-            <h3 className="rotated" style={{gridArea: "2 / 1 / 4 / 2"}}>LANES</h3>
+            }), "1 / 4")}
+            {control("Density", field(percent(() => pitch().density, density => pitch().density = density)), "1 / 5")}
+            {control("Tie", field(percent(() => pitch().tie, tie => pitch().tie = tie)), "1 / 6")}
+            {control("Slide", field(percent(() => pitch().slide, slide => pitch().slide = slide)), "1 / 7")}
+            {control("Accent", field(percent(() => pitch().accent, accent => pitch().accent = accent)), "1 / 8")}
+            <h3 className="rotated lanes" style={{gridArea: "2 / -2 / 4 / -1"}}>LANES</h3>
             {laneControls}
-            <h3 className="rotated" style={{gridArea: "4 / 1"}}>ROLL</h3>
-            {button(lifecycle, "Pitch", edit(pattern => pattern.pitch.seed = rollSeed()), "4 / 2 / 5 / 4")}
-            {button(lifecycle, "Lanes", edit(pattern => pattern.lanes.forEach(lane => lane.seed = rollSeed())), "4 / 4 / 5 / 6")}
-            {button(lifecycle, "Sound", edit(pattern => {
-                const {base, amounts} = SurgeonModel.random(rollSeed())
-                base.forEach((position, index) => pattern.base[index] = position)
-                amounts.forEach((row, index) => pattern.amounts[index] = row)
-            }), "4 / 6 / 5 / 8")}
-            {button(lifecycle, "All", () => {
-                patterns[state.shown] = SurgeonModel.random(rollSeed())
+            <h3 className="rotated roll" style={{gridArea: "4 / -2"}}>ROLL</h3>
+            {rollPitch}
+            {rollLanes}
+            {rollSound}
+            {presses(button(lifecycle, "All", () => {
+                patterns[state.shown] = SurgeonModel.rollAll(current(), rollSeed())
                 refresh.notify()
-            }, "4 / 8 / 5 / 10")}
+            }, "4 / 7 / 5 / 9", "roll"), [rollPitch, rollLanes, rollSound, ...laneRolls])}
         </section>
     )
     const basePrint = (param: int): SurgeonControls.Field["print"] => {
@@ -274,13 +302,15 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
     })
     const sound = (params: ReadonlyArray<int>): HTMLElement => (
         <section className="sound hidden">
-            {params.map((param, index) => <h3 className="caption" style={{gridArea: `1 / ${index + 2}`}}>{Params[param].name}</h3>)}
-            <h3 className="rotated" style={{gridArea: "2 / 1"}}>BASE</h3>
-            {params.map((param, index) => <div className="cell" style={{gridArea: `2 / ${index + 2}`}}>{baseCell(param)}</div>)}
+            {params.map((param, index) => <h3 className="caption" style={{gridArea: `1 / ${index + 1}`}}>{Params[param].name}</h3>)}
+            <div className="band base" style={{gridArea: "2 / 1 / 3 / -1"}}/>
+            <h3 className="rotated base" style={{gridArea: "2 / -2"}}>0</h3>
+            {params.map((param, index) => <div className="cell" style={{gridArea: `2 / ${index + 1}`}}>{baseCell(param)}</div>)}
             {Arrays.create(lane => [
-                <h3 className="lane" style={{gridArea: `${lane + 3} / 1`, "--color": LaneColors[lane].toString()}}>{LaneNames[lane]}</h3>,
+                <div className="band" style={{gridArea: `${lane + 3} / 1 / ${lane + 4} / -1`, "--color": laneColor(lane)}}/>,
+                <h3 className="rotated" style={{gridArea: `${lane + 3} / -2`, "--color": laneColor(lane)}}>{LaneNames[lane]}</h3>,
                 params.map((param, index) => (
-                    <div className="cell amount" style={{gridArea: `${lane + 3} / ${index + 2}`, "--color": LaneColors[lane].toString()}}>
+                    <div className="cell amount" style={{gridArea: `${lane + 3} / ${index + 1}`, "--color": laneColor(lane)}}>
                         {amountCell(param, lane)}
                     </div>
                 ))
@@ -288,7 +318,7 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
         </section>
     )
     const sections: ReadonlyArray<HTMLElement> = [loops, sound(ToneParams), sound(ShapeParams)]
-    const tabs: ReadonlyArray<HTMLElement> = ["L", "T", "S"].map(label => <div className="tab">{label}</div>)
+    const tabs: ReadonlyArray<HTMLElement> = ["LOOPS", "TONE", "SHAPE"].map(label => <h3 className="tab">{label}</h3>)
     const selectTab = (selected: int) => {
         tabs.forEach((tab, index) => tab.classList.toggle("selected", index === selected))
         sections.forEach((section, index) => section.classList.toggle("hidden", index !== selected))
@@ -299,20 +329,27 @@ export const SurgeonPreview = ({lifecycle, audioContext}: Construct) => {
     const controls: HTMLElement = (
         <div className="surgeon">
             <nav className="patterns">
-                {tiles}
-                {offTile}
-                {control("Tune", field({
-                    min: 24.0, max: 96.0, step: 0.1, print: Prints.hertz, parse: Parses.hertz,
-                    get: () => state.tune, set: tune => state.tune = tune
-                }))}
-                {control("Volume", field({
-                    min: -36.0, max: 6.0, step: 0.5, print: Prints.decibel, parse: Parses.plain,
-                    get: () => state.volume, set: volume => state.volume = volume
-                }))}
+                <div className="circles">
+                    {tiles}
+                    {offTile}
+                </div>
+                <div className="values">
+                    {control("Rate", choice(lifecycle, refresh, Rates, () => current().rate, rate => current().rate = rate))}
+                    {control("Tune", field({
+                        min: 24.0, max: 96.0, step: 0.1, print: Prints.hertz, parse: Parses.hertz,
+                        get: () => state.tune, set: tune => state.tune = tune
+                    }))}
+                    {control("Volume", field({
+                        min: -36.0, max: 6.0, step: 0.5, print: Prints.decibel, parse: Parses.plain,
+                        get: () => state.volume, set: volume => state.volume = volume
+                    }))}
+                </div>
             </nav>
             <div className="display">{canvas}</div>
-            <nav className="tabs">{tabs}</nav>
-            <div className="sections">{sections}</div>
+            <div className="sections">
+                <header>{tabs}</header>
+                {sections}
+            </div>
         </div>
     )
     return (

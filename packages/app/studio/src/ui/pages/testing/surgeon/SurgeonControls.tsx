@@ -100,15 +100,18 @@ export namespace SurgeonControls {
         })
 
     // caption over a value, the label control of Vaporisateur and Tubular
-    export const control = (caption: string, child: JsxValue, gridArea?: string): HTMLElement => (
+    export const control = (caption: string, child: JsxValue, gridArea?: string, color?: string): HTMLElement => (
         <div className="control" style={isDefined(gridArea) ? {gridArea} : {}}>
-            <h3>{caption}</h3>
+            <h3 style={isDefined(color) ? {color} : {}}>{caption}</h3>
             {child}
         </div>
     )
 
-    export const button = (lifecycle: Lifecycle, label: string, action: Procedure<void>, gridArea?: string): HTMLElement => {
-        const element: HTMLElement = <div className="button" style={isDefined(gridArea) ? {gridArea} : {}}>{label}</div>
+    export const button = (lifecycle: Lifecycle, label: string, action: Procedure<void>, gridArea?: string,
+                           group?: string): HTMLElement => {
+        const element: HTMLElement = (
+            <div className={isDefined(group) ? `button ${group}` : "button"} style={isDefined(gridArea) ? {gridArea} : {}}>{label}</div>
+        )
         lifecycle.own(Events.subscribe(element, "click", () => action()))
         return element
     }

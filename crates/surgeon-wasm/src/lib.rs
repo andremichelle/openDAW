@@ -10,9 +10,9 @@ use device_surgeon::engine::{Engine, Slot, PATTERNS};
 use device_surgeon::param::PARAMS;
 use device_surgeon::pattern::{Lane, PitchLoop, LANES};
 
-/// The floats `set_pattern` reads: rate, the pitch loop (steps, seed, mutate, range, density, tie, accent), four
-/// lanes (steps, seed, mutate), the base positions, then the lane amounts row by row.
-pub const PATTERN_FLOATS: usize = 1 + 7 + LANES * 3 + PARAMS + PARAMS * LANES;
+/// The floats `set_pattern` reads: rate, the pitch loop (steps, seed, mutate, range, density, tie, accent, slide),
+/// four lanes (steps, seed, mutate), the base positions, then the lane amounts row by row.
+pub const PATTERN_FLOATS: usize = 1 + 8 + LANES * 3 + PARAMS + PARAMS * LANES;
 const NO_SLOT: i32 = -2;
 const OFF: i32 = -1;
 
@@ -57,13 +57,13 @@ pub extern "C" fn set_pattern(index: usize, values: *const f32) {
     pattern.rate = values[0] as u32;
     pattern.pitch = PitchLoop {
         steps: values[1] as u32, seed: values[2] as u32, mutate: values[3], range: values[4], density: values[5],
-        tie: values[6], accent: values[7]
+        tie: values[6], accent: values[7], slide: values[8]
     };
     for lane in 0..LANES {
-        let at = 8 + lane * 3;
+        let at = 9 + lane * 3;
         pattern.lanes[lane] = Lane {steps: values[at] as u32, seed: values[at + 1] as u32, mutate: values[at + 2]};
     }
-    let base = 8 + LANES * 3;
+    let base = 9 + LANES * 3;
     pattern.base.copy_from_slice(&values[base..base + PARAMS]);
     for param in 0..PARAMS {
         let at = base + PARAMS + param * LANES;

@@ -76,7 +76,9 @@ pub struct Voice {
     level: f32,
     strike_level: f32,
     held: u32,
-    sounding: bool
+    sounding: bool,
+    slide_remaining: u32,
+    started: bool
 }
 
 impl Voice {
@@ -94,14 +96,18 @@ impl Voice {
         self.gate_envelope.set(GATE_ATTACK, 0.0, patch.decay, self.sample_rate);
     }
 
-    /// `pitch` in MIDI semitones (fractions welcome), `velocity` 0 to 1. A note while another is held slides and
-    /// keeps the envelopes.
-    pub fn note_on(&mut self, pitch: f32, velocity: f32) {
+    /// `pitch` in MIDI semitones (fractions welcome), `velocity` 0 to 1. A note while another is held (a tie) keeps
+    /// the envelopes. With `slide` above zero the pitch glides evenly from where it is to the new pitch over that
+    /// many samples, tied or not.
+    pub fn note_on(&mut self, pitch: f32, velocity: f32, slide: u32) {
         let legato = self.held > 0 && self.sounding;
+        let sliding = slide > 0 && self.started;
         self.held += 1;
         self.target_pitch = pitch;
+        self.slide_remaining = if sliding {slide} else {0};
+        self.started = true;
         if legato {return;}
-        self.pitch = pitch;
+        if !sliding {self.pitch = pitch;}
         self.level = velocity;
         self.strike_level = self.patch.strike * (1.0 - self.patch.velocity + self.patch.velocity * velocity);
         self.strike_envelope.trigger(1.0);
@@ -130,7 +136,12 @@ impl Voice {
     #[inline]
     pub fn next(&mut self) -> f32 {
         let Patch {ratio, depth, feedback, wave, second_ratio, second_depth, fold_place, sine, sine_ratio, ..} = self.patch;
-        self.pitch += (self.target_pitch - self.pitch) * self.glide_factor;
+        if self.slide_remaining > 0 {
+            self.pitch += (self.target_pitch - self.pitch) / self.slide_remaining as f32;
+            self.slide_remaining -= 1;
+        } else {
+            self.pitch += (self.target_pitch - self.pitch) * self.glide_factor;
+        }
         let frequency = 440.0 * libm::exp2f((self.pitch - 69.0) / 12.0);
         let step = frequency / self.sample_rate;
         let gate = self.gate_envelope.next();
