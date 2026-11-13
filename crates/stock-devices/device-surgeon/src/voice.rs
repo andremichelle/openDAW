@@ -143,6 +143,12 @@ impl Voice {
         if self.held == 0 {self.gate_envelope.release();}
     }
 
+    /// Moves the pitch of the sounding note, at the patch's glide.
+    pub fn glide_to(&mut self, pitch: f32) {
+        self.target_pitch = pitch;
+        self.slide_remaining = 0;
+    }
+
     /// Lets go of every held note, the tail rings out.
     pub fn release_all(&mut self) {
         self.held = 0;

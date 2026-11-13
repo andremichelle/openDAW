@@ -157,13 +157,19 @@ impl Instrument for Surgeon {
         state.dirty = true;
     }
 
-    fn handle_event(_state: &mut SurgeonState, _event: &EventRecord) {}
+    fn handle_event(state: &mut SurgeonState, event: &EventRecord) {
+        match event.kind {
+            abi::EVENT_NOTE_ON => state.engine.note_on(event.id, event.pitch as f32 + event.cent / 100.0, event.velocity),
+            abi::EVENT_NOTE_OFF | abi::EVENT_CHOKE => state.engine.note_off(event.id),
+            _ => {}
+        }
+    }
 
     fn process_audio(state: &mut SurgeonState, output: [&mut [f32]; 2], block: &Block) {
         let [out_left, out_right] = output;
         if state.dirty {state.compose();}
         let playing = block.flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
-        if state.slot_changed {
+        if state.slot_changed || (state.playing && !playing) {
             state.slot_changed = false;
             let slot = state.slot();
             if playing && state.playing && !block.flags.discontinuous() {state.engine.fire(slot);} else {state.engine.select(slot);}
@@ -218,6 +224,7 @@ impl Instrument for Surgeon {
         if id == state.selected_id {
             let FieldValue::Int(selected) = value else {panic!("Surgeon selected pattern kind mismatch")};
             state.selected = (selected.max(0) as usize).min(PATTERNS - 1);
+            state.engine.sound = state.selected;
             state.dirty = true;
             return;
         }

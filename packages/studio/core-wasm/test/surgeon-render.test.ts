@@ -1,14 +1,21 @@
 // Surgeon in the FULL engine: it plays by itself while the transport runs, from the patterns stored in its box.
 import {describe, expect, it} from "vitest"
 import {int, Procedure, UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, SurgeonDeviceBox} from "@opendaw/studio-boxes"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, SurgeonDeviceBox, TrackBox} from "@opendaw/studio-boxes"
+import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
 const SAMPLES_PER_BAR = 3840 * 25 // 48k, 120 bpm, 960 per quarter
 
-const session = async (setup: Procedure<SurgeonDeviceBox>) => {
+type Note = { position: int, duration: int, pitch: int }
+
+const Notes: ReadonlyArray<Note> = [
+    {position: 240, duration: 700, pitch: 50}, {position: 1200, duration: 300, pitch: 57},
+    {position: 1400, duration: 900, pitch: 45}, {position: 4000, duration: 2000, pitch: 52}
+]
+
+const session = async (setup: Procedure<SurgeonDeviceBox>, notes: ReadonlyArray<Note> = []) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -22,6 +29,30 @@ const session = async (setup: Procedure<SurgeonDeviceBox>) => {
         box.host.refer(unit.input)
         setup(box)
     })
+    if (notes.length > 0) {
+        const track = TrackBox.create(source, UUID.generate(), box => {
+            box.type.setValue(TrackType.Notes)
+            box.enabled.setValue(true)
+            box.index.setValue(0)
+            box.target.refer(unit)
+            box.tracks.refer(unit.tracks)
+        })
+        const events = NoteEventCollectionBox.create(source, UUID.generate())
+        notes.forEach(({position, duration, pitch}) => NoteEventBox.create(source, UUID.generate(), box => {
+            box.events.refer(events.events)
+            box.position.setValue(position)
+            box.duration.setValue(duration)
+            box.pitch.setValue(pitch)
+            box.velocity.setValue(0.8)
+        }))
+        NoteRegionBox.create(source, UUID.generate(), box => {
+            box.regions.refer(track.regions)
+            box.events.refer(events.owners)
+            box.position.setValue(0)
+            box.duration.setValue(100_000)
+            box.loopDuration.setValue(100_000)
+        })
+    }
     source.endTransaction()
     const {engine, memory} = await loadFullEngine()
     const sync = connectSyncToEngine(engine, memory, source)
@@ -49,8 +80,8 @@ const session = async (setup: Procedure<SurgeonDeviceBox>) => {
     }
 }
 
-const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>): Promise<Float32Array> => {
-    const {engine, render, close} = await session(setup)
+const render = async (bars: int, setup: Procedure<SurgeonDeviceBox>, notes: ReadonlyArray<Note> = []): Promise<Float32Array> => {
+    const {engine, render, close} = await session(setup, notes)
     engine.stop(); engine.play()
     const left = render(bars * SAMPLES_PER_BAR)
     close()
@@ -133,17 +164,29 @@ describe("Surgeon in the full engine", () => {
         expect(rest.subarray(0, untilBar).every((value, index) => value === reference[start.length + index])).toBe(true)
         expect(rms(rest, untilBar + SAMPLES_PER_BAR / 2, rest.length)).toBeLessThan(rms(reference, SAMPLES_PER_BAR * 1.5, reference.length) * 0.1)
     }, 300000)
-    it("a slot that waits for its bar is taken at once when the transport stops", async () => {
-        const {engine, render: play, edit, close} = await session(() => {})
+    it("a slot that waits for its bar is taken at once when the transport pauses", async () => {
+        const {engine, half, render: play, edit, close} = await session(() => {})
         engine.stop(); engine.play()
-        play(SAMPLES_PER_BAR / 2)
+        play(SAMPLES_PER_BAR / 4)
         await edit(box => box.slot.setValue(-1))
-        engine.stop()
+        const waiting = play(half)
+        expect(rms(waiting, 0, waiting.length)).toBeGreaterThan(0.0)
+        engine.pause()
         play(4 * SAMPLES_PER_BAR)
         engine.play()
-        const output = play(SAMPLES_PER_BAR)
+        const output = play(SAMPLES_PER_BAR / 4)
         close()
         expect(rms(output, 0, output.length)).toBe(0.0)
+    }, 300000)
+    it("plays the notes of its track while the slot is off", async () => {
+        const output = await render(2, box => box.slot.setValue(-1), Notes)
+        expect(output.every(Number.isFinite)).toBe(true)
+        expect(rms(output, 0, 6000)).toBe(0.0)
+        expect(rms(output, 6000, SAMPLES_PER_BAR)).toBeGreaterThan(0.01)
+        expect(rms(output, SAMPLES_PER_BAR, 2 * SAMPLES_PER_BAR)).toBeGreaterThan(0.01)
+    }, 300000)
+    it("keeps its sound with notes on its track while a pattern plays", async () => {
+        expect(fingerprint(await render(2, () => {}, Notes))).toBe("6155579d367bcbb5")
     }, 300000)
     it("follows the volume", async () => {
         const full = await render(1, () => {})

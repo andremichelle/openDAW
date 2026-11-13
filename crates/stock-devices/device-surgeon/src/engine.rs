@@ -1,6 +1,7 @@
 use crate::hash::unit;
-use crate::pattern::{Pattern, LOOPS, MAX_STEPS};
-use crate::voice::Voice;
+use crate::param::PARAMS;
+use crate::pattern::{Pattern, LANES, LOOPS, MAX_STEPS};
+use crate::voice::{Patch, Voice};
 use dsp::resampler::ResamplerMono;
 
 pub const PATTERNS: usize = 8;
@@ -10,6 +11,8 @@ pub const MAX_FRAMES: usize = 128;
 
 const OVERSAMPLING: usize = 2;
 const MAX_OFFS: usize = 4;
+const MAX_PLAYED: usize = 8;
+const MAX_QUEUED: usize = 16;
 const NONE: i64 = i64::MIN;
 
 // Counts how often each step of one loop has been replaced, carried forward pass by pass. Counting from the song
@@ -42,6 +45,19 @@ impl Counter {
     }
 }
 
+// A note from the track, waiting for the block it belongs to (`on`) or sounding (`pitch`).
+#[derive(Clone, Copy)]
+struct Played {
+    id: u32,
+    pitch: f32,
+    velocity: f32,
+    on: bool
+}
+
+impl Played {
+    const NONE: Played = Played {id: 0, pitch: 0.0, velocity: 0.0, on: false};
+}
+
 /// What plays: one of the patterns, or nothing (the Off button).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Slot {
@@ -54,6 +70,8 @@ pub struct Engine {
     /// Centre pitch as a MIDI number with fractions (the editor shows Hz).
     pub tune: f32,
     pub volume: f32,
+    /// The pattern whose sound the notes from the track play with while the slot is Off.
+    pub sound: usize,
     active: Slot,
     fired: Option<Slot>,
     voice: Voice,
@@ -65,7 +83,12 @@ pub struct Engine {
     counters: [Counter; LOOPS],
     offs: [f64; MAX_OFFS],
     off_count: usize,
-    was_playing: bool
+    was_playing: bool,
+    queued: [Played; MAX_QUEUED],
+    queued_count: usize,
+    played: [Played; MAX_PLAYED],
+    played_count: usize,
+    played_step: i64
 }
 
 impl Engine {
@@ -76,6 +99,7 @@ impl Engine {
             patterns: [Pattern::default(); PATTERNS],
             tune: 50.0,
             volume: 1.0,
+            sound: 0,
             active: Slot::Pattern(0),
             fired: None,
             voice,
@@ -87,7 +111,12 @@ impl Engine {
             counters: [Counter::NEW; LOOPS],
             offs: [0.0; MAX_OFFS],
             off_count: 0,
-            was_playing: false
+            was_playing: false,
+            queued: [Played::NONE; MAX_QUEUED],
+            queued_count: 0,
+            played: [Played::NONE; MAX_PLAYED],
+            played_count: 0,
+            played_step: NONE
         }
     }
 
@@ -98,6 +127,7 @@ impl Engine {
 
     /// Switches at once, for a stopped transport.
     pub fn select(&mut self, slot: Slot) {
+        if self.played_count > 0 {self.release();}
         self.active = slot;
         self.fired = None;
     }
@@ -117,6 +147,66 @@ impl Engine {
     fn release(&mut self) {
         self.voice.release_all();
         self.off_count = 0;
+        self.played_count = 0;
+    }
+
+    /// A note from the track starts. It sounds while the slot is Off, with the sound of the pattern `sound`.
+    /// `pitch` in MIDI semitones, `velocity` 0 to 1, `id` names it for `note_off`.
+    pub fn note_on(&mut self, id: u32, pitch: f32, velocity: f32) {self.queue(Played {id, pitch, velocity, on: true});}
+
+    pub fn note_off(&mut self, id: u32) {self.queue(Played {id, pitch: 0.0, velocity: 0.0, on: false});}
+
+    fn queue(&mut self, note: Played) {
+        if self.queued_count == MAX_QUEUED {
+            self.queued.copy_within(1.., 0);
+            self.queued_count -= 1;
+        }
+        self.queued[self.queued_count] = note;
+        self.queued_count += 1;
+    }
+
+    // the sound of the pattern `sound` at a step, or without its lanes when the transport does not run
+    fn played_patch(&mut self, step: Option<i64>) -> Patch {
+        let mut pattern = self.patterns[self.sound.min(PATTERNS - 1)];
+        let Some(step) = step.filter(|step| *step >= 0) else {
+            pattern.amounts = [[0.0; LANES]; PARAMS];
+            return pattern.patch(0);
+        };
+        let mut generations = [0; LOOPS];
+        for (index, (seed, mutate, steps)) in pattern.loops().into_iter().enumerate() {
+            generations[index] = self.counters[index].generation(seed, mutate, steps, step as u32);
+        }
+        pattern.patch_with(step as u32, &generations)
+    }
+
+    fn played_step_at(&self, pulse: f64) -> i64 {
+        libm::floor(pulse / self.patterns[self.sound.min(PATTERNS - 1)].step_pulses()) as i64
+    }
+
+    fn start_queued(&mut self, pulse: f64, playing: bool) {
+        for index in 0..self.queued_count {
+            let note = self.queued[index];
+            if note.on {
+                if self.active != Slot::Off {continue;}
+                if self.played_count == MAX_PLAYED {
+                    self.voice.note_off();
+                    self.played.copy_within(1.., 0);
+                    self.played_count -= 1;
+                }
+                self.played_step = if playing {self.played_step_at(pulse)} else {NONE};
+                let patch = self.played_patch(if playing {Some(self.played_step)} else {None});
+                self.voice.set_patch(patch);
+                self.voice.note_on(note.pitch, note.velocity, 0);
+                self.played[self.played_count] = note;
+                self.played_count += 1;
+            } else if let Some(at) = self.played[..self.played_count].iter().position(|played| played.id == note.id) {
+                self.played.copy_within(at + 1..self.played_count, at);
+                self.played_count -= 1;
+                self.voice.note_off();
+                if at == self.played_count && at > 0 {self.voice.glide_to(self.played[at - 1].pitch);}
+            }
+        }
+        self.queued_count = 0;
     }
 
     fn enter(&mut self, step: i64, step_pulses: f64, step_samples: f64) {
@@ -180,6 +270,7 @@ impl Engine {
             self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
         }
         self.was_playing = playing;
+        if self.queued_count > 0 {self.start_queued(p0, playing);}
         let advance = (p1 - p0) / count as f64;
         for index in 0..count {
             if playing {
@@ -188,6 +279,7 @@ impl Engine {
                 if bar != self.bar {
                     self.bar = bar;
                     if let Some(slot) = self.fired.take() {
+                        if self.played_count > 0 {self.release();}
                         self.active = slot;
                         self.step = NONE;
                         self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
@@ -202,6 +294,14 @@ impl Engine {
                     } else if step != self.step {
                         self.step = step;
                         self.enter(step, step_pulses, if advance > 0.0 {step_pulses / advance} else {0.0});
+                    }
+                }
+                if self.played_count > 0 {
+                    let step = self.played_step_at(pulse);
+                    if step != self.played_step {
+                        self.played_step = step;
+                        let patch = self.played_patch(Some(step));
+                        self.voice.set_patch(patch);
                     }
                 }
                 let mut read = 0;

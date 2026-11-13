@@ -205,6 +205,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         engine.isPlaying.subscribe(() => {
             state.reported = false
             updateTiles()
+            painter.requestUpdate()
         }),
         liveStreamReceiver.subscribeIntegers(adapter.state, ([active, fired]) => {
             if (state.reported && active === state.active && fired === state.fired) {return}

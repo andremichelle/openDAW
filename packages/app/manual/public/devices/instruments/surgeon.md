@@ -33,7 +33,9 @@ Example uses:
 
 ## 1. Patterns
 
-The circles 1 to 8 are the patterns, **Off** silences the device.
+The circles 1 to 8 are the patterns, **Off** silences the loops. While **Off**, Surgeon plays the notes of its
+track and your keyboard with the sound of the selected pattern, one note at a time. While a pattern plays, notes are
+ignored.
 
 1. Click a pattern while the transport plays and it takes over at the next bar. It flashes until then.
 2. With the transport stopped it takes over at once.

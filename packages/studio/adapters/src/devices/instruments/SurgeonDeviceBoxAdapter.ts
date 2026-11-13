@@ -167,7 +167,7 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get defaultTrackType(): TrackType {return TrackType.Notes}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get acceptsMidiEvents(): boolean {return false}
+    get acceptsMidiEvents(): boolean {return true}
 
     live(key: int): AutomatableParameterFieldAdapter<number> {
         return asDefined(this.#live.get(key), `Surgeon has no value with key ${key}`)

@@ -43,11 +43,16 @@ proves it (as for Slide: at 0 % the engine renders the same samples as before).
 
 ### Play mode
 
-1. The loop plays while the transport plays. It takes no notes from the track.
+1. The loop plays while the transport plays. While a pattern plays, notes from the track are ignored.
 2. 8 pattern buttons and an Off button in the editor. One is active.
 3. A switch to another pattern or to Off takes effect at the start of the next bar.
-4. After Off the last note rings out, no new notes start.
-5. All loops run on the song position, not on the moment the pattern was fired. A pattern fired late joins
+4. After Off the last note rings out, the loop starts no new notes.
+5. While Off, the notes of the track play (decided 2026-11-13): one voice, the pitch is the note (Tune does not
+   move it), the sound is the selected pattern's. With the transport running the lanes move the sound step by
+   step, stopped the notes play the base values. Overlapping notes glide with Glide, the last note wins and a
+   released note falls back to the one still held. A pattern that takes over ends the played notes. Without
+   notes on the track every sample stays the same.
+6. All loops run on the song position, not on the moment the pattern was fired. A pattern fired late joins
    exactly where it would be had it played all along ("in phase", decided 2026-11-13).
 
 ### Pitch loop
@@ -294,7 +299,7 @@ One spec list generates both the live parameters and the pattern fields, so they
 3. Selecting another pattern stores the live controls into the pattern that is left, loads the new one into the
    live controls and sets `slot` and `pattern`, as plain writes in one undo step. The engine takes over at the
    next bar, the bar comes from the signature track. A slot changed while the transport is stopped, starts or
-   jumps is taken at once, and a slot still waiting for its bar is taken when the transport stops.
+   jumps is taken at once, and a slot still waiting for its bar is taken when the transport stops or pauses.
 4. The engine reports the playing slot and the slot that waits for its bar. The editor shows the flash from it.
 
 ### Files
