@@ -1,6 +1,7 @@
 import {FadingEnvelope} from "@opendaw/lib-dsp"
-import {clamp, Curve, Option, TAU} from "@opendaw/lib-std"
+import {clamp, Curve, Option, PrintValue, TAU} from "@opendaw/lib-std"
 import {TimelineRange} from "@opendaw/studio-core"
+import {AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
 
@@ -10,6 +11,14 @@ export namespace AudioFadeHandles {
     export type Part = LengthPart | SlopePart
     export type Handle<PART extends Part> = {readonly part: PART, readonly x: number, readonly y: number}
     type Range = Pick<TimelineRange, "unitToX">
+
+    // a length handle shows its fade as a share of the region, a slope handle its curve, 50 being linear
+    export const printValue = ({duration, fading}: AudioRegionBoxAdapter, part: Part): PrintValue => {
+        const share = (length: number): number => duration > 0 ? length / duration : 0.0
+        const value = part === "fading-in" ? share(fading.in) : part === "fading-out" ? share(fading.out)
+            : part === "fading-in-slope" ? fading.inSlope : fading.outSlope
+        return {value: (value * 100.0).toFixed(1), unit: "%"}
+    }
 
     export const radius = 4
     export const slopeRadius = 3

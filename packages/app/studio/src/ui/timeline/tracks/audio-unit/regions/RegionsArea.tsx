@@ -10,8 +10,6 @@ import {
     Lifecycle,
     Nullable,
     Option,
-    PrintValue,
-    Provider,
     Unhandled
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -119,26 +117,56 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         manager.hoveredAudioRegion.wrap(isInstanceOf(region, AudioRegionBoxAdapter)
             && region.position <= unit && unit < region.complete ? region : null)
     }
-    const holdFadeHover = (process: Dragging.Process, readValue: Provider<PrintValue>): Option<Dragging.Process> => {
-        fadeDragging = true
+    const fadeHandleOf = (target: Nullable<RegionCaptureTarget>): Nullable<{ region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part }> => {
+        if (!isDefined(target) || target.type !== "region") {return null}
+        switch (target.part) {
+            case "fading-in":
+            case "fading-in-slope":
+            case "fading-out":
+            case "fading-out-slope":
+                return {region: target.region, part: target.part}
+            default:
+                return null
+        }
+    }
+    const fadeHover: { handle: Nullable<{ region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part }> } = {handle: null}
+    const showFadeValue = (region: AudioRegionBoxAdapter, part: AudioFadeHandles.Part): void => {
         const layers = Layers.get(element)
         layers.textTooltip.forceHide()
-        const at = {clientX: pointer.clientX, clientY: pointer.clientY}
-        layers.valueTooltip.show(() => ({...readValue(), clientX: at.clientX + 12, clientY: at.clientY + 16}))
+        layers.valueTooltip.show(() => ({
+            ...AudioFadeHandles.printValue(region, part), clientX: pointer.clientX + 12, clientY: pointer.clientY + 16
+        }))
+    }
+    // as a knob: the value shows while the pointer rests on a fade handle and stays through its drag
+    const hoverFadeHandle = (target: Nullable<RegionCaptureTarget>): void => {
+        if (fadeDragging) {return}
+        const handle = fadeHandleOf(target)
+        const current = fadeHover.handle
+        if (handle?.region === current?.region && handle?.part === current?.part) {return}
+        fadeHover.handle = handle
+        if (isDefined(handle)) {showFadeValue(handle.region, handle.part)} else {Layers.get(element).valueTooltip.hide()}
+    }
+    const holdFadeHover = (process: Dragging.Process, region: AudioRegionBoxAdapter,
+                           part: AudioFadeHandles.Part): Option<Dragging.Process> => {
+        fadeDragging = true
+        fadeHover.handle = {region, part}
+        showFadeValue(region, part)
         return Option.wrap({
             ...process,
             update: event => {
                 process.update(event)
-                at.clientX = event.clientX
-                at.clientY = event.clientY
+                pointer.clientX = event.clientX
+                pointer.clientY = event.clientY
             },
             finally: () => {
-                layers.valueTooltip.forceHide()
                 fadeDragging = false
                 if (pointer.inside) {
-                    hoverAudioRegion(capturing.capturePoint(pointer.clientX, pointer.clientY), pointer.clientX)
+                    const target = capturing.capturePoint(pointer.clientX, pointer.clientY)
+                    hoverAudioRegion(target, pointer.clientX)
+                    hoverFadeHandle(target)
                 } else {
                     manager.hoveredAudioRegion.clear()
+                    hoverFadeHandle(null)
                 }
             }
         })
@@ -213,6 +241,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             const target = capturing.captureEvent(event)
             hoverAudioRegion(target, event.clientX)
             if (fadeDragging) {return}
+            hoverFadeHandle(target)
             const tooltip = Layers.get(element).textTooltip
             if (TextTooltip.enabled && StudioPreferences.settings.visibility["visible-help-hints"] && target?.type === "track" && target.track.trackBoxAdapter.type === TrackType.Notes
                 && target.track.trackBoxAdapter.regions.collection.length() === 0) {
@@ -224,6 +253,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         Events.subscribe(element, "pointerleave", () => {
             pointer.inside = false
             if (!fadeDragging) {manager.hoveredAudioRegion.clear()}
+            hoverFadeHandle(null)
             Layers.get(element).textTooltip.hide()
         }),
         Events.subscribe(scrollContainer, "scroll", () => {
@@ -406,7 +436,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                                     dragEvent.clientX - startX, dragEvent.clientY - startY, dragEvent.shiftKey),
                                 approve: () => drag.approve(),
                                 cancel: () => drag.cancel()
-                            }, () => ({value: ((isFadeIn ? fading.inSlope : fading.outSlope) * 100.0).toFixed(1), unit: "%"}))
+                            }, audioRegion, target.part)
                         }
                         const startPointer = range.xToUnit(event.clientX - clientRect.left)
                         const drag = AudioFadeLengthDrag.create(fading, duration, isFadeIn, startPointer, editing)
@@ -415,10 +445,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                                 drag.update(range.xToUnit(dragEvent.clientX - clientRect.left), dragEvent.shiftKey),
                             approve: () => drag.approve(),
                             cancel: () => drag.cancel()
-                        }, () => {
-                            const length = isFadeIn ? fading.in : fading.out
-                            return {value: (duration > 0 ? length / duration * 100.0 : 0.0).toFixed(1), unit: "%"}
-                        })
+                        }, audioRegion, target.part)
                     }
                     default: {
                         return Unhandled(target)

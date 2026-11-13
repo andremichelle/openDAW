@@ -152,9 +152,13 @@ export namespace RegionRenderer {
                     })
                     context.restore()
                 }
-                if (isInstanceOf(region, AudioRegionBoxAdapter) && tracks.hoveredAudioRegion.contains(region)) {
+                const handleOpacity = isInstanceOf(region, AudioRegionBoxAdapter) ? tracks.fadeReveal.opacityOf(region) : 0.0
+                if (handleOpacity > 0.0 && isInstanceOf(region, AudioRegionBoxAdapter)) {
+                    context.save()
+                    context.globalAlpha = handleOpacity
                     AudioFadeHandles.render(context, range, region.fading, position, complete, bound.bottom, handleColor,
                         AudioFadeAnchors.read(region.box))
+                    context.restore()
                 }
                 if (selected) {
                     context.fillStyle = labelBackground
