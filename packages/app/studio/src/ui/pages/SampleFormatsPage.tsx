@@ -176,14 +176,14 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
             <span className="possible">
                 {convertible.length === 0 ? "Nothing to convert" : `Converting all would free ${Bytes.toString(SampleFormats.savingOf(convertible))}`}
             </span>,
-            report.failures.length > 0
-                ? <span className="failures" title={report.failures.join("\n")}>{`${report.failures.length} unreadable`}</span>
-                : <span/>,
             <Button lifecycle={reportTerminator} onClick={() => convert().then(EmptyExec)}
                     appearance={{color: Colors.green, framed: true}}>{convertLabel}</Button>,
             <Button lifecycle={reportTerminator} onClick={() => scan().then(EmptyExec)} appearance={{color: Colors.blue, framed: true}}>
                 <span>Rescan</span>
             </Button>)
+        if (report.failures.length > 0) {
+            summary.append(<span className="failures" title={report.failures.join("\n")}>{`${report.failures.length} unreadable`}</span>)
+        }
         Html.empty(tabs)
         tabs.append(<RadioGroup lifecycle={reportTerminator} model={tab} appearance={{framed: true}}
                                 elements={SampleFormats.KindOrder.map(kind => ({

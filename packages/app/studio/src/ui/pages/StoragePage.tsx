@@ -193,12 +193,6 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             <span>{`openDAW files: ${Bytes.toString(report.total)}`}</span>,
             <span className="estimate"/>,
             <div className="break"/>,
-            unused.length === 0 ? <span/> : (
-                <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}
-                        appearance={{color: Colors.red, framed: true}}>
-                    <span>{`Delete unused (${unused.length}, ${Bytes.toString(StorageReport.sizeOf(unused))})...`}</span>
-                </Button>
-            ),
             <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
                 <span>Rescan</span>
             </Button>,
@@ -206,6 +200,13 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
                     appearance={{color: Colors.blue, framed: true}}>
                 <span>Optimise Samples...</span>
             </Button>)
+        if (unused.length > 0) {
+            summary.append(
+                <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}
+                        appearance={{color: Colors.red, framed: true}}>
+                    <span>{`Delete unused (${unused.length}, ${Bytes.toString(StorageReport.sizeOf(unused))})...`}</span>
+                </Button>)
+        }
         if (report.failures.length > 0) {
             summary.append(
                 <div className="break"/>,
