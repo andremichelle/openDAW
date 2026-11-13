@@ -215,12 +215,12 @@ export const SampleFormatsPage: PageFactory<StudioService> = ({lifecycle, servic
     return (
         <div className={className}>
             <BackButton lifecycle={lifecycle} service={service}/>
-            <h1>Sample Formats</h1>
+            <h1>Sample Optimisation</h1>
             <p className="disclaimer">
                 openDAW stores a sample as 16 bit when nothing is lost by it, which takes half the space of 32 bit
                 float. Samples stored before that was possible are still 32 bit. This page converts them. It only
-                covers the storage of this browser, see <LocalLink href="/storage">Storage</LocalLink> for
-                everything else.
+                covers your own samples in the storage of this browser, not the cached samples of the openDAW
+                cloud. See <LocalLink href="/storage">Storage</LocalLink> for everything else.
             </p>
             {summary}
             {tabs}

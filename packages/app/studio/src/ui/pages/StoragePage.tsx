@@ -192,9 +192,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         summary.append(
             <span>{`openDAW files: ${Bytes.toString(report.total)}`}</span>,
             <span className="estimate"/>,
-            report.failures.length > 0
-                ? <span className="failures" title={report.failures.join("\n")}>{`${report.failures.length} unreadable`}</span>
-                : <span/>,
+            <div className="break"/>,
             unused.length === 0 ? <span/> : (
                 <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}
                         appearance={{color: Colors.red, framed: true}}>
@@ -206,8 +204,16 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             </Button>,
             <Button lifecycle={reportTerminator} onClick={() => RouteLocation.get().navigateTo("/storage/samples")}
                     appearance={{color: Colors.blue, framed: true}}>
-                <span>Sample formats...</span>
+                <span>Optimise Samples...</span>
             </Button>)
+        if (report.failures.length > 0) {
+            summary.append(
+                <div className="break"/>,
+                <div className="failures">
+                    {[`${report.failures.length} could not be read or decoded:`,
+                        ...report.failures.map(path => StorageReport.describeFailure(report, path))].join("\n")}
+                </div>)
+        }
         navigator.storage.estimate().then(({usage, quota}) => {
             const estimate = summary.querySelector("span.estimate")
             if (estimate !== null && usage !== undefined && quota !== undefined) {

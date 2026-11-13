@@ -16,8 +16,10 @@ export namespace SampleFormats {
         readonly saving: int
     }
     // leftovers: the ids of samples whose audio file was being replaced when the page went away
+    // skipped: cached samples of the openDAW cloud, they are optimised there
     export type Report = {
-        readonly entries: ReadonlyArray<Entry>, readonly failures: ReadonlyArray<string>, readonly leftovers: ReadonlyArray<string>
+        readonly entries: ReadonlyArray<Entry>, readonly failures: ReadonlyArray<string>, readonly leftovers: ReadonlyArray<string>,
+        readonly skipped: int
     }
     export type Reader = (path: string) => Promise<Uint8Array>
     export type HeadReader = (path: string, bytes: int) => Promise<Uint8Array>
@@ -26,6 +28,7 @@ export namespace SampleFormats {
     export const Folder = "samples/v2/"
     const Leftovers: ReadonlyArray<string> = ["audio.wav.pending", "audio.wav.commit"]
     const HeadBytes = 44
+    const CloudOrigin = "openDAW"
 
     export const KindOrder: ReadonlyArray<SampleConversion.Kind> = ["exact", "rounding", "scaling", "float", "sixteen"]
 
@@ -46,13 +49,16 @@ export namespace SampleFormats {
             && Leftovers.some(name => path.endsWith(`/${name}`))).map(({path}) => path.split("/")[2])))
         const entries: Array<Entry> = []
         const failures: Array<string> = []
+        let skipped = 0
         for (const [index, {path, size}] of audio.entries()) {
             const id = path.split("/")[2]
             const folder = `${Folder}${id}`
             const {name, origin} = await metaOf(read, `${folder}/meta.json`)
             const base = {id, name: name ?? id, origin, size}
-            const start = await Promises.tryCatch(head(path, HeadBytes))
-            if (start.status === "resolved" && WavFile.isSixteenBit(start.value)) {
+            const start = origin === CloudOrigin ? undefined : await Promises.tryCatch(head(path, HeadBytes))
+            if (!isDefined(start)) {
+                skipped++
+            } else if (start.status === "resolved" && WavFile.isSixteenBit(start.value)) {
                 entries.push({...base, kind: "sixteen", peak: null, saving: 0})
             } else {
                 const bytes = await Promises.tryCatch(read(path))
@@ -69,7 +75,7 @@ export namespace SampleFormats {
             }
             progress((index + 1) / audio.length)
         }
-        return {entries, failures, leftovers}
+        return {entries, failures, leftovers, skipped}
     }
 
     // the entry of a sample after its conversion

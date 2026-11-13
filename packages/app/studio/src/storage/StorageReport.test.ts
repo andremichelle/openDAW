@@ -18,6 +18,14 @@ const report: StorageScan.Report = {
 }
 
 describe("StorageReport", () => {
+    it("names the project or asset an unreadable file belongs to", () => {
+        expect(StorageReport.describeFailure(report, "p1/project.od")).toBe("project 'p1': p1/project.od")
+        expect(StorageReport.describeFailure(report, "samples/v2/a/audio.wav")).toBe("sample 'a': samples/v2/a/audio.wav")
+        expect(StorageReport.describeFailure(report, "m")).toBe("model 'm': m")
+        expect(StorageReport.describeFailure(report, "p10/project.od")).toBe("p10/project.od")
+        expect(StorageReport.describeFailure(report, "locked/file")).toBe("locked/file")
+    })
+
     it("adds the open project as a user of the assets its live graph refers to", () => {
         const result = StorageReport.withOpenProject(report, "p2", [{kind: "sample", id: "a"}, {kind: "sample", id: "b"}])
         expect(result.assets.map(({usedBy}) => usedBy)).toEqual([

@@ -1,3 +1,4 @@
+import {isDefined} from "@opendaw/lib-std"
 import {StorageScan} from "./StorageScan"
 
 export namespace StorageReport {
@@ -33,6 +34,12 @@ export namespace StorageReport {
             default:
                 return itemsOf(report, tab).length
         }
+    }
+
+    // names what an unreadable file belongs to
+    export const describeFailure = ({items, assets}: StorageScan.Report, path: string): string => {
+        const owner = [...items, ...assets].find(entry => path === entry.path || path.startsWith(`${entry.path}/`))
+        return isDefined(owner) ? `${owner.kind} '${owner.name}': ${path}` : path
     }
 
     export const keyOf = ({kind, id}: { kind: string, id: string }): string => `${kind}:${id}`

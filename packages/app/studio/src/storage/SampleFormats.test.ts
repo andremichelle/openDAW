@@ -57,9 +57,19 @@ describe("SampleFormats.scan", () => {
     })
     it("reports name, origin, size, peak and what a conversion frees", async () => {
         const store: Store = new Map()
-        sample(store, "abc", floatFile(0.5, -0.75, 0.25, 0), {name: "Kick", origin: "openDAW", bpm: 120})
+        sample(store, "abc", floatFile(0.5, -0.75, 0.25, 0), {name: "Kick", origin: "recording", bpm: 120})
         const {report: {entries: [entry]}} = await scanOf(store)
-        expect(entry).toEqual({id: "abc", name: "Kick", origin: "openDAW", size: 44 + 16, kind: "exact", peak: 0.75, saving: 8})
+        expect(entry).toEqual({id: "abc", name: "Kick", origin: "recording", size: 44 + 16, kind: "exact", peak: 0.75, saving: 8})
+    })
+    it("leaves out the cached samples of the cloud and never reads their audio", async () => {
+        const store: Store = new Map()
+        sample(store, "cloud", floatFile(0.5, -0.75), {name: "Kick", origin: "openDAW"})
+        sample(store, "mine", floatFile(0.5, -0.75), {name: "Mine", origin: "import"})
+        sample(store, "taken", floatFile(0.5, -0.75), {name: "Take", origin: "recording"})
+        const {report, fullReads} = await scanOf(store)
+        expect(report.entries.map(({id}) => id).sort()).toEqual(["mine", "taken"])
+        expect(report.skipped).toBe(1)
+        expect(fullReads).not.toContain("samples/v2/cloud/audio.wav")
     })
     it("frees nothing for samples that do not convert", async () => {
         const store: Store = new Map()
@@ -120,7 +130,7 @@ describe("SampleFormats.scan", () => {
         expect(steps).toEqual([0.5, 1.0])
     })
     it("is empty for an empty storage", async () => {
-        expect((await scanOf(new Map())).report).toEqual({entries: [], failures: [], leftovers: []})
+        expect((await scanOf(new Map())).report).toEqual({entries: [], failures: [], leftovers: [], skipped: 0})
     })
 })
 
