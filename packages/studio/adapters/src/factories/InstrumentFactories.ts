@@ -7,6 +7,7 @@ import {
     NeonDeviceBox,
     WclapInstrumentBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -29,6 +30,8 @@ import {TrackType} from "../timeline/TrackType"
 import {PlayfieldPads} from "../devices/instruments/Playfield/PlayfieldPads"
 import {SamplerModulation} from "../devices/instruments/Sampler/SamplerModulation"
 import {SamplerZones} from "../devices/instruments/Sampler/SamplerZones"
+import {Surgeon as SurgeonDevice} from "../devices/instruments/SurgeonDeviceBoxAdapter"
+import {SurgeonModel} from "../devices/instruments/Surgeon/SurgeonModel"
 
 export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
@@ -363,7 +366,31 @@ export namespace InstrumentFactories {
     export const fitsCell = (cell: InstrumentCompositeCellBox, factory: InstrumentFactory<any, any>): boolean =>
         PlayfieldPads.isPad(cell) ? isPadInstrument(factory) : isLayerInstrument(factory)
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
+    export const Surgeon: InstrumentFactory<void, SurgeonDeviceBox> = {
+        defaultName: "Surgeon",
+        defaultIcon: IconSymbol.Surgeon,
+        briefDescription: "Raw Techno Themes",
+        description: "Plays metallic FM themes for raw techno by itself, from loops that mutate and patterns fired on the bar",
+        manualPage: DeviceManualUrls.Surgeon,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): SurgeonDeviceBox =>
+            SurgeonDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                // pattern 1 is the locked default loop, the others start as rolled patterns
+                const first = SurgeonDevice.readPattern(box.patterns.fields()[0])
+                box.patterns.fields().forEach((pattern, index) => {
+                    if (index > 0) {SurgeonDevice.writePattern(pattern, SurgeonModel.rollAll(first, index))}
+                })
+                box.host.refer(host)
+            })
+    }
+
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, Surgeon, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
     export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
         .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))

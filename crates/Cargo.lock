@@ -491,8 +491,10 @@ dependencies = [
 name = "device-surgeon"
 version = "0.0.0"
 dependencies = [
+ "abi",
  "dsp",
  "libm",
+ "math",
  "surgeon-lab",
 ]
 
@@ -879,13 +881,6 @@ version = "0.0.0"
 dependencies = [
  "dsp",
  "libm",
-]
-
-[[package]]
-name = "surgeon-wasm"
-version = "0.0.0"
-dependencies = [
- "device-surgeon",
 ]
 
 [[package]]

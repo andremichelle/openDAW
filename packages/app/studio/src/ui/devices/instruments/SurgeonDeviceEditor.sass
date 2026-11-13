@@ -1,5 +1,4 @@
 @use "@/mixins"
-@use "@/ui/devices/instruments/SamplerDeviceEditor/shared"
 
 $tile: 22px
 $circle: 20px
@@ -17,16 +16,13 @@ $column: 50px
     opacity: 0.25
 
 component
-  display: flex
-  flex-direction: column
-  row-gap: 0.75em
-
-  div.transport
-    display: flex
-    align-items: center
-    column-gap: 1em
-    font-size: 11px
-    color: var(--color-dark)
+  --color: var(--color-green)
+  display: grid
+  grid-template-columns: ($circle * 3 + 4px) 180px auto
+  grid-template-rows: 172px
+  column-gap: 1em
+  align-content: start
+  @include mixins.Control
 
   div.button
     display: flex
@@ -46,24 +42,10 @@ component
       color: rgba(white, 0.9)
       border-color: var(--color)
 
-    &.play
-      --color: var(--color-green)
-      width: 64px
-      margin: 0
-
     &.roll
       width: 60px
       margin: 0
       justify-self: center
-
-  div.surgeon
-    --color: var(--color-green)
-    display: grid
-    grid-template-columns: ($circle * 3 + 4px) 180px auto
-    grid-template-rows: 172px
-    column-gap: 1em
-    align-content: start
-    @include mixins.Control
 
   // borrowed from TubularDeviceEditor (round tab tiles)
   div.tile
@@ -106,11 +88,6 @@ component
     > div.values
       display: grid
       row-gap: 5px
-
-      label.value
-        height: 13px
-        padding-top: 0
-        line-height: 13px
 
       > div.control
         row-gap: 0
@@ -238,15 +215,8 @@ component
     align-content: center
     min-width: 0
 
-  label.value
-    @include shared.value-label
-    justify-content: center
-    height: 18px
-    cursor: ns-resize
-
-  div.cell.amount label.value
+  div.cell.amount
     color: var(--color)
 
     &.zero
-      color: var(--color-shadow)
-      opacity: 0.5
+      opacity: 0.35

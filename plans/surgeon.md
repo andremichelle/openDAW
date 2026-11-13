@@ -1,9 +1,8 @@
 # Surgeon
 
-Status 2026-11-13: design settled in listening rounds with André, editor layout drawn and accepted as an
-arrangement. Lab crate `crates/surgeon-lab` built. Engine core `crates/stock-devices/device-surgeon` built and
-checked against the lab. Editor draft on `/testing` built (uncommitted, not yet seen in a browser). No device ABI
-wrapper, no box, no real editor.
+Status 2026-11-13: Surgeon is a real stock instrument. It is in the device browser, plays in the studio and in
+the headless engine, has its editor, a manual page and tests. The `/testing` preview and its own module are
+removed. Open: scripting API, presets, a screenshot for the manual (see "Device" below).
 
 Branch: `surgeon`, in its own checkout `../openDAW-surgeon` (a git worktree, created 2026-11-13 from
 `9fee779f6`). Committed, not pushed. The main checkout holds other work and must stay free of these files.
@@ -270,6 +269,65 @@ Sources: [Chowning 1973](https://web.eecs.umich.edu/%7Efessler/course/100/misc/c
 
 Our own engine and controls. No circuit, parameter set, layout or preset name of a product is copied.
 
+## Device
+
+How the engine core became an instrument (2026-11-13).
+
+### Box
+
+`SurgeonDeviceBox` (`forge-boxes/.../instruments/SurgeonDeviceBox.ts`):
+1. `tune` (Hz), `volume` (dB) and `slot` (which pattern plays, -1 is off): automatable parameters.
+2. `pattern`: the pattern the live controls belong to. It stays when the slot goes off.
+3. `live`: 101 automatable parameters, the controls of the editor (rate, the pitch loop, the lanes, the sound and
+   its lane amounts).
+4. `patterns`: 8 times the same 101 values as plain fields.
+
+One spec list generates both the live parameters and the pattern fields, so they cannot drift apart.
+
+### Who uses what
+
+1. The engine plays the stored patterns. A live control only counts while it is automated or modulated, then its
+   value replaces that value in every pattern. So an automation lane keeps acting whichever pattern plays.
+2. An edit of a live control is written into the pattern it belongs to in the same transaction (the adapter
+   mirrors it). That is why an edit is heard at once and is kept, with one undo step.
+3. Selecting a pattern sets `slot` and `pattern` and copies the pattern into the live controls. The engine takes
+   over at the next bar, the bar comes from the signature track.
+4. The engine reports the playing slot and the slot that waits for its bar. The editor shows the flash from it.
+
+### Files
+
+1. Rust: `crates/stock-devices/device-surgeon/src/device.rs` (the wrapper) and the exports in `lib.rs`.
+2. Adapter: `adapters/src/devices/instruments/SurgeonDeviceBoxAdapter.ts`, with the loop model in
+   `Surgeon/SurgeonModel.ts`.
+3. Editor: `app/studio/src/ui/devices/instruments/SurgeonDeviceEditor.tsx` and `.sass`, the layout of the reviewed
+   draft with the studio's own parameter controls.
+4. Registration: device list of the schema, `BoxAdapters`, `InstrumentBox`, `InstrumentFactories` (the description
+   contains "raw techno"), `DeviceManualUrls`, `IconSymbol` and `IconLibrary`, `engine-modules.ts`, `DEVICE_CRATES`
+   in `build-wasm.sh`, `DeviceEditorFactory`, `DeviceTags`, the manual page and `Manuals.ts`.
+5. Generated and committed: `crates/studio-boxes/src/registry.rs`.
+
+### Tests
+
+1. `core-wasm/test/param-mapping-parity.test.ts`: every bound parameter maps like its adapter.
+2. `core-wasm/test/surgeon-render.test.ts`: the full engine plays the device from a project, Off is silent, a
+   pattern plays its stored values, a live control that is not automated is ignored, the volume acts.
+3. `adapters/.../Surgeon/SurgeonModel.test.ts` and `SurgeonValues.test.ts`: the loop model against the engine's
+   values, and box values against the model.
+4. In the studio (checked in Chrome): the device is in the browser with its description, the editor renders, the
+   transport plays it, a fired pattern flashes and takes over at the bar, Off silences it, no console errors.
+
+### Open
+
+1. Scripting API: Surgeon is not in the scripting package yet.
+2. Presets, and the chain with Delay and Dattorro Reverb.
+3. The manual page has no screenshot.
+4. `crates/Cargo.toml` has no `opt-level = 3` entry for the crate (a shared file, the other synths have one).
+5. If the slot is automated, the playing pattern can differ from the one the live controls belong to. Edits then
+   go to the pattern the controls show, not to the one that plays.
+6. The engine delivers at most 32 automation changes per update position to one device. With more than 32
+   controls automated at once, the rest is dropped.
+7. Tune and Volume changes are not smoothed.
+
 ## Lab
 
 `crates/surgeon-lab`, a dev only workspace crate, never built for the browser.
@@ -367,7 +425,7 @@ Open in the engine:
    `packages/app/studio/src/ui/pages/testing/SurgeonPreview.tsx`, every control works on a TypeScript model of the
    loops (`surgeon/SurgeonModel.ts`, tested against values printed by the engine), the display follows a preview
    clock. It sits in the `PreviewDevicePanel` frame copied from the `opendrum` branch. Sound: the real engine
-   core as `crates/surgeon-wasm` (`surgeon_wasm.wasm`, built by `build-wasm.sh`) inside an audio worklet
+   core as `crates/surgeon-wasm` (`surgeon_wasm.wasm`, built by hand) inside an audio worklet
    (`surgeon/SurgeonWorklet.js`, `surgeon/SurgeonAudio.ts`), which also reports the position the display follows.
 3. ~~Engine core, checked against the lab.~~
 4. Box, adapter, device ABI wrapper, real editor. Browser checkpoint.
@@ -377,9 +435,7 @@ Open in the engine:
 ## Open
 
 1. How the 110 values are shown in the editor.
-2. The preview module `surgeon_wasm.wasm` is copied into the engine package's `dist/wasm`, which the SDK publishes
-   and PROD bundles. It should be served from a place of its own before a release. The `opendrum` branch does
-   the same with its preview module, so both want one answer.
-3. Merge note: this branch adds `surgeon-wasm` to the members in `crates/Cargo.toml` and to `build-wasm.sh`, the
-   `opendrum` branch edits the same lines for `opendrum-wasm`.
+2. Shared build files (decided 2026-11-13): this branch leaves `crates/Cargo.toml` and `TestingPage.tsx` as they
+   are on `next-release`. In `build-wasm.sh` it only adds `device-surgeon` to the device list, a line `opendrum`
+   does not touch. The `/testing` preview and its module `surgeon-wasm` are removed.
 

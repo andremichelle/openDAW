@@ -59,7 +59,7 @@ pub struct Engine {
     voice: Voice,
     resampler: ResamplerMono,
     scratch: [f32; MAX_FRAMES * OVERSAMPLING],
-    bar: i64,
+    bar: f64,
     step: i64,
     rate: u32,
     counters: [Counter; LOOPS],
@@ -81,7 +81,7 @@ impl Engine {
             voice,
             resampler: ResamplerMono::new(OVERSAMPLING),
             scratch: [0.0; MAX_FRAMES * OVERSAMPLING],
-            bar: NONE,
+            bar: f64::NAN,
             step: NONE,
             rate: 0,
             counters: [Counter::NEW; LOOPS],
@@ -146,18 +146,36 @@ impl Engine {
         if position == floor {floor as i64 - 1} else {floor as i64}
     }
 
-    /// Renders one block: the pulse range `[p0, p1)` spread over `output` (at most `MAX_FRAMES` frames). While the
-    /// transport does not play, or after a jump, held notes are let go and ring out.
+    /// `process_bars` in 4/4 from pulse zero.
     pub fn process(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, output: &mut [f32]) {
+        self.process_bars(p0, p1, playing, discontinuous, 0.0, BAR_PULSES, output);
+    }
+
+    /// Lets go of every held note at once (the transport stopped), the tail rings out.
+    pub fn stop(&mut self) {
+        self.release();
+        self.was_playing = false;
+    }
+
+    // the start of the bar holding `pulse`, for bars of `length` pulses counted from `origin`
+    fn bar_of(pulse: f64, origin: f64, length: f64) -> f64 {origin + libm::floor((pulse - origin) / length) * length}
+
+    /// Renders one block: the pulse range `[p0, p1)` spread over `output` (at most `MAX_FRAMES` frames). While the
+    /// transport does not play, or after a jump, held notes are let go and ring out. `bar_start` and `bar_length`
+    /// describe the bar around `p0` (the signature), a fired slot takes over where a bar starts.
+    pub fn process_bars(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64, bar_length: f64,
+                        output: &mut [f32]) {
+        let bar_length = if bar_length > 0.0 {bar_length} else {BAR_PULSES};
         let frames = output.len().min(MAX_FRAMES);
         let count = frames * OVERSAMPLING;
         if !playing {
             if self.was_playing {self.release();}
-            self.bar = NONE;
+            self.bar = f64::NAN;
             self.step = NONE;
         } else if discontinuous || !self.was_playing {
             self.release();
-            self.bar = Self::index_before(p0, BAR_PULSES);
+            let bar = Self::bar_of(p0, bar_start, bar_length);
+            self.bar = if bar == p0 {bar - bar_length} else {bar};
             self.step = self.pattern().map_or(NONE, |pattern| Self::index_before(p0, pattern.step_pulses()));
             self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
         }
@@ -166,7 +184,7 @@ impl Engine {
         for index in 0..count {
             if playing {
                 let pulse = p0 + advance * index as f64;
-                let bar = libm::floor(pulse / BAR_PULSES) as i64;
+                let bar = Self::bar_of(pulse, bar_start, bar_length);
                 if bar != self.bar {
                     self.bar = bar;
                     if let Some(slot) = self.fired.take() {

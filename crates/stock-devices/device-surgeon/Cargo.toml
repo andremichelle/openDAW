@@ -4,11 +4,13 @@ version = "0.0.0"
 edition = "2021"
 publish = false
 
-# the engine core of Surgeon (plans/surgeon.md). The device ABI wrapper follows with the box.
+# Surgeon (plans/surgeon.md): the engine core plus the device wrapper that binds it to the SurgeonDeviceBox
 [lib]
-crate-type = ["lib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
+abi = {path = "../../abi"}
+math = {path = "../../math"}
 dsp = {path = "../../dsp"}
 libm = "0.2"
 
