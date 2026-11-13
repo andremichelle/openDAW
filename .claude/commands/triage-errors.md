@@ -10,7 +10,7 @@ Triage the openDAW production error log.
 Run (add `?env=production` or `?limit=N` if `$ARGUMENTS` narrows scope):
 
 ```
-curl -s "https://logs.opendaw.studio/unfixed.php" | python3 -m json.tool
+curl -s -H "Origin: https://opendaw.studio" "https://logs.opendaw.studio/unfixed.php" | python3 -m json.tool
 ```
 
 Each row is one deduplicated issue: `error_name`, `error_message`, `occurrences`, `first_seen`, `last_seen`,
@@ -43,7 +43,7 @@ so the bare number is meaningful, e.g. `work on 1054 (regions overlap: prev.comp
 For each new/unknown group worth pursuing, fetch a full sample (stack + captured logs) from the raw list:
 
 ```
-curl -s "https://logs.opendaw.studio/list.php?offset=0&limit=40" | python3 -c "import json,sys; [print(json.dumps(r,indent=1)) for r in json.load(sys.stdin) if r['id']==<latest_id>]"
+curl -s -H "Origin: https://opendaw.studio" "https://logs.opendaw.studio/list.php?offset=0&limit=40" | python3 -c "import json,sys; [print(json.dumps(r,indent=1)) for r in json.load(sys.stdin) if r['id']==<latest_id>]"
 ```
 
 Grep the codebase for the thrown message / the top non-minified stack frame to locate the source. Follow the

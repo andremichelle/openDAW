@@ -7,7 +7,7 @@
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
-import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {Exec, int, isDefined, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioData, LowBandAnalyser, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
@@ -59,6 +59,14 @@ import {createEngineMemory} from "./engine-modules"
 
 const GONIO_PAIRS = 512
 
+type ProcessorOptions = {processorOptions: EngineProcessorAttachment} & AudioNodeOptions
+
+let bootClient: Nullable<EngineToClient> = null
+
+const reportBootFailure = (error: unknown): void => {
+    if (isDefined(bootClient)) {bootClient.error(error)}
+}
+
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
     readonly #memory: WebAssembly.Memory
@@ -108,11 +116,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #recordingStopTime: number = Number.NaN
     #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
-    constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
+    constructor({processorOptions}: ProcessorOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
-        this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             messenger.channel("engine-to-client"),
@@ -157,6 +164,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
+        bootClient = this.#engineToClient
+        this.#memory = createEngineMemory()
         this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
         const {engine, scriptBridges} = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
             this.#memory, sampleRate, this.#engineToClient, this.#wclap, () => this.#broadcaster ?? null)
@@ -698,6 +707,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
 
 }
 
-registerProcessor(WASM_ENGINE_PROCESSOR_NAME, WasmEngineProcessor)
+// processorerror carries no cause: a failing constructor sends its error over the port first
+registerProcessor(WASM_ENGINE_PROCESSOR_NAME, new Proxy(WasmEngineProcessor, {
+    construct: (target, args, newTarget): WasmEngineProcessor => {
+        bootClient = null
+        const {status, value, error} = tryCatch((): WasmEngineProcessor => Reflect.construct(target, args, newTarget))
+        if (status === "success") {return value}
+        reportBootFailure(error)
+        throw error
+    }
+}))
 
 export {} // isolate this file's module scope from other worklets

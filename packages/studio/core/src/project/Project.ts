@@ -354,8 +354,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             // we will only accept the first error
             worklet.removeEventListener("error", handler)
             worklet.removeEventListener("processorerror", handler)
+            const cause = await this.#awaitErrorCause(worklet, event)
             lifecycle.terminate()
-            await safeExecute(restart?.unload, event)
+            await safeExecute(restart?.unload, cause)
             if (this.#terminated) {return}
             safeExecute(restart?.load, this.startAudioWorklet(restart))
         }
@@ -365,6 +366,17 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.engine.setWorklet(worklet)
         worklet.isReady().then(() => this.audioUnitFreeze.replay(worklet))
         return worklet
+    }
+
+    // The browser's own event for a failed processor carries no cause, the processor sends it right before or after
+    #awaitErrorCause(worklet: EngineWorklet, event: unknown): Promise<unknown> {
+        const hasCause = (candidate: unknown): boolean => candidate instanceof ErrorEvent && isDefined(candidate.error)
+        if (!(event instanceof Event) || hasCause(event)) {return Promise.resolve(event)}
+        const {promise, resolve} = Promise.withResolvers<unknown>()
+        const onError = (candidate: Event) => {if (hasCause(candidate)) {resolve(candidate)}}
+        worklet.addEventListener("error", onError)
+        setTimeout(() => resolve(event), 250)
+        return promise.finally(() => worklet.removeEventListener("error", onError))
     }
 
     handleCpuOverload(): void {
