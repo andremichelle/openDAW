@@ -250,6 +250,12 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             leave: () => markerPosition.setValue(null)
         }),
         Events.subscribe(element, "wheel", (event: WheelEvent) => {
+            if (event.ctrlKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                WheelScaling.apply(element, range, event)
+                return
+            }
             if (event.shiftKey) {
                 event.preventDefault()
                 event.stopPropagation()

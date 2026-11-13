@@ -44,6 +44,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
 
@@ -208,6 +209,12 @@ export const PitchEditor = ({
         }),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
+            if (event.ctrlKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                WheelScaling.apply(canvas, range, event)
+                return
+            }
             if (event.shiftKey || event.altKey) {return}
             event.preventDefault()
             positioner.scrollModel.moveBy(event.deltaY)
