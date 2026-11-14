@@ -1,18 +1,14 @@
-import {int, Option} from "@opendaw/lib-std"
+import {int, Option, Terminable} from "@opendaw/lib-std"
 import {WasmWorker} from "@opendaw/lib-wasm-worker"
 import WasmWorkerUrl from "@opendaw/lib-wasm-worker/worker.js?worker&url"
 
 // the preview renders through the real engines (crates/opendrum), built as opendrum_wasm.wasm
 export namespace OpenDrumSynth {
-    export const SampleRate = 48000
+    // the display's picture renders at half the usual rate, about twice as fast and enough to draw it
+    export const SampleRate = 24000
     export const MaxSeconds = 2.0
-    // long sounds render (and play) this much, the display still shows MaxSeconds
-    const LongSeconds = 8.0
-    // every hit and every reference plays 6 dB down, so a loud hit never clips and levels stay comparable
-    export const Headroom = 0.5
-    export const PlayModes: ReadonlyArray<string> = ["Mono", "Poly", "Gate"]
-    export const OffOn: ReadonlyArray<string> = ["Off", "On"]
-    export const RumbleLengths: ReadonlyArray<string> = ["1/16", "1/8", "1/4", "1/2", "1/1"]
+    // the display draws every hit 6 dB down, so a loud hit stays inside it
+    const Headroom = 0.5
     const RumbleBars: ReadonlyArray<number> = [0.0625, 0.125, 0.25, 0.5, 1.0]
     const ModuleUrl = `${import.meta.env.BASE_URL}wasm-engine/wasm/opendrum_wasm.wasm`
 
@@ -84,7 +80,6 @@ export namespace OpenDrumSynth {
         readonly engine: Engine
         readonly values: ReadonlyArray<number>
         readonly bpm: number
-        readonly frames: int
         readonly contour: Contour
     }
     /** The display's view of a hit: its trimmed length and a min and a max per column, curves per column. */
@@ -95,15 +90,14 @@ export namespace OpenDrumSynth {
         readonly pitch: Float32Array
         readonly softPitch: Float32Array
     }
-    export type Renderer = {
+    /** One worker over the shared compiled module, whoever starts it terminates it. */
+    export type Renderer = Terminable & {
         picture(request: Request, signal: AbortSignal): Promise<Picture>
-        samples(request: Request): Promise<Float32Array>
     }
     // the display reduces every hit to this many min and max pairs over MaxSeconds
     export const Columns = 1024
+    // the render ends where the display ends
     const DisplayFrames = MaxSeconds * SampleRate
-    const Frames = MaxSeconds * SampleRate
-    const LongFrames = LongSeconds * SampleRate
     export const OutOfDate = "engine out of date, rebuild the wasm"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
@@ -129,20 +123,23 @@ export namespace OpenDrumSynth {
         return {envelope, pitch, softPitch}
     }
 
+    /** Equal for two requests that render the same hit. */
+    export const keyOf = ({engine, values, bpm}: Request): string => `${engine}:${bpm}:${values.join(",")}`
+
     const request = (engine: Engine, values: ReadonlyArray<number>, contour: Contour,
-                     frames: int = Frames, bpm: number = 120): Request => ({engine, values, bpm, frames, contour})
+                     bpm: number = 120): Request => ({engine, values, bpm, contour})
 
     export const kick = (kick: Kick, bpm: number): Request => request("kick", [kick.tune, kick.pitch, kick.sweep,
         kick.drift, kick.decay, kick.punch, kick.shape, kick.click, kick.tone, kick.skin, kick.rumble,
         RumbleBars[kick.length], kick.duck, kick.drive, kick.velocity, kick.play, kick.bright, kick.volume, kick.noise,
-        kick.glide], kick, Frames, bpm)
+        kick.glide], kick, bpm)
     export const snare = (snare: Snare): Request => request("snare", [snare.tune, snare.ratio, snare.balance,
         snare.pitch, snare.sweep, snare.decay, snare.punch, snare.shape, snare.level, snare.wireDecay, snare.width,
         snare.curve, snare.click, snare.tone, snare.skin, snare.drive, snare.volume, snare.velocity, snare.play,
         snare.glide], {...snare, drift: 0})
     export const cymbal = (cymbal: Cymbal): Request => request("cymbal", [cymbal.tune, cymbal.tone, cymbal.attack,
         cymbal.decay, cymbal.volume, cymbal.velocity, cymbal.play],
-        {pitch: 0, sweep: 0.001, drift: 0, decay: cymbal.decay, punch: 1, velocity: cymbal.velocity}, LongFrames)
+        {pitch: 0, sweep: 0.001, drift: 0, decay: cymbal.decay, punch: 1, velocity: cymbal.velocity})
     export const perc = (perc: Perc): Request => request("perc", [perc.tune, perc.ratio, perc.index, perc.bite,
         perc.pitch, perc.sweep, perc.decay, perc.curve, perc.noise, perc.drive, perc.volume, perc.velocity, perc.play],
         {pitch: perc.pitch, sweep: perc.sweep, drift: 0, decay: perc.decay, punch: perc.curve, velocity: perc.velocity})
@@ -167,45 +164,47 @@ export namespace OpenDrumSynth {
         clap.tail, clap.volume, clap.velocity, clap.play],
         {pitch: 0, sweep: 0.001, drift: 0, decay: clap.roomDecay, punch: 0, velocity: clap.velocity})
 
-    const start = async (): Promise<Renderer> => {
-        const response = await fetch(ModuleUrl)
-        if (!response.ok) {return Promise.reject(new Error(`Could not load ${ModuleUrl} (${response.status})`))}
-        const module = await WebAssembly.compileStreaming(response)
+    let compiled: Option<Promise<WebAssembly.Module>> = Option.None
+
+    // compiled once, every worker instantiates the same module
+    const compile = (): Promise<WebAssembly.Module> => {
+        if (compiled.isEmpty()) {
+            const module = fetch(ModuleUrl).then(response => response.ok
+                ? WebAssembly.compileStreaming(response)
+                : Promise.reject(new Error(`Could not load ${ModuleUrl} (${response.status})`)))
+            module.catch(() => compiled = Option.None)
+            compiled = Option.wrap(module)
+        }
+        return compiled.unwrap()
+    }
+
+    /** Starts a worker of its own for the caller (a device editor, the preview page). */
+    export const start = async (): Promise<Renderer> => {
+        const module = await compile()
         const endpoint = WasmWorker.fromUrl(WasmWorkerUrl, "openDrum")
         const worker = WasmWorker.create({name: "openDrum", module, endpoint})
-        const counts = new Int32Array(await worker.call("param_counts", new ArrayBuffer(0), {maxResultBytes: 40}))
+        const counted = await worker.call("param_counts", new ArrayBuffer(0), {maxResultBytes: 40})
+            .catch((error: unknown) => {
+                worker.terminate()
+                return Promise.reject(error)
+            })
+        const counts = new Int32Array(counted)
         // the page and the served engine must agree on the number of values, a stale engine would shift them
-        const input = ({engine, values, bpm}: Request, frames: int, columns: int): Promise<ArrayBuffer> =>
+        const input = ({engine, values, bpm}: Request): Promise<ArrayBuffer> =>
             values.length === counts[Engines.indexOf(engine)]
-                ? Promise.resolve(Float32Array.from([SampleRate, frames, DisplayFrames, columns, bpm, ...values])
-                    .buffer)
+                ? Promise.resolve(
+                    Float32Array.from([SampleRate, DisplayFrames, DisplayFrames, Columns, bpm, ...values]).buffer)
                 : Promise.reject(new Error(OutOfDate))
         return {
             picture: async (request: Request, signal: AbortSignal): Promise<Picture> => {
-                const output = await worker.call(request.engine, await input(request, request.frames, Columns),
+                const output = await worker.call(request.engine, await input(request),
                     {maxResultBytes: (1 + Columns * 2) * 4, signal})
                 const floats = new Float32Array(output)
                 const length = floats[0]
                 const peaks = floats.subarray(1).map(value => value * Headroom)
                 return {length, peaks, ...curves(request.contour, length)}
             },
-            samples: async (request: Request): Promise<Float32Array> => {
-                const output = await worker.call(request.engine, await input(request, request.frames, 0),
-                    {maxResultBytes: request.frames * 4})
-                return new Float32Array(output).map(value => value * Headroom)
-            }
+            terminate: () => worker.terminate()
         }
-    }
-
-    let renderer: Option<Promise<Renderer>> = Option.None
-
-    /** One worker for every openDrum display, started on first use and kept. */
-    export const load = (): Promise<Renderer> => {
-        if (renderer.isEmpty()) {
-            const started = start()
-            started.catch(() => renderer = Option.None)
-            renderer = Option.wrap(started)
-        }
-        return renderer.unwrap()
     }
 }

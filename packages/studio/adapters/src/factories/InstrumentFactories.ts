@@ -8,6 +8,7 @@ import {
     WclapInstrumentBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
+    OpenDrumKickDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -389,8 +390,26 @@ export namespace InstrumentFactories {
                 box.host.refer(host)
             })
     }
+    export const OpenDrumKick: InstrumentFactory<void, OpenDrumKickDeviceBox> = {
+        defaultName: "openDrum Kick",
+        defaultIcon: IconSymbol.DrumSet,
+        briefDescription: "Synthesized Kick",
+        description: "A synthesized kick drum, from deep booming to short and punchy, with a rumble tail it ducks",
+        manualPage: DeviceManualUrls.OpenDrumKick,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): OpenDrumKickDeviceBox =>
+            OpenDrumKickDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, Surgeon, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, Surgeon, OpenDrumKick, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
     export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
         .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))

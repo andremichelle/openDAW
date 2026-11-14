@@ -13,6 +13,7 @@ import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
 import {SurgeonDeviceBox} from "./instruments/SurgeonDeviceBox"
+import {OpenDrumKickDeviceBox} from "./instruments/OpenDrumKickDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {SamplerDeviceBox} from "./instruments/SamplerDeviceBox"
@@ -94,6 +95,7 @@ export const DeviceDefinitions = [
     NeonDeviceBox,
     WclapInstrumentBox,
     TubularDeviceBox,
+    OpenDrumKickDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,

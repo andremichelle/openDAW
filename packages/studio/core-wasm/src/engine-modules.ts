@@ -79,6 +79,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_neon.wasm", boxType: "NeonDeviceBox"},   // instrument (phase distortion)
     {url: "/wasm/plugins/device_tubular.wasm", boxType: "TubularDeviceBox"}, // instrument (six-operator FM)
     {url: "/wasm/plugins/device_surgeon.wasm", boxType: "SurgeonDeviceBox"}, // instrument (plays FM themes by itself)
+    {url: "/wasm/plugins/device_opendrum_kick.wasm", boxType: "OpenDrumKickDeviceBox"}, // instrument (synthesized kick)
     {url: "/wasm/plugins/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
     {url: "/wasm/plugins/device_sampler.wasm", boxType: "SamplerDeviceBox"},   // instrument (multi-zone sampler)
     {url: "/wasm/plugins/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect

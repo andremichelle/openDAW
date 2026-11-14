@@ -5,6 +5,7 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
+    OpenDrumKickDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -26,6 +27,7 @@ export type InstrumentBox =
     | WclapInstrumentBox
     | TubularDeviceBox
     | SurgeonDeviceBox
+    | OpenDrumKickDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox
     | SamplerDeviceBox

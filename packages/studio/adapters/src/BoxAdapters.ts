@@ -50,6 +50,7 @@ import {
     KeyEventBox,
     ChordEventBox,
     NeonDeviceBox,
+    OpenDrumKickDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
     MaximizerDeviceBox,
@@ -162,6 +163,7 @@ import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAda
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
 import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
+import {OpenDrumKickDeviceBoxAdapter} from "./devices/instruments/OpenDrumKickDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {SurgeonDeviceBoxAdapter} from "./devices/instruments/SurgeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
@@ -329,6 +331,7 @@ export class BoxAdapters implements Terminable {
             visitModuleGainBox: (box: ModuleGainBox) => new ModuleGainAdapter(this.#context, box),
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumKickDeviceBox: (box: OpenDrumKickDeviceBox) => new OpenDrumKickDeviceBoxAdapter(this.#context, box),
             visitTubularDeviceBox: (box: TubularDeviceBox) => new TubularDeviceBoxAdapter(this.#context, box),
             visitSurgeonDeviceBox: (box: SurgeonDeviceBox) => new SurgeonDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),

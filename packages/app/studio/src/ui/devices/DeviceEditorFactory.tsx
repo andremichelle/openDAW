@@ -42,6 +42,7 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
+    OpenDrumKickDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
     CubedDeviceBox,
@@ -100,6 +101,7 @@ import {
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
+    OpenDrumKickDeviceBoxAdapter,
     TubularDeviceBoxAdapter,
     SurgeonDeviceBoxAdapter,
     CubedDeviceBoxAdapter,
@@ -126,6 +128,7 @@ import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDev
 import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
 import {KorpusDeviceEditor} from "@/ui/devices/instruments/KorpusDeviceEditor.tsx"
 import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
+import {OpenDrumKickDeviceEditor} from "@/ui/devices/instruments/OpenDrumKickDeviceEditor"
 import {TubularDeviceEditor} from "@/ui/devices/instruments/TubularDeviceEditor.tsx"
 import {SurgeonDeviceEditor} from "@/ui/devices/instruments/SurgeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
@@ -265,6 +268,12 @@ export namespace DeviceEditorFactory {
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, NeonDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumKickDeviceBox: (box: OpenDrumKickDeviceBox): JsxValue => (
+                <OpenDrumKickDeviceEditor lifecycle={lifecycle}
+                                          service={service}
+                                          adapter={service.project.boxAdapters.adapterFor(box, OpenDrumKickDeviceBoxAdapter)}
+                                          deviceHost={deviceHost}/>
             ),
             visitWclapInstrumentBox: (box: WclapInstrumentBox): JsxValue => (
                 <WclapDeviceEditor lifecycle={lifecycle}

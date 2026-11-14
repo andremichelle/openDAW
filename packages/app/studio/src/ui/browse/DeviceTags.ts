@@ -8,6 +8,7 @@ export namespace DeviceTags {
         Neon: ["synth", "phase-distortion"],
         Tubular: ["synth", "subtractive"],
         Surgeon: ["synth", "fm"],
+        OpenDrumKick: ["drums", "synth"],
         MIDIOutput: ["midi", "hardware", "utility"],
         Nano: ["sampler"],
         Sampler: ["sampler"],

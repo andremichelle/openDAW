@@ -1,6 +1,5 @@
 import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
-import {extname, resolve, sep} from "path"
-import {homedir} from "os"
+import {extname, resolve} from "path"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
@@ -141,40 +140,6 @@ export default defineConfig(({command}) => {
                         fileName: `wasm-engine/${name}`,
                         source: readFileSync(resolve(sourceDir, name))
                     }))
-                }
-            },
-            {
-                // Dev only: the local 808 / 909 reference hits the openDrum preview on /testing compares against.
-                // Never bundled, the samples stay on this machine.
-                name: "opendrum-references",
-                configureServer(server) {
-                    const root = resolve(process.env.OPENDRUM_REFERENCES
-                        ?? resolve(homedir(), "Documents/Resources/samples"))
-                    server.middlewares.use("/opendrum-references", (req, res, next) => {
-                        const name = decodeURIComponent((req.url ?? "").split("?")[0].replace(/^\//, ""))
-                        const file = resolve(root, name)
-                        if (!/\.wav$/i.test(name) || !file.startsWith(root + sep) || !existsSync(file)) {return next()}
-                        const bytes = readFileSync(file)
-                        res.setHeader("Content-Type", "audio/wav")
-                        res.setHeader("Accept-Ranges", "bytes")
-                        const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "")
-                        if (range === null) {
-                            res.end(bytes)
-                            return
-                        }
-                        const start = range[1] === "" ? Math.max(0, bytes.length - Number(range[2])) : Number(range[1])
-                        const end = range[1] === "" || range[2] === "" ? bytes.length - 1
-                            : Math.min(Number(range[2]), bytes.length - 1)
-                        if (start > end || start >= bytes.length) {
-                            res.statusCode = 416
-                            res.setHeader("Content-Range", `bytes */${bytes.length}`)
-                            res.end()
-                            return
-                        }
-                        res.statusCode = 206
-                        res.setHeader("Content-Range", `bytes ${start}-${end}/${bytes.length}`)
-                        res.end(bytes.subarray(start, end + 1))
-                    })
                 }
             },
             {

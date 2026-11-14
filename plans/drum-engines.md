@@ -352,6 +352,241 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
 7. Playfield: an "openDrum Kit" preset that fills pads at GM keys (36 kick, 38 snare, 39 clap, 37 rim, 42 closed
    hat, 46 open hat with exclude group, 41 to 50 toms, 49 crash, 51 ride, 56 cowbell).
 
+## Presets and controls
+
+Collected 2026-11-14 from the /testing preview before it was removed. The controls are the device layout (sections
+of at most four values, each with its range and unit), the presets are the fitted and the by-ear settings. Percent
+values are stored 0 to 1 (or -1 to 1). Preset names here say what they were fitted to, stock presets get our own
+names.
+
+### 1. Kick
+
+Controls:
+
+1. Body (orange, two columns): Tune (tune) 30 to 120 Hz, Pitch (pitch) 0 to 48 st, Sweep (sweep) 0.001 to 0.2 s, Drift
+   (drift) 0 to 12 st, Decay (decay) 0.02 to 6 s, Punch (punch) -100 to 100 %, Shape (shape) 0 to 100 %, Skin (skin) 0
+   to 100 %.
+2. Strike (yellow): Click (click) 0 to 100 %, Tone (tone) 200 to 16000 Hz, Noise (noise) 0 to 100 %, Drive (drive) 0 to
+   36 dB.
+3. Rumble (purple): Level (rumble) 0 to 100 %, Length (length) 1/16, 1/8, 1/4, 1/2, 1/1, Duck (duck) 0 to 100 %, Bright
+   (bright) 0 to 100 %.
+4. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate, Glide
+   (glide) 0 to 1 s.
+
+Presets:
+
+1. Kick (808 fit) (reference TR808WAV/BD/BD5050.WAV): tune: 51.43, pitch: 28.23, sweep: 0.0025, drift: 4.1, decay:
+   1.137, punch: 0.078, shape: 0.001, click: 0.034, tone: 873.1, skin: 0.295, rumble: 0, length: 2, duck: 1, drive:
+   0.82, velocity: 0.5, play: 0, bright: 0.25, volume: 0, noise: 0.5, glide: 0.
+2. Kick (909 fit) (reference Roland TR-909/BT3AADA.WAV): tune: 46.84, pitch: 26.68, sweep: 0.0106, drift: 2.04, decay:
+   0.708, punch: -0.477, shape: 0.352, click: 0.342, tone: 1013.3, skin: 0.144, rumble: 0, length: 2, duck: 1, drive:
+   3.25, velocity: 0.5, play: 0, bright: 0.25, volume: 0, noise: 0.5, glide: 0.
+
+### 2. Snare
+
+Controls:
+
+1. Body (orange, two columns): Tune (tune) 80 to 600 Hz, Ratio (ratio) 1 to 3, Balance (balance) 0 to 100 %, Pitch
+   (pitch) 0 to 24 st, Sweep (sweep) 0.001 to 0.1 s, Decay (decay) 0.02 to 2 s, Punch (punch) -100 to 100 %, Shape
+   (shape) 0 to 100 %.
+2. Strike (yellow): Click (click) 0 to 100 %, Tone (tone) 200 to 16000 Hz, Skin (skin) 0 to 100 %, Drive (drive) 0 to
+   36 dB.
+3. Noise (green): Level (level) -48 to -3 dB, Decay (wireDecay) 0.02 to 2 s, Width (width) 0 to 100 %, Curve (curve)
+   -100 to 100 %.
+4. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate, Glide
+   (glide) 0 to 1 s.
+
+Presets:
+
+1. Snare (808 fit) (reference TR808WAV/SD/SD5050.WAV): tune: 171.16, ratio: 1.943, balance: 0.7243, pitch: 2.065,
+   sweep: 0.0092, decay: 0.2093, punch: -0.0221, shape: 0, level: -5.3, wireDecay: 0.1944, width: 0.46, curve: -0.2745,
+   click: 0.1079, tone: 4779, skin: 0.1612, drive: 0, volume: 0, velocity: 0.5, play: 0, glide: 0.
+2. Snare (909) (reference Roland TR-909/ST3T3S3.WAV): tune: 145, ratio: 1.5, balance: 0.292, pitch: 9.7, sweep: 0.0078,
+   decay: 0.188, punch: 0, shape: 0.5, level: -23.7, wireDecay: 0.1394, width: 0.81, curve: 1, click: 0, tone: 759,
+   skin: 0, drive: 0, volume: 0, velocity: 0.5, play: 0, glide: 0.
+
+### 3. Clap
+
+Controls:
+
+1. Hands (orange): Hands (hands) 1 to 8, Gap (gap) 0 to 0.04 s, Last (last) 0.3 to 1.5, Spread (spread) 0 to 100 %.
+2. Burst (yellow): Attack (attack) 0 to 0.005 s, Decay (decay) 0.002 to 0.2 s, Snap (snap) 0 to 100 %, Drive (drive) 0
+   to 36 dB.
+3. Tone (purple): Tone (tone) 300 to 8000 Hz, Reso (resonance) 0 to 100 %.
+4. Room (green): Level (room) -48 to 0 dB, Decay (roomDecay) 0.02 to 2 s, Tail (tail) 0 to 100 %.
+5. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Clap (808) (reference TR808WAV/CP/CP.WAV): hands: 4, gap: 0.0115, last: 0.71, spread: 0, attack: 0.00075, decay:
+   0.019, snap: 0.6, drive: 0, tone: 1055, resonance: 1, room: -1.25, roomDecay: 0.41, tail: 0.5, volume: -2, velocity:
+   0.5, play: 0.
+2. Clap (909) (reference Roland TR-909/HANDCLP1.WAV): hands: 4, gap: 0.0116, last: 0.885, spread: 0, attack: 0, decay:
+   0.0255, snap: 0, drive: 0, tone: 865, resonance: 0.36, room: -3.25, roomDecay: 0.72, tail: 0, volume: 0, velocity:
+   0.5, play: 0.
+
+### 4. Tom
+
+Controls:
+
+1. Body (orange, two columns): Tune (tune) 40 to 800 Hz, Pitch (pitch) 0 to 24 st, Sweep (sweep) 0.001 to 0.2 s, Drift
+   (drift) 0 to 12 st, Decay (decay) 0.02 to 3 s, Punch (punch) -100 to 100 %, Shape (shape) 0 to 100 %, Drive (drive)
+   0 to 36 dB.
+2. Layers (yellow): Sub (sub) 0 to 100 %, Ratio (ratio) 0.5 to 1, Top (top) 0 to 100 %, Length (length) 0.02 to 1 s.
+3. Noise (green): Level (noise) -48 to 0 dB, Decay (noiseDecay) 0.02 to 3 s, Color (color) 0 to 100 %, Air (air) 0 to
+   100 %.
+4. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate, Glide
+   (glide) 0 to 1 s.
+
+Presets:
+
+1. Conga (808 low) (reference TR808WAV/LC/LC50.WAV): tune: 200.5, pitch: 24, sweep: 0.0005, drift: 0, decay: 0.55,
+   punch: 0, shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0, air:
+   0, volume: 0, velocity: 0.5, play: 0, glide: 0.
+2. Conga (808 mid) (reference TR808WAV/MC/MC50.WAV): tune: 281.5, pitch: 12, sweep: 0.001, drift: 0, decay: 0.3, punch:
+   -0.3, shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0, air: 0,
+   volume: 0, velocity: 0.5, play: 0, glide: 0.
+3. Conga (808 high) (reference TR808WAV/HC/HC50.WAV): tune: 412.5, pitch: 12, sweep: 0.0005, drift: 0, decay: 0.25,
+   punch: -0.15, shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0,
+   air: 0, volume: 0, velocity: 0.5, play: 0, glide: 0.
+4. Tom (808 low) (reference TR808WAV/LT/LT50.WAV): tune: 88, pitch: 0.4, sweep: 0.05, drift: 0, decay: 0.62, punch: 0,
+   shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2, noise: -34, noiseDecay: 0.7, color: 0, air: 0, volume:
+   0, velocity: 0.5, play: 0, glide: 0.
+5. Tom (909 low) (reference Roland TR-909/LT3D3.WAV): tune: 74.4, pitch: 4.8, sweep: 0.0246, drift: 2.1, decay: 0.7,
+   punch: 0, shape: 1, drive: 0, sub: 0.3, ratio: 0.67, top: 0.8, length: 0.2, noise: -16, noiseDecay: 0.25, color:
+   0.3, air: 0.35, volume: -2, velocity: 0.5, play: 0, glide: 0.
+6. Tom (909 high) (reference Roland TR-909/HT3D3.WAV): tune: 113.1, pitch: 4.3, sweep: 0.0254, drift: 2.2, decay: 0.5,
+   punch: 0, shape: 1, drive: 0, sub: 0.25, ratio: 0.69, top: 0.7, length: 0.2, noise: -30, noiseDecay: 0.25, color:
+   0.5, air: 0.35, volume: -2, velocity: 0.5, play: 0, glide: 0.
+
+### 5. Rim
+
+Controls:
+
+1. Tones (orange): Tune (tune) 100 to 4000 Hz, Ratio (ratio) 1 to 5, Balance (balance) 0 to 100 %, Ring (ring) 0.005 to
+   1 s.
+2. High (yellow): Level (high) 0 to 100 %, Ratio (highRatio) 1 to 12, Ring (ringHigh) 0.005 to 1 s, Swell (swell) 0 to
+   8.
+3. Shape (green): Decay (decay) 0.002 to 0.5 s, Punch (punch) -100 to 100 %, Drive (drive) 0 to 36 dB, Hard (hard) 0 to
+   100 %.
+4. Strike (purple): Click (click) 0 to 100 %, Cut (cut) 20 to 4000 Hz, Restart (restart) Off, On.
+5. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Rim (808) (reference TR808WAV/RS/RS.WAV): tune: 476, ratio: 3.6, balance: 1, high: 0, highRatio: 6.3, ring: 0.17,
+   ringHigh: 0.035, decay: 0.012, punch: 0.7, drive: 12, hard: 0, click: 0.05, swell: 3, cut: 300, restart: 1, volume:
+   -3, velocity: 0.5, play: 0.
+2. Rim (909) (reference Roland TR-909/RIM127.WAV): tune: 220, ratio: 2.08, balance: 1, high: 0.625, highRatio: 5.2,
+   ring: 0.0775, ringHigh: 0.04, decay: 0.205, punch: -0.19, drive: 12, hard: 0.4, click: 0, swell: 0.4, cut: 60,
+   restart: 1, volume: 0, velocity: 0.5, play: 0.
+3. Claves (808) (reference TR808WAV/CL/CL.WAV): tune: 2422, ratio: 1, balance: 0, high: 0, highRatio: 1, ring: 0.1,
+   ringHigh: 0.1, decay: 0.05, punch: 0.6, drive: 0, hard: 0, click: 0, swell: 3, cut: 20, restart: 1, volume: 0,
+   velocity: 0.5, play: 0.
+
+### 6. Hat
+
+Controls:
+
+1. Source (orange): Tune (tune) 0.25 to 4, Color (color) 200 to 16000 Hz.
+2. Character (purple): Spread (spread) -100 to 100 %, Ring (ring) 0 to 100 %, Reso (reso) 0 to 100 %, Curve (curve)
+   -100 to 100 %.
+3. Shape (green): Hold (hold) 0 to 0.5 s, Decay (decay) 0.005 to 4 s.
+4. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Hat (808 closed) (reference TR808WAV/CH/CH.WAV): tune: 1, color: 6300, hold: 0, decay: 0.13, spread: 0, ring: 0,
+   reso: 0, curve: 0, volume: 0, velocity: 0.5, play: 0.
+2. Hat (808 open) (reference TR808WAV/OH/OH00.WAV): tune: 1, color: 6200, hold: 0.2, decay: 0.15, spread: 0, ring: 0,
+   reso: 0, curve: 0, volume: 0, velocity: 0.5, play: 0.
+
+### 7. Shaker
+
+Controls:
+
+1. Shape (orange): Color (color) 200 to 16000 Hz, Attack (attack) 0 to 0.2 s, Decay (decay) 0.002 to 2 s, Curve (curve)
+   -100 to 100 %.
+2. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Maracas (808) (reference TR808WAV/MA/MA.WAV): color: 7200, attack: 0.02, decay: 0.012, curve: 0.3, volume: 0,
+   velocity: 0.5, play: 0.
+
+### 8. Cymbal
+
+Controls:
+
+1. Shape (orange): Tune (tune) 0.25 to 4, Tone (tone) 0 to 100 %, Attack (attack) 0 to 2 s, Decay (decay) 0.05 to 8 s.
+2. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Cymbal (808) (reference TR808WAV/CY/CY0000.WAV): tune: 1, tone: 0, attack: 0, decay: 0.75, volume: 0, velocity: 0.5,
+   play: 0.
+
+### 9. Bell
+
+Controls:
+
+1. Tones (orange): Tune (tune) 50 to 4000 Hz, Ratio (ratio) 1 to 4, Balance (balance) 0 to 100 %.
+2. Shape (orange): Color (color) 100 to 16000 Hz, Strike (strike) 0 to 100 %, Decay (decay) 0.01 to 4 s.
+3. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Cowbell (808) (reference TR808WAV/CB/CB.WAV): tune: 558, ratio: 1.477, balance: 0.7, color: 1050, strike: 0.8,
+   decay: 0.7, volume: 0, velocity: 0.5, play: 0.
+
+### 10. Perc
+
+Controls:
+
+1. FM (orange): Tune (tune) 20 to 8000 Hz, Ratio (ratio) 0.25 to 16, Index (index) 0 to 100 %, Bite (bite) 0.001 to 2 s.
+2. Shape (orange): Pitch (pitch) -48 to 48 st, Sweep (sweep) 0.0005 to 2 s, Decay (decay) 0.005 to 4 s, Curve (curve)
+   -100 to 100 %.
+3. Grit (orange): Noise (noise) 0 to 100 %, Drive (drive) 0 to 36 dB.
+4. Play (cream): Volume (volume) -36 to 6 dB, Velocity (velocity) 0 to 100 %, Mode (play) Mono, Poly, Gate.
+
+Presets:
+
+1. Zap: tune: 120, ratio: 1, index: 0.2, bite: 0.03, pitch: 48, sweep: 0.02, decay: 0.2, curve: 0, noise: 0, drive: 0,
+   volume: 0, velocity: 0.5, play: 0.
+2. Laser: tune: 400, ratio: 0.5, index: 0.4, bite: 0.15, pitch: 36, sweep: 0.08, decay: 0.35, curve: 0.3, noise: 0,
+   drive: 0, volume: 0, velocity: 0.5, play: 0.
+3. Blip: tune: 1200, ratio: 2, index: 0.1, bite: 0.01, pitch: 0, sweep: 0.01, decay: 0.06, curve: 0.5, noise: 0, drive:
+   0, volume: 0, velocity: 0.5, play: 0.
+4. Rise: tune: 300, ratio: 1.5, index: 0.3, bite: 0.2, pitch: -24, sweep: 0.06, decay: 0.25, curve: 0.2, noise: 0,
+   drive: 0, volume: 0, velocity: 0.5, play: 0.
+5. Metal: tune: 330, ratio: 3.53, index: 0.6, bite: 0.4, pitch: 2, sweep: 0.005, decay: 0.6, curve: -0.3, noise: 0,
+   drive: 0, volume: 0, velocity: 0.5, play: 0.
+6. Industrial: tune: 80, ratio: 1.41, index: 0.8, bite: 0.1, pitch: 24, sweep: 0.01, decay: 0.3, curve: -0.5, noise:
+   0.25, drive: 18, volume: 0, velocity: 0.5, play: 0.
+
+
+## Devices, as built
+
+Started 2026-11-14 with the Kick as the template, the other nine follow it after the browser check.
+The /testing preview, its reference players and the dev only reference route are removed (2026-11-14), every
+control and preset it held is in "Presets and controls" above. The lab (`crates/opendrum-lab`) still reads the
+references from disk.
+
+1. `crates/opendrum-device`: the glue every openDrum device shares. An engine describes its parameters (box key
+   and mapping) and how a value lands in its params, `export_device!` writes the device exports. Notes transpose
+   by key minus 60 plus the host's base tuning, the mono engine output goes to both channels.
+2. One crate per device, `crates/stock-devices/device-opendrum-<engine>`, one line: `export_device!(engine)`.
+   `opendrum` and `opendrum-device` build at opt-level 3 (the preview module renders bit identically).
+3. Box `OpenDrum<Engine>DeviceBox` (defaults are the fitted preset), adapter with the same mappings (the parity
+   test checks every value), factory "openDrum <Engine>" with the DrumSet icon, browser tags drums and synth,
+   manual page `opendrum-<engine>`.
+4. Editor: one shared `OpenDrumDeviceEditor`. Left the hit display (Vaporisateur's display frame), right one
+   column of label controls per four values, sections with Delay's heads and tinted bands. The display renders
+   through the shared `lib-wasm-worker`, it is optional: without the worker it stays empty.
+5. Kick: built 2026-11-14. Parity (3 checks) and a render test in the full engine (the device plays the engine's
+   hit, correlation above 0.9999, a key 12 above plays an octave higher). Not checked in a browser yet.
+   Open: a trigger to audition the hit from the display, stock presets.
+
 ## Phases
 
 1. ~~UI preview of the shared frame on /testing with Kick and Hat (layout sign off before any box or DSP exists,

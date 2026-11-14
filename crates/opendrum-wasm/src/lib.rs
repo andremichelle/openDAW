@@ -19,17 +19,26 @@ use opendrum::perc::{Perc, PercParams};
 // the preview releases a held note (Mode Gate) after this time
 const GATE_SECONDS: f32 = 0.2;
 
+// renders in chunks so a Gate note is released on time and the render ends once the engine is silent
+const CHUNK: usize = 2048;
+
 macro_rules! play_hit {
     ($engine:ident, $params:ident, $output:ident, $sample_rate:ident, |$out:ident| $process:expr) => {
-        if $params.play == Play::Gate {
-            let gate = ((GATE_SECONDS * $sample_rate) as usize).min($output.len());
-            let (held, released) = $output.split_at_mut(gate);
-            {let $out = held; $process;}
-            $engine.note_off(0, &$params);
-            {let $out = released; $process;}
-        } else {
-            let $out = $output;
-            $process;
+        let gate = if $params.play == Play::Gate {
+            ((GATE_SECONDS * $sample_rate) as usize).min($output.len())
+        } else {0};
+        let mut held = gate > 0;
+        let mut start = 0;
+        while start < $output.len() {
+            if held && start >= gate {
+                $engine.note_off(0, &$params);
+                held = false;
+            }
+            let limit = if held {gate} else {$output.len()};
+            let end = (start + CHUNK).min(limit);
+            {let $out = &mut $output[start..end]; $process;}
+            start = end;
+            if !held && $engine.is_silent() {break;}
         }
     };
 }

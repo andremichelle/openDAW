@@ -2,7 +2,7 @@
 # crate compiling to a focused .wasm (one entry point per feature). Add a member per feature.
 [workspace]
 resolver = "2"
-members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "wclap-common", "stock-devices/*", "engine", "sine", "stretch", "stretch-wasm", "signalsmith", "matchering", "device-mastering", "opendrum", "opendrum-lab", "opendrum-wasm"]
+members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "wclap-common", "stock-devices/*", "engine", "sine", "stretch", "stretch-wasm", "signalsmith", "matchering", "device-mastering", "opendrum", "opendrum-device", "opendrum-lab", "opendrum-wasm"]
 # stretch-lab is a LOCAL research harness: it path-depends on a sibling checkout (../../../audio-analyzer-rs)
 # that does not exist in CI, and cargo loads every member's manifest for any workspace command. Excluding it
 # keeps the engine/wasm build (and CI) self-contained; build it directly from crates/stretch-lab when the
@@ -20,6 +20,10 @@ opt-level = 3
 [profile.release.package.engine]
 opt-level = 3
 [profile.release.package.dsp]
+opt-level = 3
+[profile.release.package.opendrum]
+opt-level = 3
+[profile.release.package.opendrum-device]
 opt-level = 3
 [profile.release.package.math]
 opt-level = 3
@@ -94,4 +98,6 @@ opt-level = 3
 [profile.release.package.device-cubed]
 opt-level = 3
 [profile.release.package.device-surgeon]
+opt-level = 3
+[profile.release.package.device-opendrum-kick]
 opt-level = 3

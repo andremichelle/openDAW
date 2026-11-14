@@ -138,7 +138,8 @@ The openDrum display.
 2. The display paints the last result and repaints when the next arrives. Playing a hit waits for the result that
    belongs to the current values.
 3. ~~The per trigger variation can then be shown too.~~ Decided: the display shows the first render only.
-4. The openDrum editors share one static worker, aborts are discard.
+4. Every openDrum editor starts a worker of its own over the one compiled module and ends it when it closes
+   (decided 2026-11-14). The /testing preview keeps one worker for the page.
 
 ## Audio side (later)
 
@@ -160,8 +161,9 @@ The openDrum display.
    trap), `worker.js` (3.7 kB). 12 tests over a `MessageChannel` with a hand written test module.
 2. ~~The openDrum preview moves onto it.~~ Built 2026-11-14: one export per engine plus `param_counts`, every
    export renders exactly what the old ones did. The display asks for 1024 min and max pairs (8 kB, about 5 ms in
-   node for a bell), a click asks for the samples. One static worker for all displays, a value change aborts the
-   previous request. Not checked in a browser yet.
+   node for a bell), a click asks for the samples. One worker per editor, one render at a time: a
+   change while it runs renders the current values when it is done (aborting starved the display under
+   modulation). The display shows the controlled values (automation, modulation).
 3. Audio side: design note with the first device that needs it, then build.
 4. Later: refactor the existing shared worker (peaks, OPFS, transients, tempo, material, sample effects) into the
    new system.
@@ -172,7 +174,7 @@ The openDrum display.
 2. ~~Floats or bytes as the generic call?~~ Decided: bytes, a typed proxy on top.
 3. ~~Should `open` accept a module that is already compiled, or urls only?~~ Decided: compiled modules only.
 4. ~~One instance of the new worker for all services, or one per module?~~ Decided: the implementation chooses
-   (bound to an editor or static). The openDrum editors use the static variant, they share one module.
+   (bound to an editor or static). The openDrum editors are bound, each its own worker over one shared module.
 5. Several workers in parallel over one compiled module (a pool): each worker instantiates the module itself, so
    calls run on separate cores. Open: the pool size (a fixed number or derived from the machine) and its first
    user. Phase 1 starts with one worker.

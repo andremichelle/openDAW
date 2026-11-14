@@ -401,6 +401,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-opendrum-kick"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
 name = "device-pitch"
 version = "0.0.0"
 dependencies = [
@@ -739,6 +747,17 @@ version = "0.0.0"
 dependencies = [
  "dsp",
  "libm",
+]
+
+[[package]]
+name = "opendrum-device"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+ "opendrum",
 ]
 
 [[package]]
