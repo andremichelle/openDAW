@@ -44,6 +44,7 @@ export const ErrorsPage: PageFactory<StudioService> = ({lifecycle}: PageContext<
                                 <h4>#</h4>
                                 <h4>Time</h4>
                                 <h4>Build</h4>
+                                <h4>Origin</h4>
                                 <h4>Type</h4>
                                 <h4>Message</h4>
                                 <h4>JS</h4>
