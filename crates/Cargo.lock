@@ -401,6 +401,86 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-opendrum-bell"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-clap"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-cymbal"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-hat"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-kick"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-perc"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-rim"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-shaker"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-snare"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
+name = "device-opendrum-tom"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
+]
+
+[[package]]
 name = "device-pitch"
 version = "0.0.0"
 dependencies = [
@@ -731,6 +811,43 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "opendrum"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+]
+
+[[package]]
+name = "opendrum-device"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+ "opendrum",
+]
+
+[[package]]
+name = "opendrum-lab"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+ "math",
+ "opendrum",
+]
+
+[[package]]
+name = "opendrum-wasm"
+version = "0.0.0"
+dependencies = [
+ "opendrum",
+ "opendrum-device",
 ]
 
 [[package]]

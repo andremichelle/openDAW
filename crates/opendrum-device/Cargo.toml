@@ -1,0 +1,16 @@
+[package]
+name = "opendrum-device"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# the device glue every openDrum device crate shares: parameters, notes, output and the exports
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+abi = {path = "../abi"}
+math = {path = "../math"}
+dsp = {path = "../dsp"}
+libm = "0.2"
+opendrum = {path = "../opendrum"}

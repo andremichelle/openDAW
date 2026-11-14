@@ -36,13 +36,17 @@ export namespace StringMapping {
     export const numeric =
         ({unit, fractionDigits, unitPrefix, bipolar}: NumericOptions = {}): StringMapping<number> =>
             new Numeric(unit, fractionDigits, unitPrefix, bipolar)
+    const withoutUnit = (text: string, unit: string): string => {
+        const trimmed = text.trim()
+        return unit.length > 0 && trimmed.endsWith(unit) ? trimmed.slice(0, -unit.length).trim() : trimmed
+    }
     export const indices = (unit: string, values: ReadonlyArray<string>): StringMapping<int> =>
         new class implements StringMapping<int> {
             x(y: int): StringResult {
                 return {unit, value: values[y]}
             }
             y(x: string): ParseResult<int> {
-                const index = values.indexOf(x)
+                const index = values.indexOf(withoutUnit(x, unit))
                 return index === -1 ? {type: "unknown", value: "💣"} : {type: "explicit", value: index}
             }
         }
@@ -62,7 +66,7 @@ export namespace StringMapping {
                 return {unit, value: strings.at(values.indexOf(y)) ?? "N/A"}
             }
             y(x: string): ParseResult<T> {
-                const index = strings.indexOf(x)
+                const index = strings.indexOf(withoutUnit(x, unit))
                 return index === -1 ? {type: "unknown", value: "💣"} : {type: "explicit", value: values[index]}
             }
         }

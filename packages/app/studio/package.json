@@ -20,6 +20,7 @@
     "@opendaw/lib-midi": "^0.0.83",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
+    "@opendaw/lib-wasm-worker": "^0.0.1",
     "@opendaw/studio-adapters": "^0.4.0",
     "@opendaw/studio-boxes": "^0.0.122",
     "@opendaw/studio-core": "^0.3.0",

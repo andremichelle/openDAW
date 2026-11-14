@@ -40,7 +40,7 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 # The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
-DEVICE_CRATES="device-korpus device-cubed device-autotune device-revamp device-pitch device-note-filter device-scale-matrix device-chord-keys device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-neon device-tubular device-surgeon device-nano device-sampler device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-convolver device-soundfont device-vocoder device-neural-amp device-wclap device-wclap-instrument device-wclap-midi"
+DEVICE_CRATES="device-korpus device-cubed device-autotune device-revamp device-pitch device-note-filter device-scale-matrix device-chord-keys device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-neon device-tubular device-surgeon device-opendrum-kick device-opendrum-perc device-opendrum-bell device-opendrum-cymbal device-opendrum-shaker device-opendrum-hat device-opendrum-rim device-opendrum-tom device-opendrum-clap device-opendrum-snare device-nano device-sampler device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-convolver device-soundfont device-vocoder device-neural-amp device-wclap device-wclap-instrument device-wclap-midi"
 
 # The engine keeps its function names until wasm-opt has written them to engine.symbols (crash stacks), then drops them.
 RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
@@ -49,13 +49,15 @@ RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
 #                    standalone build: it owns its memory, imports nothing, and never runs on the
 #                    audio thread, so none of the linker gymnastics above apply.
 RUSTFLAGS="$SIMD" cargo build -p stretch-wasm --release --target "$TARGET"
+# opendrum_wasm.wasm  renders one openDrum hit for the device editors' displays. Standalone like stretch_wasm.
+RUSTFLAGS="$SIMD" cargo build -p opendrum-wasm --release --target "$TARGET"
 for crate in $DEVICE_CRATES; do
   RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core
 done
 
 # Module basenames (crate '-' -> '_') plus the engine host.
 DEVICE_MODULES=$(echo "$DEVICE_CRATES" | tr '-' '_')
-MODULES="engine stretch_wasm $DEVICE_MODULES"
+MODULES="engine stretch_wasm opendrum_wasm $DEVICE_MODULES"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`, CI: binaryen GitHub release).
 # GUARDED: if it is not installed the build still works, just larger. The devices are PIC side modules (a
@@ -83,6 +85,6 @@ fi
 # package publishes and what `loadEngineModules(wasmUrl)` fetches.
 DIST="$ROOT/packages/studio/core-wasm/dist"
 mkdir -p "$DIST/wasm/plugins"
-cp "$OUT/engine.wasm" "$OUT/stretch_wasm.wasm" "$DIST/wasm/"
+cp "$OUT/engine.wasm" "$OUT/stretch_wasm.wasm" "$OUT/opendrum_wasm.wasm" "$DIST/wasm/"
 for module in $DEVICE_MODULES; do cp "$OUT/$module.wasm" "$DIST/wasm/plugins/"; done
 echo "built: engine.wasm + stretch_wasm.wasm + stock devices + werkstatt/apparat/spielwerk"

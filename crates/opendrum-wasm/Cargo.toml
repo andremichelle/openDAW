@@ -1,0 +1,13 @@
+[package]
+name = "opendrum-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# standalone module for the openDrum editors' displays: renders one hit with the device's engine
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opendrum = {path = "../opendrum"}
+opendrum-device = {path = "../opendrum-device"}
