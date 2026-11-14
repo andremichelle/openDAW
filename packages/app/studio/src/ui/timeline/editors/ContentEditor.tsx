@@ -1,3 +1,4 @@
+import {installEditorClickSeeking} from "./EditorNavigation"
 import css from "./ContentEditor.sass?inline"
 import {Lifecycle, Option, Terminator, ValueMapping} from "@opendaw/lib-std"
 import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
@@ -248,6 +249,9 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
     const {project: {engine}} = service
     const shortcuts = ShortcutManager.get().createContext(element, "ContentEditor")
     lifecycle.ownAll(
+        installEditorClickSeeking(contentEditor, element.querySelector<HTMLElement>(".time-axis")!,
+            range, snapping, () => owner.nonEmpty(), position => engine.setPosition(position),
+            () => !engine.isPlaying.getValue()),
         updateEditor,
         editingSubject.catchupAndSubscribe(() => {
             element.classList.remove("disabled")
