@@ -51,7 +51,7 @@ export namespace Euclid {
             box.note.setValue(note)
         })
 
-    /** Moves a lane to `to` in the list, the others close up. */
+    /** Moves a lane to `to` in the list and renumbers every lane densely. */
     export const moveLane = (device: EuclidDeviceBox, from: int, to: int): void => {
         const lanes = [...lanesOf(device)]
         const [moved] = lanes.splice(from, 1)

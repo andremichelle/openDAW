@@ -1,9 +1,4 @@
-//! The EUCLID MIDI-effect device (`EuclidDeviceBox`): every lane (`EuclidLaneBox`, a child box observed as one
-//! table row) plays its note on a Euclidean rhythm while the transport runs. A pattern holds the rhythm of every
-//! lane, eight of them, the playing one changes at the next bar and plays through its own groove. Accented hits
-//! play at full velocity, the others at the lane's velocity. A burst plays its step as evenly spaced triggers whose
-//! level falls (or rises) by fade. A note lasts one step or until the lane's next hit. Two lanes hitting the same
-//! note at the same moment send one note-on, the louder one. Incoming notes pass through unchanged.
+//! The Euclid MIDI effect: every lane plays its note on a Euclidean rhythm of the active pattern.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -123,7 +118,9 @@ pub struct EuclidState {
     retained: [Retained; MAX_RETAINED],
     retained_count: usize,
     next_id: u32,
-    transporting: bool
+    transporting: bool,
+    // a state built while the transport runs takes the stored pattern at once
+    started: bool
 }
 
 fn blank() -> EventRecord {
@@ -168,12 +165,13 @@ impl EuclidState {
         self.lanes[..rows].sort_unstable_by_key(|lane| lane.order);
     }
 
-    fn release_completed(&mut self, to: f64, events: &mut [EventRecord], count: &mut usize) {
+    // a note-off that finds no room stays retained and goes out with the next block
+    fn release_completed(&mut self, from: f64, to: f64, events: &mut [EventRecord], count: &mut usize) {
         let mut index = 0;
         while index < self.retained_count {
             let note = self.retained[index];
-            if note.end < to {
-                emit(events, count, EventRecord {position: note.end, kind: EVENT_NOTE_OFF, id: note.id, pitch: note.pitch, ..blank()});
+            let off = EventRecord {position: note.end.max(from), kind: EVENT_NOTE_OFF, id: note.id, pitch: note.pitch, ..blank()};
+            if note.end < to && emit(events, count, off) {
                 self.retained[index] = self.retained[self.retained_count - 1];
                 self.retained_count -= 1;
             } else {
@@ -183,10 +181,8 @@ impl EuclidState {
     }
 
     fn release_all(&mut self, position: f64, events: &mut [EventRecord], count: &mut usize) {
-        for note in &self.retained[..self.retained_count] {
-            emit(events, count, EventRecord {position, kind: EVENT_NOTE_OFF, id: note.id, pitch: note.pitch, ..blank()});
-        }
-        self.retained_count = 0;
+        for note in &mut self.retained[..self.retained_count] {note.end = note.end.min(position);}
+        self.release_completed(position, f64::INFINITY, events, count);
     }
 
     fn start(&mut self, candidate: &Candidate, events: &mut [EventRecord], count: &mut usize) {
@@ -265,10 +261,10 @@ impl EuclidState {
 
     // the lanes' hits in `[from, to)` of the active pattern, one note-on per moment and note, the louder one
     fn generate(&mut self, from: f64, to: f64, discontinuous: bool, events: &mut [EventRecord], count: &mut usize) {
-        if self.active == OFF || self.lane_count == 0 {return;}
+        if self.active == OFF {return;}
         let pattern = self.active as usize;
         let (s0, s1) = self.grooves[pattern].straight(from, to, discontinuous);
-        if s1 <= s0 {return;}
+        if self.lane_count == 0 || s1 <= s0 {return;}
         let mut candidates = [Candidate::default(); MAX_CANDIDATES];
         let mut total = 0;
         self.collect(pattern, s0, s1, &mut candidates, &mut total);
@@ -289,10 +285,13 @@ impl EuclidState {
         let mut buffer = [blank(); 256];
         let events = &mut buffer[..out.len().min(256)];
         let mut count = 0;
+        for event in input {emit(events, &mut count, *event);}
         let transporting = flags & abi::BlockFlags::TRANSPORTING != 0;
         let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
         if discontinuous || (self.transporting && !transporting) {self.release_all(from, events, &mut count);}
-        if !transporting || discontinuous {
+        self.release_completed(from, to, events, &mut count);
+        if !transporting || discontinuous || !self.started {
+            self.started = true;
             if self.active != self.requested {
                 self.active = self.requested;
                 self.dirty = true;
@@ -301,6 +300,9 @@ impl EuclidState {
         self.transporting = transporting;
         if self.dirty {self.compose();}
         if transporting {
+            for (pattern, groove) in self.grooves.iter_mut().enumerate() {
+                if pattern as i32 != self.active {groove.straight(from, to, discontinuous);}
+            }
             let mut at = from;
             let mut first = discontinuous;
             if self.active != self.requested {
@@ -308,7 +310,7 @@ impl EuclidState {
                 let boundary = if bar.start >= from {bar.start} else {bar.start + bar.length};
                 if boundary < to {
                     self.generate(at, boundary, first, events, &mut count);
-                    self.release_completed(boundary, events, &mut count);
+                    self.release_completed(at, boundary, events, &mut count);
                     self.active = self.requested;
                     self.compose();
                     at = boundary;
@@ -317,8 +319,7 @@ impl EuclidState {
             }
             self.generate(at, to, first, events, &mut count);
         }
-        self.release_completed(to, events, &mut count);
-        for event in input {emit(events, &mut count, *event);}
+        self.release_completed(from, to, events, &mut count);
         let rank = |event: &EventRecord| if event.kind == EVENT_NOTE_OFF {0} else {1};
         events[..count].sort_unstable_by(|left, right| left.position.partial_cmp(&right.position)
             .unwrap_or(core::cmp::Ordering::Equal).then(rank(left).cmp(&rank(right))));
@@ -353,6 +354,7 @@ impl EuclidState {
 pub fn seed(state: &mut EuclidState) {
     state.requested = 0;
     state.active = 0;
+    state.started = false;
     state.length = 0;
     state.rate = 2;
     state.table = Table::empty();

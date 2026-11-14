@@ -1,4 +1,4 @@
-import {Arrays, int, isDefined, isInstanceOf, Optional, UUID} from "@opendaw/lib-std"
+import {Arrays, int, isInstanceOf, Optional, UUID} from "@opendaw/lib-std"
 import {Box, Field} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
@@ -128,11 +128,11 @@ export namespace EffectFactories {
     // the lowest pad of the Playfield the effect plays into, key 60 into any other instrument
     const firstNote = (host: Field): int => {
         const unit = host.box
-        const playfield = isInstanceOf(unit, AudioUnitBox)
-            ? unit.input.pointerHub.incoming().map(({box}) => box).find(box => isInstanceOf(box, PlayfieldDeviceBox))
-            : undefined
-        if (!isDefined(playfield) || !isInstanceOf(playfield, PlayfieldDeviceBox)) {return 60}
-        return Math.min(...PlayfieldPads.padsOf(playfield).map(pad => pad.index.getValue()), 60)
+        if (!isInstanceOf(unit, AudioUnitBox)) {return 60}
+        const keys = unit.input.pointerHub.incoming()
+            .flatMap(({box}) => isInstanceOf(box, PlayfieldDeviceBox) ? PlayfieldPads.padsOf(box) : [])
+            .map(pad => pad.index.getValue())
+        return keys.length > 0 ? Math.min(...keys) : 60
     }
 
     export const Euclid: EffectFactory = {

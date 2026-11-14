@@ -1,6 +1,6 @@
 import css from "./SurgeonDeviceEditor.sass?inline"
 import {
-    Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, Optional, Procedure, tryCatch, UUID, ValueGuide
+    Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Optional, Procedure, UUID, ValueGuide
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
@@ -27,6 +27,7 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {Icon} from "@/ui/components/Icon"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
+import {PatternClipboard} from "@/ui/devices/PatternClipboard"
 
 const className = Html.adoptStyleSheet(css, "SurgeonDeviceEditor")
 
@@ -125,23 +126,12 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
             : MenuItem.default({label: "Remove Automation"}).setTriggerProcedure(() => editing.modify(() =>
                 slot.track.ifSome(track => tracks.delete(track))))]
     }
-    const copyPattern = (index: int): ClipboardEntry => {
-        const groove = box.patterns.fields()[index].groove.targetVertex
-            .mapOr(({box: target}) => UUID.toString(target.address.uuid), undefined)
-        const copied: CopiedPattern = {pattern: adapter.patternModel(index), groove}
-        return {type: PatternEntry, data: new TextEncoder().encode(JSON.stringify(copied)).buffer, count: 1}
-    }
-    const copiedPattern = (entry: ClipboardEntry): Option<CopiedPattern> => {
-        if (entry.type !== PatternEntry) {return Option.None}
-        const {status, value} = tryCatch(() => JSON.parse(new TextDecoder().decode(entry.data)) as CopiedPattern)
-        return status === "success" ? Option.wrap(value) : Option.None
-    }
-    const pastePattern = (index: int, entry: ClipboardEntry): void => copiedPattern(entry).ifSome(({pattern, groove}) =>
-        act(() => {
+    const copyPattern = (index: int): ClipboardEntry => PatternClipboard.encode<CopiedPattern>(PatternEntry,
+        {pattern: adapter.patternModel(index), groove: PatternClipboard.grooveOf(box.patterns.fields()[index].groove)})
+    const pastePattern = (index: int, entry: ClipboardEntry): void =>
+        PatternClipboard.decode<CopiedPattern>(PatternEntry, entry).ifSome(({pattern, groove}) => act(() => {
             adapter.writePattern(index, pattern)
-            const pointer = box.patterns.fields()[index].groove
-            Option.wrap(groove).flatMap(uuid => box.graph.findBox(UUID.parse(uuid)))
-                .match({none: () => pointer.defer(), some: source => pointer.refer(source)})
+            PatternClipboard.referGroove(box.patterns.fields()[index].groove, groove)
         }))
     tiles.forEach((tile, index) => lifecycle.ownAll(
         Events.subscribe(tile, "pointerdown", () => tile.focus()),
@@ -154,16 +144,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                 selectable: ClipboardManager.peek().mapOr(entry => entry.type === PatternEntry, false)})
                 .setTriggerProcedure(() => ClipboardManager.peek().ifSome(entry => pastePattern(index, entry)))))))
     const circles: HTMLElement = <div className="circles">{tiles}{offTile}</div>
-    // the focused tile copies and pastes its pattern (Cmd+C and Cmd+V)
-    const focusedPattern = (): int => tiles.findIndex(tile => tile === document.activeElement)
-    lifecycle.own(ClipboardManager.install(circles, {
-        canCopy: () => focusedPattern() >= 0,
-        canCut: () => false,
-        canPaste: (entry: ClipboardEntry) => entry.type === PatternEntry && focusedPattern() >= 0,
-        copy: () => Option.wrap(copyPattern(focusedPattern())),
-        cut: () => Option.None,
-        paste: (entry: ClipboardEntry) => pastePattern(focusedPattern(), entry)
-    }))
+    PatternClipboard.install(lifecycle, circles, PatternEntry, tiles, copyPattern, pastePattern)
     lifecycle.ownAll(
         Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))),
         ContextMenu.subscribe(offTile, collector => collector.addItems(...slotItems())))

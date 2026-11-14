@@ -1,7 +1,7 @@
 import css from "./EuclidDeviceEditor.sass?inline"
 import {
     Arrays, asInstanceOf, Color, int, isDefined, Lifecycle, Mulberry32, Notifier, Option, Optional, Procedure, Subscription, Terminator,
-    tryCatch
+    UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
@@ -26,6 +26,7 @@ import {SamplerValueLabel} from "@/ui/devices/instruments/SamplerDeviceEditor/Sa
 import {EuclidRhythm} from "@/ui/devices/midi-effects/Euclid/EuclidRhythm"
 import {EuclidCircle} from "@/ui/devices/midi-effects/Euclid/EuclidCircle"
 import {EuclidNotes} from "@/ui/devices/midi-effects/Euclid/EuclidNotes"
+import {PatternClipboard} from "@/ui/devices/PatternClipboard"
 
 const className = Html.adoptStyleSheet(css, "EuclidDeviceEditor")
 
@@ -37,10 +38,16 @@ type Construct = {
 }
 
 const PatternEntry = "euclid-pattern"
-// a copied pattern: the rhythm values of every lane in list order and the groove by uuid
-type CopiedPattern = { readonly rhythms: ReadonlyArray<ReadonlyArray<number>>, readonly groove: Optional<string> }
+type CopiedPattern = { readonly rhythms: ReadonlyArray<ReadonlyArray<number>>, readonly groove: Optional<UUID.String> }
 const RhythmKeys: ReadonlyArray<keyof Euclid.Rhythm> =
     ["steps", "pulses", "rotate", "rate", "accents", "accentRotate", "bursts", "burstRotate", "repeats", "fade"]
+type Tracked = {
+    readonly lane: EuclidLaneBox
+    readonly dot: HTMLElement
+    readonly steps: ReadonlyArray<EuclidRhythm.Step>
+    readonly duration: number
+    readonly audible: boolean
+}
 
 export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
@@ -62,6 +69,9 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         return Option.wrap(all[Math.min(selected, all.length - 1)])
     }
     const rhythm = (): Option<Euclid.Rhythm> => lane().map(each => Euclid.rhythmOf(each, edited))
+    const reported = {active: box.pattern.getValue(), waiting: Euclid.NoPattern, fresh: false}
+    const reporting = (): boolean => engine.isPlaying.getValue() && reported.fresh
+    const playingPattern = (): int => reporting() ? reported.active : box.pattern.getValue()
     const noteName = (note: int): Option<string> => deviceHost.audioUnitBoxAdapter().inputAdapter.flatMap(input =>
         input instanceof AudioBusBoxAdapter || !isDefined(input.noteName) ? Option.None : input.noteName(note))
     const labelOf = (note: int): string => noteName(note).unwrapOrElse(() => MidiKeys.toFullString(note))
@@ -100,7 +110,6 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         const parsed = numberIn(text)
         return isDefined(parsed) ? parsed / 100 : undefined
     }
-    // a lane's rhythm value in the edited pattern
     const rhythmValue = (pick: (rhythm: Euclid.Rhythm) => Int32Field, min: int, max: int): HTMLElement =>
         value(min, max, 1, integer(), () => rhythm().mapOr(each => pick(each).getValue(), 0),
             next => rhythm().ifSome(each => pick(each).setValue(Math.round(next))))
@@ -130,42 +139,59 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             Arrays.create(octave => octave, 11).forEach(octave => parent.addMenuItem(octaveItem(octave))))
         return <MenuButton root={root} appearance={{color: Colors.gray, activeColor: Colors.bright}}>{label}</MenuButton>
     }
-    // the step a lane plays at the transport position, -1 while stopped or off
-    const stepOf = (each: EuclidLaneBox): int => {
-        if (!engine.isPlaying.getValue() || box.pattern.getValue() < 0) {return -1}
-        const {steps, rate} = Euclid.rhythmOf(each, edited)
-        const factor = Euclid.GlobalFactors[namedParameter.rate.getValue()] ?? 1
-        const duration = (Euclid.ValueQuarters[rate.getValue()] ?? 0.25) * 960 / factor
+    const factor = (): number => Euclid.GlobalFactors[namedParameter.rate.getValue()] ?? 1
+    const stepDuration = (rhythm: Euclid.Rhythm): number => (Euclid.ValueQuarters[rhythm.rate.getValue()] ?? 0.25) * 960 / factor()
+    const stepOf = ({steps, duration}: Tracked): int => {
+        if (!engine.isPlaying.getValue() || playingPattern() < 0 || steps.length === 0) {return -1}
         const length = namedParameter.length.getValue()
         const position = Math.max(0, engine.position.getValue())
-        const local = length > 0 ? position % (length * 240 / factor) : position
-        return Math.floor(local / duration) % Math.max(1, steps.getValue())
+        const local = length > 0 ? position % (length * 240 / factor()) : position
+        return Math.floor(local / duration) % steps.length
     }
-    const stepsOf = (each: EuclidLaneBox): ReadonlyArray<EuclidRhythm.Step> => {
-        const rhythm = Euclid.rhythmOf(each, edited)
+    const stepsOf = (each: EuclidLaneBox, pattern: int): ReadonlyArray<EuclidRhythm.Step> => {
+        const rhythm = Euclid.rhythmOf(each, pattern)
         return EuclidRhythm.steps({
             steps: rhythm.steps.getValue(), pulses: rhythm.pulses.getValue(), rotate: rhythm.rotate.getValue(),
             accents: rhythm.accents.getValue(), accentRotate: rhythm.accentRotate.getValue(),
             bursts: rhythm.bursts.getValue(), burstRotate: rhythm.burstRotate.getValue()
         })
     }
-    const audible = (each: EuclidLaneBox): boolean =>
-        !each.mute.getValue() && (each.solo.getValue() || !lanes().some(other => other.solo.getValue()))
-    // the dot is lit while the lane's note sounds: one step long, or until the next hit
-    const sounding = (each: EuclidLaneBox): boolean => {
-        const step = stepOf(each)
-        if (step < 0 || !audible(each)) {return false}
-        const steps = stepsOf(each)
-        return each.gate.getValue() === 0 ? steps[step]?.hit === true : steps.some(entry => entry.hit)
+    const audibleIn = (all: ReadonlyArray<EuclidLaneBox>) => {
+        const soloed = all.some(other => other.solo.getValue())
+        return (each: EuclidLaneBox): boolean => !each.mute.getValue() && (each.solo.getValue() || !soloed)
+    }
+    const sounding = (tracked: Tracked): boolean => {
+        const step = stepOf(tracked)
+        if (step < 0 || !tracked.audible) {return false}
+        return tracked.lane.gate.getValue() === 0 ? tracked.steps[step]?.hit === true : tracked.steps.some(entry => entry.hit)
     }
     const list: HTMLElement = <div className="lanes"/>
     const rows = lifecycle.own(new Terminator())
     let rowElements: ReadonlyArray<HTMLElement> = []
-    let dots: ReadonlyArray<readonly [EuclidLaneBox, HTMLElement]> = []
+    let rowDots: ReadonlyArray<HTMLElement> = []
+    let rendering: string = ""
+    let tracked: ReadonlyArray<Tracked> = []
     let dragging: Option<int> = Option.None
-    const renderList = (): void => {
-        rows.terminate()
+    let moved: boolean = false
+    const track = (): void => {
         const all = lanes()
+        const audible = audibleIn(all)
+        const pattern = Math.max(0, playingPattern())
+        tracked = all.map((each, index) => ({
+            lane: each, dot: rowDots[index], steps: stepsOf(each, pattern),
+            duration: stepDuration(Euclid.rhythmOf(each, pattern)), audible: audible(each)
+        })).filter(entry => isDefined(entry.dot))
+    }
+    const renderList = (): void => {
+        const all = lanes()
+        const audible = audibleIn(all)
+        const current = Math.min(selected, all.length - 1)
+        const signature = all.map((each, index) => [UUID.toString(each.address.uuid), each.note.getValue(),
+            noteName(each.note.getValue()).unwrapOrElse(""), each.mute.getValue(), each.solo.getValue(), audible(each),
+            index === current].join(":")).join("|")
+        if (signature === rendering) {return}
+        rendering = signature
+        rows.terminate()
         const rendered = all.map((each, index) => {
             const toggle = (label: string, active: boolean, flip: () => void): HTMLElement => {
                 const element: HTMLElement = <span className={Html.buildClassList("toggle", label === "S" && "solo", active && "active")}>
@@ -180,8 +206,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             const dot: HTMLElement = <span className="dot"/>
             const note = each.note.getValue()
             const row: HTMLElement = (
-                <div className={Html.buildClassList("lane", index === Math.min(selected, all.length - 1) && "selected",
-                    !audible(each) && "silent")}>
+                <div className={Html.buildClassList("lane", index === current && "selected", !audible(each) && "silent")}>
                     <span className="note">{MidiKeys.toFullString(note)}</span>
                     {dot}
                     <span className="name">{noteName(note).unwrapOrElse("")}</span>
@@ -191,6 +216,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             )
             rows.ownAll(
                 Events.subscribe(row, "pointerdown", (event: PointerEvent) => {
+                    if (event.button !== 0) {return}
                     selected = index
                     dragging = Option.wrap(index)
                     list.setPointerCapture(event.pointerId)
@@ -200,25 +226,30 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     MenuItem.default({label: "Remove lane", selectable: all.length > 1})
                         .setTriggerProcedure(() => editing.modify(() => Euclid.removeLane(box, each)))))
             )
-            return [row, [each, dot] as const] as const
+            return [row, dot] as const
         })
         rowElements = rendered.map(([row]) => row)
-        dots = rendered.map(([, dot]) => dot)
+        rowDots = rendered.map(([, dot]) => dot)
         list.replaceChildren(...rowElements)
     }
-    // a pressed lane follows the pointer up and down the list
+    const endDrag = (): void => {
+        dragging = Option.None
+        if (moved) {editing.mark()}
+        moved = false
+    }
     lifecycle.ownAll(
         Events.subscribe(list, "pointermove", (event: PointerEvent) => dragging.ifSome(from => {
-            const top = list.getBoundingClientRect().top - list.scrollTop
-            const above = rowElements.filter(row => row.offsetTop <= event.clientY - top).length
+            const above = rowElements.filter(row => row.getBoundingClientRect().top <= event.clientY).length
             const to = Math.max(0, Math.min(lanes().length - 1, above - 1))
             if (to === from) {return}
-            editing.modify(() => Euclid.moveLane(box, from, to))
+            editing.modify(() => Euclid.moveLane(box, from, to), false)
+            moved = true
             selected = to
             dragging = Option.wrap(to)
         })),
-        Events.subscribe(list, "pointerup", () => dragging = Option.None),
-        Events.subscribe(list, "pointercancel", () => dragging = Option.None)
+        Events.subscribe(list, "pointerup", endDrag),
+        Events.subscribe(list, "pointercancel", endDrag),
+        {terminate: endDrag}
     )
     const roll = (all: boolean): void => {editing.modify(() => {
         const seed = box.seed.getValue()
@@ -227,7 +258,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         const targets = all ? lanes() : lane().mapOr(each => [each], [])
         targets.forEach(each => {
             const {steps, pulses, rotate, accents, accentRotate} = Euclid.rhythmOf(each, edited)
-            const length = [8, 12, 16, 16, 16, 24, 32][random.nextInt(0, 7)]
+            const length = random.nextElement([8, 12, 16, 16, 16, 24, 32])
             const hits = random.nextInt(1, Math.ceil(length * 0.75) + 1)
             steps.setValue(length)
             pulses.setValue(hits)
@@ -249,52 +280,37 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         Euclid.createLane(boxGraph, box, note)
         selected = lanes().length - 1
     })}
-    // the clipboard carries a pattern: the rhythm of every lane in list order and its groove
-    const copyPattern = (pattern: int): ClipboardEntry => {
-        const rhythms = lanes().map(each => {
+    const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode<CopiedPattern>(PatternEntry, {
+        rhythms: lanes().map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
             return RhythmKeys.map(key => rhythm[key].getValue())
-        })
-        const groove = box.patterns.fields()[pattern].groove.targetVertex.mapOr(({box: target}) => target.address.toString(), undefined)
-        const copied: CopiedPattern = {rhythms, groove}
-        return {type: PatternEntry, data: new TextEncoder().encode(JSON.stringify(copied)).buffer, count: 1}
-    }
-    const pastePattern = (pattern: int, entry: ClipboardEntry): void => {
-        if (entry.type !== PatternEntry) {return}
-        const {status, value: copied} = tryCatch(() => JSON.parse(new TextDecoder().decode(entry.data)) as CopiedPattern)
-        if (status !== "success") {return}
-        editing.modify(() => {
+        }),
+        groove: PatternClipboard.grooveOf(box.patterns.fields()[pattern].groove)
+    })
+    const pastePattern = (pattern: int, entry: ClipboardEntry): void =>
+        PatternClipboard.decode<CopiedPattern>(PatternEntry, entry).ifSome(copied => editing.modify(() => {
             lanes().forEach((each, index) => {
                 const values = copied.rhythms[index]
                 if (!isDefined(values)) {return}
                 const rhythm = Euclid.rhythmOf(each, pattern)
                 RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
             })
-            const pointer = box.patterns.fields()[pattern].groove
-            const groove = project.rootBoxAdapter.grooves.adapters().find(each => each.box.address.toString() === copied.groove)
-            if (isDefined(groove)) {pointer.refer(groove.box)} else {pointer.defer()}
-        })
-    }
-    // a pattern written into a note region at the playhead: Length steps, or one bar when the lanes never restart
+            PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
+        }))
     const exportPattern = (pattern: int): void => {
         const {api} = project
         const track = deviceHost.audioUnitBoxAdapter().tracks.collection.adapters().find(each => each.type === TrackType.Notes)
         if (!isDefined(track)) {return}
-        const factor = Euclid.GlobalFactors[namedParameter.rate.getValue()] ?? 1
         const length = namedParameter.length.getValue()
-        const period = length > 0 ? length * 240 / factor : Infinity
+        const period = length > 0 ? length * 240 / factor() : Infinity
         const duration = length > 0 ? period : 3840
-        const notes = EuclidNotes.of(lanes().map(each => {
+        const all = lanes()
+        const audible = audibleIn(all)
+        const notes = EuclidNotes.of(all.map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
             return {
                 note: each.note.getValue(), velocity: each.velocity.getValue(), gate: each.gate.getValue(), audible: audible(each),
-                steps: EuclidRhythm.steps({
-                    steps: rhythm.steps.getValue(), pulses: rhythm.pulses.getValue(), rotate: rhythm.rotate.getValue(),
-                    accents: rhythm.accents.getValue(), accentRotate: rhythm.accentRotate.getValue(),
-                    bursts: rhythm.bursts.getValue(), burstRotate: rhythm.burstRotate.getValue()
-                }),
-                step: (Euclid.ValueQuarters[rhythm.rate.getValue()] ?? 0.25) * 960 / factor,
-                repeats: rhythm.repeats.getValue(), fade: rhythm.fade.getValue()
+                steps: stepsOf(each, pattern), step: stepDuration(rhythm), repeats: rhythm.repeats.getValue(), fade: rhythm.fade.getValue()
             }
         }), duration, period)
         editing.modify(() => api.createTrackRegion(track.box, Math.max(0, service.timeline.snapping.floor(engine.position.getValue())),
@@ -328,20 +344,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         return tile
     }, Euclid.Patterns + 1)
     tiles.append(...tileElements)
-    const focusedPattern = (): Option<int> => {
-        const index = tileElements.findIndex(tile => tile === document.activeElement)
-        return index >= 0 && index < Euclid.Patterns ? Option.wrap(index) : Option.None
-    }
-    lifecycle.own(ClipboardManager.install(tiles, {
-        canCopy: () => focusedPattern().nonEmpty(),
-        canCut: () => false,
-        canPaste: (entry: ClipboardEntry) => entry.type === PatternEntry && focusedPattern().nonEmpty(),
-        copy: () => focusedPattern().map(copyPattern),
-        cut: () => Option.None,
-        paste: (entry: ClipboardEntry) => focusedPattern().ifSome(index => pastePattern(index, entry))
-    }))
-    // the engine reports the playing and the waiting pattern while the transport runs
-    const reported = {active: box.pattern.getValue(), waiting: Euclid.NoPattern, fresh: false}
+    PatternClipboard.install(lifecycle, tiles, PatternEntry, tileElements.slice(0, Euclid.Patterns), copyPattern, pastePattern)
     lifecycle.ownAll(
         liveStreamReceiver.subscribeIntegers(adapter.state, ([active, waiting]) => {
             if (reported.fresh && reported.active === active && reported.waiting === waiting) {return}
@@ -356,9 +359,8 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         })
     )
     const updateTiles = (): void => {
-        const playing = engine.isPlaying.getValue() && reported.fresh
-        const active = playing ? reported.active : box.pattern.getValue()
-        const waiting = playing ? reported.waiting : Euclid.NoPattern
+        const active = playingPattern()
+        const waiting = reporting() ? reported.waiting : Euclid.NoPattern
         tileElements.forEach((tile, index) => {
             const pattern = index === Euclid.Patterns ? Euclid.Off : index
             tile.classList.toggle("active", active === pattern)
@@ -379,21 +381,25 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         lane().ifSome(each => {
             const rhythm = Euclid.rhythmOf(each, edited)
             EuclidCircle.paint(context, actualWidth, actualHeight, {
-                steps: stepsOf(each), repeats: rhythm.repeats.getValue(), fade: rhythm.fade.getValue(), playing,
+                steps: stepsOf(each, edited), repeats: rhythm.repeats.getValue(), fade: rhythm.fade.getValue(), playing,
                 caption: `${rhythm.pulses.getValue()}/${rhythm.steps.getValue()}`, rate: Euclid.Values[rhythm.rate.getValue()] ?? ""
             })
         })
     }))
-    lifecycle.own(engine.position.subscribe(() => {
-        const step = lane().mapOr(stepOf, -1)
+    const updatePlayhead = (): void => {
+        const shown = lane().flatMap(each => Option.wrap(tracked.find(entry => entry.lane === each)))
+        const step = edited === playingPattern() ? shown.mapOr(stepOf, -1) : -1
         if (step !== playing) {
             playing = step
             painter.requestUpdate()
         }
-        dots.forEach(([each, dot]) => dot.classList.toggle("on", sounding(each)))
-    }))
+        tracked.forEach(entry => entry.dot.classList.toggle("on", sounding(entry)))
+    }
+    lifecycle.own(engine.position.subscribe(updatePlayhead))
     lifecycle.own(observe(() => {
         renderList()
+        track()
+        updatePlayhead()
         updateTiles()
         grooveLabel.textContent = GrooveMenus.tooltip(project, box.patterns.fields()[edited].groove)().replace("Groove: ", "")
         painter.requestUpdate()
@@ -433,7 +439,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             {control("Bursts", rhythmValue(each => each.bursts, 0, Euclid.MaxSteps), area(10, 0))}
             {control("Rotate", rhythmValue(each => each.burstRotate, 0, Euclid.MaxSteps - 1), area(10, 1))}
             {control("Repeats", rhythmValue(each => each.repeats, Euclid.MinRepeats, Euclid.MaxRepeats), area(10, 2))}
-            {control("Fade", value(-1, 1, 0.01, percent, () => rhythm().mapOr(each => each.fade.getValue(), 0),
+            {control("Fade", value(-1, 1, 0.02, percent, () => rhythm().mapOr(each => each.fade.getValue(), 0),
                 next => rhythm().ifSome(each => each.fade.setValue(next)), fromPercent), area(10, 3))}
         </div>
     )

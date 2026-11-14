@@ -208,3 +208,42 @@ fn stopping_the_transport_ends_every_note() {
     assert_eq!(out[..count].iter().filter(|event| event.kind == EVENT_NOTE_OFF).count(), 1);
     assert_eq!(state.retained_count, 0);
 }
+
+#[test]
+fn a_full_output_delays_note_offs_but_never_loses_them() {
+    let lanes: Vec<LaneSpec> = (0..20).map(|index| LaneSpec {note: 40 + index, rhythms: [Rhythm {pulses: 16, ..Rhythm::default()}; 8],
+        ..LaneSpec::default()}).collect();
+    let mut state = state(&lanes);
+    let held = EventRecord {position: 10.0, kind: EVENT_NOTE_ON, id: 7, pitch: 90, velocity: 1.0, ..blank()};
+    let mut all = Vec::new();
+    let mut at = 0.0;
+    while at < BAR {
+        let mut out = [blank(); 12];
+        let flags = PLAYING | if at == 0.0 {BlockFlags::DISCONTINUOUS} else {0};
+        let input: Vec<EventRecord> = if at == 0.0 {vec![held]} else {Vec::new()};
+        let count = state.process(at, at + 128.0, flags, &input, &mut out);
+        all.extend_from_slice(&out[..count]);
+        at += 128.0;
+    }
+    let mut stop = [blank(); 512];
+    let count = state.process(BAR, BAR + 128.0, 0, &[], &mut stop);
+    all.extend_from_slice(&stop[..count]);
+    assert!(all.iter().any(|event| event.id == 7), "the incoming note passes through");
+    let started: Vec<u32> = all.iter().filter(|event| event.kind == EVENT_NOTE_ON && event.id != 7).map(|event| event.id).collect();
+    assert!(!started.is_empty());
+    for id in started {
+        assert_eq!(all.iter().filter(|event| event.kind == EVENT_NOTE_OFF && event.id == id).count(), 1, "note {id} ends once");
+    }
+}
+
+#[test]
+fn a_state_built_while_playing_takes_the_stored_pattern_at_once() {
+    let mut lane = LaneSpec::default();
+    lane.rhythms[1] = Rhythm {pulses: 16, ..Rhythm::default()};
+    let mut state = state(&[lane]);
+    state.requested = 1;
+    let mut out = [blank(); 256];
+    let count = state.process(1000.0, 1700.0, PLAYING, &[], &mut out);
+    let positions: Vec<f64> = ons(&out[..count]).iter().map(|on| on.0).collect();
+    assert_eq!(positions, vec![1200.0, 1440.0, 1680.0]);
+}

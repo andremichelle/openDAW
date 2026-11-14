@@ -42,6 +42,10 @@ impl BroadcastEntry {
     pub fn alive(&self) -> bool {
         self.owner.upgrade().is_some()
     }
+
+    pub fn owner(&self) -> Option<BroadcastSlot> {
+        self.owner.upgrade()
+    }
 }
 
 #[derive(Default)]
@@ -96,9 +100,13 @@ impl Broadcasts {
     /// that `register`'s dedup would then skip. Mirrors TS, where `onStartAutomation`'s broadcast is created once
     /// and persists across region edits; keeps the registration + write pointer stable so the knob never freezes.
     pub fn live_slot(&self, uuid: Uuid, keys: &[u16], package_type: u32) -> Option<BroadcastSlot> {
+        self.live_entry(uuid, keys, package_type).and_then(BroadcastEntry::owner)
+    }
+
+    /// The live entry at (uuid, keys) for this package type.
+    pub fn live_entry(&self, uuid: Uuid, keys: &[u16], package_type: u32) -> Option<&BroadcastEntry> {
         self.entries.iter()
             .find(|entry| entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type && entry.alive())
-            .and_then(|entry| entry.owner.upgrade())
     }
 
     /// Drop every entry whose owning slot died (its processor was torn down). Self-healing: no per-teardown

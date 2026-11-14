@@ -366,7 +366,6 @@ impl Engine {
         let broadcast_binds = core::mem::take(unsafe { BROADCAST_BINDS.get() });
         let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
         for (id, path, len, package_type) in broadcast_binds {
-            let slot = engine_env::telemetry::broadcast_slot(len as usize);
             // Honor the type the device DECLARED (via `bind_broadcast` / `bind_broadcast_float` /
             // `bind_broadcast_ints`), not a length heuristic: a one-element FLOAT_ARRAY (the Maximizer's
             // reduction, read with `subscribeFloats`) must NOT collapse to a scalar FLOAT.
@@ -376,10 +375,15 @@ impl Engine {
                 crate::broadcast::PACKAGE_FLOAT => crate::broadcast::PACKAGE_FLOAT,
                 _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
             };
+            // a Playfield pad's replica of a unit-level midi effect writes into the slot the editor reads
+            let shared = self.broadcasts.live_entry(device_uuid, &path, package_type)
+                .and_then(|entry| entry.owner().map(|slot| (slot, entry.active)))
+                .filter(|(slot, _)| slot.borrow().len() == len as usize);
+            let (slot, active) = shared.unwrap_or_else(|| (engine_env::telemetry::broadcast_slot(len as usize), false));
             self.broadcasts.register(device_uuid, &path, package_type, &slot);
             let ptr = slot.borrow().as_ptr() as u32;
             if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
-                *entry = (ptr, false);
+                *entry = (ptr, active);
             }
             broadcast_slots.push((id, slot));
         }

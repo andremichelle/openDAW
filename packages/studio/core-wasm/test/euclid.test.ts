@@ -25,7 +25,7 @@ type Lane = { note: number, pulses: number }
 // 120 bpm at 48 kHz: a quantum of 128 frames is 5.12 pulses, a sixteenth 46.875 quanta
 const QUANTA_PER_SIXTEENTH = 240 / 5.12
 
-const createScene = async (lanes: ReadonlyArray<Lane>, held: number = 0) => {
+const createScene = async (lanes: ReadonlyArray<Lane>, held: number = 0, pattern: number = 0) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -38,8 +38,11 @@ const createScene = async (lanes: ReadonlyArray<Lane>, held: number = 0) => {
         box.host.refer(unit.input)
         box.code.setValue("// @apparat js 1 1\n" + INSTRUMENT)
     })
-    const device = EuclidDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.midiEffects))
-    lanes.forEach(({note, pulses}) => Euclid.rhythmOf(Euclid.createLane(source, device, note), 0).pulses.setValue(pulses))
+    const device = EuclidDeviceBox.create(source, UUID.generate(), box => {
+        box.host.refer(unit.midiEffects)
+        box.pattern.setValue(pattern)
+    })
+    lanes.forEach(({note, pulses}) => Euclid.rhythmOf(Euclid.createLane(source, device, note), pattern).pulses.setValue(pulses))
     const track = TrackBox.create(source, UUID.generate(), box => {
         box.type.setValue(TrackType.Notes)
         box.enabled.setValue(true)
@@ -80,7 +83,7 @@ const createScene = async (lanes: ReadonlyArray<Lane>, held: number = 0) => {
         engine.render()
         return Math.round(new Float32Array(memory.buffer, engine.output_ptr(), half)[half - 1] * 1000)
     })
-    return {levels, close: () => sync.close()}
+    return {levels, source, device, sync, close: () => sync.close()}
 }
 
 const at = (sixteenth: number, inside: number = 0.5): number => Math.floor((sixteenth + inside) * QUANTA_PER_SIXTEENTH)
@@ -100,6 +103,29 @@ describe("Euclid", () => {
         expect(levels[at(1)]).toBe(72)
         expect(levels[at(2)]).toBe(42 + 72)
         expect(levels[at(4)]).toBe(36 + 42 + 72)
+        scene.close()
+    }, 60000)
+    it("starts with the stored pattern", async () => {
+        const scene = await createScene([{note: 60, pulses: 4}], 0, 1)
+        const levels = scene.levels(at(16, 0))
+        expect([0, 4, 8, 12].map(step => levels[at(step)])).toEqual([60, 60, 60, 60])
+        scene.close()
+    }, 60000)
+    it("switches to another pattern on the next bar", async () => {
+        const scene = await createScene([{note: 60, pulses: 4}])
+        const {source, device, sync} = scene
+        source.beginTransaction()
+        Euclid.lanesOf(device).forEach(lane => Euclid.rhythmOf(lane, 1).pulses.setValue(16))
+        source.endTransaction()
+        await sync.settle()
+        const first = scene.levels(at(2))
+        source.beginTransaction()
+        device.pattern.setValue(1)
+        source.endTransaction()
+        await sync.settle()
+        const levels = [...first, ...scene.levels(at(24, 0) - first.length)]
+        expect([5, 6, 7].map(step => levels[at(step)])).toEqual([0, 0, 0])
+        expect([17, 18, 19].map(step => levels[at(step)])).toEqual([60, 60, 60])
         scene.close()
     }, 60000)
 })
