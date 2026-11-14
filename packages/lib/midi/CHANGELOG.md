@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.84-beta.0](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-midi@0.0.83...@opendaw/lib-midi@0.0.84-beta.0) (2026-11-14)
+
+**Note:** Version bump only for package @opendaw/lib-midi
+
 ## [0.0.83](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-midi@0.0.82...@opendaw/lib-midi@0.0.83) (2026-11-09)
 
 **Note:** Version bump only for package @opendaw/lib-midi
