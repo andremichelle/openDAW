@@ -47,3 +47,11 @@ The `viewStates` values are `MutableObservableValue`s. Set them inside an editin
 ### @opendaw/lib-box: a failed undo or redo step is dropped
 
 `BoxEditing.undo()` and `redo()` still roll back a step that cannot be applied (in a live room another participant may have changed what it touches) and return `false`, but the step is now removed from the history, so the next call reaches the older step.
+
+### @opendaw/studio-core: `FFmpegWorker.load` takes the core URLs
+
+`FFmpegWorker.load(progress, urls?)` accepts `{coreURL, wasmURL}` (type `FFmpegCoreURLs`) to load the ffmpeg core from your own host. `package.opendaw.studio` only allows requests from `opendaw.studio`, so other origins must host `ffmpeg-core.js` and `ffmpeg-core.wasm` (`@ffmpeg/core` 0.12.6, `dist/esm`) themselves. Without `urls` nothing changes (`FFmpegWorker.DefaultCoreURLs`). The first call wins, a later call with other URLs reuses the loaded core.
+
+### @opendaw/studio-core: `OpusConverter` encodes stereo
+
+Stereo sources failed inside `@ffmpeg/core` 0.12.x with `RuntimeError: memory access out of bounds`. `OpusConverter` now encodes sources with more than one channel with `-mapping_family 255` (channels coded independently). Mono output is unchanged.
