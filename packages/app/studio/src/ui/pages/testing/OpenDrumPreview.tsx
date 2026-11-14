@@ -385,6 +385,22 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             drive: 0, hard: 0, click: 0, swell: 3, cut: 20, restart: 1, volume: 0, velocity: 0.5, play: 0
         }, "TR808WAV/CL/CL.WAV"),
         // set from the measured pitch fall, decay, harmonics and noise of the references (2026-11-13)
+        // the 808 congas are its tom circuit without noise, fitted on level and the first cycle (2026-11-14)
+        tomDevice("Conga (808 low)", {
+            tune: 200.5, pitch: 24, sweep: 0.0005, drift: 0, decay: 0.55, punch: 0, shape: 0, drive: 0, sub: 0,
+            ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0, air: 0, volume: 0, velocity: 0.5,
+            play: 0, glide: 0
+        }, "TR808WAV/LC/LC50.WAV"),
+        tomDevice("Conga (808 mid)", {
+            tune: 281.5, pitch: 12, sweep: 0.001, drift: 0, decay: 0.3, punch: -0.3, shape: 0, drive: 0, sub: 0,
+            ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0, air: 0, volume: 0, velocity: 0.5,
+            play: 0, glide: 0
+        }, "TR808WAV/MC/MC50.WAV"),
+        tomDevice("Conga (808 high)", {
+            tune: 412.5, pitch: 12, sweep: 0.0005, drift: 0, decay: 0.25, punch: -0.15, shape: 0, drive: 0, sub: 0,
+            ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02, color: 0, air: 0, volume: 0, velocity: 0.5,
+            play: 0, glide: 0
+        }, "TR808WAV/HC/HC50.WAV"),
         tomDevice("Tom (808 low)", {
             tune: 88, pitch: 0.4, sweep: 0.05, drift: 0, decay: 0.62, punch: 0, shape: 0, drive: 0, sub: 0, ratio: 0.67,
             top: 0, length: 0.2, noise: -34, noiseDecay: 0.7, color: 0, air: 0, volume: 0, velocity: 0.5, play: 0, glide: 0

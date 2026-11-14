@@ -778,3 +778,8 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    A band on a tone clipped (up to 2.6), so a band that lets more through than the 808 setting is turned down to
    its level (computed from both tones and 48 harmonics), never up: lifting a distant band made the hit spiky.
    Not judged by ear yet.
+11. 808 congas with the Tom engine, no engine of their own (2026-11-14). Measured: pure sines at a fixed pitch
+   (low 200.5, mid 281.5, high 412.5 Hz, harmonics below -63 dB, no noise from 5 ms on), the first half cycle
+   shortened by the ping. Fitted on level over time and the first 4 ms: Pitch 12 to 24 st over 0.5 to 1 ms, Noise
+   off, low Decay 0.55 s, mid 0.3 s Punch -30 %, high 0.25 s Punch -15 %; level within 0.4, 2.5 and 1.2 dB. Three
+   Tom presets on /testing next to LC50, MC50 and HC50.
