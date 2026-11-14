@@ -36,10 +36,16 @@ export const SamplerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       populateMenu={parent => MenuItems.forAudioUnitInput(parent, service, deviceHost)}
                       populateHeader={() => (
                           // 12px makes the button 18px high: at the header's 11px it is 16.5px and sits half a pixel off the icons
-                          <Button lifecycle={lifecycle} appearance={{color: Colors.green, activeColor: Colors.bright, cursor: "pointer"}}
-                                  style={{fontSize: "12px", position: "relative", top: "1px"}}
+                          <Button lifecycle={lifecycle}
+                                  appearance={{color: Colors.green, activeColor: Colors.bright, cursor: "pointer"}}
                                   onClick={() => SamplerZoneWindow.open(service, adapter, deviceHost)}>
-                              <span style={{fontSize: "11px"}}>Edit Sample Zones</span>
+                              <span style={{
+                                  fontSize: "10px",
+                                  lineHeight: "1",
+                                  padding: "2px 6px",
+                                  borderRadius: "12px",
+                                  outline: `0.5px ${Colors.green.toString()} solid`
+                              }}>Editor</span>
                           </Button>
                       )}
                       populateControls={() => (
@@ -48,7 +54,8 @@ export const SamplerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                   () => samples => SamplerSamples.add(project, adapter, undefined, samples)))}>
                               <div className="stacks">{stacks.slice(0, 3)}</div>
                               <div className="stacks">{stacks.slice(3)}</div>
-                              <SamplerModulationList lifecycle={lifecycle} editing={editing} adapter={adapter} onHover={highlight}/>
+                              <SamplerModulationList lifecycle={lifecycle} editing={editing} adapter={adapter}
+                                                     onHover={highlight}/>
                           </div>
                       )}
                       populateMeter={() => (
