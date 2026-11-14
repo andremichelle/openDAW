@@ -151,9 +151,7 @@ impl Voice {
             };
         }
         self.current = usize::MAX;
-        self.burst = 0.0;
         self.rise = 0;
-        self.snap = 0.0;
         let wider = (params.gap / GAP_REFERENCE).max(1.0);
         let stretch = wider * wider;
         self.burst_factor = libm::expf(libm::logf(0.001) / (params.decay.max(0.0005) * stretch * sample_rate));
@@ -165,9 +163,11 @@ impl Voice {
             self.room_high.reset();
             self.snap_high.reset();
             self.room_low.reset();
+            self.burst = 0.0;
+            self.snap = 0.0;
+            self.room.stop();
+            self.room_tail.stop();
         }
-        self.room.stop();
-        self.room_tail.stop();
         self.room_tail.set(ROOM_ATTACK, ROOM_HOLD, params.room_decay.max(0.01) * ROOM_TAIL_TIME, sample_rate);
         self.room_tail.set_floor(0.0001);
         self.room.set(ROOM_ATTACK, ROOM_HOLD, params.room_decay.max(0.01), sample_rate);
@@ -361,6 +361,21 @@ mod tests {
         let mut rest = vec![0.0; (1.2 * RATE) as usize];
         clap.process(&params, &mut rest);
         assert!(clap.is_silent(), "both stages end within 1.8 s");
+    }
+
+    #[test]
+    fn a_mono_retrigger_lets_the_room_ring_on() {
+        let params = ClapParams {attack: 0.005, ..ClapParams::default()};
+        let mut clap = Clap::new(RATE);
+        clap.note_on(1, 1.0, 0.0, &params);
+        let mut first = vec![0.0; (0.2 * RATE) as usize];
+        clap.process(&params, &mut first);
+        clap.note_on(2, 1.0, 0.0, &params);
+        let mut second = vec![0.0; (0.01 * RATE) as usize];
+        clap.process(&params, &mut second);
+        let before = rms(&first[first.len() - (0.001 * RATE) as usize..]);
+        let after = window(&second, 0.0, 1.0);
+        assert!(before > 0.0 && after > before * 0.5, "the room carries on, {before} -> {after}");
     }
 
     #[test]

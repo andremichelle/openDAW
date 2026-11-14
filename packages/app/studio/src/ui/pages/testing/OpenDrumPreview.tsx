@@ -542,6 +542,10 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             const gain = audioContext.createGain()
             source.buffer = buffer
             source.connect(gain).connect(target)
+            source.addEventListener("ended", () => {
+                source.disconnect()
+                gain.disconnect()
+            }, {once: true})
             if (audioContext.state !== "running") {audioContext.resume().then()}
             source.start(now)
             sounding = Option.wrap([source, gain])
@@ -554,6 +558,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             filter.frequency.value = OpenFilterHz
         })
         filters[0].connect(filters[1]).connect(audioContext.destination)
+        lifecycle.own({terminate: () => filters.forEach(filter => filter.disconnect())})
         const play = createPlayer(poly, filters[0])
         const audio: Option<HTMLAudioElement> = reference.map(path => (
             <audio controls preload="auto" src={`${import.meta.env.BASE_URL}opendrum-references/${encodeURI(path)}`}/>
@@ -561,10 +566,19 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         audio.ifSome(element => {
             const referenceGain = audioContext.createGain()
             referenceGain.gain.value = OpenDrumSynth.Headroom
-            audioContext.createMediaElementSource(element).connect(referenceGain).connect(filters[0])
-            lifecycle.own(Events.subscribe(element, "play", () => {
-                if (audioContext.state !== "running") {audioContext.resume().then()}
-            }))
+            const source = audioContext.createMediaElementSource(element)
+            source.connect(referenceGain).connect(filters[0])
+            lifecycle.ownAll(
+                Events.subscribe(element, "play", () => {
+                    if (audioContext.state !== "running") {audioContext.resume().then()}
+                }),
+                {
+                    terminate: () => {
+                        element.pause()
+                        source.disconnect()
+                        referenceGain.disconnect()
+                    }
+                })
         })
         const noiseOnly = lifecycle.own(new DefaultObservableValue(false))
         const canvas: HTMLCanvasElement = <canvas/>

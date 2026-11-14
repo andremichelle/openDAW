@@ -1,15 +1,6 @@
 import css from "./PropertyEditor.sass?inline"
 import {
-    Editing,
-    isDefined,
-    Lifecycle,
-    Nullable,
-    ObservableValue,
-    Option,
-    Selection,
-    StringMapping,
-    unitValue,
-    ValueAxis
+    Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, StringMapping, unitValue, ValueAxis
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
@@ -152,10 +143,8 @@ export const PropertyEditor =
                     const accessor = propertyOwner.getValue()
                     return accessor.stringMapping.x(accessor.readRawValue(adapter)).value
                 },
-                setter: text => {
+                setter: (text, shown) => {
                     const accessor = propertyOwner.getValue()
-                    const shown = selection.selected().at(0)
-                    if (!isDefined(shown)) {return}
                     const {unit} = accessor.stringMapping.x(accessor.readRawValue(shown))
                     const result = accessor.stringMapping.y(StringMapping.withDisplayUnit(text, unit))
                     if (result.type === "explicit") {

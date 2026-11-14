@@ -104,7 +104,7 @@ impl Shaker {
         let color = params.color.clamp(200.0, top * 0.9);
         let high = SvfCoefficients::new(color, 0.707, sample_rate);
         let low = SvfCoefficients::new(top, 0.707, sample_rate);
-        let width = libm::sqrtf((top - COLOR_REFERENCE) / (top - color));
+        let width = libm::sqrtf((top - COLOR_REFERENCE.min(top * 0.9)) / (top - color));
         let level = libm::powf(10.0, params.volume / 20.0) * width * OUTPUT_GAIN;
         for value in output.iter_mut() {
             *value = self.voices.iter_mut().filter(|voice| voice.active)
@@ -118,6 +118,19 @@ impl Shaker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn low_sample_rates_stay_finite() {
+        for rate in [8_000.0, 16_000.0, 22_050.0] {
+            let params = ShakerParams::default();
+            let mut shaker = Shaker::new(rate);
+            shaker.note_on(1, 1.0, &params);
+            let mut output = vec![0.0; (0.2 * rate) as usize];
+            shaker.process(&params, &mut output);
+            assert!(output.iter().all(|value| value.is_finite()), "{rate} Hz");
+            assert!(output.iter().any(|value| *value != 0.0), "{rate} Hz");
+        }
+    }
 
     const RATE: f32 = 48_000.0;
 

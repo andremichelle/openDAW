@@ -28,8 +28,9 @@ const BRIGHT_RANGE: f32 = 20.0;
 // a darker or lower rumble sounds quieter, so its level rises with the bandwidth it loses below the reference
 const RUMBLE_REFERENCE_CUTOFF: f32 = 1500.0;
 const RUMBLE_COMPENSATION: f32 = 0.35;
-const RUMBLE_COMB_LINE: usize = 3600;
-const RUMBLE_ALLPASS_LINE: usize = 1300;
+// long enough for the tunings at 192 kHz
+const RUMBLE_COMB_LINE: usize = 7100;
+const RUMBLE_ALLPASS_LINE: usize = 2450;
 const RUMBLE_TONE: f32 = 1.5;
 const SILENT: f32 = 0.0001;
 const DRIVE_DC_BLOCK: f32 = 5.0;
@@ -173,6 +174,7 @@ struct Rumble {
     filters: [Svf; 2],
     since_hit: u32,
     started: bool,
+    sounding: bool,
     follower: f32,
     rumble_follower: f32,
     kick_follower: f32
@@ -191,6 +193,7 @@ impl Rumble {
             filters: [Svf::default(); 2],
             since_hit: 0,
             started: false,
+            sounding: false,
             follower: 0.0,
             rumble_follower: 0.0,
             kick_follower: 0.0
@@ -233,10 +236,14 @@ impl Rumble {
         self.kick_follower = driven.abs().max(self.kick_follower * (1.0 - follow.1));
         let power = input * input;
         self.follower += (power - self.follower) * if power > self.follower {follow.0} else {follow.1};
+        if !self.started || level <= 0.0 {
+            self.sounding = false;
+            return 0.0;
+        }
         let tail = self.diffuse(input);
-        if !self.started || level <= 0.0 {return 0.0;}
         let seconds = self.since_hit as f32 / sample_rate;
         self.since_hit = self.since_hit.saturating_add(1);
+        self.sounding = seconds < length;
         let low = self.filters[0].process(libm::tanhf(tail * 3.0), filter).low;
         let low = self.filters[1].process(low, filter).low;
         let over = libm::sqrtf(self.follower * 2.0) / DUCK_THRESHOLD;
@@ -340,7 +347,7 @@ impl Kick {
         }
     }
 
-    pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+    pub fn is_silent(&self) -> bool {!self.rumble.sounding && self.voices.iter().all(|voice| !voice.active)}
 }
 
 #[cfg(test)]
@@ -422,6 +429,32 @@ mod tests {
         let early = peak(&with[..(0.01 * RATE) as usize]);
         let later = peak(&with[(0.2 * RATE) as usize..(0.4 * RATE) as usize]);
         assert!(early < later * 0.2, "rumble at the attack {early}, later {later}");
+    }
+
+    #[test]
+    fn the_rumble_tail_keeps_the_kick_sounding() {
+        let params = KickParams {rumble: 1.0, length: 1.0, decay: 0.3, ..KickParams::default()};
+        let mut kick = Kick::new(RATE);
+        kick.note_on(1, 1.0, 0.0, &params);
+        let mut output = vec![0.0; (1.0 * RATE) as usize];
+        kick.process(&params, 120.0, &mut output);
+        assert!(!kick.is_silent(), "the body has ended, the 2 s rumble has not");
+        let mut rest = vec![0.0; (1.2 * RATE) as usize];
+        kick.process(&params, 120.0, &mut rest);
+        assert!(kick.is_silent(), "silent once the rumble has faded");
+    }
+
+    #[test]
+    fn the_rumble_keeps_four_distinct_combs_at_high_rates() {
+        for rate in [44_100.0, 96_000.0, 192_000.0] {
+            let rumble = Rumble::new(rate);
+            let mut lengths = rumble.comb_lengths.to_vec();
+            lengths.dedup();
+            assert_eq!(lengths.len(), 4, "{rate} Hz");
+            assert_ne!(rumble.allpass_lengths[0], rumble.allpass_lengths[1], "{rate} Hz");
+            assert!(rumble.comb_lengths.iter().all(|length| *length < RUMBLE_COMB_LINE), "{rate} Hz");
+            assert!(rumble.allpass_lengths.iter().all(|length| *length < RUMBLE_ALLPASS_LINE), "{rate} Hz");
+        }
     }
 
     #[test]

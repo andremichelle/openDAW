@@ -31,6 +31,20 @@ describe("Extract Prefix", () => {
     })
 })
 
+describe("Choices with a unit", () => {
+    it("find the typed choice with or without the unit shown next to it", () => {
+        const order = StringMapping.indices("db", ["12", "24", "36", "48"])
+        expect(order.y(StringMapping.withDisplayUnit("24", "db"))).toEqual({type: "explicit", value: 1})
+        expect(order.y("24")).toEqual({type: "explicit", value: 1})
+        expect(order.y(" 36 db ")).toEqual({type: "explicit", value: 2})
+        expect(order.y("25")).toEqual({type: "unknown", value: "💣"})
+        const unisono = StringMapping.values("#", [1, 3, 5], ["1", "3", "5"])
+        expect(unisono.y(StringMapping.withDisplayUnit("3", "#"))).toEqual({type: "explicit", value: 3})
+        const names = StringMapping.indices("", ["Off", "On"])
+        expect(names.y("On")).toEqual({type: "explicit", value: 1})
+    })
+})
+
 describe("Unit starting with a digit (#264)", () => {
     it("strips the unit before parsing so its leading digit is not merged into the value", () => {
         const mapping = StringMapping.numeric({unit: "1/32th"})

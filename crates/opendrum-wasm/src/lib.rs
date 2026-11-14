@@ -16,6 +16,24 @@ use opendrum::bell::{Bell, BellParams};
 use opendrum::perc::{Perc, PercParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
+// the preview releases a held note (Mode Gate) after this time
+const GATE_SECONDS: f32 = 0.2;
+
+macro_rules! play_hit {
+    ($engine:ident, $params:ident, $output:ident, $sample_rate:ident, |$out:ident| $process:expr) => {
+        if $params.play == Play::Gate {
+            let gate = ((GATE_SECONDS * $sample_rate) as usize).min($output.len());
+            let (held, released) = $output.split_at_mut(gate);
+            {let $out = held; $process;}
+            $engine.note_off(0, &$params);
+            {let $out = released; $process;}
+        } else {
+            let $out = $output;
+            $process;
+        }
+    };
+}
+
 pub const KICK_PARAMS: usize = 20;
 pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
@@ -63,7 +81,7 @@ pub extern "C" fn render_kick(params: *const f32, velocity: f32, bpm: f32, sampl
     };
     let mut kick = Kick::new(sample_rate);
     kick.note_on(0, velocity, 0.0, &params);
-    kick.process(&params, bpm, output);
+    play_hit!(kick, params, output, sample_rate, |out| kick.process(&params, bpm, out));
 }
 
 #[no_mangle]
@@ -91,7 +109,7 @@ pub extern "C" fn render_snare(params: *const f32, velocity: f32, sample_rate: f
     };
     let mut snare = Snare::new(sample_rate);
     snare.note_on(0, velocity, 0.0, &params);
-    snare.process(&params, output);
+    play_hit!(snare, params, output, sample_rate, |out| snare.process(&params, out));
 }
 
 #[no_mangle]
@@ -111,7 +129,7 @@ pub extern "C" fn render_clap(params: *const f32, velocity: f32, sample_rate: f3
     };
     let mut clap = Clap::new(sample_rate);
     clap.note_on(0, velocity, 0.0, &params);
-    clap.process(&params, output);
+    play_hit!(clap, params, output, sample_rate, |out| clap.process(&params, out));
 }
 
 #[no_mangle]
@@ -131,7 +149,7 @@ pub extern "C" fn render_tom(params: *const f32, velocity: f32, sample_rate: f32
     };
     let mut tom = Tom::new(sample_rate);
     tom.note_on(0, velocity, 0.0, &params);
-    tom.process(&params, output);
+    play_hit!(tom, params, output, sample_rate, |out| tom.process(&params, out));
 }
 
 #[no_mangle]
@@ -151,7 +169,7 @@ pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32
     };
     let mut rim = Rim::new(sample_rate);
     rim.note_on(0, velocity, 0.0, &params);
-    rim.process(&params, output);
+    play_hit!(rim, params, output, sample_rate, |out| rim.process(&params, out));
 }
 
 #[no_mangle]
@@ -168,7 +186,7 @@ pub extern "C" fn render_hat(params: *const f32, velocity: f32, sample_rate: f32
     };
     let mut hat = Hat::new(sample_rate);
     hat.note_on(0, velocity, 0.0, &params);
-    hat.process(&params, output);
+    play_hit!(hat, params, output, sample_rate, |out| hat.process(&params, out));
 }
 
 #[no_mangle]
@@ -185,7 +203,7 @@ pub extern "C" fn render_cymbal(params: *const f32, velocity: f32, sample_rate: 
     };
     let mut cymbal = Cymbal::new(sample_rate);
     cymbal.note_on(0, velocity, 0.0, &params);
-    cymbal.process(&params, output);
+    play_hit!(cymbal, params, output, sample_rate, |out| cymbal.process(&params, out));
 }
 
 #[no_mangle]
@@ -202,7 +220,7 @@ pub extern "C" fn render_shaker(params: *const f32, velocity: f32, sample_rate: 
     };
     let mut shaker = Shaker::new(sample_rate);
     shaker.note_on(0, velocity, &params);
-    shaker.process(&params, output);
+    play_hit!(shaker, params, output, sample_rate, |out| shaker.process(&params, out));
 }
 
 #[no_mangle]
@@ -219,7 +237,7 @@ pub extern "C" fn render_bell(params: *const f32, velocity: f32, sample_rate: f3
     };
     let mut bell = Bell::new(sample_rate);
     bell.note_on(0, velocity, 0.0, &params);
-    bell.process(&params, output);
+    play_hit!(bell, params, output, sample_rate, |out| bell.process(&params, out));
 }
 
 #[no_mangle]
@@ -238,5 +256,5 @@ pub extern "C" fn render_perc(params: *const f32, velocity: f32, sample_rate: f3
     };
     let mut perc = Perc::new(sample_rate);
     perc.note_on(0, velocity, 0.0, &params);
-    perc.process(&params, output);
+    play_hit!(perc, params, output, sample_rate, |out| perc.process(&params, out));
 }

@@ -1,4 +1,6 @@
-import {clamp, DefaultObservableValue, Func, int, isDefined, Lifecycle, Notifier, Optional, Procedure, Provider} from "@opendaw/lib-std"
+import {
+    clamp, DefaultObservableValue, Func, int, isDefined, Lifecycle, Notifier, Option, Optional, Procedure, Provider
+} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -13,7 +15,7 @@ export namespace OpenDrumControls {
     export type Format = {
         readonly print: Func<number, Printed>
         // `shown` is the unit on display, a number typed without a unit is read in it
-        readonly parse: (text: string, shown: string) => Optional<number>
+        readonly parse: (text: string, shown: string) => Option<number>
     }
     export type Field = {
         readonly name: string
@@ -23,11 +25,11 @@ export namespace OpenDrumControls {
         readonly choices?: ReadonlyArray<string>
     }
 
-    const {numberIn} = SamplerValueLabel
-    const scaled = (factor: number): Func<string, Optional<number>> => text => {
-        const parsed = numberIn(text)
-        return isDefined(parsed) ? parsed * factor : undefined
+    const numberIn = (text: string): Option<number> => {
+        const parsed = SamplerValueLabel.numberIn(text)
+        return isDefined(parsed) && Number.isFinite(parsed) ? Option.wrap(parsed) : Option.None
     }
+    const scaled = (factor: number): Func<string, Option<number>> => text => numberIn(text).map(value => value * factor)
 
     export const Formats = {
         integer: (unit: string): Format => ({print: value => [String(Math.round(value)), unit], parse: numberIn}),
@@ -86,8 +88,8 @@ export namespace OpenDrumControls {
                 const typed = await SamplerValueLabel.ask(label, event, unit.length > 0 ? `${text} ${unit}` : text)
                 if (typed.isEmpty()) {return}
                 const parsed = format.parse(typed.unwrap(), unit)
-                if (!isDefined(parsed) || !Number.isFinite(parsed)) {return}
-                field.set(clamp(parsed, min, max))
+                if (parsed.isEmpty()) {return}
+                field.set(clamp(parsed.unwrap(), min, max))
                 refresh.notify()
             })
         )

@@ -354,9 +354,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             element: canvas,
             selection,
             getter: (adapter) => context.stringMapping.x(context.valueMapping.y(eventMapping.x(adapter.value))).value,
-            setter: text => {
-                const shown = selection.selected().at(0)
-                if (!isDefined(shown)) {return}
+            setter: (text, shown) => {
                 const {unit} = context.stringMapping.x(context.valueMapping.y(eventMapping.x(shown.value)))
                 const result = context.stringMapping.y(StringMapping.withDisplayUnit(text, unit))
                 let value
