@@ -21,7 +21,7 @@ export const OpenDrumClapDeviceBox: BoxSchema<Pointers> =
         20: range("room", -1.25, -48, 0, "linear", "dB"),
         21: range("room-decay", 0.41, 0.02, 2, "exponential", "s"),
         22: unipolar("tail", 0.5),
-        23: range("volume", -2, -36, 6, "linear", "dB"),
+        23: range("volume", 0, -36, 6, "linear", "dB"),
         24: unipolar("velocity", 1),
         25: choice("play", 0, PlayModes),
         26: bipolar("panning", 0.0)

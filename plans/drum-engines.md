@@ -419,10 +419,10 @@ Controls:
 Presets:
 
 1. Clap (808) (reference TR808WAV/CP/CP.WAV): hands: 4, gap: 0.0115, last: 0.71, spread: 0, attack: 0.00075, decay:
-   0.019, snap: 0.6, drive: 0, tone: 1055, resonance: 1, room: -1.25, roomDecay: 0.41, tail: 0.5, volume: -2, velocity:
+   0.019, snap: 0.6, drive: 0, tone: 1055, resonance: 1, room: -1.25, roomDecay: 0.41, tail: 0.5, volume: 0, velocity:
    0.5, play: 0.
 2. Clap (909) (reference Roland TR-909/HANDCLP1.WAV): hands: 4, gap: 0.0116, last: 0.885, spread: 0, attack: 0, decay:
-   0.0255, snap: 0, drive: 0, tone: 865, resonance: 0.36, room: -3.25, roomDecay: 0.72, tail: 0, volume: 0, velocity:
+   0.0255, snap: 0, drive: 0, tone: 865, resonance: 0.36, room: -3.25, roomDecay: 0.72, tail: 0, volume: 2, velocity:
    0.5, play: 0.
 
 ### 4. Tom
@@ -608,6 +608,10 @@ references from disk.
    engine's mono output with the linear law (unity on both sides at the centre, so Pan 0 is bit identical).
    Glide is gone from Kick, Snare and Tom, its field key 29 is Pan now (both float, both 0 by default, nothing
    released used Glide). The other seven devices got a new field after Play.
+10. Output trim (2026-11-14, his decision): the default Clap peaked at +6.4 dBFS and the Snare at +2.4 dBFS (the
+    other eight between -3.6 and +0.2), which drove a Maximizer much harder than they sound. A fixed gain after
+    the drive, Clap -8.6 dB and Snare -2.6 dB, puts both at -0.2 dBFS like the Kick, every sample is the old one
+    times the trim (within 1.5e-7). The Clap's default Volume is 0 dB now (was -2, the 2 dB moved into its trim).
 
 Next (decided 2026-11-14):
 

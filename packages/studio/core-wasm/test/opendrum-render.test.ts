@@ -28,7 +28,7 @@ const Devices: Record<string, { install: Install, values: ReadonlyArray<number> 
         values: [171.16, 1.943, 0.7243, 2.065, 0.0092, 0.2093, -0.0221, 0, -5.3, 0.1944, 0.46, -0.2745, 0.1079, 4779,
             0.1612, 0, 0, 1, 0, 0]},
     clap: {install: (source, unit) => OpenDrumClapDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [4, 0.0115, 0.71, 0, 0.00075, 0.019, 0.6, 0, 1055, 1, -1.25, 0.41, 0.5, -2, 1, 0, 0]},
+        values: [4, 0.0115, 0.71, 0, 0.00075, 0.019, 0.6, 0, 1055, 1, -1.25, 0.41, 0.5, 0, 1, 0, 0]},
     tom: {install: (source, unit) => OpenDrumTomDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
         values: [88, 0.4, 0.05, 0, 0.62, 0, 0, 0, 0.67, 0, 0.2, 0, -34, 0.7, 0, 0, 0, 1, 0, 0]},
     rim: {install: (source, unit) => OpenDrumRimDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),

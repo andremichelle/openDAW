@@ -54,6 +54,8 @@ const DRIVE_DC_BLOCK: f32 = 30.0;
 const DRIVE_BIAS_FULL: f32 = 12.0;
 // the drive's ceiling in engine level (the 808 clap's bursts peak at 2.6), a power of two so Drive 0 stays bit exact
 const DRIVE_CEILING: f32 = 4.0;
+// the default hit peaks just under full scale, as the Kick and Tom do (-8.6 dB)
+const OUTPUT_TRIM: f32 = 0.3715;
 
 /// Times in seconds, Tone in Hz, Room, Drive and Volume in dB, Hands 1 to 8, Last as a share of Gap, the rest 0 to 1.
 /// Tail is the amount of the room's long quiet second stage.
@@ -267,7 +269,7 @@ impl Clap {
         let room_level = if params.room <= LEVEL_OFF {0.0} else {libm::powf(10.0, params.room / 20.0)};
         let room = SvfCoefficients::new((params.tone * ROOM_TONE).min(sample_rate * 0.45), ROOM_Q, sample_rate);
         let snap = SvfCoefficients::new(SNAP_HIGH.min(sample_rate * 0.45), 0.707, sample_rate);
-        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive);
+        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive) * OUTPUT_TRIM;
         let bias = DRIVE_BIAS * (params.drive / DRIVE_BIAS_FULL).clamp(0.0, 1.0);
         for chunk in output.chunks_mut(RENDER_QUANTUM) {
             let frames = chunk.len();

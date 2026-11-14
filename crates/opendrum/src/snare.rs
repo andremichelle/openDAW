@@ -62,6 +62,8 @@ const DRIVE_DC_BLOCK: f32 = 30.0;
 const DRIVE_BIAS_FULL: f32 = 12.0;
 // the drive's ceiling in engine level (a snare hit peaks around 1.3), a power of two so Drive 0 stays bit exact
 const DRIVE_CEILING: f32 = 2.0;
+// the default hit peaks just under full scale, as the Kick and Tom do (-2.6 dB)
+const OUTPUT_TRIM: f32 = 0.7413;
 
 /// Times in seconds, Pitch in semitones above Tune, Tone in Hz, Level, Drive and Volume in dB, Punch -1 to 1, Ratio
 /// as a frequency ratio, the rest 0 to 1.
@@ -288,7 +290,7 @@ impl Snare {
                 ResonatorCoefficients::radius((params.decay / (3.0 + index as f32)).max(0.005), sample_rate)
             })
         };
-        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive);
+        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive) * OUTPUT_TRIM;
         let bias = DRIVE_BIAS * (params.drive / DRIVE_BIAS_FULL).clamp(0.0, 1.0);
         for voice in self.voices.iter_mut().filter(|voice| voice.active) {voice.set_envelopes(params, sample_rate);}
         for chunk in output.chunks_mut(RENDER_QUANTUM) {
