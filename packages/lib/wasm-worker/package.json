@@ -1,0 +1,34 @@
+{
+  "name": "@opendaw/lib-wasm-worker",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-or-later",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker.js": "./dist/worker.js"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc && esbuild src/worker.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=dist/worker.js",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendaw/lib-std": "^0.0.89"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.28",
+    "@opendaw/typescript-config": "^0.0.32",
+    "esbuild": "^0.28.0"
+  }
+}

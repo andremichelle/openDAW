@@ -1,7 +1,7 @@
 import css from "./OpenDrumPreview.sass?inline"
 import referenceCss from "./OpenDrumReference.sass?inline"
 import navigationCss from "./OpenDrumNavigation.sass?inline"
-import {Color, DefaultObservableValue, Lifecycle, Notifier, Option, Provider, tryCatch} from "@opendaw/lib-std"
+import {Color, DefaultObservableValue, Lifecycle, Notifier, Option, Provider} from "@opendaw/lib-std"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {CanvasPainter} from "@opendaw/studio-core"
@@ -24,7 +24,7 @@ type Device = {
     readonly name: string
     readonly engine: string
     readonly color: Color
-    readonly render: Provider<Option<OpenDrumSynth.Hit>>
+    readonly request: Provider<OpenDrumSynth.Request>
     readonly groups: ReadonlyArray<HTMLElement>
     readonly refresh: Notifier<void>
     readonly reference: Option<string>
@@ -78,7 +78,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Kick", color: Colors.orange, groups, refresh, reference: Option.wrap(reference),
             poly: () => kick.play === 1,
-            render: () => renderer.map(loaded => loaded.renderKick(kick, PreviewBpm))}
+            request: () => OpenDrumSynth.kick(kick, PreviewBpm)}
     }
     const snareDevice = (name: string, snare: OpenDrumSynth.Snare, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -119,7 +119,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Snare", color: Colors.green, groups, refresh, reference: Option.wrap(reference),
             poly: () => snare.play === 1,
-            render: () => renderer.map(loaded => loaded.renderSnare(snare))}
+            request: () => OpenDrumSynth.snare(snare)}
     }
     const cymbalDevice = (name: string, cymbal: OpenDrumSynth.Cymbal, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -144,7 +144,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Cymbal", color: Colors.yellow, groups, refresh, reference: Option.wrap(reference),
             poly: () => cymbal.play === 1,
-            render: () => renderer.map(loaded => loaded.renderCymbal(cymbal))}
+            request: () => OpenDrumSynth.cymbal(cymbal)}
     }
     const percDevice = (name: string, perc: OpenDrumSynth.Perc): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -179,7 +179,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Perc", color: Colors.red, groups, refresh, reference: Option.None,
             poly: () => perc.play === 1,
-            render: () => renderer.map(loaded => loaded.renderPerc(perc))}
+            request: () => OpenDrumSynth.perc(perc)}
     }
     const bellDevice = (name: string, bell: OpenDrumSynth.Bell, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -208,7 +208,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Bell", color: Colors.white, groups, refresh, reference: Option.wrap(reference),
             poly: () => bell.play === 1,
-            render: () => renderer.map(loaded => loaded.renderBell(bell))}
+            request: () => OpenDrumSynth.bell(bell)}
     }
     const shakerDevice = (name: string, shaker: OpenDrumSynth.Shaker, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -233,7 +233,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Shaker", color: Colors.green, groups, refresh, reference: Option.wrap(reference),
             poly: () => shaker.play === 1,
-            render: () => renderer.map(loaded => loaded.renderShaker(shaker))}
+            request: () => OpenDrumSynth.shaker(shaker)}
     }
     const hatDevice = (name: string, hat: OpenDrumSynth.Hat, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -265,7 +265,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Hat", color: Colors.cream, groups, refresh, reference: Option.wrap(reference),
             poly: () => hat.play === 1,
-            render: () => renderer.map(loaded => loaded.renderHat(hat))}
+            request: () => OpenDrumSynth.hat(hat)}
     }
     const rimDevice = (name: string, rim: OpenDrumSynth.Rim, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -306,7 +306,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Rim", color: Colors.yellow, groups, refresh, reference: Option.wrap(reference),
             poly: () => rim.play === 1,
-            render: () => renderer.map(loaded => loaded.renderRim(rim))}
+            request: () => OpenDrumSynth.rim(rim)}
     }
     const tomDevice = (name: string, tom: OpenDrumSynth.Tom, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -347,7 +347,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Tom", color: Colors.blue, groups, refresh, reference: Option.wrap(reference),
             poly: () => tom.play === 1,
-            render: () => renderer.map(loaded => loaded.renderTom(tom))}
+            request: () => OpenDrumSynth.tom(tom)}
     }
     const clapDevice = (name: string, clap: OpenDrumSynth.Clap, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -386,7 +386,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         ]
         return {name, engine: "Clap", color: Colors.purple, groups, refresh, reference: Option.wrap(reference),
             poly: () => clap.play === 1,
-            render: () => renderer.map(loaded => loaded.renderClap(clap))}
+            request: () => OpenDrumSynth.clap(clap)}
     }
     let renderer: Option<OpenDrumSynth.Renderer> = Option.None
     let status: string = "loading the engine"
@@ -551,7 +551,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             sounding = Option.wrap([source, gain])
         }
     }
-    const createDevice = ({name, engine, color, render, groups, refresh, reference, poly}: Device): HTMLElement => {
+    const createDevice = ({name, engine, color, request, groups, refresh, reference, poly}: Device): HTMLElement => {
         const filters = [audioContext.createBiquadFilter(), audioContext.createBiquadFilter()]
         filters.forEach(filter => {
             filter.type = "highpass"
@@ -583,35 +583,30 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         const noiseOnly = lifecycle.own(new DefaultObservableValue(false))
         const canvas: HTMLCanvasElement = <canvas/>
         const length: HTMLElement = <span className="length"/>
-        // a stale engine (the page sends more or fewer values than it expects) shows as a status, not a wrong sound
-        const safeRender = (): Option<OpenDrumSynth.Hit> => {
-            const result = tryCatch(render)
-            if (result.status === "success") {return result.value}
-            status = "engine out of date, rebuild the wasm"
-            console.warn(result.error)
-            return Option.None
-        }
-        let hit: Option<OpenDrumSynth.Hit> = safeRender()
+        let picture: Option<OpenDrumSynth.Picture> = Option.None
+        let problem: Option<string> = Option.None
+        let pending: Option<AbortController> = Option.None
         const painter = lifecycle.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight, devicePixelRatio}) => {
             const width = actualWidth * devicePixelRatio
             const height = actualHeight * devicePixelRatio
             const middle = height / 2
-            const frames = OpenDrumSynth.MaxSeconds * OpenDrumSynth.SampleRate
+            const columns = OpenDrumSynth.Columns
             context.clearRect(0, 0, width, height)
-            if (hit.isEmpty()) {return}
-            const {samples, envelope, pitch, softPitch} = hit.unwrap()
+            if (picture.isEmpty()) {return}
+            const {length: frames, peaks, envelope, pitch, softPitch} = picture.unwrap()
+            const lastColumn = frames / (OpenDrumSynth.MaxSeconds * OpenDrumSynth.SampleRate) * columns
             context.fillStyle = Colors.shadow.opacity(0.2).toString()
             context.fillRect(0, Math.round(middle), width, devicePixelRatio)
             context.fillStyle = color.opacity(0.5).toString()
             for (let x = 0; x < width; x++) {
-                const from = Math.floor(x / width * frames)
-                const to = Math.min(samples.length, Math.floor((x + 1) / width * frames))
-                if (from >= samples.length) {break}
+                const from = Math.floor(x / width * columns)
+                const to = Math.min(columns, Math.max(from + 1, Math.floor((x + 1) / width * columns)))
+                if (from >= lastColumn) {break}
                 let min = 0.0
                 let max = 0.0
-                for (let index = from; index < to; index++) {
-                    min = Math.min(min, samples[index])
-                    max = Math.max(max, samples[index])
+                for (let column = from; column < to; column++) {
+                    min = Math.min(min, peaks[column * 2])
+                    max = Math.max(max, peaks[column * 2 + 1])
                 }
                 const top = middle - Math.min(1.0, max) * (middle - devicePixelRatio)
                 const bottom = middle - Math.max(-1.0, min) * (middle - devicePixelRatio)
@@ -624,7 +619,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 context.setLineDash(dash.map(value => value * devicePixelRatio))
                 context.beginPath()
                 for (let x = 0; x < width; x++) {
-                    const index = Math.min(Math.floor(x / width * frames), values.length - 1)
+                    const index = Math.min(Math.floor(x / width * values.length), values.length - 1)
                     const y = middle - values[index] * scale * (middle - devicePixelRatio)
                     if (x === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
                 }
@@ -635,17 +630,43 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             curve(pitch, 1.0, Colors.cream.opacity(0.9).toString(), [])
             context.setLineDash([])
         }))
-        const update = (): void => {
-            hit = safeRender()
-            length.textContent = hit.match({
-                none: () => status,
-                some: ({samples}) => Formats.seconds.print(samples.length / OpenDrumSynth.SampleRate).join(" ")
+        const show = (): void => {
+            length.textContent = picture.match({
+                none: () => problem.match({none: () => status, some: text => text}),
+                some: ({length}) => Formats.seconds.print(length / OpenDrumSynth.SampleRate).join(" ")
             })
             painter.requestUpdate()
         }
+        // the display keeps the last picture until the one for the current values arrives, a newer request aborts
+        const update = (): void => {
+            pending.ifSome(controller => controller.abort())
+            pending = Option.None
+            if (renderer.isEmpty()) {
+                show()
+                return
+            }
+            const controller = new AbortController()
+            pending = Option.wrap(controller)
+            renderer.unwrap().picture(request(), controller.signal).then(result => {
+                pending = Option.None
+                picture = Option.wrap(result)
+                problem = Option.None
+                show()
+            }, (error: unknown) => {
+                if (controller.signal.aborted) {return}
+                pending = Option.None
+                picture = Option.None
+                const outOfDate = error instanceof Error && error.message === OpenDrumSynth.OutOfDate
+                problem = Option.wrap(outOfDate ? OpenDrumSynth.OutOfDate : "the render failed")
+                console.warn(error)
+                show()
+            })
+        }
         lifecycle.ownAll(
             refresh.subscribe(update),
-            Events.subscribe(canvas, "pointerdown", () => hit.ifSome(({samples}) => play(samples))),
+            Events.subscribe(canvas, "pointerdown", () => renderer.ifSome(loaded =>
+                loaded.samples(request()).then(play, (error: unknown) => console.warn(error)))),
+            {terminate: () => pending.ifSome(controller => controller.abort())},
             noiseOnly.catchupAndSubscribe(owner => filters.forEach(filter =>
                 filter.frequency.value = owner.getValue() ? NoiseOnlyHz : OpenFilterHz))
         )

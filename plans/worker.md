@@ -1,7 +1,7 @@
 # Wasm services in a worker
 
-Status: quick plan 2026-11-14, nothing built. Decided 2026-11-14: a new worker of its own for this, the existing
-shared worker stays as it is and is refactored into the new system later.
+Status: phases 1 and 2 built 2026-11-14 (`packages/lib/wasm-worker`, 12 tests; the openDrum preview renders through
+it). Decided 2026-11-14: a new worker of its own for this, the existing shared worker stays as it is.
 
 ## Goal
 
@@ -42,7 +42,7 @@ Decided 2026-11-14.
    module, 3 ms for the first 2 s render. Not measured in a browser. A display starts empty and paints when the
    first result arrives, its area is reserved.
 2. The call is untyped: `taskWorker.call("method-name", bytes, {signal, maxResultBytes})` returns a promise of
-   optional bytes. Buffers are transferred in both directions, never copied. A proxy class per module wraps this
+   the bytes written. Buffers are transferred in both directions, never copied. A proxy class per module wraps this
    into typed methods (floats are one view onto the bytes).
 3. The worker takes compiled modules only, never urls (decided 2026-11-14). The main thread fetches and compiles
    (`WebAssembly.compileStreaming`, the compile itself runs off the main thread in the browser) and hands the
@@ -96,6 +96,39 @@ Decided 2026-11-14.
 4. Side finding, not part of this work: lib-inference still creates its worker with
    `new URL("./workers/inference.worker.js", import.meta.url)` by default (a `workerFactory` can replace it).
 
+## Dry run
+
+Decided 2026-11-14, before building phases 1 and 2.
+
+1. Now: phases 1 and 2. Phase 3 waits for the first device that needs it (its host imports are designed then).
+   Phase 4 does not fit as written: the shared worker's jobs (peaks, OPFS, transients) are JavaScript, not wasm.
+2. Rendering is optional. openDrum and every later device work fully without the worker, SDK users who never start
+   it get devices whose editors show no hit. Nothing in a box, adapter or processor depends on it.
+3. Module convention, completed:
+   1. `alloc(length)` returns an 8 byte aligned pointer. The worker keeps one input and one output area per
+      instance and allocates again only when a call needs more, so nothing leaks and no `free` is needed.
+   2. After every `alloc` and every call the worker reads `memory.buffer` again (memory growth detaches views).
+   3. A negative return is an error code and rejects the call, a return above the capacity rejects too
+      ("result larger than maxResultBytes"). No automatic retry, a call may have side effects.
+   4. A trap re-instantiates the module (cheap), the worker restarts only for the Restart abort.
+4. One controller, one module, one name (the name appears in errors). The controller sends one call at a time and
+   keeps the queue itself, so aborting a queued call removes it before the worker ever sees it.
+5. Abort: Discard and Restart now, Shared flag later (it needs its own slice protocol and has no user yet).
+6. Tests run the worker's logic in process over a `MessageChannel` with an injected worker factory (node has no
+   browser `Worker`). That a real running wasm loop is cut off by Restart is checked in the browser only. The test
+   module is a small `.wat` (alloc, copy, trap, error, loop) with its compiled bytes committed as a fixture, so
+   tests need no `wat2wasm`.
+7. The package builds with `tsc` plus esbuild for `dist/worker.js`, like core-wasm. Vite dev reads the built dist,
+   a change to the worker needs a rebuild of the package.
+8. openDrum: every engine export takes its values (sample rate, frames, velocity, bpm, parameters) from the input
+   bytes and writes floats. One `param_counts` call replaces the per engine counts, the proxy checks it on load, so
+   the "engine out of date" status stays. The display shows the first render only, no per hit variation.
+9. The display gets peaks, not samples: the render reduces the hit in the wasm to a fixed number of min and max
+   pairs over the display's time span plus the trimmed length, so neither the transfer nor the main thread handles
+   a full rate 48 kHz hit while a value is dragged. Full samples are rendered only when the hit is played.
+10. A value change aborts the previous request (latest wins). A click renders the full hit for the current values
+   and plays it when it arrives.
+
 ## First user
 
 The openDrum display.
@@ -104,7 +137,7 @@ The openDrum display.
    the convention (their loose numbers go into the bytes).
 2. The display paints the last result and repaints when the next arrives. Playing a hit waits for the result that
    belongs to the current values.
-3. The per trigger variation can then be shown too: the hit counter becomes one of the values in the bytes.
+3. ~~The per trigger variation can then be shown too.~~ Decided: the display shows the first render only.
 4. The openDrum editors share one static worker, aborts are discard.
 
 ## Audio side (later)
@@ -121,10 +154,14 @@ The openDrum display.
 
 ## Phases
 
-1. The package `@opendaw/lib-wasm-worker`: the generic worker and its controller, with tests (instantiate a
-   compiled module, call, abort while queued, abort while running in each of the three ways, terminate, a trapping
-   module), the worker bundle exported as `"./worker.js"`, the studio passing its url.
-2. The openDrum preview moves onto it.
+1. ~~The package `@opendaw/lib-wasm-worker`: the generic worker and its controller, with tests, the worker bundle
+   exported as `"./worker.js"`, the studio passing its url.~~ Built 2026-11-14: `WasmWorker` (controller, queue,
+   Discard and Restart abort, terminate), `WasmRuntime` (worker side, instance areas, re-instantiation after a
+   trap), `worker.js` (3.7 kB). 12 tests over a `MessageChannel` with a hand written test module.
+2. ~~The openDrum preview moves onto it.~~ Built 2026-11-14: one export per engine plus `param_counts`, every
+   export renders exactly what the old ones did. The display asks for 1024 min and max pairs (8 kB, about 5 ms in
+   node for a bell), a click asks for the samples. One static worker for all displays, a value change aborts the
+   previous request. Not checked in a browser yet.
 3. Audio side: design note with the first device that needs it, then build.
 4. Later: refactor the existing shared worker (peaks, OPFS, transients, tempo, material, sample effects) into the
    new system.
