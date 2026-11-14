@@ -63,8 +63,7 @@ pub struct TomParams {
     pub air: f32,
     pub volume: f32,
     pub velocity: f32,
-    pub play: Play,
-    pub glide: f32
+    pub play: Play
 }
 
 impl Default for TomParams {
@@ -72,7 +71,7 @@ impl Default for TomParams {
         Self {
             tune: 110.0, pitch: 3.0, sweep: 0.03, drift: 0.0, decay: 0.5, punch: 0.0, shape: 0.0, sub: 0.0, ratio: 0.67,
             top: 0.0, length: 0.2, drive: 0.0, noise: -30.0, noise_decay: 0.3, color: 0.3, air: 0.0, volume: 0.0,
-            velocity: 0.5, play: Play::Mono, glide: 0.0
+            velocity: 0.5, play: Play::Mono
         }
     }
 }
@@ -80,7 +79,6 @@ impl Default for TomParams {
 #[derive(Clone, Copy, Default)]
 struct Block {
     sweep_factor: f32,
-    glide_factor: f32,
     drift_factor: f32,
     noise_high: SvfCoefficients,
     noise_low: SvfCoefficients,
@@ -96,7 +94,6 @@ struct Voice {
     age: u32,
     level: f32,
     transpose: f32,
-    slide: f32,
     bend: f32,
     drift: f32,
     elapsed: u32,
@@ -130,7 +127,6 @@ impl Voice {
         self.age = age;
         self.level = strength;
         self.transpose = transpose;
-        self.slide = 0.0;
         self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.drift = libm::exp2f(params.drift / 12.0) - 1.0;
@@ -148,9 +144,8 @@ impl Voice {
     #[inline]
     fn render(&mut self, params: &TomParams, block: &Block, sample_rate: f32) -> f32 {
         self.elapsed = self.elapsed.saturating_add(1);
-        let key = params.tune * libm::exp2f((self.transpose + self.slide) / 12.0);
+        let key = params.tune * libm::exp2f(self.transpose / 12.0);
         let frequency = key * (1.0 + self.bend + self.drift);
-        self.slide *= block.glide_factor;
         self.bend *= block.sweep_factor;
         self.drift *= block.drift_factor;
         let sine = self.bodies[0].sine(frequency, sample_rate);
@@ -222,10 +217,7 @@ impl Tom {
         };
         let (hits, sample_rate) = (self.hits, self.sample_rate);
         let voice = &mut self.voices[index];
-        let previous = voice.transpose + voice.slide;
-        let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
         voice.start(id, hits, strength, transpose, params, sample_rate);
-        if sliding {voice.slide = previous - transpose;}
     }
 
     pub fn process(&mut self, params: &TomParams, output: &mut [f32]) {
@@ -235,7 +227,6 @@ impl Tom {
         let level = if params.noise <= LEVEL_OFF {0.0} else {libm::powf(10.0, params.noise / 20.0) * NOISE_GAIN};
         let block = Block {
             sweep_factor: libm::expf(-1.0 / (params.sweep.max(0.0005) * sample_rate)),
-            glide_factor: if params.glide > 0.0 {libm::expf(-3.0 / (params.glide * sample_rate))} else {0.0},
             drift_factor: libm::expf(-1.0 / (params.sweep.max(0.0005) * DRIFT_TIME * sample_rate)),
             noise_high: SvfCoefficients::new((centre * 0.5).min(nyquist_guard), 0.707, sample_rate),
             noise_low: SvfCoefficients::new((centre * NOISE_TOP).min(nyquist_guard), 0.5, sample_rate),
@@ -283,10 +274,10 @@ mod tests {
     fn every_parameter_extreme_stays_finite_and_bounded() {
         let low = TomParams {tune: 40.0, pitch: 0.0, sweep: 0.001, drift: 0.0, decay: 0.02, punch: -1.0, shape: 0.0,
             sub: 0.0, ratio: 0.5, top: 0.0, length: 0.02, drive: 0.0, noise: LEVEL_OFF, noise_decay: 0.02, color: 0.0, air: 0.0,
-            volume: -36.0, velocity: 0.0, play: Play::Mono, glide: 0.0};
+            volume: -36.0, velocity: 0.0, play: Play::Mono};
         let high = TomParams {tune: 800.0, pitch: 24.0, sweep: 0.2, drift: 12.0, decay: 3.0, punch: 1.0, shape: 1.0,
             sub: 1.0, ratio: 1.0, top: 1.0, length: 1.0, drive: 36.0, noise: 0.0, noise_decay: 3.0, color: 1.0, air: 1.0,
-            volume: 0.0, velocity: 1.0, play: Play::Poly, glide: 1.0};
+            volume: 0.0, velocity: 1.0, play: Play::Poly};
         for params in [low, high, TomParams::default()] {
             let samples = render(&params, 3.5);
             assert!(samples.iter().all(|value| value.is_finite() && value.abs() < 8.0));

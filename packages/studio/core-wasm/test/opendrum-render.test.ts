@@ -28,24 +28,24 @@ const Devices: Record<string, { install: Install, values: ReadonlyArray<number> 
         values: [171.16, 1.943, 0.7243, 2.065, 0.0092, 0.2093, -0.0221, 0, -5.3, 0.1944, 0.46, -0.2745, 0.1079, 4779,
             0.1612, 0, 0, 1, 0, 0]},
     clap: {install: (source, unit) => OpenDrumClapDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [4, 0.0115, 0.71, 0, 0.00075, 0.019, 0.6, 0, 1055, 1, -1.25, 0.41, 0.5, -2, 1, 0]},
+        values: [4, 0.0115, 0.71, 0, 0.00075, 0.019, 0.6, 0, 1055, 1, -1.25, 0.41, 0.5, -2, 1, 0, 0]},
     tom: {install: (source, unit) => OpenDrumTomDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
         values: [88, 0.4, 0.05, 0, 0.62, 0, 0, 0, 0.67, 0, 0.2, 0, -34, 0.7, 0, 0, 0, 1, 0, 0]},
     rim: {install: (source, unit) => OpenDrumRimDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [476, 3.6, 1, 0, 6.3, 0.17, 0.035, 0.012, 0.7, 12, 0, 0.05, 3, 300, 1, -3, 1, 0]},
+        values: [476, 3.6, 1, 0, 6.3, 0.17, 0.035, 0.012, 0.7, 12, 0, 0.05, 3, 300, 1, -3, 1, 0, 0]},
     hat: {install: (source, unit) => OpenDrumHatDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [1, 6300, 0, 0.13, 0, 0, 0, 0, 0, 1, 0]},
+        values: [1, 6300, 0, 0.13, 0, 0, 0, 0, 0, 1, 0, 0]},
     shaker: {install: (source, unit) => OpenDrumShakerDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [7200, 0.02, 0.012, 0.3, 0, 1, 0]},
+        values: [7200, 0.02, 0.012, 0.3, 0, 1, 0, 0]},
     cymbal: {install: (source, unit) => OpenDrumCymbalDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [1, 0, 0, 0.75, 0, 1, 0]},
+        values: [1, 0, 0, 0.75, 0, 1, 0, 0]},
     bell: {install: (source, unit) => OpenDrumBellDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [558, 1.477, 0.7, 1050, 0.8, 0.7, 0, 1, 0]},
+        values: [558, 1.477, 0.7, 1050, 0.8, 0.7, 0, 1, 0, 0]},
     perc: {install: (source, unit) => OpenDrumPercDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input)),
-        values: [120, 1, 0.2, 0.03, 48, 0.02, 0.2, 0, 0, 0, 0, 1, 0]}
+        values: [120, 1, 0.2, 0.03, 48, 0.02, 0.2, 0, 0, 0, 0, 1, 0, 0]}
 }
 
-const render = async (install: Install, notes: ReadonlyArray<Note>, frames: int): Promise<Float32Array> => {
+const render = async (install: Install, notes: ReadonlyArray<Note>, frames: int, channel: 0 | 1 = 0): Promise<Float32Array> => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -88,7 +88,7 @@ const render = async (install: Install, notes: ReadonlyArray<Note>, frames: int)
     const left = new Float32Array(Math.ceil(frames / half) * half)
     for (let index = 0; index < left.length / half; index++) {
         engine.render()
-        left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), index * half)
+        left.set(new Float32Array(memory.buffer, engine.output_ptr() + channel * half * 4, half), index * half)
     }
     sync.close()
     return left
@@ -136,6 +136,23 @@ describe("openDrum devices", () => {
             expect(rms(output, 0, length)).toBeGreaterThan(0.001)
             expect(correlation(output.subarray(0, length), preview(name, values, length))).toBeGreaterThan(0.9999)
         }))
+
+    it("pans the hit, centred both sides are the same", async () => {
+        const install = (panning: number): Install => (source, unit) =>
+            OpenDrumSnareDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.input)
+                box.panning.setValue(panning)
+            })
+        const length = SAMPLE_RATE / 2
+        const notes = [{position: 0, pitch: 60}]
+        const centreLeft = await render(install(0), notes, length, 0)
+        const centreRight = await render(install(0), notes, length, 1)
+        expect(centreRight).toEqual(centreLeft)
+        const leftOnly = await render(install(-1), notes, length, 1)
+        expect(rms(leftOnly, 0, length)).toBe(0)
+        const halfRight = await render(install(0.5), notes, length, 0)
+        expect(rms(halfRight, 0, length) / rms(centreLeft, 0, length)).toBeCloseTo(0.5, 3)
+    })
 
     it("kick plays every note and transposes by the key against 60", async () => {
         const notes = [{position: 0, pitch: 60}, {position: 3840, pitch: 72}]

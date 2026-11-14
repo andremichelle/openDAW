@@ -15,7 +15,7 @@ type Construct = {
 export const OpenDrumRimDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
         tune, ratio, balance, high, highRatio, ring, ringHigh, decay, punch, drive, hard, click, swell, cut, restart,
-        volume, velocity, play
+        volume, velocity, play, panning
     } = adapter.namedParameter
     return (
         <OpenDrumDeviceEditor lifecycle={lifecycle}
@@ -30,7 +30,7 @@ export const OpenDrumRimDeviceEditor = ({lifecycle, service, adapter, deviceHost
                                   {title: "HIGH", color: Colors.yellow, columns: [[high, highRatio, ringHigh, swell]]},
                                   {title: "SHAPE", color: Colors.green, columns: [[decay, punch, drive, hard]]},
                                   {title: "STRIKE", color: Colors.purple, columns: [[click, cut, restart]]},
-                                  {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}
+                                  {title: "PLAY", color: Colors.cream, columns: [[volume, panning, velocity, play]]}
                               ]}/>
     )
 }

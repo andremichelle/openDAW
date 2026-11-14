@@ -28,5 +28,5 @@ export const OpenDrumKickDeviceBox: BoxSchema<Pointers> =
         26: range("volume", 0.0, -36.0, 6.0, "linear", "dB"),
         27: unipolar("velocity", 1),
         28: choice("play", 0, PlayModes),
-        29: range("glide", 0.0, 0.0, 1.0, "linear", "s")
+        29: bipolar("panning", 0.0)
     })

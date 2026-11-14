@@ -85,8 +85,7 @@ pub struct SnareParams {
     pub drive: f32,
     pub volume: f32,
     pub velocity: f32,
-    pub play: Play,
-    pub glide: f32
+    pub play: Play
 }
 
 impl Default for SnareParams {
@@ -94,7 +93,7 @@ impl Default for SnareParams {
         Self {
             tune: 180.0, ratio: 1.6, balance: 0.4, pitch: 7.0, sweep: 0.01, decay: 0.2, punch: 0.0, shape: 0.0,
             level: -6.0, wire_decay: 0.25, width: 0.5, curve: 0.0, click: 0.2, tone: 4000.0, skin: 0.0,
-            drive: 0.0, volume: 0.0, velocity: 0.5, play: Play::Mono, glide: 0.0
+            drive: 0.0, volume: 0.0, velocity: 0.5, play: Play::Mono
         }
     }
 }
@@ -102,7 +101,6 @@ impl Default for SnareParams {
 #[derive(Clone, Copy, Default)]
 struct Block {
     sweep_factor: f32,
-    glide_factor: f32,
     click: ClickShape,
     wire_high: SvfCoefficients,
     wire_low: SvfCoefficients,
@@ -121,7 +119,6 @@ struct Voice {
     age: u32,
     level: f32,
     transpose: f32,
-    slide: f32,
     bend: f32,
     elapsed: u32,
     bodies: [DrumOscillator; 2],
@@ -164,7 +161,6 @@ impl Voice {
         self.age = age;
         self.level = strength;
         self.transpose = transpose;
-        self.slide = 0.0;
         self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.elapsed = 0;
@@ -190,8 +186,7 @@ impl Voice {
     fn render(&mut self, params: &SnareParams, block: &Block, sample_rate: f32) -> f32 {
         let seconds = self.elapsed as f32 / sample_rate;
         self.elapsed = self.elapsed.saturating_add(1);
-        let frequency = params.tune * libm::exp2f((self.transpose + self.slide) / 12.0) * (1.0 + self.bend);
-        self.slide *= block.glide_factor;
+        let frequency = params.tune * libm::exp2f(self.transpose / 12.0) * (1.0 + self.bend);
         self.bend *= block.sweep_factor;
         let low = self.amps[0].next();
         let high = self.amps[1].next();
@@ -270,10 +265,7 @@ impl Snare {
         };
         let (hits, sample_rate) = (self.hits, self.sample_rate);
         let voice = &mut self.voices[index];
-        let previous = voice.transpose + voice.slide;
-        let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
         voice.start(id, hits, strength, transpose, params, sample_rate);
-        if sliding {voice.slide = previous - transpose;}
     }
 
     pub fn process(&mut self, params: &SnareParams, output: &mut [f32]) {
@@ -284,7 +276,6 @@ impl Snare {
         let resonance = WIRE_RESONANCE[0] + (WIRE_RESONANCE[1] - WIRE_RESONANCE[0]) * params.width * params.width;
         let block = Block {
             sweep_factor: libm::expf(-1.0 / (params.sweep.max(0.0005) * sample_rate)),
-            glide_factor: if params.glide > 0.0 {libm::expf(-3.0 / (params.glide * sample_rate))} else {0.0},
             click: ClickShape::new(params.tone, sample_rate),
             wire_high: SvfCoefficients::new(wire_high, WIRE_HIGH_PASS_Q, sample_rate),
             wire_low: SvfCoefficients::new(wire_low, resonance, sample_rate),
@@ -337,10 +328,10 @@ mod tests {
     fn every_parameter_extreme_stays_finite_and_bounded() {
         let low = SnareParams {tune: 80.0, ratio: 1.0, balance: 0.0, pitch: 0.0, sweep: 0.001, decay: 0.02, punch: 0.0,
             shape: 0.0, level: LEVEL_OFF, wire_decay: 0.02, width: 0.0, curve: -1.0, click: 0.0, tone: 200.0,
-            skin: 0.0, drive: 0.0, volume: -36.0, velocity: 0.0, play: Play::Mono, glide: 0.0};
+            skin: 0.0, drive: 0.0, volume: -36.0, velocity: 0.0, play: Play::Mono};
         let high = SnareParams {tune: 600.0, ratio: 3.0, balance: 1.0, pitch: 24.0, sweep: 0.1, decay: 2.0, punch: -1.0,
             shape: 1.0, level: 0.0, wire_decay: 2.0, width: 1.0, curve: 1.0, click: 1.0, tone: 16000.0,
-            skin: 1.0, drive: 36.0, volume: 0.0, velocity: 1.0, play: Play::Poly, glide: 1.0};
+            skin: 1.0, drive: 36.0, volume: 0.0, velocity: 1.0, play: Play::Poly};
         for params in [low, high, SnareParams::default()] {
             let samples = render(&params, 2.5);
             assert!(samples.iter().all(|value| value.is_finite()));

@@ -2294,8 +2294,8 @@ export interface OpenDrumKick extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
-    /** Glide in seconds (0 to 1) */
-    glide: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2343,8 +2343,8 @@ export interface OpenDrumSnare extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
-    /** Glide in seconds (0 to 1) */
-    glide: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2386,6 +2386,8 @@ export interface OpenDrumClap extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2433,8 +2435,8 @@ export interface OpenDrumTom extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
-    /** Glide in seconds (0 to 1) */
-    glide: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2480,6 +2482,8 @@ export interface OpenDrumRim extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2511,6 +2515,8 @@ export interface OpenDrumHat extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2534,6 +2540,8 @@ export interface OpenDrumShaker extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2557,6 +2565,8 @@ export interface OpenDrumCymbal extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2584,6 +2594,8 @@ export interface OpenDrumBell extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**
@@ -2619,6 +2631,8 @@ export interface OpenDrumPerc extends Instrument {
     velocity: unitValue
     /** Mode (0-2): Mono, Poly, Gate */
     play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
 }
 
 /**

@@ -604,6 +604,10 @@ references from disk.
    Shaker 0.125 s. The level curve is the upper outline of the rendered hit at the waveform's own scale, its column
    peaks held and smoothed twice over 35 ms (at most 1/32 of the span), so it always shows what the device plays (decided 2026-11-14, the
    formulas missed Hold, Attack and the Cymbal's fade). The pitch curve still follows Pitch, Sweep and Drift.
+9. Pan (2026-11-14, his decision): every device has Pan below Volume in Play, the device applies it to the
+   engine's mono output with the linear law (unity on both sides at the centre, so Pan 0 is bit identical).
+   Glide is gone from Kick, Snare and Tom, its field key 29 is Pan now (both float, both 0 by default, nothing
+   released used Glide). The other seven devices got a new field after Play.
 
 Next (decided 2026-11-14):
 

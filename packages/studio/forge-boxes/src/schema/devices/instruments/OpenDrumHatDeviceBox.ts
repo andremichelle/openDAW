@@ -18,5 +18,6 @@ export const OpenDrumHatDeviceBox: BoxSchema<Pointers> =
         17: bipolar("curve", 0),
         18: range("volume", 0, -36, 6, "linear", "dB"),
         19: unipolar("velocity", 1),
-        20: choice("play", 0, PlayModes)
+        20: choice("play", 0, PlayModes),
+        21: bipolar("panning", 0.0)
     })

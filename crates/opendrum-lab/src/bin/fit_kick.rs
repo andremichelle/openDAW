@@ -35,7 +35,7 @@ impl Engine for KickEngine {
         let params = KickParams {
             tune: get(0), pitch: get(1), sweep: get(2), drift: get(3), decay: get(4), punch: get(5), shape: get(6),
             click: get(7), tone: get(8), skin: get(9), rumble: 0.0, length: 0.25, duck: 1.0, drive: get(10), velocity: 0.0,
-            bright: 0.25, volume: 0.0, noise: get(11), glide: 0.0, play: Play::Mono
+            bright: 0.25, volume: 0.0, noise: get(11), play: Play::Mono
         };
         let mut kick = Kick::new(sample_rate as f32);
         kick.note_on(0, 1.0, 0.0, &params);

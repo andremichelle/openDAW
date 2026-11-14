@@ -1067,7 +1067,7 @@ export class OpenDrumKickImpl extends InstrumentFacade<OpenDrumKickDeviceBox> im
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
-    declare glide: float
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumKickDeviceBox) {
         super(context, box)
@@ -1075,7 +1075,7 @@ export class OpenDrumKickImpl extends InstrumentFacade<OpenDrumKickDeviceBox> im
             tune: box.tune, pitch: box.pitch, sweep: box.sweep, drift: box.drift, decay: box.decay, punch: box.punch,
             shape: box.shape, skin: box.skin, click: box.click, tone: box.tone, noise: box.noise, drive: box.drive,
             rumble: box.rumble, length: box.length, duck: box.duck, bright: box.bright, volume: box.volume,
-            velocity: box.velocity, play: box.play, glide: box.glide
+            velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1101,7 +1101,7 @@ export class OpenDrumSnareImpl extends InstrumentFacade<OpenDrumSnareDeviceBox> 
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
-    declare glide: float
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumSnareDeviceBox) {
         super(context, box)
@@ -1109,7 +1109,7 @@ export class OpenDrumSnareImpl extends InstrumentFacade<OpenDrumSnareDeviceBox> 
             tune: box.tune, ratio: box.ratio, balance: box.balance, pitch: box.pitch, sweep: box.sweep,
             decay: box.decay, punch: box.punch, shape: box.shape, level: box.level, wireDecay: box.wireDecay,
             width: box.width, curve: box.curve, click: box.click, tone: box.tone, skin: box.skin, drive: box.drive,
-            volume: box.volume, velocity: box.velocity, play: box.play, glide: box.glide
+            volume: box.volume, velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1132,13 +1132,15 @@ export class OpenDrumClapImpl extends InstrumentFacade<OpenDrumClapDeviceBox> im
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumClapDeviceBox) {
         super(context, box)
         this.bind({
             hands: box.hands, gap: box.gap, last: box.last, spread: box.spread, attack: box.attack, decay: box.decay,
             snap: box.snap, drive: box.drive, tone: box.tone, resonance: box.resonance, room: box.room,
-            roomDecay: box.roomDecay, tail: box.tail, volume: box.volume, velocity: box.velocity, play: box.play
+            roomDecay: box.roomDecay, tail: box.tail, volume: box.volume, velocity: box.velocity, play: box.play,
+            panning: box.panning
         })
     }
 }
@@ -1164,7 +1166,7 @@ export class OpenDrumTomImpl extends InstrumentFacade<OpenDrumTomDeviceBox> impl
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
-    declare glide: float
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumTomDeviceBox) {
         super(context, box)
@@ -1172,7 +1174,7 @@ export class OpenDrumTomImpl extends InstrumentFacade<OpenDrumTomDeviceBox> impl
             tune: box.tune, pitch: box.pitch, sweep: box.sweep, drift: box.drift, decay: box.decay, punch: box.punch,
             shape: box.shape, sub: box.sub, ratio: box.ratio, top: box.top, length: box.length, drive: box.drive,
             noise: box.noise, noiseDecay: box.noiseDecay, color: box.color, air: box.air, volume: box.volume,
-            velocity: box.velocity, play: box.play, glide: box.glide
+            velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1197,6 +1199,7 @@ export class OpenDrumRimImpl extends InstrumentFacade<OpenDrumRimDeviceBox> impl
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumRimDeviceBox) {
         super(context, box)
@@ -1204,7 +1207,7 @@ export class OpenDrumRimImpl extends InstrumentFacade<OpenDrumRimDeviceBox> impl
             tune: box.tune, ratio: box.ratio, balance: box.balance, high: box.high, highRatio: box.highRatio,
             ring: box.ring, ringHigh: box.ringHigh, decay: box.decay, punch: box.punch, drive: box.drive,
             hard: box.hard, click: box.click, swell: box.swell, cut: box.cut, restart: box.restart,
-            volume: box.volume, velocity: box.velocity, play: box.play
+            volume: box.volume, velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1222,12 +1225,14 @@ export class OpenDrumHatImpl extends InstrumentFacade<OpenDrumHatDeviceBox> impl
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumHatDeviceBox) {
         super(context, box)
         this.bind({
             tune: box.tune, color: box.color, hold: box.hold, decay: box.decay, spread: box.spread, ring: box.ring,
-            reso: box.reso, curve: box.curve, volume: box.volume, velocity: box.velocity, play: box.play
+            reso: box.reso, curve: box.curve, volume: box.volume, velocity: box.velocity, play: box.play,
+            panning: box.panning
         })
     }
 }
@@ -1241,12 +1246,13 @@ export class OpenDrumShakerImpl extends InstrumentFacade<OpenDrumShakerDeviceBox
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumShakerDeviceBox) {
         super(context, box)
         this.bind({
             color: box.color, attack: box.attack, decay: box.decay, curve: box.curve, volume: box.volume,
-            velocity: box.velocity, play: box.play
+            velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1260,12 +1266,13 @@ export class OpenDrumCymbalImpl extends InstrumentFacade<OpenDrumCymbalDeviceBox
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumCymbalDeviceBox) {
         super(context, box)
         this.bind({
             tune: box.tune, tone: box.tone, attack: box.attack, decay: box.decay, volume: box.volume,
-            velocity: box.velocity, play: box.play
+            velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1281,12 +1288,13 @@ export class OpenDrumBellImpl extends InstrumentFacade<OpenDrumBellDeviceBox> im
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumBellDeviceBox) {
         super(context, box)
         this.bind({
             tune: box.tune, ratio: box.ratio, balance: box.balance, color: box.color, strike: box.strike,
-            decay: box.decay, volume: box.volume, velocity: box.velocity, play: box.play
+            decay: box.decay, volume: box.volume, velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }
@@ -1306,13 +1314,14 @@ export class OpenDrumPercImpl extends InstrumentFacade<OpenDrumPercDeviceBox> im
     declare volume: float
     declare velocity: unitValue
     declare play: 0 | 1 | 2
+    declare panning: bipolar
 
     constructor(context: Context, box: OpenDrumPercDeviceBox) {
         super(context, box)
         this.bind({
             tune: box.tune, ratio: box.ratio, index: box.index, bite: box.bite, pitch: box.pitch, sweep: box.sweep,
             decay: box.decay, curve: box.curve, noise: box.noise, drive: box.drive, volume: box.volume,
-            velocity: box.velocity, play: box.play
+            velocity: box.velocity, play: box.play, panning: box.panning
         })
     }
 }

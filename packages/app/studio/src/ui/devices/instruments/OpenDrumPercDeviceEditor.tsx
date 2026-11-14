@@ -14,7 +14,7 @@ type Construct = {
 
 export const OpenDrumPercDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
-        tune, ratio, index, bite, pitch, sweep, decay, curve, noise, drive, volume, velocity, play
+        tune, ratio, index, bite, pitch, sweep, decay, curve, noise, drive, volume, velocity, play, panning
     } = adapter.namedParameter
     return (
         <OpenDrumDeviceEditor lifecycle={lifecycle}
@@ -29,7 +29,7 @@ export const OpenDrumPercDeviceEditor = ({lifecycle, service, adapter, deviceHos
                                   {title: "FM", color: Colors.orange, columns: [[tune, ratio, index, bite]]},
                                   {title: "SHAPE", color: Colors.green, columns: [[pitch, sweep, decay, curve]]},
                                   {title: "GRIT", color: Colors.purple, columns: [[noise, drive]]},
-                                  {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}
+                                  {title: "PLAY", color: Colors.cream, columns: [[volume, panning, velocity, play]]}
                               ]}/>
     )
 }

@@ -43,7 +43,7 @@ impl Engine for SnareEngine {
         let params = SnareParams {
             tune: get(0), ratio: get(1), balance: get(2), pitch: get(3), sweep: get(4), decay: get(5), punch: get(6),
             shape: get(7), level: get(8), wire_decay: get(9), width: get(10), curve: get(11),
-            click: get(12), tone: get(13), skin: get(14), drive: 0.0, volume: 0.0, velocity: 0.0, play: Play::Mono, glide: 0.0
+            click: get(12), tone: get(13), skin: get(14), drive: 0.0, volume: 0.0, velocity: 0.0, play: Play::Mono
         };
         let mut snare = Snare::new(sample_rate as f32);
         snare.note_on(0, 1.0, 0.0, &params);

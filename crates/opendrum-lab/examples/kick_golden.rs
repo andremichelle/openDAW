@@ -9,7 +9,7 @@ fn main() {
     let sets = [
         base,
         KickParams {click: 1.0, drive: 12.0, skin: 0.5, rumble: 1.0, punch: -0.5, noise: 0.8, ..base},
-        KickParams {click: 0.4, drive: 3.0, punch: 0.7, shape: 0.8, play: Play::Poly, glide: 0.1, bright: 0.9, ..base}
+        KickParams {click: 0.4, drive: 3.0, punch: 0.7, shape: 0.8, play: Play::Poly, bright: 0.9, ..base}
     ];
     for params in sets {
         let mut kick = Kick::new(48_000.0);

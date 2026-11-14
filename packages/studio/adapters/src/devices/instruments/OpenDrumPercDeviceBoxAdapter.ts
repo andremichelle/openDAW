@@ -23,7 +23,8 @@ const wrap = (parameter: ParameterAdapterSet, box: OpenDrumPercDeviceBox) => {
         volume: parameter.createParameter(box.volume, ValueMapping.linear(-36, 6), decibel, "Volume"),
         velocity: parameter.createParameter(box.velocity, ValueMapping.unipolar(), percent, "Velocity"),
         play: parameter.createParameter(box.play, OpenDrum.choice(OpenDrum.PlayModes),
-            StringMapping.indices("", OpenDrum.PlayModes), "Mode")
+            StringMapping.indices("", OpenDrum.PlayModes), "Mode"),
+        panning: parameter.createParameter(box.panning, ValueMapping.bipolar(), StringMapping.panning, "Pan", 0.5)
     } as const
 }
 

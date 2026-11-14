@@ -15,7 +15,7 @@ type Construct = {
 export const OpenDrumClapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
         hands, gap, last, spread, attack, decay, snap, drive, tone, resonance, room, roomDecay, tail, volume,
-        velocity, play
+        velocity, play, panning
     } = adapter.namedParameter
     return (
         <OpenDrumDeviceEditor lifecycle={lifecycle}
@@ -30,7 +30,7 @@ export const OpenDrumClapDeviceEditor = ({lifecycle, service, adapter, deviceHos
                                   {title: "BURST", color: Colors.yellow, columns: [[attack, decay, snap, drive]]},
                                   {title: "TONE", color: Colors.purple, columns: [[tone, resonance]]},
                                   {title: "ROOM", color: Colors.green, columns: [[room, roomDecay, tail]]},
-                                  {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}
+                                  {title: "PLAY", color: Colors.cream, columns: [[volume, panning, velocity, play]]}
                               ]}/>
     )
 }

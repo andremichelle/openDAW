@@ -4,6 +4,7 @@
 
 pub use abi;
 use abi::{float_value, int_value, Block, EventRecord, Instrument, ParamValue, EVENT_CHOKE, EVENT_NOTE_ON};
+use dsp::panning::{panning_to_gains, Mixing};
 use dsp::RENDER_QUANTUM;
 use math::value_mapping::{Exponential, Linear, LinearInteger};
 use opendrum::common::Play;
@@ -68,6 +69,8 @@ pub struct Param {
 pub trait Engine: Sized {
     type Params: Copy;
     const PARAMS: &'static [Param];
+    /// The index in `PARAMS` of Pan, which the device applies to the engine's mono output.
+    const PANNING: usize = Self::PARAMS.len() - 1;
     fn create(sample_rate: f32) -> Self;
     /// The engine's params before the host has delivered any value.
     fn defaults() -> Self::Params;
@@ -125,6 +128,7 @@ pub struct DrumState<E: Engine> {
     ids: [u32; MAX_PARAMS],
     sample_rate: f32,
     mono: [f32; RENDER_QUANTUM],
+    gains: [f32; 2],
     positions_id: u32,
     positions_ptr: u32,
     // notes that ended before they began (both at one offset), their hits are cut as soon as they start
@@ -143,6 +147,7 @@ impl<E: Engine> Instrument for Drum<E> {
         state.engine = E::create(sample_rate);
         state.params = E::defaults();
         state.sample_rate = sample_rate;
+        state.gains = [1.0, 1.0];
         for (index, param) in E::PARAMS.iter().enumerate() {
             state.ids[index] = abi::bind_parameter(&[param.key]);
         }
@@ -173,8 +178,8 @@ impl<E: Engine> Instrument for Drum<E> {
             let mono = &mut state.mono[..end - start];
             state.engine.process(&state.params, block.bpm, mono);
             for (index, value) in mono.iter().enumerate() {
-                left[start + index] += *value;
-                right[start + index] += *value;
+                left[start + index] += *value * state.gains[0];
+                right[start + index] += *value * state.gains[1];
             }
         }
     }
@@ -212,7 +217,12 @@ impl<E: Engine> Instrument for Drum<E> {
     fn parameter_changed(state: &mut DrumState<E>, id: u32, value: ParamValue) {
         let count = E::PARAMS.len();
         let Some(index) = state.ids[..count].iter().position(|bound| *bound == id) else {return;};
-        E::set(&mut state.params, index, E::PARAMS[index].mapping.value(value));
+        let value = E::PARAMS[index].mapping.value(value);
+        if index == E::PANNING {
+            state.gains = panning_to_gains(value, Mixing::Linear);
+        } else {
+            E::set(&mut state.params, index, value);
+        }
     }
 }
 

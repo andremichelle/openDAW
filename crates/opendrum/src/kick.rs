@@ -62,8 +62,7 @@ pub struct KickParams {
     pub play: Play,
     pub bright: f32,
     pub volume: f32,
-    pub noise: f32,
-    pub glide: f32
+    pub noise: f32
 }
 
 impl Default for KickParams {
@@ -71,7 +70,7 @@ impl Default for KickParams {
         Self {
             tune: 50.0, pitch: 16.0, sweep: 0.008, drift: 0.0, decay: 0.6, punch: 0.0, shape: 0.0, click: 0.3, tone: 3000.0,
             skin: 0.0, rumble: 0.0, length: 0.25, duck: 1.0, drive: 0.0, velocity: 0.5, play: Play::Mono,
-            bright: 0.25, volume: 0.0, noise: 0.5, glide: 0.0
+            bright: 0.25, volume: 0.0, noise: 0.5
         }
     }
 }
@@ -81,7 +80,6 @@ impl Default for KickParams {
 struct Block {
     sweep_factor: f32,
     drift_factor: f32,
-    glide_factor: f32,
     click: ClickShape,
     skin_radius: [f32; 4]
 }
@@ -93,7 +91,6 @@ struct Voice {
     age: u32,
     level: f32,
     transpose: f32,
-    slide: f32,
     bend: f32,
     drift: f32,
     elapsed: u32,
@@ -112,7 +109,6 @@ impl Voice {
         self.age = age;
         self.level = strength;
         self.transpose = transpose;
-        self.slide = 0.0;
         self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.drift = params.drift * (0.5 + 0.5 * strength);
@@ -132,8 +128,7 @@ impl Voice {
     fn render(&mut self, params: &KickParams, block: &Block, sample_rate: f32) -> f32 {
         let seconds = self.elapsed as f32 / sample_rate;
         self.elapsed = self.elapsed.saturating_add(1);
-        let frequency = params.tune * libm::exp2f((self.transpose + self.slide + self.drift) / 12.0) * (1.0 + self.bend);
-        self.slide *= block.glide_factor;
+        let frequency = params.tune * libm::exp2f((self.transpose + self.drift) / 12.0) * (1.0 + self.bend);
         self.bend *= block.sweep_factor;
         self.drift *= block.drift_factor;
         let amp = self.amp.next();
@@ -311,10 +306,7 @@ impl Kick {
         };
         let (hits, sample_rate) = (self.hits, self.sample_rate);
         let voice = &mut self.voices[index];
-        let previous = voice.transpose + voice.slide;
-        let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
         voice.start(id, hits, strength, transpose, params, sample_rate);
-        if sliding {voice.slide = previous - transpose;}
         self.rumble.hit(id);
     }
 
@@ -324,7 +316,6 @@ impl Kick {
         let block = Block {
             sweep_factor: libm::expf(-1.0 / (params.sweep.max(0.0005) * sample_rate)),
             drift_factor: libm::expf(-1.0 / (params.sweep.max(0.0005) * DRIFT_TIME * sample_rate)),
-            glide_factor: if params.glide > 0.0 {libm::expf(-3.0 / (params.glide * sample_rate))} else {0.0},
             click: ClickShape::new(params.tone, sample_rate),
             skin_radius: core::array::from_fn(|index| {
                 ResonatorCoefficients::radius((params.decay / (3.0 + index as f32)).max(0.005), sample_rate)
@@ -391,10 +382,10 @@ mod tests {
     fn every_parameter_extreme_stays_finite_and_bounded() {
         let low = KickParams {tune: 30.0, pitch: 0.0, sweep: 0.001, drift: 0.0, decay: 0.02, punch: 0.0, shape: 0.0, click: 0.0,
             tone: 200.0, skin: 0.0, rumble: 0.0, length: 0.0625, duck: 0.0, drive: 0.0, velocity: 0.0, play: Play::Mono,
-            bright: 0.0, volume: -36.0, noise: 0.0, glide: 0.0};
+            bright: 0.0, volume: -36.0, noise: 0.0};
         let high = KickParams {tune: 120.0, pitch: 48.0, sweep: 0.2, drift: 12.0, decay: 6.0, punch: -1.0, shape: 1.0, click: 1.0,
             tone: 16000.0, skin: 1.0, rumble: 1.0, length: 1.0, duck: 1.0, drive: 36.0, velocity: 1.0, play: Play::Poly,
-            bright: 1.0, volume: 0.0, noise: 1.0, glide: 1.0};
+            bright: 1.0, volume: 0.0, noise: 1.0};
         for params in [low, high, KickParams::default()] {
             let samples = render(&params, 2.0);
             assert!(samples.iter().all(|value| value.is_finite()));
@@ -495,8 +486,6 @@ mod tests {
         assert!(rumble_at(1.0) < rumble_at(0.08) * 0.5, "long body {}, short body {}", rumble_at(1.0), rumble_at(0.08));
     }
 
-    fn rising_crossings(samples: &[f32]) -> usize {samples.windows(2).filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0).count()}
-
     #[test]
     fn less_duck_never_pushes_kick_and_rumble_past_the_ceiling() {
         for duck in [0.0, 0.25, 0.5, 0.75] {
@@ -506,23 +495,6 @@ mod tests {
                 assert!(peak <= RUMBLE_CEILING + 0.01, "duck {duck} drive {drive}: {peak}");
             }
         }
-    }
-
-    #[test]
-    fn glide_slides_to_the_new_note() {
-        let crossings = |glide: f32| {
-            let params = KickParams {tune: 100.0, pitch: 0.0, drift: 0.0, click: 0.0, decay: 2.0, glide, ..KickParams::default()};
-            let mut kick = Kick::new(RATE);
-            kick.note_on(1, 1.0, 0.0, &params);
-            let mut output = vec![0.0; (0.1 * RATE) as usize];
-            kick.process(&params, 120.0, &mut output);
-            kick.note_on(2, 1.0, 12.0, &params);
-            let mut after = vec![0.0; (0.05 * RATE) as usize];
-            kick.process(&params, 120.0, &mut after);
-            rising_crossings(&after)
-        };
-        assert_eq!(crossings(0.0), 9, "jumps to 200 Hz (the reset start crossing is not counted)");
-        assert!(crossings(0.3) < 8, "still below 200 Hz while sliding, {}", crossings(0.3));
     }
 
     #[test]

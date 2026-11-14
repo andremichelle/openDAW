@@ -22,7 +22,8 @@ impl Engine for Rim {
         Param {key: 24, mapping: Mapping::Index(2)},
         Param {key: 25, mapping: Mapping::Linear(-36.0, 6.0)},
         Param {key: 26, mapping: Mapping::Linear(0.0, 1.0)},
-        Param {key: 27, mapping: Mapping::Index(3)}
+        Param {key: 27, mapping: Mapping::Index(3)},
+        Param {key: 28, mapping: Mapping::Linear(-1.0, 1.0)}
     ];
 
     fn set(params: &mut RimParams, index: usize, value: f32) {

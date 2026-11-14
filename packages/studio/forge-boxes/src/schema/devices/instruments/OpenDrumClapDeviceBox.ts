@@ -3,7 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {OpenDrumFields} from "./OpenDrumFields"
 
-const {range, unipolar, choice, integer} = OpenDrumFields
+const {range, unipolar, choice, integer, bipolar} = OpenDrumFields
 const PlayModes = 3 // Mono, Poly, Gate
 
 export const OpenDrumClapDeviceBox: BoxSchema<Pointers> =
@@ -23,5 +23,6 @@ export const OpenDrumClapDeviceBox: BoxSchema<Pointers> =
         22: unipolar("tail", 0.5),
         23: range("volume", -2, -36, 6, "linear", "dB"),
         24: unipolar("velocity", 1),
-        25: choice("play", 0, PlayModes)
+        25: choice("play", 0, PlayModes),
+        26: bipolar("panning", 0.0)
     })

@@ -15,7 +15,8 @@ impl Engine for Hat {
         Param {key: 17, mapping: Mapping::Linear(-1.0, 1.0)},
         Param {key: 18, mapping: Mapping::Linear(-36.0, 6.0)},
         Param {key: 19, mapping: Mapping::Linear(0.0, 1.0)},
-        Param {key: 20, mapping: Mapping::Index(3)}
+        Param {key: 20, mapping: Mapping::Index(3)},
+        Param {key: 21, mapping: Mapping::Linear(-1.0, 1.0)}
     ];
 
     fn set(params: &mut HatParams, index: usize, value: f32) {

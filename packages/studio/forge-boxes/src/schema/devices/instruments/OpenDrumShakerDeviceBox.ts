@@ -14,5 +14,6 @@ export const OpenDrumShakerDeviceBox: BoxSchema<Pointers> =
         13: bipolar("curve", 0.3),
         14: range("volume", 0, -36, 6, "linear", "dB"),
         15: unipolar("velocity", 1),
-        16: choice("play", 0, PlayModes)
+        16: choice("play", 0, PlayModes),
+        17: bipolar("panning", 0.0)
     })

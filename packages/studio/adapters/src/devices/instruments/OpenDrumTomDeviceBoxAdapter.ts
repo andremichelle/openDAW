@@ -31,7 +31,7 @@ const wrap = (parameter: ParameterAdapterSet, box: OpenDrumTomDeviceBox) => {
         velocity: parameter.createParameter(box.velocity, ValueMapping.unipolar(), percent, "Velocity"),
         play: parameter.createParameter(box.play, OpenDrum.choice(OpenDrum.PlayModes),
             StringMapping.indices("", OpenDrum.PlayModes), "Mode"),
-        glide: parameter.createParameter(box.glide, ValueMapping.linear(0, 1), seconds, "Glide")
+        panning: parameter.createParameter(box.panning, ValueMapping.bipolar(), StringMapping.panning, "Pan", 0.5)
     } as const
 }
 

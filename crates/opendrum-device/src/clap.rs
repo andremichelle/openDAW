@@ -20,7 +20,8 @@ impl Engine for Clap {
         Param {key: 22, mapping: Mapping::Linear(0.0, 1.0)},
         Param {key: 23, mapping: Mapping::Linear(-36.0, 6.0)},
         Param {key: 24, mapping: Mapping::Linear(0.0, 1.0)},
-        Param {key: 25, mapping: Mapping::Index(3)}
+        Param {key: 25, mapping: Mapping::Index(3)},
+        Param {key: 26, mapping: Mapping::Linear(-1.0, 1.0)}
     ];
 
     fn set(params: &mut ClapParams, index: usize, value: f32) {

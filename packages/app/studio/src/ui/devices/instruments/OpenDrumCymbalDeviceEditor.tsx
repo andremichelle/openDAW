@@ -13,7 +13,7 @@ type Construct = {
 }
 
 export const OpenDrumCymbalDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {tune, tone, attack, decay, volume, velocity, play} = adapter.namedParameter
+    const {tune, tone, attack, decay, volume, velocity, play, panning} = adapter.namedParameter
     return (
         <OpenDrumDeviceEditor lifecycle={lifecycle}
                               service={service}
@@ -24,7 +24,7 @@ export const OpenDrumCymbalDeviceEditor = ({lifecycle, service, adapter, deviceH
                               parameters={Object.values(adapter.namedParameter)}
                               sections={[
                                   {title: "SHAPE", color: Colors.orange, columns: [[tune, tone, attack, decay]]},
-                                  {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}
+                                  {title: "PLAY", color: Colors.cream, columns: [[volume, panning, velocity, play]]}
                               ]}/>
     )
 }

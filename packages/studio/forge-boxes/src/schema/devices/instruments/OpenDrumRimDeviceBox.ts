@@ -26,5 +26,6 @@ export const OpenDrumRimDeviceBox: BoxSchema<Pointers> =
         24: choice("restart", 1, OffOn),
         25: range("volume", -3, -36, 6, "linear", "dB"),
         26: unipolar("velocity", 1),
-        27: choice("play", 0, PlayModes)
+        27: choice("play", 0, PlayModes),
+        28: bipolar("panning", 0.0)
     })

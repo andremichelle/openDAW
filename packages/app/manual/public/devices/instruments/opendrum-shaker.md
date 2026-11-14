@@ -37,8 +37,9 @@ Example uses:
 ## 2. Play
 
 1. **Volume**: the level of the device.
-2. **Velocity**: how much the note's velocity changes the level.
-3. **Mode**:
+2. **Pan**: the position of the hit between left and right.
+3. **Velocity**: how much the note's velocity changes the level.
+4. **Mode**:
     1. **Mono**: a new note cuts the ringing one.
     2. **Poly**: hits ring on and overlap.
     3. **Gate**: as Mono, and the hit is cut short when its note ends.

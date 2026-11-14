@@ -20,5 +20,6 @@ export const OpenDrumPercDeviceBox: BoxSchema<Pointers> =
         19: range("drive", 0, 0, 36, "linear", "dB"),
         20: range("volume", 0, -36, 6, "linear", "dB"),
         21: unipolar("velocity", 1),
-        22: choice("play", 0, PlayModes)
+        22: choice("play", 0, PlayModes),
+        23: bipolar("panning", 0.0)
     })

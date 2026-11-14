@@ -11,7 +11,8 @@ impl Engine for Cymbal {
         Param {key: 13, mapping: Mapping::Exponential(0.05, 8.0)},
         Param {key: 14, mapping: Mapping::Linear(-36.0, 6.0)},
         Param {key: 15, mapping: Mapping::Linear(0.0, 1.0)},
-        Param {key: 16, mapping: Mapping::Index(3)}
+        Param {key: 16, mapping: Mapping::Index(3)},
+        Param {key: 17, mapping: Mapping::Linear(-1.0, 1.0)}
     ];
 
     fn set(params: &mut CymbalParams, index: usize, value: f32) {

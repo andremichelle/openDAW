@@ -24,7 +24,7 @@ impl Engine for Kick {
         Param {key: 26, mapping: Mapping::Linear(-36.0, 6.0)},
         Param {key: 27, mapping: Mapping::Linear(0.0, 1.0)},
         Param {key: 28, mapping: Mapping::Index(3)},
-        Param {key: 29, mapping: Mapping::Linear(0.0, 1.0)}
+        Param {key: 29, mapping: Mapping::Linear(-1.0, 1.0)}
     ];
 
     fn set(params: &mut KickParams, index: usize, value: f32) {
@@ -48,7 +48,6 @@ impl Engine for Kick {
             16 => params.volume = value,
             17 => params.velocity = value,
             18 => params.play = play(value),
-            19 => params.glide = value,
             _ => {}
         }
     }

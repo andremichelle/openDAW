@@ -22,7 +22,7 @@ Example uses:
 
 1. A classic electronic snare for hip hop and electro
 2. A bright, noisy snare with a long tail for house
-3. A pitched snare roll with Gate and Glide
+3. A pitched snare roll with Gate
 
 ---
 
@@ -60,9 +60,9 @@ Example uses:
 ## 4. Play
 
 1. **Volume**: the level of the device.
-2. **Velocity**: how much the note's velocity changes the level.
-3. **Mode**:
+2. **Pan**: the position of the hit between left and right.
+3. **Velocity**: how much the note's velocity changes the level.
+4. **Mode**:
     1. **Mono**: a new note cuts the ringing one.
     2. **Poly**: hits ring on and overlap.
     3. **Gate**: as Mono, and the hit is cut short when its note ends.
-4. **Glide**: in Mono and Gate, a new note slides from the sounding pitch.

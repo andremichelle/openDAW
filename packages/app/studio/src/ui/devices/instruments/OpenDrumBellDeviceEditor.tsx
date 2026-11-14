@@ -13,7 +13,7 @@ type Construct = {
 }
 
 export const OpenDrumBellDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {tune, ratio, balance, color, strike, decay, volume, velocity, play} = adapter.namedParameter
+    const {tune, ratio, balance, color, strike, decay, volume, velocity, play, panning} = adapter.namedParameter
     return (
         <OpenDrumDeviceEditor lifecycle={lifecycle}
                               service={service}
@@ -25,7 +25,7 @@ export const OpenDrumBellDeviceEditor = ({lifecycle, service, adapter, deviceHos
                               sections={[
                                   {title: "TONES", color: Colors.orange, columns: [[tune, ratio, balance]]},
                                   {title: "SHAPE", color: Colors.green, columns: [[color, strike, decay]]},
-                                  {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}
+                                  {title: "PLAY", color: Colors.cream, columns: [[volume, panning, velocity, play]]}
                               ]}/>
     )
 }
