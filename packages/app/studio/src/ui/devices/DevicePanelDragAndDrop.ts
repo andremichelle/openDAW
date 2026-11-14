@@ -23,6 +23,7 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
 
 export namespace DevicePanelDragAndDrop {
     export const install = (service: StudioService,
@@ -38,7 +39,8 @@ export namespace DevicePanelDragAndDrop {
                 instrumentContainer.style.opacity = "1.0"
                 // A drop over a composite's branch list goes INTO a branch (or makes a new one), not into this
                 // parent chain. Its own target handles it, so suppress this chain's insert marker while there.
-                if (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]"))) {
+                if (SlotDragAndDrop.claims(event)
+                    || (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]")))) {
                     if (insertMarker.isConnected) {insertMarker.remove()}
                     return false
                 }
