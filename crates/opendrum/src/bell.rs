@@ -4,8 +4,8 @@
 
 use dsp::hit_envelope::HitEnvelope;
 use dsp::svf::{Svf, SvfCoefficients};
-use crate::common::pulse;
-use crate::kick::Play;
+use crate::common::{pulse, Cut};
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 
@@ -17,6 +17,8 @@ const HARMONICS: usize = 48;
 const STRIKE_DECAY: f32 = 0.05;
 const OUTPUT_GAIN: f32 = 0.36;
 const ENVELOPE_FLOOR: f32 = 0.00001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.005;
 
 /// Tune and Color in Hz, Ratio as a frequency ratio, Decay in seconds, Volume in dB, the rest 0 to 1.
 #[derive(Clone, Copy, Debug)]
@@ -47,17 +49,21 @@ struct Voice {
     id: u32,
     age: u32,
     level: f32,
+    elapsed: u32,
     transpose: f32,
     phases: [f32; 2],
     strike: HitEnvelope,
     ring: HitEnvelope,
-    filter: Svf
+    filter: Svf,
+    cut: Cut
 }
 
 impl Voice {
     fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &BellParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
+        self.elapsed = 0;
+        self.cut.reset();
         self.id = id;
         self.age = age;
         self.level = strength;
@@ -71,17 +77,13 @@ impl Voice {
         self.ring.set(0.0, 0.0, decay, sample_rate);
         for envelope in [&mut self.strike, &mut self.ring] {
             envelope.set_floor(ENVELOPE_FLOOR);
-            if params.play == Play::Gate {envelope.trigger_held(1.0);} else {envelope.trigger(1.0);}
+            envelope.trigger(1.0);
         }
-    }
-
-    fn release(&mut self) {
-        self.strike.release();
-        self.ring.release();
     }
 
     #[inline]
     fn render(&mut self, params: &BellParams, band: &SvfCoefficients, sample_rate: f32) -> f32 {
+        self.elapsed = self.elapsed.saturating_add(1);
         let base = params.tune * libm::exp2f(self.transpose / 12.0) / sample_rate;
         let steps = [base, base * params.ratio];
         let mut waves = [0.0; 2];
@@ -94,8 +96,9 @@ impl Voice {
         let tones = waves[0] * params.balance.clamp(0.0, 1.0) + waves[1];
         let strike = params.strike.clamp(0.0, 1.0);
         let envelope = self.strike.next() * strike + self.ring.next() * (1.0 - strike);
-        if self.strike.is_idle() && self.ring.is_idle() {self.active = false;}
-        self.filter.process(tones, band).band * envelope * self.level * OUTPUT_GAIN
+        let cut = self.cut.next();
+        if (self.strike.is_idle() && self.ring.is_idle()) || self.cut.is_done() {self.active = false;}
+        self.filter.process(tones, band).band * envelope * self.level * OUTPUT_GAIN * cut
     }
 }
 
@@ -138,11 +141,6 @@ impl Bell {
         self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
-    pub fn note_off(&mut self, id: u32, params: &BellParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
-    }
-
     pub fn process(&mut self, params: &BellParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let color = params.color.clamp(100.0, sample_rate * 0.45);
@@ -156,6 +154,8 @@ impl Bell {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(BellParams, RELEASE);
 }
 
 #[cfg(test)]

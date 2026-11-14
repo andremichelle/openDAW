@@ -4,6 +4,9 @@ import {int, StringMapping, ValueMapping} from "@opendaw/lib-std"
 export namespace OpenDrum {
     export const PlayModes: ReadonlyArray<string> = ["Mono", "Poly", "Gate"]
     export const RumbleLengths: ReadonlyArray<string> = ["1/16", "1/8", "1/4", "1/2", "1/1"]
+    export const OffOn: ReadonlyArray<string> = ["Off", "On"]
+    // the address key under a device box where it sends the positions of its sounding hits
+    export const PositionsKey = 1001
     export const choice = (names: ReadonlyArray<string>): ValueMapping<int> =>
         ValueMapping.linearInteger(0, names.length - 1)
     export const Strings = {

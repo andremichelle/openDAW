@@ -12,7 +12,8 @@ import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@ope
 import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
-    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, SurgeonDeviceBox, OpenDrumKickDeviceBox, MaximizerDeviceBox, NanoDeviceBox, SamplerDeviceBox, NeuralAmpDeviceBox,
+    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, SurgeonDeviceBox, OpenDrumKickDeviceBox,
+    OpenDrumSnareDeviceBox, OpenDrumClapDeviceBox, OpenDrumTomDeviceBox, OpenDrumRimDeviceBox, OpenDrumHatDeviceBox, OpenDrumShakerDeviceBox, OpenDrumCymbalDeviceBox, OpenDrumBellDeviceBox, OpenDrumPercDeviceBox, MaximizerDeviceBox, NanoDeviceBox, SamplerDeviceBox, NeuralAmpDeviceBox,
     NoteFilterDeviceBox, ScaleMatrixDeviceBox, ChordKeysDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
     ApparatDeviceBox, CubedDeviceBox, KorpusDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
@@ -21,7 +22,8 @@ import {
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
     ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
-    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, SurgeonDeviceBoxAdapter, OpenDrumKickDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, SamplerDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
+    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, SurgeonDeviceBoxAdapter, OpenDrumKickDeviceBoxAdapter,
+    OpenDrumSnareDeviceBoxAdapter, OpenDrumClapDeviceBoxAdapter, OpenDrumTomDeviceBoxAdapter, OpenDrumRimDeviceBoxAdapter, OpenDrumHatDeviceBoxAdapter, OpenDrumShakerDeviceBoxAdapter, OpenDrumCymbalDeviceBoxAdapter, OpenDrumBellDeviceBoxAdapter, OpenDrumPercDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, SamplerDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ChordKeysDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
@@ -139,6 +141,24 @@ const buildBoxes = () => {
     const surgeon = SurgeonDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(surgeonUnit.input))
     const kickUnit = createUnit(90)
     const openDrumKick = OpenDrumKickDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(kickUnit.input))
+    const openDrumSnareUnit = createUnit(91)
+    const openDrumSnare = OpenDrumSnareDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumSnareUnit.input))
+    const openDrumClapUnit = createUnit(92)
+    const openDrumClap = OpenDrumClapDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumClapUnit.input))
+    const openDrumTomUnit = createUnit(93)
+    const openDrumTom = OpenDrumTomDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumTomUnit.input))
+    const openDrumRimUnit = createUnit(94)
+    const openDrumRim = OpenDrumRimDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumRimUnit.input))
+    const openDrumHatUnit = createUnit(95)
+    const openDrumHat = OpenDrumHatDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumHatUnit.input))
+    const openDrumShakerUnit = createUnit(96)
+    const openDrumShaker = OpenDrumShakerDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumShakerUnit.input))
+    const openDrumCymbalUnit = createUnit(97)
+    const openDrumCymbal = OpenDrumCymbalDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumCymbalUnit.input))
+    const openDrumBellUnit = createUnit(98)
+    const openDrumBell = OpenDrumBellDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumBellUnit.input))
+    const openDrumPercUnit = createUnit(99)
+    const openDrumPerc = OpenDrumPercDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(openDrumPercUnit.input))
     const nano = NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(nanoUnit.input))
     const samplerUnit = createUnit(40)
     const sampler = SamplerDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(samplerUnit.input))
@@ -171,7 +191,7 @@ const buildBoxes = () => {
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
     return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, velocity, vaporisateur, neon, tubular, surgeon, openDrumKick, nano, sampler, playfieldSample,
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, velocity, vaporisateur, neon, tubular, surgeon, openDrumKick, openDrumSnare, openDrumClap, openDrumTom, openDrumRim, openDrumHat, openDrumShaker, openDrumCymbal, openDrumBell, openDrumPerc, nano, sampler, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
@@ -269,6 +289,24 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new SurgeonDeviceBoxAdapter(context, boxes.surgeon), tsOnly: []},
     {name: "opendrum-kick", file: "device_opendrum_kick.wasm",
         createAdapter: context => new OpenDrumKickDeviceBoxAdapter(context, boxes.openDrumKick), tsOnly: []},
+    {name: "opendrum-snare", file: "device_opendrum_snare.wasm",
+        createAdapter: context => new OpenDrumSnareDeviceBoxAdapter(context, boxes.openDrumSnare), tsOnly: []},
+    {name: "opendrum-clap", file: "device_opendrum_clap.wasm",
+        createAdapter: context => new OpenDrumClapDeviceBoxAdapter(context, boxes.openDrumClap), tsOnly: []},
+    {name: "opendrum-tom", file: "device_opendrum_tom.wasm",
+        createAdapter: context => new OpenDrumTomDeviceBoxAdapter(context, boxes.openDrumTom), tsOnly: []},
+    {name: "opendrum-rim", file: "device_opendrum_rim.wasm",
+        createAdapter: context => new OpenDrumRimDeviceBoxAdapter(context, boxes.openDrumRim), tsOnly: []},
+    {name: "opendrum-hat", file: "device_opendrum_hat.wasm",
+        createAdapter: context => new OpenDrumHatDeviceBoxAdapter(context, boxes.openDrumHat), tsOnly: []},
+    {name: "opendrum-shaker", file: "device_opendrum_shaker.wasm",
+        createAdapter: context => new OpenDrumShakerDeviceBoxAdapter(context, boxes.openDrumShaker), tsOnly: []},
+    {name: "opendrum-cymbal", file: "device_opendrum_cymbal.wasm",
+        createAdapter: context => new OpenDrumCymbalDeviceBoxAdapter(context, boxes.openDrumCymbal), tsOnly: []},
+    {name: "opendrum-bell", file: "device_opendrum_bell.wasm",
+        createAdapter: context => new OpenDrumBellDeviceBoxAdapter(context, boxes.openDrumBell), tsOnly: []},
+    {name: "opendrum-perc", file: "device_opendrum_perc.wasm",
+        createAdapter: context => new OpenDrumPercDeviceBoxAdapter(context, boxes.openDrumPerc), tsOnly: []},
     {name: "maximizer", file: "device_maximizer.wasm",
         createAdapter: context => new MaximizerDeviceBoxAdapter(context, boxes.maximizer), tsOnly: []},
     {name: "nano", file: "device_nano.wasm",

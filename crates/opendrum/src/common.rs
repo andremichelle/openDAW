@@ -10,6 +10,15 @@ pub const CLICK_LENGTH: f32 = 0.03;
 const CLICK_NOISE: f32 = 0.006;
 const CLICK_GAIN: f32 = 3.0;
 const CLICK_Q: f32 = 1.5;
+/// How a device plays its notes: Mono cuts the ringing hit, Poly lets hits overlap, Gate cuts a hit at its note's end.
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub enum Play {
+    #[default]
+    Mono,
+    Poly,
+    Gate
+}
+
 /// The full asymmetry of the drive, an engine passes this or less.
 pub const DRIVE_BIAS: f32 = 0.3;
 
@@ -152,4 +161,40 @@ pub fn pulse(phase: f32, step: f32, width: f32) -> f32 {
     };
     let fall = if phase < width {phase - width + 1.0} else {phase - width};
     (if phase < width {1.0} else {-1.0}) + blep(phase) - blep(fall)
+}
+
+/// Ends a hit quickly when its note ends in Gate: a linear fade to silence. Plays 1 until it starts, valid when
+/// zeroed.
+#[derive(Clone, Copy, Default)]
+pub struct Cut {
+    cutting: bool,
+    remaining: u32,
+    step: f32,
+    gain: f32
+}
+
+impl Cut {
+    pub fn reset(&mut self) {self.cutting = false;}
+
+    pub fn is_cutting(&self) -> bool {self.cutting}
+
+    pub fn start(&mut self, seconds: f32, sample_rate: f32) {
+        if self.cutting {return;}
+        let samples = ((seconds * sample_rate) as u32).max(1);
+        self.cutting = true;
+        self.remaining = samples;
+        self.step = 1.0 / samples as f32;
+        self.gain = 1.0;
+    }
+
+    #[inline]
+    pub fn next(&mut self) -> f32 {
+        if !self.cutting {return 1.0;}
+        if self.remaining == 0 {return 0.0;}
+        self.remaining -= 1;
+        self.gain = (self.gain - self.step).max(0.0);
+        self.gain
+    }
+
+    pub fn is_done(&self) -> bool {self.cutting && self.remaining == 0}
 }

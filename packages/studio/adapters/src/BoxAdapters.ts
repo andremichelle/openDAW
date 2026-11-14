@@ -51,6 +51,15 @@ import {
     ChordEventBox,
     NeonDeviceBox,
     OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
     MaximizerDeviceBox,
@@ -164,6 +173,15 @@ import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter
 import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {OpenDrumKickDeviceBoxAdapter} from "./devices/instruments/OpenDrumKickDeviceBoxAdapter"
+import {OpenDrumPercDeviceBoxAdapter} from "./devices/instruments/OpenDrumPercDeviceBoxAdapter"
+import {OpenDrumBellDeviceBoxAdapter} from "./devices/instruments/OpenDrumBellDeviceBoxAdapter"
+import {OpenDrumCymbalDeviceBoxAdapter} from "./devices/instruments/OpenDrumCymbalDeviceBoxAdapter"
+import {OpenDrumShakerDeviceBoxAdapter} from "./devices/instruments/OpenDrumShakerDeviceBoxAdapter"
+import {OpenDrumHatDeviceBoxAdapter} from "./devices/instruments/OpenDrumHatDeviceBoxAdapter"
+import {OpenDrumRimDeviceBoxAdapter} from "./devices/instruments/OpenDrumRimDeviceBoxAdapter"
+import {OpenDrumTomDeviceBoxAdapter} from "./devices/instruments/OpenDrumTomDeviceBoxAdapter"
+import {OpenDrumClapDeviceBoxAdapter} from "./devices/instruments/OpenDrumClapDeviceBoxAdapter"
+import {OpenDrumSnareDeviceBoxAdapter} from "./devices/instruments/OpenDrumSnareDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {SurgeonDeviceBoxAdapter} from "./devices/instruments/SurgeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
@@ -332,6 +350,24 @@ export class BoxAdapters implements Terminable {
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
             visitOpenDrumKickDeviceBox: (box: OpenDrumKickDeviceBox) => new OpenDrumKickDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumPercDeviceBox: (box: OpenDrumPercDeviceBox) =>
+                new OpenDrumPercDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumBellDeviceBox: (box: OpenDrumBellDeviceBox) =>
+                new OpenDrumBellDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumCymbalDeviceBox: (box: OpenDrumCymbalDeviceBox) =>
+                new OpenDrumCymbalDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumShakerDeviceBox: (box: OpenDrumShakerDeviceBox) =>
+                new OpenDrumShakerDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumHatDeviceBox: (box: OpenDrumHatDeviceBox) =>
+                new OpenDrumHatDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumRimDeviceBox: (box: OpenDrumRimDeviceBox) =>
+                new OpenDrumRimDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumTomDeviceBox: (box: OpenDrumTomDeviceBox) =>
+                new OpenDrumTomDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumClapDeviceBox: (box: OpenDrumClapDeviceBox) =>
+                new OpenDrumClapDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumSnareDeviceBox: (box: OpenDrumSnareDeviceBox) =>
+                new OpenDrumSnareDeviceBoxAdapter(this.#context, box),
             visitTubularDeviceBox: (box: TubularDeviceBox) => new TubularDeviceBoxAdapter(this.#context, box),
             visitSurgeonDeviceBox: (box: SurgeonDeviceBox) => new SurgeonDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),

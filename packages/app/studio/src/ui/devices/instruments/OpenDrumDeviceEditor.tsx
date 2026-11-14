@@ -1,8 +1,10 @@
 import css from "./OpenDrumDeviceEditor.sass?inline"
-import {Color, EmptyExec, Lifecycle, Option, Provider} from "@opendaw/lib-std"
+import {Color, EmptyExec, Func, Lifecycle, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
-import {AutomatableParameterFieldAdapter, DeviceHost, InstrumentDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {
+    AutomatableParameterFieldAdapter, DeviceHost, InstrumentDeviceBoxAdapter, OpenDrum
+} from "@opendaw/studio-adapters"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -24,25 +26,34 @@ export type OpenDrumSection = {
     readonly columns: ReadonlyArray<ReadonlyArray<AutomatableParameterFieldAdapter<number>>>
 }
 
+type Value = (parameter: AutomatableParameterFieldAdapter<number>) => number
+
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
     adapter: InstrumentDeviceBoxAdapter
     deviceHost: DeviceHost
+    engine: OpenDrumSynth.Engine
+    parameters: ReadonlyArray<AutomatableParameterFieldAdapter<number>>
+    contour: Func<Value, OpenDrumSynth.Contour>
     sections: ReadonlyArray<OpenDrumSection>
-    request: Provider<OpenDrumSynth.Request>
-    color: Color
     icon: IconSymbol
 }
 
 const Rows = 4
 
-export const OpenDrumDeviceEditor = ({lifecycle, service, adapter, deviceHost, sections, request, color, icon}: Construct) => {
+export const OpenDrumDeviceEditor = ({
+    lifecycle, service, adapter, deviceHost, engine, parameters, contour, sections, icon
+}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
-    const createControl = (parameter: AutomatableParameterFieldAdapter<number>, column: number, row: number) => (
+    // "Noise Decay" shows as "Decay" under NOISE
+    const shortName = (name: string, title: string): string =>
+        name.toLowerCase().startsWith(`${title.toLowerCase()} `) ? name.slice(title.length + 1) : name
+    const createControl = (parameter: AutomatableParameterFieldAdapter<number>, title: string, column: number,
+                           row: number) => (
         <div className="control" style={{gridArea: `${row * 2 + 2} / ${column + 2} / ${row * 2 + 4} / ${column + 3}`}}>
-            <h3>{parameter.name}</h3>
+            <h3>{shortName(parameter.name, title)}</h3>
             <AutomationControl lifecycle={lifecycle}
                                editing={editing}
                                midiLearning={midiLearning}
@@ -68,26 +79,42 @@ export const OpenDrumDeviceEditor = ({lifecycle, service, adapter, deviceHost, s
         groups.push(<h3 className="head" style={{gridArea: `1 / ${column + 2} / 2 / ${column + 2 + columns.length}`,
             "--color": sectionColor.toString()}}>{title}</h3>)
         columns.forEach((parameters, offset) => parameters.slice(0, Rows)
-            .forEach((parameter, row) => groups.push(createControl(parameter, column + offset, row))))
+            .forEach((parameter, row) => groups.push(createControl(parameter, title, column + offset, row))))
         column += columns.length
     }
     const canvas: HTMLCanvasElement = <canvas/>
     let picture: Option<OpenDrumSynth.Picture> = Option.None
-    const painter = lifecycle.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight, devicePixelRatio}) => {
-        const width = actualWidth * devicePixelRatio
-        const height = actualHeight * devicePixelRatio
-        context.clearRect(0, 0, width, height)
-        picture.ifSome(current => OpenDrumDisplay.paint(context, width, height, devicePixelRatio, current, color))
+    let positions: Float32Array = new Float32Array([-1])
+    let showing = false
+    const painter = lifecycle.own(new CanvasPainter(canvas, painting => {
+        const {context, actualWidth, actualHeight, devicePixelRatio} = painting
+        context.clearRect(0, 0, actualWidth, actualHeight)
+        picture.ifSome(current =>
+            OpenDrumDisplay.paint(context, actualWidth, actualHeight, devicePixelRatio, current, positions))
     }))
-    // one render at a time, a change meanwhile renders the current values once it is done
+    const now: Value = parameter => parameter.getControlledValue()
+    const {bpm} = project.timelineBox
+    const ordered = [...parameters].sort((first, second) => first.address.fieldKeys[0] - second.address.fieldKeys[0])
+    const tempo = OpenDrumSynth.followsTempo(engine)
+    const request = (): OpenDrumSynth.Request =>
+        ({engine, values: ordered.map(now), bpm: tempo ? bpm.getValue() : 120, contour: contour(now)})
     const closing = new AbortController()
-    // a worker of its own for this editor, ended with it
-    const renderer = OpenDrumSynth.start()
+    let renderer: Option<Promise<OpenDrumSynth.Renderer>> = Option.None
+    const obtain = (): Promise<OpenDrumSynth.Renderer> => {
+        if (renderer.isEmpty()) {
+            const started = OpenDrumSynth.start()
+            started.catch(() => renderer = Option.None)
+            renderer = Option.wrap(started)
+        }
+        return renderer.unwrap()
+    }
     let rendering = false
     let outdated = false
     let requested = ""
-    // the display is optional: without the worker it stays empty, the device plays the same
+    let retried = false
+    let stale = false
     const update = (): void => {
+        if (stale) {return}
         if (rendering) {
             outdated = true
             return
@@ -98,25 +125,47 @@ export const OpenDrumDeviceEditor = ({lifecycle, service, adapter, deviceHost, s
         requested = key
         rendering = true
         outdated = false
-        renderer
+        obtain()
             .then(loaded => loaded.picture(next, closing.signal))
             .then(result => {
+                retried = false
                 picture = Option.wrap(result)
                 painter.requestUpdate()
             }, (error: unknown) => {
-                if (!closing.signal.aborted) {console.debug("openDrum display", error)}
+                requested = ""
+                if (closing.signal.aborted) {return}
+                if (error instanceof Error && error.message === OpenDrumSynth.OutOfDate) {
+                    stale = true
+                    console.warn(`openDrum display: ${OpenDrumSynth.OutOfDate}`)
+                    return
+                }
+                console.debug("openDrum display", error)
+                renderer.ifSome(started => started.then(loaded => loaded.terminate(), EmptyExec))
+                renderer = Option.None
+                if (!retried) {
+                    retried = true
+                    outdated = true
+                }
             })
             .finally(() => {
                 rendering = false
-                if (outdated && !closing.signal.aborted) {update()}
+                if (outdated && !closing.signal.aborted) {scheduled.request()}
             })
     }
-    sections.forEach(({columns}) => columns.forEach(parameters => parameters
-        .forEach(parameter => lifecycle.own(parameter.subscribe(update)))))
+    const scheduled = lifecycle.own(deferNextFrame(update))
+    parameters.forEach(parameter => lifecycle.own(parameter.subscribe(scheduled.request)))
+    if (tempo) {lifecycle.own(bpm.subscribe(scheduled.request))}
+    lifecycle.own(project.liveStreamReceiver.subscribeFloats(adapter.address.append(OpenDrum.PositionsKey), values => {
+        const sounding = values[0] >= 0.0
+        if (!sounding && !showing) {return}
+        showing = sounding
+        positions = values
+        painter.requestUpdate()
+    }))
     lifecycle.own({
         terminate: () => {
             closing.abort()
-            renderer.then(loaded => loaded.terminate(), EmptyExec)
+            renderer.ifSome(started => started.then(loaded => loaded.terminate(), EmptyExec))
         }
     })
     update()

@@ -1,9 +1,8 @@
-import {Arrays, Exec, int, isDefined, Option, Optional, Terminable} from "@opendaw/lib-std"
+import {Arrays, Exec, int, isDefined, Option, Optional, Terminable, tryCatch} from "@opendaw/lib-std"
 import {WasmProtocol} from "./WasmProtocol"
 
 export namespace WasmWorker {
-    /** How a running call ends when its signal aborts: `discard` lets it finish and drops the result (the
-     * default), `restart` terminates the worker at once and starts a fresh one. */
+    /** How an aborted running call ends: `discard` drops its result (default), `restart` replaces the worker. */
     export type AbortMode = "discard" | "restart"
     export type CallOptions = {
         readonly maxResultBytes: int
@@ -24,6 +23,7 @@ export namespace WasmWorker {
             event.preventDefault()
             receive({type: "broken", reason: event.message})
         }
+        worker.onmessageerror = () => receive({type: "broken", reason: "a message from the worker could not be read"})
         return {
             send: (message, transfer) => worker.postMessage(message, transfer),
             terminate: () => worker.terminate()
@@ -60,7 +60,10 @@ class WasmWorkerImpl implements WasmWorker {
     #endpoint: Option<WasmProtocol.Endpoint> = Option.None
     #running: Option<Job> = Option.None
     #ids: int = 0
+    #generation: int = 0
     #terminated = false
+    #answered = false
+    #broken: Option<Error> = Option.None
 
     constructor(name: string, module: WebAssembly.Module, factory: WasmProtocol.EndpointFactory) {
         this.name = name
@@ -72,6 +75,7 @@ class WasmWorkerImpl implements WasmWorker {
     call(method: string, input: ArrayBuffer,
          {maxResultBytes, signal, abort}: WasmWorker.CallOptions): Promise<ArrayBuffer> {
         if (this.#terminated) {return Promise.reject(new Error(`${this.name} is terminated`))}
+        if (this.#broken.nonEmpty()) {return Promise.reject(this.#broken.unwrap())}
         if (isDefined(signal) && signal.aborted) {return Promise.reject(abortReason(signal))}
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
         const onAbort = () => this.#abort(job, abortReason(signal))
@@ -99,7 +103,9 @@ class WasmWorkerImpl implements WasmWorker {
     }
 
     #start(): void {
-        const endpoint = this.#factory(message => this.#receive(message))
+        this.#answered = false
+        const generation = ++this.#generation
+        const endpoint = this.#factory(message => {if (generation === this.#generation) {this.#receive(message)}})
         endpoint.send({type: "init", module: this.#module}, [])
         this.#endpoint = Option.wrap(endpoint)
     }
@@ -110,12 +116,18 @@ class WasmWorkerImpl implements WasmWorker {
     }
 
     #next(): void {
-        if (this.#terminated || this.#running.nonEmpty()) {return}
+        if (this.#terminated || this.#broken.nonEmpty() || this.#running.nonEmpty()) {return}
         const job: Optional<Job> = this.#queue.shift()
         if (!isDefined(job)) {return}
-        this.#running = Option.wrap(job)
         const {id, method, input, maxResultBytes} = job
-        this.#endpoint.unwrap().send({type: "call", id, method, input, maxResultBytes}, [input])
+        const endpoint = this.#endpoint.unwrap()
+        const sent = tryCatch(() => endpoint.send({type: "call", id, method, input, maxResultBytes}, [input]))
+        if (sent.status === "failure") {
+            this.#settle(job, sent.error)
+            this.#next()
+            return
+        }
+        this.#running = Option.wrap(job)
     }
 
     #receive(message: WasmProtocol.FromWorker): void {
@@ -124,10 +136,20 @@ class WasmWorkerImpl implements WasmWorker {
             const reason = new Error(`${this.name}: ${message.reason}`)
             this.#running.ifSome(job => this.#settle(job, reason))
             this.#running = Option.None
-            this.#restart()
-            this.#next()
+            if (this.#answered) {
+                this.#restart()
+                this.#next()
+            } else {
+                this.#broken = Option.wrap(reason)
+                this.#endpoint.ifSome(endpoint => endpoint.terminate())
+                this.#endpoint = Option.None
+                const queued = [...this.#queue]
+                Arrays.clear(this.#queue)
+                queued.forEach(job => this.#settle(job, reason))
+            }
             return
         }
+        this.#answered = true
         if (this.#running.isEmpty() || this.#running.unwrap().id !== message.id) {return}
         const job = this.#running.unwrap()
         this.#running = Option.None
@@ -153,7 +175,6 @@ class WasmWorkerImpl implements WasmWorker {
             this.#restart()
             this.#next()
         } else {
-            // the worker is still busy with it, its answer is dropped and only then the next call starts
             this.#settle(job, reason)
         }
     }

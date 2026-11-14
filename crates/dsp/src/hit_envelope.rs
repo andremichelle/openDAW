@@ -29,8 +29,7 @@ pub struct HitEnvelope {
     curve: f32,
     floor: f32,
     exponential: f32,
-    linear: f32,
-    held: bool
+    linear: f32
 }
 
 impl HitEnvelope {
@@ -50,22 +49,6 @@ impl HitEnvelope {
     pub fn set_curve(&mut self, curve: f32) {self.curve = curve.clamp(-1.0, 1.0);}
 
     pub fn trigger(&mut self, level: f32) {
-        self.held = false;
-        self.start(level);
-    }
-
-    /// Like `trigger`, but stays at the top after the hold time until `release`.
-    pub fn trigger_held(&mut self, level: f32) {
-        self.held = true;
-        self.start(level);
-    }
-
-    pub fn release(&mut self) {
-        self.held = false;
-        if self.stage == Stage::Hold {self.remaining = 0;}
-    }
-
-    fn start(&mut self, level: f32) {
         self.level = level;
         if self.attack_samples > 0 {
             self.stage = Stage::Attack;
@@ -100,7 +83,7 @@ impl HitEnvelope {
             Stage::Hold => {
                 if self.remaining > 0 {
                     self.remaining -= 1;
-                } else if !self.held {
+                } else {
                     self.stage = Stage::Decay;
                     self.exponential = 1.0;
                     self.linear = 1.0;
@@ -169,17 +152,6 @@ mod tests {
         envelope.trigger(1.0);
         let after = envelope.next();
         assert!(after >= before, "{before} -> {after}");
-    }
-
-    #[test]
-    fn held_stays_until_release() {
-        let mut envelope = HitEnvelope::default();
-        envelope.set(0.0, 0.01, 0.1, RATE);
-        envelope.trigger_held(1.0);
-        assert_eq!(run(&mut envelope, (RATE * 2.0) as usize)[1], 1.0, "still at the top after 2 s");
-        envelope.release();
-        let after = run(&mut envelope, (0.05 * RATE) as usize)[1];
-        assert!((after - 0.0316).abs() < 0.003, "-30 dB 50 ms into a 100 ms decay, {after}");
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! Run: cargo run -p opendrum-lab --release --bin fit_snare -- SD5050 ST3T3S3
 //! `all` fits every snare reference and writes `measured/snare_fits.tsv`.
 
-use opendrum::kick::Play;
+use opendrum::common::Play;
 use opendrum::snare::{Snare, SnareParams};
 use opendrum_lab::engine_fit::{run, Axis, Engine};
 use opendrum_lab::fit::Card;

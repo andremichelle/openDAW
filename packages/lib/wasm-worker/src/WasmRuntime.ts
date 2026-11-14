@@ -12,6 +12,7 @@ class Instance {
     readonly #exports: WebAssembly.Exports
     readonly #input: Area = {pointer: 0, capacity: 0}
     readonly #output: Area = {pointer: 0, capacity: 0}
+    #damaged = false
 
     constructor(module: WebAssembly.Module) {
         const instance = new WebAssembly.Instance(module, {})
@@ -29,21 +30,34 @@ class Instance {
         this.#reserve(this.#input, input.byteLength)
         this.#reserve(this.#output, maxResultBytes)
         new Uint8Array(this.#memory.buffer, this.#input.pointer, input.byteLength).set(new Uint8Array(input))
-        const written = Number(target(this.#input.pointer, input.byteLength, this.#output.pointer, maxResultBytes))
+        const called = tryCatch(() => target(this.#input.pointer, input.byteLength, this.#output.pointer, maxResultBytes))
+        if (called.status === "failure") {
+            this.#damaged = true
+            throw called.error
+        }
+        const written = Number(called.value)
         if (!Number.isInteger(written)) {throw new Error(`'${method}' returned ${written}`)}
         if (written < 0) {throw new Error(`'${method}' failed with ${written}`)}
         if (written > maxResultBytes) {throw new Error(`result of '${method}' larger than ${maxResultBytes} bytes`)}
         return this.#memory.buffer.slice(this.#output.pointer, this.#output.pointer + written)
     }
 
+    get damaged(): boolean {return this.#damaged}
+
     #reserve(area: Area, length: int): void {
         if (length <= area.capacity) {return}
-        const pointer = Number(this.#alloc(length))
+        const capacity = Math.max(length, area.capacity * 2)
+        const allocated = tryCatch(() => this.#alloc(capacity))
+        if (allocated.status === "failure") {
+            this.#damaged = true
+            throw allocated.error
+        }
+        const pointer = Number(allocated.value)
         if (!Number.isInteger(pointer) || pointer <= 0 || pointer % 8 !== 0) {
-            throw new Error(`alloc(${length}) returned ${pointer}, not an 8 byte aligned pointer`)
+            throw new Error(`alloc(${capacity}) returned ${pointer}, not an 8 byte aligned pointer`)
         }
         area.pointer = pointer
-        area.capacity = length
+        area.capacity = capacity
     }
 }
 
@@ -91,8 +105,7 @@ export class WasmRuntime {
             this.#port.post({type: "result", id, output: result.value}, [result.value])
             return
         }
-        // a trap can leave the instance's memory in any state, the next call starts on a fresh one
-        if (result.error instanceof WebAssembly.RuntimeError) {this.#instance = Option.None}
+        if (instance.damaged) {this.#instance = Option.None}
         const reason = result.error instanceof Error ? result.error.message : String(result.error)
         this.#port.post({type: "failure", id, reason}, [])
     }

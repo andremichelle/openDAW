@@ -9,7 +9,7 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::resonator::{Resonator, ResonatorCoefficients};
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{Click, ClickShape, Drive, CLICK_LENGTH, DRIVE_BIAS};
+use crate::common::{Click, ClickShape, Cut, Drive, Play, CLICK_LENGTH, DRIVE_BIAS};
 
 pub const VOICES: usize = 16;
 pub const RUMBLE_LENGTHS: [f32; 5] = [0.0625, 0.125, 0.25, 0.5, 1.0];
@@ -33,18 +33,12 @@ const RUMBLE_COMB_LINE: usize = 7100;
 const RUMBLE_ALLPASS_LINE: usize = 2450;
 const RUMBLE_TONE: f32 = 1.5;
 const SILENT: f32 = 0.0001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.01;
 const DRIVE_DC_BLOCK: f32 = 5.0;
 const DUCK_THRESHOLD: f32 = 0.1;
 // kick and rumble together stay below this peak (Duck 100 % never reaches it)
 const RUMBLE_CEILING: f32 = 2.0;
-
-#[derive(Clone, Copy, Default, PartialEq, Debug)]
-pub enum Play {
-    #[default]
-    Mono,
-    Poly,
-    Gate
-}
 
 /// Times in seconds, Pitch and Drift in semitones above Tune, Tone in Hz, Drive in dB, Length in bars, Punch -1
 /// to 1, the rest 0 to 1.
@@ -100,19 +94,18 @@ struct Voice {
     level: f32,
     transpose: f32,
     slide: f32,
-    gated: bool,
     bend: f32,
     drift: f32,
     elapsed: u32,
     oscillator: DrumOscillator,
     amp: HitEnvelope,
     click: Click,
-    skins: [Resonator; 4]
+    skins: [Resonator; 4],
+    cut: Cut
 }
 
 impl Voice {
-    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &KickParams, held: bool,
-             sample_rate: f32) {
+    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &KickParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
         self.id = id;
@@ -120,7 +113,7 @@ impl Voice {
         self.level = strength;
         self.transpose = transpose;
         self.slide = 0.0;
-        self.gated = held;
+        self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.drift = params.drift * (0.5 + 0.5 * strength);
         self.elapsed = 0;
@@ -128,7 +121,7 @@ impl Voice {
         self.click.reset(age.wrapping_mul(0x9E37_79B9) ^ 0x0D1, restart);
         self.amp.set(0.0, 0.0, params.decay, sample_rate);
         self.amp.set_curve(params.punch);
-        if held {self.amp.trigger_held(1.0);} else {self.amp.trigger(1.0);}
+        self.amp.trigger(1.0);
         self.skins.iter_mut().for_each(|skin| {
             skin.reset();
             skin.strike(params.skin * SKIN_GAIN);
@@ -157,8 +150,9 @@ impl Voice {
                 ringing |= skin.amplitude() > SILENT;
             }
         }
-        if self.amp.is_idle() && seconds >= CLICK_LENGTH && !ringing {self.active = false;}
-        value * self.level
+        let cut = self.cut.next();
+        if (self.amp.is_idle() && seconds >= CLICK_LENGTH && !ringing) || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -175,6 +169,9 @@ struct Rumble {
     since_hit: u32,
     started: bool,
     sounding: bool,
+    owner: u32,
+    cut: Cut,
+    restart: bool,
     follower: f32,
     rumble_follower: f32,
     kick_follower: f32
@@ -194,6 +191,9 @@ impl Rumble {
             since_hit: 0,
             started: false,
             sounding: false,
+            owner: 0,
+            cut: Cut::default(),
+            restart: false,
             follower: 0.0,
             rumble_follower: 0.0,
             kick_follower: 0.0
@@ -221,9 +221,26 @@ impl Rumble {
         value
     }
 
-    fn hit(&mut self) {
+    fn hit(&mut self, owner: u32) {
         self.since_hit = 0;
         self.started = true;
+        self.owner = owner;
+        if self.cut.is_done() {
+            self.clear();
+        } else if self.cut.is_cutting() {
+            self.restart = true;
+        }
+    }
+
+    // a hit after a cut starts without the tail that was cut, a cut still fading ends first
+    fn clear(&mut self) {
+        self.cut.reset();
+        self.restart = false;
+        self.combs.iter_mut().for_each(|line| line.fill(0.0));
+        self.allpasses.iter_mut().for_each(|line| line.fill(0.0));
+        self.comb_damped = [0.0; 4];
+        self.filters.iter_mut().for_each(|filter| filter.reset());
+        self.rumble_follower = 0.0;
     }
 
     /// The kick feeds the diffuse tail, saturated and low passed twice. The kick's own level (smoothed over its
@@ -240,10 +257,14 @@ impl Rumble {
             self.sounding = false;
             return 0.0;
         }
+        if self.restart && self.cut.is_done() {
+            self.clear();
+            self.since_hit = 0;
+        }
         let tail = self.diffuse(input);
         let seconds = self.since_hit as f32 / sample_rate;
         self.since_hit = self.since_hit.saturating_add(1);
-        self.sounding = seconds < length;
+        self.sounding = seconds < length && !self.cut.is_done();
         let low = self.filters[0].process(libm::tanhf(tail * 3.0), filter).low;
         let low = self.filters[1].process(low, filter).low;
         let over = libm::sqrtf(self.follower * 2.0) / DUCK_THRESHOLD;
@@ -252,7 +273,8 @@ impl Rumble {
         let rumble = low * RUMBLE_GAIN * level * ducked * fade;
         self.rumble_follower = rumble.abs().max(self.rumble_follower * (1.0 - follow.1));
         let room = (RUMBLE_CEILING - self.kick_follower).max(0.0);
-        if self.rumble_follower > room {rumble * room / self.rumble_follower} else {rumble}
+        let cut = self.cut.next();
+        if self.rumble_follower > room {rumble * room / self.rumble_follower * cut} else {rumble * cut}
     }
 }
 
@@ -291,23 +313,9 @@ impl Kick {
         let voice = &mut self.voices[index];
         let previous = voice.transpose + voice.slide;
         let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
-        if params.play == Play::Gate && voice.active && voice.gated {
-            voice.id = id;
-            voice.slide = if params.glide > 0.0 {previous - transpose} else {0.0};
-            voice.transpose = transpose;
-            return;
-        }
-        voice.start(id, hits, strength, transpose, params, params.play == Play::Gate, sample_rate);
+        voice.start(id, hits, strength, transpose, params, sample_rate);
         if sliding {voice.slide = previous - transpose;}
-        self.rumble.hit();
-    }
-
-    pub fn note_off(&mut self, id: u32, params: &KickParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| {
-            voice.gated = false;
-            voice.amp.release();
-        });
+        self.rumble.hit(id);
     }
 
     /// Renders mono into `output`. `bpm` sets the rumble length.
@@ -348,6 +356,16 @@ impl Kick {
     }
 
     pub fn is_silent(&self) -> bool {!self.rumble.sounding && self.voices.iter().all(|voice| !voice.active)}
+
+    // a choke cuts the rumble, a note's end only the rumble its own hit started
+    /// Clears what the rumble still holds, its device stops rendering after a second of silence.
+    pub fn rest(&mut self) {self.rumble.clear();}
+
+    fn cut_rumble(&mut self, id: Option<u32>) {
+        if id.map_or(true, |id| id == self.rumble.owner) {self.rumble.cut.start(RELEASE, self.sample_rate);}
+    }
+
+    voice_queries!(KickParams, RELEASE, cut_rumble);
 }
 
 #[cfg(test)]
@@ -398,16 +416,21 @@ mod tests {
     }
 
     #[test]
-    fn gate_holds_until_note_off() {
+    fn gate_plays_the_hit_as_mono_and_cuts_it_at_note_off() {
+        let gate = KickParams {play: Play::Gate, ..KickParams::default()};
+        let held = render(&gate, 1.0);
+        assert_eq!(held, render(&KickParams::default(), 1.0), "a held note plays the hit unchanged");
         let mut kick = Kick::new(RATE);
-        let params = KickParams {decay: 0.05, play: Play::Gate, ..KickParams::default()};
-        kick.note_on(7, 1.0, 0.0, &params);
-        let mut output = vec![0.0; RATE as usize];
-        kick.process(&params, 120.0, &mut output);
-        assert!(peak(&output[output.len() - 4800..]) > 0.5, "still sounding after 1 s");
-        kick.note_off(7, &params);
-        kick.process(&params, 120.0, &mut output);
-        assert!(kick.is_silent());
+        kick.note_on(7, 1.0, 0.0, &gate);
+        let mut start = vec![0.0; (0.1 * RATE) as usize];
+        kick.process(&gate, 120.0, &mut start);
+        kick.note_off(7, &gate);
+        let mut release = vec![0.0; (RELEASE * RATE) as usize + 1];
+        kick.process(&gate, 120.0, &mut release);
+        assert!(kick.is_silent(), "silent after the release");
+        let steps = release.windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
+        let before = start.windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
+        assert!(steps <= before, "the release fades, it does not click");
     }
 
     #[test]
@@ -500,20 +523,102 @@ mod tests {
     }
 
     #[test]
-    fn gate_plays_legato_while_held() {
-        let params = KickParams {decay: 0.2, play: Play::Gate, glide: 0.05, ..KickParams::default()};
+    fn gate_and_choke_cut_the_rumble_too() {
+        for gate in [true, false] {
+            let params = KickParams {rumble: 1.0, length: 1.0, play: if gate {Play::Gate} else {Play::Mono},
+                ..KickParams::default()};
+            let mut kick = Kick::new(RATE);
+            kick.note_on(1, 1.0, 0.0, &params);
+            let mut output = vec![0.0; (0.3 * RATE) as usize];
+            kick.process(&params, 120.0, &mut output);
+            if gate {kick.note_off(1, &params);} else {kick.choke();}
+            let mut after = vec![0.0; (0.02 * RATE) as usize];
+            kick.process(&params, 120.0, &mut after);
+            assert!(kick.is_silent(), "body and rumble are cut ({})", if gate {"gate"} else {"choke"});
+        }
+    }
+
+    #[test]
+    fn the_rumble_is_cut_after_the_body_has_ended() {
+        let params = KickParams {rumble: 1.0, length: 1.0, decay: 0.1, play: Play::Gate, ..KickParams::default()};
+        for choke in [false, true] {
+            let mut kick = Kick::new(RATE);
+            kick.note_on(1, 1.0, 0.0, &params);
+            let mut output = vec![0.0; (0.5 * RATE) as usize];
+            kick.process(&params, 120.0, &mut output);
+            assert!(!kick.is_silent(), "the body has ended, the rumble rings");
+            if choke {kick.choke();} else {kick.note_off(1, &params);}
+            let mut after = vec![0.0; (0.02 * RATE) as usize];
+            kick.process(&params, 120.0, &mut after);
+            assert!(kick.is_silent());
+            assert!(after[after.len() - 10..].iter().all(|value| value.abs() < 0.001));
+        }
+    }
+
+    #[test]
+    fn a_cut_rumble_does_not_return_with_the_next_hit() {
+        let params = KickParams {rumble: 1.0, length: 1.0, click: 0.0, play: Play::Gate, ..KickParams::default()};
+        let mut cut = Kick::new(RATE);
+        cut.note_on(1, 1.0, 0.0, &params);
+        let mut output = vec![0.0; (0.3 * RATE) as usize];
+        cut.process(&params, 120.0, &mut output);
+        cut.note_off(1, &params);
+        let mut silence = vec![0.0; (0.05 * RATE) as usize];
+        cut.process(&params, 120.0, &mut silence);
+        cut.note_on(2, 1.0, 0.0, &params);
+        let mut again = vec![0.0; 64];
+        cut.process(&params, 120.0, &mut again);
+        let mut fresh = Kick::new(RATE);
+        fresh.note_on(2, 1.0, 0.0, &params);
+        let mut first = vec![0.0; 64];
+        fresh.process(&params, 120.0, &mut first);
+        let jump = again.iter().zip(&first).fold(0.0f32, |peak, (value, plain)| peak.max((value - plain).abs()));
+        assert!(jump < 0.05, "no old tail at the start of the next hit, {jump}");
+    }
+
+    #[test]
+    fn a_legato_gate_note_does_not_click_the_rumble() {
+        let params = KickParams {rumble: 1.0, length: 1.0, click: 0.0, skin: 0.0, play: Play::Gate,
+            ..KickParams::default()};
+        let mut kick = Kick::new(RATE);
+        kick.note_on(1, 1.0, 0.0, &params);
+        let mut output = vec![0.0; (0.4 * RATE) as usize];
+        kick.process(&params, 120.0, &mut output);
+        let steady = output.windows(2).skip(output.len() / 2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
+        kick.note_off(1, &params);
+        kick.note_on(2, 1.0, 0.0, &params);
+        let mut joint = vec![0.0; (0.03 * RATE) as usize];
+        kick.process(&params, 120.0, &mut joint);
+        let last = *output.last().unwrap();
+        let step = (joint[0] - last).abs();
+        assert!(step < steady * 4.0 + 0.3, "no jump where the next note begins, {step} against {steady}");
+    }
+
+    #[test]
+    fn an_older_note_does_not_cut_the_new_rumble() {
+        let params = KickParams {rumble: 1.0, length: 1.0, play: Play::Gate, ..KickParams::default()};
+        let mut kick = Kick::new(RATE);
+        kick.note_on(1, 1.0, 0.0, &params);
+        kick.note_on(2, 1.0, 0.0, &params);
+        kick.note_off(1, &params);
+        let mut output = vec![0.0; (0.3 * RATE) as usize];
+        kick.process(&params, 120.0, &mut output);
+        assert!(!kick.is_silent(), "the second note still owns the hit and its rumble");
+    }
+
+    #[test]
+    fn gate_retriggers_a_held_note() {
+        let params = KickParams {play: Play::Gate, ..KickParams::default()};
         let mut kick = Kick::new(RATE);
         kick.note_on(1, 1.0, 0.0, &params);
         let mut output = vec![0.0; (0.5 * RATE) as usize];
         kick.process(&params, 120.0, &mut output);
         kick.note_on(2, 1.0, 5.0, &params);
-        assert_eq!(kick.voices[0].elapsed as usize, output.len(), "no retrigger while the gate is held");
+        assert_eq!(kick.voices[0].elapsed, 0, "a new note is a new hit");
         kick.note_off(1, &params);
-        kick.process(&params, 120.0, &mut output);
-        assert!(!kick.is_silent(), "the old id no longer owns the voice");
-        kick.note_off(2, &params);
-        kick.process(&params, 120.0, &mut output);
-        assert!(kick.is_silent());
+        let mut rest = vec![0.0; (0.05 * RATE) as usize];
+        kick.process(&params, 120.0, &mut rest);
+        assert!(!kick.is_silent(), "the old note no longer owns the voice");
     }
 
     #[test]

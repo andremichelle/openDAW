@@ -40,7 +40,7 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 # The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
-DEVICE_CRATES="device-korpus device-cubed device-autotune device-revamp device-pitch device-note-filter device-scale-matrix device-chord-keys device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-neon device-tubular device-surgeon device-opendrum-kick device-nano device-sampler device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-convolver device-soundfont device-vocoder device-neural-amp device-wclap device-wclap-instrument device-wclap-midi"
+DEVICE_CRATES="device-korpus device-cubed device-autotune device-revamp device-pitch device-note-filter device-scale-matrix device-chord-keys device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-neon device-tubular device-surgeon device-opendrum-kick device-opendrum-perc device-opendrum-bell device-opendrum-cymbal device-opendrum-shaker device-opendrum-hat device-opendrum-rim device-opendrum-tom device-opendrum-clap device-opendrum-snare device-nano device-sampler device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-convolver device-soundfont device-vocoder device-neural-amp device-wclap device-wclap-instrument device-wclap-midi"
 
 # The engine keeps its function names until wasm-opt has written them to engine.symbols (crash stacks), then drops them.
 RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
@@ -49,7 +49,7 @@ RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
 #                    standalone build: it owns its memory, imports nothing, and never runs on the
 #                    audio thread, so none of the linker gymnastics above apply.
 RUSTFLAGS="$SIMD" cargo build -p stretch-wasm --release --target "$TARGET"
-# opendrum_wasm.wasm  renders one openDrum hit for the /testing preview. Standalone like stretch_wasm.
+# opendrum_wasm.wasm  renders one openDrum hit for the device editors' displays. Standalone like stretch_wasm.
 RUSTFLAGS="$SIMD" cargo build -p opendrum-wasm --release --target "$TARGET"
 for crate in $DEVICE_CRATES; do
   RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core

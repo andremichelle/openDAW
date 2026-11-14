@@ -10,6 +10,16 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
+    OpenDrumKickDeviceBox,
+    OpenDrumSnareDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumPercDeviceBox,
     SurgeonPattern,
     SurgeonSound,
     PlayfieldDeviceBox,
@@ -58,6 +68,16 @@ import {
     NeonLine,
     NeonVibrato,
     Surgeon,
+    OpenDrumKick,
+    OpenDrumSnare,
+    OpenDrumClap,
+    OpenDrumTom,
+    OpenDrumRim,
+    OpenDrumHat,
+    OpenDrumShaker,
+    OpenDrumCymbal,
+    OpenDrumBell,
+    OpenDrumPerc,
     SurgeonValues,
     Tubular,
     TubularLfo,
@@ -132,6 +152,8 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 
 export type AnyInstrumentImpl =
     | VaporisateurImpl | PlayfieldImpl | NanoImpl | SamplerImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | SurgeonImpl | CubedImpl
+    | OpenDrumKickImpl | OpenDrumSnareImpl | OpenDrumClapImpl | OpenDrumTomImpl | OpenDrumRimImpl | OpenDrumHatImpl
+    | OpenDrumShakerImpl | OpenDrumCymbalImpl | OpenDrumBellImpl | OpenDrumPercImpl
     | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
@@ -927,6 +949,277 @@ export class ApparatImpl extends InstrumentFacade<ApparatDeviceBox> implements A
     sample(label: string): ScriptSample {return this.#script.sample(label)}
 }
 
+export class OpenDrumKickImpl extends InstrumentFacade<OpenDrumKickDeviceBox> implements OpenDrumKick {
+    readonly key = "OpenDrumKick" as const
+    declare tune: float
+    declare pitch: float
+    declare sweep: float
+    declare drift: float
+    declare decay: float
+    declare punch: bipolar
+    declare shape: unitValue
+    declare skin: unitValue
+    declare click: unitValue
+    declare tone: float
+    declare noise: unitValue
+    declare drive: float
+    declare rumble: unitValue
+    declare length: int
+    declare duck: unitValue
+    declare bright: unitValue
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+    declare glide: float
+
+    constructor(context: Context, box: OpenDrumKickDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, pitch: box.pitch, sweep: box.sweep, drift: box.drift, decay: box.decay, punch: box.punch,
+            shape: box.shape, skin: box.skin, click: box.click, tone: box.tone, noise: box.noise, drive: box.drive,
+            rumble: box.rumble, length: box.length, duck: box.duck, bright: box.bright, volume: box.volume,
+            velocity: box.velocity, play: box.play, glide: box.glide
+        })
+    }
+}
+
+export class OpenDrumSnareImpl extends InstrumentFacade<OpenDrumSnareDeviceBox> implements OpenDrumSnare {
+    readonly key = "OpenDrumSnare" as const
+    declare tune: float
+    declare ratio: float
+    declare balance: unitValue
+    declare pitch: float
+    declare sweep: float
+    declare decay: float
+    declare punch: bipolar
+    declare shape: unitValue
+    declare level: float
+    declare wireDecay: float
+    declare width: unitValue
+    declare curve: bipolar
+    declare click: unitValue
+    declare tone: float
+    declare skin: unitValue
+    declare drive: float
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+    declare glide: float
+
+    constructor(context: Context, box: OpenDrumSnareDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, ratio: box.ratio, balance: box.balance, pitch: box.pitch, sweep: box.sweep,
+            decay: box.decay, punch: box.punch, shape: box.shape, level: box.level, wireDecay: box.wireDecay,
+            width: box.width, curve: box.curve, click: box.click, tone: box.tone, skin: box.skin, drive: box.drive,
+            volume: box.volume, velocity: box.velocity, play: box.play, glide: box.glide
+        })
+    }
+}
+
+export class OpenDrumClapImpl extends InstrumentFacade<OpenDrumClapDeviceBox> implements OpenDrumClap {
+    readonly key = "OpenDrumClap" as const
+    declare hands: int
+    declare gap: float
+    declare last: float
+    declare spread: unitValue
+    declare attack: float
+    declare decay: float
+    declare snap: unitValue
+    declare drive: float
+    declare tone: float
+    declare resonance: unitValue
+    declare room: float
+    declare roomDecay: float
+    declare tail: unitValue
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumClapDeviceBox) {
+        super(context, box)
+        this.bind({
+            hands: box.hands, gap: box.gap, last: box.last, spread: box.spread, attack: box.attack, decay: box.decay,
+            snap: box.snap, drive: box.drive, tone: box.tone, resonance: box.resonance, room: box.room,
+            roomDecay: box.roomDecay, tail: box.tail, volume: box.volume, velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumTomImpl extends InstrumentFacade<OpenDrumTomDeviceBox> implements OpenDrumTom {
+    readonly key = "OpenDrumTom" as const
+    declare tune: float
+    declare pitch: float
+    declare sweep: float
+    declare drift: float
+    declare decay: float
+    declare punch: bipolar
+    declare shape: unitValue
+    declare sub: unitValue
+    declare ratio: float
+    declare top: unitValue
+    declare length: float
+    declare drive: float
+    declare noise: float
+    declare noiseDecay: float
+    declare color: unitValue
+    declare air: unitValue
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+    declare glide: float
+
+    constructor(context: Context, box: OpenDrumTomDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, pitch: box.pitch, sweep: box.sweep, drift: box.drift, decay: box.decay, punch: box.punch,
+            shape: box.shape, sub: box.sub, ratio: box.ratio, top: box.top, length: box.length, drive: box.drive,
+            noise: box.noise, noiseDecay: box.noiseDecay, color: box.color, air: box.air, volume: box.volume,
+            velocity: box.velocity, play: box.play, glide: box.glide
+        })
+    }
+}
+
+export class OpenDrumRimImpl extends InstrumentFacade<OpenDrumRimDeviceBox> implements OpenDrumRim {
+    readonly key = "OpenDrumRim" as const
+    declare tune: float
+    declare ratio: float
+    declare balance: unitValue
+    declare high: unitValue
+    declare highRatio: float
+    declare ring: float
+    declare ringHigh: float
+    declare decay: float
+    declare punch: bipolar
+    declare drive: float
+    declare hard: unitValue
+    declare click: unitValue
+    declare swell: float
+    declare cut: float
+    declare restart: 0 | 1
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumRimDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, ratio: box.ratio, balance: box.balance, high: box.high, highRatio: box.highRatio,
+            ring: box.ring, ringHigh: box.ringHigh, decay: box.decay, punch: box.punch, drive: box.drive,
+            hard: box.hard, click: box.click, swell: box.swell, cut: box.cut, restart: box.restart,
+            volume: box.volume, velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumHatImpl extends InstrumentFacade<OpenDrumHatDeviceBox> implements OpenDrumHat {
+    readonly key = "OpenDrumHat" as const
+    declare tune: float
+    declare color: float
+    declare hold: float
+    declare decay: float
+    declare spread: bipolar
+    declare ring: unitValue
+    declare reso: unitValue
+    declare curve: bipolar
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumHatDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, color: box.color, hold: box.hold, decay: box.decay, spread: box.spread, ring: box.ring,
+            reso: box.reso, curve: box.curve, volume: box.volume, velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumShakerImpl extends InstrumentFacade<OpenDrumShakerDeviceBox> implements OpenDrumShaker {
+    readonly key = "OpenDrumShaker" as const
+    declare color: float
+    declare attack: float
+    declare decay: float
+    declare curve: bipolar
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumShakerDeviceBox) {
+        super(context, box)
+        this.bind({
+            color: box.color, attack: box.attack, decay: box.decay, curve: box.curve, volume: box.volume,
+            velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumCymbalImpl extends InstrumentFacade<OpenDrumCymbalDeviceBox> implements OpenDrumCymbal {
+    readonly key = "OpenDrumCymbal" as const
+    declare tune: float
+    declare tone: unitValue
+    declare attack: float
+    declare decay: float
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumCymbalDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, tone: box.tone, attack: box.attack, decay: box.decay, volume: box.volume,
+            velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumBellImpl extends InstrumentFacade<OpenDrumBellDeviceBox> implements OpenDrumBell {
+    readonly key = "OpenDrumBell" as const
+    declare tune: float
+    declare ratio: float
+    declare balance: unitValue
+    declare color: float
+    declare strike: unitValue
+    declare decay: float
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumBellDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, ratio: box.ratio, balance: box.balance, color: box.color, strike: box.strike,
+            decay: box.decay, volume: box.volume, velocity: box.velocity, play: box.play
+        })
+    }
+}
+
+export class OpenDrumPercImpl extends InstrumentFacade<OpenDrumPercDeviceBox> implements OpenDrumPerc {
+    readonly key = "OpenDrumPerc" as const
+    declare tune: float
+    declare ratio: float
+    declare index: unitValue
+    declare bite: float
+    declare pitch: float
+    declare sweep: float
+    declare decay: float
+    declare curve: bipolar
+    declare noise: unitValue
+    declare drive: float
+    declare volume: float
+    declare velocity: unitValue
+    declare play: 0 | 1 | 2
+
+    constructor(context: Context, box: OpenDrumPercDeviceBox) {
+        super(context, box)
+        this.bind({
+            tune: box.tune, ratio: box.ratio, index: box.index, bite: box.bite, pitch: box.pitch, sweep: box.sweep,
+            decay: box.decay, curve: box.curve, noise: box.noise, drive: box.drive, volume: box.volume,
+            velocity: box.velocity, play: box.play
+        })
+    }
+}
+
 export namespace InstrumentImpls {
     export const wrap = (context: Context, box: Box): AnyInstrumentImpl => context.facade(box, () => {
         if (box instanceof VaporisateurDeviceBox) {return new VaporisateurImpl(context, box)}
@@ -939,6 +1232,16 @@ export namespace InstrumentImpls {
         if (box instanceof NeonDeviceBox) {return new NeonImpl(context, box)}
         if (box instanceof TubularDeviceBox) {return new TubularImpl(context, box)}
         if (box instanceof SurgeonDeviceBox) {return new SurgeonImpl(context, box)}
+        if (box instanceof OpenDrumKickDeviceBox) {return new OpenDrumKickImpl(context, box)}
+        if (box instanceof OpenDrumSnareDeviceBox) {return new OpenDrumSnareImpl(context, box)}
+        if (box instanceof OpenDrumClapDeviceBox) {return new OpenDrumClapImpl(context, box)}
+        if (box instanceof OpenDrumTomDeviceBox) {return new OpenDrumTomImpl(context, box)}
+        if (box instanceof OpenDrumRimDeviceBox) {return new OpenDrumRimImpl(context, box)}
+        if (box instanceof OpenDrumHatDeviceBox) {return new OpenDrumHatImpl(context, box)}
+        if (box instanceof OpenDrumShakerDeviceBox) {return new OpenDrumShakerImpl(context, box)}
+        if (box instanceof OpenDrumCymbalDeviceBox) {return new OpenDrumCymbalImpl(context, box)}
+        if (box instanceof OpenDrumBellDeviceBox) {return new OpenDrumBellImpl(context, box)}
+        if (box instanceof OpenDrumPercDeviceBox) {return new OpenDrumPercImpl(context, box)}
         if (box instanceof CubedDeviceBox) {return new CubedImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
         if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}

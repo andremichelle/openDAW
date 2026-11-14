@@ -10,8 +10,8 @@ use dsp::noise::WhiteNoise;
 use dsp::resonator::{Resonator, ResonatorCoefficients};
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{drive_makeup, Click, ClickShape, Drive, CLICK_LENGTH, DRIVE_BIAS};
-use crate::kick::Play;
+use crate::common::{drive_makeup, Click, ClickShape, Cut, Drive, CLICK_LENGTH, DRIVE_BIAS};
+use crate::common::Play;
 
 pub const VOICES: usize = 16;
 
@@ -31,6 +31,8 @@ const WIRE_REFERENCE_BAND: f32 = 4000.0;
 // a positive Curve adds the 909's short broad noise burst on the attack
 const SNAP_CUT: f32 = 4000.0;
 const SNAP_TIME: f32 = 0.004;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.005;
 const SNAP_GAIN: f32 = 12.0;
 // a positive Curve also adds the 909's low-passed noise burst under the bodies
 const LOW_CUT: f32 = 700.0;
@@ -120,7 +122,6 @@ struct Voice {
     level: f32,
     transpose: f32,
     slide: f32,
-    gated: bool,
     bend: f32,
     elapsed: u32,
     bodies: [DrumOscillator; 2],
@@ -134,7 +135,8 @@ struct Voice {
     noise: WhiteNoise,
     wire_filters: [Svf; 4],
     click: Click,
-    skins: [Resonator; 4]
+    skins: [Resonator; 4],
+    cut: Cut
 }
 
 impl Voice {
@@ -155,8 +157,7 @@ impl Voice {
         }
     }
 
-    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &SnareParams, held: bool,
-             sample_rate: f32) {
+    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &SnareParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
         self.id = id;
@@ -164,7 +165,7 @@ impl Voice {
         self.level = strength;
         self.transpose = transpose;
         self.slide = 0.0;
-        self.gated = held;
+        self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.elapsed = 0;
         self.bodies.iter_mut().for_each(|body| body.reset(0.0));
@@ -172,11 +173,9 @@ impl Voice {
         self.noise.reset(age.wrapping_mul(0x85EB_CA6B) ^ 0x5D2);
         if restart {self.wire_filters.iter_mut().for_each(|filter| filter.reset());}
         self.set_envelopes(params, sample_rate);
-        for amp in self.amps.iter_mut().chain([&mut self.wire]) {
-            if held {amp.trigger_held(1.0);} else {amp.trigger(1.0);}
-        }
+        self.amps.iter_mut().chain([&mut self.wire]).for_each(|amp| amp.trigger(1.0));
         let tail = (-params.curve).max(0.0) * TAIL_LEVEL;
-        if tail <= 0.0 {self.tail.stop();} else if held {self.tail.trigger_held(tail);} else {self.tail.trigger(tail);}
+        if tail <= 0.0 {self.tail.stop();} else {self.tail.trigger(tail);}
         let snap = params.curve.max(0.0) * SNAP_GAIN;
         if snap <= 0.0 {self.snap.stop();} else {self.snap.trigger(snap);}
         let low_burst = params.curve.max(0.0) * LOW_BURST;
@@ -185,13 +184,6 @@ impl Voice {
             skin.reset();
             skin.strike(params.skin * SKIN_GAIN);
         });
-    }
-
-    fn release(&mut self) {
-        self.gated = false;
-        self.amps.iter_mut().for_each(|amp| amp.release());
-        self.wire.release();
-        self.tail.release();
     }
 
     #[inline]
@@ -234,10 +226,10 @@ impl Voice {
             }
         }
         let noise_idle = self.wire.is_idle() && self.tail.is_idle() && self.snap.is_idle() && self.low_burst.is_idle();
-        if self.amps.iter().all(|amp| amp.is_idle()) && noise_idle && seconds >= CLICK_LENGTH && !ringing {
-            self.active = false;
-        }
-        value * self.level
+        let cut = self.cut.next();
+        let idle = self.amps.iter().all(|amp| amp.is_idle()) && noise_idle && seconds >= CLICK_LENGTH && !ringing;
+        if idle || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -280,19 +272,8 @@ impl Snare {
         let voice = &mut self.voices[index];
         let previous = voice.transpose + voice.slide;
         let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
-        if params.play == Play::Gate && voice.active && voice.gated {
-            voice.id = id;
-            voice.slide = if params.glide > 0.0 {previous - transpose} else {0.0};
-            voice.transpose = transpose;
-            return;
-        }
-        voice.start(id, hits, strength, transpose, params, params.play == Play::Gate, sample_rate);
+        voice.start(id, hits, strength, transpose, params, sample_rate);
         if sliding {voice.slide = previous - transpose;}
-    }
-
-    pub fn note_off(&mut self, id: u32, params: &SnareParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
     }
 
     pub fn process(&mut self, params: &SnareParams, output: &mut [f32]) {
@@ -332,6 +313,8 @@ impl Snare {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(SnareParams, RELEASE);
 }
 
 #[cfg(test)]

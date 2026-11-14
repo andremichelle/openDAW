@@ -9,6 +9,15 @@ import {
     TubularDeviceBox,
     SurgeonDeviceBox,
     OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -21,12 +30,13 @@ import {
     TapeDeviceBox,
     VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
-import {byte, isDefined, Optional, UUID} from "@opendaw/lib-std"
+import {byte, isDefined, Optional, Procedure, UUID} from "@opendaw/lib-std"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {Box, BoxGraph, Field} from "@opendaw/lib-box"
 import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
+import {InstrumentBox} from "./InstrumentBox"
 import {TrackType} from "../timeline/TrackType"
 import {PlayfieldPads} from "../devices/instruments/Playfield/PlayfieldPads"
 import {SamplerModulation} from "../devices/instruments/Sampler/SamplerModulation"
@@ -390,26 +400,68 @@ export namespace InstrumentFactories {
                 box.host.refer(host)
             })
     }
-    export const OpenDrumKick: InstrumentFactory<void, OpenDrumKickDeviceBox> = {
-        defaultName: "openDrum Kick",
+    const openDrum = <B extends InstrumentBox>(
+        create: (graph: BoxGraph, uuid: UUID.Bytes, constructor: Procedure<B>) => B,
+        name: string, briefDescription: string, description: string,
+        manualPage: string): InstrumentFactory<void, B> => ({
+        defaultName: `openDrum ${name}`,
         defaultIcon: IconSymbol.DrumSet,
-        briefDescription: "Synthesized Kick",
-        description: "A synthesized kick drum, from deep booming to short and punchy, with a rumble tail it ducks",
-        manualPage: DeviceManualUrls.OpenDrumKick,
+        briefDescription,
+        description,
+        manualPage,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
-                 icon: IconSymbol,
-                 _attachment?: void): OpenDrumKickDeviceBox =>
-            OpenDrumKickDeviceBox.create(boxGraph, UUID.generate(), box => {
+                 icon: IconSymbol): B =>
+            create(boxGraph, UUID.generate(), box => {
                 box.label.setValue(name)
                 box.icon.setValue(IconSymbol.toName(icon))
                 box.host.refer(host)
             })
-    }
+    })
+    export const OpenDrumKick = openDrum(OpenDrumKickDeviceBox.create, "Kick",
+        "Synthesized Kick",
+        "A synthesized kick drum, from deep booming to short and punchy, with a rumble tail it ducks",
+        DeviceManualUrls.OpenDrumKick)
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, Surgeon, OpenDrumKick, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
+    export const OpenDrumSnare = openDrum(OpenDrumSnareDeviceBox.create, "Snare",
+        "Synthesized Snare",
+        "A synthesized snare drum, two tuned bodies and a band of noise for the wires",
+        DeviceManualUrls.OpenDrumSnare)
+    export const OpenDrumClap = openDrum(OpenDrumClapDeviceBox.create, "Clap",
+        "Synthesized Clap",
+        "A synthesized hand clap, a burst of hands and the room after it",
+        DeviceManualUrls.OpenDrumClap)
+    export const OpenDrumTom = openDrum(OpenDrumTomDeviceBox.create, "Tom",
+        "Synthesized Tom",
+        "Synthesized toms, congas and bongos: a tuned body with layers above and below and a band of noise",
+        DeviceManualUrls.OpenDrumTom)
+    export const OpenDrumRim = openDrum(OpenDrumRimDeviceBox.create, "Rim",
+        "Synthesized Rim",
+        "Rimshots, claves and woodblocks from short ringing tones, a click and drive",
+        DeviceManualUrls.OpenDrumRim)
+    export const OpenDrumHat = openDrum(OpenDrumHatDeviceBox.create, "Hat",
+        "Synthesized Hi-Hat",
+        "Closed and open hi-hats from six square oscillators, a new hit chokes the ringing one",
+        DeviceManualUrls.OpenDrumHat)
+    export const OpenDrumShaker = openDrum(OpenDrumShakerDeviceBox.create, "Shaker",
+        "Synthesized Shaker",
+        "Maracas, shakers and cabasas from filtered noise that swells in and fades",
+        DeviceManualUrls.OpenDrumShaker)
+    export const OpenDrumCymbal = openDrum(OpenDrumCymbalDeviceBox.create, "Cymbal",
+        "Synthesized Cymbal",
+        "Cymbals from six square oscillators in three bands that fade on their own",
+        DeviceManualUrls.OpenDrumCymbal)
+    export const OpenDrumBell = openDrum(OpenDrumBellDeviceBox.create, "Bell",
+        "Synthesized Bell",
+        "Cowbells, agogos and tuned bells from two pulse tones through a band-pass",
+        DeviceManualUrls.OpenDrumBell)
+    export const OpenDrumPerc = openDrum(OpenDrumPercDeviceBox.create, "Perc",
+        "FM Percussion",
+        "Zaps, lasers, blips and metallic hits from a sine pair whose FM depth and pitch fall",
+        DeviceManualUrls.OpenDrumPerc)
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, Surgeon, OpenDrumKick, OpenDrumPerc, OpenDrumBell, OpenDrumCymbal, OpenDrumShaker, OpenDrumHat, OpenDrumRim, OpenDrumTom, OpenDrumClap, OpenDrumSnare, MIDIOutput, Nano, Playfield, Sampler, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
     export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
         .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))

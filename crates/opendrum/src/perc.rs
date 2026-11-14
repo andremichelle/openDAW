@@ -6,8 +6,8 @@
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::RENDER_QUANTUM;
-use crate::common::{drive_makeup, Drive, DRIVE_BIAS};
-use crate::kick::Play;
+use crate::common::{drive_makeup, Cut, Drive, DRIVE_BIAS};
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 
@@ -19,6 +19,8 @@ const DRIVE_BIAS_FULL: f32 = 12.0;
 const DRIVE_CEILING: f32 = 2.0;
 const NOISE_SEED: u32 = 0x5EC7;
 const ENVELOPE_FLOOR: f32 = 0.00001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.005;
 
 /// Tune in Hz, Ratio as a frequency ratio, Pitch in semitones, times in seconds, Drive and Volume in dB, Curve -1 to
 /// 1, the rest 0 to 1.
@@ -54,6 +56,7 @@ struct Voice {
     id: u32,
     age: u32,
     level: f32,
+    elapsed: u32,
     depth: f32,
     transpose: f32,
     bend: f32,
@@ -61,13 +64,16 @@ struct Voice {
     modulator: f32,
     amp: HitEnvelope,
     index: HitEnvelope,
-    noise: WhiteNoise
+    noise: WhiteNoise,
+    cut: Cut
 }
 
 impl Voice {
     fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &PercParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
+        self.elapsed = 0;
+        self.cut.reset();
         self.id = id;
         self.age = age;
         self.level = strength;
@@ -84,17 +90,13 @@ impl Voice {
         self.index.set(0.0, 0.0, params.bite.max(0.001), sample_rate);
         for envelope in [&mut self.amp, &mut self.index] {
             envelope.set_floor(ENVELOPE_FLOOR);
-            if params.play == Play::Gate {envelope.trigger_held(1.0);} else {envelope.trigger(1.0);}
+            envelope.trigger(1.0);
         }
-    }
-
-    fn release(&mut self) {
-        self.amp.release();
-        self.index.release();
     }
 
     #[inline]
     fn render(&mut self, params: &PercParams, sweep_factor: f32, sample_rate: f32) -> f32 {
+        self.elapsed = self.elapsed.saturating_add(1);
         let frequency = params.tune * libm::exp2f((self.transpose + self.bend) / 12.0);
         self.bend *= sweep_factor;
         let step = (frequency / sample_rate).min(0.45);
@@ -107,8 +109,9 @@ impl Voice {
         if self.modulator >= 1.0 {self.modulator -= libm::floorf(self.modulator);}
         let noise = params.noise.clamp(0.0, 1.0);
         let value = (tone + (self.noise.next() - tone) * noise) * self.amp.next();
-        if self.amp.is_idle() {self.active = false;}
-        value * self.level
+        let cut = self.cut.next();
+        if self.amp.is_idle() || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -140,11 +143,6 @@ impl Perc {
         self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
-    pub fn note_off(&mut self, id: u32, params: &PercParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
-    }
-
     pub fn process(&mut self, params: &PercParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let sweep_factor = libm::expf(-1.0 / (params.sweep.max(0.0005) * sample_rate));
@@ -163,6 +161,8 @@ impl Perc {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(PercParams, RELEASE);
 }
 
 #[cfg(test)]

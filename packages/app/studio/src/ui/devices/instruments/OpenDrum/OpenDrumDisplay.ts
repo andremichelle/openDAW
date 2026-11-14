@@ -1,18 +1,17 @@
-import {Color} from "@opendaw/lib-std"
 import {Colors} from "@opendaw/studio-enums"
 import {OpenDrumSynth} from "@/ui/devices/instruments/OpenDrum/OpenDrumSynth"
 
-/** Paints a hit's picture: the waveform from its min and max columns, the level and the pitch curves. */
+/** Paints a hit's picture and a dot on its level curve per sounding hit (`positions` in seconds, -1 ends the list). */
 export namespace OpenDrumDisplay {
     export const paint = (context: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number,
-                          picture: OpenDrumSynth.Picture, color: Color): void => {
+                          picture: OpenDrumSynth.Picture, positions: Float32Array): void => {
         const middle = height / 2
         const columns = OpenDrumSynth.Columns
-        const {length, peaks, envelope, pitch, softPitch} = picture
-        const lastColumn = length / (OpenDrumSynth.MaxSeconds * OpenDrumSynth.SampleRate) * columns
+        const {length, span, peaks, envelope, pitch} = picture
+        const lastColumn = length / (span * OpenDrumSynth.SampleRate) * columns
         context.fillStyle = Colors.shadow.opacity(0.2).toString()
         context.fillRect(0, Math.round(middle), width, pixelRatio)
-        context.fillStyle = color.opacity(0.5).toString()
+        context.fillStyle = Colors.blue.opacity(0.6).toString()
         for (let x = 0; x < width; x++) {
             const from = Math.floor(x / width * columns)
             const to = Math.min(columns, Math.max(from + 1, Math.floor((x + 1) / width * columns)))
@@ -40,9 +39,18 @@ export namespace OpenDrumDisplay {
             }
             context.stroke()
         }
-        curve(envelope, color.opacity(0.9).toString(), [])
-        curve(softPitch, Colors.cream.opacity(0.35).toString(), [2, 2])
-        curve(pitch, Colors.cream.opacity(0.9).toString(), [])
+        curve(envelope, Colors.white.opacity(0.9).toString(), [])
+        curve(pitch, Colors.blue.toString(), [3, 2])
         context.setLineDash([])
+        context.fillStyle = Colors.white.toString()
+        for (const seconds of positions) {
+            if (seconds < 0.0) {break}
+            const column = Math.floor(seconds / span * columns)
+            if (column >= columns) {continue}
+            const y = middle - envelope[column] * (middle - pixelRatio)
+            context.beginPath()
+            context.arc(column / columns * width, y, 2.5 * pixelRatio, 0, Math.PI * 2)
+            context.fill()
+        }
     }
 }

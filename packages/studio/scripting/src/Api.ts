@@ -2185,6 +2185,378 @@ export interface Apparat extends Instrument, ScriptDevice {
 }
 
 /**
+ * openDrum Kick: a synthesized kick drum with a rumble tail it ducks. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumKick extends Instrument {
+    /** Always "OpenDrumKick" */
+    readonly key: "OpenDrumKick"
+    /** Tune in Hz (30 to 120) */
+    tune: float
+    /** Pitch in semitones (0 to 48) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.2) */
+    sweep: float
+    /** Drift in semitones (0 to 12) */
+    drift: float
+    /** Decay in seconds (0.02 to 6) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Skin (0.0 to 1.0) */
+    skin: unitValue
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Tone in Hz (200 to 16000) */
+    tone: float
+    /** Noise (0.0 to 1.0) */
+    noise: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Rumble level (0.0 to 1.0) */
+    rumble: unitValue
+    /** Rumble length (0-4): 1/16, 1/8, 1/4, 1/2, 1/1 */
+    length: int
+    /** Rumble duck (0.0 to 1.0) */
+    duck: unitValue
+    /** Rumble brightness (0.0 to 1.0) */
+    bright: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Glide in seconds (0 to 1) */
+    glide: float
+}
+
+/**
+ * openDrum Snare: a synthesized snare drum, two tuned bodies and a band of noise for the wires. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumSnare extends Instrument {
+    /** Always "OpenDrumSnare" */
+    readonly key: "OpenDrumSnare"
+    /** Tune in Hz (80 to 600) */
+    tune: float
+    /** Ratio (1 to 3) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** Pitch in semitones (0 to 24) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.1) */
+    sweep: float
+    /** Decay in seconds (0.02 to 2) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Level in dB (-48 to -3) */
+    level: float
+    /** Noise decay in seconds (0.02 to 2) */
+    wireDecay: float
+    /** Width (0.0 to 1.0) */
+    width: unitValue
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Tone in Hz (200 to 16000) */
+    tone: float
+    /** Skin (0.0 to 1.0) */
+    skin: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Glide in seconds (0 to 1) */
+    glide: float
+}
+
+/**
+ * openDrum Clap: a synthesized hand clap, a burst of hands and the room after it. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumClap extends Instrument {
+    /** Always "OpenDrumClap" */
+    readonly key: "OpenDrumClap"
+    /** Hands (1 to 8) */
+    hands: int
+    /** Gap in seconds (0 to 0.04) */
+    gap: float
+    /** Last (0.3 to 1.5) */
+    last: float
+    /** Spread (0.0 to 1.0) */
+    spread: unitValue
+    /** Attack in seconds (0 to 0.005) */
+    attack: float
+    /** Decay in seconds (0.002 to 0.2) */
+    decay: float
+    /** Snap (0.0 to 1.0) */
+    snap: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Tone in Hz (300 to 8000) */
+    tone: float
+    /** Reso (0.0 to 1.0) */
+    resonance: unitValue
+    /** Room level in dB (-48 to 0) */
+    room: float
+    /** Room decay in seconds (0.02 to 2) */
+    roomDecay: float
+    /** Tail (0.0 to 1.0) */
+    tail: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Tom: synthesized toms, congas and bongos. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumTom extends Instrument {
+    /** Always "OpenDrumTom" */
+    readonly key: "OpenDrumTom"
+    /** Tune in Hz (40 to 800) */
+    tune: float
+    /** Pitch in semitones (0 to 24) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.2) */
+    sweep: float
+    /** Drift in semitones (0 to 12) */
+    drift: float
+    /** Decay in seconds (0.02 to 3) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Sub (0.0 to 1.0) */
+    sub: unitValue
+    /** Ratio (0.5 to 1) */
+    ratio: float
+    /** Top (0.0 to 1.0) */
+    top: unitValue
+    /** Length in seconds (0.02 to 1) */
+    length: float
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Noise level in dB (-48 to 0) */
+    noise: float
+    /** Noise decay in seconds (0.02 to 3) */
+    noiseDecay: float
+    /** Color (0.0 to 1.0) */
+    color: unitValue
+    /** Air (0.0 to 1.0) */
+    air: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Glide in seconds (0 to 1) */
+    glide: float
+}
+
+/**
+ * openDrum Rim: rimshots, claves and woodblocks. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumRim extends Instrument {
+    /** Always "OpenDrumRim" */
+    readonly key: "OpenDrumRim"
+    /** Tune in Hz (100 to 4000) */
+    tune: float
+    /** Ratio (1 to 5) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** High level (0.0 to 1.0) */
+    high: unitValue
+    /** High ratio (1 to 12) */
+    highRatio: float
+    /** Ring in seconds (0.005 to 1) */
+    ring: float
+    /** High ring in seconds (0.005 to 1) */
+    ringHigh: float
+    /** Decay in seconds (0.002 to 0.5) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Hard (0.0 to 1.0) */
+    hard: unitValue
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Swell (0 to 8) */
+    swell: float
+    /** Cut in Hz (20 to 4000) */
+    cut: float
+    /** Restart (0-1): Off, On */
+    restart: 0 | 1
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Hat: closed and open hi-hats from six square oscillators. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumHat extends Instrument {
+    /** Always "OpenDrumHat" */
+    readonly key: "OpenDrumHat"
+    /** Tune (0.25 to 4) */
+    tune: float
+    /** Color in Hz (200 to 16000) */
+    color: float
+    /** Hold in seconds (0 to 0.5) */
+    hold: float
+    /** Decay in seconds (0.005 to 4) */
+    decay: float
+    /** Spread (-1.0 to 1.0) */
+    spread: bipolar
+    /** Ring (0.0 to 1.0) */
+    ring: unitValue
+    /** Reso (0.0 to 1.0) */
+    reso: unitValue
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Shaker: maracas, shakers and cabasas. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumShaker extends Instrument {
+    /** Always "OpenDrumShaker" */
+    readonly key: "OpenDrumShaker"
+    /** Color in Hz (200 to 16000) */
+    color: float
+    /** Attack in seconds (0 to 0.2) */
+    attack: float
+    /** Decay in seconds (0.002 to 2) */
+    decay: float
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Cymbal: cymbals from six square oscillators in three bands. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumCymbal extends Instrument {
+    /** Always "OpenDrumCymbal" */
+    readonly key: "OpenDrumCymbal"
+    /** Tune (0.25 to 4) */
+    tune: float
+    /** Tone (0.0 to 1.0) */
+    tone: unitValue
+    /** Attack in seconds (0 to 2) */
+    attack: float
+    /** Decay in seconds (0.05 to 8) */
+    decay: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Bell: cowbells, agogos and tuned bells from two pulse tones. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumBell extends Instrument {
+    /** Always "OpenDrumBell" */
+    readonly key: "OpenDrumBell"
+    /** Tune in Hz (50 to 4000) */
+    tune: float
+    /** Ratio (1 to 4) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** Color in Hz (100 to 16000) */
+    color: float
+    /** Strike (0.0 to 1.0) */
+    strike: unitValue
+    /** Decay in seconds (0.01 to 4) */
+    decay: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
+ * openDrum Perc: zaps, lasers, blips and metallic hits from a sine pair with falling FM depth and pitch. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumPerc extends Instrument {
+    /** Always "OpenDrumPerc" */
+    readonly key: "OpenDrumPerc"
+    /** Tune in Hz (20 to 8000) */
+    tune: float
+    /** Ratio (0.25 to 16) */
+    ratio: float
+    /** Index (0.0 to 1.0) */
+    index: unitValue
+    /** Bite in seconds (0.001 to 2) */
+    bite: float
+    /** Pitch in semitones (-48 to 48) */
+    pitch: float
+    /** Sweep in seconds (0.0005 to 2) */
+    sweep: float
+    /** Decay in seconds (0.005 to 4) */
+    decay: float
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Noise (0.0 to 1.0) */
+    noise: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+}
+
+/**
  * Instrument types by key. Use the keys with {@link Project.addInstrumentUnit}
  * @group Instruments
  */
@@ -2209,6 +2581,26 @@ export interface Instruments {
     "Tubular": Tubular
     /** {@link Surgeon} */
     "Surgeon": Surgeon
+    /** {@link OpenDrumKick} */
+    "OpenDrumKick": OpenDrumKick
+    /** {@link OpenDrumSnare} */
+    "OpenDrumSnare": OpenDrumSnare
+    /** {@link OpenDrumClap} */
+    "OpenDrumClap": OpenDrumClap
+    /** {@link OpenDrumTom} */
+    "OpenDrumTom": OpenDrumTom
+    /** {@link OpenDrumRim} */
+    "OpenDrumRim": OpenDrumRim
+    /** {@link OpenDrumHat} */
+    "OpenDrumHat": OpenDrumHat
+    /** {@link OpenDrumShaker} */
+    "OpenDrumShaker": OpenDrumShaker
+    /** {@link OpenDrumCymbal} */
+    "OpenDrumCymbal": OpenDrumCymbal
+    /** {@link OpenDrumBell} */
+    "OpenDrumBell": OpenDrumBell
+    /** {@link OpenDrumPerc} */
+    "OpenDrumPerc": OpenDrumPerc
     /** {@link Cubed} */
     "Cubed": Cubed
     /** {@link Apparat} */

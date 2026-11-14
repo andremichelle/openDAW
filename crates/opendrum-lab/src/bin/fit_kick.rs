@@ -2,7 +2,8 @@
 //! Run: cargo run -p opendrum-lab --release --bin fit_kick -- BD5050 BT3AADA
 //! `all` fits every kick reference and writes `measured/kick_fits.tsv`.
 
-use opendrum::kick::{Kick, KickParams, Play};
+use opendrum::common::Play;
+use opendrum::kick::{Kick, KickParams};
 use opendrum_lab::engine_fit::{run, Axis, Engine};
 use opendrum_lab::measure::Measures;
 use std::process::ExitCode;

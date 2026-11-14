@@ -123,6 +123,16 @@ export namespace DeviceBoxes {
             case "NeonDeviceBox": return "Neon"
             case "TubularDeviceBox": return "Tubular"
             case "SurgeonDeviceBox": return "Surgeon"
+            case "OpenDrumKickDeviceBox": return "OpenDrumKick"
+            case "OpenDrumSnareDeviceBox": return "OpenDrumSnare"
+            case "OpenDrumClapDeviceBox": return "OpenDrumClap"
+            case "OpenDrumTomDeviceBox": return "OpenDrumTom"
+            case "OpenDrumRimDeviceBox": return "OpenDrumRim"
+            case "OpenDrumHatDeviceBox": return "OpenDrumHat"
+            case "OpenDrumShakerDeviceBox": return "OpenDrumShaker"
+            case "OpenDrumCymbalDeviceBox": return "OpenDrumCymbal"
+            case "OpenDrumBellDeviceBox": return "OpenDrumBell"
+            case "OpenDrumPercDeviceBox": return "OpenDrumPerc"
             case "CubedDeviceBox": return "Cubed"
             case "ApparatDeviceBox": return "Apparat"
             case "InstrumentCompositeBox": return "InstrumentComposite"
@@ -145,6 +155,9 @@ export namespace DeviceBoxes {
     export const isInstrumentBox = (boxName: string): boolean =>
         ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SamplerDeviceBox", "SoundfontDeviceBox",
             "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "TubularDeviceBox", "SurgeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox",
+            "OpenDrumKickDeviceBox", "OpenDrumSnareDeviceBox", "OpenDrumClapDeviceBox", "OpenDrumTomDeviceBox",
+            "OpenDrumRimDeviceBox", "OpenDrumHatDeviceBox", "OpenDrumShakerDeviceBox", "OpenDrumCymbalDeviceBox",
+            "OpenDrumBellDeviceBox", "OpenDrumPercDeviceBox",
             "InstrumentCompositeBox"]
             .includes(boxName)
 

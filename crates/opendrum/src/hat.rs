@@ -7,8 +7,8 @@
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
-use crate::common::square;
-use crate::kick::Play;
+use crate::common::{square, Cut};
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 
@@ -29,6 +29,8 @@ const SPREAD_RANGE: f32 = 0.5;
 // Reso at 1 multiplies the second filter stage's Q by this
 const RESO_RANGE: f32 = 8.0;
 const ENVELOPE_FLOOR: f32 = 0.00001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.002;
 
 /// Times in seconds, Color in Hz, Spread and Curve -1 to 1, Volume in dB, Tune as a frequency ratio, the rest 0 to 1.
 #[derive(Clone, Copy, Debug)]
@@ -62,16 +64,20 @@ struct Voice {
     id: u32,
     age: u32,
     level: f32,
+    elapsed: u32,
     transpose: f32,
     phases: [f32; 6],
     amp: HitEnvelope,
-    filters: [Svf; 3]
+    filters: [Svf; 3],
+    cut: Cut
 }
 
 impl Voice {
     fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &HatParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
+        self.elapsed = 0;
+        self.cut.reset();
         self.id = id;
         self.age = age;
         self.level = strength;
@@ -85,12 +91,13 @@ impl Voice {
         self.amp.set(0.0, params.hold.max(0.0), params.decay.max(0.005), sample_rate);
         self.amp.set_curve(params.curve);
         self.amp.set_floor(ENVELOPE_FLOOR);
-        if params.play == Play::Gate {self.amp.trigger_held(1.0);} else {self.amp.trigger(1.0);}
+        self.amp.trigger(1.0);
     }
 
     #[inline]
     fn render(&mut self, params: &HatParams, squares: &[f32; 6], high: &[SvfCoefficients; 2],
               low: &SvfCoefficients, sample_rate: f32) -> f32 {
+        self.elapsed = self.elapsed.saturating_add(1);
         let scale = params.tune * libm::exp2f(self.transpose / 12.0) / sample_rate;
         let mut metal = 0.0;
         let mut waves = [0.0; 6];
@@ -110,8 +117,9 @@ impl Voice {
         let filtered = self.filters[1].process(filtered, &high[1]).high;
         let filtered = self.filters[2].process(filtered, low).low;
         let value = filtered * self.amp.next();
-        if self.amp.is_idle() {self.active = false;}
-        value * self.level * OUTPUT_GAIN
+        let cut = self.cut.next();
+        if self.amp.is_idle() || self.cut.is_done() {self.active = false;}
+        value * self.level * OUTPUT_GAIN * cut
     }
 }
 
@@ -138,11 +146,6 @@ impl Hat {
         self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
-    pub fn note_off(&mut self, id: u32, params: &HatParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.amp.release());
-    }
-
     pub fn process(&mut self, params: &HatParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let nyquist_guard = sample_rate * 0.45;
@@ -164,6 +167,8 @@ impl Hat {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(HatParams, RELEASE);
 }
 
 #[cfg(test)]

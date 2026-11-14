@@ -27,10 +27,6 @@ impl Engine for Kick {
         Param {key: 29, mapping: Mapping::Linear(0.0, 1.0)}
     ];
 
-    fn create(sample_rate: f32) -> Self {Kick::new(sample_rate)}
-
-    fn defaults() -> KickParams {KickParams::default()}
-
     fn set(params: &mut KickParams, index: usize, value: f32) {
         match index {
             0 => params.tune = value,
@@ -57,11 +53,7 @@ impl Engine for Kick {
         }
     }
 
-    fn note_on(&mut self, id: u32, velocity: f32, transpose: f32, params: &KickParams) {
-        Kick::note_on(self, id, velocity, transpose, params)
-    }
+    crate::forward!(Kick, KickParams, bpm);
 
-    fn note_off(&mut self, id: u32, params: &KickParams) {Kick::note_off(self, id, params)}
-
-    fn process(&mut self, params: &KickParams, bpm: f32, output: &mut [f32]) {Kick::process(self, params, bpm, output)}
+    fn rest(&mut self) {Kick::rest(self)}
 }

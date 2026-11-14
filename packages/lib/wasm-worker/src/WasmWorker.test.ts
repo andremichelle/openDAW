@@ -136,6 +136,31 @@ describe("WasmWorker", () => {
         worker.terminate()
     })
 
+    it("ignores what a replaced worker still sends", async () => {
+        const replaced: Array<(message: WasmProtocol.FromWorker) => void> = []
+        const factory: WasmProtocol.EndpointFactory = receive => {
+            replaced.push(receive)
+            return inProcess().factory(receive)
+        }
+        const worker = WasmWorker.create({name: "test", module: testModule, endpoint: factory})
+        const controller = new AbortController()
+        const running = count(worker, {signal: controller.signal, abort: "restart"})
+        controller.abort()
+        await expect(running).rejects.toThrow("aborted")
+        replaced[0]({type: "broken", reason: "late news from the old worker"})
+        expect(await count(worker)).toBe(1)
+        worker.terminate()
+    })
+
+    it("rejects a call whose input cannot be sent and carries on", async () => {
+        const {worker} = create()
+        const input = bytes(1, 2, 3)
+        await worker.call("reverse", input, {maxResultBytes: 3})
+        await expect(worker.call("reverse", input, {maxResultBytes: 3})).rejects.toThrow()
+        expect(await count(worker)).toBe(1)
+        worker.terminate()
+    })
+
     it("rejects at once when the signal has already aborted", async () => {
         const {worker} = create()
         const controller = new AbortController()
@@ -155,9 +180,12 @@ describe("WasmWorker", () => {
         await expect(count(worker)).rejects.toThrow("test is terminated")
     })
 
-    it("reports a module that does not follow the convention", async () => {
-        const {worker} = create(emptyModule)
-        await expect(count(worker)).rejects.toThrow("test")
+    it("reports a module that does not follow the convention and does not restart it", async () => {
+        const {worker, created} = create(emptyModule)
+        await expect(count(worker)).rejects.toThrow("the module exports no memory")
+        await new Promise(resolve => setTimeout(resolve, 10))
+        expect(created()).toBe(1)
+        await expect(count(worker)).rejects.toThrow("the module exports no memory")
         worker.terminate()
     })
 })

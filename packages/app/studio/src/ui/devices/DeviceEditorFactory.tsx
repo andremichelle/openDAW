@@ -43,6 +43,15 @@ import {
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
     OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     TubularDeviceBox,
     SurgeonDeviceBox,
     CubedDeviceBox,
@@ -102,6 +111,15 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
     OpenDrumKickDeviceBoxAdapter,
+    OpenDrumPercDeviceBoxAdapter,
+    OpenDrumBellDeviceBoxAdapter,
+    OpenDrumCymbalDeviceBoxAdapter,
+    OpenDrumShakerDeviceBoxAdapter,
+    OpenDrumHatDeviceBoxAdapter,
+    OpenDrumRimDeviceBoxAdapter,
+    OpenDrumTomDeviceBoxAdapter,
+    OpenDrumClapDeviceBoxAdapter,
+    OpenDrumSnareDeviceBoxAdapter,
     TubularDeviceBoxAdapter,
     SurgeonDeviceBoxAdapter,
     CubedDeviceBoxAdapter,
@@ -129,6 +147,15 @@ import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
 import {KorpusDeviceEditor} from "@/ui/devices/instruments/KorpusDeviceEditor.tsx"
 import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {OpenDrumKickDeviceEditor} from "@/ui/devices/instruments/OpenDrumKickDeviceEditor"
+import {OpenDrumPercDeviceEditor} from "@/ui/devices/instruments/OpenDrumPercDeviceEditor"
+import {OpenDrumBellDeviceEditor} from "@/ui/devices/instruments/OpenDrumBellDeviceEditor"
+import {OpenDrumCymbalDeviceEditor} from "@/ui/devices/instruments/OpenDrumCymbalDeviceEditor"
+import {OpenDrumShakerDeviceEditor} from "@/ui/devices/instruments/OpenDrumShakerDeviceEditor"
+import {OpenDrumHatDeviceEditor} from "@/ui/devices/instruments/OpenDrumHatDeviceEditor"
+import {OpenDrumRimDeviceEditor} from "@/ui/devices/instruments/OpenDrumRimDeviceEditor"
+import {OpenDrumTomDeviceEditor} from "@/ui/devices/instruments/OpenDrumTomDeviceEditor"
+import {OpenDrumClapDeviceEditor} from "@/ui/devices/instruments/OpenDrumClapDeviceEditor"
+import {OpenDrumSnareDeviceEditor} from "@/ui/devices/instruments/OpenDrumSnareDeviceEditor"
 import {TubularDeviceEditor} from "@/ui/devices/instruments/TubularDeviceEditor.tsx"
 import {SurgeonDeviceEditor} from "@/ui/devices/instruments/SurgeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
@@ -274,6 +301,60 @@ export namespace DeviceEditorFactory {
                                           service={service}
                                           adapter={service.project.boxAdapters.adapterFor(box, OpenDrumKickDeviceBoxAdapter)}
                                           deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumPercDeviceBox: (box: OpenDrumPercDeviceBox): JsxValue => (
+                <OpenDrumPercDeviceEditor lifecycle={lifecycle}
+                                          service={service}
+                                          adapter={service.project.boxAdapters.adapterFor(box, OpenDrumPercDeviceBoxAdapter)}
+                                          deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumBellDeviceBox: (box: OpenDrumBellDeviceBox): JsxValue => (
+                <OpenDrumBellDeviceEditor lifecycle={lifecycle}
+                                          service={service}
+                                          adapter={service.project.boxAdapters.adapterFor(box, OpenDrumBellDeviceBoxAdapter)}
+                                          deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumCymbalDeviceBox: (box: OpenDrumCymbalDeviceBox): JsxValue => (
+                <OpenDrumCymbalDeviceEditor lifecycle={lifecycle}
+                                            service={service}
+                                            adapter={service.project.boxAdapters.adapterFor(box, OpenDrumCymbalDeviceBoxAdapter)}
+                                            deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumShakerDeviceBox: (box: OpenDrumShakerDeviceBox): JsxValue => (
+                <OpenDrumShakerDeviceEditor lifecycle={lifecycle}
+                                            service={service}
+                                            adapter={service.project.boxAdapters.adapterFor(box, OpenDrumShakerDeviceBoxAdapter)}
+                                            deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumHatDeviceBox: (box: OpenDrumHatDeviceBox): JsxValue => (
+                <OpenDrumHatDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, OpenDrumHatDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumRimDeviceBox: (box: OpenDrumRimDeviceBox): JsxValue => (
+                <OpenDrumRimDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, OpenDrumRimDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumTomDeviceBox: (box: OpenDrumTomDeviceBox): JsxValue => (
+                <OpenDrumTomDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, OpenDrumTomDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumClapDeviceBox: (box: OpenDrumClapDeviceBox): JsxValue => (
+                <OpenDrumClapDeviceEditor lifecycle={lifecycle}
+                                          service={service}
+                                          adapter={service.project.boxAdapters.adapterFor(box, OpenDrumClapDeviceBoxAdapter)}
+                                          deviceHost={deviceHost}/>
+            ),
+            visitOpenDrumSnareDeviceBox: (box: OpenDrumSnareDeviceBox): JsxValue => (
+                <OpenDrumSnareDeviceEditor lifecycle={lifecycle}
+                                           service={service}
+                                           adapter={service.project.boxAdapters.adapterFor(box, OpenDrumSnareDeviceBoxAdapter)}
+                                           deviceHost={deviceHost}/>
             ),
             visitWclapInstrumentBox: (box: WclapInstrumentBox): JsxValue => (
                 <WclapDeviceEditor lifecycle={lifecycle}

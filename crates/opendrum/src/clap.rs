@@ -8,8 +8,8 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{drive_makeup, Drive, DRIVE_BIAS};
-use crate::kick::Play;
+use crate::common::{drive_makeup, Cut, Drive, DRIVE_BIAS};
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 pub const MAX_HANDS: usize = 8;
@@ -41,6 +41,8 @@ const ROOM_CLOSED: f32 = 1.0;
 const ROOM_UPDATE: u32 = 32;
 const ROOM_ATTACK: f32 = 0.001;
 const ROOM_HOLD: f32 = 0.008;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.005;
 // the room falls fast, then lingers quietly (the references hold about -30 dB from 100 to 200 ms)
 const ROOM_CURVE: f32 = -0.6;
 // under the room a quiet second stage fades far longer (the 808 is still at -71 dB after 1.9 s)
@@ -120,8 +122,8 @@ struct Voice {
     snap_high: Svf,
     room_low: Svf,
     room_low_coefficients: SvfCoefficients,
-    held: bool,
-    noise: WhiteNoise
+    noise: WhiteNoise,
+    cut: Cut
 }
 
 impl Voice {
@@ -172,13 +174,7 @@ impl Voice {
         self.room_tail.set_floor(0.0001);
         self.room.set(ROOM_ATTACK, ROOM_HOLD, params.room_decay.max(0.01), sample_rate);
         self.room.set_curve(ROOM_CURVE);
-        self.held = params.play == Play::Gate;
-    }
-
-    fn release(&mut self) {
-        self.held = false;
-        self.room.release();
-        self.room_tail.release();
+        self.cut.reset();
     }
 
     #[inline]
@@ -206,13 +202,8 @@ impl Voice {
             if next == self.count - 1 && room_level > 0.0 {
                 self.room_level = room_level;
                 let tail = room_level * ROOM_TAIL_LEVEL * params.tail.clamp(0.0, 1.0);
-                if self.held {
-                    self.room.trigger_held(room_level);
-                    if tail > 0.0 {self.room_tail.trigger_held(tail);}
-                } else {
-                    self.room.trigger(room_level);
-                    if tail > 0.0 {self.room_tail.trigger(tail);}
-                }
+                self.room.trigger(room_level);
+                if tail > 0.0 {self.room_tail.trigger(tail);}
             }
         }
         let white = self.noise.next();
@@ -237,11 +228,11 @@ impl Voice {
         let room = self.room_low.process(band, &self.room_low_coefficients).low * room_envelope;
         let quiet = self.burst < SILENT && self.snap < SILENT && self.rise == 0;
         let room_idle = self.room.is_idle() && self.room_tail.is_idle();
-        if self.current != usize::MAX && self.current + 1 >= self.count && quiet && room_idle {
-            self.active = false;
-        }
+        let cut = self.cut.next();
+        let ended = self.current != usize::MAX && self.current + 1 >= self.count && quiet && room_idle;
+        if ended || self.cut.is_done() {self.active = false;}
         let burst = self.burst_after.process(self.burst_low * self.burst, &self.burst_after_coefficients).high;
-        (burst + snap + room) * self.level * OUTPUT_GAIN
+        (burst + snap + room) * self.level * OUTPUT_GAIN * cut
     }
 }
 
@@ -271,11 +262,6 @@ impl Clap {
         self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
-    pub fn note_off(&mut self, id: u32, params: &ClapParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
-    }
-
     pub fn process(&mut self, params: &ClapParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let room_level = if params.room <= LEVEL_OFF {0.0} else {libm::powf(10.0, params.room / 20.0)};
@@ -296,6 +282,8 @@ impl Clap {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(ClapParams, RELEASE);
 }
 
 #[cfg(test)]

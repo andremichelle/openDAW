@@ -101,3 +101,21 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-opendrum-kick]
 opt-level = 3
+[profile.release.package.device-opendrum-perc]
+opt-level = 3
+[profile.release.package.device-opendrum-bell]
+opt-level = 3
+[profile.release.package.device-opendrum-cymbal]
+opt-level = 3
+[profile.release.package.device-opendrum-shaker]
+opt-level = 3
+[profile.release.package.device-opendrum-hat]
+opt-level = 3
+[profile.release.package.device-opendrum-rim]
+opt-level = 3
+[profile.release.package.device-opendrum-tom]
+opt-level = 3
+[profile.release.package.device-opendrum-clap]
+opt-level = 3
+[profile.release.package.device-opendrum-snare]
+opt-level = 3

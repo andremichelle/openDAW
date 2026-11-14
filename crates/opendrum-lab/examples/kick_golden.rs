@@ -1,4 +1,5 @@
-use opendrum::kick::{Kick, KickParams, Play};
+use opendrum::common::Play;
+use opendrum::kick::{Kick, KickParams};
 use std::io::Write;
 
 fn main() {

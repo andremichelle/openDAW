@@ -4,7 +4,8 @@
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
-use crate::kick::Play;
+use crate::common::Cut;
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 
@@ -14,6 +15,8 @@ const TOP: f32 = 18000.0;
 const COLOR_REFERENCE: f32 = 7500.0;
 const OUTPUT_GAIN: f32 = 1.2;
 const ENVELOPE_FLOOR: f32 = 0.00001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.002;
 
 /// Times in seconds, Color in Hz, Volume in dB, Curve -1 to 1, Velocity 0 to 1.
 #[derive(Clone, Copy, Debug)]
@@ -39,15 +42,19 @@ struct Voice {
     id: u32,
     age: u32,
     level: f32,
+    elapsed: u32,
     amp: HitEnvelope,
     noise: WhiteNoise,
-    filters: [Svf; 2]
+    filters: [Svf; 2],
+    cut: Cut
 }
 
 impl Voice {
     fn start(&mut self, id: u32, age: u32, strength: f32, params: &ShakerParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
+        self.elapsed = 0;
+        self.cut.reset();
         self.id = id;
         self.age = age;
         self.level = strength;
@@ -56,16 +63,18 @@ impl Voice {
         self.amp.set(params.attack.max(0.0), 0.0, params.decay.max(0.002), sample_rate);
         self.amp.set_curve(params.curve);
         self.amp.set_floor(ENVELOPE_FLOOR);
-        if params.play == Play::Gate {self.amp.trigger_held(1.0);} else {self.amp.trigger(1.0);}
+        self.amp.trigger(1.0);
     }
 
     #[inline]
     fn render(&mut self, high: &SvfCoefficients, low: &SvfCoefficients) -> f32 {
+        self.elapsed = self.elapsed.saturating_add(1);
         let filtered = self.filters[0].process(self.noise.next(), high).high;
         let filtered = self.filters[1].process(filtered, low).low;
         let value = filtered * self.amp.next();
-        if self.amp.is_idle() {self.active = false;}
-        value * self.level
+        let cut = self.cut.next();
+        if self.amp.is_idle() || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -79,7 +88,8 @@ impl Shaker {
     pub fn new(sample_rate: f32) -> Self {Self {sample_rate, voices: [Voice::default(); VOICES], hits: 0}}
 
     /// `velocity` 0 to 1. The key does not move the sound.
-    pub fn note_on(&mut self, id: u32, velocity: f32, params: &ShakerParams) {
+    /// `transpose` is ignored, every note plays the same shaker.
+    pub fn note_on(&mut self, id: u32, velocity: f32, _transpose: f32, params: &ShakerParams) {
         self.hits = self.hits.wrapping_add(1);
         let strength = 1.0 - params.velocity * (1.0 - velocity.clamp(0.0, 1.0));
         let index = match params.play {
@@ -90,11 +100,6 @@ impl Shaker {
         };
         let (hits, sample_rate) = (self.hits, self.sample_rate);
         self.voices[index].start(id, hits, strength, params, sample_rate);
-    }
-
-    pub fn note_off(&mut self, id: u32, params: &ShakerParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.amp.release());
     }
 
     pub fn process(&mut self, params: &ShakerParams, output: &mut [f32]) {
@@ -113,6 +118,8 @@ impl Shaker {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(ShakerParams, RELEASE);
 }
 
 #[cfg(test)]
@@ -124,7 +131,7 @@ mod tests {
         for rate in [8_000.0, 16_000.0, 22_050.0] {
             let params = ShakerParams::default();
             let mut shaker = Shaker::new(rate);
-            shaker.note_on(1, 1.0, &params);
+            shaker.note_on(1, 1.0, 0.0, &params);
             let mut output = vec![0.0; (0.2 * rate) as usize];
             shaker.process(&params, &mut output);
             assert!(output.iter().all(|value| value.is_finite()), "{rate} Hz");
@@ -135,7 +142,7 @@ mod tests {
     const RATE: f32 = 48_000.0;
 
     fn render(shaker: &mut Shaker, params: &ShakerParams, seconds: f32) -> Vec<f32> {
-        shaker.note_on(1, 1.0, params);
+        shaker.note_on(1, 1.0, 0.0, params);
         let mut output = vec![0.0; (seconds * RATE) as usize];
         shaker.process(params, &mut output);
         output

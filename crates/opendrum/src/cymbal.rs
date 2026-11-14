@@ -7,8 +7,8 @@
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
-use crate::common::square;
-use crate::kick::Play;
+use crate::common::{square, Cut};
+use crate::common::Play;
 
 pub const VOICES: usize = 4;
 
@@ -32,6 +32,8 @@ const SIZZLE_GAIN: f32 = 1.5;
 const BODY_TONE: f32 = 0.4;
 const OUTPUT_GAIN: f32 = 3.0;
 const ENVELOPE_FLOOR: f32 = 0.00001;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.005;
 
 /// Attack and Decay in seconds, Volume in dB, Tune as a frequency ratio, the rest 0 to 1.
 #[derive(Clone, Copy, Debug)]
@@ -65,18 +67,22 @@ struct Voice {
     id: u32,
     age: u32,
     level: f32,
+    elapsed: u32,
     transpose: f32,
     phases: [f32; 6],
     body: HitEnvelope,
     top: HitEnvelope,
     sizzle: HitEnvelope,
-    filters: [Svf; 6]
+    filters: [Svf; 6],
+    cut: Cut
 }
 
 impl Voice {
     fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &CymbalParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
+        self.elapsed = 0;
+        self.cut.reset();
         self.id = id;
         self.age = age;
         self.level = strength;
@@ -96,18 +102,13 @@ impl Voice {
         self.sizzle.set(attack, 0.0, top, sample_rate);
         for envelope in [&mut self.body, &mut self.top, &mut self.sizzle] {
             envelope.set_floor(ENVELOPE_FLOOR);
-            if params.play == Play::Gate {envelope.trigger_held(1.0);} else {envelope.trigger(1.0);}
+            envelope.trigger(1.0);
         }
-    }
-
-    fn release(&mut self) {
-        self.body.release();
-        self.top.release();
-        self.sizzle.release();
     }
 
     #[inline]
     fn render(&mut self, params: &CymbalParams, filters: &Filters, sample_rate: f32) -> f32 {
+        self.elapsed = self.elapsed.saturating_add(1);
         let scale = params.tune * libm::exp2f(self.transpose / 12.0) / sample_rate;
         let mut metal = 0.0;
         for (phase, frequency) in self.phases.iter_mut().zip(SQUARES.iter()) {
@@ -125,8 +126,9 @@ impl Voice {
         let top = self.filters[3].process(metal, &filters.top[0]).high;
         let top = self.filters[4].process(top, &filters.top[1]).high * self.top.next();
         let sizzle = self.filters[5].process(metal, &filters.sizzle).high * self.sizzle.next() * tone * SIZZLE_GAIN;
-        if self.body.is_idle() && self.top.is_idle() && self.sizzle.is_idle() {self.active = false;}
-        (body + top + sizzle) * self.level * OUTPUT_GAIN
+        let cut = self.cut.next();
+        if (self.body.is_idle() && self.top.is_idle() && self.sizzle.is_idle()) || self.cut.is_done() {self.active = false;}
+        (body + top + sizzle) * self.level * OUTPUT_GAIN * cut
     }
 }
 
@@ -153,11 +155,6 @@ impl Cymbal {
         self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
-    pub fn note_off(&mut self, id: u32, params: &CymbalParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
-    }
-
     pub fn process(&mut self, params: &CymbalParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let limit = |frequency: f32| frequency.min(sample_rate * 0.45);
@@ -175,6 +172,8 @@ impl Cymbal {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(CymbalParams, RELEASE);
 }
 
 #[cfg(test)]

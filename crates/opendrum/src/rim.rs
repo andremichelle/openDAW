@@ -9,13 +9,15 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{Click, ClickShape, Clipper, Drive, CLICK_LENGTH, DRIVE_BIAS};
-use crate::kick::Play;
+use crate::common::{Click, ClickShape, Clipper, Cut, Drive, CLICK_LENGTH, DRIVE_BIAS};
+use crate::common::Play;
 
 pub const VOICES: usize = 8;
 
 // the third tone rings this share of Ring Hi
 const THIRD_RING: f32 = 0.5;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.002;
 const CLICK_NOISE_MIX: f32 = 0.5;
 // one seed for every hit: a rim or claves hit repeats exactly
 const CLICK_SEED: u32 = 0x9E37_79B9 ^ 0x21A1;
@@ -69,12 +71,12 @@ struct Voice {
     rings: [f32; 3],
     ring_factors: [f32; 3],
     amp: HitEnvelope,
-    click: Click
+    click: Click,
+    cut: Cut
 }
 
 impl Voice {
-    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &RimParams, held: bool,
-             sample_rate: f32) {
+    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &RimParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
         self.id = id;
@@ -82,6 +84,7 @@ impl Voice {
         self.level = strength;
         self.transpose = transpose;
         self.elapsed = 0;
+        self.cut.reset();
         if params.restart {
             self.tones.iter_mut().for_each(|tone| tone.reset(0.0));
         } else {
@@ -96,7 +99,7 @@ impl Voice {
         self.amp.set(0.0, 0.0, params.decay, sample_rate);
         self.amp.set_curve(params.punch);
         self.amp.set_floor(ENVELOPE_FLOOR);
-        if held {self.amp.trigger_held(1.0);} else {self.amp.trigger(1.0);}
+        self.amp.trigger(1.0);
     }
 
     #[inline]
@@ -117,8 +120,9 @@ impl Voice {
         if seconds < CLICK_LENGTH {
             value += self.click.render(self.elapsed, seconds, click, CLICK_NOISE_MIX) * params.click;
         }
-        if self.amp.is_idle() && seconds >= CLICK_LENGTH {self.active = false;}
-        value * self.level
+        let cut = self.cut.next();
+        if (self.amp.is_idle() && seconds >= CLICK_LENGTH) || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -149,12 +153,7 @@ impl Rim {
             _ => 0
         };
         let (hits, sample_rate) = (self.hits, self.sample_rate);
-        self.voices[index].start(id, hits, strength, transpose, params, params.play == Play::Gate, sample_rate);
-    }
-
-    pub fn note_off(&mut self, id: u32, params: &RimParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.amp.release());
+        self.voices[index].start(id, hits, strength, transpose, params, sample_rate);
     }
 
     pub fn process(&mut self, params: &RimParams, output: &mut [f32]) {
@@ -179,6 +178,8 @@ impl Rim {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(RimParams, RELEASE);
 }
 
 #[cfg(test)]

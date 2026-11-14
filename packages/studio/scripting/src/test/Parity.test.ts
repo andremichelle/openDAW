@@ -41,7 +41,8 @@ const assertMirrored = (facade: object, unused: ReadonlyArray<string> = []) => {
 describe("Schema parity", () => {
     it("mirrors every automatable instrument parameter", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Sampler", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Surgeon", "Cubed", "Apparat", "InstrumentComposite"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Sampler", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Surgeon", "Cubed", "Apparat", "InstrumentComposite",
+            "OpenDrumKick", "OpenDrumSnare", "OpenDrumClap", "OpenDrumTom", "OpenDrumRim", "OpenDrumHat", "OpenDrumShaker", "OpenDrumCymbal", "OpenDrumBell", "OpenDrumPerc"]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(project.addInstrumentUnit(key).instrument)})
         expect(plain).toEqual({
@@ -61,7 +62,17 @@ describe("Schema parity", () => {
                 ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.steps.${step}`)
             ]).flat(),
             Apparat: [],
-            InstrumentComposite: []
+            InstrumentComposite: [],
+            OpenDrumKick: [],
+            OpenDrumSnare: [],
+            OpenDrumClap: [],
+            OpenDrumTom: [],
+            OpenDrumRim: [],
+            OpenDrumHat: [],
+            OpenDrumShaker: [],
+            OpenDrumCymbal: [],
+            OpenDrumBell: [],
+            OpenDrumPerc: []
         })
     })
 

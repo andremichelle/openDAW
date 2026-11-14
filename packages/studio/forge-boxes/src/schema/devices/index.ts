@@ -14,6 +14,15 @@ import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
 import {SurgeonDeviceBox} from "./instruments/SurgeonDeviceBox"
 import {OpenDrumKickDeviceBox} from "./instruments/OpenDrumKickDeviceBox"
+import {OpenDrumPercDeviceBox} from "./instruments/OpenDrumPercDeviceBox"
+import {OpenDrumBellDeviceBox} from "./instruments/OpenDrumBellDeviceBox"
+import {OpenDrumCymbalDeviceBox} from "./instruments/OpenDrumCymbalDeviceBox"
+import {OpenDrumShakerDeviceBox} from "./instruments/OpenDrumShakerDeviceBox"
+import {OpenDrumHatDeviceBox} from "./instruments/OpenDrumHatDeviceBox"
+import {OpenDrumRimDeviceBox} from "./instruments/OpenDrumRimDeviceBox"
+import {OpenDrumTomDeviceBox} from "./instruments/OpenDrumTomDeviceBox"
+import {OpenDrumClapDeviceBox} from "./instruments/OpenDrumClapDeviceBox"
+import {OpenDrumSnareDeviceBox} from "./instruments/OpenDrumSnareDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {SamplerDeviceBox} from "./instruments/SamplerDeviceBox"
@@ -96,6 +105,15 @@ export const DeviceDefinitions = [
     WclapInstrumentBox,
     TubularDeviceBox,
     OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,

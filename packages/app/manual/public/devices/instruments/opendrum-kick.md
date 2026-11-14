@@ -67,5 +67,5 @@ A dark tail made from the kick itself, for rumble kicks.
 3. **Mode**:
     1. **Mono**: a new note cuts the ringing one.
     2. **Poly**: hits ring on and overlap.
-    3. **Gate**: the hit holds while the note is held and decays when it ends, for sustained kick basses.
+    3. **Gate**: as Mono, and the hit is cut short when its note ends.
 4. **Glide**: in Mono and Gate, a new note slides from the sounding pitch.

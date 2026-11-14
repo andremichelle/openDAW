@@ -586,6 +586,21 @@ references from disk.
 5. Kick: built 2026-11-14. Parity (3 checks) and a render test in the full engine (the device plays the engine's
    hit, correlation above 0.9999, a key 12 above plays an octave higher). Not checked in a browser yet.
    Open: a trigger to audition the hit from the display, stock presets.
+6. Snare, Clap, Tom, Rim, Hat, Shaker, Cymbal, Bell and Perc: built 2026-11-14 on the Kick's template, generated
+   from one spec per engine (values in the module's order, box key, mapping, range, unit, default = the first
+   preset of "Presets and controls", label, section, manual text) into the Rust parameter table, box, adapter,
+   editor, registrations and manual, so the layers cannot drift apart. Labels that repeat in a device carry their
+   section in the parameter name ("Noise Decay"), the editor drops the section under its heading. Parity for all
+   ten and a render test per device in the full engine (each plays its engine's hit, correlation above 0.9999).
+   Modules 24 to 50 kB. Not checked in a browser yet.
+7. Gate, new meaning (decided 2026-11-14, replaces the held Gate of 2026-11-13 which held the hit at full level and
+   played legato): a held note plays the hit exactly as Mono, the note's end cuts it with a short linear fade
+   (Kick and Tom 10 ms, Snare, Clap, Cymbal, Bell and Perc 5 ms, Hat, Shaker and Rim 2 ms), every note is a new hit.
+   The display renders Gate as Mono. Velocity defaults to 100 % in every device (decided 2026-11-14).
+8. Display (2026-11-14): the same colors in every device (waveform blue, level curve white, pitch curves cream), a
+   white dot on the level curve for every sounding hit (the device sends the seconds since each hit started at
+   address key 1001, up to 16, -1 ends the list), and the span zooms to the hit: the shortest of 1/16, 1/8, 1/4,
+   1/2, 1 and 2 s that holds every sample above 1 % of its peak (under half a pixel).
 
 ## Phases
 

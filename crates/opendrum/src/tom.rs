@@ -7,8 +7,8 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{drive_makeup, Drive, DRIVE_BIAS};
-use crate::kick::Play;
+use crate::common::{drive_makeup, Cut, Drive, DRIVE_BIAS};
+use crate::common::Play;
 
 pub const VOICES: usize = 16;
 // Level in dB, at or below this the noise is off
@@ -19,6 +19,8 @@ const SHAPE_HARMONICS: [f32; 4] = [0.1, 0.2, 0.03, 0.04];
 // in the attack the main body carries more of harmonics 2, 3 and 5 (the 909's clipper runs from hard to soft)
 const EDGE_HARMONICS: [f32; 3] = [0.05, 0.15, 0.25];
 const EDGE_TIME: f32 = 0.06;
+// in Gate a hit ends this fast when its note ends
+const RELEASE: f32 = 0.01;
 // the top body: its ratio above the main one and its own fixed harmonics 2 to 5 (measured 1.72 to 1.85)
 const TOP_RATIO: f32 = 1.78;
 const TOP_HARMONICS: [f32; 4] = [0.15, 0.15, 0.1, 0.1];
@@ -95,7 +97,6 @@ struct Voice {
     level: f32,
     transpose: f32,
     slide: f32,
-    gated: bool,
     bend: f32,
     drift: f32,
     elapsed: u32,
@@ -107,7 +108,8 @@ struct Voice {
     dc_input: f32,
     dc_output: f32,
     noise: WhiteNoise,
-    noise_filters: [Svf; 3]
+    noise_filters: [Svf; 3],
+    cut: Cut
 }
 
 impl Voice {
@@ -121,8 +123,7 @@ impl Voice {
         self.noise_amp.set_floor(ENVELOPE_FLOOR);
     }
 
-    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &TomParams, held: bool,
-             sample_rate: f32) {
+    fn start(&mut self, id: u32, age: u32, strength: f32, transpose: f32, params: &TomParams, sample_rate: f32) {
         let restart = !self.active;
         self.active = true;
         self.id = id;
@@ -130,7 +131,7 @@ impl Voice {
         self.level = strength;
         self.transpose = transpose;
         self.slide = 0.0;
-        self.gated = held;
+        self.cut.reset();
         self.bend = libm::exp2f(params.pitch * (0.5 + 0.5 * strength) / 12.0) - 1.0;
         self.drift = libm::exp2f(params.drift / 12.0) - 1.0;
         self.elapsed = 0;
@@ -138,17 +139,10 @@ impl Voice {
         self.noise.reset(age.wrapping_mul(0x85EB_CA6B) ^ 0x70A2);
         if restart {self.noise_filters.iter_mut().for_each(|filter| filter.reset());}
         self.set_envelopes(params, sample_rate);
-        for envelope in [&mut self.amp, &mut self.noise_amp] {
-            if held {envelope.trigger_held(1.0);} else {envelope.trigger(1.0);}
-        }
+        self.amp.trigger(1.0);
+        self.noise_amp.trigger(1.0);
         self.top_amp.trigger(1.0);
         self.edge.trigger(1.0);
-    }
-
-    fn release(&mut self) {
-        self.gated = false;
-        self.amp.release();
-        self.noise_amp.release();
     }
 
     #[inline]
@@ -173,8 +167,10 @@ impl Voice {
         let noise_amp = self.noise_amp.next();
         let air = self.noise_filters[2].process(white, &block.air_high).high * params.air * AIR_GAIN;
         value += (band * block.noise_level + air) * noise_amp;
-        if self.amp.is_idle() && self.noise_amp.is_idle() && self.top_amp.is_idle() {self.active = false;}
-        value * self.level
+        let cut = self.cut.next();
+        let idle = self.amp.is_idle() && self.noise_amp.is_idle() && self.top_amp.is_idle();
+        if idle || self.cut.is_done() {self.active = false;}
+        value * self.level * cut
     }
 }
 
@@ -228,19 +224,8 @@ impl Tom {
         let voice = &mut self.voices[index];
         let previous = voice.transpose + voice.slide;
         let sliding = params.play != Play::Poly && voice.active && params.glide > 0.0;
-        if params.play == Play::Gate && voice.active && voice.gated {
-            voice.id = id;
-            voice.slide = if params.glide > 0.0 {previous - transpose} else {0.0};
-            voice.transpose = transpose;
-            return;
-        }
-        voice.start(id, hits, strength, transpose, params, params.play == Play::Gate, sample_rate);
+        voice.start(id, hits, strength, transpose, params, sample_rate);
         if sliding {voice.slide = previous - transpose;}
-    }
-
-    pub fn note_off(&mut self, id: u32, params: &TomParams) {
-        if params.play != Play::Gate {return;}
-        self.voices.iter_mut().filter(|voice| voice.active && voice.id == id).for_each(|voice| voice.release());
     }
 
     pub fn process(&mut self, params: &TomParams, output: &mut [f32]) {
@@ -274,6 +259,8 @@ impl Tom {
     }
 
     pub fn is_silent(&self) -> bool {self.voices.iter().all(|voice| !voice.active)}
+
+    voice_queries!(TomParams, RELEASE);
 }
 
 #[cfg(test)]

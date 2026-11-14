@@ -1,24 +1,11 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
+import {OpenDrumFields} from "./OpenDrumFields"
 
-const range = (name: string, value: number, min: number, max: number, scaling: "linear" | "exponential",
-               unit: string) => ({
-    type: "float32", name, value, pointerRules: ParameterPointerRules, constraints: {min, max, scaling}, unit
-} as const)
-const unipolar = (name: string, value: number) => ({
-    type: "float32", name, value, pointerRules: ParameterPointerRules, ...UnipolarConstraints
-} as const)
-
+const {range, unipolar, bipolar, choice} = OpenDrumFields
 const PlayModes = 3 // Mono, Poly, Gate
 const RumbleLengths = 5 // 1/16, 1/8, 1/4, 1/2, 1/1
-const bipolar = (name: string, value: number) => ({
-    type: "float32", name, value, pointerRules: ParameterPointerRules, constraints: "bipolar", unit: "%"
-} as const)
-const choice = (name: string, value: number, length: number) => ({
-    type: "int32", name, value, pointerRules: ParameterPointerRules, constraints: {length}, unit: ""
-} as const)
 
 export const OpenDrumKickDeviceBox: BoxSchema<Pointers> =
     DeviceFactory.createInstrument("OpenDrumKickDeviceBox", "notes", {
@@ -39,7 +26,7 @@ export const OpenDrumKickDeviceBox: BoxSchema<Pointers> =
         24: unipolar("duck", 1.0),
         25: unipolar("bright", 0.25),
         26: range("volume", 0.0, -36.0, 6.0, "linear", "dB"),
-        27: unipolar("velocity", 0.5),
+        27: unipolar("velocity", 1),
         28: choice("play", 0, PlayModes),
         29: range("glide", 0.0, 0.0, 1.0, "linear", "s")
     })
