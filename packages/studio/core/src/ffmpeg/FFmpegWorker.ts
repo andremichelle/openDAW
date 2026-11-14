@@ -6,9 +6,17 @@ import {OpusConverter} from "./opus"
 
 export type AcceptedSource = File | Blob
 
+export type FFmpegCoreURLs = Readonly<{ coreURL: string, wasmURL: string }>
+
 export class FFmpegWorker {
-    static async load(progress: Progress.Handler = Progress.Empty): Promise<FFmpegWorker> {
-        return Loader.loadOrAttach(progress)
+    static readonly DefaultCoreURLs: FFmpegCoreURLs = {
+        coreURL: "https://package.opendaw.studio/ffmpeg-core.js",
+        wasmURL: "https://package.opendaw.studio/ffmpeg-core.wasm"
+    }
+
+    static async load(progress: Progress.Handler = Progress.Empty,
+                      urls: FFmpegCoreURLs = FFmpegWorker.DefaultCoreURLs): Promise<FFmpegWorker> {
+        return Loader.loadOrAttach(progress, urls)
     }
 
     readonly #ffmpeg: FFmpeg
@@ -48,9 +56,9 @@ export class FFmpegWorker {
 }
 
 class Loader {
-    static async loadOrAttach(progress: Progress.Handler): Promise<FFmpegWorker> {
+    static async loadOrAttach(progress: Progress.Handler, urls: FFmpegCoreURLs): Promise<FFmpegWorker> {
         if (this.#loader === null) {
-            this.#loader = new Loader()
+            this.#loader = new Loader(urls)
         }
         const subscription = this.#loader.#progressNotifier.subscribe(progress)
         return this.#loader.load().finally(() => subscription.terminate())
@@ -59,6 +67,9 @@ class Loader {
     static #loader: Nullable<Loader> = null
 
     readonly #progressNotifier = new Notifier<unitValue>()
+    readonly #urls: FFmpegCoreURLs
+
+    constructor(urls: FFmpegCoreURLs) {this.#urls = urls}
 
     async load(): Promise<FFmpegWorker> {
         const {FFmpeg} = await import("@ffmpeg/ffmpeg")
@@ -69,7 +80,6 @@ class Loader {
         ffmpeg.on("progress", event => {
             this.#progressNotifier.notify(event.progress)
         })
-        const baseURL = "https://package.opendaw.studio" // mirror of https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm
         console.debug("[FFmpeg] Downloading core files...")
         const downloadWithProgress = async (url: string): Promise<ArrayBuffer> => {
             const response = await fetch(url)
@@ -98,8 +108,8 @@ class Loader {
             console.debug("position", position)
             return result.buffer
         }
-        const coreData = await downloadWithProgress(`${baseURL}/ffmpeg-core.js`)
-        const wasmData = await downloadWithProgress(`${baseURL}/ffmpeg-core.wasm`)
+        const coreData = await downloadWithProgress(this.#urls.coreURL)
+        const wasmData = await downloadWithProgress(this.#urls.wasmURL)
         console.debug("[FFmpeg] Creating blob URLs...")
         const coreBlob = new Blob([coreData], {type: "text/javascript"})
         const wasmBlob = new Blob([wasmData], {type: "application/wasm"})
