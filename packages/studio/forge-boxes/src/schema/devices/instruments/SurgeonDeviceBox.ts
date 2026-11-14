@@ -85,6 +85,7 @@ export const SurgeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrum
     12: {type: "int32", name: "slot", pointerRules: ParameterPointerRules, value: 0, constraints: {min: -1, max: 7}, unit: ""},
     // the pattern the live controls belong to, it stays when the slot goes off
     13: {type: "int32", name: "pattern", value: 0, constraints: {min: 0, max: 7}, unit: ""},
+    14: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false},
     // the controls of the editor, every one automatable. An automated one keeps its automation in every pattern
     20: {type: "object", name: "live", class: {name: "SurgeonSound", fields: fields(true)}},
     // the stored patterns, plain values. The device plays these, an edit of a live control is kept here as well

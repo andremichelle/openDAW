@@ -9,6 +9,7 @@ import {
     GrooveOffsetBox,
     NoteEventBox,
     NoteEventCollectionBox,
+    SurgeonDeviceBox,
     ValueEventBox,
     ValueEventCollectionBox,
     ValueRegionBox,
@@ -190,6 +191,17 @@ describe("Grooves", () => {
         expect(Grooves.users(groove).length).toBe(1)
         project.editing.modify(() => Grooves.deleteAll(project, [groove], "fallback"))
         expect(cubed.groove.isEmpty()).toBe(true)
+    })
+    it("a new Surgeon plays straight and deleting its groove with fallback leaves it without one", async () => {
+        const project = await createProject()
+        const groove = project.editing.modify(() => Grooves.create(project, "power")).unwrap()
+        const surgeon = project.editing.modify(() =>
+            asInstanceOf(project.api.createAnyInstrument(InstrumentFactories.Surgeon).instrumentBox, SurgeonDeviceBox)).unwrap()
+        expect(surgeon.groove.isEmpty()).toBe(true)
+        project.editing.modify(() => surgeon.groove.refer(groove))
+        expect(Grooves.users(groove).length).toBe(1)
+        project.editing.modify(() => Grooves.deleteAll(project, [groove], "fallback"))
+        expect(surgeon.groove.isEmpty()).toBe(true)
     })
     it("flattening keeps a groove only when every region shares it", async () => {
         const project = await createProject()

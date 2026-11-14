@@ -6,6 +6,7 @@ import {Propagation} from "@opendaw/lib-box"
 import {
     AutomatableParameterFieldAdapter,
     DeviceHost,
+    Grooves,
     InstrumentFactories,
     Surgeon,
     SurgeonDeviceBoxAdapter,
@@ -13,7 +14,7 @@ import {
     TrackType
 } from "@opendaw/studio-adapters"
 import {CanvasPainter, ContextMenu, MenuItem} from "@opendaw/studio-core"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -22,6 +23,9 @@ import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {Icon} from "@/ui/components/Icon"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 
 const className = Html.adoptStyleSheet(css, "SurgeonDeviceEditor")
 
@@ -287,6 +291,13 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const sections: ReadonlyArray<HTMLElement> = [loops, sound(ToneParams), sound(ShapeParams)]
     const tabs: ReadonlyArray<HTMLElement> = ["LOOPS", "TONE", "SHAPE"].map(label => <h3 className="tab">{label}</h3>)
     tabs.forEach((tab, index) => lifecycle.own(Events.subscribe(tab, "click", () => selectedTab.setValue(index))))
+    const grooveButton: HTMLElement = (
+        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(GrooveMenus.choiceItems(project, [box.groove]))}
+                    appearance={{tooltip: () => `Groove: ${box.groove.targetVertex
+                        .mapOr(({box: groove}) => Grooves.adapterOf(project, Grooves.asGrooveBox(groove)).label, GrooveMenus.NoneLabel)}`}}>
+            <label>Groove<Icon symbol={IconSymbol.Dropdown}/></label>
+        </MenuButton>
+    )
     lifecycle.own(selectedTab.catchupAndSubscribe(owner => {
         tabs.forEach((tab, index) => tab.classList.toggle("selected", index === owner.getValue()))
         sections.forEach((section, index) => section.classList.toggle("hidden", index !== owner.getValue()))
@@ -312,7 +323,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                               </nav>
                               <div className="display">{canvas}</div>
                               <div className="sections">
-                                  <header>{tabs}</header>
+                                  <header>{tabs}{grooveButton}</header>
                                   {sections}
                               </div>
                           </div>

@@ -112,9 +112,21 @@ component
     > header
       grid-area: 1 / 1
       display: flex
-      column-gap: 4px
+      column-gap: 1px
       margin-right: $title + $row-gap
       --color: var(--color-cream)
+
+      > button
+        --color: var(--color-purple)
+        width: 62px
+        margin-left: 24px
+        font-size: 9px
+        color: var(--color)
+
+        > label
+          font-size: inherit
+          line-height: 1
+          cursor: pointer
 
     > section
       grid-area: 2 / 1
@@ -145,9 +157,14 @@ component
     letter-spacing: 0.2px
     white-space: nowrap
     cursor: pointer
-    border-radius: 2px 2px 1px 1px
     color: rgba(white, 0.6)
     background-color: color-mix(in srgb, var(--color) 10%, transparent)
+
+    &:first-of-type
+      border-radius: 5px 0 0 2px
+
+    &:last-of-type
+      border-radius: 0 5px 2px 0
 
     &.selected
       color: rgba(black, 0.95)

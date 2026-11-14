@@ -60,7 +60,7 @@ export const GroovesList = ({lifecycle, service}: Construct): HTMLElement => {
             Html.empty(entries)
             const targets = Grooves.targets(groove.box)
             if (targets.length === 0) {
-                entries.append(<div className="placeholder">Choose this groove in a Zeitgeist, Cubed, region or clip</div>)
+                entries.append(<div className="placeholder">Choose this groove in a Zeitgeist, Cubed, Surgeon, region or clip</div>)
                 return
             }
             targets.forEach(pointer => {

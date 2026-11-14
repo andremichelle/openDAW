@@ -3,7 +3,8 @@
 A groove moves notes in time. It can swing offbeats, speed a phrase up, wobble at random or push everything
 a little late. Grooves are shared project resources like modulators: one groove can drive the
 [Zeitgeist](/manuals/devices/midi/zeitgeist) MIDI effect on several instruments, the pattern of
-[Cubed](/manuals/devices/instruments/cubed), and note and automation regions and clips at the same time.
+[Cubed](/manuals/devices/instruments/cubed) and [Surgeon](/manuals/devices/instruments/surgeon), and note and
+automation regions and clips at the same time.
 
 ---
 
@@ -15,7 +16,7 @@ uses. You find the list on the **Modulation** screen (⇧3) in the **Grooves** t
 A groove is used in three places:
 
 - by a **Zeitgeist** on an instrument, which grooves every note that reaches it
-- by **Cubed**, which grooves the steps of its own pattern
+- by **Cubed** and **Surgeon**, which groove the steps of their own patterns
 - by a **note or automation region or clip**, which grooves its own notes or curve
 
 Change a groove once and everything that uses it follows.
@@ -80,7 +81,7 @@ Each groove has a row with its editor and, on the right, the list of everything 
 - click an instrument in the **Used by** list to open it, the bin icon removes the groove from that user
 
 Deleting a groove that is in use asks what its users should do: **Remove from targets** leaves them without a
-groove, **Use Global Shuffle** moves a Zeitgeist onto the Global Shuffle. Cubed, regions and clips always lose their
+groove, **Use Global Shuffle** moves a Zeitgeist onto the Global Shuffle. Cubed, Surgeon, regions and clips always lose their
 groove.
 
 The Global Shuffle is never deleted, but you can change its type. Its amount is also shown next to the tempo
@@ -122,11 +123,15 @@ Audio regions do not take a groove yet.
 
 ---
 
-## 6. Cubed
+## 6. Cubed and Surgeon
 
 The **Groove** button next to the dice button of [Cubed](/manuals/devices/instruments/cubed) picks the groove its
 pattern plays through, with **Go to**, **None** and **New** like the region menu. A new Cubed plays straight. In a
 loop, Cubed plays every pass like a Zeitgeist.
+
+[Surgeon](/manuals/devices/instruments/surgeon) has the same menu on the **Groove** tab next to Loops, Tone and
+Shape. One groove moves the steps of all eight patterns. The bar a pattern takes over on stays where it is. In a
+loop, Surgeon plays every pass like a Zeitgeist.
 
 ---
 
@@ -140,7 +145,7 @@ the loop, like a 1 or 2 bar groove in a 4 bar loop, loses no note.
 
 ## 8. Copy, Paste and Presets
 
-Copies keep their groove. Duplicating, copying and pasting a region, clip, Zeitgeist, Cubed or instrument within a
+Copies keep their groove. Duplicating, copying and pasting a region, clip, Zeitgeist, Cubed, Surgeon or instrument within a
 project points at the same groove. Pasted into another project, the groove comes along and joins that
 project's list. The Global Shuffle maps onto the other project's Global Shuffle.
 
@@ -154,4 +159,4 @@ Scripts see every groove with its type and parameters:
 - `project.grooves` lists every groove in order
 - `groove` on a Zeitgeist reads its groove, `null` for none
 - `groove` on a note or value region and a note or value clip reads and sets its groove, `null` for none
-- `groove` on a Cubed reads and sets the groove of its pattern, `null` for none
+- `groove` on a Cubed or a Surgeon reads and sets the groove of its patterns, `null` for none

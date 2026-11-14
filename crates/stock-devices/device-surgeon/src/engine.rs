@@ -255,6 +255,13 @@ impl Engine {
     /// describe the bar around `p0` (the signature), a fired slot takes over where a bar starts.
     pub fn process_bars(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64, bar_length: f64,
                         output: &mut [f32]) {
+        self.process_straight(p0, p1, playing, discontinuous, bar_start, bar_length, output);
+    }
+
+    /// `process_bars` for a grooved block: `[p0, p1)` is the STRAIGHT range the groove moves into the block. Steps,
+    /// bars, lanes and note lengths follow it, so the groove moves every step.
+    pub fn process_straight(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64,
+                            bar_length: f64, output: &mut [f32]) {
         let bar_length = if bar_length > 0.0 {bar_length} else {BAR_PULSES};
         let frames = output.len().min(MAX_FRAMES);
         let count = frames * OVERSAMPLING;

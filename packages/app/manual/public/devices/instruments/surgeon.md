@@ -50,6 +50,9 @@ Below the circles:
 2. **Tune**: the centre pitch in Hz.
 3. **Volume**
 
+The **Groove** dropdown to the right of the Loops, Tone and Shape tabs picks a [groove](/manuals/grooves) for all
+patterns, with **Go to**, **None** and **New**. A new Surgeon plays straight.
+
 ---
 
 ## 2. Display

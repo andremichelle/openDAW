@@ -13,6 +13,7 @@ import {
     NoteClipBox,
     NoteRegionBox,
     RootBox,
+    SurgeonDeviceBox,
     ValueClipBox,
     ValueRegionBox,
     ZeitgeistDeviceBox
@@ -176,7 +177,8 @@ export namespace Grooves {
         if (doomed.size === 0) {return}
         const global = globalGroove(context)
         doomed.forEach(groove => users(groove).slice().forEach(pointer => {
-            if (mode === "fallback" && !isTimelineBox(pointer.box) && !isInstanceOf(pointer.box, CubedDeviceBox)) {
+            if (mode === "fallback" && !isTimelineBox(pointer.box) && !isInstanceOf(pointer.box, CubedDeviceBox)
+                && !isInstanceOf(pointer.box, SurgeonDeviceBox)) {
                 if (isInstanceOf(pointer.box, GrooveStackEntryBox)
                     && wouldContain(global, asGrooveBox(pointer.box.stack.targetVertex
                         .unwrap("Entry without stack").box))) {

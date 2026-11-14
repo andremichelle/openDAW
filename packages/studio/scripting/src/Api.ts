@@ -1984,6 +1984,8 @@ export interface Surgeon extends Instrument {
     readonly live: SurgeonValues
     /** The eight patterns */
     readonly patterns: ReadonlyArray<SurgeonValues>
+    /** The groove its patterns play through, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
     /** Selects a pattern (0 to 7): it plays from the next bar and the live values become its values */
     select(pattern: int): void
 }

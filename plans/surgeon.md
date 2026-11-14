@@ -54,6 +54,10 @@ proves it (as for Slide: at 0 % the engine renders the same samples as before).
    notes on the track every sample stays the same.
 6. All loops run on the song position, not on the moment the pattern was fired. A pattern fired late joins
    exactly where it would be had it played all along ("in phase", decided 2026-11-13).
+7. Groove (2026-11-14): one optional groove for the device (`groove`, key 14), like Cubed. The device asks the
+   groove for the straight range of every chunk and the engine runs on it: steps, note lengths, bars, mutation
+   passes and lanes. Bar switches stay on the straight bar lines. Without a groove the range is the block itself,
+   so every sample stays the same (fingerprints unchanged). Deleting the groove leaves Surgeon without one.
 
 ### Pitch loop
 
@@ -286,6 +290,7 @@ How the engine core became an instrument (2026-11-13).
 3. `live`: 101 automatable parameters, the controls of the editor (rate, the pitch loop, the lanes, the sound and
    its lane amounts).
 4. `patterns`: 8 times the same 101 values as plain fields.
+5. `groove`: an optional pointer to a groove of the project.
 
 One spec list generates both the live parameters and the pattern fields, so they cannot drift apart.
 
