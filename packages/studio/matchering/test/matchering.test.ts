@@ -60,8 +60,9 @@ describe("matchering.wasm", async () => {
     it("matches the target like Matchering and reports the stages in order", () => {
         stages.length = 0
         const result = wasm.matchTarget(targetLeft, targetRight, wasm.analyseReference(referenceLeft, referenceRight))
-        // the export clamps the curves to ±12 dB (crates/matchering CURVE_LIMIT_DB), Matchering itself does not
-        const clamped = (curve: Float64Array) => curve.map(value => Math.min(10 ** (12 / 20), Math.max(10 ** (-12 / 20), value)))
+        // the export levels the curves off softly toward ±9 dB (crates/matchering CURVE_LIMIT_DB), Matchering itself does not
+        const clamped = (curve: Float64Array) => curve.map((value, index) =>
+            index === 0 ? value : 10 ** (9 * Math.tanh(20 * Math.log10(Math.max(1e-6, value)) / 9) / 20))
         expect(maxDeviation(result.midCurve, clamped(fixture("match_mid_curve")), 2)).toBeLessThan(1e-5)
         expect(maxDeviation(result.sideCurve, clamped(fixture("match_side_curve")), 2)).toBeLessThan(1e-5)
         expect(Number.isFinite(result.gain) && result.gain > 0.0).toBe(true)
@@ -72,7 +73,7 @@ describe("matchering.wasm", async () => {
         Matchering.BuiltinProfiles.forEach((_, index) => {
             const profile = wasm.builtinProfile(index)
             expect(profile.midSpectrum.length).toBe(2049)
-            expect(20 * Math.log10(profile.matchRms)).toBeCloseTo(index === 3 ? -9 : -11, 0)
+            expect(20 * Math.log10(profile.matchRms * profile.finalAmplitude)).toBeCloseTo(index === 3 ? -12 : -14, 0)
         })
         const result = wasm.matchTarget(targetLeft, targetRight, wasm.builtinProfile(0))
         expect(result.midCurve.every(Number.isFinite)).toBe(true)

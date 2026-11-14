@@ -5,7 +5,7 @@
 // WASM CONTRACT: packages/studio/matchering/src/MatcheringWasm.ts mirrors these exports and layouts.
 use crate::analysis::{analyse_reference as analyse, match_target as matching, Error, MatchResult, ReferenceProfile,
                       Stage};
-use crate::config::{BINS, CURVE_LIMIT_DB};
+use crate::config::{BINS, CURVE_LIMIT_DB, PEAK_BUDGET_DB};
 
 pub const PROFILE_LENGTH: usize = 2 + 2 * BINS;
 pub const RESULT_LENGTH: usize = 2 + 2 * BINS;
@@ -80,7 +80,7 @@ pub extern "C" fn match_target(left: *const f32, right: *const f32, frames: usiz
         side_spectrum: profile[2 + BINS..].to_vec()
     };
     let mut report = |stage: Stage| unsafe {progress(stage as u32)};
-    match matching(left, right, &profile, Some(CURVE_LIMIT_DB), &mut report) {
+    match matching(left, right, &profile, Some(CURVE_LIMIT_DB), Some(PEAK_BUDGET_DB), &mut report) {
         Ok(MatchResult {gain, final_amplitude, mid_curve, side_curve}) => {
             let output = unsafe {core::slice::from_raw_parts_mut(output, RESULT_LENGTH)};
             output[0] = gain;

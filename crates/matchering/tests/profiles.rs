@@ -1,7 +1,7 @@
 // The built-in profiles are designed spectra run through the reference analysis. Their loudness, tilt and side
 // level must come out as designed, and different profiles must lead to different matches.
 
-use matchering::analysis::match_target;
+use matchering::analysis::{match_target, ReferenceProfile};
 use matchering::config::{BINS, FFT_SIZE, SAMPLE_RATE};
 use matchering::profiles::{builtin, COUNT};
 
@@ -22,8 +22,9 @@ fn profiles_are_deterministic_and_complete() {
 #[test]
 fn loudness_and_tilt_follow_the_design() {
     let balanced = builtin(0);
-    assert!((db(balanced.match_rms) - -11.0).abs() < 0.5, "balanced rms {}", db(balanced.match_rms));
-    assert!((db(builtin(3).match_rms) - -9.0).abs() < 0.5, "punchy rms");
+    let loudness = |profile: &ReferenceProfile| db(profile.match_rms * profile.final_amplitude);
+    assert!((loudness(&balanced) - -14.0).abs() < 0.5, "balanced rms {}", loudness(&balanced));
+    assert!((loudness(&builtin(3)) - -12.0).abs() < 0.5, "punchy rms {}", loudness(&builtin(3)));
     let tilt = |index: usize| {
         let profile = builtin(index);
         let average = |frequency: f64| {
@@ -57,7 +58,29 @@ fn different_profiles_give_different_curves_for_the_same_target() {
     let warm = builtin(1);
     let balanced = builtin(0);
     let target: Vec<f64> = (0..20 * SAMPLE_RATE).map(|index| ((index as f64) * 0.05).sin() * 0.3).collect();
-    let warm_result = match_target(&target, &target, &warm, None, &mut |_| {}).unwrap();
-    let balanced_result = match_target(&target, &target, &balanced, None, &mut |_| {}).unwrap();
+    let warm_result = match_target(&target, &target, &warm, None, None, &mut |_| {}).unwrap();
+    let balanced_result = match_target(&target, &target, &balanced, None, None, &mut |_| {}).unwrap();
     assert_ne!(warm_result.mid_curve, balanced_result.mid_curve);
+}
+
+#[test]
+fn the_peak_budget_keeps_a_dynamic_mix_from_being_crushed() {
+    use matchering::analysis::apply;
+    use matchering::config::{CURVE_LIMIT_DB, PEAK_BUDGET_DB, THRESHOLD};
+    // a quiet bed with a loud hit every second, peaks far above its loudness
+    let target: Vec<f64> = (0..20 * SAMPLE_RATE).map(|index| {
+        let bed = ((index as f64) * 0.05).sin() * 0.05;
+        let hit = if index % SAMPLE_RATE < 200 {((index as f64) * 0.3).sin() * 0.9} else {0.0};
+        bed + hit
+    }).collect();
+    let punchy = builtin(3);
+    let free = match_target(&target, &target, &punchy, Some(CURVE_LIMIT_DB), None, &mut |_| {}).unwrap();
+    let held = match_target(&target, &target, &punchy, Some(CURVE_LIMIT_DB), Some(PEAK_BUDGET_DB), &mut |_| {}).unwrap();
+    let peak = |result| {
+        let (left, right) = apply(&target, &target, result);
+        left.iter().chain(&right).fold(0.0f64, |peak, value| peak.max(value.abs()))
+    };
+    assert!(db(peak(&free) / THRESHOLD) > PEAK_BUDGET_DB + 3.0, "without a budget the limiter takes {} dB", db(peak(&free) / THRESHOLD));
+    assert!(db(peak(&held) / THRESHOLD) <= PEAK_BUDGET_DB + 1e-6, "with the budget {} dB", db(peak(&held) / THRESHOLD));
+    assert!(held.gain < free.gain);
 }

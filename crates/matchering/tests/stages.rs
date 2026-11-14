@@ -60,7 +60,7 @@ fn matching_curves() {
     let (left, right) = reference();
     let profile = analyse_reference(&left, &right).unwrap();
     let (left, right) = target();
-    let result = match_target(&left, &right, &profile, None, &mut |_| {}).unwrap();
+    let result = match_target(&left, &right, &profile, None, None, &mut |_| {}).unwrap();
     assert_close(&result.mid_curve[2..], &fixture("match_mid_curve")[2..], 1e-9);
     assert_close(&result.side_curve[2..], &fixture("match_side_curve")[2..], 1e-9);
 }
@@ -70,7 +70,7 @@ fn unlimited_result_matches_matchering() {
     let (left, right) = reference();
     let profile = analyse_reference(&left, &right).unwrap();
     let (left, right) = target();
-    let result = match_target(&left, &right, &profile, None, &mut |_| {}).unwrap();
+    let result = match_target(&left, &right, &profile, None, None, &mut |_| {}).unwrap();
     let (out_left, out_right) = apply(&left, &right, &result);
     let decimated: Vec<f64> = (0..out_left.len()).step_by(997)
         .flat_map(|index| [out_left[index], out_right[index]]).collect();
@@ -100,19 +100,23 @@ fn quiet_reference_is_normalized_and_keeps_its_loudness_as_final_amplitude() {
 }
 
 #[test]
-fn curve_limit_clamps_a_narrow_mix_and_keeps_the_loudness_match() {
+fn curve_limit_levels_off_a_narrow_mix_and_keeps_the_loudness_match() {
     let (left, right) = reference();
     let profile = analyse_reference(&left, &right).unwrap();
     let (left, _) = target();
     let narrow: Vec<f64> = left.iter().enumerate().map(|(index, value)| value + 1e-4 * noise(99, index as u64)).collect();
-    let unlimited = match_target(&left, &narrow, &profile, None, &mut |_| {}).unwrap();
-    let limited = match_target(&left, &narrow, &profile, Some(12.0), &mut |_| {}).unwrap();
+    let unlimited = match_target(&left, &narrow, &profile, None, None, &mut |_| {}).unwrap();
+    let limited = match_target(&left, &narrow, &profile, Some(6.0), None, &mut |_| {}).unwrap();
     let db = |value: f64| 20.0 * value.log10();
     let peak = |curve: &[f64]| curve[1..].iter().fold(f64::MIN, |peak, value| peak.max(db(*value)));
     let floor = |curve: &[f64]| curve[1..].iter().fold(f64::MAX, |floor, value| floor.min(db(*value)));
     assert!(peak(&unlimited.side_curve) > 30.0, "the narrow side is boosted without a limit");
-    assert!(peak(&limited.side_curve) <= 12.0 + 1e-9 && floor(&limited.side_curve) >= -12.0 - 1e-9);
-    assert!(peak(&limited.mid_curve) <= 12.0 + 1e-9 && floor(&limited.mid_curve) >= -12.0 - 1e-9);
+    assert!(peak(&limited.side_curve) < 6.0 && floor(&limited.side_curve) > -6.0);
+    assert!(peak(&limited.mid_curve) < 6.0 && floor(&limited.mid_curve) > -6.0);
+    // small corrections keep their size, the shape stays
+    unlimited.mid_curve[1..].iter().zip(&limited.mid_curve[1..])
+        .filter(|(free, _)| db(**free).abs() < 1.0)
+        .for_each(|(free, held)| assert!((db(*free) - db(*held)).abs() < 0.05));
     assert_eq!(limited.mid_curve[0], 0.0);
     let (out_left, out_right) = apply(&left, &narrow, &limited);
     let mid: Vec<f64> = out_left.iter().zip(&out_right).map(|(left, right)| (left + right) * 0.5).collect();

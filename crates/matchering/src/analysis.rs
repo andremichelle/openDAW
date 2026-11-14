@@ -2,7 +2,7 @@
 // Copyright (C) 2016-2022 Sergree, ported to Rust for openDAW
 // Licensed under the GNU General Public License v3.0 or later, see lib.rs.
 
-use crate::config::{FFT_SIZE, MAX_LENGTH, RMS_CORRECTION_STEPS};
+use crate::config::{FFT_SIZE, MAX_LENGTH, MIN_VALUE, RMS_CORRECTION_STEPS, THRESHOLD};
 use crate::frequencies::{average_spectrum, convolve_same, fir, matching_curve};
 use crate::levels::{loudest, rms_coefficient, Pieces, Stereo};
 
@@ -62,10 +62,10 @@ pub fn analyse_reference<S: Copy + Into<f64>>(left: &[S], right: &[S]) -> Result
 }
 
 /// 44.1 kHz stereo input, mono is passed as the same channel twice.
-/// `curve_limit_db` clamps both curves (bin 0 stays 0) before the level correction measures them, `None` keeps
-/// Matchering's unlimited curves.
+/// `curve_limit_db` softly limits both curves toward that many dB (bin 0 stays 0) before the level correction measures them, `peak_budget_db`
+/// caps the gain so the matched peaks pass the limiter threshold by at most that much. `None` keeps Matchering.
 pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &ReferenceProfile, curve_limit_db: Option<f64>,
-                                        progress: &mut dyn FnMut(Stage)) -> Result<MatchResult, Error> {
+                                        peak_budget_db: Option<f64>, progress: &mut dyn FnMut(Stage)) -> Result<MatchResult, Error> {
     let stereo = Stereo::new(left, right);
     validate(&stereo)?;
     progress(Stage::Levels);
@@ -78,14 +78,20 @@ pub fn match_target<S: Copy + Into<f64>>(left: &[S], right: &[S], profile: &Refe
     let mut mid_curve = matching_curve(&mid_spectrum, &profile.mid_spectrum);
     let mut side_curve = matching_curve(&side_spectrum, &profile.side_spectrum);
     if let Some(limit) = curve_limit_db {
-        let (low, high) = (10f64.powf(-limit / 20.0), 10f64.powf(limit / 20.0));
-        mid_curve[1..].iter_mut().chain(side_curve[1..].iter_mut()).for_each(|value| *value = value.clamp(low, high));
+        mid_curve[1..].iter_mut().chain(side_curve[1..].iter_mut())
+            .for_each(|value| *value = 10f64.powf(limit * (20.0 * value.max(MIN_VALUE).log10() / limit).tanh() / 20.0));
     }
     progress(Stage::Correction);
     let convolved_mid = convolve_same(stereo.len(), |index| stereo.mid(index), &fir(&mid_curve));
     for _ in 0..RMS_CORRECTION_STEPS {
         let (_, clipped_match_rms) = loudest(&pieces.rmses(|index| (convolved_mid[index] * gain).clamp(-1.0, 1.0)));
         gain *= rms_coefficient(clipped_match_rms, profile.match_rms);
+    }
+    if let Some(budget) = peak_budget_db {
+        let convolved_side = convolve_same(stereo.len(), |index| stereo.side(index), &fir(&side_curve));
+        let peak = convolved_mid.iter().zip(&convolved_side)
+            .fold(0.0f64, |peak, (mid, side)| peak.max((mid + side).abs()).max((mid - side).abs()));
+        if peak > 0.0 {gain = gain.min(THRESHOLD * 10f64.powf(budget / 20.0) / peak);}
     }
     Ok(MatchResult {gain, final_amplitude: profile.final_amplitude, mid_curve, side_curve})
 }

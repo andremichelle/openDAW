@@ -22,10 +22,10 @@ struct Design {
 
 // WASM CONTRACT: the order matches `Matchering.BuiltinProfiles` in packages/studio/matchering/src/Matchering.ts.
 const DESIGNS: [Design; 4] = [
-    Design {tilt: -4.5, bumps: &[], side_low: -14.0, side_high: -7.0, rms: -11.0},
-    Design {tilt: -5.5, bumps: &[(120.0, 2.0, 1.5), (9000.0, -2.0, 1.5)], side_low: -15.0, side_high: -8.0, rms: -11.0},
-    Design {tilt: -3.5, bumps: &[(8000.0, 2.0, 1.5)], side_low: -14.0, side_high: -6.0, rms: -11.0},
-    Design {tilt: -4.5, bumps: &[(70.0, 3.0, 0.8), (3000.0, 1.5, 1.2)], side_low: -16.0, side_high: -7.0, rms: -9.0}
+    Design {tilt: -4.5, bumps: &[], side_low: -14.0, side_high: -7.0, rms: -14.0},
+    Design {tilt: -5.5, bumps: &[(120.0, 2.0, 1.5), (9000.0, -2.0, 1.5)], side_low: -15.0, side_high: -8.0, rms: -14.0},
+    Design {tilt: -4.0, bumps: &[(8000.0, 1.0, 1.5)], side_low: -14.0, side_high: -6.5, rms: -14.0},
+    Design {tilt: -4.5, bumps: &[(70.0, 3.0, 0.8), (3000.0, 1.5, 1.2)], side_low: -16.0, side_high: -7.0, rms: -12.0}
 ];
 
 pub const COUNT: usize = DESIGNS.len();
