@@ -137,3 +137,19 @@ pub fn square(phase: f32, step: f32) -> f32 {
     let half = if phase < 0.5 {phase + 0.5} else {phase - 0.5};
     (if phase < 0.5 {1.0} else {-1.0}) + blep(phase) - blep(half)
 }
+
+/// A band-limited pulse, high for `width` of the cycle (0 to 1), without its DC offset removed.
+#[inline]
+pub fn pulse(phase: f32, step: f32, width: f32) -> f32 {
+    let blep = |position: f32| {
+        if position < step {
+            let ratio = position / step;
+            ratio + ratio - ratio * ratio - 1.0
+        } else if position > 1.0 - step {
+            let ratio = (position - 1.0) / step;
+            ratio * ratio + ratio + ratio + 1.0
+        } else {0.0}
+    };
+    let fall = if phase < width {phase - width + 1.0} else {phase - width};
+    (if phase < width {1.0} else {-1.0}) + blep(phase) - blep(fall)
+}

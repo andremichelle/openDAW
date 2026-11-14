@@ -221,6 +221,9 @@ Rumble
 13. Duck, 0 to 100 %: how strongly the kick's own level pushes the rumble down, instantly and for as long as the
     kick is loud (a compressor curve: at 100 % away above about -20 dB, back below it), so they sound like one
     sound that starts together. No time control, the return follows the kick (decided 2026-11-13).
+    Below 100 % the rumble (about six times louder than the body under the kick) leaked into the hit and clipped,
+    so kick and rumble together now stay below a peak of 2 (0 dBFS in the preview, 2026-11-14). At Duck 100 % the
+    ceiling never engages, except where Rumble, Length and Drive near their maximum already clipped.
 14. Drive, 0 to 36 dB: asymmetric soft saturation like a diode, 2x oversampled with a DC blocker. It adds the even
     harmonics both machines measure (the octave at about -21 dB, which a sine or triangle body cannot make). 0 is
     a clean body.
@@ -766,3 +769,12 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
       common.rs. Body and top as two fourth-order high-passes (2.8 and 6.5 kHz), the body swelling in over 15 ms
       and ringing for Decay, the top for 0.45 of it, Tone moving the weight. Still about 7 dB off the references
       on the fine grid, not in the preview yet.
+10. openDrum Bell, the 808 cowbell first (2026-11-14). Measured (scratchpad bell_fit.py, bell_env.py): two tones at
+   558 and 824 Hz (ratio 1.477) with strong even harmonics, so pulses high for 44 % of the cycle, not squares, the
+   lower tone at 70 %, a band-pass at 1050 Hz (Q 4). The level falls in two stages: 80 % gone within 50 ms, the
+   rest rings to -60 dB in 0.7 s. Engine `crates/opendrum/src/bell.rs` (3 tests), 9 parameters: Tones Tune, Ratio,
+   Balance; Shape Color, Strike, Decay; Play Volume, Velocity, Mode. Every hit starts the pulses at the same point
+   (bells repeat exactly, like rims). Preset "Cowbell (808)": harmonics within 4 dB, level over time within 0.9 dB.
+   A band on a tone clipped (up to 2.6), so a band that lets more through than the 808 setting is turned down to
+   its level (computed from both tones and 48 harmonics), never up: lifting a distant band made the hit spiky.
+   Not judged by ear yet.

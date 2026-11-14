@@ -12,6 +12,7 @@ use opendrum::rim::{Rim, RimParams};
 use opendrum::hat::{Hat, HatParams};
 use opendrum::cymbal::{Cymbal, CymbalParams};
 use opendrum::shaker::{Shaker, ShakerParams};
+use opendrum::bell::{Bell, BellParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
@@ -22,6 +23,7 @@ pub const RIM_PARAMS: usize = 18;
 pub const HAT_PARAMS: usize = 11;
 pub const CYMBAL_PARAMS: usize = 7;
 pub const SHAKER_PARAMS: usize = 7;
+pub const BELL_PARAMS: usize = 9;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -199,4 +201,21 @@ pub extern "C" fn render_shaker(params: *const f32, velocity: f32, sample_rate: 
     let mut shaker = Shaker::new(sample_rate);
     shaker.note_on(0, velocity, &params);
     shaker.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn bell_param_count() -> usize {BELL_PARAMS}
+
+/// Params: tune, ratio, balance, color, strike, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_bell(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, BELL_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = BellParams {
+        tune: values[0], ratio: values[1], balance: values[2], color: values[3], strike: values[4], decay: values[5],
+        volume: values[6], velocity: values[7], play: play_of(values[8])
+    };
+    let mut bell = Bell::new(sample_rate);
+    bell.note_on(0, velocity, 0.0, &params);
+    bell.process(&params, output);
 }

@@ -52,6 +52,11 @@ export namespace OpenDrumSynth {
         spread: number, ring: number, reso: number, curve: number
         volume: number, velocity: number, play: number
     }
+    export type Bell = {
+        tune: number, ratio: number, balance: number
+        color: number, strike: number, decay: number
+        volume: number, velocity: number, play: number
+    }
     export type Shaker = {
         color: number, attack: number, decay: number, curve: number
         volume: number, velocity: number, play: number
@@ -78,6 +83,7 @@ export namespace OpenDrumSynth {
         renderRim(rim: Rim): Hit
         renderHat(hat: Hat): Hit
         renderShaker(shaker: Shaker): Hit
+        renderBell(bell: Bell): Hit
         renderCymbal(cymbal: Cymbal): Hit
     }
 
@@ -92,6 +98,7 @@ export namespace OpenDrumSynth {
         hat_param_count(): int
         shaker_param_count(): int
         cymbal_param_count(): int
+        bell_param_count(): int
         render_kick(params: int, velocity: number, bpm: number, sampleRate: number, output: int, frames: int): void
         render_snare(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_clap(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
@@ -100,6 +107,7 @@ export namespace OpenDrumSynth {
         render_hat(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_shaker(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_cymbal(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
+        render_bell(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
     }
 
     const isExports = (value: WebAssembly.Exports): value is WebAssembly.Exports & Exports =>
@@ -107,7 +115,7 @@ export namespace OpenDrumSynth {
         && typeof value.render_snare === "function" && typeof value.render_clap === "function"
         && typeof value.render_tom === "function" && typeof value.render_rim === "function"
         && typeof value.render_hat === "function" && typeof value.render_shaker === "function"
-        && typeof value.render_cymbal === "function"
+        && typeof value.render_cymbal === "function" && typeof value.render_bell === "function"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
     const curves = (kick: Contour, frames: int): Pick<Hit, "envelope" | "pitch" | "softPitch"> => {
@@ -139,7 +147,7 @@ export namespace OpenDrumSynth {
         if (!isExports(exports)) {return Promise.reject(new Error(`${ModuleUrl} has unexpected exports`))}
         const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count(),
             exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count(), exports.shaker_param_count(),
-            exports.cymbal_param_count())
+            exports.cymbal_param_count(), exports.bell_param_count())
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
         const longFrames = LongSeconds * SampleRate
@@ -184,6 +192,14 @@ export namespace OpenDrumSynth {
                 exports.render_cymbal(params, 1.0, SampleRate, output, longFrames)
                 const contour = {pitch: 0, sweep: 0.001, drift: 0, decay: cymbal.decay, punch: 1, velocity: cymbal.velocity}
                 return collect(contour, longFrames)
+            },
+            renderBell: (bell: Bell): Hit => {
+                const values = [bell.tune, bell.ratio, bell.balance, bell.color, bell.strike, bell.decay, bell.volume,
+                    bell.velocity, bell.play]
+                write(values, exports.bell_param_count())
+                exports.render_bell(params, 1.0, SampleRate, output, frames)
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: bell.decay, punch: -bell.strike,
+                    velocity: bell.velocity})
             },
             renderShaker: (shaker: Shaker): Hit => {
                 const values = [shaker.color, shaker.attack, shaker.decay, shaker.curve, shaker.volume, shaker.velocity,

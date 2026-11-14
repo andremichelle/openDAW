@@ -143,6 +143,34 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         return {name, engine: "Cymbal", color: Colors.yellow, groups, refresh, reference, poly: () => cymbal.play === 1,
             render: () => renderer.map(loaded => loaded.renderCymbal(cymbal))}
     }
+    const bellDevice = (name: string, bell: OpenDrumSynth.Bell, reference: string): Device => {
+        const refresh = lifecycle.own(new Notifier<void>())
+        const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
+                       key: keyof OpenDrumSynth.Bell): OpenDrumControls.Field =>
+            ({name, get: () => bell[key], set: value => bell[key] = value, range: {min, max, step, format}})
+        const choice = (name: string, choices: ReadonlyArray<string>,
+                        key: keyof OpenDrumSynth.Bell): OpenDrumControls.Field =>
+            ({name, get: () => bell[key], set: value => bell[key] = value, choices})
+        const groups: ReadonlyArray<HTMLElement> = [
+            group(lifecycle, refresh, "orange", "Tones", 1, [
+                field("Tune", 50, 4000, 1, Formats.hertz, "tune"),
+                field("Ratio", 1, 4, 0.001, Formats.fixed(3, ""), "ratio"),
+                field("Balance", 0, 1, 0.01, Formats.percent, "balance")
+            ]),
+            group(lifecycle, refresh, "orange", "Shape", 1, [
+                field("Color", 100, 16000, 10, Formats.hertz, "color"),
+                field("Strike", 0, 1, 0.01, Formats.percent, "strike"),
+                field("Decay", 0.01, 4, 0.01, Formats.seconds, "decay")
+            ]),
+            group(lifecycle, refresh, "cream", "Play", 1, [
+                field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
+                field("Velocity", 0, 1, 0.01, Formats.percent, "velocity"),
+                choice("Mode", PlayModes, "play")
+            ])
+        ]
+        return {name, engine: "Bell", color: Colors.white, groups, refresh, reference, poly: () => bell.play === 1,
+            render: () => renderer.map(loaded => loaded.renderBell(bell))}
+    }
     const shakerDevice = (name: string, shaker: OpenDrumSynth.Shaker, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
         const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
@@ -320,6 +348,10 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
     let status: string = "loading the engine"
     // newest engine on top
     const devices: ReadonlyArray<Device> = [
+        // set from the measured harmonics and two stage fall of the 808 cowbell (2026-11-14)
+        bellDevice("Cowbell (808)", {
+            tune: 558, ratio: 1.477, balance: 0.7, color: 1050, strike: 0.8, decay: 0.7, volume: 0, velocity: 0.5, play: 0
+        }, "TR808WAV/CB/CB.WAV"),
         // set from the measured bands over time of the 808 cymbals (2026-11-14)
         cymbalDevice("Cymbal (808)", {
             tune: 1, tone: 0, attack: 0, decay: 0.75, volume: 0, velocity: 0.5, play: 0

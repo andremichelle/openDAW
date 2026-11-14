@@ -3,6 +3,7 @@
 
 #![cfg_attr(not(test), no_std)]
 
+pub mod bell;
 pub mod clap;
 pub mod common;
 pub mod cymbal;

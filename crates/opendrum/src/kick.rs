@@ -34,6 +34,8 @@ const RUMBLE_TONE: f32 = 1.5;
 const SILENT: f32 = 0.0001;
 const DRIVE_DC_BLOCK: f32 = 5.0;
 const DUCK_THRESHOLD: f32 = 0.1;
+// kick and rumble together stay below this peak (Duck 100 % never reaches it)
+const RUMBLE_CEILING: f32 = 2.0;
 
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub enum Play {
@@ -171,7 +173,9 @@ struct Rumble {
     filters: [Svf; 2],
     since_hit: u32,
     started: bool,
-    follower: f32
+    follower: f32,
+    rumble_follower: f32,
+    kick_follower: f32
 }
 
 impl Rumble {
@@ -187,7 +191,9 @@ impl Rumble {
             filters: [Svf::default(); 2],
             since_hit: 0,
             started: false,
-            follower: 0.0
+            follower: 0.0,
+            rumble_follower: 0.0,
+            kick_follower: 0.0
         }
     }
 
@@ -222,8 +228,9 @@ impl Rumble {
     /// strongly, so kick and rumble sound glued.
     /// Length (in seconds here) is when the rumble has faded out.
     #[inline]
-    fn render(&mut self, input: f32, level: f32, duck: f32, follow: (f32, f32), length: f32, filter: &SvfCoefficients,
-              sample_rate: f32) -> f32 {
+    fn render(&mut self, input: f32, driven: f32, level: f32, duck: f32, follow: (f32, f32), length: f32,
+              filter: &SvfCoefficients, sample_rate: f32) -> f32 {
+        self.kick_follower = driven.abs().max(self.kick_follower * (1.0 - follow.1));
         let power = input * input;
         self.follower += (power - self.follower) * if power > self.follower {follow.0} else {follow.1};
         let tail = self.diffuse(input);
@@ -235,7 +242,10 @@ impl Rumble {
         let over = libm::sqrtf(self.follower * 2.0) / DUCK_THRESHOLD;
         let ducked = 1.0 - duck * (1.0 - 1.0 / (1.0 + over * over));
         let fade = (1.0 - seconds / length.max(0.001)).max(0.0);
-        low * RUMBLE_GAIN * level * ducked * fade
+        let rumble = low * RUMBLE_GAIN * level * ducked * fade;
+        self.rumble_follower = rumble.abs().max(self.rumble_follower * (1.0 - follow.1));
+        let room = (RUMBLE_CEILING - self.kick_follower).max(0.0);
+        if self.rumble_follower > room {rumble * room / self.rumble_follower} else {rumble}
     }
 }
 
@@ -323,8 +333,9 @@ impl Kick {
             }
             self.drive.process(params.drive, DRIVE_BIAS, sample_rate, &self.dry, chunk);
             for frame in 0..frames {
-                chunk[frame] = (chunk[frame] + self.rumble.render(self.dry[frame], rumble_level, params.duck, follow,
-                                                                  rumble_length, &rumble_filter, sample_rate)) * volume;
+                let rumble = self.rumble.render(self.dry[frame], chunk[frame], rumble_level, params.duck, follow,
+                                                rumble_length, &rumble_filter, sample_rate);
+                chunk[frame] = (chunk[frame] + rumble) * volume;
             }
         }
     }
@@ -426,6 +437,17 @@ mod tests {
     }
 
     fn rising_crossings(samples: &[f32]) -> usize {samples.windows(2).filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0).count()}
+
+    #[test]
+    fn less_duck_never_pushes_kick_and_rumble_past_the_ceiling() {
+        for duck in [0.0, 0.25, 0.5, 0.75] {
+            for drive in [0.0, 12.0, 36.0] {
+                let params = KickParams {rumble: 1.0, length: 1.0, duck, drive, ..KickParams::default()};
+                let peak = render(&params, 2.0).iter().fold(0.0f32, |peak, value| peak.max(value.abs()));
+                assert!(peak <= RUMBLE_CEILING + 0.01, "duck {duck} drive {drive}: {peak}");
+            }
+        }
+    }
 
     #[test]
     fn glide_slides_to_the_new_note() {
