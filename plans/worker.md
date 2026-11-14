@@ -44,12 +44,17 @@ Decided 2026-11-14.
 2. The call is untyped: `taskWorker.call("method-name", bytes, {signal, maxResultBytes})` returns a promise of
    optional bytes. Buffers are transferred in both directions, never copied. A proxy class per module wraps this
    into typed methods (floats are one view onto the bytes).
-3. Module convention, so no worker script per implementation is needed.
+3. The worker takes compiled modules only, never urls (decided 2026-11-14). The main thread fetches and compiles
+   (`WebAssembly.compileStreaming`, the compile itself runs off the main thread in the browser) and hands the
+   `WebAssembly.Module` to the worker, which instantiates it as often as it needs (each instance has its own
+   memory). One compile per module, kept by the implementation, so reopening an editor or restarting the worker
+   compiles nothing. The same module can later go to the audio worklet.
+4. Module convention, so no worker script per implementation is needed.
    1. Own memory, empty imports, `alloc(length)` returns a pointer.
    2. Every callable export has one shape: `(inputPointer, inputLength, outputPointer, outputCapacity)` returning
       the written length. All parameters travel inside the bytes.
    3. The caller passes the largest result it expects (`maxResultBytes`), it knows what it asked for.
-4. Abort. A worker cannot read its message port inside a running loop, messages wait until the code returns to the
+5. Abort. A worker cannot read its message port inside a running loop, messages wait until the code returns to the
    event loop, in JavaScript and inside wasm alike. So a running job is ended in one of three ways, chosen per
    call by the implementation.
    1. Discard (the default): let it finish and drop the result. Right for short jobs like the openDrum hits.
@@ -58,15 +63,38 @@ Decided 2026-11-14.
       start repeats.
    3. Shared flag (opt in): the main thread sets a flag in shared memory (the studio is cross-origin isolated),
       a module that works in slices lets the worker check it between slices.
-5. The promise takes an optional `AbortSignal`.
+6. The promise takes an optional `AbortSignal`.
    1. It rejects as aborted the moment the signal fires.
    2. A job still queued is removed.
-   3. A running job is ended as in 4.
+   3. A running job is ended as in 5.
    4. Latest wins needs no mechanism of its own: the caller aborts its previous request when its values change,
       a consumer's lifecycle aborts when it is gone. Aborting is per request, so a shared worker never lets one
       editor cancel another's result.
-6. Errors: a failed load or a trapped call rejects the promise with the module url and method name. The worker
+7. Errors: a failed instantiation or a trapped call rejects the promise with the module name and method name. The worker
    is restarted, the next call works again.
+
+## Package and urls
+
+Decided 2026-11-14.
+
+1. One package, `packages/lib/wasm-worker` (`@opendaw/lib-wasm-worker`), with two parts: the controller for the
+   main thread (`dist/index.js`, built by tsc) and the generic worker (`dist/worker.js`, bundled by esbuild into
+   one self-contained file, exported as `"./worker.js"`). Nobody writes worker code, so one package keeps both
+   sides on one message format. The audio side can later become a third export of the same package.
+2. The package never resolves a path itself. `new URL(..., import.meta.url)` inside a library breaks in the
+   consumers' bundlers (Next.js, webpack, Vite's `/@fs/` paths), which is why `asset-urls.ts` was removed again on
+   2025-09-15 (b0e4a26a6) and every worker and worklet url has been passed in since.
+   1. The worker url is passed to the controller. The studio imports it as
+      `@opendaw/lib-wasm-worker/worker.js?worker&url`, SDK users bring it the way they already bring
+      `workers-main.js` and `processors.js`.
+   2. Wasm files the same: the package receives a compiled `WebAssembly.Module` and never sees a wasm url. The
+      implementation that compiles it takes its url (or a base url like core-wasm's `wasmUrl`) from the host, the
+      studio derives it from `BASE_URL` as it does for `stretch_wasm.wasm` and `opendrum_wasm.wasm`.
+3. The studio UI (the openDrum display first) is built by Vite, so it simply imports the worker url with
+   `?worker&url` and passes it. Passing urls only matters for SDK consumers once the audio engine uses the package,
+   and then nothing in the package changes (decided 2026-11-14).
+4. Side finding, not part of this work: lib-inference still creates its worker with
+   `new URL("./workers/inference.worker.js", import.meta.url)` by default (a `workerFactory` can replace it).
 
 ## First user
 
@@ -93,8 +121,9 @@ The openDrum display.
 
 ## Phases
 
-1. The new worker and its main thread class in studio-core, with tests (load, call, abort while queued, abort
-   while running in each of the three ways, terminate, a trapping module).
+1. The package `@opendaw/lib-wasm-worker`: the generic worker and its controller, with tests (instantiate a
+   compiled module, call, abort while queued, abort while running in each of the three ways, terminate, a trapping
+   module), the worker bundle exported as `"./worker.js"`, the studio passing its url.
 2. The openDrum preview moves onto it.
 3. Audio side: design note with the first device that needs it, then build.
 4. Later: refactor the existing shared worker (peaks, OPFS, transients, tempo, material, sample effects) into the
@@ -104,6 +133,9 @@ The openDrum display.
 
 1. ~~One shared worker for everything, or a second worker?~~ Decided: a new worker, the old one moves over later.
 2. ~~Floats or bytes as the generic call?~~ Decided: bytes, a typed proxy on top.
-3. Should `open` accept a module that is already compiled (for modules the studio bundles), or urls only?
+3. ~~Should `open` accept a module that is already compiled, or urls only?~~ Decided: compiled modules only.
 4. ~~One instance of the new worker for all services, or one per module?~~ Decided: the implementation chooses
    (bound to an editor or static). The openDrum editors use the static variant, they share one module.
+5. Several workers in parallel over one compiled module (a pool): each worker instantiates the module itself, so
+   calls run on separate cores. Open: the pool size (a fixed number or derived from the machine) and its first
+   user. Phase 1 starts with one worker.
