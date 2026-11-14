@@ -599,8 +599,16 @@ references from disk.
    The display renders Gate as Mono. Velocity defaults to 100 % in every device (decided 2026-11-14).
 8. Display (2026-11-14): the same colors in every device (waveform blue, level curve white, pitch curves cream), a
    white dot on the level curve for every sounding hit (the device sends the seconds since each hit started at
-   address key 1001, up to 16, -1 ends the list), and the span zooms to the hit: the shortest of 1/16, 1/8, 1/4,
-   1/2, 1 and 2 s that holds every sample above 1 % of its peak (under half a pixel).
+   address key 1001, up to 16, -1 ends the list). Each engine shows a fixed span, a zoom would jump under
+   automation (decided 2026-11-14): Kick and Cymbal 1 s, Snare, Clap, Tom, Hat, Bell and Perc 0.5 s, Rim and
+   Shaker 0.125 s.
+
+Next (decided 2026-11-14):
+
+1. No stock presets yet, they would appear on PROD.
+2. After the scripting API of the openDrum devices is final, and after merging next-release: a script builds a
+   Playfield with an 808 set and a 909 set from the openDrum devices. The 909 set uses the samples the existing 909
+   preset already uses where openDrum has no engine for them (the 909 hats, crash and ride are recordings).
 
 ## Phases
 

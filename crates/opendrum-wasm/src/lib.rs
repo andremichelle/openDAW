@@ -19,10 +19,6 @@ const TAIL_FRAMES: usize = 480;
 const BAD_INPUT: i32 = -1;
 const OUT_OF_DATE: i32 = -2;
 const TOO_SMALL: i32 = -3;
-// the spans in seconds a display zooms to
-const SPANS: [f32; 6] = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0];
-// below this share of the peak (-40 dB) a hit is under half a pixel on the display
-const VISIBLE: f32 = 0.01;
 
 /// Returns an 8 byte aligned area of `length` bytes, the worker keeps and reuses it.
 #[no_mangle]
@@ -71,12 +67,7 @@ fn hit<E: Engine>(input: *const u8, length: usize, output: *mut u8, capacity: us
         return (trimmed * 4) as i32;
     }
     if output.len() < 2 + columns * 2 {return TOO_SMALL;}
-    // display 0 zooms to the hit: the shortest span that holds all of it the display can show
-    let display = if display > 0 {display} else {
-        let peak = samples.iter().fold(0.0f32, |peak, value| peak.max(value.abs()));
-        let visible = samples.iter().rposition(|value| value.abs() >= peak * VISIBLE).map_or(0, |last| last + 1);
-        SPANS.iter().map(|seconds| (seconds * sample_rate) as usize).find(|span| *span >= visible).unwrap_or(frames)
-    };
+    let display = if display > 0 {display} else {frames};
     output[0] = trimmed as f32;
     output[1] = display as f32;
     for column in 0..columns {

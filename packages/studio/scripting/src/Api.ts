@@ -2449,7 +2449,7 @@ export interface OpenDrumHat extends Instrument {
 }
 
 /**
- * openDrum Shaker: maracas, shakers and cabasas. Key 60 plays at Tune.
+ * openDrum Shaker: maracas, shakers and cabasas. Every key plays the same shaker.
  * @group Instruments
  */
 export interface OpenDrumShaker extends Instrument {

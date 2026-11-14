@@ -225,7 +225,7 @@ impl Rumble {
         self.since_hit = 0;
         self.started = true;
         self.owner = owner;
-        if self.cut.is_done() {
+        if self.cut.is_done() || (self.cut.is_cutting() && !self.sounding) {
             self.clear();
         } else if self.cut.is_cutting() {
             self.restart = true;
@@ -236,8 +236,8 @@ impl Rumble {
     fn clear(&mut self) {
         self.cut.reset();
         self.restart = false;
-        self.combs.iter_mut().for_each(|line| line.fill(0.0));
-        self.allpasses.iter_mut().for_each(|line| line.fill(0.0));
+        self.combs.iter_mut().zip(self.comb_lengths).for_each(|(line, length)| line[..length].fill(0.0));
+        self.allpasses.iter_mut().zip(self.allpass_lengths).for_each(|(line, length)| line[..length].fill(0.0));
         self.comb_damped = [0.0; 4];
         self.filters.iter_mut().for_each(|filter| filter.reset());
         self.rumble_follower = 0.0;
@@ -357,12 +357,15 @@ impl Kick {
 
     pub fn is_silent(&self) -> bool {!self.rumble.sounding && self.voices.iter().all(|voice| !voice.active)}
 
-    // a choke cuts the rumble, a note's end only the rumble its own hit started
     /// Clears what the rumble still holds, its device stops rendering after a second of silence.
     pub fn rest(&mut self) {self.rumble.clear();}
 
+    /// A choke cuts the rumble, a note's end only the rumble its own hit started.
     fn cut_rumble(&mut self, id: Option<u32>) {
-        if id.map_or(true, |id| id == self.rumble.owner) {self.rumble.cut.start(RELEASE, self.sample_rate);}
+        if id.map_or(true, |id| id == self.rumble.owner) {
+            self.rumble.restart = false;
+            self.rumble.cut.start(RELEASE, self.sample_rate);
+        }
     }
 
     voice_queries!(KickParams, RELEASE, cut_rumble);
@@ -574,6 +577,48 @@ mod tests {
         fresh.process(&params, 120.0, &mut first);
         let jump = again.iter().zip(&first).fold(0.0f32, |peak, (value, plain)| peak.max((value - plain).abs()));
         assert!(jump < 0.05, "no old tail at the start of the next hit, {jump}");
+    }
+
+    #[test]
+    fn a_choke_without_a_sounding_rumble_leaves_the_next_hit_untouched() {
+        let params = KickParams {rumble: 1.0, length: 1.0, ..KickParams::default()};
+        let render = |kick: &mut Kick| {
+            kick.note_on(1, 1.0, 0.0, &params);
+            let mut output = vec![0.0; RATE as usize];
+            kick.process(&params, 120.0, &mut output);
+            output
+        };
+        let fresh = render(&mut Kick::new(RATE));
+        let mut early = Kick::new(RATE);
+        early.choke();
+        assert_eq!(render(&mut early), fresh, "a choke before the first hit");
+        let rested = |choke: bool| {
+            let mut kick = Kick::new(RATE);
+            render(&mut kick);
+            let mut silence = vec![0.0; (2.0 * RATE) as usize];
+            kick.process(&params, 120.0, &mut silence);
+            kick.rest();
+            if choke {kick.choke();}
+            render(&mut kick)
+        };
+        assert_eq!(rested(true), rested(false), "a choke while resting");
+    }
+
+    #[test]
+    fn a_second_cut_during_a_pending_restart_cuts_the_new_rumble() {
+        let params = KickParams {rumble: 1.0, length: 1.0, ..KickParams::default()};
+        let mut kick = Kick::new(RATE);
+        kick.note_on(1, 1.0, 0.0, &params);
+        let mut output = vec![0.0; (0.3 * RATE) as usize];
+        kick.process(&params, 120.0, &mut output);
+        kick.choke();
+        let mut fading = vec![0.0; (0.004 * RATE) as usize];
+        kick.process(&params, 120.0, &mut fading);
+        kick.note_on(2, 1.0, 0.0, &params);
+        kick.choke();
+        let mut after = vec![0.0; (0.03 * RATE) as usize];
+        kick.process(&params, 120.0, &mut after);
+        assert!(kick.is_silent(), "the second hit and its rumble are cut");
     }
 
     #[test]

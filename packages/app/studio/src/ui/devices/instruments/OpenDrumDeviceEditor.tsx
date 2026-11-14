@@ -93,11 +93,12 @@ export const OpenDrumDeviceEditor = ({
             OpenDrumDisplay.paint(context, actualWidth, actualHeight, devicePixelRatio, current, positions))
     }))
     const now: Value = parameter => parameter.getControlledValue()
-    const {bpm} = project.timelineBox
+    const {engine: transport, tempoMap} = project
     const ordered = [...parameters].sort((first, second) => first.address.fieldKeys[0] - second.address.fieldKeys[0])
     const tempo = OpenDrumSynth.followsTempo(engine)
     const request = (): OpenDrumSynth.Request =>
-        ({engine, values: ordered.map(now), bpm: tempo ? bpm.getValue() : 120, contour: contour(now)})
+        ({engine, values: ordered.map(now), bpm: tempo ? tempoMap.getTempoAt(transport.position.getValue()) : 120,
+            contour: contour(now)})
     const closing = new AbortController()
     let renderer: Option<Promise<OpenDrumSynth.Renderer>> = Option.None
     const obtain = (): Promise<OpenDrumSynth.Renderer> => {
@@ -154,7 +155,10 @@ export const OpenDrumDeviceEditor = ({
     }
     const scheduled = lifecycle.own(deferNextFrame(update))
     parameters.forEach(parameter => lifecycle.own(parameter.subscribe(scheduled.request)))
-    if (tempo) {lifecycle.own(bpm.subscribe(scheduled.request))}
+    if (tempo) {
+        lifecycle.own(tempoMap.subscribe(scheduled.request))
+        lifecycle.own(transport.position.subscribe(scheduled.request))
+    }
     lifecycle.own(project.liveStreamReceiver.subscribeFloats(adapter.address.append(OpenDrum.PositionsKey), values => {
         const sounding = values[0] >= 0.0
         if (!sounding && !showing) {return}

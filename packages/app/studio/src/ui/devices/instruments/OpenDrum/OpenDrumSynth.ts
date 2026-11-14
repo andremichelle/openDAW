@@ -4,7 +4,6 @@ import WasmWorkerUrl from "@opendaw/lib-wasm-worker/worker.js?worker&url"
 
 export namespace OpenDrumSynth {
     export const SampleRate = 24000
-    export const MaxSeconds = 2.0
     // the display draws every hit 6 dB down, so a loud hit stays inside it
     const Headroom = 0.5
     const ModuleUrl = `${import.meta.env.BASE_URL}wasm-engine/wasm/opendrum_wasm.wasm`
@@ -16,6 +15,11 @@ export namespace OpenDrumSynth {
     }
     const Engines = ["kick", "snare", "clap", "tom", "rim", "hat", "cymbal", "shaker", "bell", "perc"] as const
     export type Engine = typeof Engines[number]
+    // the seconds each display shows, fixed so automation never rescales it
+    const Spans: Record<Engine, number> = {
+        kick: 1.0, snare: 0.5, clap: 0.5, tom: 0.5, rim: 0.125, hat: 0.5, cymbal: 1.0, shaker: 0.125, bell: 0.5,
+        perc: 0.5
+    }
     /** What to render: the engine, its values in box key order, and the curves to draw. */
     export type Request = {
         readonly engine: Engine
@@ -26,7 +30,6 @@ export namespace OpenDrumSynth {
     /** The display's view of a hit: its trimmed length and a min and a max per column, curves per column. */
     export type Picture = {
         readonly length: int
-        // the seconds the display shows, the shortest of a few spans that holds the whole hit
         readonly span: number
         readonly peaks: Float32Array
         readonly envelope: Float32Array
@@ -38,7 +41,6 @@ export namespace OpenDrumSynth {
     }
     // the display reduces every hit to this many min and max pairs over its span
     export const Columns = 1024
-    const RenderFrames = MaxSeconds * SampleRate
     export const OutOfDate = "engine out of date, rebuild the wasm"
 
     const curves = ({pitch: start = 0, sweep = 0.001, drift = 0, decay, punch}: Contour, length: int,
@@ -94,7 +96,7 @@ export namespace OpenDrumSynth {
         const input = ({engine, values, bpm}: Request): Promise<ArrayBuffer> =>
             values.length === counts[Engines.indexOf(engine)]
                 ? Promise.resolve(
-                    Float32Array.from([SampleRate, RenderFrames, 0, Columns, bpm, ...values]).buffer)
+                    Float32Array.from([SampleRate, Spans[engine] * SampleRate, 0, Columns, bpm, ...values]).buffer)
                 : Promise.reject(new Error(OutOfDate))
         return {
             picture: async (request: Request, signal: AbortSignal): Promise<Picture> => {
