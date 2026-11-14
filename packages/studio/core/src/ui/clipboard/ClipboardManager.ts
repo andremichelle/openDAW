@@ -44,6 +44,8 @@ export namespace ClipboardManager {
             case "chords": return {one: "Chord", many: "Chords"}
             case "values": return {one: "Automation point", many: "Automation points"}
             case "audio-units": return {one: "AudioUnit", many: "AudioUnits"}
+            case "surgeon-pattern":
+            case "euclid-pattern": return {one: "Pattern", many: "Patterns"}
             default: return {one: "Selection", many: "Selection"}
         }
     }

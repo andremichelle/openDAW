@@ -65,6 +65,9 @@ component
       font-size: 8px
       --color: var(--color-shadow)
 
+    &:focus
+      outline: 1px solid color-mix(in srgb, var(--color) 60%, transparent)
+
     &.active
       color: rgba(black, 0.95)
       background-color: var(--color)
