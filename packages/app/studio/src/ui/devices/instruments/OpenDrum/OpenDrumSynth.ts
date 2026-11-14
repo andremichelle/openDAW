@@ -1,4 +1,4 @@
-import {int, Option, Terminable} from "@opendaw/lib-std"
+import {clamp, int, Option, Terminable} from "@opendaw/lib-std"
 import {WasmWorker} from "@opendaw/lib-wasm-worker"
 import WasmWorkerUrl from "@opendaw/lib-wasm-worker/worker.js?worker&url"
 
@@ -8,11 +8,8 @@ export namespace OpenDrumSynth {
     const Headroom = 0.5
     const ModuleUrl = `${import.meta.env.BASE_URL}wasm-engine/wasm/opendrum_wasm.wasm`
 
-    /** What the display's curves follow: the pitch falls by Pitch (and Drift) over Sweep, the level over Decay. */
-    export type Contour = {
-        readonly pitch?: number, readonly sweep?: number, readonly drift?: number, readonly decay: number
-        readonly punch: number
-    }
+    /** What the display's pitch curve follows: the pitch falls by Pitch (and Drift) over Sweep. */
+    export type Contour = { readonly pitch: number, readonly sweep: number, readonly drift?: number }
     const Engines = ["kick", "snare", "clap", "tom", "rim", "hat", "cymbal", "shaker", "bell", "perc"] as const
     export type Engine = typeof Engines[number]
     // the seconds each display shows, fixed so automation never rescales it
@@ -25,7 +22,7 @@ export namespace OpenDrumSynth {
         readonly engine: Engine
         readonly values: ReadonlyArray<number>
         readonly bpm: number
-        readonly contour: Contour
+        readonly contour: Option<Contour>
     }
     /** The display's view of a hit: its trimmed length and a min and a max per column, curves per column. */
     export type Picture = {
@@ -43,25 +40,45 @@ export namespace OpenDrumSynth {
     export const Columns = 1024
     export const OutOfDate = "engine out of date, rebuild the wasm"
 
-    const curves = ({pitch: start = 0, sweep = 0.001, drift = 0, decay, punch}: Contour, length: int,
-                    span: number): Pick<Picture, "envelope" | "pitch"> => {
-        const moves = start !== 0 || drift !== 0
+    // the level curve holds the hit's peaks over this many seconds, longer than a period of its lowest tone
+    const LevelWindow = 0.035
+
+    const hold = (values: Float32Array, reach: int): Float32Array => values.map((_, column) => {
+        let peak = 0.0
+        const to = Math.min(values.length - 1, column + reach)
+        for (let index = Math.max(0, column - reach); index <= to; index++) {peak = Math.max(peak, values[index])}
+        return peak
+    })
+
+    const average = (values: Float32Array, reach: int): Float32Array => values.map((_, column) => {
+        const from = Math.max(0, column - reach)
+        const to = Math.min(values.length - 1, column + reach)
+        let sum = 0.0
+        for (let index = from; index <= to; index++) {sum += values[index]}
+        return sum / (to - from + 1)
+    })
+
+    const level = (peaks: Float32Array, length: int, span: number): Float32Array => {
+        const used = Math.min(Columns, Math.ceil(length / (span * SampleRate) * Columns))
+        const reach = Math.max(1, Math.round(Math.min(LevelWindow, span / 32.0) / span * Columns / 2))
+        const levels = new Float32Array(used).map((_, column) => clamp(peaks[column * 2 + 1], 0.0, 1.0))
         const envelope = new Float32Array(Columns)
-        const pitch = new Float32Array(moves ? Columns : 0)
-        const rate = Math.log(1000.0) / Math.max(decay, 0.0001)
+        envelope.set(average(average(hold(levels, reach), reach), reach))
+        return envelope
+    }
+
+    const pitchCurve = ({pitch: start, sweep, drift = 0}: Contour, length: int, span: number): Float32Array => {
+        if (start === 0 && drift === 0) {return new Float32Array(0)}
+        const pitch = new Float32Array(Columns)
         const range = Math.max(Math.abs(start) + drift, 1.0)
         const end = (length - 1) / SampleRate
         for (let column = 0; column < Columns; column++) {
             const seconds = Math.min(column / Columns * span, end)
             const bend = start * Math.exp(-seconds / Math.max(sweep, 0.0005))
                 + drift * Math.exp(-seconds / Math.max(sweep * 10.0, 0.005))
-            const exponential = Math.exp(-seconds * rate)
-            const tail = 1.0 + (Math.sqrt(1000.0) - 1.0) * seconds / Math.max(decay, 0.0001)
-            const target = punch >= 0.0 ? Math.max(0.0, 1.0 - seconds / decay) : 1.0 / (tail * tail)
-            envelope[column] = exponential + (target - exponential) * Math.abs(punch)
-            if (moves) {pitch[column] = bend / range}
+            pitch[column] = bend / range
         }
-        return {envelope, pitch}
+        return pitch
     }
 
     export const followsTempo = (engine: Engine): boolean => engine === "kick"
@@ -106,7 +123,9 @@ export namespace OpenDrumSynth {
                 const [length, display] = floats
                 const span = display / SampleRate
                 const peaks = floats.subarray(2).map(value => value * Headroom)
-                return {length, span, peaks, ...curves(request.contour, length, span)}
+                const envelope = level(peaks, length, span)
+                const pitch = request.contour.mapOr(contour => pitchCurve(contour, length, span), new Float32Array(0))
+                return {length, span, peaks, envelope, pitch}
             },
             terminate: () => worker.terminate()
         }

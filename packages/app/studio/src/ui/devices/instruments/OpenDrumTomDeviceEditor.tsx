@@ -25,10 +25,7 @@ export const OpenDrumTomDeviceEditor = ({lifecycle, service, adapter, deviceHost
                               icon={InstrumentFactories.OpenDrumTom.defaultIcon}
                               engine="tom"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({
-                                  pitch: now(pitch), sweep: now(sweep), drift: now(drift), decay: now(decay),
-                                  punch: now(punch)
-                              })}
+                              contour={now => ({pitch: now(pitch), sweep: now(sweep), drift: now(drift)})}
                               sections={[
                                   {title: "BODY", color: Colors.orange, columns: [[tune, pitch, sweep, drift],
                                           [decay, punch, shape, drive]]},

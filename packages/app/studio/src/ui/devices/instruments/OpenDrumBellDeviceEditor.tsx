@@ -22,7 +22,6 @@ export const OpenDrumBellDeviceEditor = ({lifecycle, service, adapter, deviceHos
                               icon={InstrumentFactories.OpenDrumBell.defaultIcon}
                               engine="bell"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(decay), punch: -now(strike)})}
                               sections={[
                                   {title: "TONES", color: Colors.orange, columns: [[tune, ratio, balance]]},
                                   {title: "SHAPE", color: Colors.green, columns: [[color, strike, decay]]},

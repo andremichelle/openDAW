@@ -5,17 +5,22 @@ long open hat. Every hit starts the oscillators somewhere else, so no two hits s
 
 ---
 
+![screenshot](opendrum-hat.webp)
+
+---
+
 ## 0. Overview
 
 _openDrum Hat_ plays one hit per note. The display shows the hit the current values make, with its level over time.
+Press the display to play the hit, in Gate it sounds as long as you hold it.
 
 1. On a track, key 60 plays at Tune, every key above or below moves it by a semitone.
-2. In a Playfield pad, every hit plays at Tune.
+2. In a Playfield pad, the pad's Key sets the note: at 60, its default, every hit plays at Tune.
 3. Every value can be automated.
 
 Example uses:
 
-1. A closed and an open hat on two Playfield pads, the open one choked by the closed one
+1. A closed and an open hat on two Playfield pads, both set to Exclusive, so the closed one chokes the open one
 2. Ticking 16ths with a short Decay
 3. A metallic ringing hat with Ring and Reso
 

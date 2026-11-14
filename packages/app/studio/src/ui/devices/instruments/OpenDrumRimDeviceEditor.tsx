@@ -25,7 +25,6 @@ export const OpenDrumRimDeviceEditor = ({lifecycle, service, adapter, deviceHost
                               icon={InstrumentFactories.OpenDrumRim.defaultIcon}
                               engine="rim"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(decay), punch: now(punch)})}
                               sections={[
                                   {title: "TONES", color: Colors.orange, columns: [[tune, ratio, balance, ring]]},
                                   {title: "HIGH", color: Colors.yellow, columns: [[high, highRatio, ringHigh, swell]]},

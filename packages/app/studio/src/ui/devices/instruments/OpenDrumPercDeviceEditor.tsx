@@ -24,9 +24,7 @@ export const OpenDrumPercDeviceEditor = ({lifecycle, service, adapter, deviceHos
                               icon={InstrumentFactories.OpenDrumPerc.defaultIcon}
                               engine="perc"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({
-                                  pitch: now(pitch), sweep: now(sweep), decay: now(decay), punch: now(curve)
-                              })}
+                              contour={now => ({pitch: now(pitch), sweep: now(sweep)})}
                               sections={[
                                   {title: "FM", color: Colors.orange, columns: [[tune, ratio, index, bite]]},
                                   {title: "SHAPE", color: Colors.green, columns: [[pitch, sweep, decay, curve]]},

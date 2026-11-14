@@ -5,12 +5,17 @@ classic electronic claps, tight snaps and big roomy claps.
 
 ---
 
+![screenshot](opendrum-clap.webp)
+
+---
+
 ## 0. Overview
 
 _openDrum Clap_ plays one hit per note. The display shows the hit the current values make, with its level over time.
+Press the display to play the hit, in Gate it sounds as long as you hold it.
 
-1. On a track, key 60 plays at Tune, every key above or below moves it by a semitone.
-2. In a Playfield pad, every hit plays at Tune.
+1. On a track, key 60 plays at Tone, every key above or below moves Tone by a semitone.
+2. In a Playfield pad, the pad's Key sets the note: at 60, its default, every hit plays at Tone.
 3. Every value can be automated.
 
 Example uses:

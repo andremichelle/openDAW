@@ -1,9 +1,10 @@
 import css from "./OpenDrumDeviceEditor.sass?inline"
-import {Color, EmptyExec, Func, Lifecycle, Option} from "@opendaw/lib-std"
+import {byte, Color, EmptyExec, Func, Lifecycle, Option, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {
-    AutomatableParameterFieldAdapter, DeviceHost, InstrumentDeviceBoxAdapter, OpenDrum
+    AutomatableParameterFieldAdapter, DeviceHost, InstrumentCompositeCellBoxAdapter, InstrumentDeviceBoxAdapter,
+    NoteLifeCycle, OpenDrum
 } from "@opendaw/studio-adapters"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -16,6 +17,7 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {OpenDrumSynth} from "@/ui/devices/instruments/OpenDrum/OpenDrumSynth"
 import {OpenDrumDisplay} from "@/ui/devices/instruments/OpenDrum/OpenDrumDisplay"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
 
 const className = Html.adoptStyleSheet(css, "OpenDrumDeviceEditor")
 
@@ -35,7 +37,7 @@ type Construct = {
     deviceHost: DeviceHost
     engine: OpenDrumSynth.Engine
     parameters: ReadonlyArray<AutomatableParameterFieldAdapter<number>>
-    contour: Func<Value, OpenDrumSynth.Contour>
+    contour?: Func<Value, OpenDrumSynth.Contour>
     sections: ReadonlyArray<OpenDrumSection>
     icon: IconSymbol
 }
@@ -98,7 +100,7 @@ export const OpenDrumDeviceEditor = ({
     const tempo = OpenDrumSynth.followsTempo(engine)
     const request = (): OpenDrumSynth.Request =>
         ({engine, values: ordered.map(now), bpm: tempo ? tempoMap.getTempoAt(transport.position.getValue()) : 120,
-            contour: contour(now)})
+            contour: Option.wrap(contour).map(follow => follow(now))})
     const closing = new AbortController()
     let renderer: Option<Promise<OpenDrumSynth.Renderer>> = Option.None
     const obtain = (): Promise<OpenDrumSynth.Renderer> => {
@@ -166,6 +168,24 @@ export const OpenDrumDeviceEditor = ({
         positions = values
         painter.requestUpdate()
     }))
+    const key = (): byte => deviceHost.asCompositeCell().mapOr(cell =>
+        cell instanceof InstrumentCompositeCellBoxAdapter && cell.isPad ? cell.indexField.getValue() : 60, 60)
+    let audition: Terminable = Terminable.Empty
+    const release = (): void => {
+        audition.terminate()
+        audition = Terminable.Empty
+    }
+    lifecycle.ownAll(
+        Terminable.create(release),
+        Events.subscribe(canvas, "pointerdown", (event: PointerEvent) => {
+            canvas.setPointerCapture(event.pointerId)
+            release()
+            audition = NoteLifeCycle.start(signal => transport.noteSignal(signal),
+                deviceHost.audioUnitBoxAdapter().uuid, key())
+        }),
+        Events.subscribe(canvas, "pointerup", release),
+        Events.subscribe(canvas, "lostpointercapture", release),
+        TextTooltip.default(canvas, () => "Press to play the hit"))
     lifecycle.own({
         terminate: () => {
             closing.abort()

@@ -25,9 +25,7 @@ export const OpenDrumSnareDeviceEditor = ({lifecycle, service, adapter, deviceHo
                               icon={InstrumentFactories.OpenDrumSnare.defaultIcon}
                               engine="snare"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({
-                                  pitch: now(pitch), sweep: now(sweep), decay: now(decay), punch: now(punch)
-                              })}
+                              contour={now => ({pitch: now(pitch), sweep: now(sweep)})}
                               sections={[
                                   {title: "BODY", color: Colors.orange, columns: [[tune, ratio, balance, pitch],
                                           [sweep, decay, punch, shape]]},

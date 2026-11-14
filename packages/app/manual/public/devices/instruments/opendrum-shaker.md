@@ -4,9 +4,14 @@ Filtered noise that swells in and fades: maracas, shakers and cabasas. Every hit
 
 ---
 
+![screenshot](opendrum-shaker.webp)
+
+---
+
 ## 0. Overview
 
 _openDrum Shaker_ plays one hit per note. The display shows the hit the current values make, with its level over time.
+Press the display to play the hit, in Gate it sounds as long as you hold it.
 
 1. The key does not change the sound, every note plays the same shaker.
 2. In a Playfield pad, every hit plays the same.

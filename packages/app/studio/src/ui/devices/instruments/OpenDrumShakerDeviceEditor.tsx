@@ -22,7 +22,6 @@ export const OpenDrumShakerDeviceEditor = ({lifecycle, service, adapter, deviceH
                               icon={InstrumentFactories.OpenDrumShaker.defaultIcon}
                               engine="shaker"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(attack) + now(decay), punch: now(curve)})}
                               sections={[
                                   {title: "SHAPE", color: Colors.orange, columns: [[color, attack, decay, curve]]},
                                   {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}

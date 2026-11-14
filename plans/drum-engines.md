@@ -601,14 +601,22 @@ references from disk.
    white dot on the level curve for every sounding hit (the device sends the seconds since each hit started at
    address key 1001, up to 16, -1 ends the list). Each engine shows a fixed span, a zoom would jump under
    automation (decided 2026-11-14): Kick and Cymbal 1 s, Snare, Clap, Tom, Hat, Bell and Perc 0.5 s, Rim and
-   Shaker 0.125 s.
+   Shaker 0.125 s. The level curve is the upper outline of the rendered hit at the waveform's own scale, its column
+   peaks held and smoothed twice over 35 ms (at most 1/32 of the span), so it always shows what the device plays (decided 2026-11-14, the
+   formulas missed Hold, Attack and the Cymbal's fade). The pitch curve still follows Pitch, Sweep and Drift.
 
 Next (decided 2026-11-14):
 
 1. No stock presets yet, they would appear on PROD.
-2. After the scripting API of the openDrum devices is final, and after merging next-release: a script builds a
+2. ~~After the scripting API of the openDrum devices is final, and after merging next-release: a script builds a
    Playfield with an 808 set and a 909 set from the openDrum devices. The 909 set uses the samples the existing 909
-   preset already uses where openDrum has no engine for them (the 909 hats, crash and ride are recordings).
+   preset already uses where openDrum has no engine for them (the 909 hats, crash and ride are recordings).~~
+   Done 2026-11-14: `plans/scripts/opendrum-playfield/opendrum-808.txt` and `opendrum-909.txt` add a Playfield to the
+   open project, pads in the key order of the stock TR-808 and TR-909 Playfields. Scripts put instruments on pads
+   with the new `Playfield.addPad` and read them back from `Playfield.pads`. The 808 mid and hi toms are the low tom
+   tuned to 132 and 192 Hz with shorter decays, the 909 mid tom lies between the fitted low and high, neither fitted.
+3. ~~Audition trigger~~ (2026-11-14): pressing the display plays the hit (key 60, or the pad's key in a Playfield),
+   releasing it ends the note.
 
 ## Phases
 

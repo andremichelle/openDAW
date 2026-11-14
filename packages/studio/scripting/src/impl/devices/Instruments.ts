@@ -83,7 +83,9 @@ import {
     TubularLfo,
     TubularOperator,
     TubularPitchEnvelope,
+    PadInstruments,
     Playfield,
+    PlayfieldPad,
     PlayfieldSlot,
     Sample,
     Sampler,
@@ -305,11 +307,94 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
         })
     }
 
+    get pads(): ReadonlyArray<PlayfieldPad> {
+        return PlayfieldPads.padsOf(this.box)
+            .filter(box => PlayfieldPadImpl.isPad(box))
+            .map(box => PlayfieldPadImpl.wrap(this.context, box))
+            .sort((first, second) => first.note - second.note)
+    }
+
+    addPad<K extends keyof PadInstruments>(key: K, props?: DeepPartial<PadInstruments[K]>, pad?: PadProps)
+        : PlayfieldPad & {readonly instrument: PadInstruments[K]} {
+        const factory: InstrumentFactory = InstrumentFactories.Named[guardPadInstrument(key)]
+        return this.context.edit(() => {
+            const note = isDefined(pad?.note) ? Guard.int32({min: 0, max: 127}, pad.note, "note") : this.#nextFreeNote()
+            PlayfieldPads.padAt(this.box, note).ifSome(cell => cell.delete())
+            const cellBox = PlayfieldPads.createCell(this.context.boxGraph, this.box, note)
+            const instrumentBox = CellInstrument.create(this.context.boxGraph, cellBox, factory).result()
+            Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props)
+            return Props.apply(PlayfieldPadImpl.wrap(this.context, cellBox), Props.without(pad, "note")) as unknown as
+                PlayfieldPad & {readonly instrument: PadInstruments[K]}
+        })
+    }
+
     #nextFreeNote(): int {
         const taken = new Set(PlayfieldPads.padsOf(this.box).map(box => box.index.getValue()))
         for (let note = 60; note < 128; note++) {if (!taken.has(note)) {return note}}
         for (let note = 59; note >= 0; note--) {if (!taken.has(note)) {return note}}
         return panic("All 128 notes are taken")
+    }
+}
+
+type PadProps = Partial<Pick<PlayfieldPad, "note" | "key" | "gain" | "pan" | "mute" | "solo" | "exclude" | "minimized">>
+
+const guardPadInstrument = (key: string): keyof PadInstruments => {
+    Guard.oneOf(key, Object.entries(InstrumentFactories.Named)
+        .filter(([, factory]) => InstrumentFactories.isPadInstrument(factory) && factory !== InstrumentFactories.Nano)
+        .map(([name]) => name), "key")
+    return key as keyof PadInstruments
+}
+
+// a pad is a Playfield pad cell playing any instrument but a Nano
+export class PlayfieldPadImpl extends Facade<InstrumentCompositeCellBox> implements PlayfieldPad {
+    static wrap(context: Context, box: InstrumentCompositeCellBox): PlayfieldPadImpl {
+        return context.facade(box, () => new PlayfieldPadImpl(context, box), pad => !(pad instanceof PlayfieldPadImpl))
+    }
+
+    static isPad(box: InstrumentCompositeCellBox): boolean {
+        return PlayfieldPads.isPad(box) && !PlayfieldSlotImpl.isSlot(box)
+    }
+
+    declare note: int
+    declare key: int
+    declare gain: float
+    declare pan: bipolar
+    declare mute: boolean
+    declare solo: boolean
+    declare exclude: boolean
+    declare minimized: boolean
+    readonly #midiChain: EffectChain<AnyMIDIEffectImpl>
+    readonly #audioChain: EffectChain<AnyAudioEffectImpl>
+
+    private constructor(context: Context, box: InstrumentCompositeCellBox) {
+        super(context, box)
+        this.bind({note: box.index, key: box.key, gain: box.gain, pan: box.pan, mute: box.mute, solo: box.solo,
+            exclude: box.exclude, minimized: box.minimized})
+        this.#midiChain = new EffectChain<AnyMIDIEffectImpl>(context, box.midiEffects, box => MIDIEffectImpls.wrap(context, box))
+        this.#audioChain = new EffectChain<AnyAudioEffectImpl>(context, box.audioEffects, box => AudioEffectImpls.wrap(context, box))
+    }
+
+    get playfield(): Playfield {
+        const deviceBox = this.box.composite.targetVertex.unwrap("pad has no playfield").box
+        return InstrumentImpls.wrap(this.context, deviceBox) as PlayfieldImpl
+    }
+    get instrument(): PadInstruments[keyof PadInstruments] {
+        const instrumentBox = this.box.instrument.pointerHub.incoming().at(0)?.box ?? panic("Pad has no instrument")
+        return InstrumentImpls.wrap(this.context, instrumentBox) as unknown as PadInstruments[keyof PadInstruments]
+    }
+    get midiEffects(): ReadonlyArray<AnyMIDIEffect> {return this.#midiChain.list()}
+    get audioEffects(): ReadonlyArray<AnyAudioEffect> {return this.#audioChain.list()}
+
+    addMIDIEffect<K extends keyof MIDIEffects>(key: K, props?: DeepPartial<MIDIEffects[K]>, index?: int): MIDIEffects[K] {
+        Guard.oneOf(key, Object.keys(DeviceBoxes.MIDIEffectLabels), "key")
+        return this.#midiChain.add(at => DeviceBoxes.createMIDIEffect(this.context.boxGraph, key, this.box.midiEffects, at),
+            props, index) as unknown as MIDIEffects[K]
+    }
+
+    addAudioEffect<K extends keyof AudioEffects>(key: K, props?: DeepPartial<AudioEffects[K]>, index?: int): AudioEffects[K] {
+        Guard.oneOf(key, Object.keys(DeviceBoxes.AudioEffectLabels), "key")
+        return this.#audioChain.add(at => DeviceBoxes.createAudioEffect(this.context.boxGraph, key, this.box.audioEffects, at),
+            props, index) as unknown as AudioEffects[K]
     }
 }
 

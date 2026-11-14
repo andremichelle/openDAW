@@ -1,0 +1,53 @@
+// Adds a Playfield of openDrum devices to the open project, the pads in the order of the stock TR-808 Playfield
+if (!await openDAW.hasProject()) {
+    await openDAW.showInfo("openDrum Analog", "No project is open. Create or load one first.")
+    return
+}
+const project = await openDAW.getProject()
+const drums = project.addInstrumentUnit("Playfield", {label: "openDrum Analog"}).instrument
+drums.addPad("OpenDrumKick", {
+    label: "Kick", tune: 51.43, pitch: 28.23, sweep: 0.0025, drift: 4.1, decay: 1.137, punch: 0.078, shape: 0.001,
+    skin: 0.295, click: 0.034, tone: 873.1, noise: 0.5, drive: 0.82, rumble: 0, length: 2, duck: 1, bright: 0.25
+}, {note: 60})
+drums.addPad("OpenDrumSnare", {
+    label: "Snare", tune: 171.16, ratio: 1.943, balance: 0.7243, pitch: 2.065, sweep: 0.0092, decay: 0.2093,
+    punch: -0.0221, shape: 0, level: -5.3, wireDecay: 0.1944, width: 0.46, curve: -0.2745, click: 0.1079, tone: 4779,
+    skin: 0.1612, drive: 0
+}, {note: 61})
+const tom = {pitch: 0.4, sweep: 0.05, drift: 0, punch: 0, shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2,
+    noise: -34, noiseDecay: 0.7, color: 0, air: 0}
+drums.addPad("OpenDrumTom", {...tom, label: "Low Tom", tune: 88, decay: 0.62}, {note: 62})
+drums.addPad("OpenDrumTom", {...tom, label: "Mid Tom", tune: 132, decay: 0.4}, {note: 63})
+drums.addPad("OpenDrumTom", {...tom, label: "Hi Tom", tune: 192, decay: 0.31}, {note: 64})
+drums.addPad("OpenDrumRim", {
+    label: "Rim Shot", tune: 476, ratio: 3.6, balance: 1, ring: 0.17, high: 0, highRatio: 6.3, ringHigh: 0.035, swell: 3,
+    decay: 0.012, punch: 0.7, drive: 12, hard: 0, click: 0.05, cut: 300, restart: 1, volume: -3
+}, {note: 65})
+drums.addPad("OpenDrumClap", {
+    label: "Hand Clap", hands: 4, gap: 0.0115, last: 0.71, spread: 0, attack: 0.00075, decay: 0.019, snap: 0.6, drive: 0,
+    tone: 1055, resonance: 1, room: -1.25, roomDecay: 0.41, tail: 0.5, volume: -2
+}, {note: 66})
+const hat = {tune: 1, spread: 0, ring: 0, reso: 0, curve: 0}
+drums.addPad("OpenDrumHat", {...hat, label: "Closed Hat", color: 6300, hold: 0, decay: 0.13}, {note: 67, exclude: true})
+drums.addPad("OpenDrumHat", {...hat, label: "Open Hat", color: 6200, hold: 0.2, decay: 0.15}, {note: 68, exclude: true})
+drums.addPad("OpenDrumBell", {
+    label: "Cowbell", tune: 558, ratio: 1.477, balance: 0.7, color: 1050, strike: 0.8, decay: 0.7
+}, {note: 69})
+drums.addPad("OpenDrumCymbal", {label: "Cymbal", tune: 1, tone: 0, attack: 0, decay: 0.75}, {note: 70})
+drums.addPad("OpenDrumRim", {
+    label: "Claves", tune: 2422, ratio: 1, balance: 0, ring: 0.1, high: 0, highRatio: 1, ringHigh: 0.1, swell: 3,
+    decay: 0.05, punch: 0.6, drive: 0, hard: 0, click: 0, cut: 20, restart: 1
+}, {note: 71})
+const conga = {drift: 0, shape: 0, drive: 0, sub: 0, ratio: 0.67, top: 0, length: 0.2, noise: -48, noiseDecay: 0.02,
+    color: 0, air: 0}
+drums.addPad("OpenDrumTom", {
+    ...conga, label: "Low Conga", tune: 200.5, pitch: 24, sweep: 0.0005, decay: 0.55, punch: 0
+}, {note: 72})
+drums.addPad("OpenDrumTom", {
+    ...conga, label: "Mid Conga", tune: 281.5, pitch: 12, sweep: 0.001, decay: 0.3, punch: -0.3
+}, {note: 73})
+drums.addPad("OpenDrumTom", {
+    ...conga, label: "Hi Conga", tune: 412.5, pitch: 12, sweep: 0.0005, decay: 0.25, punch: -0.15
+}, {note: 74})
+drums.addPad("OpenDrumShaker", {label: "Maracas", color: 7200, attack: 0.02, decay: 0.012, curve: 0.3}, {note: 75})
+project.openInStudio()

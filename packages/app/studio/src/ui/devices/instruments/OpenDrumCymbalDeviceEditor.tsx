@@ -22,7 +22,6 @@ export const OpenDrumCymbalDeviceEditor = ({lifecycle, service, adapter, deviceH
                               icon={InstrumentFactories.OpenDrumCymbal.defaultIcon}
                               engine="cymbal"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(decay), punch: 1})}
                               sections={[
                                   {title: "SHAPE", color: Colors.orange, columns: [[tune, tone, attack, decay]]},
                                   {title: "PLAY", color: Colors.cream, columns: [[volume, velocity, play]]}

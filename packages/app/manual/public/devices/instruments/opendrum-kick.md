@@ -5,13 +5,18 @@ with a rumbling tail, all without samples.
 
 ---
 
+![screenshot](opendrum-kick.webp)
+
+---
+
 ## 0. Overview
 
 _openDrum Kick_ plays one hit per note. The display shows the hit the current values make, with its level and its
 pitch over time.
+Press the display to play the hit, in Gate it sounds as long as you hold it.
 
 1. On a track, the key sets the pitch: key 60 plays at Tune, every key above or below moves it by a semitone.
-2. In a Playfield pad, every hit plays at Tune.
+2. In a Playfield pad, the pad's Key sets the note: at 60, its default, every hit plays at Tune.
 3. Every value can be automated.
 
 Example uses:

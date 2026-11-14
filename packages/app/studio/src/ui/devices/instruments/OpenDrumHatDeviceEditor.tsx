@@ -22,7 +22,6 @@ export const OpenDrumHatDeviceEditor = ({lifecycle, service, adapter, deviceHost
                               icon={InstrumentFactories.OpenDrumHat.defaultIcon}
                               engine="hat"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(decay), punch: now(curve)})}
                               sections={[
                                   {title: "SOURCE", color: Colors.orange, columns: [[tune, color]]},
                                   {title: "CHARACTER", color: Colors.purple, columns: [[spread, ring, reso, curve]]},

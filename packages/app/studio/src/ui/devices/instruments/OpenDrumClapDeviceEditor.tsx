@@ -25,7 +25,6 @@ export const OpenDrumClapDeviceEditor = ({lifecycle, service, adapter, deviceHos
                               icon={InstrumentFactories.OpenDrumClap.defaultIcon}
                               engine="clap"
                               parameters={Object.values(adapter.namedParameter)}
-                              contour={now => ({decay: now(roomDecay), punch: 0})}
                               sections={[
                                   {title: "HANDS", color: Colors.orange, columns: [[hands, gap, last, spread]]},
                                   {title: "BURST", color: Colors.yellow, columns: [[attack, decay, snap, drive]]},

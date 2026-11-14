@@ -1265,6 +1265,63 @@ export interface Playfield extends Instrument {
      * ```
      */
     addSample(sample: Sample, props?: Partial<Omit<PlayfieldSlot, "uuid" | "playfield" | "sample" | "midiEffects" | "audioEffects" | "addMIDIEffect" | "addAudioEffect" | "remove">>): PlayfieldSlot
+    /** Pads playing an instrument, ordered by note (pads playing a sample are {@link slots}) */
+    readonly pads: ReadonlyArray<PlayfieldPad>
+    /**
+     * Put an instrument on a note. Replaces an existing pad or slot at that note.
+     * @param key - Instrument type, see {@link PadInstruments}
+     * @param props - Instrument settings
+     * @param pad - Pad settings (`note` defaults to the next free note starting at 60)
+     * @example
+     * ```ts
+     * const drums = project.addInstrumentUnit("Playfield", {label: "Drums"}).instrument
+     * drums.addPad("OpenDrumKick", {decay: 0.7}, {note: 36})
+     * drums.addPad("OpenDrumHat", {decay: 0.13}, {note: 42, exclude: true})
+     * ```
+     */
+    addPad<K extends keyof PadInstruments>(key: K, props?: DeepPartial<PadInstruments[K]>,
+                                           pad?: Partial<Pick<PlayfieldPad, "note" | "key" | "gain" | "pan" | "mute" | "solo" | "exclude" | "minimized">>): PlayfieldPad & {
+        /** The instrument this pad plays, typed by the given key */
+        readonly instrument: PadInstruments[K]
+    }
+}
+
+/**
+ * Instruments that can play on a {@link PlayfieldPad}: every layer instrument except Playfield, Instrument Composite and
+ * Nano (a sample goes on a pad with {@link Playfield.addSample})
+ * @group Instruments
+ */
+export type PadInstruments = Omit<LayerInstruments, "Playfield" | "InstrumentComposite" | "Nano">
+
+/**
+ * One pad of the Playfield playing an instrument, with its own MIDI and audio effect chains and its own strip
+ * @group Instrument Parts
+ */
+export interface PlayfieldPad extends MIDIEffectHost, AudioEffectHost {
+    /** Unique id */
+    readonly uuid: string
+    /** The Playfield this pad belongs to */
+    readonly playfield: Playfield
+    /** The instrument this pad plays */
+    readonly instrument: PadInstruments[keyof PadInstruments]
+    /** MIDI note triggering this pad (0 to 127) */
+    note: int
+    /** The note the pad's instrument plays when triggered (0 to 127, default 60) */
+    key: int
+    /** Pad gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    pan: bipolar
+    /** Mute the pad */
+    mute: boolean
+    /** Solo the pad */
+    solo: boolean
+    /** Exclusive: a new hit stops any other exclusive pad (hi-hat choke) */
+    exclude: boolean
+    /** Collapse the pad editor */
+    minimized: boolean
+    /** Remove the pad with its instrument and effects */
+    remove(): void
 }
 
 /**

@@ -21,7 +21,7 @@ const wrap = (parameter: ParameterAdapterSet, box: OpenDrumKickDeviceBox) => {
         tone: parameter.createParameter(box.tone, ValueMapping.exponential(200.0, 16000.0), hertz, "Tone"),
         noise: parameter.createParameter(box.noise, ValueMapping.unipolar(), percent, "Noise"),
         drive: parameter.createParameter(box.drive, ValueMapping.linear(0.0, 36.0), decibel, "Drive"),
-        rumble: parameter.createParameter(box.rumble, ValueMapping.unipolar(), percent, "Rumble"),
+        rumble: parameter.createParameter(box.rumble, ValueMapping.unipolar(), percent, "Rumble Level"),
         length: parameter.createParameter(box.length, OpenDrum.choice(OpenDrum.RumbleLengths),
             StringMapping.indices("", OpenDrum.RumbleLengths), "Length"),
         duck: parameter.createParameter(box.duck, ValueMapping.unipolar(), percent, "Duck"),
