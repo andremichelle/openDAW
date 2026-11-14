@@ -1,6 +1,6 @@
 //! openDrum Hat: six square oscillators at the 808's frequencies (scaled by Tune) with Noise mixed in, a steep
 //! high-pass at Color and a fixed low-pass above. One envelope: Hold at full level, then Decay. In Mono a new hit chokes
-//! the ringing one.
+//! the ringing one. The oscillators start every hit somewhere else in their cycles, like free-running ones.
 
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
@@ -82,7 +82,9 @@ impl Voice {
         self.noise.reset(age.wrapping_mul(0x85EB_CA6B) ^ 0x4A71);
         if restart {
             self.filters.iter_mut().for_each(|filter| filter.reset());
-            self.phases = [0.0; 6];
+            let mut random = WhiteNoise::default();
+            random.reset(age.wrapping_mul(0x9E37_79B9) ^ 0x4A72);
+            self.phases = core::array::from_fn(|_| (random.next() + 1.0) * 0.5);
         }
         self.amp.set(0.0, params.hold.max(0.0), params.decay.max(0.005), sample_rate);
         self.amp.set_floor(ENVELOPE_FLOOR);

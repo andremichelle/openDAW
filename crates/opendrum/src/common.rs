@@ -13,6 +13,13 @@ const CLICK_Q: f32 = 1.5;
 /// The full asymmetry of the drive, an engine passes this or less.
 pub const DRIVE_BIAS: f32 = 0.3;
 
+/// The output gain that keeps a driven hit near its undriven peak when the drive's ceiling sits above the engine's
+/// level: 1 at Drive 0, falling to a half at 12 dB and staying there.
+pub fn drive_makeup(drive: f32) -> f32 {
+    if drive <= 0.0 {return 1.0;}
+    1.0 / libm::sqrtf(libm::powf(10.0, drive.min(12.0) / 20.0))
+}
+
 /// The click's per block values for one Tone.
 #[derive(Clone, Copy, Default)]
 pub struct ClickShape {

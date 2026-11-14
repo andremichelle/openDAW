@@ -16,7 +16,7 @@ pub const KICK_PARAMS: usize = 20;
 pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
 pub const TOM_PARAMS: usize = 20;
-pub const RIM_PARAMS: usize = 17;
+pub const RIM_PARAMS: usize = 18;
 pub const HAT_PARAMS: usize = 8;
 
 #[no_mangle]
@@ -129,9 +129,8 @@ pub extern "C" fn render_tom(params: *const f32, velocity: f32, sample_rate: f32
 #[no_mangle]
 pub extern "C" fn rim_param_count() -> usize {RIM_PARAMS}
 
-/// Params: tune, ratio, balance, high, high ratio, ring, ring high, decay, punch, drive, hard, click, swell,
-/// cut,
-/// volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+/// Params: tune, ratio, balance, high, high ratio, ring, ring high, decay, punch, drive, hard, click, swell, cut,
+/// restart (0 or 1), volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
 #[no_mangle]
 pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
     let values = unsafe { core::slice::from_raw_parts(params, RIM_PARAMS) };
@@ -139,8 +138,8 @@ pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32
     let params = RimParams {
         tune: values[0], ratio: values[1], balance: values[2], high: values[3], high_ratio: values[4],
         ring: values[5], ring_high: values[6], decay: values[7], punch: values[8], drive: values[9], hard: values[10],
-        click: values[11], swell: values[12], cut: values[13], volume: values[14], velocity: values[15],
-        play: play_of(values[16])
+        click: values[11], swell: values[12], cut: values[13], restart: values[14] >= 0.5, volume: values[15],
+        velocity: values[16], play: play_of(values[17])
     };
     let mut rim = Rim::new(sample_rate);
     rim.note_on(0, velocity, 0.0, &params);

@@ -1,5 +1,6 @@
 import css from "./OpenDrumPreview.sass?inline"
 import referenceCss from "./OpenDrumReference.sass?inline"
+import navigationCss from "./OpenDrumNavigation.sass?inline"
 import {Color, DefaultObservableValue, Lifecycle, Notifier, Option, Provider} from "@opendaw/lib-std"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
@@ -12,6 +13,7 @@ import {Checkbox} from "@/ui/components/Checkbox"
 
 const className = Html.adoptStyleSheet(css, "OpenDrumPreview")
 const referenceClassName = Html.adoptStyleSheet(referenceCss, "OpenDrumReference")
+const navigationClassName = Html.adoptStyleSheet(navigationCss, "OpenDrumNavigation")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -173,7 +175,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             ]),
             group(lifecycle, refresh, "purple", "Strike", 1, [
                 field("Click", 0, 1, 0.01, Formats.percent, "click"),
-                field("Cut", 20, 4000, 10, Formats.hertz, "cut")
+                field("Cut", 20, 4000, 10, Formats.hertz, "cut"),
+                choice("Restart", OpenDrumSynth.OffOn, "restart")
             ]),
             group(lifecycle, refresh, "cream", "Play", 1, [
                 field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
@@ -234,7 +237,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         const groups: ReadonlyArray<HTMLElement> = [
             group(lifecycle, refresh, "orange", "Hands", 1, [
                 field("Hands", 1, 8, 1, Formats.fixed(0, ""), "hands"),
-                field("Gap", 0, 0.05, 0.0005, Formats.seconds, "gap"),
+                field("Gap", 0, 0.04, 0.0005, Formats.seconds, "gap"),
                 field("Last", 0.3, 1.5, 0.01, Formats.fixed(2, ""), "last"),
                 field("Spread", 0, 1, 0.01, Formats.percent, "spread")
             ]),
@@ -276,15 +279,17 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         // set from the measured tones, envelope and bands of the references (2026-11-13)
         rimDevice("Rim (808)", {
             tune: 476, ratio: 3.6, balance: 1, high: 0, highRatio: 6.3, ring: 0.17, ringHigh: 0.035, decay: 0.012,
-            punch: 0.7, drive: 12, hard: 0, click: 0.05, swell: 3, cut: 300, volume: -3, velocity: 0.5, play: 0
+            punch: 0.7, drive: 12, hard: 0, click: 0.05, swell: 3, cut: 300, restart: 1, volume: -3,
+            velocity: 0.5, play: 0
         }, "TR808WAV/RS/RS.WAV"),
         rimDevice("Rim (909)", {
             tune: 220, ratio: 2.08, balance: 1, high: 0.625, highRatio: 5.2, ring: 0.0775, ringHigh: 0.04, decay: 0.205,
-            punch: -0.19, drive: 12, hard: 0.4, click: 0, swell: 0.4, cut: 60, volume: 0, velocity: 0.5, play: 0
+            punch: -0.19, drive: 12, hard: 0.4, click: 0, swell: 0.4, cut: 60, restart: 1, volume: 0,
+            velocity: 0.5, play: 0
         }, "Roland TR-909/RIM127.WAV"),
         rimDevice("Claves (808)", {
             tune: 2422, ratio: 1, balance: 0, high: 0, highRatio: 1, ring: 0.1, ringHigh: 0.1, decay: 0.05, punch: 0.6,
-            drive: 0, hard: 0, click: 0, swell: 3, cut: 20, volume: 0, velocity: 0.5, play: 0
+            drive: 0, hard: 0, click: 0, swell: 3, cut: 20, restart: 1, volume: 0, velocity: 0.5, play: 0
         }, "TR808WAV/CL/CL.WAV"),
         // set from the measured pitch fall, decay, harmonics and noise of the references (2026-11-13)
         tomDevice("Tom (808 low)", {
@@ -465,5 +470,21 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             </div>
         )
     }
-    return <Group>{devices.map(device => createDevice(device))}</Group>
+    const panels: ReadonlyArray<HTMLElement> = devices.map(device => createDevice(device))
+    const engines: ReadonlyArray<string> = devices.map(device => device.engine)
+        .filter((engine, index, all) => all.indexOf(engine) === index)
+    const navigation: HTMLElement = (
+        <div className={navigationClassName}>
+            {engines.map(engine => (
+                <div>
+                    {devices.map((device, index) => device.engine === engine ? (
+                        <span onclick={() => panels[index].scrollIntoView({behavior: "smooth", block: "start"})}>
+                            {device.name}
+                        </span>
+                    ) : null)}
+                </div>
+            ))}
+        </div>
+    )
+    return <Group>{navigation}{panels}</Group>
 }

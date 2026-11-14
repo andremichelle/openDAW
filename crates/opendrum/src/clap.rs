@@ -8,7 +8,7 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{Drive, DRIVE_BIAS};
+use crate::common::{drive_makeup, Drive, DRIVE_BIAS};
 use crate::kick::Play;
 
 pub const VOICES: usize = 8;
@@ -16,6 +16,9 @@ pub const MAX_HANDS: usize = 8;
 // Level in dB, at or below this the room is off
 pub const LEVEL_OFF: f32 = -48.0;
 
+// above this gap (the machines') the burst fade stretches with the gap squared: the wider the gap, the further up
+// the previous burst still is when the next one starts
+const GAP_REFERENCE: f32 = 0.0116;
 // Spread at 1 moves a hand by up to this share of Gap, its tone by up to half an octave, its level by up to 6 dB
 const SPREAD_TIME: f32 = 0.35;
 const SPREAD_TONE: f32 = 0.5;
@@ -47,6 +50,8 @@ const OUTPUT_GAIN: f32 = 3.0;
 const SILENT: f32 = 0.0001;
 const DRIVE_DC_BLOCK: f32 = 30.0;
 const DRIVE_BIAS_FULL: f32 = 12.0;
+// the drive's ceiling in engine level (the 808 clap's bursts peak at 2.6), a power of two so Drive 0 stays bit exact
+const DRIVE_CEILING: f32 = 4.0;
 
 /// Times in seconds, Tone in Hz, Room, Drive and Volume in dB, Hands 1 to 8, Last as a share of Gap, the rest 0 to 1.
 /// Tail is the amount of the room's long quiet second stage.
@@ -149,7 +154,9 @@ impl Voice {
         self.burst = 0.0;
         self.rise = 0;
         self.snap = 0.0;
-        self.burst_factor = libm::expf(libm::logf(0.001) / (params.decay.max(0.0005) * sample_rate));
+        let wider = (params.gap / GAP_REFERENCE).max(1.0);
+        let stretch = wider * wider;
+        self.burst_factor = libm::expf(libm::logf(0.001) / (params.decay.max(0.0005) * stretch * sample_rate));
         self.snap_factor = libm::expf(libm::logf(0.001) / (SNAP_TIME * sample_rate));
         if restart {
             self.burst_high.reset();
@@ -274,16 +281,17 @@ impl Clap {
         let room_level = if params.room <= LEVEL_OFF {0.0} else {libm::powf(10.0, params.room / 20.0)};
         let room = SvfCoefficients::new((params.tone * ROOM_TONE).min(sample_rate * 0.45), ROOM_Q, sample_rate);
         let snap = SvfCoefficients::new(SNAP_HIGH.min(sample_rate * 0.45), 0.707, sample_rate);
-        let volume = libm::powf(10.0, params.volume / 20.0);
+        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive);
         let bias = DRIVE_BIAS * (params.drive / DRIVE_BIAS_FULL).clamp(0.0, 1.0);
         for chunk in output.chunks_mut(RENDER_QUANTUM) {
             let frames = chunk.len();
             for frame in 0..frames {
-                self.dry[frame] = self.voices.iter_mut().filter(|voice| voice.active)
+                let mix: f32 = self.voices.iter_mut().filter(|voice| voice.active)
                     .map(|voice| voice.render(params, room_level, &room, &snap, sample_rate)).sum();
+                self.dry[frame] = mix / DRIVE_CEILING;
             }
             self.drive.process(params.drive, bias, sample_rate, &self.dry, chunk);
-            chunk.iter_mut().for_each(|value| *value *= volume);
+            chunk.iter_mut().for_each(|value| *value *= level);
         }
     }
 

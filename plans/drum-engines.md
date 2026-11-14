@@ -688,3 +688,37 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    The Rim's preview columns had grown to 5 and 6 fields; regrouped to at most 4: Tones Tune, Ratio, Balance,
    Ring; High Level, Ratio, Ring, Swell; Shape Decay, Punch, Drive, Hard; Strike Click, Cut; Play. Rule for the
    coming engines: at most 4 fields a column.
+   The Hat was committed 2cfd4ff93. Clap, his find: with a larger Gap the bursts faded to silence in between and
+   left a trail of clicks. The burst fade now stretches with the Gap above 11.6 ms (the machines' gap), so each
+   burst has fallen by the same amount when the next arrives (about -26 dB at a 40 ms gap, as at 11.6 ms). At
+   11.6 ms and below nothing changes: both presets render byte identical.
+   He: still running to silence, they need to restart mid-run. The stretch is now the gap ratio squared, so the dip
+   gets shallower as the gap widens: just before the next burst about -22 dB at 11.6 ms (unchanged), -15 dB at
+   20 ms, -7 to -11 dB at 30 ms, -7 dB at 50 ms. Presets still byte identical.
+   Gap's maximum is 40 ms (his decision).
+   OPEN, needs its own run (his find 2026-11-14): Drive jumps when it leaves 0. At 0 the shared drive is bypassed,
+   above 0 the signal passes a tanh with its ceiling at 1.0 whatever the engine's level. The 808 clap peaks at 2.6
+   before the drive, so at 0.5 dB its bursts collapse to 1.0 (first 45 ms: peak 2.64 to 1.02, level -3 dB) while
+   the tail stays. The same holds for every engine whose hit peaks above about 0.5 (Snare, Tom, Rim; the Kick is
+   accepted and must stay bit identical). To decide: a ceiling that follows the engine's own level, or engine
+   levels that sit under the ceiling, so that a small Drive is a small change.
+   Fixed the same day (his "fix the Drive now"): Clap, Snare and Tom scale their mix into the shared drive by a
+   ceiling at their own level (Clap 4, Snare 2, Tom 4, powers of two so Drive 0 stays bit exact) and back out,
+   with `drive_makeup` (1 at Drive 0, a half from 12 dB on) so a driven hit stays near its undriven peak. 808 clap,
+   first 45 ms: Drive 0 peak 2.64, 0.5 dB 2.31 (level -0.4 dB), 3 dB 2.32, 12 dB 2.50, 24 dB 2.87. Clap, Tom and
+   Snare presets (all at Drive 0) render byte identical. Kick and Rim are untouched: the Kick is accepted, the Rim's
+   presets rely on the drive as it is.
+   Every trigger differs slightly in the device: the noise is seeded by the engine's hit counter (the preview
+   always renders hit 1, so it shows the same hit every time). A project rendered from its start repeats exactly.
+   Rule (his, 2026-11-14): every trigger varies in Hat, Cymbal, Crash, Shaker (maracas), Snare, Tom and Clap, not
+   in Rim and claves. Snare, Tom, Clap and Kick click already seed their noise by the hit counter. The Hat's six
+   oscillators now start every hit at seeded positions in their cycles (they started at zero after silence, so
+   hits without Noise were identical). The Rim's click uses one fixed seed, so rims and claves repeat exactly
+   (808 rim preset byte identical). Cymbal and Shaker have to follow the rule when they are built.
+   Display cost, measured in node at 48 kHz: 2 s of sound render in 3 to 5 ms (Snare, Clap with 8 hands and
+   drive, Tom, Hat), the Kick with Rumble in 10 ms, 8 s in 14 ms (Hat) and 26 ms (Kick with Rumble). The preview
+   module is about 70 kB.
+   The preview has a navigation row of all preview names on top (his request).
+   Rim Restart (his idea): On restarts the tones at the same point every hit (as before, the default), Off starts
+   them somewhere else in their cycles each hit, audible once they are driven. 18 parameters, the 808 rim preset
+   renders byte identical with Restart on. Rendering the display off the main thread: see plans/worker.md.

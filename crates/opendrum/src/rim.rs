@@ -1,10 +1,12 @@
 //! openDrum Rim: up to three pinged tones (Tune, a second at Ratio with Balance, a third at Ratio Hi with High) that
 //! swell in over Swell of their own cycles and ring for Ring (the second for Ring Hi, the third half of that), cut by a short
 //! envelope (Decay, Punch for the hard cut of the 808), driven together so they intermodulate (Hard turns the drive into a hard clip, the 909), with a click on the
-//! attack at the third tone's pitch and a high-pass (Cut). Covers rimshots, claves and side sticks.
+//! attack at the third tone's pitch and a high-pass (Cut). With Restart off the tones start every hit somewhere else
+//! in their cycles, audible once they are driven. Covers rimshots, claves and side sticks.
 
 use dsp::drum_oscillator::DrumOscillator;
 use dsp::hit_envelope::HitEnvelope;
+use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
 use crate::common::{Click, ClickShape, Clipper, Drive, CLICK_LENGTH, DRIVE_BIAS};
@@ -15,6 +17,8 @@ pub const VOICES: usize = 8;
 // the third tone rings this share of Ring Hi
 const THIRD_RING: f32 = 0.5;
 const CLICK_NOISE_MIX: f32 = 0.5;
+// one seed for every hit: a rim or claves hit repeats exactly
+const CLICK_SEED: u32 = 0x9E37_79B9 ^ 0x21A1;
 const ENVELOPE_FLOOR: f32 = 0.00001;
 const DRIVE_DC_BLOCK: f32 = 30.0;
 const DRIVE_BIAS_FULL: f32 = 12.0;
@@ -37,6 +41,7 @@ pub struct RimParams {
     pub click: f32,
     pub swell: f32,
     pub cut: f32,
+    pub restart: bool,
     pub volume: f32,
     pub velocity: f32,
     pub play: Play
@@ -46,7 +51,8 @@ impl Default for RimParams {
     fn default() -> Self {
         Self {
             tune: 450.0, ratio: 3.6, balance: 0.5, high: 0.0, high_ratio: 8.0, ring: 0.15, ring_high: 0.05, decay: 0.03, punch: 0.5,
-            drive: 6.0, hard: 0.0, click: 0.2, swell: 3.0, cut: 200.0, volume: 0.0, velocity: 0.5, play: Play::Mono
+            drive: 6.0, hard: 0.0, click: 0.2, swell: 3.0, cut: 200.0, restart: true, volume: 0.0, velocity: 0.5,
+            play: Play::Mono
         }
     }
 }
@@ -76,11 +82,17 @@ impl Voice {
         self.level = strength;
         self.transpose = transpose;
         self.elapsed = 0;
-        self.tones.iter_mut().for_each(|tone| tone.reset(0.0));
+        if params.restart {
+            self.tones.iter_mut().for_each(|tone| tone.reset(0.0));
+        } else {
+            let mut random = WhiteNoise::default();
+            random.reset(age.wrapping_mul(0x85EB_CA6B) ^ 0x21A2);
+            self.tones.iter_mut().for_each(|tone| tone.reset(f64::from(random.next() + 1.0) * 0.5));
+        }
         self.rings = [1.0; 3];
         self.ring_factors = [params.ring, params.ring_high, params.ring_high * THIRD_RING]
             .map(|ring| libm::expf(libm::logf(0.001) / (ring.max(0.001) * sample_rate)));
-        self.click.reset(age.wrapping_mul(0x9E37_79B9) ^ 0x21A1, restart);
+        self.click.reset(CLICK_SEED, restart);
         self.amp.set(0.0, 0.0, params.decay, sample_rate);
         self.amp.set_curve(params.punch);
         self.amp.set_floor(ENVELOPE_FLOOR);
@@ -188,9 +200,11 @@ mod tests {
     #[test]
     fn every_parameter_extreme_stays_finite_and_bounded() {
         let low = RimParams {tune: 100.0, ratio: 1.0, balance: 0.0, high: 0.0, high_ratio: 1.0, ring: 0.005, ring_high: 0.005,
-            decay: 0.002, punch: -1.0, drive: 0.0, hard: 0.0, click: 0.0, swell: 0.0, cut: 20.0, volume: -36.0, velocity: 0.0, play: Play::Mono};
+            decay: 0.002, punch: -1.0, drive: 0.0, hard: 0.0, click: 0.0, swell: 0.0, cut: 20.0,
+            restart: true, volume: -36.0, velocity: 0.0, play: Play::Mono};
         let high = RimParams {tune: 4000.0, ratio: 5.0, balance: 1.0, high: 1.0, high_ratio: 12.0, ring: 1.0, ring_high: 1.0, decay: 0.5,
-            punch: 1.0, drive: 36.0, hard: 1.0, click: 1.0, swell: 8.0, cut: 4000.0, volume: 0.0, velocity: 1.0, play: Play::Poly};
+            punch: 1.0, drive: 36.0, hard: 1.0, click: 1.0, swell: 8.0, cut: 4000.0,
+            restart: false, volume: 0.0, velocity: 1.0, play: Play::Poly};
         for params in [low, high, RimParams::default()] {
             let samples = render(&params, 1.0);
             assert!(samples.iter().all(|value| value.is_finite() && value.abs() < 8.0));

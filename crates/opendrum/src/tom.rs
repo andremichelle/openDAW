@@ -7,7 +7,7 @@ use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
 use dsp::RENDER_QUANTUM;
-use crate::common::{Drive, DRIVE_BIAS};
+use crate::common::{drive_makeup, Drive, DRIVE_BIAS};
 use crate::kick::Play;
 
 pub const VOICES: usize = 16;
@@ -36,6 +36,8 @@ const BODY_DC_BLOCK: f32 = 20.0;
 const ENVELOPE_FLOOR: f32 = 0.00001;
 const DRIVE_DC_BLOCK: f32 = 20.0;
 const DRIVE_BIAS_FULL: f32 = 12.0;
+// the drive's ceiling in engine level (a 909 tom peaks around 2), a power of two so Drive 0 stays bit exact
+const DRIVE_CEILING: f32 = 4.0;
 
 /// Times in seconds, Pitch and Drift in semitones above Tune, Noise, Drive and Volume in dB, Punch -1 to 1, Ratio
 /// as a frequency ratio below the body, the rest 0 to 1.
@@ -256,17 +258,18 @@ impl Tom {
             air_high: SvfCoefficients::new(AIR_HIGH.min(nyquist_guard), 0.707, sample_rate),
             dc_coefficient: 1.0 - 2.0 * core::f32::consts::PI * BODY_DC_BLOCK / sample_rate
         };
-        let volume = libm::powf(10.0, params.volume / 20.0);
+        let level = libm::powf(10.0, params.volume / 20.0) * DRIVE_CEILING * drive_makeup(params.drive);
         let bias = DRIVE_BIAS * (params.drive / DRIVE_BIAS_FULL).clamp(0.0, 1.0);
         for voice in self.voices.iter_mut().filter(|voice| voice.active) {voice.set_envelopes(params, sample_rate);}
         for chunk in output.chunks_mut(RENDER_QUANTUM) {
             let frames = chunk.len();
             for frame in 0..frames {
-                self.dry[frame] = self.voices.iter_mut().filter(|voice| voice.active)
+                let mix: f32 = self.voices.iter_mut().filter(|voice| voice.active)
                     .map(|voice| voice.render(params, &block, sample_rate)).sum();
+                self.dry[frame] = mix / DRIVE_CEILING;
             }
             self.drive.process(params.drive, bias, sample_rate, &self.dry, chunk);
-            chunk.iter_mut().for_each(|value| *value *= volume);
+            chunk.iter_mut().for_each(|value| *value *= level);
         }
     }
 

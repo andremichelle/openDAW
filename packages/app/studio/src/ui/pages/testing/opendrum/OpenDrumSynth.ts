@@ -7,6 +7,7 @@ export namespace OpenDrumSynth {
     // every hit and every reference plays 6 dB down, so a loud hit never clips and levels stay comparable
     export const Headroom = 0.5
     export const PlayModes: ReadonlyArray<string> = ["Mono", "Poly", "Gate"]
+    export const OffOn: ReadonlyArray<string> = ["Off", "On"]
     export const RumbleLengths: ReadonlyArray<string> = ["1/16", "1/8", "1/4", "1/2", "1/1"]
     const RumbleBars: ReadonlyArray<number> = [0.0625, 0.125, 0.25, 0.5, 1.0]
     const ModuleUrl = `${import.meta.env.BASE_URL}wasm-engine/wasm/opendrum_wasm.wasm`
@@ -40,7 +41,7 @@ export namespace OpenDrumSynth {
     export type Rim = {
         tune: number, ratio: number, balance: number, high: number, highRatio: number
         ring: number, ringHigh: number, decay: number, punch: number, drive: number, hard: number
-        click: number, swell: number, cut: number
+        click: number, swell: number, cut: number, restart: number
         volume: number, velocity: number, play: number
     }
     export type Hat = {
@@ -158,8 +159,9 @@ export namespace OpenDrumSynth {
                 return collect({pitch: 0, sweep: 0.001, drift: 0, decay: hat.decay, punch: 0, velocity: hat.velocity})
             },
             renderRim: (rim: Rim): Hit => {
-                const values = [rim.tune, rim.ratio, rim.balance, rim.high, rim.highRatio, rim.ring, rim.ringHigh, rim.decay, rim.punch,
-                    rim.drive, rim.hard, rim.click, rim.swell, rim.cut, rim.volume, rim.velocity, rim.play]
+                const values = [rim.tune, rim.ratio, rim.balance, rim.high, rim.highRatio, rim.ring, rim.ringHigh,
+                    rim.decay, rim.punch, rim.drive, rim.hard, rim.click, rim.swell, rim.cut, rim.restart, rim.volume,
+                    rim.velocity, rim.play]
                 new Float32Array(exports.memory.buffer, params, values.length).set(values)
                 exports.render_rim(params, 1.0, SampleRate, output, frames)
                 return collect({pitch: 0, sweep: 0.001, drift: 0, decay: rim.decay, punch: rim.punch, velocity: rim.velocity})
