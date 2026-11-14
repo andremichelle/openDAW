@@ -1,6 +1,6 @@
 import css from "./SurgeonDeviceEditor.sass?inline"
 import {
-    Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Optional, Procedure, UUID, ValueGuide
+    Arrays, clamp, DefaultObservableValue, int, isDefined, isRecord, Lifecycle, Maybe, Procedure, UUID, ValueGuide
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
@@ -48,7 +48,7 @@ const PixelsPerStep = 6
 const selectedTab = new DefaultObservableValue<int>(0)
 const PatternEntry = "surgeon-pattern"
 // a copied pattern on the clipboard, its groove by uuid so it only returns into the same project
-type CopiedPattern = { readonly pattern: SurgeonModel.Pattern, readonly groove: Optional<UUID.String> }
+type CopiedPattern = { readonly pattern: SurgeonModel.Pattern, readonly groove: Maybe<UUID.String> }
 
 export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
@@ -126,13 +126,20 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
             : MenuItem.default({label: "Remove Automation"}).setTriggerProcedure(() => editing.modify(() =>
                 slot.track.ifSome(track => tracks.delete(track))))]
     }
-    const copyPattern = (index: int): ClipboardEntry => PatternClipboard.encode<CopiedPattern>(PatternEntry,
+    const patternTemplate = adapter.patternModel(0)
+    const PatternFormat: PatternClipboard.Format<CopiedPattern> = {
+        type: PatternEntry,
+        valid: (value: unknown): value is CopiedPattern => isRecord(value)
+            && PatternClipboard.isGroove(value.groove) && PatternClipboard.sameShape(patternTemplate, value.pattern)
+    }
+    const copyPattern = (index: int): ClipboardEntry => PatternClipboard.encode(PatternFormat,
         {pattern: adapter.patternModel(index), groove: PatternClipboard.grooveOf(box.patterns.fields()[index].groove)})
+    const applyPattern = (index: int, {pattern, groove}: CopiedPattern): void => act(() => {
+        adapter.writePattern(index, pattern)
+        PatternClipboard.referGroove(box.patterns.fields()[index].groove, groove)
+    })
     const pastePattern = (index: int, entry: ClipboardEntry): void =>
-        PatternClipboard.decode<CopiedPattern>(PatternEntry, entry).ifSome(({pattern, groove}) => act(() => {
-            adapter.writePattern(index, pattern)
-            PatternClipboard.referGroove(box.patterns.fields()[index].groove, groove)
-        }))
+        PatternClipboard.decode(PatternFormat, entry).ifSome(copied => applyPattern(index, copied))
     tiles.forEach((tile, index) => lifecycle.ownAll(
         Events.subscribe(tile, "pointerdown", () => tile.focus()),
         Events.subscribe(tile, "click", () => act(() => adapter.select(index))),
@@ -141,10 +148,10 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
             MenuItem.default({label: "Copy pattern", separatorBefore: true})
                 .setTriggerProcedure(() => ClipboardManager.write(copyPattern(index))),
             MenuItem.default({label: "Paste pattern",
-                selectable: ClipboardManager.peek().mapOr(entry => entry.type === PatternEntry, false)})
-                .setTriggerProcedure(() => ClipboardManager.peek().ifSome(entry => pastePattern(index, entry)))))))
+                selectable: PatternClipboard.pastable(PatternFormat)})
+                .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, copied => applyPattern(index, copied)))))))
     const circles: HTMLElement = <div className="circles">{tiles}{offTile}</div>
-    PatternClipboard.install(lifecycle, circles, PatternEntry, tiles, copyPattern, pastePattern)
+    PatternClipboard.install(lifecycle, circles, PatternFormat, tiles, copyPattern, pastePattern)
     lifecycle.ownAll(
         Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))),
         ContextMenu.subscribe(offTile, collector => collector.addItems(...slotItems())))

@@ -28,7 +28,8 @@ const PATTERNS: usize = 8;
 pub const OFF: i32 = -1;
 const NONE: i32 = -2;
 pub const MAX_LANES: usize = 127;
-const MAX_RETAINED: usize = 512;
+// the most notes one block can carry back to the instrument (MIDI_PULL_SCRATCH, RELEASE_MAX)
+const MAX_RETAINED: usize = 256;
 const MAX_CANDIDATES: usize = 512;
 const QUARTER: f64 = 960.0;
 const SIXTEENTH: f64 = 240.0;
@@ -300,24 +301,30 @@ impl EuclidState {
         self.transporting = transporting;
         if self.dirty {self.compose();}
         if transporting {
-            for (pattern, groove) in self.grooves.iter_mut().enumerate() {
-                if pattern as i32 != self.active {groove.straight(from, to, discontinuous);}
-            }
-            let mut at = from;
-            let mut first = discontinuous;
-            if self.active != self.requested {
+            let boundary = if self.active != self.requested {
                 let bar = abi::bar_at(from);
-                let boundary = if bar.start >= from {bar.start} else {bar.start + bar.length};
-                if boundary < to {
-                    self.generate(at, boundary, first, events, &mut count);
-                    self.release_completed(at, boundary, events, &mut count);
-                    self.active = self.requested;
-                    self.compose();
-                    at = boundary;
-                    first = false;
+                Some(if bar.start >= from {bar.start} else {bar.start + bar.length}).filter(|boundary| *boundary < to)
+            } else {None};
+            let (outgoing, incoming) = (self.active, boundary.map_or(NONE, |_| self.requested));
+            for (pattern, groove) in self.grooves.iter_mut().enumerate() {
+                let pattern = pattern as i32;
+                if pattern == incoming {
+                    groove.straight(from, boundary.unwrap_or(to), discontinuous);
+                } else if pattern != outgoing {
+                    groove.straight(from, to, discontinuous);
                 }
             }
-            self.generate(at, to, first, events, &mut count);
+            match boundary {
+                Some(boundary) => {
+                    self.generate(from, boundary, discontinuous, events, &mut count);
+                    self.release_completed(from, boundary, events, &mut count);
+                    if outgoing != OFF {self.grooves[outgoing as usize].straight(boundary, to, false);}
+                    self.active = self.requested;
+                    self.compose();
+                    self.generate(boundary, to, false, events, &mut count);
+                }
+                None => self.generate(from, to, discontinuous, events, &mut count)
+            }
         }
         self.release_completed(from, to, events, &mut count);
         let rank = |event: &EventRecord| if event.kind == EVENT_NOTE_OFF {0} else {1};

@@ -247,3 +247,22 @@ fn a_state_built_while_playing_takes_the_stored_pattern_at_once() {
     let positions: Vec<f64> = ons(&out[..count]).iter().map(|on| on.0).collect();
     assert_eq!(positions, vec![1200.0, 1440.0, 1680.0]);
 }
+
+#[test]
+fn a_short_release_buffer_hands_the_rest_to_the_next_call() {
+    let mut state = state(&[LaneSpec::default()]);
+    for index in 0..MAX_RETAINED {state.retained[index] = Retained {id: OWN_IDS | index as u32, pitch: 60, end: 1e9};}
+    state.retained_count = MAX_RETAINED;
+    let mut ids = Vec::new();
+    loop {
+        let mut out = [blank(); 100];
+        let mut count = 0;
+        state.release_all(100.0, &mut out, &mut count);
+        ids.extend(out[..count].iter().map(|event| event.id));
+        if count < 100 {break;}
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), MAX_RETAINED);
+    assert_eq!(state.retained_count, 0);
+}

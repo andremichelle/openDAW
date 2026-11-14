@@ -1,6 +1,6 @@
 import css from "./EuclidDeviceEditor.sass?inline"
 import {
-    Arrays, asInstanceOf, Color, int, isDefined, Lifecycle, Mulberry32, Notifier, Option, Optional, Procedure, Subscription, Terminator,
+    Arrays, asInstanceOf, Color, int, isDefined, isRecord, Lifecycle, Maybe, Mulberry32, Notifier, Option, Optional, Procedure, Subscription, Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -38,9 +38,16 @@ type Construct = {
 }
 
 const PatternEntry = "euclid-pattern"
-type CopiedPattern = { readonly rhythms: ReadonlyArray<ReadonlyArray<number>>, readonly groove: Optional<UUID.String> }
+type CopiedPattern = { readonly rhythms: ReadonlyArray<ReadonlyArray<number>>, readonly groove: Maybe<UUID.String> }
 const RhythmKeys: ReadonlyArray<keyof Euclid.Rhythm> =
     ["steps", "pulses", "rotate", "rate", "accents", "accentRotate", "bursts", "burstRotate", "repeats", "fade"]
+const RhythmTemplate: ReadonlyArray<number> = RhythmKeys.map(() => 0)
+const PatternFormat: PatternClipboard.Format<CopiedPattern> = {
+    type: PatternEntry,
+    valid: (value: unknown): value is CopiedPattern => isRecord(value)
+        && PatternClipboard.isGroove(value.groove) && Array.isArray(value.rhythms)
+        && value.rhythms.every((row: unknown) => PatternClipboard.sameShape(RhythmTemplate, row))
+}
 type Tracked = {
     readonly lane: EuclidLaneBox
     readonly dot: HTMLElement
@@ -185,11 +192,14 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     const renderList = (): void => {
         const all = lanes()
         const audible = audibleIn(all)
+        const signature = all.map(each => [UUID.toString(each.address.uuid), each.note.getValue(),
+            noteName(each.note.getValue()).unwrapOrElse(""), each.mute.getValue(), each.solo.getValue(), audible(each)
+        ].join(":")).join("|")
         const current = Math.min(selected, all.length - 1)
-        const signature = all.map((each, index) => [UUID.toString(each.address.uuid), each.note.getValue(),
-            noteName(each.note.getValue()).unwrapOrElse(""), each.mute.getValue(), each.solo.getValue(), audible(each),
-            index === current].join(":")).join("|")
-        if (signature === rendering) {return}
+        if (signature === rendering) {
+            rowElements.forEach((row, index) => row.classList.toggle("selected", index === current))
+            return
+        }
         rendering = signature
         rows.terminate()
         const rendered = all.map((each, index) => {
@@ -198,6 +208,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     {label}
                 </span>
                 rows.own(Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+                    if (event.button !== 0) {return}
                     event.stopPropagation()
                     editing.modify(flip)
                 }))
@@ -206,7 +217,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             const dot: HTMLElement = <span className="dot"/>
             const note = each.note.getValue()
             const row: HTMLElement = (
-                <div className={Html.buildClassList("lane", index === current && "selected", !audible(each) && "silent")}>
+                <div className={Html.buildClassList("lane", !audible(each) && "silent")}>
                     <span className="note">{MidiKeys.toFullString(note)}</span>
                     {dot}
                     <span className="name">{noteName(note).unwrapOrElse("")}</span>
@@ -216,10 +227,11 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             )
             rows.ownAll(
                 Events.subscribe(row, "pointerdown", (event: PointerEvent) => {
-                    if (event.button !== 0) {return}
                     selected = index
-                    dragging = Option.wrap(index)
-                    list.setPointerCapture(event.pointerId)
+                    if (event.button === 0) {
+                        dragging = Option.wrap(index)
+                        list.setPointerCapture(event.pointerId)
+                    }
                     changed.notify()
                 }),
                 ContextMenu.subscribe(row, collector => collector.addItems(
@@ -230,6 +242,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         })
         rowElements = rendered.map(([row]) => row)
         rowDots = rendered.map(([, dot]) => dot)
+        rowElements.forEach((row, index) => row.classList.toggle("selected", index === current))
         list.replaceChildren(...rowElements)
     }
     const endDrag = (): void => {
@@ -280,7 +293,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         Euclid.createLane(boxGraph, box, note)
         selected = lanes().length - 1
     })}
-    const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode<CopiedPattern>(PatternEntry, {
+    const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode(PatternFormat, {
         rhythms: lanes().map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
             return RhythmKeys.map(key => rhythm[key].getValue())
@@ -288,15 +301,16 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         groove: PatternClipboard.grooveOf(box.patterns.fields()[pattern].groove)
     })
     const pastePattern = (pattern: int, entry: ClipboardEntry): void =>
-        PatternClipboard.decode<CopiedPattern>(PatternEntry, entry).ifSome(copied => editing.modify(() => {
-            lanes().forEach((each, index) => {
-                const values = copied.rhythms[index]
-                if (!isDefined(values)) {return}
-                const rhythm = Euclid.rhythmOf(each, pattern)
-                RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
-            })
-            PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
-        }))
+        PatternClipboard.decode(PatternFormat, entry).ifSome(copied => applyPattern(pattern, copied))
+    const applyPattern = (pattern: int, copied: CopiedPattern): void => {editing.modify(() => {
+        lanes().forEach((each, index) => {
+            const values = copied.rhythms[index]
+            if (!isDefined(values)) {return}
+            const rhythm = Euclid.rhythmOf(each, pattern)
+            RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
+        })
+        PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
+    })}
     const exportPattern = (pattern: int): void => {
         const {api} = project
         const track = deviceHost.audioUnitBoxAdapter().tracks.collection.adapters().find(each => each.type === TrackType.Notes)
@@ -335,8 +349,8 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                 collector.addItems(
                     MenuItem.default({label: "Copy pattern"}).setTriggerProcedure(() => ClipboardManager.write(copyPattern(index))),
                     MenuItem.default({label: "Paste pattern",
-                        selectable: ClipboardManager.peek().mapOr(entry => entry.type === PatternEntry, false)})
-                        .setTriggerProcedure(() => ClipboardManager.peek().ifSome(entry => pastePattern(index, entry))),
+                        selectable: PatternClipboard.pastable(PatternFormat)})
+                        .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, copied => applyPattern(index, copied))),
                     MenuItem.default({label: "Export to Note Region", separatorBefore: true})
                         .setTriggerProcedure(() => exportPattern(index)))
             })
@@ -344,7 +358,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         return tile
     }, Euclid.Patterns + 1)
     tiles.append(...tileElements)
-    PatternClipboard.install(lifecycle, tiles, PatternEntry, tileElements.slice(0, Euclid.Patterns), copyPattern, pastePattern)
+    PatternClipboard.install(lifecycle, tiles, PatternFormat, tileElements.slice(0, Euclid.Patterns), copyPattern, pastePattern)
     lifecycle.ownAll(
         liveStreamReceiver.subscribeIntegers(adapter.state, ([active, waiting]) => {
             if (reported.fresh && reported.active === active && reported.waiting === waiting) {return}
