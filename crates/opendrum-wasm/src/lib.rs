@@ -11,6 +11,7 @@ use opendrum::tom::{Tom, TomParams};
 use opendrum::rim::{Rim, RimParams};
 use opendrum::hat::{Hat, HatParams};
 use opendrum::cymbal::{Cymbal, CymbalParams};
+use opendrum::shaker::{Shaker, ShakerParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
@@ -20,6 +21,7 @@ pub const TOM_PARAMS: usize = 20;
 pub const RIM_PARAMS: usize = 18;
 pub const HAT_PARAMS: usize = 11;
 pub const CYMBAL_PARAMS: usize = 7;
+pub const SHAKER_PARAMS: usize = 7;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -180,4 +182,21 @@ pub extern "C" fn render_cymbal(params: *const f32, velocity: f32, sample_rate: 
     let mut cymbal = Cymbal::new(sample_rate);
     cymbal.note_on(0, velocity, 0.0, &params);
     cymbal.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn shaker_param_count() -> usize {SHAKER_PARAMS}
+
+/// Params: color, attack, decay, curve, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_shaker(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, SHAKER_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = ShakerParams {
+        color: values[0], attack: values[1], decay: values[2], curve: values[3], volume: values[4],
+        velocity: values[5], play: play_of(values[6])
+    };
+    let mut shaker = Shaker::new(sample_rate);
+    shaker.note_on(0, velocity, &params);
+    shaker.process(&params, output);
 }

@@ -739,6 +739,15 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
       0.094 to 0.136 rms from 200 Hz to 6.3 kHz at Reso 0 (was 1.01 to 0.115), 0.056 to 0.18 with Reso up.
       Above 6.3 kHz the hat still gets quieter (12 kHz 0.040), not compensated. The preview refuses to render when
       the page and the served engine disagree on the number of values (it showed dead controls twice).
+   Committed 15f397c9b.
+8. openDrum Shaker (his decision 2026-11-14: an engine of its own, the Hat cannot reach the 808 maracas: they are
+   pure noise, flatness 0.31 against the Hat's 0.02 to 0.11, and they swell in). Measured: the maracas rise over
+   about 18 ms like a linear ramp, hold about 2 ms, then fall about 5 dB/ms, a steep band above about 7 kHz
+   (12 dB/oct below), rolling off above 16 kHz. Engine `crates/opendrum/src/shaker.rs` (3 tests), 7 parameters:
+   Shape Color (2-pole high-pass, fixed low-pass at 18 kHz), Attack, Decay, Curve; Play Volume, Velocity, Mode.
+   The level follows the passed band's width, every hit has its own noise. Preset: Color 7200 Hz, Attack 20 ms,
+   Decay 12 ms, Curve 30 %: envelope within 1.9 dB (2 ms steps), spectrum within 2.3 dB (third octaves). Not
+   judged by ear yet.
    4. Cymbal in progress: `crates/opendrum/src/cymbal.rs` (4 tests), the shared square oscillator moved to
       common.rs. Body and top as two fourth-order high-passes (2.8 and 6.5 kHz), the body swelling in over 15 ms
       and ringing for Decay, the top for 0.45 of it, Tone moving the weight. Still about 7 dB off the references

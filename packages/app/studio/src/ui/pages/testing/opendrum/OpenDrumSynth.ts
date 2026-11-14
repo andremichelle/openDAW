@@ -50,6 +50,10 @@ export namespace OpenDrumSynth {
         spread: number, ring: number, reso: number, curve: number
         volume: number, velocity: number, play: number
     }
+    export type Shaker = {
+        color: number, attack: number, decay: number, curve: number
+        volume: number, velocity: number, play: number
+    }
     type Contour = {
         readonly pitch: number, readonly sweep: number, readonly drift: number, readonly decay: number
         readonly punch: number, readonly velocity: number
@@ -67,6 +71,7 @@ export namespace OpenDrumSynth {
         renderTom(tom: Tom): Hit
         renderRim(rim: Rim): Hit
         renderHat(hat: Hat): Hit
+        renderShaker(shaker: Shaker): Hit
     }
 
     type Exports = {
@@ -78,19 +83,21 @@ export namespace OpenDrumSynth {
         tom_param_count(): int
         rim_param_count(): int
         hat_param_count(): int
+        shaker_param_count(): int
         render_kick(params: int, velocity: number, bpm: number, sampleRate: number, output: int, frames: int): void
         render_snare(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_clap(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_tom(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_rim(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_hat(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
+        render_shaker(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
     }
 
     const isExports = (value: WebAssembly.Exports): value is WebAssembly.Exports & Exports =>
         value.memory instanceof WebAssembly.Memory && typeof value.render_kick === "function"
         && typeof value.render_snare === "function" && typeof value.render_clap === "function"
         && typeof value.render_tom === "function" && typeof value.render_rim === "function"
-        && typeof value.render_hat === "function"
+        && typeof value.render_hat === "function" && typeof value.render_shaker === "function"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
     const curves = (kick: Contour, frames: int): Pick<Hit, "envelope" | "pitch" | "softPitch"> => {
@@ -121,7 +128,7 @@ export namespace OpenDrumSynth {
         const exports = instance.exports
         if (!isExports(exports)) {return Promise.reject(new Error(`${ModuleUrl} has unexpected exports`))}
         const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count(),
-            exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count())
+            exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count(), exports.shaker_param_count())
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
         const output = exports.alloc_floats(frames)
@@ -158,12 +165,22 @@ export namespace OpenDrumSynth {
                 exports.render_snare(params, 1.0, SampleRate, output, frames)
                 return collect({...snare, drift: 0})
             },
+            renderShaker: (shaker: Shaker): Hit => {
+                const values = [shaker.color, shaker.attack, shaker.decay, shaker.curve, shaker.volume, shaker.velocity,
+                    shaker.play]
+                write(values, exports.shaker_param_count())
+                exports.render_shaker(params, 1.0, SampleRate, output, frames)
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: shaker.attack + shaker.decay,
+                    punch: shaker.curve,
+                    velocity: shaker.velocity})
+            },
             renderHat: (hat: Hat): Hit => {
                 const values = [hat.tune, hat.color, hat.hold, hat.decay, hat.spread, hat.ring, hat.reso,
                     hat.curve, hat.volume, hat.velocity, hat.play]
                 write(values, exports.hat_param_count())
                 exports.render_hat(params, 1.0, SampleRate, output, frames)
-                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: hat.decay, punch: hat.curve, velocity: hat.velocity})
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: hat.decay,
+                    punch: hat.curve, velocity: hat.velocity})
             },
             renderRim: (rim: Rim): Hit => {
                 const values = [rim.tune, rim.ratio, rim.balance, rim.high, rim.highRatio, rim.ring, rim.ringHigh,
@@ -171,7 +188,8 @@ export namespace OpenDrumSynth {
                     rim.velocity, rim.play]
                 write(values, exports.rim_param_count())
                 exports.render_rim(params, 1.0, SampleRate, output, frames)
-                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: rim.decay, punch: rim.punch, velocity: rim.velocity})
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: rim.decay,
+                    punch: rim.punch, velocity: rim.velocity})
             },
             renderTom: (tom: Tom): Hit => {
                 const values = [tom.tune, tom.pitch, tom.sweep, tom.drift, tom.decay, tom.punch, tom.shape, tom.sub,
@@ -187,7 +205,8 @@ export namespace OpenDrumSynth {
                     clap.play]
                 write(values, exports.clap_param_count())
                 exports.render_clap(params, 1.0, SampleRate, output, frames)
-                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: clap.roomDecay, punch: 0, velocity: clap.velocity})
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: clap.roomDecay,
+                    punch: 0, velocity: clap.velocity})
             }
         }
     }
