@@ -17,7 +17,7 @@ const TUNE: [u16; 1] = [10];
 const VOLUME: [u16; 1] = [11];
 const SLOT: [u16; 1] = [12];
 const SELECTED: [u16; 1] = [13];
-const GROOVE: [u16; 1] = [14];
+const GROOVE: u16 = 25;
 const LIVE: u16 = 20;
 const STORED: u16 = 30;
 const STATE: [u16; 1] = [0xFFF];
@@ -114,7 +114,7 @@ pub struct SurgeonState {
     playing: bool,
     dirty: bool,
     state_id: u32,
-    groove: abi::GrooveFollower
+    grooves: [abi::GrooveFollower; PATTERNS]
 }
 
 impl SurgeonState {
@@ -156,7 +156,7 @@ impl Instrument for Surgeon {
         }
         state.selected_id = abi::observe_field(&SELECTED);
         state.state_id = abi::bind_broadcast_int_array(&STATE, 2);
-        state.groove = abi::GrooveFollower::observe(&GROOVE);
+        for pattern in 0..PATTERNS {state.grooves[pattern] = abi::GrooveFollower::observe(&[STORED, pattern as u16, GROOVE]);}
         state.dirty = true;
     }
 
@@ -186,9 +186,18 @@ impl Instrument for Surgeon {
             let count = (frames - done).min(MAX_FRAMES);
             let (p0, p1) = (block.p0 + done as f64 * pulses_per_frame, block.p0 + (done + count) as f64 * pulses_per_frame);
             let discontinuous = done == 0 && block.flags.discontinuous();
-            let (s0, s1) = state.groove.straight(p0, p1, discontinuous);
-            let bar = abi::bar_at(s0);
-            state.engine.process_straight(s0, s1, playing, discontinuous, bar.start, bar.length, &mut scratch[..count]);
+            let mut ranges = [(p0, p1); PATTERNS];
+            for (range, groove) in ranges.iter_mut().zip(state.grooves.iter_mut()) {*range = groove.straight(p0, p1, discontinuous);}
+            if ranges.iter().all(|range| *range == (p0, p1)) {
+                let bar = abi::bar_at(p0);
+                state.engine.process_bars(p0, p1, playing, discontinuous, bar.start, bar.length, &mut scratch[..count]);
+            } else {
+                let grooves = state.grooves;
+                state.engine.process_grooved(p0, p1, &ranges, |pattern, pulse| grooves[pattern].warp(pulse), |pulse| {
+                    let bar = abi::bar_at(pulse);
+                    (bar.start, bar.length)
+                }, playing, discontinuous, &mut scratch[..count]);
+            }
             for (index, sample) in scratch[..count].iter().enumerate() {
                 out_left[done + index] += *sample;
                 out_right[done + index] += *sample;

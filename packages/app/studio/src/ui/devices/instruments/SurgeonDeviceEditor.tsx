@@ -1,12 +1,11 @@
 import css from "./SurgeonDeviceEditor.sass?inline"
-import {Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Optional, Procedure} from "@opendaw/lib-std"
+import {Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, Optional, Procedure} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
-import {Propagation} from "@opendaw/lib-box"
+import {Box, Propagation} from "@opendaw/lib-box"
 import {
     AutomatableParameterFieldAdapter,
     DeviceHost,
-    Grooves,
     InstrumentFactories,
     Surgeon,
     SurgeonDeviceBoxAdapter,
@@ -43,7 +42,7 @@ const ShapeParams: ReadonlyArray<int> = [8, 9, 10, 11, 12, 13, 14, 15]
 const SoundKeys: ReadonlyArray<int> = [...Surgeon.Sound, ...Surgeon.Amounts.flat()].map(({key}) => key)
 // shared by every Surgeon editor: the tab and a copied pattern survive a rebuilt editor
 const selectedTab = new DefaultObservableValue<int>(0)
-const clipboard: { pattern: Optional<SurgeonModel.Pattern> } = {pattern: undefined}
+const clipboard: { pattern: Optional<SurgeonModel.Pattern>, groove: Option<Box> } = {pattern: undefined, groove: Option.None}
 
 export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
@@ -116,10 +115,19 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         Events.subscribe(tile, "click", () => act(() => adapter.select(index))),
         ContextMenu.subscribe(tile, collector => collector.addItems(
             ...slotItems(),
-            MenuItem.default({label: "Copy pattern", separatorBefore: true}).setTriggerProcedure(() => clipboard.pattern = adapter.patternModel(index)),
+            MenuItem.default({label: "Copy pattern", separatorBefore: true}).setTriggerProcedure(() => {
+                clipboard.pattern = adapter.patternModel(index)
+                clipboard.groove = box.patterns.fields()[index].groove.targetVertex.map(({box: groove}) => groove)
+            }),
             MenuItem.default({label: "Paste pattern", selectable: isDefined(clipboard.pattern)}).setTriggerProcedure(() => {
-                const {pattern} = clipboard
-                if (isDefined(pattern)) {act(() => adapter.writePattern(index, pattern))}
+                const {pattern, groove} = clipboard
+                if (!isDefined(pattern)) {return}
+                act(() => {
+                    adapter.writePattern(index, pattern)
+                    const pointer = box.patterns.fields()[index].groove
+                    groove.flatMap(source => source.graph === box.graph && source.isAttached() ? Option.wrap(source) : Option.None)
+                        .match({none: () => pointer.defer(), some: source => pointer.refer(source)})
+                })
             })))))
     lifecycle.ownAll(
         Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))),
@@ -291,13 +299,19 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const sections: ReadonlyArray<HTMLElement> = [loops, sound(ToneParams), sound(ShapeParams)]
     const tabs: ReadonlyArray<HTMLElement> = ["LOOPS", "TONE", "SHAPE"].map(label => <h3 className="tab">{label}</h3>)
     tabs.forEach((tab, index) => lifecycle.own(Events.subscribe(tab, "click", () => selectedTab.setValue(index))))
+    const selectedGroove = () => box.patterns.fields()[box.pattern.getValue()].groove
     const grooveButton: HTMLElement = (
-        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(GrooveMenus.choiceItems(project, [box.groove]))}
-                    appearance={{tooltip: () => `Groove: ${box.groove.targetVertex
-                        .mapOr(({box: groove}) => Grooves.adapterOf(project, Grooves.asGrooveBox(groove)).label, GrooveMenus.NoneLabel)}`}}>
+        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent =>
+            GrooveMenus.choiceItems(project, [selectedGroove()])(parent))}
+                    appearance={{tooltip: () => GrooveMenus.tooltip(project, selectedGroove())()}}>
             <label>Groove<Icon symbol={IconSymbol.Dropdown}/></label>
         </MenuButton>
     )
+    const grooveIndicator: HTMLElement = <div className="indicator"/>
+    const updateGroove = () => grooveIndicator.classList.toggle("set", selectedGroove().nonEmpty())
+    lifecycle.ownAll(box.pattern.subscribe(updateGroove),
+        ...box.patterns.fields().map(pattern => pattern.groove.subscribe(updateGroove)))
+    updateGroove()
     lifecycle.own(selectedTab.catchupAndSubscribe(owner => {
         tabs.forEach((tab, index) => tab.classList.toggle("selected", index === owner.getValue()))
         sections.forEach((section, index) => section.classList.toggle("hidden", index !== owner.getValue()))
@@ -321,9 +335,12 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                       {control("Volume", namedParameter.volume)}
                                   </div>
                               </nav>
-                              <div className="display">{canvas}</div>
+                              <div className="display">
+                                  <div className="groove">{grooveIndicator}{grooveButton}</div>
+                                  {canvas}
+                              </div>
                               <div className="sections">
-                                  <header>{tabs}{grooveButton}</header>
+                                  <header>{tabs}</header>
                                   {sections}
                               </div>
                           </div>

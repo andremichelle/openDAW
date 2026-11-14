@@ -54,10 +54,15 @@ proves it (as for Slide: at 0 % the engine renders the same samples as before).
    notes on the track every sample stays the same.
 6. All loops run on the song position, not on the moment the pattern was fired. A pattern fired late joins
    exactly where it would be had it played all along ("in phase", decided 2026-11-13).
-7. Groove (2026-11-14): one optional groove for the device (`groove`, key 14), like Cubed. The device asks the
-   groove for the straight range of every chunk and the engine runs on it: steps, note lengths, bars, mutation
-   passes and lanes. Bar switches stay on the straight bar lines. Without a groove the range is the block itself,
-   so every sample stays the same (fingerprints unchanged). Deleting the groove leaves Surgeon without one.
+7. Groove (2026-11-14): every pattern has its own optional groove (`groove`, key 25 of a stored pattern). The
+   playing pattern's groove counts, while Off the groove of the pattern the played notes sound with. A pattern takes
+   over where the groove of the pattern before puts the bar line, from there its own groove places its steps. The
+   device asks every groove for the straight range of every chunk. Steps, note lengths, bars, mutation passes and lanes are counted on
+   it, and every step line, bar line and note end sounds exactly where the groove puts it, whatever the block size.
+   A line counts only inside the range, so a range that waits on a loop edge starts nothing. A groove that changes
+   while playing never plays a step twice, a move of more than a sixteenth counts as a jump. A slide lasts as long as
+   its step sounds. A pattern without a groove runs the old path sample by sample, also while other patterns have
+   one, so every sample stays the same (fingerprints unchanged). Deleting a groove leaves its patterns without one.
 
 ### Pitch loop
 
@@ -289,8 +294,8 @@ How the engine core became an instrument (2026-11-13).
 2. `pattern`: the pattern the live controls belong to. It stays when the slot goes off.
 3. `live`: 101 automatable parameters, the controls of the editor (rate, the pitch loop, the lanes, the sound and
    its lane amounts).
-4. `patterns`: 8 times the same 101 values as plain fields.
-5. `groove`: an optional pointer to a groove of the project.
+4. `patterns`: 8 times the same 101 values as plain fields, plus `groove`, an optional pointer to a groove of the
+   project. The groove is not a live control, the editor edits the selected pattern's groove directly.
 
 One spec list generates both the live parameters and the pattern fields, so they cannot drift apart.
 

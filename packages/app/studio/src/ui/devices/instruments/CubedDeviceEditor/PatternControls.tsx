@@ -2,8 +2,8 @@ import css from "./PatternControls.sass?inline"
 import {clamp, DefaultObservableValue, Editing, int, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions, Grooves} from "@opendaw/studio-adapters"
-import {MenuItem, MIDILearning, Project} from "@opendaw/studio-core"
+import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions} from "@opendaw/studio-adapters"
+import {MIDILearning, Project} from "@opendaw/studio-core"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Button} from "@/ui/components/Button"
@@ -66,11 +66,9 @@ export const PatternControls = ({lifecycle, project, editing, midiLearning, adap
                         appearance={{framed: true, color: Colors.orange, tooltip: "Random (Shift for options)"}}>
                     <Icon symbol={IconSymbol.Random}/>
                 </Button>
-                <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(
-                    GrooveMenus.choiceItems(project, [adapter.box.groove]))}
+                <MenuButton root={GrooveMenus.choiceRoot(project, adapter.box.groove)}
                             style={{padding: "0 0.5em"}}
-                            appearance={{framed: true, color: Colors.purple, tooltip: () => `Groove: ${adapter.box.groove.targetVertex
-                                .mapOr(({box}) => Grooves.adapterOf(project, Grooves.asGrooveBox(box)).label, GrooveMenus.NoneLabel)}`}}>
+                            appearance={{framed: true, color: Colors.purple, tooltip: GrooveMenus.tooltip(project, adapter.box.groove)}}>
                     Groove
                 </MenuButton>
                 <div className="group">

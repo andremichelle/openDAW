@@ -94,10 +94,36 @@ component
 
   div.display
     display: grid
-    grid-template-rows: minmax(0, 1fr)
+    grid-template-rows: 14px minmax(0, 1fr)
+    row-gap: 2px
     margin-bottom: 1px
     min-width: 0
     min-height: 0
+
+    > div.groove
+      --color: var(--color-purple)
+      display: flex
+      align-items: center
+      column-gap: 4px
+
+      > button
+        font-size: 9px
+        color: var(--color)
+
+        > label
+          font-size: inherit
+          line-height: 1
+          cursor: pointer
+
+      > div.indicator
+        box-sizing: border-box
+        width: 6px
+        height: 6px
+        border-radius: 50%
+        border: 1px solid var(--color)
+
+        &.set
+          background-color: var(--color)
 
     > canvas
       width: 100%
@@ -115,18 +141,6 @@ component
       column-gap: 1px
       margin-right: $title + $row-gap
       --color: var(--color-cream)
-
-      > button
-        --color: var(--color-purple)
-        width: 62px
-        margin-left: 24px
-        font-size: 9px
-        color: var(--color)
-
-        > label
-          font-size: inherit
-          line-height: 1
-          cursor: pointer
 
     > section
       grid-area: 2 / 1

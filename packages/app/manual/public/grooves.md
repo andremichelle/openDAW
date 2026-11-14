@@ -129,9 +129,10 @@ The **Groove** button next to the dice button of [Cubed](/manuals/devices/instru
 pattern plays through, with **Go to**, **None** and **New** like the region menu. A new Cubed plays straight. In a
 loop, Cubed plays every pass like a Zeitgeist.
 
-[Surgeon](/manuals/devices/instruments/surgeon) has the same menu on the **Groove** tab next to Loops, Tone and
-Shape. One groove moves the steps of all eight patterns. The bar a pattern takes over on stays where it is. In a
-loop, Surgeon plays every pass like a Zeitgeist.
+[Surgeon](/manuals/devices/instruments/surgeon) has the same menu on the **Groove** dropdown above its display.
+Each of the eight patterns has its own groove, the dropdown sets the one of the selected pattern. A pattern takes
+over where the groove of the pattern before puts the bar line, then its own groove moves its steps. In a loop,
+Surgeon plays every pass like a Zeitgeist.
 
 ---
 
@@ -159,4 +160,5 @@ Scripts see every groove with its type and parameters:
 - `project.grooves` lists every groove in order
 - `groove` on a Zeitgeist reads its groove, `null` for none
 - `groove` on a note or value region and a note or value clip reads and sets its groove, `null` for none
-- `groove` on a Cubed or a Surgeon reads and sets the groove of its patterns, `null` for none
+- `groove` on a Cubed reads and sets the groove of its patterns, `null` for none
+- `grooveOf(pattern)` and `setGroove(pattern, groove)` on a Surgeon read and set the groove of one pattern

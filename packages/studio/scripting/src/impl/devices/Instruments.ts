@@ -833,8 +833,16 @@ export class SurgeonImpl extends InstrumentFacade<SurgeonDeviceBox> implements S
 
     get pattern(): int {return this.box.pattern.getValue()}
 
-    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
-    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
+    grooveOf(pattern: int): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.#patternGroove(pattern, "grooveOf"))}
+
+    setGroove(pattern: int, groove: Nullable<AnyGroove>): void {
+        GrooveImpls.write(this.context, this.#patternGroove(pattern, "setGroove"), groove)
+    }
+
+    #patternGroove(pattern: int, name: string) {
+        const patterns = this.box.patterns.fields()
+        return patterns[Guard.int32({length: patterns.length}, pattern, name)].groove
+    }
 
     select(pattern: int): void {
         const index = Guard.int32({length: this.box.patterns.fields().length}, pattern, "select")

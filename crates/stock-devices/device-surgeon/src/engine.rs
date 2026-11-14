@@ -14,6 +14,10 @@ const MAX_OFFS: usize = 4;
 const MAX_PLAYED: usize = 8;
 const MAX_QUEUED: usize = 16;
 const NONE: i64 = i64::MIN;
+// in steps: a line computed as index times length may divide back to just below its index
+const LINE_SLACK: f64 = 1e-9;
+// a grooved position that moves further than this between two blocks is a jump
+const RESYNC_PULSES: f64 = STEP_PULSES;
 
 // Counts how often each step of one loop has been replaced, carried forward pass by pass. Counting from the song
 // start on every step would grow without bound. A jump back or a changed loop starts the count again.
@@ -88,7 +92,8 @@ pub struct Engine {
     queued_count: usize,
     played: [Played; MAX_PLAYED],
     played_count: usize,
-    played_step: i64
+    played_step: i64,
+    straight_end: f64
 }
 
 impl Engine {
@@ -116,7 +121,8 @@ impl Engine {
             queued_count: 0,
             played: [Played::NONE; MAX_PLAYED],
             played_count: 0,
-            played_step: NONE
+            played_step: NONE,
+            straight_end: f64::NAN
         }
     }
 
@@ -179,9 +185,9 @@ impl Engine {
         pattern.patch_with(step as u32, &generations)
     }
 
-    fn played_step_at(&self, pulse: f64) -> i64 {
-        libm::floor(pulse / self.patterns[self.sound.min(PATTERNS - 1)].step_pulses()) as i64
-    }
+    fn played_step_pulses(&self) -> f64 {self.patterns[self.sound.min(PATTERNS - 1)].step_pulses()}
+
+    fn played_step_at(&self, pulse: f64, slack: f64) -> i64 {libm::floor(pulse / self.played_step_pulses() + slack) as i64}
 
     fn start_queued(&mut self, pulse: f64, playing: bool) {
         for index in 0..self.queued_count {
@@ -193,7 +199,7 @@ impl Engine {
                     self.played.copy_within(1.., 0);
                     self.played_count -= 1;
                 }
-                self.played_step = if playing {self.played_step_at(pulse)} else {NONE};
+                self.played_step = if playing {self.played_step_at(pulse, 0.0)} else {NONE};
                 let patch = self.played_patch(if playing {Some(self.played_step)} else {None});
                 self.voice.set_patch(patch);
                 self.voice.note_on(note.pitch, note.velocity, 0);
@@ -248,83 +254,192 @@ impl Engine {
     }
 
     // the start of the bar holding `pulse`, for bars of `length` pulses counted from `origin`
-    fn bar_of(pulse: f64, origin: f64, length: f64) -> f64 {origin + libm::floor((pulse - origin) / length) * length}
-
-    /// Renders one block: the pulse range `[p0, p1)` spread over `output` (at most `MAX_FRAMES` frames). While the
-    /// transport does not play, or after a jump, held notes are let go and ring out. `bar_start` and `bar_length`
-    /// describe the bar around `p0` (the signature), a fired slot takes over where a bar starts.
-    pub fn process_bars(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64, bar_length: f64,
-                        output: &mut [f32]) {
-        self.process_straight(p0, p1, playing, discontinuous, bar_start, bar_length, output);
+    fn bar_of(pulse: f64, origin: f64, length: f64, slack: f64) -> f64 {
+        origin + libm::floor((pulse - origin) / length + slack) * length
     }
 
-    /// `process_bars` for a grooved block: `[p0, p1)` is the STRAIGHT range the groove moves into the block. Steps,
-    /// bars, lanes and note lengths follow it, so the groove moves every step.
-    pub fn process_straight(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64,
-                            bar_length: f64, output: &mut [f32]) {
-        let bar_length = if bar_length > 0.0 {bar_length} else {BAR_PULSES};
-        let frames = output.len().min(MAX_FRAMES);
-        let count = frames * OVERSAMPLING;
+    // the first line of a grid at or after `position`, or after it
+    fn line_from(position: f64, origin: f64, grid: f64, inclusive: bool) -> f64 {
+        let index = libm::floor((position - origin) / grid + LINE_SLACK);
+        let line = origin + index * grid;
+        if inclusive && line >= position {line} else {origin + (index + 1.0) * grid}
+    }
+
+    fn begin(&mut self, p0: f64, playing: bool, discontinuous: bool, bar_start: f64, bar_length: f64) {
         if !playing {
             if self.was_playing {self.release();}
             self.bar = f64::NAN;
             self.step = NONE;
         } else if discontinuous || !self.was_playing {
             self.release();
-            let bar = Self::bar_of(p0, bar_start, bar_length);
+            let bar = Self::bar_of(p0, bar_start, bar_length, 0.0);
             self.bar = if bar == p0 {bar - bar_length} else {bar};
             self.step = self.pattern().map_or(NONE, |pattern| Self::index_before(p0, pattern.step_pulses()));
             self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
         }
         self.was_playing = playing;
         if self.queued_count > 0 {self.start_queued(p0, playing);}
-        let advance = (p1 - p0) / count as f64;
-        for index in 0..count {
-            if playing {
-                let pulse = p0 + advance * index as f64;
-                let bar = Self::bar_of(pulse, bar_start, bar_length);
-                if bar != self.bar {
-                    self.bar = bar;
-                    if let Some(slot) = self.fired.take() {
-                        if self.played_count > 0 {self.release();}
-                        self.active = slot;
-                        self.step = NONE;
-                        self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
-                    }
-                }
-                if let Some((step_pulses, rate)) = self.pattern().map(|pattern| (pattern.step_pulses(), pattern.rate)) {
-                    let step = libm::floor(pulse / step_pulses) as i64;
-                    if rate != self.rate {
-                        // a changed rate moves the grid: wait for its next line instead of starting a note inside a step
-                        self.rate = rate;
-                        self.step = step;
-                    } else if step != self.step {
-                        self.step = step;
-                        self.enter(step, step_pulses, if advance > 0.0 {step_pulses / advance} else {0.0});
-                    }
-                }
-                if self.played_count > 0 {
-                    let step = self.played_step_at(pulse);
-                    if step != self.played_step {
-                        self.played_step = step;
-                        let patch = self.played_patch(Some(step));
-                        self.voice.set_patch(patch);
-                    }
-                }
-                let mut read = 0;
-                while read < self.off_count {
-                    if self.offs[read] <= pulse {
-                        self.voice.note_off();
-                        self.offs.copy_within(read + 1..self.off_count, read);
-                        self.off_count -= 1;
-                    } else {
-                        read += 1;
-                    }
-                }
+    }
+
+    // Everything that happens up to `pulse`: a bar line, a step line and the ends of notes. A line counts only below
+    // `limit` and only forwards, `slide` tells how many samples the step starting on a line lasts. A pattern taking
+    // over stops here when `hand_over` says so for its groove, so that groove places its first step.
+    fn cross<S: Fn(f64, f64) -> f64, H: Fn(usize) -> bool>(&mut self, pulse: f64, limit: f64, slack: f64, bar_start: f64,
+                                                           bar_length: f64, slide: &S, hand_over: &H) {
+        let bar = Self::bar_of(pulse, bar_start, bar_length, slack);
+        if bar > self.bar && bar < limit {
+            self.bar = bar;
+            if let Some(slot) = self.fired.take() {
+                if self.played_count > 0 {self.release();}
+                self.active = slot;
+                self.step = self.pattern().map_or(NONE, |pattern| Self::index_before(bar, pattern.step_pulses()));
+                self.rate = self.pattern().map_or(0, |pattern| pattern.rate);
+                if hand_over(self.groove()) {return;}
             }
+        }
+        if let Some((step_pulses, rate)) = self.pattern().map(|pattern| (pattern.step_pulses(), pattern.rate)) {
+            let step = libm::floor(pulse / step_pulses + slack) as i64;
+            if rate != self.rate {
+                // a changed rate moves the grid: wait for its next line instead of starting a note inside a step
+                self.rate = rate;
+                self.step = step;
+            } else if step > self.step && step as f64 * step_pulses < limit {
+                self.step = step;
+                self.enter(step, step_pulses, slide(step as f64 * step_pulses, step_pulses));
+            }
+        }
+        if self.played_count > 0 {
+            let step = self.played_step_at(pulse, slack);
+            if step > self.played_step && step as f64 * self.played_step_pulses() < limit {
+                self.played_step = step;
+                let patch = self.played_patch(Some(step));
+                self.voice.set_patch(patch);
+            }
+        }
+        let mut read = 0;
+        while read < self.off_count {
+            if self.offs[read] <= pulse {
+                self.voice.note_off();
+                self.offs.copy_within(read + 1..self.off_count, read);
+                self.off_count -= 1;
+            } else {
+                read += 1;
+            }
+        }
+    }
+
+    // the next line from `position` below `limit`: a bar, a step of the pattern or of the played notes, a note end
+    fn next_line(&self, position: f64, inclusive: bool, limit: f64, bar_start: f64, bar_length: f64) -> Option<f64> {
+        let mut next = Self::line_from(position, bar_start, bar_length, inclusive);
+        if let Some(pattern) = self.pattern() {next = next.min(Self::line_from(position, 0.0, pattern.step_pulses(), inclusive));}
+        if self.played_count > 0 {next = next.min(Self::line_from(position, 0.0, self.played_step_pulses(), inclusive));}
+        for off in &self.offs[..self.off_count] {
+            if *off > position {next = next.min(*off);}
+        }
+        (next >= position && next < limit).then_some(next)
+    }
+
+    /// The samples a step lasts that starts on the straight `line`, through a groove: `warp` tells where a straight
+    /// position sounds, `advance` is the timeline pulses per sample.
+    pub fn step_samples<W: Fn(f64) -> f64>(warp: &W, line: f64, step_pulses: f64, advance: f64) -> f64 {
+        if advance > 0.0 {((warp(line + step_pulses) - warp(line)) / advance).max(0.0)} else {0.0}
+    }
+
+    /// Renders one block: the pulse range `[p0, p1)` spread over `output` (at most `MAX_FRAMES` frames). While the
+    /// transport does not play, or after a jump, held notes are let go and ring out. `bar_start` and `bar_length`
+    /// describe the bar around `p0` (the signature), a fired slot takes over where a bar starts.
+    pub fn process_bars(&mut self, p0: f64, p1: f64, playing: bool, discontinuous: bool, bar_start: f64, bar_length: f64,
+                        output: &mut [f32]) {
+        let bar_length = if bar_length > 0.0 {bar_length} else {BAR_PULSES};
+        let frames = output.len().min(MAX_FRAMES);
+        let count = frames * OVERSAMPLING;
+        self.begin(p0, playing, discontinuous, bar_start, bar_length);
+        let advance = (p1 - p0) / count as f64;
+        let slide = |_: f64, step_pulses: f64| if advance > 0.0 {step_pulses / advance} else {0.0};
+        for index in 0..count {
+            if playing {self.cross(p0 + advance * index as f64, p1, 0.0, bar_start, bar_length, &slide, &|_| false);}
             self.scratch[index] = self.voice.next() * self.volume;
         }
         self.resampler.downsample(&self.scratch, output, 0, frames);
+        self.straight_end = p1;
+    }
+
+    // the pattern whose groove counts: the one that plays, while Off the one the played notes sound with
+    fn groove(&self) -> usize {
+        match self.active {
+            Slot::Pattern(index) => index.min(PATTERNS - 1),
+            Slot::Off => self.sound.min(PATTERNS - 1)
+        }
+    }
+
+    /// `process_bars` through the patterns' grooves: the block is the timeline range `[t0, t1)`, the groove of
+    /// pattern `index` moves the straight range `ranges[index]` into it and `warp(index, position)` tells where a
+    /// straight position sounds. The groove of the playing pattern counts from the moment it takes over. Every bar
+    /// line, step line and note end sounds exactly where its groove puts it. `bar` gives the start and the length of
+    /// the bar around a straight position.
+    pub fn process_grooved<W: Fn(usize, f64) -> f64, B: Fn(f64) -> (f64, f64)>(
+        &mut self, t0: f64, t1: f64, ranges: &[(f64, f64); PATTERNS], warp: W, bar: B, playing: bool,
+        discontinuous: bool, output: &mut [f32]) {
+        let frames = output.len().min(MAX_FRAMES);
+        let count = frames * OVERSAMPLING;
+        let advance = (t1 - t0) / count as f64;
+        let bar_around = |position: f64| {
+            let (start, length) = bar(position);
+            (start, if length > 0.0 {length} else {BAR_PULSES})
+        };
+        let mut groove = self.groove();
+        let s0 = ranges[groove].0;
+        let jumped = playing && self.was_playing && libm::fabs(s0 - self.straight_end) > RESYNC_PULSES;
+        let (bar_start, bar_length) = bar_around(s0);
+        self.begin(s0, playing, discontinuous || jumped, bar_start, bar_length);
+        let straight = |pattern: usize| ranges[pattern] == (t0, t1);
+        let hand_over = |pattern: usize| !straight(pattern);
+        let mut index = 0;
+        let mut from = playing.then_some(s0);
+        while let Some(start) = from.take() {
+            let (_, s1) = ranges[groove];
+            let (bar_start, bar_length) = bar_around(start);
+            if straight(groove) {
+                // without a groove sample by sample as `process_bars`, so every sample stays the same
+                let slide = |_: f64, step_pulses: f64| if advance > 0.0 {step_pulses / advance} else {0.0};
+                while index < count {
+                    self.cross(t0 + advance * index as f64, t1, 0.0, bar_start, bar_length, &slide, &hand_over);
+                    if !straight(self.groove()) {
+                        groove = self.groove();
+                        let (n0, n1) = ranges[groove];
+                        from = Some(n0 + (n1 - n0) * index as f64 / count as f64);
+                        break;
+                    }
+                    groove = self.groove();
+                    self.scratch[index] = self.voice.next() * self.volume;
+                    index += 1;
+                }
+                continue;
+            }
+            let follow = groove;
+            let slide = |line: f64, step_pulses: f64| Self::step_samples(&|pulse| warp(follow, pulse), line, step_pulses, advance);
+            self.cross(start, start, LINE_SLACK, bar_start, bar_length, &slide, &hand_over);
+            let (mut position, mut inclusive) = (start, true);
+            while let Some(line) = self.next_line(position, inclusive, s1, bar_start, bar_length) {
+                let at = if advance > 0.0 {
+                    (libm::ceil((warp(groove, line) - t0) / advance).max(index as f64) as usize).min(count)
+                } else {index};
+                for sample in index..at {self.scratch[sample] = self.voice.next() * self.volume;}
+                index = at;
+                self.cross(line, s1, LINE_SLACK, bar_start, bar_length, &slide, &hand_over);
+                if self.groove() != groove {
+                    // the new pattern's groove takes over where the old one put the bar line
+                    groove = self.groove();
+                    let (n0, n1) = ranges[groove];
+                    from = Some(n0 + (n1 - n0) * index as f64 / count as f64);
+                    break;
+                }
+                (position, inclusive) = (line, false);
+            }
+        }
+        for sample in index..count {self.scratch[sample] = self.voice.next() * self.volume;}
+        self.resampler.downsample(&self.scratch, output, 0, frames);
+        self.straight_end = ranges[groove].1;
     }
 }
 

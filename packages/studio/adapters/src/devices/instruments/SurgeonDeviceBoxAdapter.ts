@@ -1,5 +1,5 @@
 import {Arrays, asDefined, clamp, int, isDefined, Option, panic, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
-import {SurgeonDeviceBox, SurgeonPattern, SurgeonPatternFields, SurgeonSound, SurgeonSoundFields} from "@opendaw/studio-boxes"
+import {SurgeonDeviceBox, SurgeonPattern, SurgeonSound, SurgeonSoundFields} from "@opendaw/studio-boxes"
 import {Address, BooleanField, Float32Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -124,7 +124,7 @@ export namespace Surgeon {
     const Keys: ReadonlySet<int> = new Set(All.map(({key}) => key))
 
     export const patternField = (pattern: SurgeonPattern, key: int): PlainField =>
-        Keys.has(key) ? pattern.getField(key as keyof SurgeonPatternFields) : panic(`Surgeon has no value with key ${key}`)
+        Keys.has(key) ? pattern.getField(key as keyof SurgeonSoundFields) : panic(`Surgeon has no value with key ${key}`)
 
     export const readPattern = (pattern: SurgeonPattern): SurgeonModel.Pattern =>
         modelOf({get: key => patternField(pattern, key).getValue()})

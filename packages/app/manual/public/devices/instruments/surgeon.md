@@ -40,7 +40,7 @@ ignored.
 1. Click a pattern while the transport plays and it takes over at the next bar. It flashes until then.
 2. With the transport stopped it takes over at once.
 3. The editor always shows the pattern you selected. Every edit is heard at once and is kept in that pattern.
-4. Right click a pattern to copy or paste it.
+4. Right click a pattern to copy or paste it, its groove comes along.
 5. The pattern is an automatable parameter. Right click a pattern or **Off** and choose **Create Automation** to
    draw pattern changes on the timeline.
 
@@ -50,8 +50,9 @@ Below the circles:
 2. **Tune**: the centre pitch in Hz.
 3. **Volume**
 
-The **Groove** dropdown to the right of the Loops, Tone and Shape tabs picks a [groove](/manuals/grooves) for all
-patterns, with **Go to**, **None** and **New**. A new Surgeon plays straight.
+The **Groove** dropdown above the display picks a [groove](/manuals/grooves) for the selected pattern, with
+**Go to**, **None** and **New**. Every pattern has its own. The circle in front of the dropdown is filled while
+the selected pattern has a groove. A new Surgeon plays straight.
 
 ---
 
