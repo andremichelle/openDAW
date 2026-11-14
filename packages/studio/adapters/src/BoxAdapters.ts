@@ -90,6 +90,7 @@ import {
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
     ChordKeysDeviceBox,
+    EuclidDeviceBox,
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
@@ -167,6 +168,7 @@ import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapte
 import {NoteFilterDeviceBoxAdapter} from "./devices/midi-effects/NoteFilterDeviceBoxAdapter"
 import {ScaleMatrixDeviceBoxAdapter} from "./devices/midi-effects/ScaleMatrixDeviceBoxAdapter"
 import {ChordKeysDeviceBoxAdapter} from "./devices/midi-effects/ChordKeysDeviceBoxAdapter"
+import {EuclidDeviceBoxAdapter} from "./devices/midi-effects/EuclidDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
@@ -388,6 +390,7 @@ export class BoxAdapters implements Terminable {
             visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => new NoteFilterDeviceBoxAdapter(this.#context, box),
             visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => new ScaleMatrixDeviceBoxAdapter(this.#context, box),
             visitChordKeysDeviceBox: (box: ChordKeysDeviceBox) => new ChordKeysDeviceBoxAdapter(this.#context, box),
+            visitEuclidDeviceBox: (box: EuclidDeviceBox) => new EuclidDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
             visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),

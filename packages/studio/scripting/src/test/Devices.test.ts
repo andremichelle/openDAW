@@ -438,6 +438,34 @@ describe("Devices", () => {
         expect(convolver.impulse?.name).toBe("Hall")
     })
 
+    it("builds Euclid lanes with their rhythm in every pattern", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Playfield")
+        const euclid = unit.addMIDIEffect("Euclid")
+        expect(euclid.key).toBe("Euclid")
+        expect(euclid.lanes.length).toBe(0)
+        const kick = euclid.addLane({note: 36, velocity: 0.6, rhythms: [{steps: 16, pulses: 4}]})
+        const snare = euclid.addLane({note: 38, gate: 1, rhythms: [{pulses: 2, rotate: 4}, {pulses: 3}]})
+        expect(euclid.lanes.map(lane => lane.note)).toEqual([36, 38])
+        expect(kick.velocity).toBeCloseTo(0.6)
+        expect(kick.rhythms[0].pulses).toBe(4)
+        expect(kick.rhythms[1].pulses).toBe(4)
+        expect(snare.gate).toBe(1)
+        expect(snare.rhythms[0].rotate).toBe(4)
+        expect(snare.rhythms[1].pulses).toBe(3)
+        expect(snare.rhythms.length).toBe(8)
+        snare.rhythms[2].fade = -0.5
+        expect(snare.rhythms[2].fade).toBeCloseTo(-0.5)
+        euclid.pattern = 2
+        euclid.rate = 3
+        euclid.length = 32
+        expect([euclid.pattern, euclid.rate, euclid.length]).toEqual([2, 3, 32])
+        kick.remove()
+        expect(euclid.lanes.map(lane => lane.note)).toEqual([38])
+        expect(() => euclid.addLane({note: 200})).not.toThrow()
+        expect(euclid.lanes[1].note).toBe(127)
+    })
+
     it("puts instruments on Playfield pads next to sample slots", () => {
         const {project} = createFixture()
         const playfield = project.addInstrumentUnit("Playfield").instrument

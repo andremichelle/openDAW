@@ -14,7 +14,7 @@ import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, SurgeonDeviceBox, OpenDrumKickDeviceBox,
     OpenDrumSnareDeviceBox, OpenDrumClapDeviceBox, OpenDrumTomDeviceBox, OpenDrumRimDeviceBox, OpenDrumHatDeviceBox, OpenDrumShakerDeviceBox, OpenDrumCymbalDeviceBox, OpenDrumBellDeviceBox, OpenDrumPercDeviceBox, MaximizerDeviceBox, NanoDeviceBox, SamplerDeviceBox, NeuralAmpDeviceBox,
-    NoteFilterDeviceBox, ScaleMatrixDeviceBox, ChordKeysDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
+    NoteFilterDeviceBox, ScaleMatrixDeviceBox, ChordKeysDeviceBox, EuclidDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
     ApparatDeviceBox, CubedDeviceBox, KorpusDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
     LfoModulatorBox, MacroModulatorBox, RandomModulatorBox, StepsModulatorBox
@@ -24,7 +24,7 @@ import {
     ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, SurgeonDeviceBoxAdapter, OpenDrumKickDeviceBoxAdapter,
     OpenDrumSnareDeviceBoxAdapter, OpenDrumClapDeviceBoxAdapter, OpenDrumTomDeviceBoxAdapter, OpenDrumRimDeviceBoxAdapter, OpenDrumHatDeviceBoxAdapter, OpenDrumShakerDeviceBoxAdapter, OpenDrumCymbalDeviceBoxAdapter, OpenDrumBellDeviceBoxAdapter, OpenDrumPercDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, SamplerDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
-    NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ChordKeysDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
+    NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ChordKeysDeviceBoxAdapter, EuclidDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter, LfoModulatorBoxAdapter, MacroModulatorBoxAdapter, RandomModulatorBoxAdapter,
@@ -129,6 +129,7 @@ const buildBoxes = () => {
     const noteFilter = NoteFilterDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(3)})
     const scaleMatrix = ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(5)})
     const chordKeys = ChordKeysDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(6)})
+    const euclid = EuclidDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(7)})
     const vaporisateurUnit = createUnit(2)
     const nanoUnit = createUnit(3)
     const playfieldUnit = createUnit(4)
@@ -191,7 +192,7 @@ const buildBoxes = () => {
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
     return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, velocity, vaporisateur, neon, tubular, surgeon, openDrumKick, openDrumSnare, openDrumClap, openDrumTom, openDrumRim, openDrumHat, openDrumShaker, openDrumCymbal, openDrumBell, openDrumPerc, nano, sampler, playfieldSample,
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, euclid, velocity, vaporisateur, neon, tubular, surgeon, openDrumKick, openDrumSnare, openDrumClap, openDrumTom, openDrumRim, openDrumHat, openDrumShaker, openDrumCymbal, openDrumBell, openDrumPerc, nano, sampler, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
@@ -321,6 +322,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new ScaleMatrixDeviceBoxAdapter(context, boxes.scaleMatrix), tsOnly: []},
     {name: "chord-keys", file: "device_chord_keys.wasm",
         createAdapter: context => new ChordKeysDeviceBoxAdapter(context, boxes.chordKeys), tsOnly: []},
+    {name: "euclid", file: "device_euclid.wasm",
+        createAdapter: context => new EuclidDeviceBoxAdapter(context, boxes.euclid), tsOnly: []},
     {name: "pitch", file: "device_pitch.wasm",
         createAdapter: context => new PitchDeviceBoxAdapter(context, boxes.pitch), tsOnly: []},
     {name: "playfield-sample", file: "device_playfield_sample.wasm",

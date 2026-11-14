@@ -9,6 +9,8 @@ import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NoteFilterDeviceBox} from "./midi-effects/NoteFilterDeviceBox"
 import {ScaleMatrixDeviceBox} from "./midi-effects/ScaleMatrixDeviceBox"
 import {ChordKeysDeviceBox} from "./midi-effects/ChordKeysDeviceBox"
+import {EuclidDeviceBox} from "./midi-effects/EuclidDeviceBox"
+import {EuclidLaneBox} from "./midi-effects/EuclidLaneBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
@@ -127,6 +129,8 @@ export const DeviceDefinitions = [
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
     ChordKeysDeviceBox,
+    EuclidDeviceBox,
+    EuclidLaneBox,
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,

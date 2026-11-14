@@ -332,6 +332,84 @@ export interface ScaleMatrixEffect extends MIDIEffect {
 }
 
 /**
+ * The rhythm of a Euclid lane in one pattern
+ * @group MIDI Effect Parts
+ */
+export interface EuclidRhythm {
+    /** Steps of the cycle (1 to 32, default 16) */
+    steps: int
+    /** Hits spread over the steps (0 to 32, the engine uses at most the steps, default 4) */
+    pulses: int
+    /** Shifts the hits to the right (0 to 31, default 0) */
+    rotate: int
+    /** Note value of a step (0 to 11): 1/4, 1/4T, 1/4., 1/8, 1/8T, 1/8., 1/16, 1/16T, 1/16., 1/32, 1/32T, 1/32. (default 6, 1/16) */
+    rate: int
+    /** Accented hits spread over the hits, they play at full velocity (0 to 32, default 0) */
+    accents: int
+    /** Shifts the accents over the hits (0 to 31, default 0) */
+    accentRotate: int
+    /** Hits played as bursts, spread over the hits (0 to 32, default 0) */
+    bursts: int
+    /** Shifts the bursts over the hits (0 to 31, default 0) */
+    burstRotate: int
+    /** Evenly spaced triggers of a burst within its step (2 to 8, default 3) */
+    repeats: int
+    /** How the triggers of a burst fall in level (-1.0 to 1.0, below 0 they rise, default 0) */
+    fade: bipolar
+}
+
+/**
+ * One lane of Euclid: the note it plays and its rhythm in each of the eight patterns
+ * @group MIDI Effect Parts
+ */
+export interface EuclidLane {
+    /** Unique id */
+    readonly uuid: string
+    /** MIDI note the lane plays (0 to 127, default 60) */
+    note: int
+    /** Velocity of a hit without accent (0.0 to 1.0, default 0.5) */
+    velocity: unitValue
+    /** Probability that a hit plays (0.0 to 1.0, default 1.0) */
+    chance: unitValue
+    /** Note length: 0 = one step, 1 = until the lane's next hit (default 0) */
+    gate: 0 | 1
+    /** Silence the lane */
+    mute: boolean
+    /** Play only the soloed lanes */
+    solo: boolean
+    /** The rhythm in each pattern, index 0 to 7 */
+    readonly rhythms: ReadonlyArray<EuclidRhythm>
+    /** Remove the lane */
+    remove(): void
+}
+
+/**
+ * Plays notes on Euclidean rhythms, one lane per note, made for the Playfield. Incoming notes pass through.
+ * @group MIDI Effects
+ */
+export interface EuclidEffect extends MIDIEffect {
+    /** Always "Euclid" */
+    readonly key: "Euclid"
+    /** The playing pattern (-1 = off, 0 to 7, default 0), a change takes over at the next bar */
+    pattern: int
+    /** Every lane restarts after this many steps of 1/16 at the global rate (0 = never, up to 128, default 0) */
+    length: int
+    /** Global rate (0 to 4): ÷4, ÷2, ×1, ×2, ×4 (default 2) */
+    rate: 0 | 1 | 2 | 3 | 4
+    /** All lanes in list order */
+    readonly lanes: ReadonlyArray<EuclidLane>
+    /**
+     * Add a lane (at most 127)
+     * @example
+     * ```ts
+     * const euclid = unit.addMIDIEffect("Euclid")
+     * euclid.addLane({note: 38, rhythms: [{steps: 16, pulses: 2, rotate: 4}]})
+     * ```
+     */
+    addLane(props?: DeepPartial<Omit<EuclidLane, "uuid" | "remove">>): EuclidLane
+}
+
+/**
  * Plays the chord on the step of a key for every white key, held black keys change it (C# 7th, D# 9th, F# sus2,
  * G# sus4, A# the next inversion)
  * @group MIDI Effects
@@ -408,6 +486,8 @@ export interface MIDIEffects {
     "ScaleMatrix": ScaleMatrixEffect
     /** {@link ChordKeysEffect} */
     "ChordKeys": ChordKeysEffect
+    /** {@link EuclidEffect} */
+    "Euclid": EuclidEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */

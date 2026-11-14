@@ -22,6 +22,7 @@ import {
     RevampDeviceBox,
     ScaleMatrixDeviceBox,
     ChordKeysDeviceBox,
+    EuclidDeviceBox,
     ReverbDeviceBox,
     SpielwerkDeviceBox,
     StereoCompositeBox,
@@ -38,7 +39,7 @@ import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {AudioEffects, Instruments, MIDIEffects} from "../../Api"
 
 export type MIDIEffectBox =
-    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | ChordKeysDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox
+    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | ChordKeysDeviceBox | EuclidDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox
     | SpielwerkDeviceBox
 
 export type AudioEffectBox =
@@ -57,6 +58,7 @@ export namespace DeviceBoxes {
         NoteFilter: "Filter",
         ScaleMatrix: "Scale Matrix",
         ChordKeys: "Chord Keys",
+        Euclid: "Euclid",
         Velocity: "Velocity",
         Zeitgeist: "Zeitgeist",
         Spielwerk: "Spielwerk"
@@ -77,6 +79,7 @@ export namespace DeviceBoxes {
             case "NoteFilterDeviceBox": return "NoteFilter"
             case "ScaleMatrixDeviceBox": return "ScaleMatrix"
             case "ChordKeysDeviceBox": return "ChordKeys"
+            case "EuclidDeviceBox": return "Euclid"
             case "VelocityDeviceBox": return "Velocity"
             case "ZeitgeistDeviceBox": return "Zeitgeist"
             case "SpielwerkDeviceBox": return "Spielwerk"
@@ -141,7 +144,7 @@ export namespace DeviceBoxes {
     }
 
     export const isMIDIEffectBox = (boxName: string): boolean =>
-        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "ScaleMatrixDeviceBox", "ChordKeysDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
+        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "ScaleMatrixDeviceBox", "ChordKeysDeviceBox", "EuclidDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
             "SpielwerkDeviceBox"]
             .includes(boxName)
 
@@ -202,6 +205,12 @@ export namespace DeviceBoxes {
                 })
             case "ChordKeys":
                 return ChordKeysDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "Euclid":
+                return EuclidDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

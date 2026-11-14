@@ -1,7 +1,10 @@
-import {Arrays, Optional, UUID} from "@opendaw/lib-std"
-import {Box} from "@opendaw/lib-box"
+import {Arrays, int, isDefined, isInstanceOf, Optional, UUID} from "@opendaw/lib-std"
+import {Box, Field} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
+    AudioUnitBox,
+    EuclidDeviceBox,
+    PlayfieldDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     AutotuneDeviceBox,
@@ -40,7 +43,7 @@ import {
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {DeviceManualUrls} from "@opendaw/studio-adapters"
+import {DeviceManualUrls, Euclid as EuclidLanes, PlayfieldPads} from "@opendaw/studio-adapters"
 import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
@@ -120,6 +123,37 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
+    }
+
+    // the lowest pad of the Playfield the effect plays into, key 60 into any other instrument
+    const firstNote = (host: Field): int => {
+        const unit = host.box
+        const playfield = isInstanceOf(unit, AudioUnitBox)
+            ? unit.input.pointerHub.incoming().map(({box}) => box).find(box => isInstanceOf(box, PlayfieldDeviceBox))
+            : undefined
+        if (!isDefined(playfield) || !isInstanceOf(playfield, PlayfieldDeviceBox)) {return 60}
+        return Math.min(...PlayfieldPads.padsOf(playfield).map(pad => pad.index.getValue()), 60)
+    }
+
+    export const Euclid: EffectFactory = {
+        defaultName: "Euclid",
+        defaultIcon: IconSymbol.Random,
+        briefDescription: "Euclidean Sequencer",
+        description: "Plays notes on Euclidean rhythms, one lane per note, made for the Playfield",
+        manualPage: DeviceManualUrls.Euclid,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "EuclidDeviceBox",
+        create: ({boxGraph}, hostField, index) => {
+            const device = EuclidDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Euclid")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            EuclidLanes.createLane(boxGraph, device, firstNote(hostField))
+            return device
+        }
     }
 
     export const Pitch: EffectFactory = {
@@ -696,6 +730,7 @@ export namespace EffectFactories {
     export const MidiNamed = {
         Arpeggio,
         ChordKeys,
+        Euclid,
         NoteFilter,
         Pitch,
         ScaleMatrix,

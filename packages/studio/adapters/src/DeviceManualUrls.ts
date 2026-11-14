@@ -9,6 +9,7 @@ export namespace DeviceManualUrls {
     export const Pitch = "manuals/devices/midi/pitch"
     export const ScaleMatrix = "manuals/devices/midi/scale-matrix"
     export const ChordKeys = "manuals/devices/midi/chord-keys"
+    export const Euclid = "manuals/devices/midi/euclid"
     export const Spielwerk = "manuals/devices/midi/spielwerk"
     export const Velocity = "manuals/devices/midi/velocity"
     export const Zeitgeist = "manuals/devices/midi/zeitgeist"

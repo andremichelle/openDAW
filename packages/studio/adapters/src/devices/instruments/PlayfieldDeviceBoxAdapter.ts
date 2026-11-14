@@ -64,6 +64,8 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     /** @deprecated The slots of projects before the pads, empty once a project loaded. */
     get samples(): IndexedBoxAdapterCollection<PlayfieldSampleBoxAdapter, Pointers.Sample> {return this.#samples}
     get cells(): IndexedBoxAdapterCollection<InstrumentCompositeCellBoxAdapter, Pointers.InstrumentCompositeCell> {return this.#pads}
+
+    noteName(key: int): Option<string> {return this.#pads.getAdapterByIndex(key).flatMap(pad => pad.input.label)}
     get context(): BoxAdaptersContext {return this.#context}
 
     deviceHost(): DeviceHost {

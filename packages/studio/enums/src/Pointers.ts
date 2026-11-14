@@ -77,4 +77,5 @@ export enum Pointers {
     SamplerGroup,
     SamplerGroupZone,
     SamplerModulation,
+    EuclidLane,
 }

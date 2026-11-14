@@ -137,6 +137,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 files: [
                     {type: "page", label: "Arpeggio", path: "/manuals/devices/midi/arpeggio", icon: IconSymbol.Stack},
                     {type: "page", label: "Chord Keys", path: "/manuals/devices/midi/chord-keys", icon: IconSymbol.Piano},
+                    {type: "page", label: "Euclid", path: "/manuals/devices/midi/euclid", icon: IconSymbol.Random},
                     {type: "page", label: "Filter", path: "/manuals/devices/midi/note-filter", icon: IconSymbol.Piano},
                     {type: "page", label: "Pitch", path: "/manuals/devices/midi/pitch", icon: IconSymbol.Note},
                     {type: "page", label: "Scale Matrix", path: "/manuals/devices/midi/scale-matrix", icon: IconSymbol.Piano},

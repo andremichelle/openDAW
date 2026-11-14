@@ -12,6 +12,6 @@ export const TestingPage: PageFactory<StudioService> = ({lifecycle, service}: Pa
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
         <BackButton lifecycle={lifecycle} service={service}/>
         <h1>Testing</h1>
-        <p>No previews at the moment. The Sampler is built, add it from the instrument list.</p>
+        <p>No previews at the moment. Euclid is built, add it from the MIDI effects.</p>
     </div>
 )
