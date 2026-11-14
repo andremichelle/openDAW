@@ -52,6 +52,12 @@ export namespace OpenDrumSynth {
         spread: number, ring: number, reso: number, curve: number
         volume: number, velocity: number, play: number
     }
+    export type Perc = {
+        tune: number, ratio: number, index: number, bite: number
+        pitch: number, sweep: number, decay: number, curve: number
+        noise: number, drive: number
+        volume: number, velocity: number, play: number
+    }
     export type Bell = {
         tune: number, ratio: number, balance: number
         color: number, strike: number, decay: number
@@ -84,6 +90,7 @@ export namespace OpenDrumSynth {
         renderHat(hat: Hat): Hit
         renderShaker(shaker: Shaker): Hit
         renderBell(bell: Bell): Hit
+        renderPerc(perc: Perc): Hit
         renderCymbal(cymbal: Cymbal): Hit
     }
 
@@ -99,6 +106,7 @@ export namespace OpenDrumSynth {
         shaker_param_count(): int
         cymbal_param_count(): int
         bell_param_count(): int
+        perc_param_count(): int
         render_kick(params: int, velocity: number, bpm: number, sampleRate: number, output: int, frames: int): void
         render_snare(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_clap(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
@@ -108,6 +116,7 @@ export namespace OpenDrumSynth {
         render_shaker(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_cymbal(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_bell(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
+        render_perc(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
     }
 
     const isExports = (value: WebAssembly.Exports): value is WebAssembly.Exports & Exports =>
@@ -116,6 +125,7 @@ export namespace OpenDrumSynth {
         && typeof value.render_tom === "function" && typeof value.render_rim === "function"
         && typeof value.render_hat === "function" && typeof value.render_shaker === "function"
         && typeof value.render_cymbal === "function" && typeof value.render_bell === "function"
+        && typeof value.render_perc === "function"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
     const curves = (kick: Contour, frames: int): Pick<Hit, "envelope" | "pitch" | "softPitch"> => {
@@ -123,7 +133,7 @@ export namespace OpenDrumSynth {
         const pitch = new Float32Array(frames)
         const softPitch = new Float32Array(frames)
         const rate = Math.log(1000.0) / Math.max(kick.decay, 0.0001)
-        const range = Math.max(kick.pitch + kick.drift, 1.0)
+        const range = Math.max(Math.abs(kick.pitch) + kick.drift, 1.0)
         const soft = 1.0 - kick.velocity * 0.5
         for (let index = 0; index < frames; index++) {
             const seconds = index / SampleRate
@@ -147,7 +157,7 @@ export namespace OpenDrumSynth {
         if (!isExports(exports)) {return Promise.reject(new Error(`${ModuleUrl} has unexpected exports`))}
         const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count(),
             exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count(), exports.shaker_param_count(),
-            exports.cymbal_param_count(), exports.bell_param_count())
+            exports.cymbal_param_count(), exports.bell_param_count(), exports.perc_param_count())
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
         const longFrames = LongSeconds * SampleRate
@@ -192,6 +202,14 @@ export namespace OpenDrumSynth {
                 exports.render_cymbal(params, 1.0, SampleRate, output, longFrames)
                 const contour = {pitch: 0, sweep: 0.001, drift: 0, decay: cymbal.decay, punch: 1, velocity: cymbal.velocity}
                 return collect(contour, longFrames)
+            },
+            renderPerc: (perc: Perc): Hit => {
+                const values = [perc.tune, perc.ratio, perc.index, perc.bite, perc.pitch, perc.sweep, perc.decay,
+                    perc.curve, perc.noise, perc.drive, perc.volume, perc.velocity, perc.play]
+                write(values, exports.perc_param_count())
+                exports.render_perc(params, 1.0, SampleRate, output, frames)
+                return collect({pitch: perc.pitch, sweep: perc.sweep, drift: 0, decay: perc.decay, punch: perc.curve,
+                    velocity: perc.velocity})
             },
             renderBell: (bell: Bell): Hit => {
                 const values = [bell.tune, bell.ratio, bell.balance, bell.color, bell.strike, bell.decay, bell.volume,

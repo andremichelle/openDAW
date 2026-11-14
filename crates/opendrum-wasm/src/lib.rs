@@ -13,6 +13,7 @@ use opendrum::hat::{Hat, HatParams};
 use opendrum::cymbal::{Cymbal, CymbalParams};
 use opendrum::shaker::{Shaker, ShakerParams};
 use opendrum::bell::{Bell, BellParams};
+use opendrum::perc::{Perc, PercParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
@@ -24,6 +25,7 @@ pub const HAT_PARAMS: usize = 11;
 pub const CYMBAL_PARAMS: usize = 7;
 pub const SHAKER_PARAMS: usize = 7;
 pub const BELL_PARAMS: usize = 9;
+pub const PERC_PARAMS: usize = 13;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -218,4 +220,23 @@ pub extern "C" fn render_bell(params: *const f32, velocity: f32, sample_rate: f3
     let mut bell = Bell::new(sample_rate);
     bell.note_on(0, velocity, 0.0, &params);
     bell.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn perc_param_count() -> usize {PERC_PARAMS}
+
+/// Params: tune, ratio, index, bite, pitch (semitones), sweep, decay, curve, noise, drive (dB), volume (dB), velocity,
+/// play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_perc(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, PERC_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = PercParams {
+        tune: values[0], ratio: values[1], index: values[2], bite: values[3], pitch: values[4], sweep: values[5],
+        decay: values[6], curve: values[7], noise: values[8], drive: values[9], volume: values[10],
+        velocity: values[11], play: play_of(values[12])
+    };
+    let mut perc = Perc::new(sample_rate);
+    perc.note_on(0, velocity, 0.0, &params);
+    perc.process(&params, output);
 }

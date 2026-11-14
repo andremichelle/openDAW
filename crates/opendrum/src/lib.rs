@@ -9,6 +9,7 @@ pub mod common;
 pub mod cymbal;
 pub mod hat;
 pub mod kick;
+pub mod perc;
 pub mod rim;
 pub mod shaker;
 pub mod snare;

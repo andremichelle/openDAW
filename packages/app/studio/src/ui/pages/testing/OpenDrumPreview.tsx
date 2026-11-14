@@ -27,7 +27,7 @@ type Device = {
     readonly render: Provider<Option<OpenDrumSynth.Hit>>
     readonly groups: ReadonlyArray<HTMLElement>
     readonly refresh: Notifier<void>
-    readonly reference: string
+    readonly reference: Option<string>
     readonly poly: Provider<boolean>
 }
 
@@ -76,7 +76,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 field("Glide", 0, 1, 0.005, Formats.seconds, "glide")
             ])
         ]
-        return {name, engine: "Kick", color: Colors.orange, groups, refresh, reference, poly: () => kick.play === 1,
+        return {name, engine: "Kick", color: Colors.orange, groups, refresh, reference: Option.wrap(reference),
+            poly: () => kick.play === 1,
             render: () => renderer.map(loaded => loaded.renderKick(kick, PreviewBpm))}
     }
     const snareDevice = (name: string, snare: OpenDrumSynth.Snare, reference: string): Device => {
@@ -116,7 +117,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 field("Glide", 0, 1, 0.005, Formats.seconds, "glide")
             ])
         ]
-        return {name, engine: "Snare", color: Colors.green, groups, refresh, reference, poly: () => snare.play === 1,
+        return {name, engine: "Snare", color: Colors.green, groups, refresh, reference: Option.wrap(reference),
+            poly: () => snare.play === 1,
             render: () => renderer.map(loaded => loaded.renderSnare(snare))}
     }
     const cymbalDevice = (name: string, cymbal: OpenDrumSynth.Cymbal, reference: string): Device => {
@@ -140,8 +142,44 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Cymbal", color: Colors.yellow, groups, refresh, reference, poly: () => cymbal.play === 1,
+        return {name, engine: "Cymbal", color: Colors.yellow, groups, refresh, reference: Option.wrap(reference),
+            poly: () => cymbal.play === 1,
             render: () => renderer.map(loaded => loaded.renderCymbal(cymbal))}
+    }
+    const percDevice = (name: string, perc: OpenDrumSynth.Perc): Device => {
+        const refresh = lifecycle.own(new Notifier<void>())
+        const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
+                       key: keyof OpenDrumSynth.Perc): OpenDrumControls.Field =>
+            ({name, get: () => perc[key], set: value => perc[key] = value, range: {min, max, step, format}})
+        const choice = (name: string, choices: ReadonlyArray<string>,
+                        key: keyof OpenDrumSynth.Perc): OpenDrumControls.Field =>
+            ({name, get: () => perc[key], set: value => perc[key] = value, choices})
+        const groups: ReadonlyArray<HTMLElement> = [
+            group(lifecycle, refresh, "orange", "FM", 1, [
+                field("Tune", 20, 8000, 1, Formats.hertz, "tune"),
+                field("Ratio", 0.25, 16, 0.01, Formats.fixed(2, ""), "ratio"),
+                field("Index", 0, 1, 0.01, Formats.percent, "index"),
+                field("Bite", 0.001, 2, 0.001, Formats.seconds, "bite")
+            ]),
+            group(lifecycle, refresh, "orange", "Shape", 1, [
+                field("Pitch", -48, 48, 0.5, Formats.fixed(1, "st"), "pitch"),
+                field("Sweep", 0.0005, 2, 0.0005, Formats.seconds, "sweep"),
+                field("Decay", 0.005, 4, 0.005, Formats.seconds, "decay"),
+                field("Curve", -1, 1, 0.01, Formats.percent, "curve")
+            ]),
+            group(lifecycle, refresh, "orange", "Grit", 1, [
+                field("Noise", 0, 1, 0.01, Formats.percent, "noise"),
+                field("Drive", 0, 36, 0.5, Formats.decibel, "drive")
+            ]),
+            group(lifecycle, refresh, "cream", "Play", 1, [
+                field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
+                field("Velocity", 0, 1, 0.01, Formats.percent, "velocity"),
+                choice("Mode", PlayModes, "play")
+            ])
+        ]
+        return {name, engine: "Perc", color: Colors.red, groups, refresh, reference: Option.None,
+            poly: () => perc.play === 1,
+            render: () => renderer.map(loaded => loaded.renderPerc(perc))}
     }
     const bellDevice = (name: string, bell: OpenDrumSynth.Bell, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
@@ -168,7 +206,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Bell", color: Colors.white, groups, refresh, reference, poly: () => bell.play === 1,
+        return {name, engine: "Bell", color: Colors.white, groups, refresh, reference: Option.wrap(reference),
+            poly: () => bell.play === 1,
             render: () => renderer.map(loaded => loaded.renderBell(bell))}
     }
     const shakerDevice = (name: string, shaker: OpenDrumSynth.Shaker, reference: string): Device => {
@@ -192,7 +231,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Shaker", color: Colors.green, groups, refresh, reference, poly: () => shaker.play === 1,
+        return {name, engine: "Shaker", color: Colors.green, groups, refresh, reference: Option.wrap(reference),
+            poly: () => shaker.play === 1,
             render: () => renderer.map(loaded => loaded.renderShaker(shaker))}
     }
     const hatDevice = (name: string, hat: OpenDrumSynth.Hat, reference: string): Device => {
@@ -223,7 +263,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Hat", color: Colors.cream, groups, refresh, reference, poly: () => hat.play === 1,
+        return {name, engine: "Hat", color: Colors.cream, groups, refresh, reference: Option.wrap(reference),
+            poly: () => hat.play === 1,
             render: () => renderer.map(loaded => loaded.renderHat(hat))}
     }
     const rimDevice = (name: string, rim: OpenDrumSynth.Rim, reference: string): Device => {
@@ -263,7 +304,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Rim", color: Colors.yellow, groups, refresh, reference, poly: () => rim.play === 1,
+        return {name, engine: "Rim", color: Colors.yellow, groups, refresh, reference: Option.wrap(reference),
+            poly: () => rim.play === 1,
             render: () => renderer.map(loaded => loaded.renderRim(rim))}
     }
     const tomDevice = (name: string, tom: OpenDrumSynth.Tom, reference: string): Device => {
@@ -303,7 +345,8 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 field("Glide", 0, 1, 0.005, Formats.seconds, "glide")
             ])
         ]
-        return {name, engine: "Tom", color: Colors.blue, groups, refresh, reference, poly: () => tom.play === 1,
+        return {name, engine: "Tom", color: Colors.blue, groups, refresh, reference: Option.wrap(reference),
+            poly: () => tom.play === 1,
             render: () => renderer.map(loaded => loaded.renderTom(tom))}
     }
     const clapDevice = (name: string, clap: OpenDrumSynth.Clap, reference: string): Device => {
@@ -341,13 +384,39 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 choice("Mode", PlayModes, "play")
             ])
         ]
-        return {name, engine: "Clap", color: Colors.purple, groups, refresh, reference, poly: () => clap.play === 1,
+        return {name, engine: "Clap", color: Colors.purple, groups, refresh, reference: Option.wrap(reference),
+            poly: () => clap.play === 1,
             render: () => renderer.map(loaded => loaded.renderClap(clap))}
     }
     let renderer: Option<OpenDrumSynth.Renderer> = Option.None
     let status: string = "loading the engine"
     // newest engine on top
     const devices: ReadonlyArray<Device> = [
+        // no reference, set by ear (2026-11-14)
+        percDevice("Zap", {
+            tune: 120, ratio: 1, index: 0.2, bite: 0.03, pitch: 48, sweep: 0.02, decay: 0.2,
+            curve: 0, noise: 0, drive: 0, volume: 0, velocity: 0.5, play: 0
+        }),
+        percDevice("Laser", {
+            tune: 400, ratio: 0.5, index: 0.4, bite: 0.15, pitch: 36, sweep: 0.08, decay: 0.35,
+            curve: 0.3, noise: 0, drive: 0, volume: 0, velocity: 0.5, play: 0
+        }),
+        percDevice("Blip", {
+            tune: 1200, ratio: 2, index: 0.1, bite: 0.01, pitch: 0, sweep: 0.01, decay: 0.06,
+            curve: 0.5, noise: 0, drive: 0, volume: 0, velocity: 0.5, play: 0
+        }),
+        percDevice("Rise", {
+            tune: 300, ratio: 1.5, index: 0.3, bite: 0.2, pitch: -24, sweep: 0.06, decay: 0.25,
+            curve: 0.2, noise: 0, drive: 0, volume: 0, velocity: 0.5, play: 0
+        }),
+        percDevice("Metal", {
+            tune: 330, ratio: 3.53, index: 0.6, bite: 0.4, pitch: 2, sweep: 0.005, decay: 0.6,
+            curve: -0.3, noise: 0, drive: 0, volume: 0, velocity: 0.5, play: 0
+        }),
+        percDevice("Industrial", {
+            tune: 80, ratio: 1.41, index: 0.8, bite: 0.1, pitch: 24, sweep: 0.01, decay: 0.3,
+            curve: -0.5, noise: 0.25, drive: 18, volume: 0, velocity: 0.5, play: 0
+        }),
         // set from the measured harmonics and two stage fall of the 808 cowbell (2026-11-14)
         bellDevice("Cowbell (808)", {
             tune: 558, ratio: 1.477, balance: 0.7, color: 1050, strike: 0.8, decay: 0.7, volume: 0, velocity: 0.5, play: 0
@@ -486,12 +555,17 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         })
         filters[0].connect(filters[1]).connect(audioContext.destination)
         const play = createPlayer(poly, filters[0])
-        const audio: HTMLAudioElement = (
-            <audio controls preload="auto" src={`${import.meta.env.BASE_URL}opendrum-references/${encodeURI(reference)}`}/>
-        )
-        const referenceGain = audioContext.createGain()
-        referenceGain.gain.value = OpenDrumSynth.Headroom
-        audioContext.createMediaElementSource(audio).connect(referenceGain).connect(filters[0])
+        const audio: Option<HTMLAudioElement> = reference.map(path => (
+            <audio controls preload="auto" src={`${import.meta.env.BASE_URL}opendrum-references/${encodeURI(path)}`}/>
+        ))
+        audio.ifSome(element => {
+            const referenceGain = audioContext.createGain()
+            referenceGain.gain.value = OpenDrumSynth.Headroom
+            audioContext.createMediaElementSource(element).connect(referenceGain).connect(filters[0])
+            lifecycle.own(Events.subscribe(element, "play", () => {
+                if (audioContext.state !== "running") {audioContext.resume().then()}
+            }))
+        })
         const noiseOnly = lifecycle.own(new DefaultObservableValue(false))
         const canvas: HTMLCanvasElement = <canvas/>
         const length: HTMLElement = <span className="length"/>
@@ -558,7 +632,6 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         lifecycle.ownAll(
             refresh.subscribe(update),
             Events.subscribe(canvas, "pointerdown", () => hit.ifSome(({samples}) => play(samples))),
-            Events.subscribe(audio, "play", () => {if (audioContext.state !== "running") {audioContext.resume().then()}}),
             noiseOnly.catchupAndSubscribe(owner => filters.forEach(filter =>
                 filter.frequency.value = owner.getValue() ? NoiseOnlyHz : OpenFilterHz))
         )
@@ -578,7 +651,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
                 <div className="row">
                     {panel}
                     <div className="reference">
-                        {audio}
+                        {audio.match({some: element => element, none: () => <div className="none">No reference</div>})}
                         <Checkbox lifecycle={lifecycle} model={noiseOnly} appearance={{cursor: "pointer"}}>
                             <span>Noise only</span>
                         </Checkbox>

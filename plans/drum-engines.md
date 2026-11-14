@@ -783,3 +783,8 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    shortened by the ping. Fitted on level over time and the first 4 ms: Pitch 12 to 24 st over 0.5 to 1 ms, Noise
    off, low Decay 0.55 s, mid 0.3 s Punch -30 %, high 0.25 s Punch -15 %; level within 0.4, 2.5 and 1.2 dB. Three
    Tom presets on /testing next to LC50, MC50 and HC50.
+12. openDrum Perc (2026-11-14), no reference, set by ear. Engine `crates/opendrum/src/perc.rs` (4 tests), 13
+   parameters: FM Tune, Ratio, Index (phase modulation up to 8 radians), Bite (how fast Index falls); Shape Pitch
+   (-48 to 48 st, negative rises), Sweep, Decay, Curve; Grit Noise (mix), Drive (the shared drive, ceiling 2);
+   Play Volume, Velocity (level and Index), Mode. Every hit repeats exactly. Presets Zap, Laser, Blip, Rise, Metal,
+   Industrial, all peaking near 1. The preview accepts a device without a reference ("No reference").
