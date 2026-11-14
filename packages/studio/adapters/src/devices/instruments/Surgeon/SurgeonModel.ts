@@ -1,4 +1,4 @@
-import {Arrays, clamp, Func, int, isDefined} from "@opendaw/lib-std"
+import {Arrays, clamp, Func, int, isDefined, Option} from "@opendaw/lib-std"
 
 // the loops as the engine (crates/stock-devices/device-surgeon) computes them, every roll in 32 bit float
 export namespace SurgeonModel {
@@ -9,6 +9,8 @@ export namespace SurgeonModel {
     export const RatePulses: ReadonlyArray<number> = [480, 240, 120]
     export const BarPulses = 3840
     export const MaxRandomSlide = 0.5
+    export const MaxRestart = 256
+    export const MaxOffset = 128
 
     export enum Kind {Play, Tie, Rest}
 
@@ -23,7 +25,11 @@ export namespace SurgeonModel {
         readonly base: Array<number>
         readonly amounts: Array<Array<number>>
         rate: int
+        restart: int
+        offset: int
     }
+    // where a song step falls in the loops: the position they read and the passes of the pitch loop and each lane
+    export type Phase = { readonly position: int, readonly passes: ReadonlyArray<int> }
     export type Param = {
         readonly name: string
         readonly min: number
@@ -94,20 +100,42 @@ export namespace SurgeonModel {
         return count
     }
 
-    export const step = ({steps, seed, mutate, range, density, tie, accent, slide}: PitchLoop, position: int): Step => {
-        const length = clamp(steps, 1, MaxSteps)
-        const index = position % length
-        const replaced = generation(seed, index, Math.floor(position / length), mutate)
-        const roll: Func<int, number> = channel => unit(seed, index, replaced, channel)
+    export const step = (pitch: PitchLoop, position: int): Step =>
+        stepAt(pitch, position % clamp(pitch.steps, 1, MaxSteps), Math.floor(position / clamp(pitch.steps, 1, MaxSteps)))
+
+    // the step `index` of the pitch loop after `pass` passes
+    export const stepAt = ({steps, seed, mutate, range, density, tie, accent, slide}: PitchLoop, index: int, pass: int): Step => {
+        const at = index % clamp(steps, 1, MaxSteps)
+        const replaced = generation(seed, at, pass, mutate)
+        const roll: Func<int, number> = channel => unit(seed, at, replaced, channel)
         const kind = roll(2) >= float(density) ? Kind.Rest : roll(3) < float(tie) ? Kind.Tie : Kind.Play
         const offset = float(float(float(roll(1) * 2.0) - 1.0) * float(range))
         return {offset, velocity: float(1.0 - float(float(accent) * roll(4))), kind, slide: roll(5) < float(slide)}
     }
 
-    export const laneValue = ({steps, seed, mutate}: Lane, position: int): number => {
-        const length = clamp(steps, 1, MaxSteps)
-        const index = position % length
-        return unit(seed, index, generation(seed, index, Math.floor(position / length), mutate), 1)
+    export const laneValue = (lane: Lane, position: int): number =>
+        laneValueAt(lane, position % clamp(lane.steps, 1, MaxSteps), Math.floor(position / clamp(lane.steps, 1, MaxSteps)))
+
+    // the value of step `index` of a lane after `pass` passes
+    export const laneValueAt = ({steps, seed, mutate}: Lane, index: int, pass: int): number => {
+        const step = index % clamp(steps, 1, MaxSteps)
+        return unit(seed, step, generation(seed, step, pass, mutate), 1)
+    }
+
+    // as the engine's `Pattern::phase`: Restart starts every loop again, Offset moves the steps, mutation runs on
+    export const phase = ({pitch, lanes, restart, offset}: Pattern, songStep: int): Option<Phase> => {
+        if (songStep < 0) {return Option.None}
+        const shifted = songStep + clamp(offset, -MaxOffset, MaxOffset)
+        const length = clamp(restart, 0, MaxRestart)
+        if (length === 0 && shifted < 0) {return Option.None}
+        const window = length > 0 ? Math.floor(shifted / length) : 0
+        const position = length > 0 ? shifted - window * length : shifted
+        const passes = [pitch.steps, ...lanes.map(lane => lane.steps)].map(steps => {
+            const count = clamp(steps, 1, MaxSteps)
+            const perRestart = length > 0 ? Math.ceil(length / count) : 0
+            return Math.max(0, window * perRestart + Math.floor(position / count))
+        })
+        return Option.wrap({position, passes})
     }
 
     export const valueOf = ({min, max, exponential}: Param, position: number): number =>
@@ -136,7 +164,7 @@ export namespace SurgeonModel {
 
     export const create = (pitch: PitchLoop, lanes: Array<Lane>): Pattern => {
         const pattern: Pattern = {
-            pitch, lanes, rate: 1,
+            pitch, lanes, rate: 1, restart: 0, offset: 0,
             base: Arrays.create(() => 0.0, Params.length),
             amounts: Arrays.create(() => Arrays.create(() => 0.0, Lanes), Params.length)
         }
@@ -200,12 +228,14 @@ export namespace SurgeonModel {
         return pattern
     }
 
-    // the All button: the approved `random` plus its own Slide roll, Mutate and Rate stay as they are
+    // the All button: the approved `random` plus its own Slide roll, Mutate, Rate, Restart and Offset stay as they are
     export const rollAll = (current: Pattern, seed: int): Pattern => {
         const pattern = random(seed)
         pattern.pitch.slide = float(MaxRandomSlide * unit(seed, 8, 0, 7))
         pattern.pitch.mutate = current.pitch.mutate
         pattern.rate = current.rate
+        pattern.restart = current.restart
+        pattern.offset = current.offset
         pattern.lanes.forEach((lane, index) => lane.mutate = current.lanes[index].mutate)
         return pattern
     }
@@ -226,7 +256,8 @@ export namespace SurgeonModel {
         return pattern
     }
 
-    export const copy = ({pitch, lanes, base, amounts, rate}: Pattern): Pattern => ({
-        pitch: {...pitch}, lanes: lanes.map(lane => ({...lane})), base: base.slice(), amounts: amounts.map(row => row.slice()), rate
+    export const copy = ({pitch, lanes, base, amounts, rate, restart, offset}: Pattern): Pattern => ({
+        pitch: {...pitch}, lanes: lanes.map(lane => ({...lane})), base: base.slice(), amounts: amounts.map(row => row.slice()), rate,
+        restart, offset
     })
 }

@@ -780,6 +780,7 @@ export class TubularImpl extends InstrumentFacade<TubularDeviceBox> implements T
 const surgeonValues = (source: SurgeonSound | SurgeonPattern) => ({
         rate: source.rate, steps: source.steps, seed: source.seed, mutate: source.mutate, range: source.range,
         density: source.density, tie: source.tie, slide: source.slide, accent: source.accent,
+        restart: source.restart, offset: source.offset,
         laneASteps: source.laneASteps, laneASeed: source.laneASeed, laneAMutate: source.laneAMutate,
         laneBSteps: source.laneBSteps, laneBSeed: source.laneBSeed, laneBMutate: source.laneBMutate,
         laneCSteps: source.laneCSteps, laneCSeed: source.laneCSeed, laneCMutate: source.laneCMutate,

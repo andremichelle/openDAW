@@ -55,6 +55,9 @@ const values = (): ReadonlyArray<readonly [number, Value]> => [
     [7, unipolar("tie", 0.25)],
     [8, unipolar("slide", 0.0)],
     [9, unipolar("accent", 0.6)],
+    // the loops start again every that many steps (0 never), the offset moves the steps they read
+    [22, int("restart", 0, 256, 0)],
+    [23, int("offset", -128, 128, 0)],
     ...LaneNames.flatMap((lane, index): Array<readonly [number, Value]> => [
         [10 + index * 3, int(`lane-${lane}-steps`, 1, 32, LaneSteps[index])],
         [11 + index * 3, int(`lane-${lane}-seed`, 0, 99_999, LaneSeeds[index])],

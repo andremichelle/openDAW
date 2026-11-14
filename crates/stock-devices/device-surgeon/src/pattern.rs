@@ -10,6 +10,8 @@ pub const MAX_STEPS: u32 = 32;
 pub const RATE_PULSES: [f64; 3] = [480.0, 240.0, 120.0];
 pub const SIXTEENTH: u32 = 1;
 pub const MAX_RANDOM_SLIDE: f32 = 0.5;
+pub const MAX_RESTART: u32 = 256;
+pub const MAX_OFFSET: i32 = 128;
 
 const HOLD_RELEASE: f32 = 0.1;
 const SHORTEST: f32 = 0.05;
@@ -107,12 +109,16 @@ pub struct Pattern {
     pub pitch: PitchLoop,
     pub lanes: [Lane; LANES],
     pub base: [f32; PARAMS],
-    pub amounts: [[f32; LANES]; PARAMS]
+    pub amounts: [[f32; LANES]; PARAMS],
+    /// The loops start again every that many steps, 0 never.
+    pub restart: u32,
+    /// Moves the steps the loops read, in steps.
+    pub offset: i32
 }
 
 impl Pattern {
     pub fn new(pitch: PitchLoop, lanes: [Lane; LANES]) -> Self {
-        let mut pattern = Self {rate: SIXTEENTH, pitch, lanes, base: [0.0; PARAMS], amounts: [[0.0; LANES]; PARAMS]};
+        let mut pattern = Self {rate: SIXTEENTH, pitch, lanes, base: [0.0; PARAMS], amounts: [[0.0; LANES]; PARAMS], restart: 0, offset: 0};
         pattern.set(Param::Ratio1, 2.41).set(Param::Feedback, 0.25).set(Param::Ratio2, 5.19).set(Param::Depth, 0.6)
             .set(Param::Strike, 4.0).set(Param::StrikeDecay, 0.14).set(Param::Length, 0.7).set(Param::Glide, 0.04)
             .set(Param::Velocity, 0.7);
@@ -170,12 +176,14 @@ impl Pattern {
     }
 
     /// What the All button does to a pattern: `random`, plus a Slide chance drawn on its own so `random` stays as
-    /// approved. Mutate and Rate are never rolled, they stay as they are.
+    /// approved. Mutate, Rate, Restart and Offset are never rolled, they stay as they are.
     pub fn roll_all(&self, seed: u32) -> Self {
         let mut pattern = Self::random(seed);
         pattern.pitch.slide = MAX_RANDOM_SLIDE * unit(seed, 8, 0, 7);
         pattern.pitch.mutate = self.pitch.mutate;
         pattern.rate = self.rate;
+        pattern.restart = self.restart;
+        pattern.offset = self.offset;
         for (rolled, current) in pattern.lanes.iter_mut().zip(self.lanes.iter()) {rolled.mutate = current.mutate;}
         pattern
     }
@@ -187,6 +195,28 @@ impl Pattern {
     }
 
     pub fn step_pulses(&self) -> f64 {RATE_PULSES[(self.rate as usize).min(RATE_PULSES.len() - 1)]}
+
+    /// Where the song step `step` falls in the loops: the position they read and how many passes each loop has made.
+    /// Mutation runs on across restarts. None before the song starts.
+    pub fn phase(&self, step: i64) -> Option<(u32, [u32; LOOPS])> {
+        if step < 0 {return None;}
+        let shifted = step + self.offset.clamp(-MAX_OFFSET, MAX_OFFSET) as i64;
+        let restart = self.restart.min(MAX_RESTART) as i64;
+        let (window, position) = if restart > 0 {
+            (shifted.div_euclid(restart), shifted.rem_euclid(restart))
+        } else if shifted < 0 {
+            return None;
+        } else {
+            (0, shifted)
+        };
+        let mut passes = [0; LOOPS];
+        for (pass, (_, _, steps)) in passes.iter_mut().zip(self.loops()) {
+            let steps = steps.clamp(1, MAX_STEPS) as i64;
+            let per_restart = if restart > 0 {(restart + steps - 1) / steps} else {0};
+            *pass = (window * per_restart + position / steps).max(0) as u32;
+        }
+        Some((position as u32, passes))
+    }
 
     /// The seed, mutate chance and length of every loop, the pitch loop first.
     pub fn loops(&self) -> [(u32, f32, u32); LOOPS] {

@@ -54,6 +54,13 @@ The **Groove** dropdown above the display picks a [groove](/manuals/grooves) for
 **Go to**, **None** and **New**. Every pattern has its own. The circle in front of the dropdown is filled while
 the selected pattern has a groove. A new Surgeon plays straight.
 
+Next to it, two values of the selected pattern:
+
+1. **Restart**: the pitch loop and the lanes start again every that many steps (up to 256). **Off** lets them run
+   on as before. Mutation goes on across restarts.
+2. **Offset**: moves the steps the loops read, from -128 to 128. Use it when a pattern does not start where you
+   expect. With Restart it moves inside the restart length.
+
 ---
 
 ## 2. Display

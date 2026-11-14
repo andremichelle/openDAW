@@ -5,11 +5,11 @@
 
 use crate::engine::{Engine, Slot, MAX_FRAMES, PATTERNS};
 use crate::param::{Param, PARAMS};
-use crate::pattern::{Lane, Pattern, PitchLoop, LANES};
+use crate::pattern::{Lane, Pattern, PitchLoop, LANES, MAX_OFFSET, MAX_RESTART};
 use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue};
 use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, ValueMapping, Values};
 
-pub const VALUES: usize = 1 + 8 + LANES * 3 + PARAMS + PARAMS * LANES;
+pub const VALUES: usize = 1 + 8 + LANES * 3 + PARAMS + PARAMS * LANES + 2;
 /// Bind order: tune, volume, slot, then the live values. `map_parameter` relies on it.
 pub const PARAMETERS: usize = 3 + VALUES;
 
@@ -49,7 +49,9 @@ fn spec(index: usize) -> (u16, Kind) {
         1..=8 => (index as u16 + 1, PITCH[index - 1]),
         9..=20 => (index as u16 + 1, LANE[(index - 9) % 3]),
         21..=36 => (index as u16 + 9, SOUND[index - 21]),
-        _ => (index as u16 + 63, Kind::Linear(-1.0, 1.0))
+        37..=100 => (index as u16 + 63, Kind::Linear(-1.0, 1.0)),
+        101 => (22, Kind::Int(0, MAX_RESTART as i32)),
+        _ => (23, Kind::Int(-MAX_OFFSET, MAX_OFFSET))
     }
 }
 
@@ -86,6 +88,8 @@ fn pattern_of(values: &[f32; VALUES]) -> Pattern {
             steps: values[1] as u32, seed: values[2] as u32, mutate: values[3], range: values[4], density: values[5],
             tie: values[6], slide: values[7], accent: values[8]
         },
+        restart: values[101] as u32,
+        offset: values[102] as i32,
         ..Pattern::default()
     };
     for lane in 0..LANES {

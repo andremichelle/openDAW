@@ -63,6 +63,11 @@ proves it (as for Slide: at 0 % the engine renders the same samples as before).
    while playing never plays a step twice, a move of more than a sixteenth counts as a jump. A slide lasts as long as
    its step sounds. A pattern without a groove runs the old path sample by sample, also while other patterns have
    one, so every sample stays the same (fingerprints unchanged). Deleting a groove leaves its patterns without one.
+8. Restart and Offset (2026-11-14): two automatable values per pattern (`restart` key 22, 0 to 256, `offset` key 23,
+   -128 to 128). The song step plus Offset, wrapped by Restart when it is above 0, is the position the pitch loop and
+   the lanes read. Each loop counts its passes on across restarts, so mutation goes on. Before the song start, and
+   with a negative Offset and no Restart before the first step, nothing plays. Rolls and All keep both. At 0 every
+   sample stays the same.
 
 ### Pitch loop
 

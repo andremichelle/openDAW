@@ -93,13 +93,25 @@ export namespace Surgeon {
         key: 100 + index * 4 + lane, name: `${sound.name} ${LaneNames[lane]}`,
         mapping: ValueMapping.bipolar(), strings: percent
     }), LaneCount))
-    export const All: ReadonlyArray<Spec> = [Rate, ...Pitch, ...Lanes.flat(), ...Sound, ...Amounts.flat()]
+    const restartStrings: StringMapping<number> = {
+        x: steps => steps === 0 ? {value: "Off", unit: ""} : {value: String(steps), unit: ""},
+        y: text => {
+            const typed = parseInt(text, 10)
+            return text.trim().toLowerCase() === "off" ? {type: "explicit", value: 0}
+                : Number.isFinite(typed) ? {type: "explicit", value: typed} : {type: "unknown", value: text}
+        }
+    }
+    export const Restart: Spec = {key: 22, name: "Restart", mapping: ValueMapping.linearInteger(0, SurgeonModel.MaxRestart), strings: restartStrings}
+    export const Offset: Spec = whole(23, "Offset", -SurgeonModel.MaxOffset, SurgeonModel.MaxOffset)
+    export const All: ReadonlyArray<Spec> = [Rate, ...Pitch, ...Lanes.flat(), ...Sound, ...Amounts.flat(), Restart, Offset]
 
     export type Source = { readonly get: (key: int) => number }
 
     // the loops as the model reads them: sound positions between 0 and 1, switches in the middle of their slot
     export const modelOf = ({get}: Source): SurgeonModel.Pattern => ({
         rate: get(Rate.key),
+        restart: get(Restart.key),
+        offset: get(Offset.key),
         pitch: {
             steps: get(2), seed: get(3), mutate: get(4), range: get(5), density: get(6), tie: get(7), slide: get(8), accent: get(9)
         },
@@ -110,7 +122,7 @@ export namespace Surgeon {
     })
 
     // every value of a model pattern by its box key, in box units
-    export const valuesOf = ({rate, pitch, lanes, base, amounts}: SurgeonModel.Pattern): ReadonlyArray<readonly [int, number]> => [
+    export const valuesOf = ({rate, pitch, lanes, base, amounts, restart, offset}: SurgeonModel.Pattern): ReadonlyArray<readonly [int, number]> => [
         [Rate.key, rate], [2, pitch.steps], [3, pitch.seed], [4, pitch.mutate], [5, pitch.range], [6, pitch.density],
         [7, pitch.tie], [8, pitch.slide], [9, pitch.accent],
         ...lanes.flatMap(({steps, seed, mutate}, lane): Array<readonly [int, number]> =>
@@ -118,7 +130,8 @@ export namespace Surgeon {
         ...Sound.map(({key, mapping, choices}, index): readonly [int, number] => [key, isDefined(choices)
             ? Math.min(Math.floor(SurgeonModel.valueOf(SurgeonModel.Params[index], base[index])), choices.length - 1)
             : mapping.y(base[index])]),
-        ...amounts.flatMap((row, index) => row.map((amount, lane): readonly [int, number] => [Amounts[index][lane].key, amount]))
+        ...amounts.flatMap((row, index) => row.map((amount, lane): readonly [int, number] => [Amounts[index][lane].key, amount])),
+        [Restart.key, restart], [Offset.key, offset]
     ]
 
     const Keys: ReadonlySet<int> = new Set(All.map(({key}) => key))

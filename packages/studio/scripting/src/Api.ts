@@ -1777,6 +1777,10 @@ export interface SurgeonValues {
     slide: unitValue
     /** Velocity spread (0.0 to 1.0) */
     accent: unitValue
+    /** The pitch loop and the lanes start again every that many steps (1 to 256), 0 never */
+    restart: int
+    /** Moves the steps the loops read, in steps (-128 to 128) */
+    offset: int
     /** Length of lane A (1 to 32) */
     laneASteps: int
     /** Seed of lane A (0 to 99999) */

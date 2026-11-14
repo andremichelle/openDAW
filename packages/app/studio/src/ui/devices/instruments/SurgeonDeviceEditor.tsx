@@ -1,5 +1,5 @@
 import css from "./SurgeonDeviceEditor.sass?inline"
-import {Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, Optional, Procedure} from "@opendaw/lib-std"
+import {Arrays, clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, Optional, Procedure, ValueGuide} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {Box, Propagation} from "@opendaw/lib-box"
@@ -40,6 +40,7 @@ const LaneColors = [Colors.blue, Colors.green, Colors.yellow, Colors.orange]
 const ToneParams: ReadonlyArray<int> = [0, 1, 2, 3, 4, 5, 6, 7]
 const ShapeParams: ReadonlyArray<int> = [8, 9, 10, 11, 12, 13, 14, 15]
 const SoundKeys: ReadonlyArray<int> = [...Surgeon.Sound, ...Surgeon.Amounts.flat()].map(({key}) => key)
+const PixelsPerStep = 6
 // shared by every Surgeon editor: the tab and a copied pattern survive a rebuilt editor
 const selectedTab = new DefaultObservableValue<int>(0)
 const clipboard: { pattern: Optional<SurgeonModel.Pattern>, groove: Option<Box> } = {pattern: undefined, groove: Option.None}
@@ -55,13 +56,14 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         editing.modify(action)
     }
     const laneColor = (index: int): string => LaneColors[index].toString()
-    const dragging = (parameter: AutomatableParameterFieldAdapter<number>) => (
+    const dragging = (parameter: AutomatableParameterFieldAdapter<number>, options?: ValueGuide.Options) => (
         <AutomationControl lifecycle={lifecycle}
                            editing={editing}
                            midiLearning={midiLearning}
                            tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
                            parameter={parameter}>
-            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={parameter} supressValueFlyout={true}>
+            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={parameter} supressValueFlyout={true}
+                                       options={options}>
                 <ParameterLabel lifecycle={lifecycle} parameter={parameter} classList={["center"]} framed={true}/>
             </RelativeUnitValueDragging>
         </AutomationControl>
@@ -73,6 +75,13 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         </div>
     )
     const live = ({key}: Surgeon.Spec) => adapter.live(key)
+    // a whole step every few pixels: the default track would pass several steps per pixel over 257 values
+    const inline = (caption: string, parameter: AutomatableParameterFieldAdapter<number>, values: int) => (
+        <div className="inline">
+            <h3>{caption}</h3>
+            {dragging(parameter, {trackLength: values * PixelsPerStep})}
+        </div>
+    )
     const button = (label: string, action: Procedure<void>, gridArea: string, group: string): HTMLElement => {
         const element: HTMLElement = <div className={`button ${group}`} style={{gridArea}}>{label}</div>
         lifecycle.own(Events.subscribe(element, "click", () => action()))
@@ -159,12 +168,15 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         context.stroke()
         context.setLineDash([])
         const {pitch, lanes} = pattern
+        const phase = SurgeonModel.phase(pattern, position)
+        const {position: read, passes} = phase.unwrapOrElse({position: 0, passes: Arrays.create(() => 0, lanes.length + 1)})
+        const shown = playing && sounding && phase.nonEmpty()
         const steps = clamp(pitch.steps, 1, SurgeonModel.MaxSteps)
-        const first = Math.floor(position / steps) * steps
+        const pass = passes[0]
         const width = actualWidth / steps
         for (let index = 0; index < steps; index++) {
-            const {offset, kind, slide} = SurgeonModel.step(pitch, first + index)
-            const current = playing && sounding && index === position % steps
+            const {offset, kind, slide} = SurgeonModel.stepAt(pitch, index, pass)
+            const current = shown && index === read % steps
             const x = index * width
             if (kind === SurgeonModel.Kind.Rest) {
                 context.fillStyle = DisplayPaint.gridStyle(current ? 0.6 : 0.25)
@@ -172,8 +184,8 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                 continue
             }
             const y = middle - offset / Math.max(pitch.range, 1.0) * reach
-            if (slide && first + index > 0) {
-                const from = SurgeonModel.step(pitch, first + index - 1)
+            if (slide && (index > 0 || pass > 0)) {
+                const from = index > 0 ? SurgeonModel.stepAt(pitch, index - 1, pass) : SurgeonModel.stepAt(pitch, steps - 1, pass - 1)
                 if (from.kind !== SurgeonModel.Kind.Rest) {
                     context.strokeStyle = DisplayPaint.strokeStyle(0.5)
                     context.beginPath()
@@ -195,14 +207,13 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         lanes.forEach((lane, laneIndex) => {
             const top = pitchBottom + laneIndex * laneHeight
             const count = clamp(lane.steps, 1, SurgeonModel.MaxSteps)
-            const start = Math.floor(position / count) * count
             const barWidth = (actualWidth - letter) / count
             const height = laneHeight - devicePixelRatio * 3
             context.fillStyle = LaneColors[laneIndex].toString()
             context.fillText(LaneNames[laneIndex], 0, top + (laneHeight + devicePixelRatio * 3) / 2)
             for (let index = 0; index < count; index++) {
-                const amount = SurgeonModel.laneValue(lane, start + index)
-                const current = playing && sounding && index === position % count
+                const amount = SurgeonModel.laneValueAt(lane, index, passes[laneIndex + 1])
+                const current = shown && index === read % count
                 const filled = Math.max(devicePixelRatio, amount * height)
                 context.fillStyle = current ? Colors.white.toString() : LaneColors[laneIndex].opacity(0.75).toString()
                 context.fillRect(letter + index * barWidth, top + laneHeight - filled,
@@ -336,7 +347,11 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                   </div>
                               </nav>
                               <div className="display">
-                                  <div className="groove">{grooveIndicator}{grooveButton}</div>
+                                  <div className="groove">
+                                      {grooveIndicator}{grooveButton}
+                                      {inline("Restart", live(Surgeon.Restart), SurgeonModel.MaxRestart + 1)}
+                                      {inline("Offset", live(Surgeon.Offset), SurgeonModel.MaxOffset * 2 + 1)}
+                                  </div>
                                   {canvas}
                               </div>
                               <div className="sections">

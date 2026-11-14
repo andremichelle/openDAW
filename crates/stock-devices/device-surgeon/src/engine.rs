@@ -31,12 +31,19 @@ struct Counter {
 impl Counter {
     const NEW: Counter = Counter {key: (0, 0, 0), passes: [0; MAX_STEPS as usize], counts: [0; MAX_STEPS as usize]};
 
+    #[cfg(test)]
     fn generation(&mut self, seed: u32, mutate: f32, steps: u32, position: u32) -> u32 {
+        let steps = steps.clamp(1, MAX_STEPS);
+        self.generation_at(seed, mutate, steps, position % steps, position / steps)
+    }
+
+    // how often step `step` of a loop of `steps` has been replaced after `pass` passes
+    fn generation_at(&mut self, seed: u32, mutate: f32, steps: u32, step: u32, pass: u32) -> u32 {
         if mutate <= 0.0 {return 0;}
         let steps = steps.clamp(1, MAX_STEPS);
         let key = (seed, mutate.to_bits(), steps);
         if key != self.key {*self = Counter {key, ..Counter::NEW};}
-        let (pass, step) = (position / steps, (position % steps) as usize);
+        let step = step as usize;
         if pass < self.passes[step] {
             self.passes[step] = 0;
             self.counts[step] = 0;
@@ -171,18 +178,25 @@ impl Engine {
         self.queued_count += 1;
     }
 
+    // how often each loop's step at `position` has been replaced after its passes
+    fn generations(&mut self, pattern: &Pattern, position: u32, passes: &[u32; LOOPS]) -> [u32; LOOPS] {
+        let mut generations = [0; LOOPS];
+        for (index, (seed, mutate, steps)) in pattern.loops().into_iter().enumerate() {
+            let steps = steps.clamp(1, MAX_STEPS);
+            generations[index] = self.counters[index].generation_at(seed, mutate, steps, position % steps, passes[index]);
+        }
+        generations
+    }
+
     // the sound of the pattern `sound` at a step, or without its lanes when the transport does not run
     fn played_patch(&mut self, step: Option<i64>) -> Patch {
         let mut pattern = self.patterns[self.sound.min(PATTERNS - 1)];
-        let Some(step) = step.filter(|step| *step >= 0) else {
+        let Some((position, passes)) = step.and_then(|step| pattern.phase(step)) else {
             pattern.amounts = [[0.0; LANES]; PARAMS];
             return pattern.patch(0);
         };
-        let mut generations = [0; LOOPS];
-        for (index, (seed, mutate, steps)) in pattern.loops().into_iter().enumerate() {
-            generations[index] = self.counters[index].generation(seed, mutate, steps, step as u32);
-        }
-        pattern.patch_with(step as u32, &generations)
+        let generations = self.generations(&pattern, position, &passes);
+        pattern.patch_with(position, &generations)
     }
 
     fn played_step_pulses(&self) -> f64 {self.patterns[self.sound.min(PATTERNS - 1)].step_pulses()}
@@ -216,13 +230,10 @@ impl Engine {
     }
 
     fn enter(&mut self, step: i64, step_pulses: f64, step_samples: f64) {
-        if step < 0 {return;}
         let Some(pattern) = self.pattern().copied() else {return;};
-        let mut generations = [0; LOOPS];
-        for (index, (seed, mutate, steps)) in pattern.loops().into_iter().enumerate() {
-            generations[index] = self.counters[index].generation(seed, mutate, steps, step as u32);
-        }
-        let event = pattern.event_with(step as u32, &generations);
+        let Some((position, passes)) = pattern.phase(step) else {return;};
+        let generations = self.generations(&pattern, position, &passes);
+        let event = pattern.event_with(position, &generations);
         self.voice.set_patch(event.patch);
         let Some(note) = event.note else {return;};
         self.voice.note_on(self.tune + note.offset, note.velocity, if note.slide {step_samples as u32} else {0});
