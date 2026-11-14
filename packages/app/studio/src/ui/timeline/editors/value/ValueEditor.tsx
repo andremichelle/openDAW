@@ -10,6 +10,7 @@ import {
     Option,
     Point,
     Selection,
+    StringMapping,
     unitValue,
     ValueAxis,
     ValueMapping
@@ -354,7 +355,10 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             selection,
             getter: (adapter) => context.stringMapping.x(context.valueMapping.y(eventMapping.x(adapter.value))).value,
             setter: text => {
-                const result = context.stringMapping.y(text)
+                const shown = selection.selected().at(0)
+                if (!isDefined(shown)) {return}
+                const {unit} = context.stringMapping.x(context.valueMapping.y(eventMapping.x(shown.value)))
+                const result = context.stringMapping.y(StringMapping.withDisplayUnit(text, unit))
                 let value
                 if (result.type === "explicit") {
                     value = eventMapping.y(context.valueMapping.x(result.value))

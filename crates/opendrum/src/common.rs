@@ -121,3 +121,19 @@ impl Clipper {
         self.oversampler.downsample(&self.oversampled, output, 0, frames);
     }
 }
+
+/// A band-limited square (polyBLEP) from a phase in 0 to 1 advancing by `step`.
+#[inline]
+pub fn square(phase: f32, step: f32) -> f32 {
+    let blep = |position: f32| {
+        if position < step {
+            let ratio = position / step;
+            ratio + ratio - ratio * ratio - 1.0
+        } else if position > 1.0 - step {
+            let ratio = (position - 1.0) / step;
+            ratio * ratio + ratio + ratio + 1.0
+        } else {0.0}
+    };
+    let half = if phase < 0.5 {phase + 0.5} else {phase - 0.5};
+    (if phase < 0.5 {1.0} else {-1.0}) + blep(phase) - blep(half)
+}

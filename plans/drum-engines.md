@@ -722,3 +722,24 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    Rim Restart (his idea): On restarts the tones at the same point every hit (as before, the default), Off starts
    them somewhere else in their cycles each hit, audible once they are driven. 18 parameters, the 808 rim preset
    renders byte identical with Restart on. Rendering the display off the main thread: see plans/worker.md.
+   Committed f316e7aec. After it (2026-11-14):
+   1. Typed values: a number typed without a unit is read in the unit on display. Fixed in the preview and, with
+      his go, in the three studio places that lacked it (FieldAdapter.setPrintValue, the automation value editor,
+      the note property editor), using `StringMapping.withDisplayUnit` like the automatable parameters already do.
+   2. 808 open hat Hold 200 ms (his value).
+   3. Hat, more control without changing the 808 (his request, all four in a column of their own, Character):
+      Spread (-1 to 1, stretches or shrinks the oscillators' intervals above the lowest), Ring (the oscillators
+      multiply in pairs instead of adding), Reso (a peak at Color, up to 8x the Q of the second filter stage), Curve
+      (the fade's shape, like Punch). All neutral at 0, both presets render byte identical. 12 parameters.
+      Then: the Character column moved second, Color moved into Source (the Filter column had one field), Noise was
+      removed (his call, it did little), 11 parameters: Source Tune, Color; Character Spread, Ring, Reso, Curve;
+      Shape Hold, Decay; Play. Level over Color (his find, the waveform blew up at low Color): measured level
+      rises with Color to the power of -0.7 below 6 kHz, the output is turned down by that below 6 kHz (808 presets
+      at 6.2 and 6.3 kHz byte identical), and Reso is turned down by the square root of its Q gain. Level now
+      0.094 to 0.136 rms from 200 Hz to 6.3 kHz at Reso 0 (was 1.01 to 0.115), 0.056 to 0.18 with Reso up.
+      Above 6.3 kHz the hat still gets quieter (12 kHz 0.040), not compensated. The preview refuses to render when
+      the page and the served engine disagree on the number of values (it showed dead controls twice).
+   4. Cymbal in progress: `crates/opendrum/src/cymbal.rs` (4 tests), the shared square oscillator moved to
+      common.rs. Body and top as two fourth-order high-passes (2.8 and 6.5 kHz), the body swelling in over 15 ms
+      and ringing for Decay, the top for 0.45 of it, Tone moving the weight. Still about 7 dB off the references
+      on the fine grid, not in the preview yet.

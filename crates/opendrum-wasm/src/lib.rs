@@ -10,6 +10,7 @@ use opendrum::clap::{Clap, ClapParams};
 use opendrum::tom::{Tom, TomParams};
 use opendrum::rim::{Rim, RimParams};
 use opendrum::hat::{Hat, HatParams};
+use opendrum::cymbal::{Cymbal, CymbalParams};
 
 /// The order of the floats `render_kick` reads, the preview writes them in this order.
 pub const KICK_PARAMS: usize = 20;
@@ -17,7 +18,8 @@ pub const SNARE_PARAMS: usize = 20;
 pub const CLAP_PARAMS: usize = 16;
 pub const TOM_PARAMS: usize = 20;
 pub const RIM_PARAMS: usize = 18;
-pub const HAT_PARAMS: usize = 8;
+pub const HAT_PARAMS: usize = 11;
+pub const CYMBAL_PARAMS: usize = 7;
 
 #[no_mangle]
 pub extern "C" fn alloc_floats(count: usize) -> *mut f32 {
@@ -149,16 +151,33 @@ pub extern "C" fn render_rim(params: *const f32, velocity: f32, sample_rate: f32
 #[no_mangle]
 pub extern "C" fn hat_param_count() -> usize {HAT_PARAMS}
 
-/// Params: tune, noise, color, hold, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+/// Params: tune, color, hold, decay, spread, ring, reso, curve, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
 #[no_mangle]
 pub extern "C" fn render_hat(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
     let values = unsafe { core::slice::from_raw_parts(params, HAT_PARAMS) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
     let params = HatParams {
-        tune: values[0], noise: values[1], color: values[2], hold: values[3], decay: values[4], volume: values[5],
-        velocity: values[6], play: play_of(values[7])
+        tune: values[0], color: values[1], hold: values[2], decay: values[3], spread: values[4], ring: values[5],
+        reso: values[6], curve: values[7], volume: values[8], velocity: values[9], play: play_of(values[10])
     };
     let mut hat = Hat::new(sample_rate);
     hat.note_on(0, velocity, 0.0, &params);
     hat.process(&params, output);
+}
+
+#[no_mangle]
+pub extern "C" fn cymbal_param_count() -> usize {CYMBAL_PARAMS}
+
+/// Params: tune, noise, tone, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+#[no_mangle]
+pub extern "C" fn render_cymbal(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
+    let values = unsafe { core::slice::from_raw_parts(params, CYMBAL_PARAMS) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
+    let params = CymbalParams {
+        tune: values[0], noise: values[1], tone: values[2], decay: values[3], volume: values[4], velocity: values[5],
+        play: play_of(values[6])
+    };
+    let mut cymbal = Cymbal::new(sample_rate);
+    cymbal.note_on(0, velocity, 0.0, &params);
+    cymbal.process(&params, output);
 }

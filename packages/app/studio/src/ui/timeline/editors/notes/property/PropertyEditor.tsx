@@ -1,5 +1,16 @@
 import css from "./PropertyEditor.sass?inline"
-import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@opendaw/lib-std"
+import {
+    Editing,
+    isDefined,
+    Lifecycle,
+    Nullable,
+    ObservableValue,
+    Option,
+    Selection,
+    StringMapping,
+    unitValue,
+    ValueAxis
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
@@ -143,7 +154,10 @@ export const PropertyEditor =
                 },
                 setter: text => {
                     const accessor = propertyOwner.getValue()
-                    const result = accessor.stringMapping.y(text)
+                    const shown = selection.selected().at(0)
+                    if (!isDefined(shown)) {return}
+                    const {unit} = accessor.stringMapping.x(accessor.readRawValue(shown))
+                    const result = accessor.stringMapping.y(StringMapping.withDisplayUnit(text, unit))
                     if (result.type === "explicit") {
                         editing.modify(() => selection.selected()
                             .forEach(({box}) => accessor.writeValue(box, result.value)))

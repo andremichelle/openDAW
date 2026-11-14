@@ -45,9 +45,9 @@ export namespace OpenDrumSynth {
         volume: number, velocity: number, play: number
     }
     export type Hat = {
-        tune: number, noise: number
-        color: number
+        tune: number, color: number
         hold: number, decay: number
+        spread: number, ring: number, reso: number, curve: number
         volume: number, velocity: number, play: number
     }
     type Contour = {
@@ -125,6 +125,13 @@ export namespace OpenDrumSynth {
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
         const output = exports.alloc_floats(frames)
+        // the page and the served engine must agree on the number of values, a stale engine would shift them
+        const write = (values: ReadonlyArray<number>, expected: int): void => {
+            if (values.length !== expected) {
+                throw new Error(`openDrum engine expects ${expected} values, the page sends ${values.length}. Rebuild the wasm.`)
+            }
+            new Float32Array(exports.memory.buffer, params, values.length).set(values)
+        }
         const collect = (contour: Contour): Hit => {
             const rendered = new Float32Array(exports.memory.buffer, output, frames)
             let last = frames - 1
@@ -139,7 +146,7 @@ export namespace OpenDrumSynth {
                 const values = [kick.tune, kick.pitch, kick.sweep, kick.drift, kick.decay, kick.punch, kick.shape, kick.click,
                     kick.tone, kick.skin, kick.rumble, RumbleBars[kick.length], kick.duck, kick.drive, kick.velocity,
                     kick.play, kick.bright, kick.volume, kick.noise, kick.glide]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                write(values, exports.kick_param_count())
                 exports.render_kick(params, 1.0, bpm, SampleRate, output, frames)
                 return collect(kick)
             },
@@ -147,22 +154,22 @@ export namespace OpenDrumSynth {
                 const values = [snare.tune, snare.ratio, snare.balance, snare.pitch, snare.sweep, snare.decay, snare.punch,
                     snare.shape, snare.level, snare.wireDecay, snare.width, snare.curve, snare.click,
                     snare.tone, snare.skin, snare.drive, snare.volume, snare.velocity, snare.play, snare.glide]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                write(values, exports.snare_param_count())
                 exports.render_snare(params, 1.0, SampleRate, output, frames)
                 return collect({...snare, drift: 0})
             },
             renderHat: (hat: Hat): Hit => {
-                const values = [hat.tune, hat.noise, hat.color, hat.hold, hat.decay, hat.volume, hat.velocity,
-                    hat.play]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                const values = [hat.tune, hat.color, hat.hold, hat.decay, hat.spread, hat.ring, hat.reso,
+                    hat.curve, hat.volume, hat.velocity, hat.play]
+                write(values, exports.hat_param_count())
                 exports.render_hat(params, 1.0, SampleRate, output, frames)
-                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: hat.decay, punch: 0, velocity: hat.velocity})
+                return collect({pitch: 0, sweep: 0.001, drift: 0, decay: hat.decay, punch: hat.curve, velocity: hat.velocity})
             },
             renderRim: (rim: Rim): Hit => {
                 const values = [rim.tune, rim.ratio, rim.balance, rim.high, rim.highRatio, rim.ring, rim.ringHigh,
                     rim.decay, rim.punch, rim.drive, rim.hard, rim.click, rim.swell, rim.cut, rim.restart, rim.volume,
                     rim.velocity, rim.play]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                write(values, exports.rim_param_count())
                 exports.render_rim(params, 1.0, SampleRate, output, frames)
                 return collect({pitch: 0, sweep: 0.001, drift: 0, decay: rim.decay, punch: rim.punch, velocity: rim.velocity})
             },
@@ -170,7 +177,7 @@ export namespace OpenDrumSynth {
                 const values = [tom.tune, tom.pitch, tom.sweep, tom.drift, tom.decay, tom.punch, tom.shape, tom.sub,
                     tom.ratio, tom.top, tom.length, tom.drive, tom.noise, tom.noiseDecay, tom.color, tom.air,
                     tom.volume, tom.velocity, tom.play, tom.glide]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                write(values, exports.tom_param_count())
                 exports.render_tom(params, 1.0, SampleRate, output, frames)
                 return collect(tom)
             },
@@ -178,7 +185,7 @@ export namespace OpenDrumSynth {
                 const values = [clap.hands, clap.gap, clap.last, clap.spread, clap.attack, clap.decay, clap.snap,
                     clap.drive, clap.tone, clap.resonance, clap.room, clap.roomDecay, clap.tail, clap.volume, clap.velocity,
                     clap.play]
-                new Float32Array(exports.memory.buffer, params, values.length).set(values)
+                write(values, exports.clap_param_count())
                 exports.render_clap(params, 1.0, SampleRate, output, frames)
                 return collect({pitch: 0, sweep: 0.001, drift: 0, decay: clap.roomDecay, punch: 0, velocity: clap.velocity})
             }

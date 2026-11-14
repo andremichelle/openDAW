@@ -12,7 +12,8 @@ export namespace OpenDrumControls {
     export type Printed = readonly [value: string, unit: string]
     export type Format = {
         readonly print: Func<number, Printed>
-        readonly parse: Func<string, Optional<number>>
+        // `shown` is the unit on display, a number typed without a unit is read in it
+        readonly parse: (text: string, shown: string) => Optional<number>
     }
     export type Field = {
         readonly name: string
@@ -36,11 +37,17 @@ export namespace OpenDrumControls {
         decibel: {print: value => [value.toFixed(1), "dB"], parse: numberIn} satisfies Format,
         seconds: {
             print: value => value < 1.0 ? [String(Math.round(value * 1000)), "ms"] : [value.toFixed(2), "s"],
-            parse: text => scaled(/ms/i.test(text) ? 0.001 : 1.0)(text)
+            parse: (text, shown) => {
+                const unit = /ms/i.test(text) ? "ms" : /s/i.test(text) ? "s" : shown
+                return scaled(unit === "ms" ? 0.001 : 1.0)(text)
+            }
         } satisfies Format,
         hertz: {
             print: value => value < 1000.0 ? [String(Math.round(value)), "Hz"] : [(value / 1000).toFixed(1), "kHz"],
-            parse: text => scaled(/k/i.test(text) ? 1000.0 : 1.0)(text)
+            parse: (text, shown) => {
+                const unit = /k/i.test(text) ? "kHz" : /hz/i.test(text) ? "Hz" : shown
+                return scaled(unit === "kHz" ? 1000.0 : 1.0)(text)
+            }
         } satisfies Format
     }
 
@@ -78,7 +85,7 @@ export namespace OpenDrumControls {
                 const [text, unit] = format.print(field.get())
                 const typed = await SamplerValueLabel.ask(label, event, unit.length > 0 ? `${text} ${unit}` : text)
                 if (typed.isEmpty()) {return}
-                const parsed = format.parse(typed.unwrap())
+                const parsed = format.parse(typed.unwrap(), unit)
                 if (!isDefined(parsed) || !Number.isFinite(parsed)) {return}
                 field.set(clamp(parsed, min, max))
                 refresh.notify()

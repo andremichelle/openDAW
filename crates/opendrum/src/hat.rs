@@ -1,10 +1,13 @@
-//! openDrum Hat: six square oscillators at the 808's frequencies (scaled by Tune) with Noise mixed in, a steep
-//! high-pass at Color and a fixed low-pass above. One envelope: Hold at full level, then Decay. In Mono a new hit chokes
-//! the ringing one. The oscillators start every hit somewhere else in their cycles, like free-running ones.
+//! openDrum Hat: six square oscillators at the 808's frequencies (scaled by Tune), a steep
+//! high-pass at Color and a fixed low-pass above. One envelope: Hold at full level, then Decay. Spread moves the
+//! oscillators apart or together, Ring lets them modulate each other, Reso adds a peak at Color, Curve shapes the
+//! fade (all neutral at 0, the 808). In Mono a new hit chokes the ringing one. The oscillators start every hit
+//! somewhere else in their cycles, like free-running ones.
 
 use dsp::hit_envelope::HitEnvelope;
 use dsp::noise::WhiteNoise;
 use dsp::svf::{Svf, SvfCoefficients};
+use crate::common::square;
 use crate::kick::Play;
 
 pub const VOICES: usize = 8;
@@ -16,18 +19,28 @@ const HIGH_PASS_Q: [f32; 2] = [0.541, 1.307];
 // the low-pass above, between the 808's closed (about 18 kHz) and open hat (about 11 kHz)
 const TOP: f32 = 14000.0;
 const OUTPUT_GAIN: f32 = 3.5;
-// plain noise carries this much less than 1 to be as loud as the squares behind the filters
-const NOISE_MATCH: f32 = 0.14;
+// below this Color the level is turned down as the filter lets more through (measured: level rises with
+// Color to the power of -0.7), so the loudness stays where it is at the 808's Color
+const COLOR_REFERENCE: f32 = 6000.0;
+const COLOR_COMPENSATION: f32 = 0.7;
+// Reso is turned down by the square root of its Q gain, so the peak colours the hit without making it much louder
+// Spread at 1 stretches the oscillators' intervals above the lowest by this exponent, at -1 it shrinks them
+const SPREAD_RANGE: f32 = 0.5;
+// Reso at 1 multiplies the second filter stage's Q by this
+const RESO_RANGE: f32 = 8.0;
 const ENVELOPE_FLOOR: f32 = 0.00001;
 
-/// Times in seconds, Color in Hz, Volume in dB, Tune as a frequency ratio, the rest 0 to 1.
+/// Times in seconds, Color in Hz, Spread and Curve -1 to 1, Volume in dB, Tune as a frequency ratio, the rest 0 to 1.
 #[derive(Clone, Copy, Debug)]
 pub struct HatParams {
     pub tune: f32,
-    pub noise: f32,
     pub color: f32,
     pub hold: f32,
     pub decay: f32,
+    pub spread: f32,
+    pub ring: f32,
+    pub reso: f32,
+    pub curve: f32,
     pub volume: f32,
     pub velocity: f32,
     pub play: Play
@@ -36,7 +49,8 @@ pub struct HatParams {
 impl Default for HatParams {
     fn default() -> Self {
         Self {
-            tune: 1.0, noise: 0.0, color: 7000.0, hold: 0.0, decay: 0.12, volume: 0.0, velocity: 0.5,
+            tune: 1.0, color: 7000.0, hold: 0.0, decay: 0.12, spread: 0.0, ring: 0.0, reso: 0.0, curve: 0.0,
+            volume: 0.0, velocity: 0.5,
             play: Play::Mono
         }
     }
@@ -51,24 +65,7 @@ struct Voice {
     transpose: f32,
     phases: [f32; 6],
     amp: HitEnvelope,
-    noise: WhiteNoise,
     filters: [Svf; 3]
-}
-
-/// A band-limited square (polyBLEP) from a phase in 0 to 1 advancing by `step`.
-#[inline]
-fn square(phase: f32, step: f32) -> f32 {
-    let blep = |position: f32| {
-        if position < step {
-            let ratio = position / step;
-            ratio + ratio - ratio * ratio - 1.0
-        } else if position > 1.0 - step {
-            let ratio = (position - 1.0) / step;
-            ratio * ratio + ratio + ratio + 1.0
-        } else {0.0}
-    };
-    let half = if phase < 0.5 {phase + 0.5} else {phase - 0.5};
-    (if phase < 0.5 {1.0} else {-1.0}) + blep(phase) - blep(half)
 }
 
 impl Voice {
@@ -79,7 +76,6 @@ impl Voice {
         self.age = age;
         self.level = strength;
         self.transpose = transpose;
-        self.noise.reset(age.wrapping_mul(0x85EB_CA6B) ^ 0x4A71);
         if restart {
             self.filters.iter_mut().for_each(|filter| filter.reset());
             let mut random = WhiteNoise::default();
@@ -87,24 +83,30 @@ impl Voice {
             self.phases = core::array::from_fn(|_| (random.next() + 1.0) * 0.5);
         }
         self.amp.set(0.0, params.hold.max(0.0), params.decay.max(0.005), sample_rate);
+        self.amp.set_curve(params.curve);
         self.amp.set_floor(ENVELOPE_FLOOR);
         if params.play == Play::Gate {self.amp.trigger_held(1.0);} else {self.amp.trigger(1.0);}
     }
 
     #[inline]
-    fn render(&mut self, params: &HatParams, high: &[SvfCoefficients; 2], low: &SvfCoefficients,
-              sample_rate: f32) -> f32 {
+    fn render(&mut self, params: &HatParams, squares: &[f32; 6], high: &[SvfCoefficients; 2],
+              low: &SvfCoefficients, sample_rate: f32) -> f32 {
         let scale = params.tune * libm::exp2f(self.transpose / 12.0) / sample_rate;
         let mut metal = 0.0;
-        for (phase, frequency) in self.phases.iter_mut().zip(SQUARES.iter()) {
+        let mut waves = [0.0; 6];
+        for ((phase, frequency), wave) in self.phases.iter_mut().zip(squares.iter()).zip(waves.iter_mut()) {
             let step = (frequency * scale).min(0.45);
-            metal += square(*phase, step);
+            *wave = square(*phase, step);
+            metal += *wave;
             *phase += step;
             if *phase >= 1.0 {*phase -= 1.0;}
         }
-        let angle = params.noise.clamp(0.0, 1.0) * core::f32::consts::FRAC_PI_2;
-        let source = metal / 6.0 * libm::cosf(angle) + self.noise.next() * libm::sinf(angle) * NOISE_MATCH;
-        let filtered = self.filters[0].process(source, &high[0]).high;
+        let mut metal = metal / 6.0;
+        if params.ring > 0.0 {
+            let ring = (waves[0] * waves[1] + waves[2] * waves[3] + waves[4] * waves[5]) / 3.0;
+            metal += (ring - metal) * params.ring.min(1.0);
+        }
+        let filtered = self.filters[0].process(metal, &high[0]).high;
         let filtered = self.filters[1].process(filtered, &high[1]).high;
         let filtered = self.filters[2].process(filtered, low).low;
         let value = filtered * self.amp.next();
@@ -144,12 +146,20 @@ impl Hat {
     pub fn process(&mut self, params: &HatParams, output: &mut [f32]) {
         let sample_rate = self.sample_rate;
         let nyquist_guard = sample_rate * 0.45;
-        let high = HIGH_PASS_Q.map(|q| SvfCoefficients::new(params.color.clamp(200.0, nyquist_guard), q, sample_rate));
+        let color = params.color.clamp(200.0, nyquist_guard);
+        let peak = HIGH_PASS_Q[1] * (1.0 + params.reso.clamp(0.0, 1.0) * (RESO_RANGE - 1.0));
+        let high = [HIGH_PASS_Q[0], peak].map(|q| SvfCoefficients::new(color, q, sample_rate));
+        let squares = if params.spread == 0.0 {SQUARES} else {
+            let exponent = 1.0 + params.spread.clamp(-1.0, 1.0) * SPREAD_RANGE;
+            SQUARES.map(|frequency| SQUARES[0] * libm::powf(frequency / SQUARES[0], exponent))
+        };
         let low = SvfCoefficients::new(TOP.min(nyquist_guard), 0.707, sample_rate);
-        let volume = libm::powf(10.0, params.volume / 20.0);
+        let darker = if color < COLOR_REFERENCE {libm::powf(color / COLOR_REFERENCE, COLOR_COMPENSATION)} else {1.0};
+        let peaked = if params.reso > 0.0 {1.0 / libm::sqrtf(peak / HIGH_PASS_Q[1])} else {1.0};
+        let volume = libm::powf(10.0, params.volume / 20.0) * darker * peaked;
         for value in output.iter_mut() {
             *value = self.voices.iter_mut().filter(|voice| voice.active)
-                .map(|voice| voice.render(params, &high, &low, sample_rate)).sum::<f32>() * volume;
+                .map(|voice| voice.render(params, &squares, &high, &low, sample_rate)).sum::<f32>() * volume;
         }
     }
 
@@ -176,9 +186,11 @@ mod tests {
 
     #[test]
     fn every_parameter_extreme_stays_finite_and_bounded() {
-        let low = HatParams {tune: 0.25, noise: 0.0, color: 200.0, hold: 0.0, decay: 0.005,
+        let low = HatParams {tune: 0.25, color: 200.0, hold: 0.0, decay: 0.005, spread: -1.0, ring: 0.0,
+            reso: 0.0, curve: -1.0,
             volume: -36.0, velocity: 0.0, play: Play::Mono};
-        let high = HatParams {tune: 4.0, noise: 1.0, color: 16000.0, hold: 0.5, decay: 4.0,
+        let high = HatParams {tune: 4.0, color: 16000.0, hold: 0.5, decay: 4.0, spread: 1.0, ring: 1.0,
+            reso: 1.0, curve: 1.0,
             volume: 0.0, velocity: 1.0, play: Play::Poly};
         for params in [low, high, HatParams::default()] {
             let samples = render(&params, 1.0);
@@ -188,7 +200,7 @@ mod tests {
 
     #[test]
     fn identical_renders() {
-        let params = HatParams {noise: 0.5, ..HatParams::default()};
+        let params = HatParams {ring: 0.5, ..HatParams::default()};
         assert_eq!(render(&params, 0.3), render(&params, 0.3));
     }
 

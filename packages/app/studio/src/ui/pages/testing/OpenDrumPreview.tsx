@@ -1,7 +1,7 @@
 import css from "./OpenDrumPreview.sass?inline"
 import referenceCss from "./OpenDrumReference.sass?inline"
 import navigationCss from "./OpenDrumNavigation.sass?inline"
-import {Color, DefaultObservableValue, Lifecycle, Notifier, Option, Provider} from "@opendaw/lib-std"
+import {Color, DefaultObservableValue, Lifecycle, Notifier, Option, Provider, tryCatch} from "@opendaw/lib-std"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {CanvasPainter} from "@opendaw/studio-core"
@@ -129,10 +129,13 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         const groups: ReadonlyArray<HTMLElement> = [
             group(lifecycle, refresh, "orange", "Source", 1, [
                 field("Tune", 0.25, 4, 0.01, Formats.fixed(2, ""), "tune"),
-                field("Noise", 0, 1, 0.01, Formats.percent, "noise")
-            ]),
-            group(lifecycle, refresh, "yellow", "Filter", 1, [
                 field("Color", 200, 16000, 50, Formats.hertz, "color")
+            ]),
+            group(lifecycle, refresh, "purple", "Character", 1, [
+                field("Spread", -1, 1, 0.01, Formats.percent, "spread"),
+                field("Ring", 0, 1, 0.01, Formats.percent, "ring"),
+                field("Reso", 0, 1, 0.01, Formats.percent, "reso"),
+                field("Curve", -1, 1, 0.01, Formats.percent, "curve")
             ]),
             group(lifecycle, refresh, "green", "Shape", 1, [
                 field("Hold", 0, 0.5, 0.005, Formats.seconds, "hold"),
@@ -271,10 +274,12 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
     const devices: ReadonlyArray<Device> = [
         // set from the measured spectrum and decays of the 808 hats (2026-11-13)
         hatDevice("Hat (808 closed)", {
-            tune: 1, noise: 0, color: 6300, hold: 0, decay: 0.13, volume: 0, velocity: 0.5, play: 0
+            tune: 1, color: 6300, hold: 0, decay: 0.13, spread: 0, ring: 0, reso: 0, curve: 0,
+            volume: 0, velocity: 0.5, play: 0
         }, "TR808WAV/CH/CH.WAV"),
         hatDevice("Hat (808 open)", {
-            tune: 1, noise: 0, color: 6200, hold: 0.03, decay: 0.15, volume: 0, velocity: 0.5, play: 0
+            tune: 1, color: 6200, hold: 0.2, decay: 0.15, spread: 0, ring: 0, reso: 0, curve: 0,
+            volume: 0, velocity: 0.5, play: 0
         }, "TR808WAV/OH/OH00.WAV"),
         // set from the measured tones, envelope and bands of the references (2026-11-13)
         rimDevice("Rim (808)", {
@@ -386,7 +391,15 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         const noiseOnly = lifecycle.own(new DefaultObservableValue(false))
         const canvas: HTMLCanvasElement = <canvas/>
         const length: HTMLElement = <span className="length"/>
-        let hit: Option<OpenDrumSynth.Hit> = render()
+        // a stale engine (the page sends more or fewer values than it expects) shows as a status, not a wrong sound
+        const safeRender = (): Option<OpenDrumSynth.Hit> => {
+            const result = tryCatch(render)
+            if (result.status === "success") {return result.value}
+            status = "engine out of date, rebuild the wasm"
+            console.warn(result.error)
+            return Option.None
+        }
+        let hit: Option<OpenDrumSynth.Hit> = safeRender()
         const painter = lifecycle.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight, devicePixelRatio}) => {
             const width = actualWidth * devicePixelRatio
             const height = actualHeight * devicePixelRatio
@@ -431,7 +444,7 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
             context.setLineDash([])
         }))
         const update = (): void => {
-            hit = render()
+            hit = safeRender()
             length.textContent = hit.match({
                 none: () => status,
                 some: ({samples}) => Formats.seconds.print(samples.length / OpenDrumSynth.SampleRate).join(" ")
