@@ -4,6 +4,8 @@ import {int} from "@opendaw/lib-std"
 export namespace OpenDrumSynth {
     export const SampleRate = 48000
     export const MaxSeconds = 2.0
+    // long sounds render (and play) this much, the display still shows MaxSeconds
+    const LongSeconds = 8.0
     // every hit and every reference plays 6 dB down, so a loud hit never clips and levels stay comparable
     export const Headroom = 0.5
     export const PlayModes: ReadonlyArray<string> = ["Mono", "Poly", "Gate"]
@@ -54,6 +56,10 @@ export namespace OpenDrumSynth {
         color: number, attack: number, decay: number, curve: number
         volume: number, velocity: number, play: number
     }
+    export type Cymbal = {
+        tune: number, tone: number, attack: number, decay: number
+        volume: number, velocity: number, play: number
+    }
     type Contour = {
         readonly pitch: number, readonly sweep: number, readonly drift: number, readonly decay: number
         readonly punch: number, readonly velocity: number
@@ -72,6 +78,7 @@ export namespace OpenDrumSynth {
         renderRim(rim: Rim): Hit
         renderHat(hat: Hat): Hit
         renderShaker(shaker: Shaker): Hit
+        renderCymbal(cymbal: Cymbal): Hit
     }
 
     type Exports = {
@@ -84,6 +91,7 @@ export namespace OpenDrumSynth {
         rim_param_count(): int
         hat_param_count(): int
         shaker_param_count(): int
+        cymbal_param_count(): int
         render_kick(params: int, velocity: number, bpm: number, sampleRate: number, output: int, frames: int): void
         render_snare(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_clap(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
@@ -91,6 +99,7 @@ export namespace OpenDrumSynth {
         render_rim(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_hat(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
         render_shaker(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
+        render_cymbal(params: int, velocity: number, sampleRate: number, output: int, frames: int): void
     }
 
     const isExports = (value: WebAssembly.Exports): value is WebAssembly.Exports & Exports =>
@@ -98,6 +107,7 @@ export namespace OpenDrumSynth {
         && typeof value.render_snare === "function" && typeof value.render_clap === "function"
         && typeof value.render_tom === "function" && typeof value.render_rim === "function"
         && typeof value.render_hat === "function" && typeof value.render_shaker === "function"
+        && typeof value.render_cymbal === "function"
 
     // the display curves follow the engine: the sweeps fall exponentially, the level blends exponential and linear
     const curves = (kick: Contour, frames: int): Pick<Hit, "envelope" | "pitch" | "softPitch"> => {
@@ -128,10 +138,12 @@ export namespace OpenDrumSynth {
         const exports = instance.exports
         if (!isExports(exports)) {return Promise.reject(new Error(`${ModuleUrl} has unexpected exports`))}
         const count = Math.max(exports.kick_param_count(), exports.snare_param_count(), exports.clap_param_count(),
-            exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count(), exports.shaker_param_count())
+            exports.tom_param_count(), exports.rim_param_count(), exports.hat_param_count(), exports.shaker_param_count(),
+            exports.cymbal_param_count())
         const frames = MaxSeconds * SampleRate
         const params = exports.alloc_floats(count)
-        const output = exports.alloc_floats(frames)
+        const longFrames = LongSeconds * SampleRate
+        const output = exports.alloc_floats(longFrames)
         // the page and the served engine must agree on the number of values, a stale engine would shift them
         const write = (values: ReadonlyArray<number>, expected: int): void => {
             if (values.length !== expected) {
@@ -139,11 +151,11 @@ export namespace OpenDrumSynth {
             }
             new Float32Array(exports.memory.buffer, params, values.length).set(values)
         }
-        const collect = (contour: Contour): Hit => {
-            const rendered = new Float32Array(exports.memory.buffer, output, frames)
-            let last = frames - 1
+        const collect = (contour: Contour, renderedFrames: int = frames): Hit => {
+            const rendered = new Float32Array(exports.memory.buffer, output, renderedFrames)
+            let last = renderedFrames - 1
             while (last > 0 && Math.abs(rendered[last]) < 0.0001) {last--}
-            const length = Math.min(frames, last + 1 + 480)
+            const length = Math.min(renderedFrames, last + 1 + 480)
             const samples = rendered.slice(0, length)
             samples.forEach((value, index) => samples[index] = value * Headroom)
             return {samples, ...curves(contour, length)}
@@ -164,6 +176,14 @@ export namespace OpenDrumSynth {
                 write(values, exports.snare_param_count())
                 exports.render_snare(params, 1.0, SampleRate, output, frames)
                 return collect({...snare, drift: 0})
+            },
+            renderCymbal: (cymbal: Cymbal): Hit => {
+                const values = [cymbal.tune, cymbal.tone, cymbal.attack, cymbal.decay, cymbal.volume, cymbal.velocity,
+                    cymbal.play]
+                write(values, exports.cymbal_param_count())
+                exports.render_cymbal(params, 1.0, SampleRate, output, longFrames)
+                const contour = {pitch: 0, sweep: 0.001, drift: 0, decay: cymbal.decay, punch: 1, velocity: cymbal.velocity}
+                return collect(contour, longFrames)
             },
             renderShaker: (shaker: Shaker): Hit => {
                 const values = [shaker.color, shaker.attack, shaker.decay, shaker.curve, shaker.volume, shaker.velocity,

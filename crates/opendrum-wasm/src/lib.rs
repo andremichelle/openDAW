@@ -170,13 +170,13 @@ pub extern "C" fn render_hat(params: *const f32, velocity: f32, sample_rate: f32
 #[no_mangle]
 pub extern "C" fn cymbal_param_count() -> usize {CYMBAL_PARAMS}
 
-/// Params: tune, noise, tone, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
+/// Params: tune, tone, attack, decay, volume (dB), velocity, play (0 mono, 1 poly, 2 gate).
 #[no_mangle]
 pub extern "C" fn render_cymbal(params: *const f32, velocity: f32, sample_rate: f32, output: *mut f32, frames: usize) {
     let values = unsafe { core::slice::from_raw_parts(params, CYMBAL_PARAMS) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, frames) };
     let params = CymbalParams {
-        tune: values[0], noise: values[1], tone: values[2], decay: values[3], volume: values[4], velocity: values[5],
+        tune: values[0], tone: values[1], attack: values[2], decay: values[3], volume: values[4], velocity: values[5],
         play: play_of(values[6])
     };
     let mut cymbal = Cymbal::new(sample_rate);

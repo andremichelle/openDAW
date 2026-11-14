@@ -748,6 +748,20 @@ Covers zaps, lasers, blips, glitch hits, metallic and industrial hits.
    The level follows the passed band's width, every hit has its own noise. Preset: Color 7200 Hz, Attack 20 ms,
    Decay 12 ms, Curve 30 %: envelope within 1.9 dB (2 ms steps), spectrum within 2.3 dB (third octaves). Not
    judged by ear yet.
+   The Shaker was accepted ("perfect"), committed 3c4426893.
+9. openDrum Cymbal, 808 only (the 909 crash and ride are recordings). The first build (two bands) was 7 to 11 dB
+   off. Level per band over time (scratchpad band_env.py) showed three parts: a body around 2 to 5 kHz that swells
+   in over about 100 ms and rings longest (the Decay knob moves it most, the shortest setting cuts near 1 s), a top
+   above about 5 kHz with a peak near 6.5 kHz at full level from the start (-60 dB after about 0.85 s at the
+   shortest setting), and a bright part above about 8 kHz. The 808's Tone knob raises the bright part through the whole hit and
+   lowers the body by about 3 dB. Engine
+   `crates/opendrum/src/cymbal.rs` (5 tests), 7 parameters: Shape Tune, Tone (sizzle up, body down), Attack
+   (all parts fade in, the body never faster than its 40 ms swell), Decay; Play
+   Volume, Velocity, Mode. Body: fourth-order high-pass at 2.6 kHz, gentle low-pass at 4.5 kHz, 40 ms swell, a
+   straight fall over Decay. Top: fourth-order high-pass at 6 kHz with a resonant second stage, fading in
+   0.85 x Decay^0.6. Sizzle: high-pass at 9 kHz, as long as the top, level Tone, body x (1 - 0.4 Tone). Presets: CY0000 Tone 0 Decay 0.75 s (fine grid 4.2 dB),
+   CY7500 Tone 30 % Decay 0.9 s (4.7 dB), CY0075 Decay 5 s (6.2 dB); the bands sit within about 0 to 5 dB over the first
+   400 ms. The display in the preview covers 2 s, the long cymbal runs past it. Not judged by ear yet.
    4. Cymbal in progress: `crates/opendrum/src/cymbal.rs` (4 tests), the shared square oscillator moved to
       common.rs. Body and top as two fourth-order high-passes (2.8 and 6.5 kHz), the body swelling in over 15 ms
       and ringing for Decay, the top for 0.45 of it, Tone moving the weight. Still about 7 dB off the references

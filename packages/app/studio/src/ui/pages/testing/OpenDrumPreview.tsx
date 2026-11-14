@@ -119,6 +119,30 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
         return {name, engine: "Snare", color: Colors.green, groups, refresh, reference, poly: () => snare.play === 1,
             render: () => renderer.map(loaded => loaded.renderSnare(snare))}
     }
+    const cymbalDevice = (name: string, cymbal: OpenDrumSynth.Cymbal, reference: string): Device => {
+        const refresh = lifecycle.own(new Notifier<void>())
+        const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
+                       key: keyof OpenDrumSynth.Cymbal): OpenDrumControls.Field =>
+            ({name, get: () => cymbal[key], set: value => cymbal[key] = value, range: {min, max, step, format}})
+        const choice = (name: string, choices: ReadonlyArray<string>,
+                        key: keyof OpenDrumSynth.Cymbal): OpenDrumControls.Field =>
+            ({name, get: () => cymbal[key], set: value => cymbal[key] = value, choices})
+        const groups: ReadonlyArray<HTMLElement> = [
+            group(lifecycle, refresh, "orange", "Shape", 1, [
+                field("Tune", 0.25, 4, 0.01, Formats.fixed(2, ""), "tune"),
+                field("Tone", 0, 1, 0.01, Formats.percent, "tone"),
+                field("Attack", 0, 2, 0.001, Formats.seconds, "attack"),
+                field("Decay", 0.05, 8, 0.01, Formats.seconds, "decay")
+            ]),
+            group(lifecycle, refresh, "cream", "Play", 1, [
+                field("Volume", -36, 6, 0.5, Formats.decibel, "volume"),
+                field("Velocity", 0, 1, 0.01, Formats.percent, "velocity"),
+                choice("Mode", PlayModes, "play")
+            ])
+        ]
+        return {name, engine: "Cymbal", color: Colors.yellow, groups, refresh, reference, poly: () => cymbal.play === 1,
+            render: () => renderer.map(loaded => loaded.renderCymbal(cymbal))}
+    }
     const shakerDevice = (name: string, shaker: OpenDrumSynth.Shaker, reference: string): Device => {
         const refresh = lifecycle.own(new Notifier<void>())
         const field = (name: string, min: number, max: number, step: number, format: OpenDrumControls.Format,
@@ -296,6 +320,10 @@ export const OpenDrumPreview = ({lifecycle, audioContext}: Construct) => {
     let status: string = "loading the engine"
     // newest engine on top
     const devices: ReadonlyArray<Device> = [
+        // set from the measured bands over time of the 808 cymbals (2026-11-14)
+        cymbalDevice("Cymbal (808)", {
+            tune: 1, tone: 0, attack: 0, decay: 0.75, volume: 0, velocity: 0.5, play: 0
+        }, "TR808WAV/CY/CY0000.WAV"),
         // set from the measured swell, cut and spectrum of the 808 maracas (2026-11-14)
         shakerDevice("Maracas (808)", {
             color: 7200, attack: 0.02, decay: 0.012, curve: 0.3, volume: 0, velocity: 0.5, play: 0
