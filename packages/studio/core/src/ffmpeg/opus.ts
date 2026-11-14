@@ -19,10 +19,13 @@ export class OpusConverter implements FFmpegConverter<OpusOptions> {
                 inputData = await this.#worker.fetchFileData(source)
             }
             await this.#worker.ffmpeg.writeFile("input.wav", inputData)
+            // the stock @ffmpeg/core 0.12.x crashes on stereo libopus unless channels are coded independently
+            const mapping = OpusConverter.#channelCount(inputData) > 1 ? ["-mapping_family", "255"] : []
             await this.#worker.ffmpeg.exec([
                 "-y",
                 "-i", "input.wav",
                 "-c:a", "libopus",
+                ...mapping,
                 "-b:a", `${options?.bitrate ?? 160}k`,
                 "-vbr", "on",
                 "-compression_level", String(options?.complexity ?? 10),
@@ -38,5 +41,17 @@ export class OpusConverter implements FFmpegConverter<OpusOptions> {
             subscription.terminate()
             await this.#worker.cleanupFiles(["input.wav", "output.opus"])
         }
+    }
+
+    static #channelCount(data: Uint8Array): int {
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+        let position = 12
+        while (position + 8 <= data.byteLength) {
+            const id = String.fromCharCode(...data.subarray(position, position + 4))
+            const size = view.getUint32(position + 4, true)
+            if (id === "fmt " && position + 12 <= data.byteLength) {return view.getUint16(position + 10, true)}
+            position += 8 + size + (size & 1)
+        }
+        return 0
     }
 }
