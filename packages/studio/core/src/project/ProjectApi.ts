@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "../TrackHeightDefaults"
 import {
     Arrays,
     asInstanceOf,
@@ -175,6 +176,7 @@ export class ProjectApi {
         const instrumentBox = create(boxGraph, audioUnitBox.input, uniqueName, iconSymbol, options.attachment)
         const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
             box.index.setValue(0)
+            box.height.setValue(TrackHeightDefaults.get())
             box.type.setValue(trackType)
             box.tracks.refer(audioUnitBox.tracks)
             box.target.refer(audioUnitBox)
@@ -823,6 +825,7 @@ export class ProjectApi {
         const index = IndexedBox.insertOrder(field, insertIndex)
         return TrackBox.create(this.#project.boxGraph, UUID.generate(), box => {
             box.index.setValue(index)
+            box.height.setValue(TrackHeightDefaults.get())
             box.type.setValue(trackType)
             box.tracks.refer(field)
             box.target.refer(target ?? field.box)

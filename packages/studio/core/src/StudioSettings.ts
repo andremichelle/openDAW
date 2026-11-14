@@ -1,5 +1,5 @@
 import {z} from "zod"
-import {ColorSchemes, DefaultColorScheme} from "@opendaw/studio-enums"
+import {ColorSchemes, DefaultColorScheme, MaxTrackHeight} from "@opendaw/studio-enums"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
@@ -26,6 +26,7 @@ export const StudioSettingsSchema = z.object({
         "offer-studio-tour": true
     }),
     "timeline": z.object({
+        "default-track-height": z.number().int().min(48).max(MaxTrackHeight).catch(48),
         "markers": z.boolean(),
         "tempo": z.boolean(),
         "signature": z.boolean(),
@@ -34,6 +35,7 @@ export const StudioSettingsSchema = z.object({
         "clips": z.boolean(),
         "follow-cursor": z.boolean()
     }).default({
+        "default-track-height": 48,
         "markers": true,
         "tempo": false,
         "signature": false,
