@@ -165,6 +165,7 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.default({
                         label: "Record Studio...",
                         icon: IconSymbol.RecordStudio,
+                        shortcut: Global["toggle-studio-recording"].shortcut.format(),
                         separatorBefore: true,
                         hidden: !ScreenRecorder.isSupported(),
                         selectable: !service.screenRecorder.recording.getValue()

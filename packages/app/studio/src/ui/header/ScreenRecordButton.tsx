@@ -4,6 +4,8 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {ScreenRecorder} from "@/service/ScreenRecorder"
+import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -15,7 +17,10 @@ export const ScreenRecordButton = ({lifecycle, recorder}: Construct) => {
         <div style={{display: "flex"}}>
             <Button lifecycle={lifecycle}
                     onClick={() => recorder.stop()}
-                    appearance={{color: Colors.red, activeColor: Colors.red, tooltip: "Stop Studio Recording", cursor: "pointer"}}>
+                    appearance={{
+                        color: Colors.red, activeColor: Colors.red, cursor: "pointer",
+                        tooltip: ShortcutTooltip.create("Stop Studio Recording", GlobalShortcuts["toggle-studio-recording"].shortcut)
+                    }}>
                 <Icon symbol={IconSymbol.Stop}/>
             </Button>
         </div>

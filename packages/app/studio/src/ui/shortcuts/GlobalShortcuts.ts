@@ -59,6 +59,10 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyK, {ctrl}),
         description: "Show or hide software keyboard"
     },
+    "toggle-studio-recording": {
+        shortcut: Shortcut.of(Key.KeyE, {ctrl, shift}),
+        description: "Start or stop the studio recording"
+    },
     "toggle-device-panel": {
         shortcut: Shortcut.of(Key.KeyD, {shift}),
         description: "Show or hide device panel"

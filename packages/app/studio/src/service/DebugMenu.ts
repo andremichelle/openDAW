@@ -10,6 +10,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {SyncLogService} from "@/service/SyncLogService"
 import {Dialogs} from "@/ui/components/dialogs"
 import {NextcloudDebug} from "@/service/NextcloudDebug"
+import {DemoModeRoute} from "@/service/StudioNavigation"
 
 export const createDebugMenu = (service: StudioService) => MenuItem.default({
     label: "Debug",
@@ -55,6 +56,8 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/signal-graph")),
     MenuItem.default({label: "・ Benchmark"})
         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/performance")),
+    MenuItem.default({label: "・ Demo Mode"})
+        .setTriggerProcedure(() => RouteLocation.get().navigateTo(DemoModeRoute)),
     MenuItem.default({
         label: "Throw an error in main-thread 💣",
         separatorBefore: true,

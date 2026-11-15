@@ -15,6 +15,7 @@ import {EngineFacade} from "@opendaw/studio-core"
 import {ScreenRecording} from "@/service/ScreenRecording"
 
 type TabCaptureOptions = DisplayMediaStreamOptions & {
+    video: MediaTrackConstraints & { cursor: "never" }
     preferCurrentTab: boolean, selfBrowserSurface: "include", surfaceSwitching: "exclude"
 }
 
@@ -22,9 +23,7 @@ const FrameRate = 60
 
 export class ScreenRecorder {
     static isSupported(): boolean {
-        const chromium = Browser.isChrome() || navigator.userAgent.includes("Edg/")
-        return chromium && Browser.isWeb() && !Browser.isMobile()
-            && isDefined(navigator.mediaDevices?.getDisplayMedia) && isDefined(window.VideoEncoder)
+        return Browser.isWeb() && isDefined(navigator.mediaDevices?.getDisplayMedia) && isDefined(window.VideoEncoder)
             && isDefined(window.AudioEncoder) && isDefined(window.MediaStreamTrackProcessor)
             && isDefined(window.showSaveFilePicker)
     }
@@ -46,7 +45,7 @@ export class ScreenRecorder {
     async start(): Promise<void> {
         if (this.#recording.getValue()) {return}
         const options: TabCaptureOptions = {
-            video: {frameRate: {ideal: FrameRate, max: FrameRate}}, audio: false,
+            video: {frameRate: {ideal: FrameRate, max: FrameRate}, cursor: "never"}, audio: false,
             preferCurrentTab: true, selfBrowserSurface: "include", surfaceSwitching: "exclude"
         }
         const {status, value: display, error} = await Promises.tryCatch(navigator.mediaDevices.getDisplayMedia(options))

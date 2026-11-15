@@ -1,5 +1,6 @@
 import {
     Arrays,
+    EmptyExec,
     isNull,
     JSONValue,
     Objects,
@@ -12,6 +13,7 @@ import {Devices} from "@opendaw/studio-adapters"
 import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
+import {ScreenRecorder} from "@/service/ScreenRecorder"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
@@ -124,6 +126,16 @@ export namespace StudioShortcutManager {
             }),
             gc.register(gs["capture-midi"].shortcut, () => service.runIfProject(project => project.commitMidiCapture())),
             gc.register(gs["toggle-software-keyboard"].shortcut, () => service.toggleSoftwareKeyboard()),
+            gc.register(gs["toggle-studio-recording"].shortcut, () => {
+                const {screenRecorder} = service
+                if (screenRecorder.recording.getValue()) {
+                    screenRecorder.stop()
+                    return true
+                }
+                if (!ScreenRecorder.isSupported()) {return false}
+                screenRecorder.start().then(EmptyExec)
+                return true
+            }),
             gc.register(gs["toggle-device-panel"].shortcut, () => panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()),
             gc.register(gs["toggle-content-editor-panel"].shortcut, () => panelLayout.getByType(PanelType.ContentEditor).toggleMinimize()),
             gc.register(gs["toggle-browser-panel"].shortcut, () => panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()),

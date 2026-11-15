@@ -30,8 +30,9 @@ import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
 import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
+import {DemoModePage} from "@/ui/pages/DemoModePage"
 import {TestingPage} from "@/ui/pages/TestingPage"
-import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {DemoModeRoute, DevicePreviewRoute} from "@/service/StudioNavigation"
 import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
 import {SampleEditorRoute} from "@/service/SampleEditorService"
 import {ContestPage} from "@/ui/pages/contest/ContestPage"
@@ -49,8 +50,8 @@ export const App = (service: StudioService) => {
     const footer: HTMLElement = <Footer lifecycle={terminator} service={service}/>
     terminator.own(RouteLocation.get().catchupAndSubscribe(({path}) => {
         const standalone = StandaloneRoutes.has(path)
-        header.classList.toggle("hidden", standalone)
-        footer.classList.toggle("hidden", standalone)
+        header.classList.toggle("hidden", standalone || path === DemoModeRoute)
+        footer.classList.toggle("hidden", standalone || path === DemoModeRoute)
     }))
     return (
         <Frag>
@@ -100,7 +101,8 @@ export const App = (service: StudioService) => {
                     {path: "/performance/sample-read", factory: SampleReadPage},
                     {path: "/join/*", factory: JoinRoomPage},
                     {path: "/contests/*", factory: ContestPage},
-                    {path: DevicePreviewRoute, factory: DevicePreviewPage}
+                    {path: DevicePreviewRoute, factory: DevicePreviewPage},
+                    {path: DemoModeRoute, factory: DemoModePage}
                 ]}
             />
             <ChatOverlay lifecycle={terminator} service={service}/>

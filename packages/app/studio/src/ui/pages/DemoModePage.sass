@@ -1,0 +1,105 @@
+@use "@/colors"
+
+component
+  flex: 1
+  display: flex
+  overflow: hidden
+  @include colors.panel-background
+
+  &.cursor-hidden, &.cursor-hidden *
+    cursor: none !important
+
+  > div.picker
+    flex: 0 0 14em
+    display: flex
+    flex-direction: column
+    row-gap: 0.5em
+    padding: 1em
+    overflow: hidden
+    border-right: 1px rgba(white, 0.08) solid
+
+    > h5
+      margin: 0
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      color: var(--color-cream)
+
+      > span
+        font-size: 0.625rem
+        font-weight: normal
+        color: var(--color-dark)
+
+    > div.list
+      flex: 1 0 0
+      display: flex
+      flex-direction: column
+      align-items: stretch
+      row-gap: 2px
+      overflow: hidden auto
+      mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 4px), transparent)
+
+      > h6
+        margin: 0.75em 0 0.25em 0
+        color: var(--color-gray)
+
+      > button
+        appearance: none
+        border: none
+        outline: none
+        text-align: left
+        padding: 0.25em 0.5em
+        border-radius: 2px
+        color: var(--color-gray)
+        background: transparent
+        border-left: 2px transparent solid
+
+        &.midi
+          border-left-color: var(--color-orange)
+
+        &.source
+          border-left-color: var(--color-green)
+
+        &.audio
+          border-left-color: var(--color-blue)
+
+        &:hover
+          color: var(--color-bright)
+
+        &.selected
+          color: var(--color-bright)
+          background: rgba(white, 0.08)
+
+  > div.stage
+    flex: 1 0 0
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: safe center
+    row-gap: 16px
+    padding: 16px
+    overflow: auto
+
+    > div.browser
+      flex: 1 0 0
+      width: min(48em, 100%)
+      display: flex
+      flex-direction: column
+      min-height: 0
+
+    > div
+      flex: 0 0 auto
+      height: 232px
+      display: flex
+
+      &.midi
+        border-top: 1px var(--color-orange) solid
+        background: linear-gradient(to bottom, var(--color-orange) -500%, transparent 20%)
+
+      &.source
+        border-top: 1px var(--color-green) solid
+        background: linear-gradient(to bottom, var(--color-green) -500%, transparent 20%)
+
+      &.audio
+        border-top: 1px var(--color-blue) solid
+        background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
