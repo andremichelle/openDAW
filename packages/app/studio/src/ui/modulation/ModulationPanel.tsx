@@ -40,7 +40,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
                 <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent =>
                     parent.addMenuItem(...Modulators.Kinds.map(kind => MenuItem.default({label: kind.label})
                         .setTriggerProcedure(() => editing.modify(() => kind.create(project))))))}
-                            appearance={{color: Colors.cream}}>
+                            appearance={{color: Colors.orange}}>
                     <Icon symbol={IconSymbol.Add}/>
                 </MenuButton>
             </h5>

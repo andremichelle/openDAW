@@ -12,6 +12,7 @@ import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
+import {ScreenRecorder} from "@/service/ScreenRecorder"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -160,7 +161,15 @@ export const populateStudioMenu = (service: StudioService) => {
                         label: "Statistics",
                         icon: IconSymbol.Charts
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/stats")),
-                    createDebugMenu(service)
+                    createDebugMenu(service),
+                    MenuItem.default({
+                        label: "Record Studio...",
+                        icon: IconSymbol.RecordStudio,
+                        shortcut: Global["toggle-studio-recording"].shortcut.format(),
+                        separatorBefore: true,
+                        hidden: !ScreenRecorder.isSupported(),
+                        selectable: !service.screenRecorder.recording.getValue()
+                    }).setTriggerProcedure(() => service.screenRecorder.start())
                 )
             }
         )

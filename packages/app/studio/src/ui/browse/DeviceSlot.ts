@@ -1,4 +1,4 @@
-import {asInstanceOf, int, isAbsent, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Attempt, Func, int, isAbsent, isInstanceOf, Option, Optional, UUID} from "@opendaw/lib-std"
 import {Box, Field, IndexedBox} from "@opendaw/lib-box"
 import {
     AudioCompositeAdapter,
@@ -15,8 +15,8 @@ import {
     PresetHeader,
     TrackType
 } from "@opendaw/studio-adapters"
-import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox} from "@opendaw/studio-boxes"
-import {EffectFactories, Project} from "@opendaw/studio-core"
+import {AudioEffectCompositeCellBox, AudioUnitBox, InstrumentCompositeBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
+import {AudioUnitInsertion, CompositeLayerProduct, EffectFactories, Project} from "@opendaw/studio-core"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 
 // where the device dialog creates or replaces a device
@@ -24,8 +24,9 @@ export type DeviceSlot =
     | { readonly type: "insert", readonly host: DeviceHost, readonly accepts: "audio" | "midi", readonly index: int }
     | { readonly type: "replace-effect", readonly host: DeviceHost, readonly accepts: "audio" | "midi", readonly index: int }
     | { readonly type: "replace-instrument", readonly host: DeviceHost }
-    | { readonly type: "new-instrument", readonly anchor: Option<UUID.Bytes> }
+    | { readonly type: "new-instrument", readonly insertion: AudioUnitInsertion }
     | { readonly type: "new-layer", readonly host: DeviceHost, readonly composite: InstrumentCompositeBox }
+    | { readonly type: "new-pad", readonly host: DeviceHost, readonly playfield: PlayfieldDeviceBox, readonly key: int }
     | { readonly type: "new-entry", readonly host: DeviceHost, readonly composite: AudioCompositeAdapter }
 
 export namespace DeviceSlot {
@@ -44,13 +45,24 @@ export namespace DeviceSlot {
             case "replace-instrument":
             case "new-instrument":
             case "new-layer":
+            case "new-pad":
                 return "instrument"
         }
     }
 
     // whether notes played into the slot's audio unit reach what is auditioned
     export const takesNotes = (slot: DeviceSlot): boolean => slot.type === "new-instrument" || slot.type === "new-layer"
+        || slot.type === "new-pad"
         || slot.host.audioUnitBoxAdapter().inputAdapter.mapOr(input => input.accepts === "midi", false)
+
+    // a pad hears only its own key, so its audition plays that key
+    export const padKey = (slot: DeviceSlot): Option<int> => {
+        if (slot.type === "new-pad") {return Option.wrap(slot.key)}
+        if (slot.type === "replace-instrument" && isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter) && slot.host.isPad) {
+            return Option.wrap(slot.host.indexField.getValue())
+        }
+        return Option.None
+    }
 
     export const isReplace = (slot: DeviceSlot): boolean =>
         slot.type === "replace-effect" || slot.type === "replace-instrument"
@@ -86,9 +98,11 @@ export namespace DeviceSlot {
                 return factory !== InstrumentFactories.Tape
             case "new-layer":
                 return InstrumentFactories.isLayerInstrument(factory)
+            case "new-pad":
+                return InstrumentFactories.isPadInstrument(factory)
             case "replace-instrument":
                 if (isInstanceOf(slot.host, InstrumentCompositeCellBoxAdapter)) {
-                    return InstrumentFactories.isLayerInstrument(factory)
+                    return InstrumentFactories.fitsCell(slot.host.box, factory)
                 }
                 return factory.trackType === TrackType.Notes
                     && slot.host.inputAdapter.mapOr(input => input.accepts === "midi", false)
@@ -114,8 +128,7 @@ export namespace DeviceSlot {
     export const placeRack = (project: Project, slot: DeviceSlot, bytes: ArrayBuffer, keepTimeline: boolean): boolean => {
         switch (slot.type) {
             case "new-instrument": {
-                const insertIndex = slot.anchor.flatMap(unit => project.api.audioUnitIndex(unit)).unwrapOrUndefined()
-                const first = PresetDecoder.decode(bytes, project.skeleton, insertIndex).at(0)
+                const first = project.api.importAudioUnitsAt(bytes, slot.insertion).at(0)
                 if (isAbsent(first)) {return false}
                 project.userEditingManager.audioUnit.edit(first.editing)
                 return true
@@ -162,8 +175,7 @@ export namespace DeviceSlot {
         const {api} = project
         switch (slot.type) {
             case "new-instrument": {
-                const {audioUnitBox, instrumentBox} = api.createAnyInstrument(factory)
-                api.placeAudioUnitBefore(audioUnitBox, slot.anchor)
+                const {instrumentBox} = api.createInstrumentAt(factory, slot.insertion)
                 return Option.wrap(instrumentBox)
             }
             case "replace-instrument": {
@@ -174,6 +186,8 @@ export namespace DeviceSlot {
             }
             case "new-layer":
                 return api.createCompositeLayer(slot.composite, factory).asOption().map(({instrumentBox}) => instrumentBox)
+            case "new-pad":
+                return api.createPlayfieldPad(slot.playfield, slot.key, factory).asOption().map(({instrumentBox}) => instrumentBox)
             default:
                 return Option.None
         }
@@ -182,6 +196,14 @@ export namespace DeviceSlot {
     export const hasTimeline = (slot: DeviceSlot): boolean =>
         slot.type === "replace-instrument" && slot.host.isAudioUnit
         && slot.host.audioUnitBoxAdapter().box.tracks.pointerHub.incoming().length > 0
+
+    // a new cell from `create` holding the preset's instrument
+    const presetIntoCell = (bytes: ArrayBuffer, device: string,
+                            create: Func<InstrumentFactory, Attempt<CompositeLayerProduct<InstrumentBox>, string>>): boolean => {
+        const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[device as InstrumentFactories.Keys]
+        if (isAbsent(factory)) {return false}
+        return create(factory).asOption().mapOr(({cellBox}) => PresetDecoder.replaceLayerInstrument(bytes, cellBox).isSuccess(), false)
+    }
 
     // applies preset bytes at the slot, false when the preset does not fit
     export const placePreset = (project: Project, slot: DeviceSlot, bytes: ArrayBuffer,
@@ -214,17 +236,14 @@ export namespace DeviceSlot {
             case "new-instrument": {
                 const factory = InstrumentFactories.Named[device as InstrumentFactories.Keys]
                 if (isAbsent(factory)) {return false}
-                const {audioUnitBox} = project.api.createAnyInstrument(factory)
-                project.api.placeAudioUnitBefore(audioUnitBox, slot.anchor)
+                const {audioUnitBox} = project.api.createInstrumentAt(factory, slot.insertion)
                 return PresetDecoder.replaceAudioUnit(bytes, asInstanceOf(audioUnitBox, AudioUnitBox),
                     {keepMIDIEffects: true, keepAudioEffects: true}).isSuccess()
             }
-            case "new-layer": {
-                const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[device as InstrumentFactories.Keys]
-                if (isAbsent(factory)) {return false}
-                return project.api.createCompositeLayer(slot.composite, factory).asOption()
-                    .mapOr(({cellBox}) => PresetDecoder.replaceLayerInstrument(bytes, cellBox).isSuccess(), false)
-            }
+            case "new-layer":
+                return presetIntoCell(bytes, device, factory => project.api.createCompositeLayer(slot.composite, factory))
+            case "new-pad":
+                return presetIntoCell(bytes, device, factory => project.api.createPlayfieldPad(slot.playfield, slot.key, factory))
         }
     }
 }

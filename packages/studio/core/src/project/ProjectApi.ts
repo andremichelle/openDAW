@@ -36,6 +36,7 @@ import {
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    PlayfieldDeviceBox,
     TrackBox,
     ValueClipBox,
     ValueEventBox,
@@ -45,13 +46,17 @@ import {
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
+    CellInstrument,
+    PlayfieldPads,
     AudioClipBoxAdapter,
     AudioRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
+    AudioUnitGroups,
     CaptureBox,
     ColorCodes,
     DeviceAccepts,
+    Devices,
     DeviceBoxUtils,
     EffectPointerType,
     IndexedAdapterCollectionListener,
@@ -63,6 +68,7 @@ import {
     InterpolationFieldAdapter,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    PresetDecoder,
     ProjectQueries,
     RegionAdapters,
     RegionOverlap,
@@ -79,8 +85,14 @@ import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
 import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {PlayfieldPadToUnit} from "./PlayfieldPadToUnit"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
+
+export type AudioUnitInsertion = {
+    readonly before: Option<UUID.Bytes>
+    readonly parent: Option<UUID.Bytes>
+}
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -152,12 +164,12 @@ export class ProjectApi {
     createInstrument<A, INST extends InstrumentBox>(
         {create, defaultIcon, defaultName, trackType}: InstrumentFactory<A, INST>,
         options: InstrumentOptions<A> = {} as any): InstrumentProduct<INST> {
-        const {name, icon, index} = options
+        const {name, icon, index, destination} = options
         const {boxGraph, rootBox, userEditingManager} = this.#project
         assert(rootBox.isAttached(), "rootBox not attached")
         const existingNames = ProjectQueries.existingInstrumentNames(rootBox)
         const audioUnitBox = AudioUnitFactory.create(this.#project.skeleton,
-            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index)
+            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index, destination)
         const uniqueName = Strings.getUniqueName(existingNames, name ?? defaultName)
         const iconSymbol = icon ?? defaultIcon
         const instrumentBox = create(boxGraph, audioUnitBox.input, uniqueName, iconSymbol, options.attachment)
@@ -173,6 +185,67 @@ export class ProjectApi {
 
     createAnyInstrument(factory: InstrumentFactory<any, any>): InstrumentProduct<InstrumentBox> {
         return this.createInstrument(factory)
+    }
+
+    createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
+        return this.createInstrumentAt(factory, this.insertionAfterSelection())
+    }
+
+    insertionAfterSelection(): AudioUnitInsertion {
+        const {audioUnitSelection, audioUnitLayout} = this.#project
+        const selected = AudioUnitGroups.roots(audioUnitSelection.selected())
+        const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
+        return this.insertionAfter(Option.wrap(anchor))
+    }
+
+    insertionAfterEditing(): AudioUnitInsertion {
+        return this.insertionAfter(this.#project.userEditingManager.audioUnit.get()
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None))
+    }
+
+    insertionAfter(anchor: Option<AudioUnitBox>): AudioUnitInsertion {
+        const parent = anchor.flatMap(AudioUnitGroups.parent)
+        const siblings = AudioUnitGroups.children(this.#project.rootBox, parent.unwrapOrUndefined())
+        const before = anchor.flatMap(unit => Option.wrap(siblings[siblings.indexOf(unit) + 1]))
+        return {before: before.map(unit => unit.address.uuid), parent: parent.map(unit => unit.address.uuid)}
+    }
+
+    insertionBefore(anchor: Option<UUID.Bytes>): AudioUnitInsertion {
+        return {before: anchor, parent: anchor.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(AudioUnitGroups.parent).map(unit => unit.address.uuid)}
+    }
+
+    createInstrumentAt(factory: InstrumentFactory, insertion: AudioUnitInsertion): InstrumentProduct<InstrumentBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const product = this.createInstrument(factory, {destination})
+        this.placeAudioUnitsAt([product.audioUnitBox], insertion)
+        const {audioUnitSelection} = this.#project
+        audioUnitSelection.deselectAll()
+        audioUnitSelection.select(product.audioUnitBox)
+        return product
+    }
+
+    importAudioUnitsAt(bytes: ArrayBuffer, insertion: AudioUnitInsertion): ReadonlyArray<AudioUnitBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const imported = PresetDecoder.decode(bytes, this.#project.skeleton, undefined, destination)
+        this.placeAudioUnitsAt(AudioUnitGroups.roots(imported), insertion)
+        return imported
+    }
+
+    placeAudioUnitsAt(units: ReadonlyArray<AudioUnitBox>, insertion: AudioUnitInsertion): void {
+        if (insertion.parent.isEmpty() && insertion.before.isEmpty()) {return}
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const before = insertion.before.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.parent(unit).equals(parent) ? Option.wrap(unit) : Option.None)
+        this.#project.grouping.move(units, parent.unwrapOrUndefined(), before.unwrapOrUndefined())
+    }
+
+    #audioUnit(uuid: UUID.Bytes): Option<AudioUnitBox> {
+        return this.#project.boxGraph.findBox(uuid).flatMap(box => box instanceof AudioUnitBox ? Option.wrap(box) : Option.None)
     }
 
     // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).
@@ -224,7 +297,6 @@ export class ProjectApi {
             return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
         }
         const {boxGraph} = this.#project
-        const {create, defaultIcon, defaultName} = factory
         const layers = IndexedBox.collectIndexedBoxes(composite.cells)
         const index = clamp(atIndex, 0, layers.length)
         layers.slice(index).forEach((box, offset) => box.index.setValue(index + offset + 1))
@@ -232,16 +304,36 @@ export class ProjectApi {
             box.composite.refer(composite.cells)
             box.index.setValue(index)
         })
-        return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
+        return Attempts.ok({cellBox, instrumentBox: this.#createInCell(cellBox, factory, attachment)})
+    }
+
+    #createInCell<A, INST extends InstrumentBox>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A, INST>,
+                                                 attachment?: A): INST {
+        return CellInstrument.create(this.#project.boxGraph, cellBox, factory, undefined, attachment).result()
+    }
+
+    createPlayfieldPad<A, INST extends InstrumentBox>(playfield: PlayfieldDeviceBox, key: int,
+                                                     factory: InstrumentFactory<A, INST>,
+                                                     attachment?: A): Attempt<CompositeLayerProduct<INST>, string> {
+        if (!InstrumentFactories.isPadInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a pad`)
+        }
+        if (!Number.isInteger(key) || key < 0 || key > 127) {return Attempts.err(`${key} is no MIDI key`)}
+        if (PlayfieldPads.padAt(playfield, key).nonEmpty()) {
+            return Attempts.err(`Key ${key} already holds a pad`)
+        }
+        const cellBox = PlayfieldPads.createCell(this.#project.boxGraph, playfield, key)
+        return Attempts.ok({cellBox, instrumentBox: this.#createInCell(cellBox, factory, attachment)})
+    }
+
+    // the pad's instrument, chains, mix, automation and notes on a new unit next to the Playfield
+    movePadToUnit(cellBox: InstrumentCompositeCellBox,
+                  insertion: Option<AudioUnitInsertion> = Option.None): Attempt<AudioUnitBox, string> {
+        return PlayfieldPadToUnit.extract(this.#project, cellBox, insertion)
     }
 
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
-        if (!InstrumentFactories.isLayerInstrument(factory)) {
-            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
-        }
-        cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
-        const {create, defaultIcon, defaultName}: InstrumentFactory = factory
-        return Attempts.ok(create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment))
+        return CellInstrument.replace(this.#project.boxGraph, cellBox, factory, undefined, attachment)
     }
 
     moveCompositeLayer(composite: InstrumentCompositeBox, fromIndex: int, toIndex: int): void {
@@ -299,30 +391,49 @@ export class ProjectApi {
         return AudioUnitAsLayer.paste(this.#project, composite, data, notes)
     }
 
+    pasteAudioUnitAsPad(playfield: PlayfieldDeviceBox, key: int,
+                        data: ArrayBufferLike): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        return AudioUnitAsLayer.pasteAsPad(this.#project, playfield, key, data)
+    }
+
     // automation lanes are not copied
     duplicateCompositeLayer(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
-        const {boxGraph} = this.#project
         const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
-        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
-        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
         const insertIndex = cellBox.index.getValue() + 1
         IndexedBox.collectIndexedBoxes(composite.cells)
             .filter(box => box.index.getValue() >= insertIndex)
             .forEach(box => box.index.setValue(box.index.getValue() + 1))
+        const copy = this.#cloneCell(cellBox)
+        copy.index.setValue(insertIndex)
+        return copy
+    }
+
+    // a copy of a Playfield pad (its instrument and chains) on another key, automation lanes are not copied
+    copyPlayfieldPad(cellBox: InstrumentCompositeCellBox, key: int): InstrumentCompositeCellBox {
+        const copy = this.#cloneCell(cellBox)
+        copy.index.setValue(key)
+        return copy
+    }
+
+    #cloneCell(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
+        const {boxGraph} = this.#project
+        const composite = cellBox.composite.targetVertex.unwrap("composite.target").box
+        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
+        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
         PointerField.decodeWith({
             map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
                 address.map(addr => uuidMap.opt(addr.uuid).mapOr(({target}) => addr.moveTo(target), addr))
         }, () => TransferUtils.cloneBoxes([cellBox, ...dependencies]
             .filter(source => !TransferUtils.keepsIdentity(source)), uuidMap, boxGraph))
-        const copy = asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
+        return asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
             .unwrap("cell copy"), InstrumentCompositeCellBox)
-        copy.index.setValue(insertIndex)
-        return copy
     }
 
     deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {
-        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
-        const survivors = IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+        const composite = cellBox.composite.targetVertex.unwrap("composite.target").box
+        const survivors = isInstanceOf(composite, InstrumentCompositeBox)
+            ? IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+            : Arrays.empty<IndexedBox>()
         cellBox.delete()
         survivors.forEach((box, index) => box.index.setValue(index))
     }
@@ -679,6 +790,7 @@ export class ProjectApi {
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
         // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
         if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
+        if (AudioUnitGroups.isGroup(audioUnitBox)) {this.#project.grouping.deleteGroup(audioUnitBox); return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()

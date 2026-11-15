@@ -43,4 +43,46 @@ describe("ContextMenu", () => {
         deleted.notify()
         expect(close).not.toHaveBeenCalled()
     })
+
+    const labelsOf = async (target: Element): Promise<ReadonlyArray<string>> => {
+        const {promise, resolve} = Promise.withResolvers<ReadonlyArray<string>>()
+        const installation = ContextMenu.install(window, root => resolve(root.collectChildren()
+            .map(item => item.data.type === "default" ? item.data.label : "")))
+        target.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}))
+        const labels = await promise
+        installation.terminate()
+        return labels
+    }
+
+    const nested = () => {
+        const parent = document.createElement("div")
+        const child = document.createElement("div")
+        parent.appendChild(child)
+        document.body.appendChild(parent)
+        return {parent, child}
+    }
+
+    it("collects from the target and every ancestor, innermost first", async () => {
+        const {parent, child} = nested()
+        const subscriptions = Terminable.many(
+            ContextMenu.subscribe(parent, collector => collector.addItems(MenuItem.default({label: "parent"}))),
+            ContextMenu.subscribe(child, collector => collector.addItems(MenuItem.default({label: "child"}))))
+        expect(await labelsOf(child)).toStrictEqual(["child", "parent"])
+        subscriptions.terminate()
+        parent.remove()
+    })
+
+    it("stopPropagation keeps the ancestors out", async () => {
+        const {parent, child} = nested()
+        const subscriptions = Terminable.many(
+            ContextMenu.subscribe(parent, collector => collector.addItems(MenuItem.default({label: "parent"}))),
+            ContextMenu.subscribe(child, collector => {
+                collector.addItems(MenuItem.default({label: "child"}))
+                collector.stopPropagation()
+            }))
+        expect(await labelsOf(child)).toStrictEqual(["child"])
+        expect(await labelsOf(parent)).toStrictEqual(["parent"])
+        subscriptions.terminate()
+        parent.remove()
+    })
 })

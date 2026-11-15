@@ -1,3 +1,4 @@
+import {isDefined} from "@opendaw/lib-std"
 import {StorageScan} from "./StorageScan"
 
 export namespace StorageReport {
@@ -35,6 +36,12 @@ export namespace StorageReport {
         }
     }
 
+    // names what an unreadable file belongs to
+    export const describeFailure = ({items, assets}: StorageScan.Report, path: string): string => {
+        const owner = [...items, ...assets].find(entry => path === entry.path || path.startsWith(`${entry.path}/`))
+        return isDefined(owner) ? `${owner.kind} '${owner.name}': ${path}` : path
+    }
+
     export const keyOf = ({kind, id}: { kind: string, id: string }): string => `${kind}:${id}`
 
     export const summarize = (names: ReadonlyArray<string>, max: number = 3): string =>
@@ -59,7 +66,10 @@ export namespace StorageReport {
 
     export const AssetKinds: ReadonlyArray<StorageScan.AssetKind> = ["sample", "soundfont", "wclap"]
 
-    export const sizeOf = (entries: ReadonlyArray<{ size: number }>): number =>
+    export const assetsOf = (report: StorageScan.Report): ReadonlyArray<StorageScan.Asset> => report.assets
+        .toSorted((a, b) => AssetKinds.indexOf(a.kind) - AssetKinds.indexOf(b.kind) || a.name.localeCompare(b.name))
+
+    export const sizeOf =(entries: ReadonlyArray<{ size: number }>): number =>
         entries.reduce((sum, {size}) => sum + size, 0)
 
     export const unusedOf = (report: StorageScan.Report): ReadonlyArray<StorageScan.Asset> =>

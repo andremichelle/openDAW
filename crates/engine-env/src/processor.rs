@@ -25,4 +25,6 @@ pub trait Processor: EventReceiver {
     fn set_input_delays(&mut self, _main: u32, _sidechains: &[(NodeId, u32)], _limits: CompensationLimits) {}
     /// Frames this node's input is late, so its automation follows the audio it processes.
     fn set_automation_delay(&mut self, _frames: u32) {}
+    /// Whether this node sits on a feedback loop closed by a sidechain.
+    fn set_feedback(&mut self, _in_loop: bool) {}
 }

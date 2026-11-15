@@ -50,7 +50,18 @@ import {
     KeyEventBox,
     ChordEventBox,
     NeonDeviceBox,
+    OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
     MaximizerDeviceBox,
     MasteringDeviceBox,
     MIDIOutputDeviceBox,
@@ -63,6 +74,10 @@ import {
     ModuleGainBox,
     ModuleMultiplierBox,
     NanoDeviceBox,
+    SamplerDeviceBox,
+    SamplerZoneBox,
+    SamplerGroupBox,
+    SamplerModulationBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
@@ -74,6 +89,8 @@ import {
     NoteRegionBox,
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
+    EuclidDeviceBox,
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
@@ -151,14 +168,31 @@ import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBox
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
 import {NoteFilterDeviceBoxAdapter} from "./devices/midi-effects/NoteFilterDeviceBoxAdapter"
 import {ScaleMatrixDeviceBoxAdapter} from "./devices/midi-effects/ScaleMatrixDeviceBoxAdapter"
+import {ChordKeysDeviceBoxAdapter} from "./devices/midi-effects/ChordKeysDeviceBoxAdapter"
+import {EuclidDeviceBoxAdapter} from "./devices/midi-effects/EuclidDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
 import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {GuitarDeviceBoxAdapter} from "./devices/instruments/GuitarDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
+import {OpenDrumKickDeviceBoxAdapter} from "./devices/instruments/OpenDrumKickDeviceBoxAdapter"
+import {OpenDrumPercDeviceBoxAdapter} from "./devices/instruments/OpenDrumPercDeviceBoxAdapter"
+import {OpenDrumBellDeviceBoxAdapter} from "./devices/instruments/OpenDrumBellDeviceBoxAdapter"
+import {OpenDrumCymbalDeviceBoxAdapter} from "./devices/instruments/OpenDrumCymbalDeviceBoxAdapter"
+import {OpenDrumShakerDeviceBoxAdapter} from "./devices/instruments/OpenDrumShakerDeviceBoxAdapter"
+import {OpenDrumHatDeviceBoxAdapter} from "./devices/instruments/OpenDrumHatDeviceBoxAdapter"
+import {OpenDrumRimDeviceBoxAdapter} from "./devices/instruments/OpenDrumRimDeviceBoxAdapter"
+import {OpenDrumTomDeviceBoxAdapter} from "./devices/instruments/OpenDrumTomDeviceBoxAdapter"
+import {OpenDrumClapDeviceBoxAdapter} from "./devices/instruments/OpenDrumClapDeviceBoxAdapter"
+import {OpenDrumSnareDeviceBoxAdapter} from "./devices/instruments/OpenDrumSnareDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
+import {SurgeonDeviceBoxAdapter} from "./devices/instruments/SurgeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
+import {SamplerDeviceBoxAdapter} from "./devices/instruments/SamplerDeviceBoxAdapter"
+import {SamplerZoneBoxAdapter} from "./devices/instruments/Sampler/SamplerZoneBoxAdapter"
+import {SamplerGroupBoxAdapter} from "./devices/instruments/Sampler/SamplerGroupBoxAdapter"
+import {SamplerModulationBoxAdapter} from "./devices/instruments/Sampler/SamplerModulationBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {InstrumentCompositeBoxAdapter} from "./devices/instruments/InstrumentCompositeBoxAdapter"
 import {InstrumentCompositeCellBoxAdapter} from "./devices/instruments/InstrumentComposite/InstrumentCompositeCellBoxAdapter"
@@ -320,8 +354,32 @@ export class BoxAdapters implements Terminable {
             visitModuleGainBox: (box: ModuleGainBox) => new ModuleGainAdapter(this.#context, box),
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumKickDeviceBox: (box: OpenDrumKickDeviceBox) => new OpenDrumKickDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumPercDeviceBox: (box: OpenDrumPercDeviceBox) =>
+                new OpenDrumPercDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumBellDeviceBox: (box: OpenDrumBellDeviceBox) =>
+                new OpenDrumBellDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumCymbalDeviceBox: (box: OpenDrumCymbalDeviceBox) =>
+                new OpenDrumCymbalDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumShakerDeviceBox: (box: OpenDrumShakerDeviceBox) =>
+                new OpenDrumShakerDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumHatDeviceBox: (box: OpenDrumHatDeviceBox) =>
+                new OpenDrumHatDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumRimDeviceBox: (box: OpenDrumRimDeviceBox) =>
+                new OpenDrumRimDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumTomDeviceBox: (box: OpenDrumTomDeviceBox) =>
+                new OpenDrumTomDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumClapDeviceBox: (box: OpenDrumClapDeviceBox) =>
+                new OpenDrumClapDeviceBoxAdapter(this.#context, box),
+            visitOpenDrumSnareDeviceBox: (box: OpenDrumSnareDeviceBox) =>
+                new OpenDrumSnareDeviceBoxAdapter(this.#context, box),
             visitTubularDeviceBox: (box: TubularDeviceBox) => new TubularDeviceBoxAdapter(this.#context, box),
+            visitSurgeonDeviceBox: (box: SurgeonDeviceBox) => new SurgeonDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
+            visitSamplerDeviceBox: (box: SamplerDeviceBox) => new SamplerDeviceBoxAdapter(this.#context, box),
+            visitSamplerZoneBox: (box: SamplerZoneBox) => new SamplerZoneBoxAdapter(this.#context, box),
+            visitSamplerGroupBox: (box: SamplerGroupBox) => new SamplerGroupBoxAdapter(this.#context, box),
+            visitSamplerModulationBox: (box: SamplerModulationBox) => new SamplerModulationBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
             visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => new WclapMidiEffectBoxAdapter(this.#context, box),
@@ -334,6 +392,8 @@ export class BoxAdapters implements Terminable {
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
             visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => new NoteFilterDeviceBoxAdapter(this.#context, box),
             visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => new ScaleMatrixDeviceBoxAdapter(this.#context, box),
+            visitChordKeysDeviceBox: (box: ChordKeysDeviceBox) => new ChordKeysDeviceBoxAdapter(this.#context, box),
+            visitEuclidDeviceBox: (box: EuclidDeviceBox) => new EuclidDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
             visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),

@@ -78,12 +78,10 @@ export const StudioSettingsSchema = z.object({
     }),
     "editing": z.object({
         "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
-        "show-clipboard-menu": z.boolean(),
-        "new-instrument-note-region": z.boolean().catch(true)
+        "show-clipboard-menu": z.boolean()
     }).default({
         "overlapping-regions-behaviour": "clip",
-        "show-clipboard-menu": false,
-        "new-instrument-note-region": true
+        "show-clipboard-menu": false
     }),
     "webclap": z.object({
         "default-zoom": z.union(WclapZoomOptions.map(value => z.literal(value))).catch(({input}) => nearestWclapZoom(input))

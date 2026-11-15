@@ -3,6 +3,7 @@ import {fileURLToPath} from "url"
 import * as path from "node:path"
 import * as fs from "node:fs"
 import {
+    AudioLease,
     ProjectSkeleton,
     SampleLoader,
     SampleLoaderManager,
@@ -13,7 +14,7 @@ import {Xml} from "@opendaw/lib-xml"
 import {FileReferenceSchema} from "@opendaw/lib-dawproject"
 import {DawProjectExporter} from "./DawProjectExporter"
 import {Peaks} from "@opendaw/lib-fusion"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData, AudioInfo} from "@opendaw/lib-dsp"
 
 describe("DawProjectExport", () => {
     it("export", async () => {
@@ -28,11 +29,13 @@ describe("DawProjectExport", () => {
             getOrCreate(format: UUID.Bytes): SampleLoader {
                 return new class implements SampleLoader {
                     data: Option<AudioData> = Option.None
+                    info: Option<AudioInfo> = Option.None
                     peaks: Option<Peaks> = Option.None
                     uuid: UUID.Bytes = format
                     state: SampleLoaderState = {type: "progress", progress: 0.0}
                     meta: Option<any> = Option.None
                     invalidate(): void {throw new Error("Method not implemented.")}
+                    acquire(): Promise<AudioLease> {return Promise.reject(new Error("Method not implemented."))}
                     subscribe(_observer: Observer<SampleLoaderState>): Subscription {
                         return Terminable.Empty
                     }

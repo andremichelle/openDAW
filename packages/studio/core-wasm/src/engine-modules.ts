@@ -19,7 +19,8 @@ export type CompositeSpec = {
     childMuteKey: number, childSoloKey: number,
     // A child's volume (dB) / panning Float32Fields (0 = no per-child strip): a ChannelStrip between the
     // child's output (post its own fx chain) and the composite sum. Playfield's slot keys are 50 / 51.
-    childVolumeKey: number, childPanKey: number
+    childVolumeKey: number, childPanKey: number,
+    cellKeyKey: number // a cell's `key` (0 = no pad routing)
 }
 
 // An EFFECT composite box type: an audio or midi EFFECT hosting a collection of ENTRIES, each its own effect
@@ -77,7 +78,19 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
     {url: "/wasm/plugins/device_neon.wasm", boxType: "NeonDeviceBox"},   // instrument (phase distortion)
     {url: "/wasm/plugins/device_tubular.wasm", boxType: "TubularDeviceBox"}, // instrument (six-operator FM)
+    {url: "/wasm/plugins/device_surgeon.wasm", boxType: "SurgeonDeviceBox"}, // instrument (plays FM themes by itself)
+    {url: "/wasm/plugins/device_opendrum_kick.wasm", boxType: "OpenDrumKickDeviceBox"}, // instrument (synthesized kick)
+    {url: "/wasm/plugins/device_opendrum_perc.wasm", boxType: "OpenDrumPercDeviceBox"}, // instrument (synthesized perc)
+    {url: "/wasm/plugins/device_opendrum_bell.wasm", boxType: "OpenDrumBellDeviceBox"}, // instrument (synthesized bell)
+    {url: "/wasm/plugins/device_opendrum_cymbal.wasm", boxType: "OpenDrumCymbalDeviceBox"}, // instrument (synthesized cymbal)
+    {url: "/wasm/plugins/device_opendrum_shaker.wasm", boxType: "OpenDrumShakerDeviceBox"}, // instrument (synthesized shaker)
+    {url: "/wasm/plugins/device_opendrum_hat.wasm", boxType: "OpenDrumHatDeviceBox"}, // instrument (synthesized hat)
+    {url: "/wasm/plugins/device_opendrum_rim.wasm", boxType: "OpenDrumRimDeviceBox"}, // instrument (synthesized rim)
+    {url: "/wasm/plugins/device_opendrum_tom.wasm", boxType: "OpenDrumTomDeviceBox"}, // instrument (synthesized tom)
+    {url: "/wasm/plugins/device_opendrum_clap.wasm", boxType: "OpenDrumClapDeviceBox"}, // instrument (synthesized clap)
+    {url: "/wasm/plugins/device_opendrum_snare.wasm", boxType: "OpenDrumSnareDeviceBox"}, // instrument (synthesized snare)
     {url: "/wasm/plugins/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
+    {url: "/wasm/plugins/device_sampler.wasm", boxType: "SamplerDeviceBox"},   // instrument (multi-zone sampler)
     {url: "/wasm/plugins/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect
     {url: "/wasm/plugins/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
     {url: "/wasm/plugins/device_delay.wasm", boxType: "DelayDeviceBox"},       // audio effect
@@ -87,6 +100,8 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_pitch.wasm", boxType: "PitchDeviceBox"},     // midi effect
     {url: "/wasm/plugins/device_note_filter.wasm", boxType: "NoteFilterDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_scale_matrix.wasm", boxType: "ScaleMatrixDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_chord_keys.wasm", boxType: "ChordKeysDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_euclid.wasm", boxType: "EuclidDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {url: "/wasm/plugins/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
     {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
@@ -113,21 +128,18 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_playfield_sample.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 
-// The composite box types. Playfield hosts its slots in the `samples` field (key 10); each slot's note is its
-// `index` field (key 15) and its choke-group flag is `exclude` (key 42). The slot plugin itself is the
-// PlayfieldSampleBox entry in DEVICES above.
+// Playfield pads are cells: a pad receives its `index` note (5) as its `key` (45).
 export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
-    // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
-    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
-        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22,
-        childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51},
+    {boxType: "PlayfieldDeviceBox", childrenField: 11, indexKey: 5, excludeKey: 44,
+        cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
+        childMuteKey: 41, childSoloKey: 42, childVolumeKey: 40, childPanKey: 43, cellKeyKey: 45},
     // A generic instrument bundle: children are CELLS (InstrumentCompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
     // (field 5, UI position + engine sort). No note routing, no choke. A cell has its own strip: gain 40,
     // pan 43, and mute 41 / solo 42 silence at the STRIP (the layer keeps running), unlike a Playfield pad.
     {boxType: "InstrumentCompositeBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
-        childMuteKey: 41, childSoloKey: 42, childVolumeKey: 40, childPanKey: 43}
+        childMuteKey: 41, childSoloKey: 42, childVolumeKey: 40, childPanKey: 43, cellKeyKey: 0}
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the

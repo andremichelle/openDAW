@@ -10,16 +10,16 @@ use engine_env::block_flags::BlockFlags;
 use engine_env::event::Event;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
-use engine_env::ppqn::pulses_to_samples;
+use engine_env::ppqn::frame_at;
 use engine_env::process_info::ProcessInfo;
 
-const SR: f32 = 48_000.0; // pulses_to_samples(p, 120, 48000) == floor(p * 25)
+const SR: f32 = 48_000.0; // frame_at(p, 0, 0, 120, 48000) == floor(p * 25)
 const BPM: f32 = 120.0;
 
-// The sample boundary the template computes for an event at `position` in a block starting at pulse 0
-// (same floor as TS `Math.floor(PPQN.pulsesToSamples(...))`).
+// The sample boundary the template computes for an event at `position` in a block anchored at pulse 0
+// (#536: 3.84 pulses is exactly frame 96, the old conversion gave 95).
 fn split(position: f64) -> usize {
-    pulses_to_samples(position, BPM, SR) as usize
+    frame_at(position, 0.0, 0, BPM, SR) as usize
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,7 +73,7 @@ impl AudioProcessor for Recorder {
 }
 
 fn block(flags: BlockFlags) -> Block {
-    Block {index: 0, p0: 0.0, p1: 5.12, s0: 0, s1: 128, bpm: BPM, flags}
+    Block {index: 0, p0: 0.0, p1: 5.12, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: BPM, flags}
 }
 
 fn note_start(id: u64, position: f64) -> Event {

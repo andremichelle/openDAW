@@ -19,7 +19,8 @@ export type ControlContext = {
 }
 
 export const createParameterInput = ({lifecycle, editing, midiLearning, deviceHost}: ControlContext,
-                                     parameter: AutomatableParameterFieldAdapter): JsxValue => (
+                                     parameter: AutomatableParameterFieldAdapter,
+                                     supressValueFlyout: boolean = false): JsxValue => (
     <AutomationControl lifecycle={lifecycle}
                        editing={editing}
                        midiLearning={midiLearning}
@@ -27,7 +28,8 @@ export const createParameterInput = ({lifecycle, editing, midiLearning, deviceHo
                        parameter={parameter}>
         <RelativeUnitValueDragging lifecycle={lifecycle}
                                    editing={editing}
-                                   parameter={parameter}>
+                                   parameter={parameter}
+                                   supressValueFlyout={supressValueFlyout}>
             <ParameterLabel lifecycle={lifecycle}
                             parameter={parameter}
                             framed/>

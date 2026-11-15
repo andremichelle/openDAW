@@ -3,7 +3,7 @@ import {Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {InstrumentCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
 import {EffectFactories} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {EntryPeakMeter} from "@/ui/devices/EntryPeakMeter"
@@ -18,13 +18,13 @@ const className = Html.adoptStyleSheet(css, "AudioCompositeEntry")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    composite: InstrumentCompositeBoxAdapter
     layer: InstrumentCompositeCellBoxAdapter
 }
 
-export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct) => {
+export const InstrumentCompositeLayer = ({lifecycle, service, composite, layer}: Construct) => {
     const {project} = service
     const {editing, userEditingManager, api} = project
-    const composite = layer.compositeDevice()
     const getIndex = () => layer.indexField.getValue()
     const remove: HTMLElement = <Icon symbol={IconSymbol.Close} className="remove"/>
     const iconsElement: HTMLElement = <div className="icons"/>

@@ -41,6 +41,8 @@ const MAKEUP_FIELD: [u16; 1] = [20];
 const MIX_FIELD: [u16; 1] = [21];
 const SIDE_CHAIN_FIELD: [u16; 1] = [30];
 const EDITOR_FIELD: [u16; 1] = [0]; // live editor values at address.append(0): [input dB, reduction dB, output dB]
+const STREAM_FIELD: [u16; 1] = [1]; // fast levels at address.append(1): [input dB, output dB]
+const STREAM_PEAK_DECAY_SECONDS: f32 = 0.010;
 
 const INPUTGAIN_MAPPING: Linear = Linear {min: -30.0, max: 30.0};
 const THRESHOLD_MAPPING: Linear = Linear {min: -60.0, max: 0.0};
@@ -99,7 +101,12 @@ pub struct CompressorState {
     editor_ptr: u32,
     editor_peak_decay: f32,
     inp_max: f32,
-    out_max: f32
+    out_max: f32,
+    stream_id: u32,
+    stream_ptr: u32,
+    stream_peak_decay: f32,
+    stream_inp_max: f32,
+    stream_out_max: f32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -140,6 +147,11 @@ impl AudioEffect for Compressor {
         state.editor_peak_decay = libm::expf(-1.0 / (sample_rate * 0.500));
         state.inp_max = 0.0;
         state.out_max = 0.0;
+        state.stream_id = abi::bind_broadcast(&STREAM_FIELD, 2);
+        state.stream_ptr = 0;
+        state.stream_peak_decay = libm::expf(-1.0 / (sample_rate * STREAM_PEAK_DECAY_SECONDS));
+        state.stream_inp_max = 0.0;
+        state.stream_out_max = 0.0;
     }
 
     fn parameter_changed(state: &mut CompressorState, id: u32, value: ParamValue) {
@@ -228,6 +240,19 @@ impl AudioEffect for Compressor {
                 state.inp_max *= state.editor_peak_decay;
             }
         }
+        let stream_active = abi::broadcast_active(state.stream_id);
+        if stream_active {
+            for &peak in &state.sidechain_signal[s0..s1] {
+                if state.stream_inp_max <= peak {
+                    state.stream_inp_max = peak;
+                } else {
+                    state.stream_inp_max *= state.stream_peak_decay;
+                }
+            }
+        } else {
+            state.stream_inp_max = 0.0;
+            state.stream_out_max = 0.0;
+        }
         // 3) crest-factor auto-ballistics, static compression curve, then smoothing ballistics
         state.ballistics.process_crest_factor(&state.sidechain_signal, s0, s1);
         state.gain_computer.apply_compression_to_buffer(&mut state.sidechain_signal, s0, s1);
@@ -283,6 +308,24 @@ impl AudioEffect for Compressor {
             editor[0] = gain_to_db(state.inp_max);
             editor[1] = red_min;
             editor[2] = gain_to_db(state.out_max);
+        }
+        if stream_active {
+            for i in s0..s1 {
+                let peak = libm::fabsf(out_left[i]).max(libm::fabsf(out_right[i]));
+                if state.stream_out_max <= peak {
+                    state.stream_out_max = peak;
+                } else {
+                    state.stream_out_max *= state.stream_peak_decay;
+                }
+            }
+            if state.stream_ptr == 0 {
+                state.stream_ptr = abi::broadcast_ptr(state.stream_id);
+            }
+            if state.stream_ptr != 0 {
+                let stream = unsafe { core::slice::from_raw_parts_mut(state.stream_ptr as *mut f32, 2) };
+                stream[0] = gain_to_db(state.stream_inp_max);
+                stream[1] = gain_to_db(state.stream_out_max);
+            }
         }
         state.processing = true;
     }

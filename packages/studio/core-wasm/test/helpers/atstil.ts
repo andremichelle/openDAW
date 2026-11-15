@@ -6,7 +6,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs"
 import {UUID} from "@opendaw/lib-std"
 import {WavFile} from "@opendaw/lib-dsp"
 import type {BoxGraph} from "@opendaw/lib-box"
-import {ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {loadFullEngine} from "./load-full-engine"
 import {connectSyncToEngine} from "./connect-sync"
@@ -16,7 +16,9 @@ const CACHE = "/tmp/atstil-samples"
 
 export const decodeAtstil = (): BoxGraph => {
     const buffer = readFileSync(FILE)
-    return ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer).boxGraph
+    const {boxGraph} = ProjectSkeleton.decode(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
+    DeviceMigration.migrate(boxGraph)
+    return boxGraph
 }
 
 export const registerAtstilScripts = (boxGraph: BoxGraph): number => {

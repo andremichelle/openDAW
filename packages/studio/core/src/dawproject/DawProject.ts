@@ -1,8 +1,10 @@
-import {asDefined, isDefined, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {asDefined, isDefined, panic, RuntimeNotifier, tryCatch, UUID} from "@opendaw/lib-std"
 import {Xml} from "@opendaw/lib-xml"
 import {FileReferenceSchema, MetaDataSchema, ProjectSchema} from "@opendaw/lib-dawproject"
-import {ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
+import {ProjectSkeleton, SampleLoader, SampleLoaderManager} from "@opendaw/studio-adapters"
 import {DawProjectExporter} from "./DawProjectExporter"
+import {AudioFileBox} from "@opendaw/studio-boxes"
+import {Promises} from "@opendaw/lib-runtime"
 import {ExternalLib} from "../ExternalLib"
 
 export namespace DawProject {
@@ -59,12 +61,21 @@ export namespace DawProject {
             return Promise.reject(error)
         }
         const zip = new JSZip()
-        const projectSchema = DawProjectExporter.write(skeleton, sampleManager, {
+        // the exporter reads the frames at once, so they are leased for its run
+        const leases = await Promise.all(skeleton.boxGraph.boxes()
+            .filter(box => box instanceof AudioFileBox)
+            .map(box => sampleManager.getOrCreate(box.address.uuid))
+            .filter(loader => loader.state.type === "loaded")
+            .map(loader => Promises.tryCatch(SampleLoader.acquire(loader))))
+        const written = tryCatch(() => DawProjectExporter.write(skeleton, sampleManager, {
             write: (path: string, buffer: ArrayBuffer): FileReferenceSchema => {
                 zip.file(path, buffer)
                 return Xml.element({path, external: false}, FileReferenceSchema)
             }
-        })
+        }))
+        leases.forEach(lease => {if (lease.status === "resolved") {lease.value.terminate()}})
+        if (written.status === "failure") {return Promise.reject(written.error)}
+        const projectSchema = written.value
         const metaDataXml = Xml.pretty(Xml.toElement("MetaData", metaData))
         const projectXml = Xml.pretty(Xml.toElement("Project", projectSchema))
         console.debug("encode")

@@ -2,9 +2,9 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Arrays, Option, UUID} from "@opendaw/lib-std"
+import {Arrays, Nullable, Option, UUID} from "@opendaw/lib-std"
 import {Api, MixdownOptions, Project, Sample} from "../Api"
-import {ScriptHostProtocol} from "../ScriptHostProtocol"
+import {DialogRequest, DialogValue, ScriptHostProtocol} from "../ScriptHostProtocol"
 import {ApiImpl} from "../impl/ApiImpl"
 import {ProjectImpl} from "../impl/ProjectImpl"
 
@@ -15,10 +15,17 @@ export class FakeHost implements ScriptHostProtocol {
     readonly applied: Array<ReadonlyArray<UpdateTask<BoxIO.TypeMap>>> = []
     readonly rendered: Array<{ buffer: ArrayBufferLike, options: MixdownOptions }> = []
     readonly saved: Array<{ byteLength: number, fileName: string, mimeType: string }> = []
+    readonly forms: Array<DialogRequest> = []
+    cancelForms: boolean = false
     current: { graph: BoxGraph<BoxIO.TypeMap>, name: string } | null = null
 
     async hasProject(): Promise<boolean> {return this.current !== null}
     async showInfo(headline: string, message: string): Promise<void> {this.dialogs.push({headline, message})}
+    async showDialog(request: DialogRequest): Promise<Nullable<ReadonlyArray<DialogValue>>> {
+        this.forms.push(request)
+        if (this.cancelForms) {return null}
+        return request.fields.flatMap(field => field.type === "section" ? [] : [field.value])
+    }
 
     openProject(buffer: ArrayBufferLike, name?: string): void {
         this.opened.push({buffer, name: name ?? ""})

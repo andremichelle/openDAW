@@ -42,6 +42,7 @@ import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
+import {ScriptFormDialog} from "@/script/ScriptFormDialog"
 import {ScriptSession} from "./code-editor/ScriptSession"
 import {ScriptTemplates} from "./code-editor/StockScripts"
 
@@ -92,6 +93,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             }),
         hasProject: async (): Promise<boolean> => service.projectProfileService.getValue().nonEmpty(),
         showInfo: (headline: string, message: string): Promise<void> => RuntimeNotifier.info({headline, message}),
+        showDialog: request => ScriptFormDialog.show(request),
         fetchProject: async (): Promise<{ buffer: ArrayBuffer; name: string }> => {
             return service.projectProfileService.getValue().match({
                 none: () => panic("No project available"),

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 168" width="896" height="336" font-family="system-ui, -apple-system, Segoe UI, sans-serif" text-anchor="middle">
+    <g fill="#d0d9dc">
+        <rect x="1" y="0" width="62" height="168" rx="3"/>
+        <rect x="65" y="0" width="62" height="168" rx="3"/>
+        <rect x="129" y="0" width="62" height="168" rx="3"/>
+        <rect x="193" y="0" width="62" height="168" rx="3"/>
+        <rect x="257" y="0" width="62" height="168" rx="3"/>
+        <rect x="321" y="0" width="62" height="168" rx="3"/>
+        <rect x="385" y="0" width="62" height="168" rx="3"/>
+    </g>
+    <g fill="#1a2023" font-size="11">
+        <text x="32" y="124">C</text>
+        <text x="96" y="124">D</text>
+        <text x="160" y="124">E</text>
+        <text x="224" y="124">F</text>
+        <text x="288" y="124">G</text>
+        <text x="352" y="124">A</text>
+        <text x="416" y="124">B</text>
+    </g>
+    <g fill="#1a2023" font-size="20" font-weight="600">
+        <text x="32" y="152">1</text>
+        <text x="96" y="152">2</text>
+        <text x="160" y="152">3</text>
+        <text x="224" y="152">4</text>
+        <text x="288" y="152">5</text>
+        <text x="352" y="152">6</text>
+        <text x="416" y="152">7</text>
+    </g>
+    <g fill="#1a2023">
+        <rect x="40" y="0" width="48" height="100" rx="3"/>
+        <rect x="104" y="0" width="48" height="100" rx="3"/>
+        <rect x="232" y="0" width="48" height="100" rx="3"/>
+        <rect x="296" y="0" width="48" height="100" rx="3"/>
+        <rect x="360" y="0" width="48" height="100" rx="3"/>
+    </g>
+    <g fill="#ffbf75" font-size="13" font-weight="600">
+        <text x="64" y="84">7th</text>
+        <text x="128" y="84">9th</text>
+        <text x="256" y="84">sus2</text>
+        <text x="320" y="84">sus4</text>
+        <text x="384" y="84">inv</text>
+    </g>
+</svg>

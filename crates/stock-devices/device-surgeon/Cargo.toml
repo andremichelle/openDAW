@@ -1,0 +1,18 @@
+[package]
+name = "device-surgeon"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Surgeon (plans/surgeon.md): the engine core plus the device wrapper that binds it to the SurgeonDeviceBox
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../../abi"}
+math = {path = "../../math"}
+dsp = {path = "../../dsp"}
+libm = "0.2"
+
+[dev-dependencies]
+surgeon-lab = {path = "../../surgeon-lab"}

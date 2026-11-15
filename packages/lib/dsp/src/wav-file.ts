@@ -1,5 +1,6 @@
 import {Arrays, int, panic} from "@opendaw/lib-std"
 import {AudioData} from "./audio-data"
+import {PcmData} from "./pcm-data"
 
 export namespace WavFile {
     const MAGIC_RIFF = 0x46464952
@@ -7,8 +8,16 @@ export namespace WavFile {
     const MAGIC_FMT = 0x20746d66
     const MAGIC_DATA = 0x61746164
 
-    export const decodeFloats = (buffer: ArrayBuffer): AudioData => {
-        const view = new DataView(buffer)
+    type Layout = {
+        readonly audioFormat: int
+        readonly bitsPerSample: int
+        readonly numberOfChannels: int
+        readonly sampleRate: number
+        readonly numberOfFrames: int
+        readonly dataOffset: int
+    }
+
+    const locate = (view: DataView): Layout => {
         if (view.getUint32(0, true) !== MAGIC_RIFF
             || view.getUint32(8, true) !== MAGIC_WAVE) {
             return panic("Not a RIFF/WAVE file")
@@ -40,6 +49,12 @@ export namespace WavFile {
             return panic("Invalid block alignment")
         }
         const numberOfFrames = Math.floor(dataSize / blockAlign)
+        return {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset}
+    }
+
+    export const decodeFloats = (buffer: ArrayBuffer): AudioData => {
+        const view = new DataView(buffer)
+        const {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset} = locate(view)
         const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
         if (audioFormat === 3 && bitsPerSample === 32) {
             const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
@@ -68,6 +83,59 @@ export namespace WavFile {
             return panic(`Unsupported WAV format: ${audioFormat}, ${bitsPerSample}-bit`)
         }
         return audioData
+    }
+
+    // whether the first 44 bytes are the header of a 16 bit PCM file as `encodePcm` writes it
+    export const isSixteenBit = (head: Uint8Array): boolean => {
+        if (head.byteLength < 44) {return false}
+        const view = new DataView(head.buffer, head.byteOffset, head.byteLength)
+        return view.getUint32(0, true) === MAGIC_RIFF && view.getUint32(8, true) === MAGIC_WAVE
+            && view.getUint32(12, true) === MAGIC_FMT && view.getUint16(20, true) === 1 && view.getUint16(34, true) === 16
+    }
+
+    // 16 bit PCM stays 16 bit, everything else is decoded to floats
+    export const decodePcm = (buffer: ArrayBuffer): PcmData => {
+        const view = new DataView(buffer)
+        const {audioFormat, bitsPerSample, numberOfChannels, sampleRate, numberOfFrames, dataOffset} = locate(view)
+        if (audioFormat !== 1 || bitsPerSample !== 16) {return {format: "float32", ...decodeFloats(buffer)}}
+        const frames = PcmData.createInt16(numberOfFrames, numberOfChannels)
+        // an odd data offset cannot be viewed as 16 bit words
+        const interleaved = dataOffset % 2 === 0 ? new Int16Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
+            : new Int16Array(buffer.slice(dataOffset, dataOffset + numberOfFrames * numberOfChannels * 2))
+        frames.forEach((plane, channel) => {
+            for (let frame = 0, index = channel; frame < numberOfFrames; frame++, index += numberOfChannels) {
+                plane[frame] = interleaved[index]
+            }
+        })
+        return {format: "int16", sampleRate, numberOfFrames, numberOfChannels, frames}
+    }
+
+    // 16 bit frames as 16 bit PCM with nothing rounded, float frames as `encodeFloats` writes them
+    export const encodePcm = (pcm: PcmData): ArrayBuffer => {
+        if (pcm.format === "float32") {return encodeFloats(pcm)}
+        const {sampleRate, numberOfFrames, numberOfChannels, frames} = pcm
+        const dataSize = numberOfFrames * numberOfChannels * 2
+        const view = new DataView(new ArrayBuffer(44 + dataSize))
+        view.setUint32(0, MAGIC_RIFF, true)
+        view.setUint32(4, 36 + dataSize, true)
+        view.setUint32(8, MAGIC_WAVE, true)
+        view.setUint32(12, MAGIC_FMT, true)
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
+        view.setUint16(22, numberOfChannels, true)
+        view.setUint32(24, sampleRate, true)
+        view.setUint32(28, sampleRate * numberOfChannels * 2, true)
+        view.setUint16(32, numberOfChannels * 2, true)
+        view.setUint16(34, 16, true)
+        view.setUint32(36, MAGIC_DATA, true)
+        view.setUint32(40, dataSize, true)
+        const interleaved = new Int16Array(view.buffer, 44, numberOfFrames * numberOfChannels)
+        frames.forEach((plane, channel) => {
+            for (let frame = 0, index = channel; frame < numberOfFrames; frame++, index += numberOfChannels) {
+                interleaved[index] = plane[frame]
+            }
+        })
+        return view.buffer as ArrayBuffer
     }
 
     type AudioBufferLike = {

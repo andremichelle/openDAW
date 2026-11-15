@@ -78,7 +78,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
                 readSample: async uuid => {
                     const path = `${SampleStorage.Folder}/${UUID.toString(uuid)}`
                     const [wavBytes, metaBytes] = await Promise.all([
-                        Workers.Opfs.read(`${path}/audio.wav`),
+                        SampleStorage.get().readAudio(uuid),
                         Workers.Opfs.read(`${path}/meta.json`)
                     ])
                     return [wavBytes.buffer as ArrayBuffer, JSON.parse(new TextDecoder().decode(metaBytes))]

@@ -1,4 +1,4 @@
-import {clamp, int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, Func, int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {CubedDeviceBox, CubedPattern} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -59,6 +59,20 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         fields.forEach((field, index) =>
             field.setValue(index < used ? CubedStep.pack(steps[index]) : DefaultStep))
         pattern.length.setValue(clamp(length, 1, fields.length))
+    }
+
+    // false when the transform refuses, steps past the new length stay untouched
+    transformCurrentPattern(transform: Func<CubedPatternData, Option<CubedPatternData>>): boolean {
+        return transform(this.readCurrentPattern()).match({
+            none: () => false,
+            some: ({length, steps}) => {
+                const pattern = this.currentPattern()
+                pattern.steps.fields().slice(0, length)
+                    .forEach((field, index) => field.setValue(CubedStep.pack(steps[index])))
+                pattern.length.setValue(length)
+                return true
+            }
+        })
     }
 
     clearCurrentPattern(): void {

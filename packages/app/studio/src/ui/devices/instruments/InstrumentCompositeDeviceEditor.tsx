@@ -26,7 +26,7 @@ type Construct = {
 export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const rows = (rowLifecycle: Lifecycle): ReadonlyArray<Element> => adapter.cells.adapters()
-        .map(layer => <InstrumentCompositeLayer lifecycle={rowLifecycle} service={service} layer={layer}/>)
+        .map(layer => <InstrumentCompositeLayer lifecycle={rowLifecycle} service={service} composite={adapter} layer={layer}/>)
     const footer: Option<HTMLElement> = Option.wrap(
         <AddLayerButton lifecycle={lifecycle}
                         onClick={() => DeviceDialog.open(service, {type: "new-layer", host: deviceHost, composite: adapter.box})}/>

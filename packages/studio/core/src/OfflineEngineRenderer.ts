@@ -12,7 +12,7 @@ import {
     TimeSpan,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, PcmData, ppqn} from "@opendaw/lib-dsp"
 import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Communicator, Messenger, Promises, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
@@ -20,13 +20,15 @@ import {
     EngineCommands,
     EngineState,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
     NoteSignal,
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
-    OfflineEngineRenderConfig
+    OfflineEngineRenderConfig,
+    SampleLoader
 , ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
@@ -90,19 +92,10 @@ export class OfflineEngineRenderer {
         Communicator.executor<EngineToClient>(engineMessenger.channel("engine-to-client"), {
             log: (message: string): void => console.log("OFFLINE-ENGINE", message),
             error: (reason: unknown) => console.error("OFFLINE-ENGINE", reason),
+            notice: (notice: EngineNotice): void => console.warn("OFFLINE-ENGINE", notice),
             ready: (): void => {},
-            fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => new Promise((resolve, reject) => {
-                const handler = source.sampleManager.getOrCreate(uuid)
-                const subscription = handler.subscribe(state => {
-                    if (state.type === "error") {
-                        reject(new Error(state.reason))
-                        subscription.terminate()
-                    } else if (state.type === "loaded") {
-                        resolve(handler.data.unwrap("handler.data"))
-                        subscription.terminate()
-                    }
-                })
-            }),
+            fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => SampleLoader.frames(source.sampleManager.getOrCreate(uuid)),
+            fetchSample: (uuid: UUID.Bytes): Promise<PcmData> => SampleLoader.stored(source.sampleManager.getOrCreate(uuid)),
             fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundFont2> => new Promise((resolve, reject) => {
                 const handler = source.soundfontManager.getOrCreate(uuid)
                 const subscription = handler.subscribe(state => {
@@ -227,7 +220,8 @@ export class OfflineEngineRenderer {
                 controlFlagsBuffer,
                 project: source.toArrayBuffer(),
                 exportConfiguration: optExportConfiguration.unwrapOrUndefined(),
-                variant: engine.attachment
+                variant: engine.attachment,
+                fetchSample: true
             })
         }
         const {promise: abortPromise, reject: rejectOnAbort} = Promise.withResolvers<never>()
@@ -273,10 +267,11 @@ export class OfflineEngineRenderer {
                 ? {startPosition: 0 as ppqn, endPosition: source.lastRegionAction()}
                 : {startPosition: r.start, endPosition: r.end}
         })
-        const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
+        const minDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition)
+        const maxDurationSeconds = minDurationSeconds + 30
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer =>
-                renderer.render({maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
+                renderer.render({minDurationSeconds, maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
         boxGraph.endTransaction()
@@ -309,7 +304,7 @@ export class OfflineEngineRenderer {
         const numFrames = Math.round(seconds * sampleRate)
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer => tail
-                ? renderer.render({maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
+                ? renderer.render({minDurationSeconds: seconds, maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
                 : renderer.#renderFrames(start, numFrames, passes, progress, abortSignal)))
         boxGraph.beginTransaction()
         loopArea.enabled.setValue(was.loopEnabled)

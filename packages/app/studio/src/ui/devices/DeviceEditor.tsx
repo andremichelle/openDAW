@@ -159,6 +159,12 @@ export const DeviceEditor =
                             Events.subscribe(element, "click", () => editing.modify(() => enabledField.toggle()))
                         )}/>
                     {(createLabel ?? defaultLabelFactory(lifecycle, editing, labelField))()}
+                    {isDefined(populateHeader) && (
+                        <div className="header-tools" onInit={element => lifecycle.own(
+                            Events.subscribe(element, "pointerdown", event => event.stopPropagation()))}>
+                            {populateHeader()}
+                        </div>
+                    )}
                     {isNotNull(presetCategory) && (() => {
                         const category = presetCategory
                         // Folder-icon dropdown showing every preset for this
@@ -208,12 +214,6 @@ export const DeviceEditor =
                         lifecycle.own(availability.subscribe(apply))
                         return button
                     })()}
-                    {isDefined(populateHeader) && (
-                        <div className="header-tools" onInit={element => lifecycle.own(
-                            Events.subscribe(element, "pointerdown", event => event.stopPropagation()))}>
-                            {populateHeader()}
-                        </div>
-                    )}
                 </header>
                 <MenuButton root={MenuItem.root()
                     .setRuntimeChildrenProcedure(parent => {

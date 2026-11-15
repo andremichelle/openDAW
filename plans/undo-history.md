@@ -320,6 +320,31 @@ Each phase ends with `tsc --noEmit` and the test suites green.
 
 `ProjectEnv.createEditing` implementers must implement `amend` and `begin`.
 
+## Alternative: seal pending when the next step starts (idea 2026-11-10)
+
+A simpler model with a single pending list and no step objects. `modify(fn)` starts a new step: it first seals
+everything pending into a history step, then records its own changes as the new pending. `amend(fn)` appends to
+pending. Undo seals pending and reverts it. The pending list is the open last step, its UI state the tail.
+
+Covers situations 1 to 5 and 7: the switch joins the step before, Escape reverts only the drag, order inside a step is
+chronological, phantom steps and the clipboard `mark()` workarounds go away.
+
+Needs three rules:
+
+1. **Headless pending.** Pending that did not begin with `modify` (selection after an undo) joins the last step
+   instead of becoming a step of its own (rule 1 above). At history index 0 it joins the baseline.
+2. **Redo.** Redo reverts a headless pending first, then replays the next step (rule 3 above).
+3. **Empty start.** A gesture start opens a step even without changes, so the moves that follow belong to it. An
+   empty step is dropped when the next one starts (rule 7 above).
+
+Not covered:
+
+1. **Recording (situation 6).** One pending list means one open step. A knob turn during a take splits it, as today.
+   Recording would have to suppress new steps while it runs.
+2. **Selections that fail in a live room.** Selections are still recorded, so an undo step holding a selection of a
+   region or clip another participant deleted still fails and is dropped.
+3. **Call-site migration.** Unchanged: discrete edits recorded unmarked today must become `modify`.
+
 ## Open questions
 
 1. **Undo during recording.** Rule 5 disables undo while the recording step is open. Alternative: undo stops the

@@ -39,9 +39,10 @@ describe("differential audio", () => {
         expect(maxDiff(enabled, restored)).toBe(0) // re-enabling is a PERFECT edge-only restore (no glide, no reset)
     }, 30000)
 
-    it("disabling composite children (Playfield slots) changes the mix, re-enabling restores it bit-for-bit", async () => {
+    it("disabling composite children (Playfield pads) changes the mix, re-enabling restores it bit-for-bit", async () => {
         const {source, sync, capture} = await buildProject()
-        const slots = source.boxes().filter(DeviceBoxUtils.isInstrumentDeviceBox).filter(box => box.name === "PlayfieldSampleBox")
+        const slots = source.boxes().filter(DeviceBoxUtils.isInstrumentDeviceBox)
+            .filter(box => box.host.targetVertex.mapOr(({box: host}) => host.name === "InstrumentCompositeCellBox", false))
         expect(slots.length).toBeGreaterThan(0)
 
         const withSlots = capture(128)

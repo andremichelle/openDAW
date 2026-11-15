@@ -2,7 +2,7 @@ import css from "./StoragePage.sass?inline"
 import {
     Bytes, DefaultObservableValue, EmptyExec, MutableObservableOption, Option, RuntimeNotifier, Terminator, UUID
 } from "@opendaw/lib-std"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {StorageScan} from "@/storage/StorageScan"
@@ -150,7 +150,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         if (current === "assets") {
             list.className = "list assets"
             list.append(<h4>Name</h4>, <h4>Kind</h4>, <h4>Size</h4>, <h4>Used by</h4>, <h4/>)
-            report.assets.toSorted((a, b) => b.size - a.size).forEach(asset => list.append(
+            StorageReport.assetsOf(report).forEach(asset => list.append(
                 <div className="name" title={asset.id}>{preview(asset)}<span>{asset.name}</span></div>,
                 <div className="kind">{KindLabels[asset.kind]}</div>,
                 <div className="size">{Bytes.toString(asset.size)}</div>,
@@ -192,18 +192,29 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
         summary.append(
             <span>{`openDAW files: ${Bytes.toString(report.total)}`}</span>,
             <span className="estimate"/>,
-            report.failures.length > 0
-                ? <span className="failures" title={report.failures.join("\n")}>{`${report.failures.length} unreadable`}</span>
-                : <span/>,
-            unused.length === 0 ? <span/> : (
+            <div className="break"/>,
+            <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
+                <span>Rescan</span>
+            </Button>,
+            <Button lifecycle={reportTerminator} onClick={() => RouteLocation.get().navigateTo("/storage/samples")}
+                    appearance={{color: Colors.blue, framed: true}}>
+                <span>Optimise Samples...</span>
+            </Button>)
+        if (unused.length > 0) {
+            summary.append(
                 <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}
                         appearance={{color: Colors.red, framed: true}}>
                     <span>{`Delete unused (${unused.length}, ${Bytes.toString(StorageReport.sizeOf(unused))})...`}</span>
-                </Button>
-            ),
-            <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
-                <span>Rescan</span>
-            </Button>)
+                </Button>)
+        }
+        if (report.failures.length > 0) {
+            summary.append(
+                <div className="break"/>,
+                <div className="failures">
+                    {[`${report.failures.length} could not be read or decoded:`,
+                        ...report.failures.map(path => StorageReport.describeFailure(report, path))].join("\n")}
+                </div>)
+        }
         navigator.storage.estimate().then(({usage, quota}) => {
             const estimate = summary.querySelector("span.estimate")
             if (estimate !== null && usage !== undefined && quota !== undefined) {

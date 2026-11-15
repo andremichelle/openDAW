@@ -825,7 +825,7 @@ impl Engine {
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
         let monitor = self.monitor_channels_of(&unit.unit);
         let include_fx = self.unit_options(&unit.unit).include_audio_effects;
-        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], &[], None, monitor, include_fx);
+        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], &[], None, None, monitor, include_fx);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -1045,8 +1045,8 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // a cluster wirer takes one input per facet (instrument + midi + audio + routing)
     pub(crate) fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
                     midi: &[Member], audio: &[Member], unit_midi: &[Rc<PluginMidiEffect>], choke: &[i32], gate: Option<&Rc<Cell<bool>>>,
-                    monitor: Option<(i32, i32)>, include_fx: bool) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
-        let mut pull = match gate {
+                    pad: Option<&Rc<PadRouter>>, monitor: Option<(i32, i32)>, include_fx: bool) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
+        let mut pull = match gate.filter(|_| pad.is_none()) {
             // A composite SLOT: routed through `SlotRoute` so its choke records inject and its silent gate
             // (pad mute / solo) drops note starts live, no rebuild.
             Some(gate) => PullLink::SlotRoute {upstream: sequencer.clone(), choke: Rc::from(choke.to_vec()), gate: gate.clone()},
@@ -1057,6 +1057,9 @@ impl Engine {
         // leaf unit folding its midi chain onto the note source. Empty for a leaf (its `midi` IS the unit chain).
         for effect in unit_midi {
             pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
+        }
+        if let Some(route) = pad {
+            pull = PullLink::PadRoute {route: route.clone(), upstream: Rc::new(pull)};
         }
         for member in midi {
             if !self.device_enabled(member.uuid) {
@@ -1124,7 +1127,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its signal/invalidate/rewire context
     pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: SlotInstrument,
                                          midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>],
-                                         choke: &[i32], gate: &Rc<Cell<bool>>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
+                                         choke: &[i32], gate: &Rc<Cell<bool>>, pad: Option<&Rc<PadRouter>>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
         let mut sequencer_keep: Option<(Uuid, SharedNoteEventSource)> = None;
         if let Some(prev) = prev {
@@ -1137,10 +1140,15 @@ impl Engine {
             for member in prev.midi { pool.insert(member.uuid, member); }
             for member in prev.audio { pool.insert(member.uuid, member); }
         }
+        let unit_note_bits = crate::current_unit_note_bits();
+        if pad.is_some() {
+            crate::set_current_unit_note_bits(None); // the pad route marks the unit's notes at the incoming pitch
+        }
         let instrument = match device {
             SlotInstrument::Plugin(device) => self.take_or_build_instrument(&mut pool, instrument_uuid, device, signal, invalidate, rewire),
             SlotInstrument::MidiOut => self.take_or_build_midi_out(&mut pool, instrument_uuid, invalidate, rewire)
         };
+        crate::set_current_unit_note_bits(unit_note_bits);
         let unit_replicas: Vec<Member> = unit_midi.iter()
             .filter_map(|original| self.take_or_build_midi_replica(&mut pool, original, invalidate, rewire)).collect();
         let replica_handles: Vec<Rc<PluginMidiEffect>> = unit_replicas.iter().filter_map(|member| match &member.proc {
@@ -1174,7 +1182,7 @@ impl Engine {
                 sequencer
             }
         };
-        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &replica_handles, choke, Some(gate), None, true);
+        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &replica_handles, choke, Some(gate), pad, None, true);
         SlotCluster {instrument, sequencer, unit_replicas, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 

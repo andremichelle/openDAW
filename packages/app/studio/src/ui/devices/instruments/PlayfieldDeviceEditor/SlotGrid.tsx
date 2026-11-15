@@ -3,7 +3,7 @@ import {Html} from "@opendaw/lib-dom"
 import {Arrays, DefaultObservableValue, int, Lifecycle, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {InstrumentCompositeCellBoxAdapter, NoteStreamReceiver, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {SlotState} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotState"
 import {Slot} from "@/ui/devices/instruments/PlayfieldDeviceEditor/Slot"
 import {OctaveSelector} from "@/ui/devices/instruments/PlayfieldDeviceEditor/OctaveSelector"
@@ -21,13 +21,13 @@ export const SlotGrid = ({lifecycle, service, adapter, octave}: Construct) => {
     const {project} = service
     const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver, adapter.audioUnitBoxAdapter().address))
     const slotStates = Arrays.create(() => new DefaultObservableValue<SlotState>(SlotState.Idle), 128)
-    const slotValues = Arrays.create(() => new DefaultObservableValue<Option<PlayfieldSampleBoxAdapter>>(Option.None), 12)
-    const slotViews: ReadonlyArray<HTMLElement> = slotValues.map((sample, semitone) => (
+    const slotValues = Arrays.create(() => new DefaultObservableValue<Option<InstrumentCompositeCellBoxAdapter>>(Option.None), 12)
+    const slotViews: ReadonlyArray<HTMLElement> = slotValues.map((pad, semitone) => (
         <Slot lifecycle={lifecycle}
               service={service}
               noteReceiver={noteReceiver}
               adapter={adapter}
-              sample={sample}
+              pad={pad}
               octave={octave}
               semitone={semitone}/>
     ))
@@ -36,10 +36,10 @@ export const SlotGrid = ({lifecycle, service, adapter, octave}: Construct) => {
         for (let semitone = 0; semitone < 12; semitone++) {
             const note = offset + semitone
             if (note < 128) {
-                const sample = adapter.samples.getAdapterByIndex(note)
+                const pad = adapter.cells.getAdapterByIndex(note)
                 const slotValue = slotValues[semitone]
-                if (slotValue.getValue().unwrapOrNull()?.address.toString() !== sample.unwrapOrNull()?.address.toString()) {
-                    slotValue.setValue(sample)
+                if (slotValue.getValue().unwrapOrNull()?.address.toString() !== pad.unwrapOrNull()?.address.toString()) {
+                    slotValue.setValue(pad)
                 }
                 slotViews[semitone].classList.remove("hidden")
             } else {
@@ -49,7 +49,7 @@ export const SlotGrid = ({lifecycle, service, adapter, octave}: Construct) => {
     }
     const updateSlotState = () => {
         let index = 0 | 0
-        adapter.samples.adapters().forEach(({indexField}) => {
+        adapter.cells.adapters().forEach(({indexField}) => {
             const toIndex = indexField.getValue()
             while (index < toIndex && index < 128) {
                 slotStates[index].setValue(noteReceiver.isNoteOn(index) ? SlotState.Playing : SlotState.Idle)
@@ -71,7 +71,7 @@ export const SlotGrid = ({lifecycle, service, adapter, octave}: Construct) => {
     }
     lifecycle.ownAll(
         octave.subscribe(slotUpdater),
-        adapter.samples.catchupAndSubscribe({
+        adapter.cells.catchupAndSubscribe({
             onAdd: updateSlots,
             onRemove: updateSlots,
             onReorder: updateSlots

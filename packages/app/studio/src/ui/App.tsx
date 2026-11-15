@@ -21,14 +21,18 @@ import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
 import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {ManifestoPage} from "@/ui/pages/ManifestoPage"
+import {ChangelogPage} from "@/ui/pages/ChangelogPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {StoragePage} from "@/ui/pages/StoragePage"
+import {SampleFormatsPage} from "@/ui/pages/SampleFormatsPage"
 import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
 import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
-import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {DemoModePage} from "@/ui/pages/DemoModePage"
+import {TestingPage} from "@/ui/pages/TestingPage"
+import {DemoModeRoute, DevicePreviewRoute} from "@/service/StudioNavigation"
 import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
 import {SampleEditorRoute} from "@/service/SampleEditorService"
 import {ContestPage} from "@/ui/pages/contest/ContestPage"
@@ -46,8 +50,8 @@ export const App = (service: StudioService) => {
     const footer: HTMLElement = <Footer lifecycle={terminator} service={service}/>
     terminator.own(RouteLocation.get().catchupAndSubscribe(({path}) => {
         const standalone = StandaloneRoutes.has(path)
-        header.classList.toggle("hidden", standalone)
-        footer.classList.toggle("hidden", standalone)
+        header.classList.toggle("hidden", standalone || path === DemoModeRoute)
+        footer.classList.toggle("hidden", standalone || path === DemoModeRoute)
     }))
     return (
         <Frag>
@@ -66,9 +70,11 @@ export const App = (service: StudioService) => {
                     {path: "/create", factory: WorkspacePage, reuse: true},
                     {path: "/preferences", factory: PreferencesPage},
                     {path: "/storage", factory: StoragePage},
+                    {path: "/storage/samples", factory: SampleFormatsPage},
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
+                    {path: "/changelog", factory: ChangelogPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
@@ -90,11 +96,13 @@ export const App = (service: StudioService) => {
                     {path: "/open-bundle/*", factory: OpenBundlePage},
                     {path: "/open-project", factory: OpenProjectPage},
                     {path: "/test", factory: TestPage},
+                    {path: "/testing", factory: TestingPage},
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},
                     {path: "/join/*", factory: JoinRoomPage},
                     {path: "/contests/*", factory: ContestPage},
-                    {path: DevicePreviewRoute, factory: DevicePreviewPage}
+                    {path: DevicePreviewRoute, factory: DevicePreviewPage},
+                    {path: DemoModeRoute, factory: DemoModePage}
                 ]}
             />
             <ChatOverlay lifecycle={terminator} service={service}/>

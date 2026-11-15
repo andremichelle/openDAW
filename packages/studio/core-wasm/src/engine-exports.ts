@@ -1,9 +1,21 @@
 import {Option} from "@opendaw/lib-std"
 import {RenderQuantum} from "@opendaw/lib-dsp"
-import {SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
+import {EngineNotice, SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
+
+// WASM CONTRACT: `abi::SampleRef` (frames_ptr, frame_count, channel_count, sample_rate, format) and its formats.
+export const SAMPLE_REF_BYTES = 20
+
+type FloatResolver = {
+    host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_sample_floats?(handle: number, outPtr: number): number
+}
+
+// the frames as f32 for readers that hand samples on as floats, 0 until a 16 bit sample has its float copy
+export const resolveFloats = (engine: FloatResolver, handle: number, outPtr: number): number =>
+    engine.host_resolve_sample_floats?.(handle, outPtr) ?? engine.host_resolve_sample(handle, outPtr)
 
 // WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
 export enum FieldKind {Int = 0, Float = 1, Bool = 2}
@@ -21,10 +33,11 @@ export type EngineExports = {
     device_set_sidechain_collection_field: (deviceId: number, field: number) => void
     device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
     device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
+    device_set_table_changed: (deviceId: number, tableChangedIndex: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
-    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number, childMuteKey: number, childSoloKey: number, childVolumeKey: number, childPanKey: number) => void
+    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number, childMuteKey: number, childSoloKey: number, childVolumeKey: number, childPanKey: number, cellKeyKey: number) => void
     effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number, indexKey: number, chainField: number, labelKey: number, gainKey: number, panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number, inputTapField: number, crossover1Key: number, crossover2Key: number, crossover3Key: number) => void
     input_ptr: () => number
     input_capacity: () => number
@@ -166,6 +179,9 @@ export type EngineExports = {
     // Observe a device's POINTER field and deliver the TARGET box's string field through `field_changed`
     // (the NeuralAmp's model JSON on its NeuralAmpModelBox); shares the `host_observe_field` id space.
     host_observe_target_string: (pathPtr: number, pathLen: number, fieldKey: number) => number
+    // Observe the child boxes under one of a device's hubs as a table of 32-bit words, delivered through
+    // `table_changed` (the Sampler's zones, groups and modulation slots).
+    host_observe_table: (pathPtr: number, pathLen: number, columnsPtr: number, columnsLen: number) => number
     // Route B/C (audio input ports). A device imports these: `host_bind_sidechain` declares a sidechain port by
     // its pointer field-key path (returns the port id 2+); `host_resolve_input` resolves a port id to its
     // stereo buffer during render (id 1 the through-signal).
@@ -184,6 +200,9 @@ export type EngineExports = {
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
+    sample_set_ready_i16: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
+    host_resolve_sample_floats: (handle: number, outPtr: number) => number
+    set_sample_float_budget: (values: number) => void
     // Recording/loop/note preferences (TS settings.recording.allowTakes, settings.playback.pauseOnLoopDisabled,
     // settings.playback.truncateNotesAtRegionEnd): the loop-wrap gate, pause-at-loop-end, and live note
     // truncation the sequencers read per block.
@@ -201,6 +220,10 @@ export type EngineExports = {
     report_message_ptr: () => number
     report_message_len: () => number
     report_message_clear: () => void
+    // non-fatal notices for the user, one tab-separated line each, read and cleared after `render`
+    notice_message_ptr: () => number
+    notice_message_len: () => number
+    notice_message_clear: () => void
     // the signal graph as text lines (see engine `signal_graph_report`), returns the full length
     signal_graph_report: (outPtr: number, max: number) => number
     compensation_latency: () => number // frames the heard output lags the timeline through delay compensation
@@ -223,6 +246,19 @@ export const takeReportMessage = (exports: EngineExports, memory: WebAssembly.Me
     const message = decodeUtf8(new Uint8Array(memory.buffer, exports.report_message_ptr(), length))
     exports.report_message_clear()
     return Option.wrap(message)
+}
+
+export const takeNotices = (exports: EngineExports, memory: WebAssembly.Memory): ReadonlyArray<EngineNotice> => {
+    const length = exports.notice_message_len()
+    if (length === 0) {return []}
+    const lines = decodeUtf8(new Uint8Array(memory.buffer, exports.notice_message_ptr(), length)).split("\n")
+    exports.notice_message_clear()
+    return lines.flatMap((line): ReadonlyArray<EngineNotice> => {
+        const [type, device, source] = line.split("\t")
+        if (type === "sidechain-loop") {return [{type, device, source}]}
+        if (type === "non-finite") {return [{type, device}]}
+        return []
+    })
 }
 
 export const readSignalGraph = (exports: EngineExports, memory: WebAssembly.Memory): SignalGraph => {

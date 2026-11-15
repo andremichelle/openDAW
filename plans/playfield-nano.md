@@ -1,7 +1,8 @@
 # Playfield plays Nano: replace the slot player
 
-Status: planned 2026-11-02, phase 1 committed (0fe8e500c), dry run 2026-11-03 (issues folded in below, open
-decisions at the end).
+Status: planned 2026-11-02, phase 1 committed (0fe8e500c), phases 2 to 5 built 2026-11-11 (uncommitted), phase 6
+open. Built: Nano `tail` (32), pads loop at the minimum fade 0.001 s (decided 2026-11-11, gap 8 dropped), `pad_route.rs`, `cell_key_key` spec, migration in `DeviceMigration`
+(projects and presets), `PlayfieldPads`, pad UI on cells, scripting slots on cells. A pad cannot host a composite.
 
 ## Goal
 
@@ -143,7 +144,8 @@ About 40 TS files touch the Playfield boxes. Each one moves to cells + Nano:
    Swapping a pad's instrument already works there (drag, preset), earlier than phase 6.
 5. Drag and drop between pads (`SlotDragAndDrop`) searches all boxes by `index` and must stay inside one
    Playfield.
-6. Removing a sample (`SampleSelector`) deletes the slot today. See decision 3.
+6. Removing a sample (`SampleSelector`) deletes the slot today. On a pad it must delete the cell, not only the
+   Nano (decision 8), or an empty cell stays behind.
 7. `PlayfieldDeviceBoxAdapter` (`samples`, `chop`, `reset`, `labeledAudioOutputs`), `InstrumentFactories`, the
    chop dialog and auto-chop create cells with Nano.
 8. SDK: the exported adapter API and the documented `chop` behaviour change. Keep old names working.
@@ -161,13 +163,13 @@ About 40 TS files touch the Playfield boxes. Each one moves to cells + Nano:
 ## Phases
 
 1. Note Filter MIDI-FX: box, crate, adapter, editor, native + wasm tests. Committed 0fe8e500c.
-2. Nano gaps (per decision 1), plus a parity test: one slot versus Nano in a routed cell, all gate modes,
-   reverse, mono, exclude, chopped pads, at default parameters.
-3. Engine: cell-based Playfield spec, routing step after the unit midi-fx, remap, exclude, id table, owner
-   gating, mute flag, pad sidechain, meters, tests.
-4. Schema + migration (all pointers, presets / clipboard hook, live room safe) + `playfield.od` render test.
-5. UI: cell adapter, layer commands, Playfield editor, cell editor, drag and drop, chop, SDK, scripting,
-   track visitors, drum editor plan, tests. Browser checkpoint per step.
+2. ~~Nano gaps 5, 7, 8, 11 (decision 6), plus a parity test with tolerance: one slot versus Nano in a routed cell,
+   all gate modes, reverse, mono, exclude, chopped pads, at default parameters.~~
+3. ~~Engine: cell-based Playfield spec, routing step after the unit midi-fx, remap, exclude, id table, owner
+   gating, mute flag, pad sidechain, meters, tests.~~
+4. ~~Schema + migration (all pointers, presets / clipboard hook, live room safe) + `playfield.od` render test.~~
+5. ~~UI: cell adapter, layer commands, Playfield editor, cell editor, drag and drop, chop, SDK, scripting,
+   track visitors, drum editor plan, tests. Browser checkpoint per step.~~
 6. Later: any instrument on a pad (device browser on a pad, generic pad view, pad label from the instrument).
 
 ## Decisions
@@ -181,12 +183,9 @@ About 40 TS files touch the Playfield boxes. Each one moves to cells + Nano:
    Nano sounds up to 64 overlapping notes per pad (the slot 16). Both only differ under automation, edits during
    a sounding note, or more than 16 overlapping hits on one pad. Nano gains no snapshot mode and no voice cap.
 5. The Note Filter tracks at most 64 held notes (like Pitch), approved.
-
-## Open decisions
-
-1. Bit identity costs about ten Nano changes (Nano gaps 1 to 10). Options:
-   1. A slot-compatible playback mode inside Nano.
-   2. Accept small differences, the parity test gets a tolerance.
-   3. Old projects keep the slot player inside cells, only new pads use Nano.
-2. How many held notes the pad router tracks (Pad routing 5).
-3. Removing a sample from a pad: delete the cell, or keep an empty pad.
+6. No bit identity: the parity test gets a tolerance (2026-11-11). Nano gaps 1 to 4, 6, 9, 10 stay as they are.
+   Gaps 5, 7, 8 (audible: chopped pads ringing, Gate On click, loop fade 0) and 11 (UI) are built.
+7. The pad router tracks 64 held notes per pad, like Nano's voices. A complete whose start fell out of the table
+   releases at the current `key`.
+8. Removing a sample deletes the cell, as today. Later an empty pad accepts a sample (becomes a Nano) or any
+   instrument.

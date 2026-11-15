@@ -232,7 +232,7 @@ fn an_automated_dry_resolves_at_the_update_clock_inside_the_quantum() {
     // pulses, and the 10-pulse update grid falls inside this block, at pulse 10 -> sample 50.
     let block = Block {
         index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING),
-        p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0
+        p0: 8.0, p1: 13.12, anchor: 8.0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0
     };
     mix.process(&ProcessInfo {blocks: &[block]});
     let output = mix.audio_output();

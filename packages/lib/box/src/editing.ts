@@ -74,7 +74,8 @@ export class BoxEditing implements Editing {
     #savedHistoryIndex: int = 0 // -1 = saved state was spliced away, >= 0 = valid saved position
     #epoch: int = 0
 
-    constructor(graph: BoxGraph, outsideHistory: Predicate<Box> = Predicates.alwaysFalse) {
+    constructor(graph: BoxGraph,
+                outsideHistory: Predicate<Box> = Predicates.alwaysFalse) {
         this.#graph = graph
         this.#outsideHistory = outsideHistory
 
@@ -188,7 +189,13 @@ export class BoxEditing implements Editing {
                     result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.forward(this.#graph))
-                this.#historyIndex++
+                this.#marked.splice(this.#historyIndex, 1)
+                if (this.#savedHistoryIndex > this.#historyIndex) {
+                    this.#savedHistoryIndex--
+                } else if (this.#savedHistoryIndex === this.#historyIndex) {
+                    this.#savedHistoryIndex = -1
+                }
+                this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }
@@ -210,7 +217,9 @@ export class BoxEditing implements Editing {
                     result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.inverse(this.#graph, this.#outsideHistory))
-                this.#historyIndex--
+                this.#marked.splice(--this.#historyIndex, 1)
+                if (this.#savedHistoryIndex > this.#historyIndex) {this.#savedHistoryIndex = -1}
+                this.#notifier.notify()
                 RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }

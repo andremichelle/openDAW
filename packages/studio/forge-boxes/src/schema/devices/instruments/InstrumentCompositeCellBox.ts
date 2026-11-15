@@ -24,8 +24,10 @@ export const InstrumentCompositeCellBox: BoxSchema<Pointers> = {
             },
             41: {type: "boolean", name: "mute", pointerRules: ParameterPointerRules},
             42: {type: "boolean", name: "solo", pointerRules: ParameterPointerRules},
-            43: {type: "float32", name: "pan", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""}
+            43: {type: "float32", name: "pan", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""},
+            44: {type: "boolean", name: "exclude", pointerRules: ParameterPointerRules}, // Playfield pads only
+            45: {type: "int32", name: "key", value: 60, constraints: {min: 0, max: 127}, unit: ""} // Playfield pads only
         }
     },
-    pointerRules: {accepts: [Pointers.Editing, Pointers.Selection], mandatory: false}
+    pointerRules: {accepts: [Pointers.Editing, Pointers.SideChain, Pointers.Selection], mandatory: false}
 }

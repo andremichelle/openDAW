@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-jsx",
-  "version": "0.0.98",
+  "version": "0.0.99-beta.0",
   "license": "AGPL-3.0-or-later",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -23,8 +23,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-dom": "^0.0.96",
-    "@opendaw/lib-std": "^0.0.89"
+    "@opendaw/lib-dom": "^0.0.97-beta.0",
+    "@opendaw/lib-std": "^0.0.90-beta.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

@@ -33,7 +33,7 @@ fn panic(info: &PanicInfo) -> ! {
 const MAX_VOICES: usize = 64;
 const POSITION_SLOTS: u32 = 16; // the editor paints up to 16 playheads; the slot after the last holds -1
 const LEGACY_ATTACK_SECONDS: f32 = 0.003; // the original Nano's fixed attack, the schema default
-const FAST_RELEASE_SECONDS: f32 = 0.005; // mono retrigger and choke, as the Playfield slot
+const FAST_RELEASE_SECONDS: f32 = 0.005; // mono retrigger, choke and the gated tail, as the Playfield slot
 const PAN_RAMP_SECONDS: f32 = 0.005; // the channel strip's de-click
 
 // The Nano box's field-key paths (the stable schema keys). `[10]`, `[15]` and `[20]` are the original fields.
@@ -54,6 +54,7 @@ const PANNING_FIELD: [u16; 1] = [28];
 const POLYPHONE_FIELD: [u16; 1] = [29];
 const ONE_SHOT_FIELD: [u16; 1] = [30];
 const FIXED_PITCH_FIELD: [u16; 1] = [31];
+const TAIL_FIELD: [u16; 1] = [32];
 const POSITIONS_PATH: [u16; 1] = [1001];
 
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
@@ -86,6 +87,7 @@ pub struct NanoState {
     polyphone: bool,
     one_shot: bool,
     fixed_pitch: bool,
+    tail: bool,
     pan_left: LinearRamp,
     pan_right: LinearRamp,
     processing: bool, // false until the first rendered chunk, so the initial pan jumps instead of gliding
@@ -108,6 +110,7 @@ pub struct NanoState {
     polyphone_id: u32,
     one_shot_id: u32,
     fixed_pitch_id: u32,
+    tail_id: u32,
     sample_id: u32,
     positions_id: u32,
     positions_ptr: u32
@@ -136,6 +139,7 @@ impl Instrument for Nano {
         state.polyphone = true;
         state.one_shot = false;
         state.fixed_pitch = false;
+        state.tail = false;
         state.pan_left = LinearRamp::linear(sample_rate, PAN_RAMP_SECONDS);
         state.pan_right = LinearRamp::linear(sample_rate, PAN_RAMP_SECONDS);
         state.pan_left.set(1.0, false);
@@ -158,6 +162,7 @@ impl Instrument for Nano {
         state.polyphone_id = abi::bind_parameter(&POLYPHONE_FIELD);
         state.one_shot_id = abi::bind_parameter(&ONE_SHOT_FIELD);
         state.fixed_pitch_id = abi::bind_parameter(&FIXED_PITCH_FIELD);
+        state.tail_id = abi::bind_parameter(&TAIL_FIELD);
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
         state.positions_id = abi::bind_broadcast(&POSITIONS_PATH, POSITION_SLOTS);
     }
@@ -194,8 +199,6 @@ impl Instrument for Nano {
             publish_positions(state);
             return;
         };
-        let left = sample.plane(0);
-        let right = if sample.channel_count > 1 {sample.plane(1)} else {left};
         let loop_fade_frames = if state.loop_enabled {
             (state.loop_fade_seconds as f64 * sample.sample_rate as f64).max(1.0)
         } else {
@@ -216,13 +219,15 @@ impl Instrument for Nano {
             loop_start: state.loop_start,
             loop_end: state.loop_end,
             one_shot: state.one_shot,
-            fixed_pitch: state.fixed_pitch
+            fixed_pitch: state.fixed_pitch,
+            tail: state.tail,
+            end_fade: (FAST_RELEASE_SECONDS * state.sample_rate) as u32
         };
-        for voice in state.voices.iter_mut() {
+        abi::with_planes!(sample, |left, right| for voice in state.voices.iter_mut() {
             if voice.is_active() && voice.process(out_left, out_right, left, right, &playback) {
                 voice.force_stop();
             }
-        }
+        });
         apply_panning(state, out_left, out_right);
         publish_positions(state);
     }
@@ -262,6 +267,8 @@ impl Instrument for Nano {
             state.one_shot = bool_value(value);
         } else if id == state.fixed_pitch_id {
             state.fixed_pitch = bool_value(value);
+        } else if id == state.tail_id {
+            state.tail = bool_value(value);
         }
     }
 
@@ -350,7 +357,7 @@ pub fn render(state: &mut NanoState, events: &[EventRecord], out_left: &mut [f32
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
     abi::dispatch_range::<Nano>(state, [&mut *out_left, &mut *out_right], events, &block);
     Nano::finish(state, [out_left, out_right]);
 }
@@ -403,7 +410,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         8 => float_value(value, &LOOP_FADE_MAPPING),
         11 => float_value(value, &TUNE_MAPPING),
         12 => float_value(value, &PANNING_MAPPING),
-        13 | 14 | 15 => if bool_value(value) {1.0} else {0.0},
+        13 | 14 | 15 | 16 => if bool_value(value) {1.0} else {0.0},
         _ => f32::NAN
     }
 }

@@ -19,3 +19,4 @@ export {GlobalGrooveLabel, migrateGrooveCollection} from "./MigrateGrooveCollect
 export {migrateUndefinedTracks} from "./MigrateUndefinedTracks"
 export {migrateUnsatisfiedMandatory} from "./MigrateUnsatisfiedMandatory"
 export {migrateZeroDurationRegions} from "./MigrateZeroDurationRegions"
+export {migrateViewStates} from "./MigrateViewStates"

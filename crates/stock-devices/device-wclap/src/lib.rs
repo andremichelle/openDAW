@@ -116,7 +116,7 @@ mod tests {
         let in_left: Vec<f32> = (0..128).map(|i| (i as f32 * 0.1).sin()).collect();
         let in_right: Vec<f32> = (0..128).map(|i| (i as f32 * 0.07).cos()).collect();
         let (mut out_left, mut out_right) = (vec![0.0f32; 128], vec![0.0f32; 128]);
-        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 32, s1: 96, bpm: 120.0};
+        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 32, s0: 32, s1: 96, bpm: 120.0};
         state.link.process_effect(&in_left, &in_right, &mut out_left, &mut out_right, 32, 96, &block);
         assert_eq!(&out_left[32..96], &in_left[32..96]);
         assert_eq!(&out_right[32..96], &in_right[32..96]);

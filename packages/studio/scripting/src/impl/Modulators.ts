@@ -206,12 +206,14 @@ export class RandomModulatorImpl extends ModulatorFacade<RandomModulatorBox> imp
     declare smooth: unitValue
     declare seed: int
     declare levels: int
+    declare bias: bipolar
+    declare focus: unitValue
 
     constructor(context: Context, box: RandomModulatorBox) {
         super(context, box)
         this.bind({
             loop: box.loop, rateSync: box.rateSync, rateAbsolute: box.rateAbsolute, phase: box.phase,
-            smooth: box.smooth, seed: box.seed, levels: box.levels
+            smooth: box.smooth, seed: box.seed, levels: box.levels, bias: box.bias, focus: box.focus
         })
     }
 }

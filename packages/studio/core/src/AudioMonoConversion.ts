@@ -11,7 +11,7 @@ export namespace AudioMonoConversion {
     export type Mode = "sum" | "equal-power"
 
     export const canConvert = (file: AudioFileBoxAdapter): boolean =>
-        file.data.mapOr(data => data.numberOfChannels > 1, false)
+        file.info.mapOr(info => info.numberOfChannels > 1, false)
 
     export const mixdown = (audioData: AudioData, mode: Mode): AudioData => {
         const {sampleRate, numberOfFrames, numberOfChannels, frames} = audioData

@@ -41,6 +41,16 @@ pub fn pulses_to_samples(pulses: f64, bpm: f32, sample_rate: f32) -> f64 {
     pulses_to_seconds(pulses, bpm) * sample_rate as f64
 }
 
+// One division, so a whole pulse count that spans whole frames converts exactly.
+pub fn pulses_to_frames(pulses: f64, bpm: f32, sample_rate: f32) -> f64 {
+    pulses * 60.0 * sample_rate as f64 / (QUARTER * bpm as f64)
+}
+
+/// The frame `pulse` falls on, counted from the transport's `anchor` pulse at frame `anchor_frame`.
+pub fn frame_at(pulse: f64, anchor: f64, anchor_frame: i64, bpm: f32, sample_rate: f32) -> i64 {
+    anchor_frame + math::floor(pulses_to_frames(pulse - anchor, bpm, sample_rate)) as i64
+}
+
 /// Pulses per bar for a time signature (4/4 = 3840). Mirrors `fromSignature`; truncation equals
 /// `Math.floor` for these positive values.
 pub fn from_signature(nominator: i32, denominator: i32) -> f64 {

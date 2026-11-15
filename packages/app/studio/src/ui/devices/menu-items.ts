@@ -1,5 +1,6 @@
 import {
     AudioUnitBoxAdapter,
+    AudioUnitGroups,
     DeviceBoxAdapter,
     DeviceHost,
     Devices,
@@ -8,18 +9,19 @@ import {
     InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
+    PlayfieldDeviceBoxAdapter,
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {
-    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectBox, EffectFactories, MenuItem, NestedHostExit,
+    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectBox, EffectFactories, MenuItem, NestedHostExit, PadsClipboard,
     PresetEntry
 } from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs"
 import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
-import {Editing, isDefined, isInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Editing, int, isDefined, isInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Clipboard} from "@opendaw/lib-dom"
-import {InstrumentCompositeBox} from "@opendaw/studio-boxes"
+import {InstrumentCompositeBox, InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
@@ -29,6 +31,53 @@ import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 
 export namespace MenuItems {
+    export const movePadToUnit = (service: StudioService, pad: InstrumentCompositeCellBoxAdapter): MenuItem =>
+        MenuItem.default({label: "Move to Own Track", hidden: !pad.isPad, selectable: pad.inputAdapter.nonEmpty()})
+            .setTriggerProcedure(() => {
+                const {editing, api, userEditingManager} = service.project
+                editing.modify(() => api.movePadToUnit(pad.box).match({
+                    ok: unit => userEditingManager.audioUnit.edit(unit.editing),
+                    err: reason => console.warn(reason)
+                }))
+            })
+
+    // a pad copies as an audio unit, so a pad also takes any copied audio unit
+    export const padClipboard = (service: StudioService, playfield: PlayfieldDeviceBoxAdapter, key: int,
+                                 pad: Option<InstrumentCompositeCellBox>): ReadonlyArray<MenuItem> => {
+        const {editing, api} = service.project
+        const copy = (cell: InstrumentCompositeCellBox) => PadsClipboard.copyEntry(cell, playfield.audioUnitBoxAdapter().box)
+        return [
+            MenuItem.default({label: "Copy", selectable: pad.nonEmpty(), separatorBefore: true})
+                .setTriggerProcedure(() => pad.flatMap(copy).ifSome(entry => ClipboardManager.write(entry))),
+            MenuItem.default({label: "Cut", selectable: pad.nonEmpty()})
+                .setTriggerProcedure(() => pad.ifSome(cell => copy(cell).ifSome(entry => {
+                    ClipboardManager.write(entry, true)
+                    editing.modify(() => api.deleteCompositeLayer(cell))
+                }))),
+            MenuItem.default({label: "Paste"})
+                .setTriggerProcedure(async () => {
+                    const system = (await Option.async(Clipboard.readText())).flatMap(ClipboardManager.decode)
+                    const entry = system.nonEmpty() ? system : ClipboardManager.peek()
+                    if (!playfield.box.isAttached()) {return}
+                    if (entry.mapOr(entry => entry.type !== "audio-units", true)) {
+                        RuntimeNotifier.notify({message: "The clipboard holds no pad or audio unit", icon: "Warning"})
+                        return
+                    }
+                    editing.modify(() => api.pasteAudioUnitAsPad(playfield.box, key, entry.unwrap().data)
+                        .match({ok: () => {}, err: reason => RuntimeNotifier.notify({message: reason, icon: "Warning"})}))
+                })
+        ]
+    }
+
+    // leaves the cell for its parent, then deletes it
+    export const deleteCell = (service: StudioService, cell: InstrumentCompositeCellBoxAdapter): void => {
+        const {editing, api, userEditingManager} = service.project
+        editing.modify(() => {
+            userEditingManager.audioUnit.edit(backTargetOfCell(cell))
+            api.deleteCompositeLayer(cell.box)
+        })
+    }
+
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {
         const {project} = service
         const {editing, api} = project
@@ -45,15 +94,13 @@ export namespace MenuItems {
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
             populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
             parent.addMenuItem(copyAudioUnit(audioUnit, {separatorBefore: true}))
-            parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true})
+            parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true, hidden: deviceHost.isPad})
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(api.duplicateCompositeLayer(deviceHost.box))
                 })))
-            parent.addMenuItem(MenuItem.default({label: "Delete layer"})
-                .setTriggerProcedure(() => editing.modify(() => {
-                    project.userEditingManager.audioUnit.edit(backTargetOfCell(deviceHost))
-                    api.deleteCompositeLayer(deviceHost.box)
-                })))
+            parent.addMenuItem(movePadToUnit(service, deviceHost))
+            parent.addMenuItem(MenuItem.default({label: deviceHost.isPad ? "Delete pad" : "Delete layer", separatorBefore: deviceHost.isPad})
+                .setTriggerProcedure(() => deleteCell(service, deviceHost)))
             return
         }
         const instrumentBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
@@ -81,7 +128,8 @@ export namespace MenuItems {
     }
 
     export const copyAudioUnit = (audioUnit: AudioUnitBoxAdapter, options?: { separatorBefore?: boolean }): MenuItem =>
-        MenuItem.default({label: "Copy AudioUnit", hidden: audioUnit.isOutput, separatorBefore: options?.separatorBefore})
+        MenuItem.default({label: "Copy AudioUnit",
+            selectable: !AudioUnitGroups.isGroup(audioUnit.box), hidden: audioUnit.isOutput, separatorBefore: options?.separatorBefore})
             .setTriggerProcedure(() => AudioUnitsClipboard.copyEntry(audioUnit).ifSome(ClipboardManager.write))
 
     // the system clipboard is async, so the item is enabled by this session's last copy and reads the system

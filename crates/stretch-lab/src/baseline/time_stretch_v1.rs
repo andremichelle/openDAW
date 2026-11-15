@@ -790,7 +790,7 @@ mod tests {
     }
 
     fn playing_block() -> Block {
-        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 240.0, s0: 0, s1: 64, bpm: 120.0}
+        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 240.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 64, bpm: 120.0}
     }
 
     #[test]
@@ -840,7 +840,7 @@ mod tests {
         let mut output = AudioBuffer::new();
         let fading_gain = [1.0f32; 128];
         // content_ppqn 100 is past the last warp marker (10) -> the cycle is silent.
-        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 340.0, s0: 0, s1: 64, bpm: 120.0};
+        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 340.0, anchor: 100.0, anchor_frame: 0, s0: 0, s1: 64, bpm: 120.0};
         let src = Source {left: &source, right: &source, num_frames: source.len()};
         sequencer.process(&mut output, &src, 48_000.0, &transients, &config, 0.0, &block, 100.0, 100.0, 340.0, &fading_gain, 48_000.0);
         assert_eq!(output.left[0], 0.0, "content past the warp range is silent");

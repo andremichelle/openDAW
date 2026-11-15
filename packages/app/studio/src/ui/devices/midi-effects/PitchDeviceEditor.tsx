@@ -4,7 +4,7 @@ import {Lifecycle} from "@opendaw/lib-std"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {createElement} from "@opendaw/lib-jsx"
-import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
+import {ControlContext, createParameterRow} from "@/ui/devices/instruments/NanoDeviceEditor/ParameterControls"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
@@ -23,6 +23,7 @@ export const PitchDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const {octaves, semiTones, cent} = adapter.namedParameter
     const {project} = service
     const {editing, liveStreamReceiver, midiLearning} = project
+    const controls: ControlContext = {lifecycle, editing, midiLearning, deviceHost}
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -30,27 +31,12 @@ export const PitchDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              {ControlBuilder.createKnob({
-                                  lifecycle,
-                                  editing,
-                                  midiLearning,
-                                  adapter,
-                                  parameter: octaves
-                              })}
-                              {ControlBuilder.createKnob({
-                                  lifecycle,
-                                  editing,
-                                  midiLearning,
-                                  adapter,
-                                  parameter: semiTones
-                              })}
-                              {ControlBuilder.createKnob({
-                                  lifecycle,
-                                  editing,
-                                  midiLearning,
-                                  adapter,
-                                  parameter: cent
-                              })}
+                              <div className="parameter-stack pitch">
+                                  <div className="label">Pitch</div>
+                                  {createParameterRow(controls, octaves)}
+                                  {createParameterRow(controls, semiTones)}
+                                  {createParameterRow(controls, cent)}
+                              </div>
                           </div>
                       )}
                       populateMeter={() => (

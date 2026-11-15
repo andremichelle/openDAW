@@ -39,6 +39,8 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
             const modify = <T extends AnyClipBoxAdapter>(procedure: Procedure<T>) =>
                 editing.modify(() => selection.selected().forEach(adapter => procedure(adapter as T)))
             collector.addItems(
+                ColorMenu.createPalette(hue => modify(adapter => adapter.box.hue.setValue(hue)),
+                    selection.selected().every(adapter => adapter.hue === clip.hue) ? clip.hue : undefined),
                 MenuItem.default({label: "Delete"})
                     .setTriggerProcedure(() => editing.modify(() =>
                         selection.selected().forEach(clip => clip.box.delete()))),
@@ -55,7 +57,6 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                         const newValue = !clip.box.mute.getValue()
                         modify(({box: {mute}}) => mute.setValue(newValue))
                     }),
-                ColorMenu.createItem(hue => modify(adapter => adapter.box.hue.setValue(hue))),
                 GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Consolidate", selectable: clip.isMirrowed})
                     .setTriggerProcedure(() => editing.modify(() =>

@@ -1,6 +1,6 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {ModulatorParameterPointerRules, UnipolarConstraints} from "../Defaults"
+import {BipolarConstraints, ModulatorParameterPointerRules, UnipolarConstraints} from "../Defaults"
 import {ModulatorFactory} from "./ModulatorFactory"
 
 export const RandomModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModulator("RandomModulatorBox", {
@@ -25,5 +25,7 @@ export const RandomModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMo
     17: {
         type: "int32", name: "levels", value: 0, // 0 stays continuous
         constraints: {min: 0, max: 32}, unit: ""
-    }
+    },
+    18: {type: "float32", name: "bias", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...BipolarConstraints},
+    19: {type: "float32", name: "focus", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints}
 })

@@ -1,13 +1,32 @@
+@use "@/colors"
+
 component
-  display: grid
+  display: flex
+  flex-direction: column
   width: 64px
-  grid-template-columns: repeat(auto-fill, 1fr)
-  border-radius: 0.125em
+  row-gap: 1px
+  border-radius: 0.25em
   position: relative
-  padding: 0.125em 0.125em 0.875em 0.125em
+  padding: 1px
 
   &.enabled, &.mastering
-    background-color: rgba(black, 0.25)
+    background-color: colors.$MIXER-SECTION-BACKGROUND
+    box-shadow: colors.$MIXER-SECTION-SHADOW
+
+  > button.add
+    order: 1
+    margin-top: auto
+    flex: 0 0 14px
+    border-radius: calc(0.25em - 1px)
+    color: colors.$MIXER-ADD-COLOR
+    background-color: colors.$MIXER-ADD-BACKGROUND
+
+    > svg
+      font-size: 10px
+
+    &:hover, &.active
+      color: var(--color-cream)
+      background-color: colors.$MIXER-ADD-BACKGROUND-HOVER
 
   &.mastering
     padding: 0

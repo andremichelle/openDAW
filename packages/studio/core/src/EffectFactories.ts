@@ -1,7 +1,10 @@
-import {Arrays, Optional, UUID} from "@opendaw/lib-std"
-import {Box} from "@opendaw/lib-box"
+import {Arrays, int, isInstanceOf, Optional, UUID} from "@opendaw/lib-std"
+import {Box, Field} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
+    AudioUnitBox,
+    EuclidDeviceBox,
+    PlayfieldDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     AutotuneDeviceBox,
@@ -22,6 +25,7 @@ import {
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
     WclapDeviceBox,
     WclapMidiEffectBox,
     PitchDeviceBox,
@@ -39,7 +43,7 @@ import {
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {DeviceManualUrls} from "@opendaw/studio-adapters"
+import {DeviceManualUrls, Euclid as EuclidLanes, PlayfieldPads} from "@opendaw/studio-adapters"
 import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
@@ -68,9 +72,9 @@ export namespace EffectFactories {
     }
 
     export const NoteFilter: EffectFactory = {
-        defaultName: "Note Filter",
+        defaultName: "Filter",
         defaultIcon: IconSymbol.Piano,
-        briefDescription: "Note Filter",
+        briefDescription: "Filter",
         description: "Passes a key range and transposes or sets the keys",
         manualPage: DeviceManualUrls.NoteFilter,
         separatorBefore: false,
@@ -79,7 +83,7 @@ export namespace EffectFactories {
         boxName: "NoteFilterDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
-                box.label.setValue("Note Filter")
+                box.label.setValue("Filter")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -101,6 +105,55 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
+    }
+
+    export const ChordKeys: EffectFactory = {
+        defaultName: "Chord Keys",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Chord Player",
+        description: "Plays the chords of a key from single keys",
+        manualPage: DeviceManualUrls.ChordKeys,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "ChordKeysDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            ChordKeysDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Chord Keys")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    // the lowest pad of the Playfield the effect plays into, key 60 into any other instrument
+    const firstNote = (host: Field): int => {
+        const unit = host.box
+        if (!isInstanceOf(unit, AudioUnitBox)) {return 60}
+        const keys = unit.input.pointerHub.incoming()
+            .flatMap(({box}) => isInstanceOf(box, PlayfieldDeviceBox) ? PlayfieldPads.padsOf(box) : [])
+            .map(pad => pad.index.getValue())
+        return keys.length > 0 ? Math.min(...keys) : 60
+    }
+
+    export const Euclid: EffectFactory = {
+        defaultName: "Euclid",
+        defaultIcon: IconSymbol.Random,
+        briefDescription: "Euclidean Sequencer",
+        description: "Plays notes on Euclidean rhythms, one lane per note, made for the Playfield",
+        manualPage: DeviceManualUrls.Euclid,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "EuclidDeviceBox",
+        create: ({boxGraph}, hostField, index) => {
+            const device = EuclidDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Euclid")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            EuclidLanes.createLane(boxGraph, device, firstNote(hostField))
+            return device
+        }
     }
 
     export const Pitch: EffectFactory = {
@@ -676,6 +729,8 @@ export namespace EffectFactories {
 
     export const MidiNamed = {
         Arpeggio,
+        ChordKeys,
+        Euclid,
         NoteFilter,
         Pitch,
         ScaleMatrix,

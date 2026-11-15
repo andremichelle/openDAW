@@ -53,6 +53,8 @@ export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter, LabeledAud
     get iconField(): StringField
     get defaultTrackType(): TrackType
     get acceptsMidiEvents(): boolean
+    /** The instrument's own name for a key (a Playfield names its pads), None where it has none. */
+    noteName?(key: int): Option<string>
 }
 
 // A host of device chains. A host is ONE-SIDED when it hosts only one kind of chain: an AudioEffectCompositeCellBox

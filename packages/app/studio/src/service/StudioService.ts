@@ -24,6 +24,7 @@ import {
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider, TrafficMeter} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {Spotlight} from "@/ui/spotlight/Spotlight"
@@ -37,6 +38,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {SampleEditorService} from "@/service/SampleEditorService"
+import {ScreenRecorder} from "@/service/ScreenRecorder"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
@@ -45,7 +47,7 @@ import {FooterLabel} from "@/service/FooterLabel"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
+import {ExportConfiguration, InstrumentFactories, SampleLoader} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -137,6 +139,7 @@ export class StudioService implements ProjectEnv {
     readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
+    readonly screenRecorder: ScreenRecorder
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
@@ -167,6 +170,7 @@ export class StudioService implements ProjectEnv {
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext, new WasmBpmDetector(STRETCH_WASM_URL))
+        this.screenRecorder = new ScreenRecorder(audioContext, this.engine)
         this.#sampleService.subscribe(([sample, _]) => this.#signals.notify({
             type: "import-sample",
             sample
@@ -362,7 +366,7 @@ export class StudioService implements ProjectEnv {
                 continue
             }
             const uuid = UUID.parse(sample.uuid)
-            await Promises.tryCatch(this.sampleManager.getAudioData(uuid))
+            await Promises.tryCatch(SampleLoader.loaded(this.sampleManager.getOrCreate(uuid)))
             if (aborted) {break}
             editing.modify(() => {
                 const {trackBox, instrumentBox} = api.createInstrument(InstrumentFactories.Tape)
@@ -439,6 +443,8 @@ export class StudioService implements ProjectEnv {
     }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
+
+    revealDevice(uuid: UUID.Bytes): void {this.#signals.notify({type: "reveal-device", uuid})}
 
     async verifyProject() {
         if (!this.hasProfile) {return}
@@ -546,6 +552,7 @@ export class StudioService implements ProjectEnv {
                 lifeTime.ownAll(
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),
+                    TrackGrouping.deselectHiddenTracks(project),
                     userEditingManager.timeline.catchupAndSubscribe(option => option
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)

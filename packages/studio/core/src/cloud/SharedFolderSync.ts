@@ -234,7 +234,7 @@ export namespace SharedFolderSync {
         if (!await ensureLocal(local, "audio.wav", () => awaitSampleLoaded(loader))) {return false}
         const remote = sampleFolder(loader.uuid)
         const result = await Promises.tryCatch((async () => {
-            await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`), onProgress)
+            await cloudHandler.upload(`${remote}/audio.wav`, bufferOf(await SampleStorage.get().readAudio(loader.uuid)), onProgress)
             await cloudHandler.upload(`${remote}/peaks.bin`, await readOpfs(`${local}/peaks.bin`))
             await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
         })())
@@ -379,10 +379,10 @@ export namespace SharedFolderSync {
         return promise
     }
 
-    const readOpfs = async (path: string): Promise<ArrayBuffer> => {
-        const bytes = await Workers.Opfs.read(path)
-        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-    }
+    const bufferOf = (bytes: Uint8Array): ArrayBuffer =>
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+
+    const readOpfs = async (path: string): Promise<ArrayBuffer> => bufferOf(await Workers.Opfs.read(path))
 
     const writeOpfs = (path: string, data: ArrayBuffer): Promise<void> => Workers.Opfs.write(path, new Uint8Array(data))
 

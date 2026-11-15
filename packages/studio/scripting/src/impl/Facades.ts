@@ -12,7 +12,6 @@ import {
     MIDIOutputParameterBox,
     ModulationBox,
     NoteEventBox,
-    PlayfieldSampleBox,
     RandomModulatorBox,
     StepsModulatorBox,
     TrackBox,
@@ -68,8 +67,9 @@ export namespace Facades {
         if (InstrumentImpls.isBox(box)) {return InstrumentImpls.wrap(context, box)}
         if (MIDIEffectImpls.isBox(box)) {return MIDIEffectImpls.wrap(context, box)}
         if (AudioEffectImpls.isBox(box)) {return AudioEffectImpls.wrap(context, box)}
-        if (box instanceof PlayfieldSampleBox) {return PlayfieldSlotImpl.wrap(context, box)}
-        if (box instanceof InstrumentCompositeCellBox) {return InstrumentCompositeLayerImpl.wrap(context, box)}
+        if (box instanceof InstrumentCompositeCellBox) {
+            return PlayfieldSlotImpl.isSlot(box) ? PlayfieldSlotImpl.wrap(context, box) : InstrumentCompositeLayerImpl.wrap(context, box)
+        }
         if (box instanceof AudioEffectCompositeCellBox) {return AudioEffectCompositeEntryImpl.wrap(context, box)}
         if (box instanceof AuxSendBox) {return SendImpl.wrap(context, box)}
         if (box instanceof WerkstattParameterBox) {return ScriptParameterImpl.wrap(context, box)}

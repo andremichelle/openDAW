@@ -1,0 +1,59 @@
+@use "@/mixins"
+
+component
+  display: grid
+  grid-template-rows: repeat(9, 17px)
+  grid-template-columns: 12em repeat(var(--columns), 4.5em)
+  row-gap: 1px
+  column-gap: 4px
+  align-content: start
+  position: relative
+  @include mixins.Control
+
+  > header
+    grid-area: 1 / 1 / -1 / 2
+    border-radius: 8px
+    outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.12)
+    position: relative
+
+    > canvas
+      top: 4px
+      left: 4px
+      width: calc(100% - 8px)
+      height: calc(100% - 8px)
+      border-radius: 4px
+      position: absolute
+
+  > section
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    border-radius: 3px
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+    pointer-events: none
+
+  > h3.head
+    font-size: 9px
+    font-weight: 400
+    letter-spacing: 0.2px
+    padding: 1px 4px
+    height: min-content
+    border-radius: 3px 3px 0 0
+    text-align: center
+    white-space: nowrap
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
+  > div.control
+    display: grid
+    grid-template-rows: auto auto
+    white-space: nowrap
+    justify-content: center
+    padding: 4px 4px 1px 4px
+
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
+      text-align: center
+      text-transform: capitalize
+      color: var(--color-shadow)
+      z-index: 1

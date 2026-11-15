@@ -12,7 +12,8 @@
 //! become linear-phase FIRs at the engine rate, run by `dsp::convolution::Convolver` on mid/side, then the match
 //! gain `[20]`, the Hyrax limiter and the final amplitude `[21]`. Final touch parameters: amount `[10]` (blend with
 //! the dry signal delayed to the FIR center), gain `[11]`, width `[12]` (side level), ceiling `[13]` (limiter
-//! threshold); limiter `[14]` is a plain field. The latency is constant: half the FIR plus the limiter lookahead.
+//! threshold); limiter `[14]` is a plain field. Compare `[15]` and mono `[16]` are local listening switches, mono
+//! folds the output after the meters. The latency is constant: half the FIR plus the limiter lookahead.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -43,6 +44,7 @@ const WIDTH_FIELD: [u16; 1] = [12];
 const CEILING_FIELD: [u16; 1] = [13];
 const LIMITER_FIELD: [u16; 1] = [14];
 const COMPARE_FIELD: [u16; 1] = [15]; // no box field: a local value, delivered only by `override_device_field`
+const MONO_FIELD: [u16; 1] = [16]; // no box field: a local value, delivered only by `override_device_field`
 const METERS_FIELD: [u16; 1] = [0]; // peak left, peak right, short-term LUFS, integrated LUFS, correlation
 const METER_COUNT: usize = 5;
 const SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS MasteringDeviceBoxAdapter.spectrum
@@ -126,6 +128,7 @@ pub struct MasteringState {
     final_amplitude: f32,
     compare: bool,
     compare_gain: f32,
+    mono: bool,
     output_loudness: Loudness,
     dry_loudness: Loudness,
     correlation: Correlation,
@@ -139,6 +142,7 @@ pub struct MasteringState {
     spectrum_low_id: u32,
     spectrum_low_ptr: u32,
     compare_id: u32,
+    mono_id: u32,
     amount_id: u32,
     gain_id: u32,
     width_id: u32,
@@ -177,6 +181,7 @@ impl MasteringDevice {
         match value {
             FieldValue::Bool(flag) if id == state.limiter_id => state.limiter = flag,
             FieldValue::Bool(flag) if id == state.compare_id => state.compare = flag,
+            FieldValue::Bool(flag) if id == state.mono_id => state.mono = flag,
             FieldValue::Float(real) if id == state.match_gain_id => state.match_gain = real,
             FieldValue::Float(real) if id == state.final_amplitude_id => state.final_amplitude = real,
             FieldValue::Bytes(bytes) if id == state.mid_curve_id => {
@@ -255,6 +260,7 @@ impl AudioEffect for MasteringDevice {
         state.final_amplitude = 1.0;
         state.compare = false;
         state.compare_gain = 1.0;
+        state.mono = false;
         state.output_loudness.init(sample_rate);
         state.dry_loudness.init(sample_rate);
         state.correlation.init(sample_rate);
@@ -268,6 +274,7 @@ impl AudioEffect for MasteringDevice {
         state.spectrum_low_id = abi::bind_broadcast(&SPECTRUM_LOW_FIELD, LOW_NUM_BINS as u32);
         state.spectrum_low_ptr = 0;
         state.compare_id = abi::observe_field(&COMPARE_FIELD);
+        state.mono_id = abi::observe_field(&MONO_FIELD);
         state.amount_id = abi::bind_parameter(&AMOUNT_FIELD);
         state.gain_id = abi::bind_parameter(&GAIN_FIELD);
         state.width_id = abi::bind_parameter(&WIDTH_FIELD);
@@ -359,6 +366,13 @@ impl AudioEffect for MasteringDevice {
         }
         Self::meter(state, &out_left[s0..s1], &out_right[s0..s1]);
         Self::spectrum(state, &out_left[s0..s1], &out_right[s0..s1]);
+        if state.mono {
+            for index in s0..s1 {
+                let mid = (out_left[index] + out_right[index]) * 0.5;
+                out_left[index] = mid;
+                out_right[index] = mid;
+            }
+        }
     }
 }
 

@@ -28,7 +28,7 @@ export const resolveLoopRange = (adapter: NanoDeviceBoxAdapter, numFrames: numbe
 }
 
 export const loopRangeOf = (adapter: NanoDeviceBoxAdapter): Option<LoopRange> =>
-    adapter.file().flatMap(file => file.data).map(data => resolveLoopRange(adapter, data.numberOfFrames, data.sampleRate))
+    adapter.file().flatMap(file => file.info).map(info => resolveLoopRange(adapter, info.numberOfFrames, info.sampleRate))
 
 export const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoDeviceBoxAdapter): void => {
     context.clearRect(0, 0, width, height)
@@ -54,7 +54,7 @@ export const paintWaveform = ({context, width, height}: CanvasPainter, adapter: 
         const u1 = end * numFrames
         const x0 = start * wd
         const x1 = end * wd
-        context.fillStyle = Colors.dark.toString()
+        context.fillStyle = Colors.blue.toString()
         renderRange(u0, u1, x0, x1)
         context.fillRect(Math.round(x0), 0, 1, fullHeight)
         context.fillRect(Math.round(x1), 0, 1, fullHeight)

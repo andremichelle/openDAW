@@ -47,6 +47,7 @@ const SpectrumScale = new LinearScale(-60.0, -3.0)
 
 const CURVE_BIN_HZ = 44100 / 4096
 const COMPARE_KEY = 15
+const MONO_KEY = 16
 const CURVE_POINTS = 240
 const THUMB_HEIGHT = "0.5em" // MasteringPanel.sass div.thumb
 const SnapCenter: ValueGuide.Options = {snap: {threshold: 0.5}}
@@ -115,6 +116,7 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
     const fileReferences: Array<Reference> = []
     const reference = new DefaultObservableValue<string>(Matchering.BuiltinProfiles[0])
     const compare = new DefaultObservableValue(false)
+    const mono = new DefaultObservableValue(false)
     const busy = new DefaultObservableValue(false)
     const device = new MutableObservableOption<MasteringDeviceBoxAdapter>()
     const findDevice = (): Option<MasteringDeviceBoxAdapter> => Option.wrap(outputUnit.box.mastering.pointerHub.incoming().at(0))
@@ -391,7 +393,9 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                     meters[3].bar.style.width = `${(values[4] + 1.0) * 50}%`
                 }),
                 compare.catchupAndSubscribe(owner => engine.overrideDeviceField(adapter.uuid, COMPARE_KEY, owner.getValue())),
-                {terminate: () => engine.overrideDeviceField(adapter.uuid, COMPARE_KEY, false)}
+                {terminate: () => engine.overrideDeviceField(adapter.uuid, COMPARE_KEY, false)},
+                mono.catchupAndSubscribe(owner => engine.overrideDeviceField(adapter.uuid, MONO_KEY, owner.getValue())),
+                {terminate: () => engine.overrideDeviceField(adapter.uuid, MONO_KEY, false)}
             )
         }
         const slider: HTMLElement = (
@@ -543,6 +547,16 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                                 {isDefined(adapter)
                                     ? renderKnob(lifecycle, adapter.namedParameter.width, SnapCenter)
                                     : renderPlaceholderKnob(lifecycle, placeholders.width, 0.5)}
+                                <Column ems={LKR} color={Colors.cream}>
+                                    <h5>Test Mono</h5>
+                                    <Checkbox lifecycle={lifecycle} model={mono} className={disabledClass}
+                                              appearance={{
+                                                  color: Colors.shadow, activeColor: Colors.yellow, framed: true,
+                                                  tooltip: "Listen in mono (not stored, exports stay stereo)"
+                                              }}>
+                                        <span>ON</span>
+                                    </Checkbox>
+                                </Column>
                             </div>
                         </section>
                         <section className="meters">
@@ -604,8 +618,16 @@ export const MasteringPanel = ({lifecycle, service, outputUnit}: Construct) => {
                 render()
             }
         }),
-        engine.subscribeWorkletChanged(() => compare.setValue(false)),
-        {terminate: () => compare.setValue(false)}
+        engine.subscribeWorkletChanged(() => {
+            compare.setValue(false)
+            mono.setValue(false)
+        }),
+        {
+            terminate: () => {
+                compare.setValue(false)
+                mono.setValue(false)
+            }
+        }
     )
     if (device.isEmpty()) {render()}
     MasteringProfiles.list().then(entries => {

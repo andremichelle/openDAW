@@ -9,6 +9,7 @@ export type Options = {
     measure?: Provider<AABB>
     padding?: Padding
     dragPadding?: Padding // for a native drag entering the target, defaults to `padding`
+    pointerOnly?: boolean
 }
 
 const DragOverSilence = 1000
@@ -75,7 +76,9 @@ export const installAutoScroll = (target: Element, autoScroller: AutoScroller, o
                 && isDefined(event.target.closest(options.ignorePointerSelector))) {return}
             arm("pointer")
         }, {capture: true}),
-        Events.subscribe(target, "dragenter", () => {if (lifeTime.isEmpty()) {arm("drag")}}, {capture: true}),
+        Events.subscribe(target, "dragenter", () => {
+            if (options?.pointerOnly !== true && lifeTime.isEmpty()) {arm("drag")}
+        }, {capture: true}),
         lifeTime
     )
 }

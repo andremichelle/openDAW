@@ -9,6 +9,22 @@ pub mod harmony;
 pub mod random;
 pub mod value_mapping;
 
+/// One stored sample frame value, read as f32. Sample frames are resident as f32 or as 16 bit PCM.
+pub trait Pcm: Copy {
+    fn to_f32(self) -> f32;
+}
+
+impl Pcm for f32 {
+    #[inline(always)]
+    fn to_f32(self) -> f32 {self}
+}
+
+impl Pcm for i16 {
+    // exactly what a 16 bit WAV decodes to: every i16 / 32768 is representable in f32
+    #[inline(always)]
+    fn to_f32(self) -> f32 {self as f32 * (1.0 / 32768.0)}
+}
+
 /// Pi as f32, re-exported from core (what the feature crates use).
 pub use core::f32::consts::PI;
 
@@ -127,4 +143,32 @@ pub fn fast_sin(x: f32) -> f32 {
     const C: f32 = -4.0 / (PI * PI);
     let y = B * x + C * x * fabs(x);
     0.225 * (y * fabs(y) - y) + y
+}
+
+#[cfg(test)]
+mod pcm_tests {
+    use super::Pcm;
+
+    #[test]
+    fn a_float_is_read_as_it_is() {
+        for value in [0.0f32, -0.0, 1.0, -1.5, f32::MIN_POSITIVE, 0.123_456_79] {
+            assert_eq!(value.to_f32().to_bits(), value.to_bits());
+        }
+    }
+
+    #[test]
+    fn every_sixteen_bit_value_is_read_as_a_wav_decodes_it() {
+        for value in i16::MIN..=i16::MAX {
+            let decoded = (value as f64 / 32768.0) as f32;
+            assert_eq!(value.to_f32().to_bits(), decoded.to_bits(), "{value}");
+            assert_eq!(value.to_f32().to_bits(), (value as f32 / 32768.0).to_bits(), "{value}");
+        }
+    }
+
+    #[test]
+    fn sixteen_bit_spans_minus_one_to_just_below_one() {
+        assert_eq!(i16::MIN.to_f32(), -1.0);
+        assert_eq!(i16::MAX.to_f32(), 32_767.0 / 32_768.0);
+        assert_eq!(0i16.to_f32().to_bits(), 0.0f32.to_bits());
+    }
 }

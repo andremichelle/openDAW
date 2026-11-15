@@ -1,5 +1,6 @@
 import {RootBox} from "./RootBox"
 import {SelectionBox} from "./SelectionBox"
+import {ViewStateBox} from "./ViewStateBox"
 import {UserInterfaceBox} from "./UserInterface"
 import {UploadFileBox} from "./UploadFileBox"
 import {TimelineBox} from "./timeline/TimelineBox"
@@ -50,7 +51,7 @@ import {ChordEventBox} from "./timeline/ChordEventBox"
 
 export const Definitions = [
     MetaDataBox, ProjectMetaBox,
-    RootBox, SelectionBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
+    RootBox, SelectionBox, ViewStateBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
     TimelineBox, TrackBox,
     NoteEventBox, NoteEventRepeatBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox, SignatureEventBox,

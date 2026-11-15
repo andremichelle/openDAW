@@ -12,6 +12,7 @@ impl Engine {
     /// source unit (re)building with a new buffer, and load build order uniformly. Run only when a reconcile
     /// did work (a membership change or an enqueued unit), so an idle transaction does nothing here.
     pub(crate) fn resolve_sidechains(&mut self) {
+        self.sidechain_links.clear();
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             match &mut unit.wired {
@@ -59,6 +60,7 @@ impl Engine {
         let mut sources: Vec<(u32, NodeId, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
             let target = self.graph.target_of(&port.address).cloned();
+            let target_uuid = target.as_ref().map(|address| address.uuid);
             let resolution = target.and_then(|target| {
                 // A pointer at a FIELD of a box resolves by its FULL address first: that is how a device nested
                 // in an effect composite taps the composite's INPUT (its `input` vertex, registered to the
@@ -94,12 +96,32 @@ impl Engine {
                 changed = true;
             }
             if let Some((node, buffer)) = resolution {
+                if let Some(target_uuid) = target_uuid {
+                    self.sidechain_links.push((binding.node_id, binding.device_uuid, node, target_uuid));
+                }
                 sources.push((port.port_id, node, buffer));
             }
         }
         if changed {
             binding.sink.borrow_mut().set_sidechains(&sources);
         }
+    }
+
+    /// Flag every node on a sidechain feedback loop and tell the user once about each newly looped device.
+    pub(crate) fn resolve_feedback(&mut self) {
+        let mut nodes = BTreeSet::new();
+        let mut looped = BTreeSet::new();
+        for (consumer, device, source, target) in &self.sidechain_links {
+            let cycle = self.context.feedback_nodes(*source, *consumer);
+            if cycle.is_empty() {continue}
+            nodes.extend(cycle);
+            if looped.insert(*device) && !self.looped_sidechains.contains(device) {
+                crate::notice(format_args!("sidechain-loop\t{}\t{}",
+                    boxgraph::address::uuid_to_string(device), boxgraph::address::uuid_to_string(target)));
+            }
+        }
+        self.looped_sidechains = looped;
+        self.context.set_feedback(nodes);
     }
 
     /// The summing bus of a route: a REGISTERED (non-primary) bus's sum, or the master fallback (`None` =

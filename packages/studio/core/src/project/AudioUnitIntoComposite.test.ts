@@ -1,10 +1,10 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {Grooves, InstrumentCompositeBoxAdapter, InstrumentFactories, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Grooves, InstrumentCompositeBoxAdapter, InstrumentFactories, PlayfieldPads, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {EffectFactories} from "../EffectFactories"
 import {
     AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, GrooveStackBox, InstrumentCompositeBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox,
-    NoteRegionBox, PitchDeviceBox, TrackBox, VaporisateurDeviceBox
+    NoteRegionBox, PitchDeviceBox, PlayfieldDeviceBox, TrackBox, VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitsClipboard} from "../ui/clipboard/types/AudioUnitsClipboardHandler"
@@ -181,7 +181,8 @@ describe("paste an audio unit as a layer", () => {
         const {sourceUnit, composite, compositeUnit} = project.editing.modify(() => {
             const source = api.createAnyInstrument(InstrumentFactories.Nano)
             const sourceTrack = tracksOf(source.audioUnitBox)[0]
-            api.createNoteRegion({trackBox: sourceTrack, position: 0, duration: 3840})
+            const sourceRegion = api.createNoteRegion({trackBox: sourceTrack, position: 0, duration: 3840})
+            api.createNoteEvent({owner: sourceRegion, position: 0, duration: 240, pitch: 64})
             api.createNoteClip(sourceTrack, 0)
             const target = api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
             const targetTrack = tracksOf(target.audioUnitBox)[0]
@@ -357,6 +358,43 @@ describe("paste an audio unit as a layer with grooves", () => {
         project.editing.modify(() => project.api.pasteAudioUnitAsLayer(composite, entry.data, "append").result()).unwrap()
         expect(Grooves.entriesOf(stack).length).toBe(2)
         expect(project.rootBox.grooves.pointerHub.incoming().length).toBe(grooves)
+        project.terminate()
+    })
+
+    it("pastes an audio unit as a pad, replacing the pad on the key and moving its notes to the pad key", async () => {
+        const project = await createProject()
+        const {api, boxAdapters} = project
+        const {sourceUnit, playfield} = project.editing.modify(() => {
+            const source = api.createAnyInstrument(InstrumentFactories.Nano)
+            const sourceTrack = source.audioUnitBox.tracks.pointerHub.incoming()
+                .map(({box}) => box).find((box): box is TrackBox => box instanceof TrackBox)
+            if (isDefined(sourceTrack)) {api.createNoteRegion({trackBox: sourceTrack, position: 0, duration: 3840})}
+            const target = api.createAnyInstrument(InstrumentFactories.Playfield).instrumentBox as PlayfieldDeviceBox
+            api.createPlayfieldPad(target, 38, InstrumentFactories.Vaporisateur)
+            return {sourceUnit: source.audioUnitBox, playfield: target}
+        }).unwrap()
+        const entry = AudioUnitsClipboard.copyEntry(boxAdapters.adapterFor(sourceUnit, AudioUnitBoxAdapter)).unwrap("copy")
+        expect(AudioUnitAsLayer.clipboardHasNotes(entry.data)).toBe(true)
+        const regions = project.boxGraph.boxes().filter(box => box instanceof NoteRegionBox).length
+        const {cellBox, instrumentBox} = project.editing.modify(() =>
+            api.pasteAudioUnitAsPad(playfield, 38, entry.data).result()).unwrap()
+        expect(PlayfieldPads.padsOf(playfield)).toEqual([cellBox])
+        expect(cellBox.index.getValue()).toBe(38)
+        expect(instrumentBox).toBeInstanceOf(NanoDeviceBox)
+        expect(project.boxGraph.boxes().filter(box => box instanceof NoteRegionBox).length).toBe(regions + 1)
+        project.terminate()
+    })
+
+    it("refuses an audio unit with a composite as a pad", async () => {
+        const project = await createProject()
+        const {api, boxAdapters} = project
+        const {source, playfield} = project.editing.modify(() => ({
+            source: api.createAnyInstrument(InstrumentFactories.InstrumentComposite).audioUnitBox,
+            playfield: api.createAnyInstrument(InstrumentFactories.Playfield).instrumentBox as PlayfieldDeviceBox
+        })).unwrap()
+        const entry = AudioUnitsClipboard.copyEntry(boxAdapters.adapterFor(source, AudioUnitBoxAdapter)).unwrap("copy")
+        expect(project.editing.modify(() => api.pasteAudioUnitAsPad(playfield, 36, entry.data)).unwrap().isFailure()).toBe(true)
+        expect(PlayfieldPads.padsOf(playfield)).toHaveLength(0)
         project.terminate()
     })
 })

@@ -7,7 +7,7 @@ A note editor variant for instruments that map pitches to sounds (Playfield firs
 1. `NoteEditor.tsx` wires `PitchEditorHeader` + `PianoRoll` (header) and `PitchEditor` (body) around one `PitchPositioner`.
 2. The vertical axis is only touched through `PitchPositioner`: `pitchToY`, `yToPitch`, `noteHeight`, `centerNote`, `scrollModel`, `valueAxis`, `subscribe`. Users: `PitchEditor`, `PitchPainter`, `PitchEventCapturing`, `PitchSelectionLocator` (via `valueAxis`), `NoteMoveModifier`, `NoteViewMenu`, `PianoRoll`.
 3. `NoteMoveModifier`, `NoteCreateModifier`, `NoteDurationModifier`, `PropertyEditor` work on pitch values and need no change once the axis is abstract.
-4. `PlayfieldDeviceBoxAdapter.samples` holds `PlayfieldSampleBoxAdapter`s with `indexField` (= pitch) and `fileLabel`.
+4. `PlayfieldDeviceBoxAdapter.pads` holds `InstrumentCompositeCellBoxAdapter`s with `indexField` (= pitch) and `label` (the instrument label, a Nano's file name).
 
 ## Design
 
@@ -44,7 +44,7 @@ export interface NoteMappingOwner {
 ```
 
 - Optional on instruments, found through a type guard `NoteMappingOwner.is(adapter)` (no `in` checks), so existing SDK implementers are untouched.
-- Playfield implements it from its sample collection: subscribes to add/remove on `samples` plus each sample's `index` and `file` pointer, notifies once per change, label = `fileLabel`.
+- Playfield implements it from its pad collection: subscribes to add/remove on `pads` plus each pad's `index` and instrument, notifies once per change, label = the pad `label`.
 - The editor never writes the mapping. Renaming or reassigning happens on the device (Playfield slots).
 - Resolution: track -> audio unit -> input instrument adapter.
 

@@ -43,10 +43,10 @@ fn plays_two_loops_the_section_twice_then_falls_through() {
     assert_eq!(q1.len(), 2, "the quantum splits at the marker boundary");
     assert_close(q1[0].p0, 5.12, "q1 start");
     assert_eq!(q1[0].p1, 10.0, "the split lands exactly on the boundary");
-    // 4.88 pulses = 121.99999... samples; the TS `| 0` truncation (mirrored by `as i64`) floors to 121
-    assert_eq!((q1[0].s0, q1[0].s1), (0, 121), "sample-exact split");
+    // 4.88 pulses are exactly 122 samples (#533: the summed quantum position used to make it 121)
+    assert_eq!((q1[0].s0, q1[0].s1), (0, 122), "sample-exact split");
     assert!(!q1[0].discontinuous);
-    assert_eq!((q1[1].p0, q1[1].s0, q1[1].s1), (0.0, 121, RENDER_QUANTUM), "resumes at the section start");
+    assert_eq!((q1[1].p0, q1[1].s0, q1[1].s1), (0.0, 122, RENDER_QUANTUM), "resumes at the section start");
     assert!(q1[1].discontinuous, "the post-jump block flags discontinuous");
     assert_eq!(transport.current_marker(), Some((A, 1)), "the play count advanced across the jump");
     assert!(transport.take_marker_changed());
@@ -58,11 +58,11 @@ fn plays_two_loops_the_section_twice_then_falls_through() {
     let q3 = render(&mut transport, &markers, true);
     assert_eq!(q3.len(), 1, "falling through keeps the block whole");
     assert!(!q3[0].discontinuous);
-    assert_close(q3[0].p0, 5.4, "q3 start (0.28 pulses carried over the jump)");
-    assert_close(q3[0].p1, 10.52, "q3 end");
+    assert_close(q3[0].p0, 5.36, "q3 start (0.24 pulses carried over the jump)");
+    assert_close(q3[0].p1, 10.48, "q3 end");
     assert_eq!(transport.current_marker(), Some((B, 0)), "B's section became active");
     assert!(transport.take_marker_changed());
-    assert_close(transport.position(), 10.52, "playback continued past the boundary");
+    assert_close(transport.position(), 10.48, "playback continued past the boundary");
 }
 
 #[test]
@@ -213,4 +213,27 @@ fn reset_forgets_the_marker_silently_and_paused_renders_resolve_at_the_frozen_po
     transport.render_paused(&markers);
     assert_eq!(transport.current_marker(), Some((B, 0)));
     assert!(transport.take_marker_changed());
+}
+
+// #533: with positions exact on whole frames a marker can sit exactly on a quantum's end (512 pulses = 100 quanta)
+#[test]
+fn a_marker_on_the_quantum_end_repeats_and_falls_through() {
+    let markers = [marker(A, 0.0, 2), marker(B, 512.0, 1)];
+    let mut transport = Transport::new(48_000.0, 120.0);
+    transport.play();
+    for _ in 0..99 {
+        render(&mut transport, &markers, true);
+    }
+    let last = render(&mut transport, &markers, true);
+    assert_eq!(last.len(), 1, "the pass ends with the quantum");
+    assert_eq!((last[0].p1, last[0].s1), (512.0, RENDER_QUANTUM));
+    assert_eq!(transport.current_marker(), Some((A, 1)), "the section repeats");
+    let resumed = render(&mut transport, &markers, true);
+    assert_eq!(resumed[0].p0, 0.0, "the next quantum resumes at the section start");
+    assert!(resumed[0].discontinuous, "and is flagged discontinuous");
+    for _ in 0..99 {
+        render(&mut transport, &markers, true);
+    }
+    assert_eq!(transport.position(), 512.0, "the second pass ends on the boundary");
+    assert_eq!(transport.current_marker(), Some((B, 0)), "and falls through into B");
 }

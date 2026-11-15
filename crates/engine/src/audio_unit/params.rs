@@ -42,6 +42,7 @@ pub(crate) fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Ve
     unsafe { SAMPLE_OBS.get() }.clear();
     unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
+    unsafe { TABLE_OBS.get() }.clear();
     unsafe { SIDECHAIN_BIND.get() }.clear();
     unsafe { GROOVE_BINDS.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
@@ -357,6 +358,7 @@ impl Engine {
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
         let soundfont_paths = core::mem::take(unsafe { SOUNDFONT_OBS.get() }); // recorded by host_observe_soundfont during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
+        let table_obs = core::mem::take(unsafe { TABLE_OBS.get() }); // recorded by host_observe_table during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
         // The device's LIVE-DATA broadcast binds (`host_bind_broadcast` during init): create each slot, register
         // it at the device address + declared path (TS `broadcaster.broadcastFloats(adapter.address.append(...))`),
@@ -364,7 +366,6 @@ impl Engine {
         let broadcast_binds = core::mem::take(unsafe { BROADCAST_BINDS.get() });
         let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
         for (id, path, len, package_type) in broadcast_binds {
-            let slot = engine_env::telemetry::broadcast_slot(len as usize);
             // Honor the type the device DECLARED (via `bind_broadcast` / `bind_broadcast_float` /
             // `bind_broadcast_ints`), not a length heuristic: a one-element FLOAT_ARRAY (the Maximizer's
             // reduction, read with `subscribeFloats`) must NOT collapse to a scalar FLOAT.
@@ -374,10 +375,15 @@ impl Engine {
                 crate::broadcast::PACKAGE_FLOAT => crate::broadcast::PACKAGE_FLOAT,
                 _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
             };
+            // a Playfield pad's replica of a unit-level midi effect writes into the slot the editor reads
+            let shared = self.broadcasts.live_entry(device_uuid, &path, package_type)
+                .and_then(|entry| entry.owner().map(|slot| (slot, entry.active)))
+                .filter(|(slot, _)| slot.borrow().len() == len as usize);
+            let (slot, active) = shared.unwrap_or_else(|| (engine_env::telemetry::broadcast_slot(len as usize), false));
             self.broadcasts.register(device_uuid, &path, package_type, &slot);
             let ptr = slot.borrow().as_ptr() as u32;
             if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
-                *entry = (ptr, false);
+                *entry = (ptr, active);
             }
             broadcast_slots.push((id, slot));
         }
@@ -430,8 +436,14 @@ impl Engine {
         } else {
             None
         };
+        let tables = if table_obs.is_empty() {
+            None
+        } else {
+            let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            Some(self.bind_tables(device_uuid, reg, state_ptr, table_obs, signal))
+        };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots, groove_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, tables, broadcast_slots, groove_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -769,6 +781,9 @@ impl Engine {
             }
             if let Some(records) = params.records {
                 self.teardown_script_records(records);
+            }
+            if let Some(tables) = params.tables {
+                self.teardown_tables(tables);
             }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);

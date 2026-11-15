@@ -18,6 +18,14 @@ const report: StorageScan.Report = {
 }
 
 describe("StorageReport", () => {
+    it("names the project or asset an unreadable file belongs to", () => {
+        expect(StorageReport.describeFailure(report, "p1/project.od")).toBe("project 'p1': p1/project.od")
+        expect(StorageReport.describeFailure(report, "samples/v2/a/audio.wav")).toBe("sample 'a': samples/v2/a/audio.wav")
+        expect(StorageReport.describeFailure(report, "m")).toBe("model 'm': m")
+        expect(StorageReport.describeFailure(report, "p10/project.od")).toBe("p10/project.od")
+        expect(StorageReport.describeFailure(report, "locked/file")).toBe("locked/file")
+    })
+
     it("adds the open project as a user of the assets its live graph refers to", () => {
         const result = StorageReport.withOpenProject(report, "p2", [{kind: "sample", id: "a"}, {kind: "sample", id: "b"}])
         expect(result.assets.map(({usedBy}) => usedBy)).toEqual([
@@ -71,6 +79,17 @@ describe("StorageReport", () => {
         expect(unused.map(({id}) => id)).toEqual(["s2", "s1", "f", "w"])
         expect(StorageReport.sizeOf(unused)).toBe(155)
         expect(StorageReport.sizeOf([])).toBe(0)
+    })
+
+    it("lists the assets by kind, then by name", () => {
+        const assets: ReadonlyArray<StorageScan.Asset> = [
+            {...asset("w", []), kind: "wclap", name: "Alpha", size: 99},
+            {...asset("s1", []), name: "snare", size: 5},
+            {...asset("f", []), kind: "soundfont", name: "Piano", size: 1},
+            {...asset("s2", []), name: "Kick", size: 50},
+            {...asset("s3", []), name: "clap", size: 500}
+        ]
+        expect(StorageReport.assetsOf({...report, assets}).map(({id}) => id)).toEqual(["s3", "s2", "s1", "f", "w"])
     })
 
     it("never lists an asset the open project uses as unused", () => {

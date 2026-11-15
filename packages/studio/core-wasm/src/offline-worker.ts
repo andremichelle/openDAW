@@ -18,7 +18,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {AudioAnalyser, AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, dbToGain, PcmData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
@@ -28,6 +28,7 @@ import {
     EngineCommands,
     EngineSettingsSchema,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
@@ -49,11 +50,12 @@ import {
     WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {EngineExports, settleCompensation, takeReportMessage} from "./engine-exports"
+import {EngineExports, settleCompensation, takeNotices, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {QuantumStepper} from "./quantum-stepper"
+import {SilenceTail} from "./silence-tail"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
@@ -108,6 +110,7 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
         throw describeEngineTrap(engine, memory, rendered.error)
     }
     takeReportMessage(engine, memory).ifSome(message => {throw new Error(`engine: ${message}`)})
+    takeNotices(engine, memory).forEach(notice => console.warn("engine notice", notice))
     midi.drain(engine, memory, 0)
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
@@ -152,8 +155,10 @@ Communicator.executor<OfflineEngineProtocol>(
                 dispatcher => new class implements EngineToClient {
                     log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                     error(reason: unknown): void {dispatcher.dispatchAndForget(this.error, reason)}
+                    notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                     deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
+                    fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                     fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
@@ -197,6 +202,8 @@ Communicator.executor<OfflineEngineProtocol>(
             }
             const {engine} = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
                 createWclapBridges(memory, config.sampleRate, engineToClient, track))
+            // nothing here has a quantum to keep, and a render must not start without its samples
+            engine.set_sample_float_budget(0xFFFFFFFF)
             // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
             // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
             // offline render has no host for, so they are settled once here (TS ExportMetronomeConfiguration).
@@ -292,7 +299,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 })
             ]
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
-                reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
+                reason => engineToClient.error(describeEngineTrap(engine, memory, reason)), config.fetchSample === true)
             const stateSender = SyncStream.writer(EngineStateSchema(), config.syncStreamBuffer, engineState => {
                 const statePtr = engine.engine_state_ptr()
                 const view = new DataView(memory.buffer, statePtr, engine.engine_state_len())
@@ -394,14 +401,13 @@ Communicator.executor<OfflineEngineProtocol>(
         },
         async render(config: OfflineEngineRenderConfig) {
             const engine = state.unwrap("state.render")
-            const {silenceThresholdDb, silenceDurationSeconds, maxDurationSeconds} = config
-            const threshold = dbToGain(silenceThresholdDb ?? -72.0)
-            const silenceFramesNeeded = Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate)
+            const {silenceThresholdDb, silenceDurationSeconds, minDurationSeconds, maxDurationSeconds} = config
+            const tail = new SilenceTail(dbToGain(silenceThresholdDb ?? -72.0),
+                Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate),
+                Math.ceil((minDurationSeconds ?? 0) * engine.sampleRate), engine.sampleRate / 4)
             const maxFrames = isDefined(maxDurationSeconds) ? Math.ceil(maxDurationSeconds * engine.sampleRate) : Infinity
             const {numberOfChannels} = state.unwrap("state.render")
             const chunks: Float32Array[][] = Arrays.create(() => [], numberOfChannels)
-            let consecutiveSilentFrames = 0
-            let hasHadAudio = false
             let lastYield = 0
             engine.running = true
             await Wait.timeSpan(TimeSpan.seconds(0))
@@ -412,21 +418,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 const start = trimStart(engine)
                 if (start === RenderQuantum) {continue}
                 const kept = start === 0 ? outputChannels : outputChannels.map(channel => channel.subarray(start))
-                let maxSample = 0
-                for (const channel of kept) {
-                    for (const sample of channel) {
-                        const absoluteValue = Math.abs(sample)
-                        if (absoluteValue > maxSample) {maxSample = absoluteValue}
-                    }
-                }
-                const isSilent = maxSample <= threshold
-                if (maxSample > threshold) {hasHadAudio = true}
-                if (isSilent && hasHadAudio) {
-                    consecutiveSilentFrames += kept[0].length
-                    if (consecutiveSilentFrames >= silenceFramesNeeded) {break}
-                } else {
-                    consecutiveSilentFrames = 0
-                }
+                if (!tail.accept(kept)) {break}
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     chunks[channel].push(kept[channel].slice())
                 }
@@ -437,7 +429,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     await new Promise(resolve => setTimeout(resolve, 0))
                 }
             }
-            const framesToKeep = engine.totalFrames - consecutiveSilentFrames + Math.min(engine.sampleRate / 4, consecutiveSilentFrames)
+            const framesToKeep = tail.framesToKeep
             return Arrays.create(channelIndex => {
                 const total = new Float32Array(framesToKeep)
                 let offset = 0

@@ -8,11 +8,13 @@ export interface OfflineEngineInitializeConfig {
     project: ArrayBufferLike
     exportConfiguration?: ExportConfiguration
     variant?: Record<string, unknown> // extras for an alternative engine worker (e.g. the WASM artifacts url)
+    fetchSample?: boolean // the host answers `EngineToClient.fetchSample`
 }
 
 export interface OfflineEngineRenderConfig {
     silenceThresholdDb?: number
     silenceDurationSeconds?: number
+    minDurationSeconds?: number
     maxDurationSeconds?: number
 }
 

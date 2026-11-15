@@ -15,7 +15,6 @@ use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
 use crate::meter::Meter;
-use crate::ppqn::pulses_to_samples;
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
 use crate::ramp::LinearRamp;
@@ -87,14 +86,7 @@ impl AudioSinkProcessor {
     }
 
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
-        let pulses = position - block.p0;
-        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-        let raw = if pulses.abs() < 1.0e-7 {
-            s0
-        } else {
-            s0 + pulses_to_samples(pulses, block.bpm, self.sample_rate) as usize
-        };
-        raw.clamp(s0, s1)
+        crate::block::frame_of(block, position, self.sample_rate)
     }
 
     /// The copy of the input the target bus sums (always the full signal, regardless of the pass level).

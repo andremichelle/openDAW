@@ -1,6 +1,6 @@
 import css from "./EmptySlot.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue} from "@opendaw/lib-std"
+import {Events, Html} from "@opendaw/lib-dom"
+import {int, Lifecycle, ObservableValue, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
@@ -11,6 +11,9 @@ import {Icon} from "@/ui/components/Icon"
 import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu} from "@opendaw/studio-core"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {MenuItems} from "@/ui/devices/menu-items"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 
 const className = Html.adoptStyleSheet(css, "EmptySlot")
 
@@ -28,14 +31,20 @@ export const EmptySlot = (
     {lifecycle, service, adapter, noteReceiver, sampleSelector, octave, semitone}: Construct) => {
     const {project} = service
     const browseButton: HTMLElement = (
-        <div className="audio-file">
+        <div>
             <Icon symbol={IconSymbol.AudioFile}/>
         </div>
     )
+    const instrumentButton: HTMLElement = (
+        <div>
+            <Icon symbol={IconSymbol.Piano}/>
+        </div>
+    )
+    const buttons: HTMLElement = <div className="buttons">{browseButton}{instrumentButton}</div>
     const element: HTMLElement = (
         <div className={className} data-slot-index={octave.getValue() * 12 + semitone}>
             <header/>
-            {browseButton}
+            {buttons}
             <footer>
                 <NoteLabel lifecycle={lifecycle} octave={octave} semitone={semitone}/>
             </footer>
@@ -49,14 +58,21 @@ export const EmptySlot = (
         SlotDragAndDrop.installTarget({
             element,
             project,
+            playfield: adapter,
             getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
         sampleSelector.configureDrop(element, sample =>
             ChopTrigger.forSample(service, adapter, sample, octave.getValue() * 12 + semitone)),
         sampleSelector.configureBrowseClick(browseButton),
-        noteReceiver.subscribe((receiver) => browseButton.classList
+        TextTooltip.default(browseButton, () => "Browse sample"),
+        TextTooltip.default(instrumentButton, () => "Choose instrument"),
+        Events.subscribe(instrumentButton, "click", () => DeviceDialog.open(service, {
+            type: "new-pad", host: adapter.deviceHost(), playfield: adapter.box, key: octave.getValue() * 12 + semitone
+        })),
+        noteReceiver.subscribe((receiver) => buttons.classList
             .toggle("playing", receiver.isNoteOn(octave.getValue() * 12 + semitone))),
-        ContextMenu.subscribe(element, collector => collector.addItems(sampleSelector.createBrowseMenuData()))
+        ContextMenu.subscribe(element, collector => collector.addItems(...MenuItems.padClipboard(
+            service, adapter, octave.getValue() * 12 + semitone, Option.None)))
     )
     return element
 }

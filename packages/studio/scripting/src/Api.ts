@@ -332,6 +332,105 @@ export interface ScaleMatrixEffect extends MIDIEffect {
 }
 
 /**
+ * The rhythm of a Euclid lane in one pattern
+ * @group MIDI Effect Parts
+ */
+export interface EuclidRhythm {
+    /** Steps of the cycle (1 to 32, default 16) */
+    steps: int
+    /** Hits spread over the steps (0 to 32, the engine uses at most the steps, default 4) */
+    pulses: int
+    /** Shifts the hits to the right (0 to 31, default 0) */
+    rotate: int
+    /** Note value of a step (0 to 11): 1/4, 1/4T, 1/4., 1/8, 1/8T, 1/8., 1/16, 1/16T, 1/16., 1/32, 1/32T, 1/32. (default 6, 1/16) */
+    rate: int
+    /** Accented hits spread over the hits, they play at full velocity (0 to 32, default 0) */
+    accents: int
+    /** Shifts the accents over the hits (0 to 31, default 0) */
+    accentRotate: int
+    /** Hits played as bursts, spread over the hits (0 to 32, default 0) */
+    bursts: int
+    /** Shifts the bursts over the hits (0 to 31, default 0) */
+    burstRotate: int
+    /** Evenly spaced triggers of a burst within its step (2 to 8, default 3) */
+    repeats: int
+    /** How the triggers of a burst fall in level (-1.0 to 1.0, below 0 they rise, default 0) */
+    fade: bipolar
+}
+
+/**
+ * One lane of Euclid: the note it plays and its rhythm in each of the eight patterns
+ * @group MIDI Effect Parts
+ */
+export interface EuclidLane {
+    /** Unique id */
+    readonly uuid: string
+    /** MIDI note the lane plays (0 to 127, default 60) */
+    note: int
+    /** Velocity of a hit without accent (0.0 to 1.0, default 0.5) */
+    velocity: unitValue
+    /** Probability that a hit plays (0.0 to 1.0, default 1.0) */
+    chance: unitValue
+    /** Note length: 0 = one step, 1 = until the lane's next hit (default 0) */
+    gate: 0 | 1
+    /** Silence the lane */
+    mute: boolean
+    /** Play only the soloed lanes */
+    solo: boolean
+    /** The rhythm in each pattern, index 0 to 7 */
+    readonly rhythms: ReadonlyArray<EuclidRhythm>
+    /** Remove the lane */
+    remove(): void
+}
+
+/**
+ * Plays notes on Euclidean rhythms, one lane per note, made for the Playfield. Incoming notes pass through.
+ * @group MIDI Effects
+ */
+export interface EuclidEffect extends MIDIEffect {
+    /** Always "Euclid" */
+    readonly key: "Euclid"
+    /** The playing pattern (-1 = off, 0 to 7, default 0), a change takes over at the next bar */
+    pattern: int
+    /** Every lane restarts after this many steps of 1/16 at the global rate (0 = never, up to 128, default 0) */
+    length: int
+    /** Global rate (0 to 4): ÷4, ÷2, ×1, ×2, ×4 (default 2) */
+    rate: 0 | 1 | 2 | 3 | 4
+    /** All lanes in list order */
+    readonly lanes: ReadonlyArray<EuclidLane>
+    /**
+     * Add a lane (at most 127)
+     * @example
+     * ```ts
+     * const euclid = unit.addMIDIEffect("Euclid")
+     * euclid.addLane({note: 38, rhythms: [{steps: 16, pulses: 2, rotate: 4}]})
+     * ```
+     */
+    addLane(props?: DeepPartial<Omit<EuclidLane, "uuid" | "remove">>): EuclidLane
+}
+
+/**
+ * Plays the chord on the step of a key for every white key, held black keys change it (C# 7th, D# 9th, F# sus2,
+ * G# sus4, A# the next inversion)
+ * @group MIDI Effects
+ */
+export interface ChordKeysEffect extends MIDIEffect {
+    /** Always "ChordKeys" */
+    readonly key: "ChordKeys"
+    /** Root pitch class (0 to 11, 0 = C, default 0) */
+    root: int
+    /**
+     * Scale (0 to 14, default 0): Major, Natural Minor, Harmonic Minor, Melodic Minor, Dorian, Phrygian, Lydian,
+     * Mixolydian, Locrian, Pentatonic Major, Pentatonic Minor, Blues, Whole Tone, Diminished, Augmented
+     */
+    scale: int
+    /** Uses the key of the project's key track at the note's position instead of root and scale (default true) */
+    follow: boolean
+    /** Plays each chord in the inversion closest to the previous one (default false) */
+    voiceLeading: boolean
+}
+
+/**
  * Reshapes note velocities
  * @group MIDI Effects
  */
@@ -385,6 +484,10 @@ export interface MIDIEffects {
     "NoteFilter": NoteFilterEffect
     /** {@link ScaleMatrixEffect} */
     "ScaleMatrix": ScaleMatrixEffect
+    /** {@link ChordKeysEffect} */
+    "ChordKeys": ChordKeysEffect
+    /** {@link EuclidEffect} */
+    "Euclid": EuclidEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */
@@ -1183,6 +1286,8 @@ export interface PlayfieldSlot extends MIDIEffectHost, AudioEffectHost {
     readonly sample: Sample
     /** MIDI note triggering this slot (0 to 127) */
     note: int
+    /** The note the slot's instrument plays when triggered (0 to 127, default 60) */
+    key: int
     /** Icon name */
     icon: string
     /** Enable the slot */
@@ -1240,6 +1345,63 @@ export interface Playfield extends Instrument {
      * ```
      */
     addSample(sample: Sample, props?: Partial<Omit<PlayfieldSlot, "uuid" | "playfield" | "sample" | "midiEffects" | "audioEffects" | "addMIDIEffect" | "addAudioEffect" | "remove">>): PlayfieldSlot
+    /** Pads playing an instrument, ordered by note (pads playing a sample are {@link slots}) */
+    readonly pads: ReadonlyArray<PlayfieldPad>
+    /**
+     * Put an instrument on a note. Replaces an existing pad or slot at that note.
+     * @param key - Instrument type, see {@link PadInstruments}
+     * @param props - Instrument settings
+     * @param pad - Pad settings (`note` defaults to the next free note starting at 60)
+     * @example
+     * ```ts
+     * const drums = project.addInstrumentUnit("Playfield", {label: "Drums"}).instrument
+     * drums.addPad("OpenDrumKick", {decay: 0.7}, {note: 36})
+     * drums.addPad("OpenDrumHat", {decay: 0.13}, {note: 42, exclude: true})
+     * ```
+     */
+    addPad<K extends keyof PadInstruments>(key: K, props?: DeepPartial<PadInstruments[K]>,
+                                           pad?: Partial<Pick<PlayfieldPad, "note" | "key" | "gain" | "pan" | "mute" | "solo" | "exclude" | "minimized">>): PlayfieldPad & {
+        /** The instrument this pad plays, typed by the given key */
+        readonly instrument: PadInstruments[K]
+    }
+}
+
+/**
+ * Instruments that can play on a {@link PlayfieldPad}: every layer instrument except Playfield, Instrument Composite and
+ * Nano (a sample goes on a pad with {@link Playfield.addSample})
+ * @group Instruments
+ */
+export type PadInstruments = Omit<LayerInstruments, "Playfield" | "InstrumentComposite" | "Nano">
+
+/**
+ * One pad of the Playfield playing an instrument, with its own MIDI and audio effect chains and its own strip
+ * @group Instrument Parts
+ */
+export interface PlayfieldPad extends MIDIEffectHost, AudioEffectHost {
+    /** Unique id */
+    readonly uuid: string
+    /** The Playfield this pad belongs to */
+    readonly playfield: Playfield
+    /** The instrument this pad plays */
+    readonly instrument: PadInstruments[keyof PadInstruments]
+    /** MIDI note triggering this pad (0 to 127) */
+    note: int
+    /** The note the pad's instrument plays when triggered (0 to 127, default 60) */
+    key: int
+    /** Pad gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    pan: bipolar
+    /** Mute the pad */
+    mute: boolean
+    /** Solo the pad */
+    solo: boolean
+    /** Exclusive: a new hit stops any other exclusive pad (hi-hat choke) */
+    exclude: boolean
+    /** Collapse the pad editor */
+    minimized: boolean
+    /** Remove the pad with its instrument and effects */
+    remove(): void
 }
 
 /**
@@ -1350,6 +1512,8 @@ export interface Nano extends Instrument {
     oneShot: boolean
     /** Every note plays at the root key, ignoring the played key (default false). */
     fixedPitch: boolean
+    /** The region end releases a one-shot, which plays on into the sample, and fades a held note out over 5 ms (default false). */
+    tail: boolean
 }
 
 /**
@@ -1363,6 +1527,217 @@ export interface Soundfont extends Instrument {
     file: Nullable<SoundfontFile>
     /** Preset index within the soundfont (0 to 65535) */
     presetIndex: int
+}
+
+/**
+ * Sampler envelope (delay, attack, hold, decay, sustain, release)
+ * @group Instrument Parts
+ */
+export interface SamplerEnvelope {
+    /** Delay in seconds (0 to 5, default 0) */
+    delay: float
+    /** Attack in seconds (0.001 to 8, default 0.001) */
+    attack: float
+    /** Hold in seconds (0 to 5, default 0) */
+    hold: float
+    /** Decay in seconds (0.001 to 8, default 0.5) */
+    decay: float
+    /** Sustain level (0.0 to 1.0, default 1.0 for the amp envelope, 0.0 for the mod envelope) */
+    sustain: unitValue
+    /** Release in seconds (0.001 to 8, default 0.25) */
+    release: float
+}
+
+/**
+ * Sampler LFO
+ * @group Instrument Parts
+ */
+export interface SamplerLFO {
+    /** Shape: 0 = sine, 1 = triangle, 2 = saw, 3 = square (default 0) */
+    shape: 0 | 1 | 2 | 3
+    /** Rate in Hz (0.01 to 30, default 5 for the first, 0.5 for the second). With sync on it snaps to the nearest note length */
+    rate: float
+    /** Delay in seconds (0 to 5, default 0) */
+    delay: float
+    /** Fade in seconds (0 to 5, default 0) */
+    fade: float
+    /** Follow the project tempo (default false) */
+    sync: boolean
+    /** Restart with every note (default true) */
+    restart: boolean
+}
+
+/**
+ * Sampler filter
+ * @group Instrument Parts
+ */
+export interface SamplerFilter {
+    /** Type: 0 = off, 1 = low-pass 12 dB, 2 = low-pass 24 dB, 3 = high-pass 12 dB (default 0) */
+    type: 0 | 1 | 2 | 3
+    /** Cutoff in Hz (20 to 20000, default 20000) */
+    cutoff: float
+    /** Resonance (0.0 to 1.0, default 0.0) */
+    resonance: unitValue
+}
+
+/**
+ * A group of Sampler zones. Zones of one group share round robin, choke and trigger
+ * @group Instrument Parts
+ */
+export interface SamplerGroup {
+    /** Unique id */
+    readonly uuid: string
+    /** Custom label */
+    label: string
+    /** Round robin: 0 = off, 1 = cycle, 2 = random (default 0) */
+    roundRobin: 0 | 1 | 2
+    /** Choke group (1 to 127), 0 is off (default 0). A note silences the other groups with the same number */
+    choke: int
+    /** Trigger: 0 = note on, 1 = note release (default 0) */
+    trigger: 0 | 1
+    /** The zones of this group */
+    readonly zones: ReadonlyArray<SamplerZone>
+    /** Remove the group with its zones. Throws for the last group of a Sampler */
+    remove(): void
+}
+
+/**
+ * One sample of a Sampler with the keys and velocities it plays on. Positions are sample frames
+ * @group Instrument Parts
+ */
+export interface SamplerZone {
+    /** Unique id */
+    readonly uuid: string
+    /** The sample */
+    sample: Sample
+    /** The group the zone belongs to */
+    group: SamplerGroup
+    /** Off keeps the sample but takes the zone off the map (default true) */
+    enabled: boolean
+    /** Lowest key (0 to 127, default 0) */
+    keyLow: int
+    /** Highest key (0 to 127, default 127) */
+    keyHigh: int
+    /** Crossfade into neighbouring zones in semitones (0 to 127, default 0) */
+    keyFade: int
+    /** The key that plays the sample at its native rate (0 to 127, default 60) */
+    rootKey: int
+    /** Lowest velocity (1 to 127, default 1) */
+    velocityLow: int
+    /** Highest velocity (1 to 127, default 127) */
+    velocityHigh: int
+    /** Velocity crossfade (0 to 127, default 0) */
+    velocityFade: int
+    /** Transpose in semitones (-24 to 24, default 0) */
+    transpose: int
+    /** Fine tune in cents (-100 to 100, default 0) */
+    tune: float
+    /** How far the pitch follows the key (0.0 to 1.0, default 1.0) */
+    keyTrack: unitValue
+    /** Gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Turn in the round robin of its group (1 to 128, default 1) */
+    sequence: int
+    /** Play backwards (default false) */
+    reverse: boolean
+    /** Ignore the note-off and play to the end (default false) */
+    oneShot: boolean
+    /** First frame (default 0) */
+    sampleStart: int
+    /** Frame the sample ends at (default 2147483647, the end of the sample) */
+    sampleEnd: int
+    /** Loop: 0 = off, 1 = while the note is held, 2 = always, also through the release (default 0) */
+    loopMode: 0 | 1 | 2
+    /** First frame of the loop (default 0) */
+    loopStart: int
+    /** Frame the loop ends at (default 2147483647, the end of the sample) */
+    loopEnd: int
+    /** Loop crossfade in seconds (0 to 1, default 0) */
+    loopFade: float
+    /** Play the loop forwards and backwards in turns (default false) */
+    loopAlternate: boolean
+    /** Remove the zone */
+    remove(): void
+}
+
+/**
+ * One modulation of a Sampler: a source, a target and how far it reaches
+ * @group Instrument Parts
+ */
+export interface SamplerModulation {
+    /** Unique id */
+    readonly uuid: string
+    /** Source: 0 = amp envelope, 1 = mod envelope, 2 = LFO 1, 3 = LFO 2, 4 = velocity, 5 = key, 6 = random */
+    source: 0 | 1 | 2 | 3 | 4 | 5 | 6
+    /** Target: 0 = pitch, 1 = cutoff, 2 = resonance, 3 = gain, 4 = pan, 5 = sample start, 6 = loop start, 7 = LFO 1 rate, 8 = LFO 2 rate, 9 = envelope depth */
+    target: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    /** Amount (-1.0 to 1.0, default 0.0). A full amount is 48 semitones for pitch, 4 octaves for the LFO rates, the full range otherwise */
+    amount: bipolar
+    /** Remove the modulation */
+    remove(): void
+}
+
+/**
+ * Multi-sample instrument: many samples mapped by key and velocity
+ * @group Instruments
+ */
+export interface Sampler extends Instrument {
+    /** Always "Sampler" */
+    readonly key: "Sampler"
+    /** Notes that sound at once (1 to 64, default 16) */
+    voices: int
+    /** Glide in seconds (0 to 5, default 0) */
+    glide: float
+    /** One voice that keeps its envelopes over tied notes (default false) */
+    legato: boolean
+    /** Octave shift (-3 to 3, default 0) */
+    octave: int
+    /** Transpose in semitones (-12 to 12, default 0) */
+    transpose: int
+    /** Fine tune in cents (-100 to 100, default 0) */
+    tune: float
+    /** Volume in dB (default -3) */
+    volume: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Mono amount (0.0 to 1.0, default 0.0) */
+    mono: unitValue
+    /** The filter */
+    readonly filter: SamplerFilter
+    /** The amp envelope */
+    readonly ampEnvelope: SamplerEnvelope
+    /** The mod envelope, a modulation source */
+    readonly modEnvelope: SamplerEnvelope
+    /** The two LFOs, modulation sources */
+    readonly lfos: ReadonlyArray<SamplerLFO>
+    /** All groups in order. A new Sampler has one */
+    readonly groups: ReadonlyArray<SamplerGroup>
+    /** All zones */
+    readonly zones: ReadonlyArray<SamplerZone>
+    /** All modulations in order. A new Sampler has velocity to gain at full amount */
+    readonly modulations: ReadonlyArray<SamplerModulation>
+    /** Add a group */
+    addGroup(props?: Partial<Pick<SamplerGroup, "label" | "roundRobin" | "choke" | "trigger">>): SamplerGroup
+    /**
+     * Add a zone playing the sample. Without a group it joins the first one
+     * @example
+     * ```ts
+     * const sampler = project.addInstrumentUnit("Sampler").instrument
+     * sampler.addZone(low, {keyLow: 0, keyHigh: 59, rootKey: 48})
+     * sampler.addZone(high, {keyLow: 60, keyHigh: 127, rootKey: 72, loopMode: 1})
+     * ```
+     */
+    addZone(sample: Sample, props?: Partial<Omit<SamplerZone, "uuid" | "sample" | "remove">>): SamplerZone
+    /**
+     * Add a modulation
+     * @example
+     * ```ts
+     * sampler.addModulation(2, 0, 0.01) // LFO 1 to pitch
+     * ```
+     */
+    addModulation(source: SamplerModulation["source"], target: SamplerModulation["target"], amount: bipolar): SamplerModulation
 }
 
 /**
@@ -1514,6 +1889,248 @@ export interface Neon extends Instrument {
     readonly lines: ReadonlyArray<NeonLine>
     /** Six envelopes in fixed order: line1 pitch, line1 DCW, line1 DCA, line2 pitch, line2 DCW, line2 DCA */
     readonly envelopes: ReadonlyArray<NeonEnvelope>
+}
+
+/**
+ * The values of one Surgeon pattern: the rate, the pitch loop, the four lanes, the sound and its lane amounts
+ * @group Instruments
+ */
+export interface SurgeonValues {
+    /** Step length: 0 = eighth, 1 = sixteenth, 2 = thirty-second */
+    rate: int
+    /** Length of the pitch loop (1 to 32) */
+    steps: int
+    /** Seed of the pitch loop (0 to 99999), the same seed gives the same loop */
+    seed: int
+    /** Chance per step and pass that a pitch step is replaced (0.0 to 1.0) */
+    mutate: unitValue
+    /** Pitch spread around the tune, in semitones (0 to 36) */
+    range: float
+    /** Share of steps that sound (0.0 to 1.0) */
+    density: unitValue
+    /** Share of notes that run into the next note (0.0 to 1.0) */
+    tie: unitValue
+    /** Chance that the pitch glides from the previous pitch over one step (0.0 to 1.0) */
+    slide: unitValue
+    /** Velocity spread (0.0 to 1.0) */
+    accent: unitValue
+    /** The pitch loop and the lanes start again every that many steps (1 to 256), 0 never */
+    restart: int
+    /** Moves the steps the loops read, in steps (-128 to 128) */
+    offset: int
+    /** Length of lane A (1 to 32) */
+    laneASteps: int
+    /** Seed of lane A (0 to 99999) */
+    laneASeed: int
+    /** Chance per step and pass that a step of lane A is replaced (0.0 to 1.0) */
+    laneAMutate: unitValue
+    /** Length of lane B (1 to 32) */
+    laneBSteps: int
+    /** Seed of lane B (0 to 99999) */
+    laneBSeed: int
+    /** Chance per step and pass that a step of lane B is replaced (0.0 to 1.0) */
+    laneBMutate: unitValue
+    /** Length of lane C (1 to 32) */
+    laneCSteps: int
+    /** Seed of lane C (0 to 99999) */
+    laneCSeed: int
+    /** Chance per step and pass that a step of lane C is replaced (0.0 to 1.0) */
+    laneCMutate: unitValue
+    /** Length of lane D (1 to 32) */
+    laneDSteps: int
+    /** Seed of lane D (0 to 99999) */
+    laneDSeed: int
+    /** Chance per step and pass that a step of lane D is replaced (0.0 to 1.0) */
+    laneDMutate: unitValue
+    /** Frequency of the first modulator against the note (0.25 to 8) */
+    firstRatio: float
+    /** Feedback of the first modulator, clean to noisy (0.0 to 1.0) */
+    feedback: unitValue
+    /** Frequency of the second modulator against the note (0.25 to 16) */
+    secondRatio: float
+    /** Depth of the second modulator, 0 is off (0 to 1.5) */
+    secondDepth: float
+    /** Oscillator wave: 0 = sine, 1 = half, 2 = rectified, 3 = burst */
+    wave: int
+    /** Resting modulation depth (0 to 4) */
+    depth: float
+    /** Extra modulation depth at the start of a note (0 to 8) */
+    strike: float
+    /** How fast the strike falls back, in seconds (0.02 to 1) */
+    strikeDecay: float
+    /** Wave folder amount (0.0 to 1.0) */
+    fold: unitValue
+    /** Place of the folder: 0 = before the gate, 1 = after the gate */
+    foldPlace: int
+    /** Note length, from a short hit to a long decay (0.0 to 1.0) */
+    length: unitValue
+    /** Share of the longest notes that hold their whole step (0.0 to 1.0) */
+    held: unitValue
+    /** Level of the plain sine under the sound (0 to 1.5) */
+    sineGain: float
+    /** Pitch of the plain sine: 0 = an octave below, 1 = at the pitch */
+    sinePitch: int
+    /** How fast a tied note reaches its pitch, in seconds (0 to 0.3) */
+    glide: float
+    /** How much the velocity of a note changes its strike (0.0 to 1.0) */
+    velocity: unitValue
+    /** How much lane A adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioA: float
+    /** How much lane B adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioB: float
+    /** How much lane C adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioC: float
+    /** How much lane D adds to firstRatio, as a share of its range (-1.0 to 1.0) */
+    firstRatioD: float
+    /** How much lane A adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackA: float
+    /** How much lane B adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackB: float
+    /** How much lane C adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackC: float
+    /** How much lane D adds to feedback, as a share of its range (-1.0 to 1.0) */
+    feedbackD: float
+    /** How much lane A adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioA: float
+    /** How much lane B adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioB: float
+    /** How much lane C adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioC: float
+    /** How much lane D adds to secondRatio, as a share of its range (-1.0 to 1.0) */
+    secondRatioD: float
+    /** How much lane A adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthA: float
+    /** How much lane B adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthB: float
+    /** How much lane C adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthC: float
+    /** How much lane D adds to secondDepth, as a share of its range (-1.0 to 1.0) */
+    secondDepthD: float
+    /** How much lane A adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveA: float
+    /** How much lane B adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveB: float
+    /** How much lane C adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveC: float
+    /** How much lane D adds to wave, as a share of its range (-1.0 to 1.0) */
+    waveD: float
+    /** How much lane A adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthA: float
+    /** How much lane B adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthB: float
+    /** How much lane C adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthC: float
+    /** How much lane D adds to depth, as a share of its range (-1.0 to 1.0) */
+    depthD: float
+    /** How much lane A adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeA: float
+    /** How much lane B adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeB: float
+    /** How much lane C adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeC: float
+    /** How much lane D adds to strike, as a share of its range (-1.0 to 1.0) */
+    strikeD: float
+    /** How much lane A adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayA: float
+    /** How much lane B adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayB: float
+    /** How much lane C adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayC: float
+    /** How much lane D adds to strikeDecay, as a share of its range (-1.0 to 1.0) */
+    strikeDecayD: float
+    /** How much lane A adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldA: float
+    /** How much lane B adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldB: float
+    /** How much lane C adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldC: float
+    /** How much lane D adds to fold, as a share of its range (-1.0 to 1.0) */
+    foldD: float
+    /** How much lane A adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceA: float
+    /** How much lane B adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceB: float
+    /** How much lane C adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceC: float
+    /** How much lane D adds to foldPlace, as a share of its range (-1.0 to 1.0) */
+    foldPlaceD: float
+    /** How much lane A adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthA: float
+    /** How much lane B adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthB: float
+    /** How much lane C adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthC: float
+    /** How much lane D adds to length, as a share of its range (-1.0 to 1.0) */
+    lengthD: float
+    /** How much lane A adds to held, as a share of its range (-1.0 to 1.0) */
+    heldA: float
+    /** How much lane B adds to held, as a share of its range (-1.0 to 1.0) */
+    heldB: float
+    /** How much lane C adds to held, as a share of its range (-1.0 to 1.0) */
+    heldC: float
+    /** How much lane D adds to held, as a share of its range (-1.0 to 1.0) */
+    heldD: float
+    /** How much lane A adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainA: float
+    /** How much lane B adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainB: float
+    /** How much lane C adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainC: float
+    /** How much lane D adds to sineGain, as a share of its range (-1.0 to 1.0) */
+    sineGainD: float
+    /** How much lane A adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchA: float
+    /** How much lane B adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchB: float
+    /** How much lane C adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchC: float
+    /** How much lane D adds to sinePitch, as a share of its range (-1.0 to 1.0) */
+    sinePitchD: float
+    /** How much lane A adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideA: float
+    /** How much lane B adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideB: float
+    /** How much lane C adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideC: float
+    /** How much lane D adds to glide, as a share of its range (-1.0 to 1.0) */
+    glideD: float
+    /** How much lane A adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityA: float
+    /** How much lane B adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityB: float
+    /** How much lane C adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityC: float
+    /** How much lane D adds to velocity, as a share of its range (-1.0 to 1.0) */
+    velocityD: float
+}
+
+/**
+ * Plays metallic FM themes for raw techno by itself, from loops that mutate and patterns fired on the bar.
+ * `live` holds the editor's controls, they are the selected pattern. An automated live value replaces that value
+ * in every pattern.
+ * @group Instruments
+ */
+export interface Surgeon extends Instrument {
+    /** Always "Surgeon" */
+    readonly key: "Surgeon"
+    /** Centre pitch in Hz (20 to 2000) */
+    tune: float
+    /** Volume in dB (up to 0) */
+    volume: float
+    /** The pattern that plays (0 to 7), -1 is off. A change takes over at the next bar */
+    slot: int
+    /** The selected pattern (0 to 7), the one the live values are. Change it with `select` */
+    readonly pattern: int
+    /** The editor's controls, the values of the selected pattern */
+    readonly live: SurgeonValues
+    /** The eight patterns */
+    readonly patterns: ReadonlyArray<SurgeonValues>
+    /** The groove a pattern (0 to 7) plays through, null for none */
+    grooveOf(pattern: int): Nullable<AnyGroove>
+    /** Sets the groove a pattern (0 to 7) plays through: a groove of the project, or null for none */
+    setGroove(pattern: int, groove: Nullable<AnyGroove>): void
+    /** Selects a pattern (0 to 7): it plays from the next bar and the live values become its values */
+    select(pattern: int): void
 }
 
 /**
@@ -1798,6 +2415,392 @@ export interface Apparat extends Instrument, ScriptDevice {
 }
 
 /**
+ * openDrum Kick: a synthesized kick drum with a rumble tail it ducks. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumKick extends Instrument {
+    /** Always "OpenDrumKick" */
+    readonly key: "OpenDrumKick"
+    /** Tune in Hz (30 to 120) */
+    tune: float
+    /** Pitch in semitones (0 to 48) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.2) */
+    sweep: float
+    /** Drift in semitones (0 to 12) */
+    drift: float
+    /** Decay in seconds (0.02 to 6) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Skin (0.0 to 1.0) */
+    skin: unitValue
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Tone in Hz (200 to 16000) */
+    tone: float
+    /** Noise (0.0 to 1.0) */
+    noise: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Rumble level (0.0 to 1.0) */
+    rumble: unitValue
+    /** Rumble length (0-4): 1/16, 1/8, 1/4, 1/2, 1/1 */
+    length: int
+    /** Rumble duck (0.0 to 1.0) */
+    duck: unitValue
+    /** Rumble brightness (0.0 to 1.0) */
+    bright: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Snare: a synthesized snare drum, two tuned bodies and a band of noise for the wires. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumSnare extends Instrument {
+    /** Always "OpenDrumSnare" */
+    readonly key: "OpenDrumSnare"
+    /** Tune in Hz (80 to 600) */
+    tune: float
+    /** Ratio (1 to 3) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** Pitch in semitones (0 to 24) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.1) */
+    sweep: float
+    /** Decay in seconds (0.02 to 2) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Level in dB (-48 to -3) */
+    level: float
+    /** Noise decay in seconds (0.02 to 2) */
+    wireDecay: float
+    /** Width (0.0 to 1.0) */
+    width: unitValue
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Tone in Hz (200 to 16000) */
+    tone: float
+    /** Skin (0.0 to 1.0) */
+    skin: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Clap: a synthesized hand clap, a burst of hands and the room after it. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumClap extends Instrument {
+    /** Always "OpenDrumClap" */
+    readonly key: "OpenDrumClap"
+    /** Hands (1 to 8) */
+    hands: int
+    /** Gap in seconds (0 to 0.04) */
+    gap: float
+    /** Last (0.3 to 1.5) */
+    last: float
+    /** Spread (0.0 to 1.0) */
+    spread: unitValue
+    /** Attack in seconds (0 to 0.005) */
+    attack: float
+    /** Decay in seconds (0.002 to 0.2) */
+    decay: float
+    /** Snap (0.0 to 1.0) */
+    snap: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Tone in Hz (300 to 8000) */
+    tone: float
+    /** Reso (0.0 to 1.0) */
+    resonance: unitValue
+    /** Room level in dB (-48 to 0) */
+    room: float
+    /** Room decay in seconds (0.02 to 2) */
+    roomDecay: float
+    /** Tail (0.0 to 1.0) */
+    tail: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Tom: synthesized toms, congas and bongos. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumTom extends Instrument {
+    /** Always "OpenDrumTom" */
+    readonly key: "OpenDrumTom"
+    /** Tune in Hz (40 to 800) */
+    tune: float
+    /** Pitch in semitones (0 to 24) */
+    pitch: float
+    /** Sweep in seconds (0.001 to 0.2) */
+    sweep: float
+    /** Drift in semitones (0 to 12) */
+    drift: float
+    /** Decay in seconds (0.02 to 3) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Shape (0.0 to 1.0) */
+    shape: unitValue
+    /** Sub (0.0 to 1.0) */
+    sub: unitValue
+    /** Ratio (0.5 to 1) */
+    ratio: float
+    /** Top (0.0 to 1.0) */
+    top: unitValue
+    /** Length in seconds (0.02 to 1) */
+    length: float
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Noise level in dB (-48 to 0) */
+    noise: float
+    /** Noise decay in seconds (0.02 to 3) */
+    noiseDecay: float
+    /** Color (0.0 to 1.0) */
+    color: unitValue
+    /** Air (0.0 to 1.0) */
+    air: unitValue
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Rim: rimshots, claves and woodblocks. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumRim extends Instrument {
+    /** Always "OpenDrumRim" */
+    readonly key: "OpenDrumRim"
+    /** Tune in Hz (100 to 4000) */
+    tune: float
+    /** Ratio (1 to 5) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** High level (0.0 to 1.0) */
+    high: unitValue
+    /** High ratio (1 to 12) */
+    highRatio: float
+    /** Ring in seconds (0.005 to 1) */
+    ring: float
+    /** High ring in seconds (0.005 to 1) */
+    ringHigh: float
+    /** Decay in seconds (0.002 to 0.5) */
+    decay: float
+    /** Punch (-1.0 to 1.0) */
+    punch: bipolar
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Hard (0.0 to 1.0) */
+    hard: unitValue
+    /** Click (0.0 to 1.0) */
+    click: unitValue
+    /** Swell (0 to 8) */
+    swell: float
+    /** Cut in Hz (20 to 4000) */
+    cut: float
+    /** Restart (0-1): Off, On */
+    restart: 0 | 1
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Hat: closed and open hi-hats from six square oscillators. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumHat extends Instrument {
+    /** Always "OpenDrumHat" */
+    readonly key: "OpenDrumHat"
+    /** Tune (0.25 to 4) */
+    tune: float
+    /** Color in Hz (200 to 16000) */
+    color: float
+    /** Hold in seconds (0 to 0.5) */
+    hold: float
+    /** Decay in seconds (0.005 to 4) */
+    decay: float
+    /** Spread (-1.0 to 1.0) */
+    spread: bipolar
+    /** Ring (0.0 to 1.0) */
+    ring: unitValue
+    /** Reso (0.0 to 1.0) */
+    reso: unitValue
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Shaker: maracas, shakers and cabasas. Every key plays the same shaker.
+ * @group Instruments
+ */
+export interface OpenDrumShaker extends Instrument {
+    /** Always "OpenDrumShaker" */
+    readonly key: "OpenDrumShaker"
+    /** Color in Hz (200 to 16000) */
+    color: float
+    /** Attack in seconds (0 to 0.2) */
+    attack: float
+    /** Decay in seconds (0.002 to 2) */
+    decay: float
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Cymbal: cymbals from six square oscillators in three bands. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumCymbal extends Instrument {
+    /** Always "OpenDrumCymbal" */
+    readonly key: "OpenDrumCymbal"
+    /** Tune (0.25 to 4) */
+    tune: float
+    /** Tone (0.0 to 1.0) */
+    tone: unitValue
+    /** Attack in seconds (0 to 2) */
+    attack: float
+    /** Decay in seconds (0.05 to 8) */
+    decay: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Bell: cowbells, agogos and tuned bells from two pulse tones. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumBell extends Instrument {
+    /** Always "OpenDrumBell" */
+    readonly key: "OpenDrumBell"
+    /** Tune in Hz (50 to 4000) */
+    tune: float
+    /** Ratio (1 to 4) */
+    ratio: float
+    /** Balance (0.0 to 1.0) */
+    balance: unitValue
+    /** Color in Hz (100 to 16000) */
+    color: float
+    /** Strike (0.0 to 1.0) */
+    strike: unitValue
+    /** Decay in seconds (0.01 to 4) */
+    decay: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
+ * openDrum Perc: zaps, lasers, blips and metallic hits from a sine pair with falling FM depth and pitch. Key 60 plays at Tune.
+ * @group Instruments
+ */
+export interface OpenDrumPerc extends Instrument {
+    /** Always "OpenDrumPerc" */
+    readonly key: "OpenDrumPerc"
+    /** Tune in Hz (20 to 8000) */
+    tune: float
+    /** Ratio (0.25 to 16) */
+    ratio: float
+    /** Index (0.0 to 1.0) */
+    index: unitValue
+    /** Bite in seconds (0.001 to 2) */
+    bite: float
+    /** Pitch in semitones (-48 to 48) */
+    pitch: float
+    /** Sweep in seconds (0.0005 to 2) */
+    sweep: float
+    /** Decay in seconds (0.005 to 4) */
+    decay: float
+    /** Curve (-1.0 to 1.0) */
+    curve: bipolar
+    /** Noise (0.0 to 1.0) */
+    noise: unitValue
+    /** Drive in dB (0 to 36) */
+    drive: float
+    /** Volume in dB (-36 to 6) */
+    volume: float
+    /** Velocity (0.0 to 1.0) */
+    velocity: unitValue
+    /** Mode (0-2): Mono, Poly, Gate */
+    play: 0 | 1 | 2
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+}
+
+/**
  * Instrument types by key. Use the keys with {@link Project.addInstrumentUnit}
  * @group Instruments
  */
@@ -1808,6 +2811,8 @@ export interface Instruments {
     "Playfield": Playfield
     /** {@link Nano} */
     "Nano": Nano
+    /** {@link Sampler} */
+    "Sampler": Sampler
     /** {@link Soundfont} */
     "Soundfont": Soundfont
     /** {@link MIDIOutput} */
@@ -1818,6 +2823,28 @@ export interface Instruments {
     "Neon": Neon
     /** {@link Tubular} */
     "Tubular": Tubular
+    /** {@link Surgeon} */
+    "Surgeon": Surgeon
+    /** {@link OpenDrumKick} */
+    "OpenDrumKick": OpenDrumKick
+    /** {@link OpenDrumSnare} */
+    "OpenDrumSnare": OpenDrumSnare
+    /** {@link OpenDrumClap} */
+    "OpenDrumClap": OpenDrumClap
+    /** {@link OpenDrumTom} */
+    "OpenDrumTom": OpenDrumTom
+    /** {@link OpenDrumRim} */
+    "OpenDrumRim": OpenDrumRim
+    /** {@link OpenDrumHat} */
+    "OpenDrumHat": OpenDrumHat
+    /** {@link OpenDrumShaker} */
+    "OpenDrumShaker": OpenDrumShaker
+    /** {@link OpenDrumCymbal} */
+    "OpenDrumCymbal": OpenDrumCymbal
+    /** {@link OpenDrumBell} */
+    "OpenDrumBell": OpenDrumBell
+    /** {@link OpenDrumPerc} */
+    "OpenDrumPerc": OpenDrumPerc
     /** {@link Cubed} */
     "Cubed": Cubed
     /** {@link Guitar} */
@@ -2943,6 +3970,10 @@ export interface RandomModulator extends Modulator {
     seed: int
     /** Quantise to n levels (0 = continuous, 1 to 32) */
     levels: int
+    /** The value the draws lean towards (-1.0 to 1.0) */
+    bias: bipolar
+    /** How strongly the draws gather around the bias (0.0 = evenly spread, 1.0 = always the bias) */
+    focus: unitValue
 }
 
 /**
@@ -3066,6 +4097,144 @@ export interface MixdownOptions {
 }
 
 /**
+ * One choice of a dropdown in {@link Api.showDialog}
+ * @group Dialogs
+ */
+export interface DialogOption<V extends string | number = string | number> {
+    /** Text shown in the list */
+    label: string
+    /** Value returned when chosen */
+    value: V
+}
+
+/**
+ * A group title spanning the dialog. Returns no value
+ * @group Dialogs
+ */
+export interface DialogSection {
+    /** Always "section" */
+    type: "section"
+    /** The title */
+    label: string
+}
+
+/**
+ * A single line of text
+ * @group Dialogs
+ */
+export interface DialogText {
+    /** Always "text" */
+    type: "text"
+    /** Text in front of the control */
+    label: string
+    /** Initial text */
+    value: string
+}
+
+/**
+ * A number typed in by the user
+ * @group Dialogs
+ */
+export interface DialogNumber {
+    /** Always "number" */
+    type: "number"
+    /** Text in front of the control */
+    label: string
+    /** Initial value */
+    value: number
+    /** Lowest value (default unbounded) */
+    min?: number
+    /** Highest value (default unbounded) */
+    max?: number
+    /** The value snaps to multiples of it. Without it the value is free and the arrow keys change it by 1 */
+    step?: number
+    /** Shown behind the value */
+    unit?: string
+}
+
+/**
+ * A number chosen on a slider
+ * @group Dialogs
+ */
+export interface DialogSlider {
+    /** Always "slider" */
+    type: "slider"
+    /** Text in front of the control */
+    label: string
+    /** Initial value */
+    value: number
+    /** Lowest value */
+    min: number
+    /** Highest value */
+    max: number
+    /** The value snaps to multiples of it */
+    step?: number
+    /** How the slider travels between min and max: "linear" (default), "exp" (needs min > 0) or "int" (whole numbers) */
+    mapping?: "linear" | "exp" | "int"
+    /** Shown behind the value */
+    unit?: string
+}
+
+/**
+ * An on/off switch
+ * @group Dialogs
+ */
+export interface DialogCheckbox {
+    /** Always "checkbox" */
+    type: "checkbox"
+    /** Text in front of the control */
+    label: string
+    /** Initial state */
+    value: boolean
+}
+
+/**
+ * A list of choices
+ * @group Dialogs
+ */
+export interface DialogDropdown<V extends string | number = string | number> {
+    /** Always "dropdown" */
+    type: "dropdown"
+    /** Text in front of the control */
+    label: string
+    /** Initial choice, must be the value of one option */
+    value: V
+    /** The choices, at least one */
+    options: ReadonlyArray<DialogOption<V>>
+}
+
+/**
+ * A row of {@link Api.showDialog}
+ * @group Dialogs
+ */
+export type DialogField = DialogSection | DialogText | DialogNumber | DialogSlider | DialogCheckbox | DialogDropdown
+
+/**
+ * The dialog {@link Api.showDialog} opens
+ * @group Dialogs
+ */
+export interface DialogSpec<F extends Record<string, DialogField> = Record<string, DialogField>> {
+    /** Title of the dialog */
+    headline: string
+    /** Text of the confirm button (default "Ok") */
+    okText?: string
+    /** The rows by name, shown in this order. Avoid names that are whole numbers, they move to the front */
+    fields: F
+}
+
+/**
+ * What {@link Api.showDialog} returns: one value under the name of every field, sections left out
+ * @group Dialogs
+ */
+export type DialogValues<F extends Record<string, DialogField>> = {
+    [K in keyof F as F[K] extends DialogSection ? never : K]:
+    F[K] extends DialogText ? string
+        : F[K] extends DialogCheckbox ? boolean
+            : F[K] extends DialogDropdown<infer V> ? V
+                : number
+}
+
+/**
  * The global `openDAW` object, entry point of every script
  * @group Essentials
  */
@@ -3094,6 +4263,28 @@ export interface Api {
     getProject(): Promise<Project>
     /** Show an info dialog in the studio and wait until it is closed */
     showInfo(headline: string, message: string): Promise<void>
+    /**
+     * Ask the user for values in a dialog. Resolves with the values, or with null when the dialog was cancelled
+     * @example
+     * ```ts
+     * const values = await openDAW.showDialog({
+     *     headline: "New Pad",
+     *     okText: "Create",
+     *     fields: {
+     *         name: {type: "text", label: "Name", value: "Pad"},
+     *         voices: {type: "number", label: "Voices", value: 32, min: 1, max: 64, step: 1},
+     *         sound: {type: "section", label: "Sound"},
+     *         bandwidth: {type: "slider", label: "Bandwidth", value: 45, min: 1, max: 200, mapping: "exp", unit: "ct"},
+     *         zone: {type: "dropdown", label: "Semitones per zone", value: 3,
+     *             options: [{label: "One", value: 1}, {label: "Three", value: 3}, {label: "Six", value: 6}]},
+     *         randomStart: {type: "checkbox", label: "Random start", value: true}
+     *     }
+     * })
+     * if (values === null) {return}
+     * const project = openDAW.newProject(values.name)
+     * ```
+     */
+    showDialog<const F extends Record<string, DialogField>>(dialog: DialogSpec<F>): Promise<Nullable<DialogValues<F>>>
     /**
      * Create a sample in the studio from raw audio data
      * @example

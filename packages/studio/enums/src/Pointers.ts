@@ -72,4 +72,10 @@ export enum Pointers {
     GrooveStackEntries,
     KeyTrack,
     ChordTrack,
+    ViewState,
+    SamplerZone,
+    SamplerGroup,
+    SamplerGroupZone,
+    SamplerModulation,
+    EuclidLane,
 }

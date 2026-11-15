@@ -4,6 +4,7 @@ export interface RegionPaintBucket {
     contentColor: string
     contentBackground: string
     loopStrokeColor: string
+    handleColor: string
 }
 
 export namespace RegionPaintBucket {
@@ -20,6 +21,7 @@ export namespace RegionPaintBucket {
         const contentColor = `hsl(${hue}, ${normSat}%, 55%)`
         const contentBackground = selected ? `hsla(${hue}, ${normSat}%, 60%, 0.12)` : `hsla(${hue}, ${normSat}%, 60%, 0.07)`
         const loopStrokeColor = `hsl(${hue}, ${normSat}%, 58%)`
-        return {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor}
+        const handleColor = `hsl(${hue}, ${normSat}%, 70%)`
+        return {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor, handleColor}
     }
 }

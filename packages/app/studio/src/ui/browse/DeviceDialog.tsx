@@ -78,6 +78,8 @@ const headlineOf = (slot: DeviceSlot): string => {
         case "new-instrument":
         case "new-layer":
             return "Add Instrument"
+        case "new-pad":
+            return "Add Pad Instrument"
     }
 }
 
@@ -132,7 +134,8 @@ const relevanceOf = (entry: DeviceEntry, query: string): int => {
 }
 
 const byRelevance = (query: string) => (left: DeviceEntry, right: DeviceEntry): int =>
-    relevanceOf(left, query) - relevanceOf(right, query)
+    Number(right.kind === "device") - Number(left.kind === "device")
+    || relevanceOf(left, query) - relevanceOf(right, query)
     || DeviceCatalog.rankOf[left.kind] - DeviceCatalog.rankOf[right.kind]
     || DeviceCatalog.compare(left, right)
 
@@ -349,7 +352,7 @@ export namespace DeviceDialog {
                 .ifSome(target => captureDevices.allCaptures().forEach(capture => capture.armed.setValue(capture === target)))
         })
         const piano: Nullable<SVGElement> = DeviceSlot.takesNotes(slot)
-            ? <DevicePiano lifecycle={lifecycle} notes={notes}/> : null
+            ? <DevicePiano lifecycle={lifecycle} notes={notes} playedKey={DeviceSlot.padKey(slot)}/> : null
         const onKeyDown = (event: KeyboardEvent): void => {
             const typing = Events.isTextInput(event.target) && searchText.getValue().length > 0
             if (event.code === "ArrowDown" || event.code === "ArrowUp") {

@@ -166,7 +166,7 @@ pub extern "C" fn process(desc_ptr: u32) {
         for event in &event_scratch[..count] {
             if event.offset > cursor {
                 abi::script_audio(handle, 0, 0, out_l, out_r,
-                    &Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: cursor, s1: event.offset, bpm: block.bpm});
+                    &Block {index: block.index, flags, p0: chunk_p0, p1: event.position, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: cursor, s1: event.offset, bpm: block.bpm});
                 cursor = event.offset;
                 chunk_p0 = event.position;
                 flags.clear_event_flags();
@@ -179,6 +179,6 @@ pub extern "C" fn process(desc_ptr: u32) {
             }
         }
         abi::script_audio(handle, 0, 0, out_l, out_r,
-            &Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor, s1: block.s1, bpm: block.bpm});
+            &Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: cursor, s1: block.s1, bpm: block.bpm});
     }
 }

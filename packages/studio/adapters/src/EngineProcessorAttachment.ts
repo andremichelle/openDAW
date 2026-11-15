@@ -13,6 +13,7 @@ export type EngineProcessorAttachment = {
     exportConfiguration?: ExportConfiguration
     options?: ProcessorOptions
     variant?: Record<string, unknown> // structured-clonable extras for an alternative engine processor (EngineVariant)
+    fetchSample?: boolean // the host answers `EngineToClient.fetchSample`
 }
 
 export type ExportStemConfiguration = {

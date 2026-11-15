@@ -5,10 +5,22 @@ import {
     GuitarDeviceBox,
     NeonDeviceBox,
     TubularDeviceBox,
+    SurgeonDeviceBox,
+    OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
+    SamplerDeviceBox,
     SoundfontDeviceBox,
     TapeDeviceBox,
     VaporisateurDeviceBox,
@@ -25,8 +37,20 @@ export type InstrumentBox =
     | NeonDeviceBox
     | WclapInstrumentBox
     | TubularDeviceBox
+    | SurgeonDeviceBox
+    | OpenDrumKickDeviceBox
+    | OpenDrumPercDeviceBox
+    | OpenDrumBellDeviceBox
+    | OpenDrumCymbalDeviceBox
+    | OpenDrumShakerDeviceBox
+    | OpenDrumHatDeviceBox
+    | OpenDrumRimDeviceBox
+    | OpenDrumTomDeviceBox
+    | OpenDrumClapDeviceBox
+    | OpenDrumSnareDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox
+    | SamplerDeviceBox
     | InstrumentCompositeBox
     | SoundfontDeviceBox
     | MIDIOutputDeviceBox

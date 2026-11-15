@@ -3,12 +3,16 @@ import {
     NoteFilterDeviceBox,
     PitchDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
+    EuclidDeviceBox,
+    EuclidLaneBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
-import {bipolar, float, int, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {asInstanceOf, bipolar, float, int, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {Euclid} from "@opendaw/studio-adapters"
 import {Guard} from "../Guard"
 import {
     AnyAudioUnit,
@@ -19,6 +23,11 @@ import {
     NoteFilterEffect,
     PitchEffect,
     ScaleMatrixEffect,
+    ChordKeysEffect,
+    DeepPartial,
+    EuclidEffect,
+    EuclidLane,
+    EuclidRhythm,
     ScriptParameter,
     ScriptSample,
     SpielwerkEffect,
@@ -28,6 +37,7 @@ import {
 import {Context} from "../Context"
 import {EffectDeviceBox, EffectFacade} from "./EffectChain"
 import {Facades} from "../Facades"
+import {Facade, Props} from "../Common"
 import {GrooveImpls} from "../Grooves"
 import {ScriptSupport} from "./ScriptDevices"
 import {MIDIEffectBox} from "./DeviceBoxes"
@@ -37,8 +47,8 @@ export abstract class MIDIEffectFacade<B extends EffectDeviceBox = EffectDeviceB
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
-export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl
-    | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
+export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl | ChordKeysEffectImpl
+    | EuclidEffectImpl | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
     readonly key = "Arpeggio" as const
@@ -120,6 +130,66 @@ export class ScaleMatrixEffectImpl extends MIDIEffectFacade<ScaleMatrixDeviceBox
     }
 }
 
+export class ChordKeysEffectImpl extends MIDIEffectFacade<ChordKeysDeviceBox> implements ChordKeysEffect {
+    readonly key = "ChordKeys" as const
+    declare root: int
+    declare scale: int
+    declare follow: boolean
+    declare voiceLeading: boolean
+
+    constructor(context: Context, box: ChordKeysDeviceBox) {
+        super(context, box)
+        this.bind({root: box.root, scale: box.scale, follow: box.follow, voiceLeading: box.voiceLeading})
+    }
+}
+
+export class EuclidLaneImpl extends Facade<EuclidLaneBox> implements EuclidLane {
+    static wrap(context: Context, box: EuclidLaneBox): EuclidLaneImpl {
+        return context.facade(box, () => new EuclidLaneImpl(context, box), lane => !(lane instanceof EuclidLaneImpl))
+    }
+
+    declare note: int
+    declare velocity: unitValue
+    declare chance: unitValue
+    declare gate: 0 | 1
+    declare mute: boolean
+    declare solo: boolean
+    declare readonly rhythms: ReadonlyArray<EuclidRhythm>
+
+    private constructor(context: Context, box: EuclidLaneBox) {
+        super(context, box)
+        this.bind({
+            note: box.note, velocity: box.velocity, chance: box.chance, gate: box.gate, mute: box.mute, solo: box.solo,
+            rhythms: Array.from({length: Euclid.Patterns}, (_, pattern) => ({...Euclid.rhythmOf(box, pattern)}))
+        })
+    }
+
+    remove(): void {this.context.edit(() => Euclid.removeLane(asEuclid(this.box), this.box))}
+}
+
+const asEuclid = (lane: EuclidLaneBox): EuclidDeviceBox =>
+    asInstanceOf(lane.device.targetVertex.unwrap("lane has no device").box, EuclidDeviceBox)
+
+export class EuclidEffectImpl extends MIDIEffectFacade<EuclidDeviceBox> implements EuclidEffect {
+    readonly key = "Euclid" as const
+    declare pattern: int
+    declare length: int
+    declare rate: 0 | 1 | 2 | 3 | 4
+
+    constructor(context: Context, box: EuclidDeviceBox) {
+        super(context, box)
+        this.bind({pattern: box.pattern, length: box.length, rate: box.rate})
+    }
+
+    get lanes(): ReadonlyArray<EuclidLane> {return Euclid.lanesOf(this.box).map(lane => EuclidLaneImpl.wrap(this.context, lane))}
+
+    addLane(props?: DeepPartial<Omit<EuclidLane, "uuid" | "remove">>): EuclidLane {
+        if (Euclid.lanesOf(this.box).length >= Euclid.MaxLanes) {return panic(new RangeError(`at most ${Euclid.MaxLanes} lanes`))}
+        return this.context.edit(() => Props.apply(
+            EuclidLaneImpl.wrap(this.context, Euclid.createLane(this.context.boxGraph, this.box, 60)), props))
+    }
+}
+
 export class VelocityEffectImpl extends MIDIEffectFacade<VelocityDeviceBox> implements VelocityEffect {
     readonly key = "Velocity" as const
     declare magnetPosition: unitValue
@@ -171,6 +241,8 @@ export namespace MIDIEffectImpls {
         if (box instanceof PitchDeviceBox) {return new PitchEffectImpl(context, box)}
         if (box instanceof NoteFilterDeviceBox) {return new NoteFilterEffectImpl(context, box)}
         if (box instanceof ScaleMatrixDeviceBox) {return new ScaleMatrixEffectImpl(context, box)}
+        if (box instanceof ChordKeysDeviceBox) {return new ChordKeysEffectImpl(context, box)}
+        if (box instanceof EuclidDeviceBox) {return new EuclidEffectImpl(context, box)}
         if (box instanceof VelocityDeviceBox) {return new VelocityEffectImpl(context, box)}
         if (box instanceof ZeitgeistDeviceBox) {return new ZeitgeistEffectImpl(context, box)}
         if (box instanceof SpielwerkDeviceBox) {return new SpielwerkEffectImpl(context, box)}
@@ -179,6 +251,6 @@ export namespace MIDIEffectImpls {
 
     export const isBox = (box: Box): box is MIDIEffectBox =>
         box instanceof ArpeggioDeviceBox || box instanceof PitchDeviceBox || box instanceof VelocityDeviceBox
-        || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ZeitgeistDeviceBox
+        || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ChordKeysDeviceBox || box instanceof EuclidDeviceBox || box instanceof ZeitgeistDeviceBox
         || box instanceof SpielwerkDeviceBox
 }

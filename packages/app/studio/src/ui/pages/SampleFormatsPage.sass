@@ -1,0 +1,116 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 1.5em
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  overflow: hidden
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  > h1
+    color: var(--color-blue)
+
+  > p.disclaimer
+    margin: 0
+    max-width: 48em
+    font-size: 0.75rem
+    line-height: 1.4em
+    color: var(--color-dark)
+
+    > a
+      color: var(--color-blue)
+
+  > p.note
+    margin: 0
+    max-width: 48em
+    min-height: 2.8em
+    font-size: 0.75rem
+    line-height: 1.4em
+    color: var(--color-orange)
+
+  > div.summary
+    display: flex
+    align-items: center
+    column-gap: 1.5em
+    min-height: 2em
+    font-size: 0.75rem
+    color: var(--color-cream)
+
+    > span.possible
+      color: var(--color-dark)
+
+    > span.failures
+      color: var(--color-red)
+
+  > div.tabs
+    font-size: 0.75rem
+
+    > div
+      column-gap: 0.25em
+
+      > label
+        padding: 0 0.5em
+        white-space: nowrap
+
+  > div.list-wrapper
+    flex: 1
+    margin-left: -1.5em
+    padding: 8px 0 8px 1.5em
+    overflow: hidden auto
+    mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+    > div.list
+      display: grid
+      grid-template-columns: minmax(10em, 28em) 6em 18em 5em 5em
+      column-gap: 1.5em
+      row-gap: 0.25em
+      align-content: start
+      justify-content: start
+      align-items: center
+      font-size: 0.75rem
+
+      &.convertible
+        grid-template-columns: 1.25em minmax(10em, 28em) 6em 18em 5em 5em
+
+      > h4
+        margin-bottom: 0.25em
+        color: var(--color-blue)
+
+      > div
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+      > div.check
+        display: flex
+        place-items: center
+        overflow: visible
+
+      > div.name
+        display: flex
+        align-items: center
+        column-gap: 0.5em
+        user-select: text
+        -webkit-user-select: text
+
+        > span:last-child
+          overflow: hidden
+          text-overflow: ellipsis
+
+        > span.preview
+          flex: none
+          display: flex
+          place-items: center
+          cursor: pointer
+
+          &.playing
+            color: var(--color-blue)
+
+      > div.peak, > div.size
+        text-align: right
+
+      > div.empty
+        grid-column: 1 / -1

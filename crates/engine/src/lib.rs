@@ -19,7 +19,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
@@ -44,7 +44,7 @@ use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
 use engine_env::note_event_instrument::SharedNoteEventSource;
-use engine_env::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
+use engine_env::ppqn::{first_update_position, UPDATE_CLOCK_RATE};
 use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
 use transport::transport::{Marker, Transport, RENDER_QUANTUM};
@@ -82,7 +82,8 @@ struct DeviceReg {
     // the hub of `ScriptBufferBox` children (`@buffer` data), delivered through the same `data_changed`; 0 = none
     buffer_collection_field: u16,
     data_changed_index: u32,
-    release_all_index: u32 // slot of a MIDI effect's `release_all` export; 0 if none
+    release_all_index: u32, // slot of a MIDI effect's `release_all` export; 0 if none
+    table_changed_index: u32 // slot of the device's `table_changed` export (observed tables); 0 if none
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -126,7 +127,14 @@ pub(crate) struct CompositeSpec {
     // strip runs a `ChannelStripProcessor` between the child's output and the sum. Playfield's slot keys
     // are 50 / 51.
     pub(crate) child_volume_key: u16,
-    pub(crate) child_pan_key: u16
+    pub(crate) child_pan_key: u16,
+    pub(crate) cell_key_key: u16 // a cell's `key` (0 = no pad routing, see `pad_route`)
+}
+
+impl CompositeSpec {
+    pub(crate) fn routes_pads(&self) -> bool {
+        self.cell_key_key != 0
+    }
 }
 
 /// How an effect composite hands its INPUT to its entries. `Broadcast` gives every entry the same signal (the
@@ -294,6 +302,50 @@ pub(crate) fn call_device_data_changed(data_changed_index: u32, state_ptr: u32, 
     let _ = (data_changed_index, state_ptr, collection, values, records, fields);
 }
 
+// Call a device's `table_changed(state_ptr, id, ptr, rows, columns)` export with the snapshot of an observed
+// table (`words` row-major, `rows * columns` long). Called only off-render (the unit reconcile).
+#[cfg(target_family = "wasm")]
+#[inline]
+pub(crate) fn call_device_table_changed(table_changed_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+    if table_changed_index == 0 {
+        return;
+    }
+    let table_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(table_changed_index as usize) };
+    table_changed(state_ptr, id, words.as_ptr() as u32, rows, columns);
+}
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn call_device_table_changed(table_changed_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+    #[cfg(test)]
+    native_table_changed::record(table_changed_index, state_ptr, id, words, rows, columns);
+    #[cfg(not(test))]
+    let _ = (table_changed_index, state_ptr, id, words, rows, columns);
+}
+
+// Native TEST SEAM: what `call_device_table_changed` delivered.
+#[cfg(all(test, not(target_family = "wasm")))]
+pub(crate) mod native_table_changed {
+    use alloc::vec::Vec;
+    #[derive(Clone, Debug, PartialEq)]
+    pub(crate) struct Delivery {
+        pub(crate) state_ptr: u32,
+        pub(crate) id: u32,
+        pub(crate) rows: u32,
+        pub(crate) columns: u32,
+        pub(crate) words: Vec<u32>,
+        pub(crate) ptr: usize
+    }
+    std::thread_local! {
+        static DELIVERIES: core::cell::RefCell<Vec<Delivery>> = const { core::cell::RefCell::new(Vec::new()) };
+    }
+    pub(crate) fn record(_index: u32, state_ptr: u32, id: u32, words: &[u32], rows: u32, columns: u32) {
+        let delivery = Delivery {state_ptr, id, rows, columns, words: words.to_vec(), ptr: words.as_ptr() as usize};
+        DELIVERIES.with(|deliveries| deliveries.borrow_mut().push(delivery));
+    }
+    pub(crate) fn take() -> Vec<Delivery> {
+        DELIVERIES.with(|deliveries| core::mem::take(&mut *deliveries.borrow_mut()))
+    }
+}
+
 // Native TEST SEAM: what `call_device_data_changed` delivered.
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod native_data_changed {
@@ -420,8 +472,10 @@ pub(crate) mod broadcast;
 mod time_stretch;
 mod tempo_map;
 mod script_device;
+mod table;
 use audio_unit::{AudioUnitBinding, Members};
 mod composite;
+mod pad_route;
 mod effect_composite;
 
 mod param_automation;
@@ -746,6 +800,12 @@ shared_static! {
     static FIELD_OBS: Vec<FieldObs> = Vec::new();
 }
 
+// The table-observe recorder the `host_observe_table` export appends to. After `init` the engine watches each
+// hub and delivers its rows through the device's `table_changed` export. Its own cell (NOT `ENGINE`), as above.
+shared_static! {
+    static TABLE_OBS: Vec<table::TableObs> = Vec::new();
+}
+
 // The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
 // pointer FIELD-KEY path (e.g. the Gate's `side-chain` at `[30]`), in declaration order. After `init` the
 // engine resolves each to a source's output and feeds it in as an input PORT (id 2, 3, ...). Its own cell (NOT
@@ -834,7 +894,8 @@ enum PullLink {
     // `gate` is the child's SILENT flag (mute / not-soloed, TS `SampleProcessor.handleEvent`): while set, the
     // child's note STARTS are dropped (releases + chokes still pass, so held voices stop like TS).
     SlotRoute { upstream: SharedNoteEventSource, choke: Rc<[i32]>, gate: Rc<Cell<bool>> },
-    MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
+    MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> },
+    PadRoute { route: Rc<pad_route::PadRouter>, upstream: Rc<PullLink> }
 }
 
 impl PullLink {
@@ -847,6 +908,8 @@ impl PullLink {
                 Rc::ptr_eq(a, b) && a_choke[..] == b_choke[..] && Rc::ptr_eq(a_gate, b_gate),
             (PullLink::MidiFx {effect: a, upstream: a_upstream}, PullLink::MidiFx {effect: b, upstream: b_upstream}) =>
                 Rc::ptr_eq(a, b) && a_upstream.same(b_upstream),
+            (PullLink::PadRoute {route: a, upstream: a_upstream}, PullLink::PadRoute {route: b, upstream: b_upstream}) =>
+                Rc::ptr_eq(a, b) && a_upstream.same(b_upstream),
             _ => false
         }
     }
@@ -854,15 +917,25 @@ impl PullLink {
     fn holds(&self, effect: &Rc<PluginMidiEffect>) -> bool {
         match self {
             PullLink::MidiFx {effect: own, upstream} => Rc::ptr_eq(own, effect) || upstream.holds(effect),
+            PullLink::PadRoute {upstream, ..} => upstream.holds(effect),
             _ => false
         }
     }
 
     /// Every effect of this chain missing from `next` ends the notes it started, into `out`.
     pub(crate) fn release_leavers(&self, next: &PullLink, out: &mut Vec<EventRecord>) {
-        if let PullLink::MidiFx {effect, upstream} = self {
-            if !next.holds(effect) {effect.release_all(out)}
-            upstream.release_leavers(next, out);
+        match self {
+            PullLink::MidiFx {effect, upstream} => {
+                if !next.holds(effect) {effect.release_all(out)}
+                upstream.release_leavers(next, out);
+            }
+            PullLink::PadRoute {route, upstream} => {
+                let mut released: Vec<EventRecord> = Vec::new();
+                upstream.release_leavers(next, &mut released);
+                let count = route.route(&mut released);
+                out.extend_from_slice(&released[..count]);
+            }
+            _ => {}
         }
     }
 }
@@ -964,6 +1037,20 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
     let count = match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out),
         Some(PullLink::SlotRoute {ref upstream, ref choke, ref gate}) => pull_from_slot_route(upstream, choke, gate, from, to, flags, out),
+        Some(PullLink::PadRoute {route, upstream}) => {
+            {
+                let pull = unsafe { PULL.get() };
+                pull.current = Some((*upstream).clone());
+                pull.note_bits = None;
+            }
+            let count = pull_events_into(from, to, flags, out, out_ptr) as usize;
+            {
+                let pull = unsafe { PULL.get() };
+                pull.current = Some(PullLink::PadRoute {route: route.clone(), upstream});
+                pull.note_bits = consumer_bits.clone();
+            }
+            route.route(&mut out[..count]) as u32
+        }
         Some(PullLink::MidiFx {effect, upstream}) => {
             // Descend into the fx: swap in ITS params + clock-armed state + the upstream link, so the fx's own
             // `host_update_parameters` / `next_update_position` see the fx's automation and its upstream pull
@@ -1156,6 +1243,22 @@ pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
     let obs = unsafe { FIELD_OBS.get() };
     obs.push(FieldObs {path: path.to_vec(), target_key: 0});
+    obs.len() as u32 - 1
+}
+
+/// Host import a device calls from its `init` to observe the child boxes under one of its hubs as a table
+/// (`abi::observe_table`). Only RECORDS the hub path and the columns (into `TABLE_OBS`) and returns the id.
+/// Touches no `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_observe_table(path_ptr: u32, path_len: u32, columns_ptr: u32, columns_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let columns = unsafe { core::slice::from_raw_parts(columns_ptr as *const abi::TableColumn, columns_len as usize) };
+    record_table_obs(path, columns)
+}
+
+fn record_table_obs(path: &[u16], columns: &[abi::TableColumn]) -> u32 {
+    let obs = unsafe { TABLE_OBS.get() };
+    obs.push(table::TableObs {path: path.to_vec(), columns: columns.to_vec()});
     obs.len() as u32 - 1
 }
 
@@ -1526,14 +1629,7 @@ struct TempoStamp {
 
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
-    let pulses = position - block.p0;
-    let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-    let raw = if pulses.abs() < 1.0e-7 {
-        s0
-    } else {
-        s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
-    };
-    raw.clamp(s0, s1)
+    engine_env::block::frame_of(block, position, sample_rate)
 }
 
 struct Engine {
@@ -1626,6 +1722,9 @@ struct Engine {
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
     output_registry: AudioOutputBufferRegistry<NodeId>,
+    // every resolved sidechain as (consumer node, consumer device, source node, source box), rebuilt per resolve
+    sidechain_links: Vec<(NodeId, Uuid, NodeId, Uuid)>,
+    looped_sidechains: BTreeSet<Uuid>,
     // The SEND/RETURN bus registry: each non-primary `AudioBusBox`'s summing bus (`AudioBusProcessor`), keyed
     // by the bus box uuid, built when its bus-type audio unit is wired. A unit's `output` (25) or an
     // `AuxSendBox`'s `targetBus` resolves through this to the sum node to feed; the PRIMARY bus is ABSENT (it
@@ -1710,6 +1809,8 @@ impl Engine {
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             field_overrides: BTreeMap::new(),
             output_registry: AudioOutputBufferRegistry::new(),
+            sidechain_links: Vec::new(),
+            looped_sidechains: BTreeSet::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
@@ -1747,13 +1848,19 @@ impl Engine {
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16,
-            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0});
+            sidechain_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0, release_all_index: 0, table_changed_index: 0});
         id
     }
 
     fn set_device_release_all(&mut self, device_id: u32, release_all_index: u32) {
         if let Some(reg) = self.devices.get_mut(device_id as usize) {
             reg.release_all_index = release_all_index;
+        }
+    }
+
+    fn set_device_table_changed(&mut self, device_id: u32, table_changed_index: u32) {
+        if let Some(reg) = self.devices.get_mut(device_id as usize) {
+            reg.table_changed_index = table_changed_index;
         }
     }
 
@@ -1791,10 +1898,10 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
     fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
                           cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16,
-                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16) {
+                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16, cell_key_key: u16) {
         self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
             cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key,
-            child_volume_key, child_pan_key});
+            child_volume_key, child_pan_key, cell_key_key});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
@@ -2002,6 +2109,8 @@ impl Engine {
                     flags: BlockFlags::create(true, block.discontinuous, true, false),
                     p0: block.p0,
                     p1: block.p1,
+                    anchor: block.anchor,
+                    anchor_frame: block.anchor_frame,
                     s0: block.s0 as u32,
                     s1: block.s1 as u32,
                     bpm: block.bpm
@@ -2024,6 +2133,8 @@ impl Engine {
                         flags: BlockFlags::create(false, false, false, false),
                         p0: paused.p0,
                         p1: paused.p1,
+                        anchor: paused.anchor,
+                        anchor_frame: covered as i64,
                         s0: covered as u32,
                         s1: RENDER_QUANTUM as u32,
                         bpm: paused.bpm
@@ -2042,6 +2153,8 @@ impl Engine {
                 flags: BlockFlags::create(false, false, false, false),
                 p0: paused.p0,
                 p1: paused.p1,
+                anchor: paused.anchor,
+                anchor_frame: paused.anchor_frame,
                 s0: paused.s0 as u32,
                 s1: paused.s1 as u32,
                 bpm: paused.bpm
@@ -2121,6 +2234,14 @@ impl Engine {
         // which the worklet's play command issues first when timestamp playback is enabled).
         self.schedule_midi_transport(midi_output::start_message());
         self.transport.play()
+    }
+
+    fn suspend_automation(&self, uuid: [u8; 16]) {
+        if !self.transport.is_playing() {return}
+        let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+        if !suspended.contains(&uuid) {
+            suspended.push(uuid);
+        }
     }
 
     /// Schedule a MIDI transport message for the next quantum (TS `midiTransportClock.schedule`).
@@ -2488,7 +2609,7 @@ impl Engine {
     /// LfoModulatorBox: shape 10, rateSync 11, rateAbsolute 12, phase 13, exponent 15. StepsModulatorBox:
     /// count 10, rateSync 11, rateAbsolute 12, phase 13, smooth 15, direction 16, steps 20 (array of 64).
     /// MacroModulatorBox: value 10. RandomModulatorBox: loop 10, rateSync 11, rateAbsolute 12, phase 13,
-    /// smooth 15, seed 16, levels 17.
+    /// smooth 15, seed 16, levels 17, bias 18, focus 19.
     fn advance_modulation(&mut self) {
         let free_running = self.transport.free_running();
         let playing = self.transport.is_playing();
@@ -2622,7 +2743,11 @@ impl Engine {
                 (13, unipolar,
                     |state, value| if let ModulatorKind::Random(random) = &state.kind {random.phase.set(value)}),
                 (15, unipolar,
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)})
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)}),
+                (18, bipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.bias.set(value)}),
+                (19, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.focus.set(value)})
             ],
             _ => alloc::vec![
                 (10u16, Integer(LinearInteger {min: 0, max: 4}),
@@ -3150,6 +3275,7 @@ pub extern "C" fn init(sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn render() {
     unsafe {
+        SAMPLES.get().convert_floats();
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
@@ -3201,8 +3327,14 @@ pub extern "C" fn frozen_allocate(frame_count: u32, _channels: u32) -> *mut f32 
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.frozen_pending = alloc::vec![0.0; frame_count as usize * 2];
-                engine.frozen_pending.as_mut_ptr()
+                engine.frozen_pending = Vec::new();
+                match (frame_count as usize).checked_mul(2).and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.frozen_pending = pending;
+                        engine.frozen_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }
@@ -3366,9 +3498,8 @@ pub extern "C" fn ignore_note_region() {
 pub extern "C" fn suspend_automation() {
     let mut uuid = [0u8; 16];
     uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
-    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
-    if !suspended.contains(&uuid) {
-        suspended.push(uuid);
+    if let Some(engine) = unsafe { ENGINE.get().as_ref() } {
+        engine.suspend_automation(uuid)
     }
 }
 
@@ -3662,8 +3793,15 @@ pub extern "C" fn click_allocate(frame_count: u32, channels: u32) -> *mut f32 {
     unsafe {
         match ENGINE.get().as_mut() {
             Some(engine) => {
-                engine.click_pending = alloc::vec![0.0; frame_count as usize * channels.clamp(1, 2) as usize];
-                engine.click_pending.as_mut_ptr()
+                engine.click_pending = Vec::new();
+                match (frame_count as usize).checked_mul(channels.clamp(1, 2) as usize)
+                    .and_then(|len| sample::try_filled(len, 0.0f32)) {
+                    Some(pending) => {
+                        engine.click_pending = pending;
+                        engine.click_pending.as_mut_ptr()
+                    }
+                    None => core::ptr::null_mut()
+                }
             }
             None => core::ptr::null_mut()
         }
@@ -3753,6 +3891,16 @@ pub extern "C" fn device_set_record_collection(device_id: u32, record_field: u32
     }
 }
 
+/// Set the function-table slot of a registered device's `table_changed` export. Call after `device_register`, before `bind`.
+#[no_mangle]
+pub extern "C" fn device_set_table_changed(device_id: u32, table_changed_index: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_device_table_changed(device_id, table_changed_index);
+        }
+    }
+}
+
 /// Set the table slot of a registered MIDI effect's `release_all` export. Call after `device_register`, before `bind`.
 #[no_mangle]
 pub extern "C" fn device_set_release_all(device_id: u32, release_all_index: u32) {
@@ -3782,7 +3930,7 @@ pub extern "C" fn device_set_sidechain_collection_field(device_id: u32, field: u
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
                                      cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32,
-                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32) {
+                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32, cell_key_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -3792,7 +3940,7 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
-                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16);
+                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16, cell_key_key as u16);
         }
     }
 }
@@ -3844,6 +3992,24 @@ pub extern "C" fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32 {
     }
 }
 
+/// As `host_resolve_sample` with f32 frames, 0 until the float copy of a 16 bit sample is complete.
+#[no_mangle]
+pub extern "C" fn host_resolve_sample_floats(handle: u32, out_ptr: u32) -> u32 {
+    match unsafe { SAMPLES.get() }.resolve_floats(handle) {
+        Some(sample_ref) => {
+            unsafe { *(out_ptr as *mut abi::SampleRef) = sample_ref; }
+            1
+        }
+        None => 0
+    }
+}
+
+/// How many values of 16 bit samples become floats per render block, `u32::MAX` for all at once (offline).
+#[no_mangle]
+pub extern "C" fn set_sample_float_budget(values: u32) {
+    unsafe { SAMPLES.get() }.set_float_budget(if values == u32::MAX {usize::MAX} else {values as usize});
+}
+
 /// Pop the next sample awaiting a load (the engine queued it on seeing an `AudioFileBox`): write its 16-byte
 /// uuid to `out_ptr` and return its handle, or return -1 when none are pending. The worklet drains these
 /// after applying a transaction and dispatches each to the main-thread loader. Off-render.
@@ -3870,6 +4036,12 @@ pub extern "C" fn sample_allocate(handle: u32, byte_len: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
     unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
+}
+
+/// As `sample_set_ready`, for planes the loader wrote as 16 bit PCM (2 bytes per frame and channel).
+#[no_mangle]
+pub extern "C" fn sample_set_ready_i16(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
+    unsafe { SAMPLES.get() }.set_ready_as(handle, frame_count, channel_count, sample_rate, abi::SAMPLE_FORMAT_I16);
 }
 
 /// Resolve a soundfont handle for a device DURING render: write a `SoundfontRef` (ptr + len) to `out_ptr` and
@@ -4046,6 +4218,38 @@ pub extern "C" fn report_message_len() -> usize {
 #[no_mangle]
 pub extern "C" fn report_message_clear() {
     unsafe { REPORT_MESSAGE.get() }.1 = 0;
+}
+
+const NOTICE_MESSAGE_CAPACITY: usize = 1024;
+const NOTICE_LINE_RESERVE: usize = 128;
+shared_static! {
+    static NOTICE_MESSAGE: ([u8; NOTICE_MESSAGE_CAPACITY], usize) = ([0; NOTICE_MESSAGE_CAPACITY], 0);
+}
+
+// a non-fatal line for the user (tab-separated, kind first), read and cleared after `render`
+pub(crate) fn notice(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    let (buffer, written) = unsafe { NOTICE_MESSAGE.get() };
+    if NOTICE_MESSAGE_CAPACITY - *written < NOTICE_LINE_RESERVE {return}
+    let mut writer = BufferWriter {buffer, written: *written};
+    if writer.written > 0 {let _ = writer.write_str("\n");}
+    let _ = writer.write_fmt(args);
+    *written = writer.written;
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_ptr() -> *const u8 {
+    unsafe { NOTICE_MESSAGE.get() }.0.as_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_len() -> usize {
+    unsafe { NOTICE_MESSAGE.get() }.1
+}
+
+#[no_mangle]
+pub extern "C" fn notice_message_clear() {
+    unsafe { NOTICE_MESSAGE.get() }.1 = 0;
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.

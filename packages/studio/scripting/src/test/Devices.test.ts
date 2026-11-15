@@ -7,7 +7,7 @@ describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "ChordKeys", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach((key, index) => {
             const effect = unit.addMIDIEffect(key)
             expect(effect.key).toBe(key)
@@ -33,6 +33,18 @@ describe("Devices", () => {
         expect(() => matrix.setCustom(new Array(13).fill(0))).toThrow(RangeError)
         matrix.root = 14
         expect(matrix.root).toBe(11)
+    })
+
+    it("edits Chord Keys", () => {
+        const {project} = createFixture()
+        const chordKeys = project.addInstrumentUnit("Vaporisateur").addMIDIEffect("ChordKeys")
+        expect([chordKeys.root, chordKeys.scale, chordKeys.follow, chordKeys.voiceLeading]).toEqual([0, 0, true, false])
+        chordKeys.scale = 3
+        chordKeys.follow = false
+        chordKeys.voiceLeading = true
+        expect([chordKeys.scale, chordKeys.follow, chordKeys.voiceLeading]).toEqual([3, false, true])
+        chordKeys.root = 14
+        expect(chordKeys.root).toBe(11)
     })
 
     it("adds every audio effect with defaults", () => {
@@ -280,6 +292,102 @@ describe("Devices", () => {
         expect(spielwerk.parameter("chance").value).toBe(1)
     })
 
+    it("builds a multi-sample Sampler", () => {
+        const {project, host} = createFixture()
+        const sampler = project.addInstrumentUnit("Sampler", {label: "Keys"}, {
+            voices: 24, filter: {type: 1, cutoff: 4000}, ampEnvelope: {release: 2}, lfos: [{rate: 3}, {sync: true}]
+        }).instrument
+        expect(sampler.key).toBe("Sampler")
+        expect(sampler.voices).toBe(24)
+        expect(sampler.filter.type).toBe(1)
+        expect(sampler.filter.cutoff).toBe(4000)
+        expect(sampler.ampEnvelope.release).toBe(2)
+        expect(sampler.modEnvelope.sustain).toBe(0)
+        expect(sampler.lfos.length).toBe(2)
+        expect(sampler.lfos[0].rate).toBe(3)
+        expect(sampler.lfos[1].sync).toBe(true)
+        sampler.voices = 500
+        expect(sampler.voices).toBe(64)
+        expect(() => {sampler.filter.type = 9 as 0}).toThrow(RangeError)
+        // a new Sampler has one group and velocity to gain
+        expect(sampler.groups.map(group => group.label)).toEqual(["Group 1"])
+        expect(sampler.modulations.map(({source, target, amount}) => [source, target, amount])).toEqual([[4, 3, 1]])
+        expect(sampler.zones).toEqual([])
+        const low = sampler.addZone(sample("Low"), {keyLow: 0, keyHigh: 59, rootKey: 48, loopMode: 2, loopEnd: 1000})
+        const high = sampler.addZone(sample("High"), {keyLow: 60, rootKey: 72})
+        expect(sampler.zones).toEqual([low, high])
+        expect([low.keyLow, low.keyHigh, low.rootKey, low.loopMode, low.loopStart, low.loopEnd]).toEqual([0, 59, 48, 2, 0, 1000])
+        expect([high.keyLow, high.keyHigh, high.rootKey, high.sampleEnd]).toEqual([60, 127, 72, 0x7FFFFFFF])
+        expect(low.sample.name).toBe("Low")
+        expect(low.group).toBe(sampler.groups[0])
+        expect(sampler.groups[0].zones).toEqual([low, high])
+        low.keyHigh = 300
+        expect(low.keyHigh).toBe(127)
+        expect(() => sampler.addZone(sample("Bad"), {nope: 1} as object)).toThrow(TypeError)
+        expect(sampler.zones.length).toBe(2) // a failed add leaves nothing behind
+        // groups
+        const releases = sampler.addGroup({label: "Release", trigger: 1, roundRobin: 2, choke: 3})
+        expect(sampler.groups).toEqual([sampler.groups[0], releases])
+        expect([releases.label, releases.trigger, releases.roundRobin, releases.choke]).toEqual(["Release", 1, 2, 3])
+        expect(sampler.addGroup().label).toBe("Group 3")
+        high.group = releases
+        expect(high.group).toBe(releases)
+        expect(releases.zones).toEqual([high])
+        const click = sampler.addZone(sample("Click"), {group: releases, oneShot: true})
+        expect(releases.zones).toEqual([high, click])
+        const other = project.addInstrumentUnit("Sampler").instrument
+        expect(() => {low.group = other.groups[0]}).toThrow("another Sampler")
+        expect(() => {low.group = {} as typeof releases}).toThrow(TypeError)
+        // swapping the sample drops the one nothing plays any more
+        low.sample = sample("Lower")
+        expect(low.sample.name).toBe("Lower")
+        // modulations
+        const vibrato = sampler.addModulation(2, 0, 0.02)
+        const start = sampler.addModulation(6, 5, 4)
+        expect(sampler.modulations.length).toBe(3)
+        expect(sampler.modulations.at(-1)).toBe(start)
+        expect(start.amount).toBe(1)
+        expect(vibrato.amount).toBeCloseTo(0.02)
+        expect(() => sampler.addModulation(7 as 0, 0, 0)).toThrow(RangeError)
+        expect(sampler.modulations.length).toBe(3)
+        vibrato.remove()
+        expect(sampler.modulations).toEqual([sampler.modulations[0], start])
+        // removing a group takes its zones along, the last group stays
+        releases.remove()
+        expect(high.attached).toBe(false)
+        expect(click.attached).toBe(false)
+        expect(sampler.zones).toEqual([low])
+        low.remove()
+        expect(sampler.zones).toEqual([])
+        sampler.groups[1].remove()
+        expect(() => sampler.groups[0].remove()).toThrow("last group")
+        expect(sampler.groups.length).toBe(1)
+        // the project opens and reads back
+        const again = sampler.addZone(sample("Again"), {keyLow: 10, keyHigh: 20})
+        project.openInStudio()
+        expect(host.opened.length).toBe(1)
+        expect(again.keyHigh).toBe(20)
+    })
+
+    it("reads a Sampler back from an open project", async () => {
+        const {api, project} = createFixture()
+        const built = project.addInstrumentUnit("Sampler", {label: "Keys"}).instrument
+        built.addZone(sample("One"), {keyLow: 12, keyHigh: 14, rootKey: 13, loopMode: 1})
+        built.addModulation(6, 5, 1)
+        project.openInStudio()
+        const loaded = await api.getProject()
+        const sampler = loaded.audioUnits.map(unit => unit.kind === "instrument" ? unit.instrument : null)
+            .find(instrument => instrument?.key === "Sampler")
+        if (sampler?.key !== "Sampler") {throw new Error("no sampler")}
+        expect(sampler.zones.map(zone => [zone.sample.name, zone.keyLow, zone.keyHigh, zone.rootKey, zone.loopMode]))
+            .toEqual([["One", 12, 14, 13, 1]])
+        expect(sampler.modulations.map(({source, target, amount}) => [source, target, amount])).toEqual([[4, 3, 1], [6, 5, 1]])
+        sampler.zones[0].keyHigh = 20
+        loaded.openInStudio()
+        const reloaded = await api.getProject()
+        expect(reloaded.audioUnits.length).toBe(loaded.audioUnits.length)
+    })
+
     it("configures samplers", () => {
         const {project} = createFixture()
         const nano = project.addInstrumentUnit("Nano").instrument
@@ -328,6 +436,65 @@ describe("Devices", () => {
         expect(convolver.impulse).toBeNull()
         convolver.impulse = sample("Hall")
         expect(convolver.impulse?.name).toBe("Hall")
+    })
+
+    it("builds Euclid lanes with their rhythm in every pattern", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Playfield")
+        const euclid = unit.addMIDIEffect("Euclid")
+        expect(euclid.key).toBe("Euclid")
+        expect(euclid.lanes.length).toBe(0)
+        const kick = euclid.addLane({note: 36, velocity: 0.6, rhythms: [{steps: 16, pulses: 4}]})
+        const snare = euclid.addLane({note: 38, gate: 1, rhythms: [{pulses: 2, rotate: 4}, {pulses: 3}]})
+        expect(euclid.lanes.map(lane => lane.note)).toEqual([36, 38])
+        expect(kick.velocity).toBeCloseTo(0.6)
+        expect(kick.rhythms[0].pulses).toBe(4)
+        expect(kick.rhythms[1].pulses).toBe(4)
+        expect(snare.gate).toBe(1)
+        expect(snare.rhythms[0].rotate).toBe(4)
+        expect(snare.rhythms[1].pulses).toBe(3)
+        expect(snare.rhythms.length).toBe(8)
+        snare.rhythms[2].fade = -0.5
+        expect(snare.rhythms[2].fade).toBeCloseTo(-0.5)
+        euclid.pattern = 2
+        euclid.rate = 3
+        euclid.length = 32
+        expect([euclid.pattern, euclid.rate, euclid.length]).toEqual([2, 3, 32])
+        kick.remove()
+        expect(euclid.lanes.map(lane => lane.note)).toEqual([38])
+        expect(() => euclid.addLane({note: 200})).not.toThrow()
+        expect(euclid.lanes[1].note).toBe(127)
+    })
+
+    it("puts instruments on Playfield pads next to sample slots", () => {
+        const {project} = createFixture()
+        const playfield = project.addInstrumentUnit("Playfield").instrument
+        const slot = playfield.addSample(sample("Kick"), {note: 36})
+        const kick = playfield.addPad("OpenDrumKick", {decay: 0.7, label: "Kick"}, {note: 37, gain: -3})
+        const hat = playfield.addPad("OpenDrumHat", {decay: 0.13}, {exclude: true, key: 62})
+        expect(kick.note).toBe(37)
+        expect(kick.gain).toBe(-3)
+        expect(kick.instrument.key).toBe("OpenDrumKick")
+        expect(kick.instrument.decay).toBeCloseTo(0.7)
+        expect(kick.instrument.label).toBe("Kick")
+        expect(kick.playfield).toBe(playfield)
+        expect(hat.note).toBe(60)
+        expect(hat.key).toBe(62)
+        expect(hat.exclude).toBe(true)
+        expect(playfield.pads.map(pad => pad.note)).toEqual([37, 60])
+        expect(playfield.slots.map(entry => entry.note)).toEqual([36])
+        const effect = kick.addAudioEffect("Delay")
+        expect(kick.audioEffects[0]).toBe(effect)
+        const replaced = playfield.addPad("OpenDrumSnare", undefined, {note: 36})
+        expect(() => slot.note).toThrow()
+        expect(playfield.slots.length).toBe(0)
+        expect(playfield.pads.map(pad => pad.instrument.key)).toEqual(["OpenDrumSnare", "OpenDrumKick", "OpenDrumHat"])
+        replaced.remove()
+        expect(playfield.pads.map(pad => pad.note)).toEqual([37, 60])
+        expect(() => playfield.addPad("Nano" as "OpenDrumKick")).toThrow()
+        expect(() => playfield.addPad("Playfield" as "OpenDrumKick")).toThrow()
+        expect(playfield.addPad("OpenDrumKick", undefined, {note: 200}).note).toBe(127)
+        expect(playfield.pads.length).toBe(3)
     })
 
     it("builds an Instrument Composite with layers, their chains and a nested composite", () => {

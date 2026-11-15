@@ -189,6 +189,27 @@ describe("grooves", () => {
         expect(() => {cubed.groove = other.groove}).toThrow("Expected a groove of the project")
     })
 
+    it("a Surgeon plays straight until a script gives a pattern a groove", () => {
+        const {project, boxes} = setup()
+        const surgeon = project.addInstrumentUnit("Surgeon").instrument
+        if (surgeon.key !== "Surgeon") {throw new Error("expected a Surgeon")}
+        for (let pattern = 0; pattern < 8; pattern++) {expect(surgeon.grooveOf(pattern)).toBeNull()}
+        const random = project.grooves.find(groove => groove.kind === "Random")!
+        surgeon.setGroove(3, random)
+        expect(surgeon.grooveOf(3)).toBe(random)
+        expect(surgeon.grooveOf(2)).toBeNull()
+        expect(boxes.random.pointerHub.incoming().length).toBe(2)
+        surgeon.select(3)
+        expect(surgeon.grooveOf(3)).toBe(random)
+        expect(surgeon.grooveOf(0)).toBeNull()
+        surgeon.setGroove(3, null)
+        expect(surgeon.grooveOf(3)).toBeNull()
+        expect(() => surgeon.grooveOf(8)).toThrow()
+        expect(() => surgeon.setGroove(-1, null)).toThrow()
+        const other = setup().project
+        expect(() => surgeon.setGroove(0, other.grooves[0])).toThrow("Expected a groove of the project")
+    })
+
     it("a region refuses a groove of another project", () => {
         const {project} = setup()
         const other = setup().project

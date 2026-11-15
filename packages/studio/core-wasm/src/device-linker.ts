@@ -21,7 +21,7 @@ const HOST_IMPORTS: ReadonlyArray<string> = [
     "host_update_parameters", "host_first_update_position", "host_next_update_position",
     "host_resolve_sample", "host_observe_sample",
     "host_resolve_soundfont", "host_observe_soundfont",
-    "host_observe_field", "host_observe_target_string",
+    "host_observe_field", "host_observe_target_string", "host_observe_table",
     "host_bind_sidechain", "host_resolve_input", "host_self_uuid", "host_panic",
     "host_base_frequency", "host_bar_at", "host_harmony_at", "host_set_latency",
     "host_observe_groove", "host_groove_warp", "host_groove_unwarp", "host_loop_area"
@@ -52,6 +52,7 @@ export type DeviceExports = {
     observe_record_collection_field?: () => number
     observe_buffer_collection_field?: () => number
     data_changed?: (statePtr: number, collection: number, ptr: number, records: number, fields: number) => void
+    table_changed?: (statePtr: number, id: number, ptr: number, rows: number, columns: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -67,10 +68,11 @@ export type LinkerEngine = {
     device_set_sidechain_collection_field: (deviceId: number, field: number) => void
     device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
     device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
+    device_set_table_changed: (deviceId: number, tableChangedIndex: number) => void
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
                          childEnabledKey: number, childMuteKey: number, childSoloKey: number,
-                         childVolumeKey: number, childPanKey: number) => void
+                         childVolumeKey: number, childPanKey: number, cellKeyKey: number) => void
     effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number,
                                 indexKey: number, chainField: number, labelKey: number, gainKey: number,
                                 panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number,
@@ -83,7 +85,7 @@ export type CompositeRegistration = {
     boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
     childEnabledKey: number, childMuteKey: number, childSoloKey: number,
-    childVolumeKey: number, childPanKey: number
+    childVolumeKey: number, childPanKey: number, cellKeyKey: number
 }
 
 const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
@@ -172,6 +174,7 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
         device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
     engine.device_set_box_type(deviceId, writeName(engine, memory, boxType))
     if (device.release_all !== undefined) {engine.device_set_release_all(deviceId, installOptional(device.release_all))}
+    if (device.table_changed !== undefined) {engine.device_set_table_changed(deviceId, installOptional(device.table_changed))}
     const sidechainField = device.observe_sidechain_collection_field?.() ?? 0
     if (sidechainField !== 0) {engine.device_set_sidechain_collection_field(deviceId, sidechainField)}
     const recordField = device.observe_record_collection_field?.() ?? 0
@@ -186,7 +189,7 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
 export const registerComposite = (engine: LinkerEngine, memory: WebAssembly.Memory, spec: CompositeRegistration): void => {
     engine.composite_register(writeName(engine, memory, spec.boxType), spec.childrenField, spec.indexKey,
         spec.excludeKey, spec.cellInstrumentField, spec.cellMidiField, spec.cellAudioField, spec.childEnabledKey,
-        spec.childMuteKey, spec.childSoloKey, spec.childVolumeKey, spec.childPanKey)
+        spec.childMuteKey, spec.childSoloKey, spec.childVolumeKey, spec.childPanKey, spec.cellKeyKey)
 }
 
 // Register one EFFECT COMPOSITE box type (a parallel fx / midi stack): write its name, then map its entry

@@ -646,7 +646,7 @@ mod tests {
     }
 
     fn playing_block(p0: f64, p1: f64, s0: u32, s1: u32, bpm: f32) -> Block {
-        Block {index: 0, flags: abi::BlockFlags::create(true, false, true, false), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: abi::BlockFlags::create(true, false, true, false), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]

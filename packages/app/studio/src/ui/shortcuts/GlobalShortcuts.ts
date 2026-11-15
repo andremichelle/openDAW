@@ -6,6 +6,14 @@ const ctrl = true
 const alt = true
 
 export const GlobalShortcutsFactory = ShortcutValidator.validate({
+    "group-tracks": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl}),
+        description: "Create a group bus from the selected tracks"
+    },
+    "ungroup-tracks": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl, shift}),
+        description: "Remove the selected group buses (keep tracks)"
+    },
     "project-undo": {
         shortcut: Shortcut.of(Key.KeyZ, {ctrl}),
         description: "Undo last action"
@@ -50,6 +58,10 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "toggle-software-keyboard": {
         shortcut: Shortcut.of(Key.KeyK, {ctrl}),
         description: "Show or hide software keyboard"
+    },
+    "toggle-studio-recording": {
+        shortcut: Shortcut.of(Key.KeyE, {ctrl, shift}),
+        description: "Start or stop the studio recording"
     },
     "toggle-device-panel": {
         shortcut: Shortcut.of(Key.KeyD, {shift}),

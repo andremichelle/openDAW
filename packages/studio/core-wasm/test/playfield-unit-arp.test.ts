@@ -2,12 +2,12 @@
 // over the same window. Pad A (note 60, hard left) must sound sample-identical whether or not pad B (note 64,
 // hard right) exists: a second pad pulling the shared arp must not change what the first pad receives.
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
+import {asInstanceOf, UUID} from "@opendaw/lib-std"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, GrooveShuffleBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox,
-    PlayfieldDeviceBox, PlayfieldSampleBox, TrackBox, VelocityDeviceBox, ZeitgeistDeviceBox
+    NanoDeviceBox, PlayfieldDeviceBox, TrackBox, VelocityDeviceBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {PlayfieldPads, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -29,13 +29,9 @@ const renderLeft = async (pads: ReadonlyArray<{note: number, panning: number}>, 
             box.endInSeconds.setValue(1.0)
             box.fileName.setValue("synthetic")
         })
-        PlayfieldSampleBox.create(source, UUID.generate(), box => {
-            box.device.refer(playfield.samples)
-            box.file.refer(file)
-            box.index.setValue(note)
-            box.panning.setValue(panning)
-            box.gate.setValue(1)
-        })
+        const pad = PlayfieldPads.create(source, playfield, file, note)
+        pad.pan.setValue(panning)
+        pad.instrument.pointerHub.incoming().forEach(({box}) => asInstanceOf(box, NanoDeviceBox).oneShot.setValue(false))
     })
     if (fx === "arp") {
         ArpeggioDeviceBox.create(source, UUID.generate(), box => {

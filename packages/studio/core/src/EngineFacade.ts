@@ -92,6 +92,8 @@ export class EngineFacade implements Engine {
     // a new engine (first boot or a restart): local state sent to the old one, like `overrideDeviceField`, is gone
     subscribeWorkletChanged(observer: Observer<void>): Subscription {return this.#workletChanged.subscribe(observer)}
 
+    get worklet(): Option<EngineWorklet> {return this.#worklet}
+
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 
     releaseWorklet(): void {

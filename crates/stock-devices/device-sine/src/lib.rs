@@ -131,7 +131,7 @@ pub fn render(state: &mut SynthState, events: &[EventRecord], out_left: &mut [f3
         *sample = 0.0;
     }
     // One block spanning the whole buffer (the engine supplies real blocks in `process`).
-    let block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
     abi::dispatch_range::<Synth>(state, [&mut *out_left, &mut *out_right], events, &block);
     Synth::finish(state, [out_left, out_right]);
 }

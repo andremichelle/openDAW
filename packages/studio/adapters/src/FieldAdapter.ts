@@ -71,7 +71,7 @@ export class FieldAdapter<T extends PrimitiveValues = any> implements MutableObs
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
     getPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getValue())}
     setPrintValue(text: string): void {
-        const result = this.#stringMapping.y(text)
+        const result = this.#stringMapping.y(StringMapping.withDisplayUnit(text, this.getPrintValue().unit))
         if (result.type === "unitValue") {
             this.setUnitValue(clamp(result.value, 0.0, 1.0))
         } else if (result.type === "explicit") {

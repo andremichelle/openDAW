@@ -1,5 +1,5 @@
 import css from "./CubedDeviceEditor.sass?inline"
-import {DefaultObservableValue, int, Lifecycle, ValueGuide} from "@opendaw/lib-std"
+import {DefaultObservableValue, Editing, int, Lifecycle, ValueGuide} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -7,7 +7,7 @@ import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {AutomatableParameterFieldAdapter, CubedDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
 import {Html} from "@opendaw/lib-dom"
-import {MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {CubedPatternActions} from "@/ui/devices/instruments/CubedDeviceEditor/CubedPatternActions"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
@@ -44,6 +44,11 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         })
     const stepRange = lifecycle.own(new DefaultObservableValue<int>(16))
     const patternContext = {editing, adapter}
+    const patternItems = (context: {editing: Editing, adapter: CubedDeviceBoxAdapter, origin?: Element}) => [
+        ...CubedPatternActions.editItems(context, service),
+        ...CubedPatternActions.clipboardItems(context),
+        CubedPatternActions.loadAblItem(context)
+    ]
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -51,12 +56,11 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                       populateMenu={parent => {
                           MenuItems.forAudioUnitInput(parent, service, deviceHost)
                           parent.addMenuItem(MenuItem.default({label: "Pattern", separatorBefore: true})
-                              .setRuntimeChildrenProcedure(submenu => submenu.addMenuItem(
-                                  ...CubedPatternActions.clipboardItems(patternContext),
-                                  CubedPatternActions.loadAblItem(patternContext))))
+                              .setRuntimeChildrenProcedure(submenu => submenu.addMenuItem(...patternItems(patternContext))))
                       }}
                       populateControls={() => (
-                          <div className={className}>
+                          <div className={className} onInit={element => lifecycle.own(ContextMenu.subscribe(element,
+                              collector => collector.addItems(...patternItems({editing, adapter, origin: element}))))}>
                               <div className="controls">
                                   <div className="waveform">
                                       <AutomationControl lifecycle={lifecycle} editing={editing}

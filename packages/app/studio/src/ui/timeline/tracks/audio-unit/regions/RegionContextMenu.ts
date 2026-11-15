@@ -16,6 +16,7 @@ import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/Regio
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionTransformer.ts"
+import {RegionDuplication} from "@/ui/timeline/tracks/audio-unit/regions/RegionDuplication.ts"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
@@ -73,17 +74,14 @@ export const installRegionContextMenu =
             const region = target.region
             closeWhen(close => region.box.subscribeDeletion(close))
             addItems(
+                ColorMenu.createPalette(hue => editing.modify(() =>
+                    selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue))),
+                    selection.selected().every(adapter => adapter.hue === region.hue) ? region.hue : undefined),
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
-                MenuItem.default({label: "Duplicate"})
-                    .setTriggerProcedure(() => editing.modify(() => {
-                        project.api.duplicateRegion(region)
-                            .ifSome(duplicate => {
-                                selection.deselectAll()
-                                selection.select(duplicate)
-                            })
-                    })),
+                MenuItem.default({label: "Duplicate", shortcut: RegionsShortcuts["duplicate-regions"].shortcut.format()})
+                    .setTriggerProcedure(() => RegionDuplication.duplicateSelected(project)),
                 MenuItem.default({
                     label: "Mute",
                     checked: region.mute,
@@ -92,8 +90,6 @@ export const installRegionContextMenu =
                     const newValue = !region.mute
                     return selection.selected().slice().forEach(adapter => adapter.box.mute.setValue(newValue))
                 })),
-                ColorMenu.createItem(hue => editing.modify(() =>
-                    selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
                 GrooveMenus.timelineItem(project, selection.selected().map(adapter => adapter.box)),
                 MenuItem.default({label: "Rename"})
                     .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label)
@@ -254,12 +250,12 @@ export const installRegionContextMenu =
                     hidden: region.type !== "audio-region" || !Browser.isLocalHost()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
-                        region.file.data.ifSome(async data => {
+                        region.file.audioData.then(async data => {
                             const bpm = await TempoDetection.runOne(data.frames[0], data.sampleRate, region.label)
                             // null is cancel or failure, both of which runOne has already reported.
                             if (isNull(bpm)) {return}
                             await RuntimeNotifier.info({headline: region.label, message: `${bpm} bpm`})
-                        })
+                        }, EmptyExec)
                     }
                 }),
                 MenuItem.default({
@@ -267,7 +263,7 @@ export const installRegionContextMenu =
                     hidden: region.type !== "audio-region" || !Browser.isLocalHost()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
-                        region.file.data.ifSome(async data => {
+                        region.file.audioData.then(async data => {
                             const label = region.label.length === 0 ? "Audio" : region.label
                             const updater = RuntimeNotifier.progress({headline: "Analyzing material", message: label})
                             const {status, value, error} =
@@ -279,7 +275,7 @@ export const installRegionContextMenu =
                                 return
                             }
                             await AudioMaterialDialog.show(label, value, element)
-                        })
+                        }, EmptyExec)
                     }
                 }),
                 DebugMenus.debugBox(region.box)

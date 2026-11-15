@@ -2,6 +2,10 @@ import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/li
 import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 
 export const RegionsShortcutsFactory = ShortcutValidator.validate({
+    "duplicate-regions": {
+        shortcut: Shortcut.of(Key.KeyD, {ctrl: true}),
+        description: "Duplicate selected regions"
+    },
     ...CommonShortcuts.Selection,
     ...CommonShortcuts.Snapping,
     "toggle-mute": {

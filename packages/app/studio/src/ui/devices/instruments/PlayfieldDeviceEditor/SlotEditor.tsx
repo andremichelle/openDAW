@@ -113,7 +113,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
         sampleEnd.subscribe(waveformPainter.requestUpdate),
         service.project.liveStreamReceiver.subscribeFloats(adapter.address, array => {
             const {canvas} = playbackContext
-            adapter.file().flatMap(file => file.data).match({
+            adapter.file().flatMap(file => file.info).match({
                 none: () => {
                     canvas.width = canvas.clientWidth
                     canvas.height = canvas.clientHeight

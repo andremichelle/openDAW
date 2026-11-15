@@ -33,7 +33,9 @@ import {
     Devices,
     EffectDeviceBox,
     FilteredSelection,
+    InstrumentCompositeCellBoxAdapter,
     InstrumentDeviceBoxAdapter,
+    InstrumentFactories,
     isGrooveBox,
     isModulatorBox,
     TransferUtils,
@@ -41,6 +43,7 @@ import {
     UnionBoxTypes
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
+import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {ClipboardUtils} from "../ClipboardUtils"
 
 type ClipboardDevices = ClipboardEntry<"devices">
@@ -387,6 +390,21 @@ export namespace DevicesClipboard {
                         RuntimeNotifier.info({
                             headline: "Incompatible Instrument",
                             message: `Cannot replace a '${selectedContent}' instrument with a '${metadata.instrumentContent}' instrument.`
+                        }).finally()
+                        replaceInstrument = false
+                    }
+                }
+                if (replaceInstrument && isInstanceOf(host, InstrumentCompositeCellBoxAdapter)) {
+                    const clipboard = BoxGraphCopy.readGraph(entry.data)
+                    // the top instrument is hosted outside the clipboard, a nested one inside it
+                    const pasted = clipboard.boxes().find(box => DeviceBoxUtils.isInstrumentDeviceBox(box)
+                        && box.host.targetAddress.mapOr(address => clipboard.findBox(address.uuid).isEmpty(), true))
+                    const pastedKey = isDefined(pasted) ? InstrumentFactories.keyOfBox(pasted) : undefined
+                    const pastedFactory = isDefined(pastedKey) ? InstrumentFactories.Named[pastedKey] : undefined
+                    if (isDefined(pastedFactory) ? !InstrumentFactories.fitsCell(host.box, pastedFactory) : host.isPad) {
+                        RuntimeNotifier.info({
+                            headline: "Incompatible Instrument",
+                            message: `Cannot replace a ${host.isPad ? "pad" : "layer"}'s instrument with a '${pastedFactory?.defaultName ?? pasted?.name ?? "device"}'.`
                         }).finally()
                         replaceInstrument = false
                     }

@@ -39,13 +39,15 @@ Picking another reference matches again right away. As long as the project is un
 
 Choose the part of the song in the bottom row (the entire song, the loop area or a section between markers) and click **Analyse**. The project is rendered and compared with the reference. Mastering analyses up to 10 minutes, the same limit applies to reference files.
 
+The level rises toward the reference's loudness only as far as your mix allows: the loudest peaks pass the limiter by about 2 dB at most, so the limiter shapes transients instead of squashing the mix. A dynamic mix therefore ends up quieter than a loud reference. Use **Gain** to go louder on purpose.
+
 The analysis stays until you analyse again. If you change your mix a lot, analyse again so the mastering follows it.
 
 ---
 
 ## 3. Display and Amount
 
-The display shows the correction for the middle of the stereo image (solid line) and for the sides (dashed line), from 20 Hz to 20 kHz, within ±12 dB.
+The display shows the correction for the middle of the stereo image (solid line) and for the sides (dashed line), from 20 Hz to 20 kHz, within ±12 dB. Small corrections keep their size, larger ones level off smoothly toward 9 dB, so no band is boosted or cut further than that.
 
 **Amount** (the vertical slider) blends between your mix (0 %) and the full correction (100 %).
 
@@ -62,6 +64,8 @@ The display shows the correction for the middle of the stereo image (solid line)
 ## 5. Spread
 
 **Width** narrows (below 100 %) or widens (above 100 %) the stereo image.
+
+**Test Mono** lets you listen to the master in mono, to check how it sounds on a single speaker. The meters keep measuring the stereo master. Test Mono is never stored in the project and exports stay stereo.
 
 ---
 

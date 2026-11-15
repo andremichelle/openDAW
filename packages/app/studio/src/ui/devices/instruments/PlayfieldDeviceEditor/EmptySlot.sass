@@ -5,16 +5,23 @@
 component
   @include Slot.Component
 
-  > div.audio-file
+  > div.buttons
     display: flex
     place-items: center
     place-content: center
-    cursor: pointer
+    column-gap: 0.5em
+    color: rgba(white, 0.4)
     transition: color 60ms linear
-    color: rgba(white, 0.1)
 
     &.playing
       color: var(--color-red)
+
+    > div
+      display: flex
+      cursor: pointer
+
+    &:not(.playing) > div:hover
+      color: rgba(white, 0.8)
 
   > footer
     display: flex

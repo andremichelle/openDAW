@@ -83,3 +83,35 @@ describe("timeline auto-scroll leaves the track header controls alone", () => {
         subscription.terminate()
     })
 })
+
+// the clips area scrolls only for a drag that started inside it, never for a sample dragged across it
+describe("pointer-only auto-scroll", () => {
+    it("ignores a native drag entering the target", () => {
+        vi.stubGlobal("Element", TestElement)
+        const target = new TestElement(false)
+        const scroller = vi.fn()
+        const subscription = installAutoScroll(target as unknown as Element, scroller, {pointerOnly: true})
+        harness.listeners.find(entry => entry.type === "dragenter")?.listener({})
+        expect(harness.listeners.filter(entry => entry.target === harness.owner)).toHaveLength(0)
+        expect(scroller).not.toHaveBeenCalled()
+        subscription.terminate()
+    })
+    it("still scrolls a drag that started inside", () => {
+        vi.stubGlobal("Element", TestElement)
+        const target = new TestElement(false)
+        const scroller = vi.fn()
+        const subscription = installAutoScroll(target as unknown as Element, scroller, {pointerOnly: true})
+        harness.listeners.find(entry => entry.type === "pointerdown")?.listener({target})
+        harness.listeners.find(entry => entry.type === "pointermove")?.listener({clientX: 130, clientY: 50})
+        harness.frames.forEach(frame => frame())
+        expect(scroller).toHaveBeenCalledWith(30, 0)
+        subscription.terminate()
+    })
+    it("arms for a native drag without the option", () => {
+        vi.stubGlobal("Element", TestElement)
+        const subscription = installAutoScroll(new TestElement(false) as unknown as Element, vi.fn())
+        harness.listeners.find(entry => entry.type === "dragenter")?.listener({})
+        expect(harness.listeners.filter(entry => entry.target === harness.owner).length).toBeGreaterThan(0)
+        subscription.terminate()
+    })
+})

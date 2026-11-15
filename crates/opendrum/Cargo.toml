@@ -1,0 +1,13 @@
+[package]
+name = "opendrum"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# the openDrum engines, shared by the device crates, the reference lab and the preview wasm
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+dsp = {path = "../dsp"}
+libm = "0.2"

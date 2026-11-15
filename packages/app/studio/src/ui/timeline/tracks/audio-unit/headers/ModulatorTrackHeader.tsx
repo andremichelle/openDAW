@@ -62,7 +62,7 @@ export const ModulatorTrackHeader = ({lifecycle, service, trackBoxAdapter}: Cons
                 controlLabel.textContent = target
             }
         })),
-        project.timelineFocus.track.catchupAndSubscribe(optTrack =>
+        project.trackFocus.track.catchupAndSubscribe(optTrack =>
             element.classList.toggle("focused", optTrack.mapOr(track => track === trackBoxAdapter, false))),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
@@ -73,7 +73,7 @@ export const ModulatorTrackHeader = ({lifecycle, service, trackBoxAdapter}: Cons
                 project.editing.modify(() => trackBoxAdapter.targetName = value)
             }
         }),
-        Events.subscribe(element, "pointerdown", () => project.timelineFocus.focusTrack(trackBoxAdapter)),
+        Events.subscribe(element, "pointerdown", () => project.trackFocus.focus(trackBoxAdapter)),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (!Keyboard.isDelete(event)) {return}
             deleteLane()

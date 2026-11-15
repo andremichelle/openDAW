@@ -14,7 +14,7 @@ import {Files} from "@opendaw/lib-dom"
 import {WavFile} from "@opendaw/lib-dsp"
 import type {ExecutionProvider, Inference as InferenceNamespace, TaskKey} from "@opendaw/lib-inference"
 import {AudioContentFactory, Project, ProjectMeta, ProjectProfile} from "@opendaw/studio-core"
-import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
+import {InstrumentFactories, Sample, SampleLoader} from "@opendaw/studio-adapters"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
@@ -269,7 +269,7 @@ export namespace NeuralDemux {
                     continue
                 }
                 const sample = importResult.value
-                await Promises.tryCatch(service.sampleManager.getAudioData(UUID.parse(sample.uuid)))
+                await Promises.tryCatch(SampleLoader.loaded(service.sampleManager.getOrCreate(UUID.parse(sample.uuid))))
                 importResults.push({name: stemName, sample})
             }
             importDialog.terminate()

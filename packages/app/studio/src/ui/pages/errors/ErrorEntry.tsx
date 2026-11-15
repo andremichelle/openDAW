@@ -24,6 +24,7 @@ export type Entry = {
     error_stack: string
     logs: string
     fixed: number
+    origin: string
 }
 
 type Construct = {
@@ -37,11 +38,13 @@ export const ErrorEntry = ({entry}: Construct) => {
     const buildTimeString = TimeSpan.millis(new Date(entry.build_date).getTime() - nowTime).toUnitString()
     const userAgent = entry.user_agent.replace(/^Mozilla\/[\d.]+\s*/, "")
     const errorMessage = Strings.fallback(entry.error_message, "No message")
+    const origin = Strings.fallback(entry.origin, "unknown").replace(/^https?:\/\//, "")
     return (
         <div className={className && Html.buildClassList("row", entry.fixed === 1 && "fixed")}>
             <div>{entry.id}</div>
             <div>{errorTimeString}</div>
             <div>{buildTimeString}</div>
+            <div>{origin}</div>
             <div>{entry.error_name}</div>
             <div className="error-message" title={errorMessage}>{errorMessage}</div>
             <div>{entry.script_tags}</div>
@@ -75,6 +78,7 @@ export const ErrorEntry = ({entry}: Construct) => {
                          build_uuid: entry.build_uuid,
                          build_env: entry.build_env,
                          build_date: entry.build_date,
+                         origin: entry.origin,
                          error_name: entry.error_name,
                          error_message: entry.error_message,
                          error_stack: entry.error_stack,

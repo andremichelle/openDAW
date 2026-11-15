@@ -1,5 +1,5 @@
 import css from "./DevicePiano.sass?inline"
-import {byte, int, isDefined, isInstanceOf, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {byte, int, isDefined, isInstanceOf, Lifecycle, Option, Terminable} from "@opendaw/lib-std"
 import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {MidiData} from "@opendaw/lib-midi"
@@ -13,7 +13,9 @@ const LowestPitch = 36
 const NumKeys = 61
 
 // plays the auditioned instrument through the software MIDI input, hardware keyboards reach it the same way
-export const DevicePiano = ({lifecycle, notes}: { lifecycle: Lifecycle, notes: NoteStreamReceiver }): SVGElement => {
+export const DevicePiano = ({lifecycle, notes, playedKey}: {
+    lifecycle: Lifecycle, notes: NoteStreamReceiver, playedKey: Option<int>
+}): SVGElement => {
     const layout = new PianoRollLayout(0, NumKeys - 1, {whiteKeys: {width: 14, height: 40}, blackKeys: {width: 10, height: 24}})
     const {softwareMIDIInput} = MidiDevices
     const {sizes: {whiteKeys, blackKeys}} = layout
@@ -33,8 +35,10 @@ export const DevicePiano = ({lifecycle, notes}: { lifecycle: Lifecycle, notes: N
     const playing = {pitch: -1}
     const stop = (): void => {
         if (playing.pitch === -1) {return}
-        softwareMIDIInput.sendNoteOff(playing.pitch)
+        const pitch = playing.pitch
         playing.pitch = -1
+        softwareMIDIInput.sendNoteOff(playedKey.unwrapOrElse(pitch))
+        update()
     }
     const play = (event: PointerEvent): void => {
         if (event.buttons === 0 || !isInstanceOf(event.target, SVGRectElement)) {return}
@@ -43,14 +47,17 @@ export const DevicePiano = ({lifecycle, notes}: { lifecycle: Lifecycle, notes: N
         const pitch = LowestPitch + parseInt(key)
         if (pitch === playing.pitch) {return}
         stop()
-        softwareMIDIInput.sendNoteOn(pitch)
         playing.pitch = pitch
+        softwareMIDIInput.sendNoteOn(playedKey.unwrapOrElse(pitch))
+        update()
     }
     const update = (): void => {
         for (let key: int = 0; key < NumKeys; key++) {
             const pitch = LowestPitch + key
             svg.querySelector(`[data-key="${key}"]`)?.classList
-                .toggle("active", softwareMIDIInput.hasActiveNote(pitch) || notes.isNoteOn(pitch))
+                .toggle("active", playedKey.isEmpty()
+                    ? softwareMIDIInput.hasActiveNote(pitch) || notes.isNoteOn(pitch)
+                    : playing.pitch === pitch || (playing.pitch === -1 && notes.isNoteOn(pitch)))
         }
     }
     lifecycle.ownAll(

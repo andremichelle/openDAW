@@ -8,11 +8,29 @@ import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NoteFilterDeviceBox} from "./midi-effects/NoteFilterDeviceBox"
 import {ScaleMatrixDeviceBox} from "./midi-effects/ScaleMatrixDeviceBox"
+import {ChordKeysDeviceBox} from "./midi-effects/ChordKeysDeviceBox"
+import {EuclidDeviceBox} from "./midi-effects/EuclidDeviceBox"
+import {EuclidLaneBox} from "./midi-effects/EuclidLaneBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
+import {SurgeonDeviceBox} from "./instruments/SurgeonDeviceBox"
+import {OpenDrumKickDeviceBox} from "./instruments/OpenDrumKickDeviceBox"
+import {OpenDrumPercDeviceBox} from "./instruments/OpenDrumPercDeviceBox"
+import {OpenDrumBellDeviceBox} from "./instruments/OpenDrumBellDeviceBox"
+import {OpenDrumCymbalDeviceBox} from "./instruments/OpenDrumCymbalDeviceBox"
+import {OpenDrumShakerDeviceBox} from "./instruments/OpenDrumShakerDeviceBox"
+import {OpenDrumHatDeviceBox} from "./instruments/OpenDrumHatDeviceBox"
+import {OpenDrumRimDeviceBox} from "./instruments/OpenDrumRimDeviceBox"
+import {OpenDrumTomDeviceBox} from "./instruments/OpenDrumTomDeviceBox"
+import {OpenDrumClapDeviceBox} from "./instruments/OpenDrumClapDeviceBox"
+import {OpenDrumSnareDeviceBox} from "./instruments/OpenDrumSnareDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
+import {SamplerDeviceBox} from "./instruments/SamplerDeviceBox"
+import {SamplerZoneBox} from "./instruments/SamplerZoneBox"
+import {SamplerGroupBox} from "./instruments/SamplerGroupBox"
+import {SamplerModulationBox} from "./instruments/SamplerModulationBox"
 import {StereoToolDeviceBox} from "./audio-effects/StereoToolDeviceBox"
 import {ZeitgeistDeviceBox} from "./midi-effects/ZeitGeistDeviceBox"
 import {UnknownAudioEffectDevice} from "./audio-effects/UnknownAudioEffectDevice"
@@ -89,14 +107,31 @@ export const DeviceDefinitions = [
     NeonDeviceBox,
     WclapInstrumentBox,
     TubularDeviceBox,
+    OpenDrumKickDeviceBox,
+    OpenDrumPercDeviceBox,
+    OpenDrumBellDeviceBox,
+    OpenDrumCymbalDeviceBox,
+    OpenDrumShakerDeviceBox,
+    OpenDrumHatDeviceBox,
+    OpenDrumRimDeviceBox,
+    OpenDrumTomDeviceBox,
+    OpenDrumClapDeviceBox,
+    OpenDrumSnareDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
+    SamplerDeviceBox,
+    SamplerZoneBox,
+    SamplerGroupBox,
+    SamplerModulationBox,
     TapeDeviceBox,
     ArpeggioDeviceBox,
     PitchDeviceBox,
     NoteFilterDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
+    EuclidDeviceBox,
+    EuclidLaneBox,
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
@@ -125,5 +160,6 @@ export const DeviceDefinitions = [
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
     FrequencySplitBox,
-    AudioSinkDeviceBox
+    AudioSinkDeviceBox,
+    SurgeonDeviceBox
 ]

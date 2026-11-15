@@ -143,7 +143,7 @@ mod tests {
         let mut state: WclapInstrumentState = unsafe { core::mem::zeroed() };
         WclapInstrument::init(&mut state, 48_000.0);
         let (mut out_left, mut out_right) = (vec![0.25f32; 128], vec![0.5f32; 128]);
-        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         state.link.process_instrument(None, &mut out_left, &mut out_right, &block);
         assert!(out_left.iter().all(|&sample| sample == 0.25));
         assert!(out_right.iter().all(|&sample| sample == 0.5));

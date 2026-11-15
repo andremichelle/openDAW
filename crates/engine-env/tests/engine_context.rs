@@ -69,3 +69,52 @@ fn the_output_buffer_registry_is_reachable_through_the_handle() {
     let entry = context.registry().resolve(&address).expect("registered");
     assert_eq!(entry.buffer.borrow().left[0], 0.9);
 }
+
+struct Flagged {
+    in_loop: Rc<RefCell<bool>>,
+    events: EventBuffer
+}
+
+impl EventReceiver for Flagged {
+    fn event_input(&mut self) -> &mut EventBuffer {
+        &mut self.events
+    }
+}
+
+impl Processor for Flagged {
+    fn reset(&mut self) {}
+    fn process(&mut self, _info: &ProcessInfo) {}
+    fn set_feedback(&mut self, in_loop: bool) {
+        *self.in_loop.borrow_mut() = in_loop;
+    }
+}
+
+fn flagged(context: &mut EngineContext) -> (u64, Rc<RefCell<bool>>) {
+    let in_loop = Rc::new(RefCell::new(false));
+    let id = context.register_processor(Rc::new(RefCell::new(Flagged {in_loop: in_loop.clone(), events: EventBuffer::new()})));
+    (id, in_loop)
+}
+
+#[test]
+fn a_sidechain_from_downstream_names_exactly_the_nodes_on_its_loop() {
+    // feeder -> vocoder -> revamp -> strip, and the vocoder listens to the revamp
+    let mut context = EngineContext::new();
+    let (feeder, _) = flagged(&mut context);
+    let (vocoder, vocoder_flag) = flagged(&mut context);
+    let (revamp, revamp_flag) = flagged(&mut context);
+    let (strip, strip_flag) = flagged(&mut context);
+    let (other, _) = flagged(&mut context);
+    context.register_edge(feeder, vocoder);
+    context.register_edge(vocoder, revamp);
+    context.register_edge(revamp, strip);
+    context.register_order_edge(revamp, vocoder);
+    let nodes = context.feedback_nodes(revamp, vocoder);
+    assert_eq!(nodes.into_iter().collect::<Vec<_>>(), vec![vocoder, revamp]);
+    assert!(context.feedback_nodes(feeder, vocoder).is_empty(), "an upstream sidechain closes no loop");
+    assert!(context.feedback_nodes(other, vocoder).is_empty(), "an unrelated sidechain closes no loop");
+    assert_eq!(context.feedback_nodes(strip, feeder).len(), 4, "a feeder listening to the strip loops the whole chain");
+    context.set_feedback(context.feedback_nodes(revamp, vocoder));
+    assert!(*vocoder_flag.borrow() && *revamp_flag.borrow() && !*strip_flag.borrow());
+    context.set_feedback(Default::default());
+    assert!(!*vocoder_flag.borrow() && !*revamp_flag.borrow(), "an opened loop clears its flags");
+}

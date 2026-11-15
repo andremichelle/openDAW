@@ -7,27 +7,32 @@ export type AnyPrimitiveField = PrimitiveField<PrimitiveValues, PointerTypes>
 export type FieldSpec = { readonly [key: string]: AnyPrimitiveField | FieldSpec | ReadonlyArray<AnyPrimitiveField | FieldSpec> }
 
 export namespace Fields {
-    const specs = new WeakMap<object, FieldSpec>()
+    // the field a bound property reads and writes at the moment it is used
+    export type Redirect = (field: AnyPrimitiveField) => AnyPrimitiveField
 
-    export const bind = <T extends object>(context: Context, target: T, spec: FieldSpec, prefix: string = ""): T => {
+    const specs = new WeakMap<object, FieldSpec>()
+    const direct: Redirect = field => field
+
+    export const bind = <T extends object>(context: Context, target: T, spec: FieldSpec, prefix: string = "",
+                                           redirect: Redirect = direct): T => {
         specs.set(target, {...(specs.get(target) ?? {}), ...spec})
         Object.entries(spec).forEach(([key, entry]) => {
             const name = `${prefix}${key}`
             if (entry instanceof PrimitiveField) {
-                accessor(context, target, key, name, entry)
+                accessor(context, target, key, name, entry, redirect)
             } else if (Array.isArray(entry)) {
                 const array: Array<unknown> = []
                 entry.forEach((element, index) => {
                     if (element instanceof PrimitiveField) {
-                        accessor(context, array, String(index), `${name}.${index}`, element)
+                        accessor(context, array, String(index), `${name}.${index}`, element, redirect)
                     } else {
-                        array.push(bind(context, {}, element as FieldSpec, `${name}.${index}.`))
+                        array.push(bind(context, {}, element as FieldSpec, `${name}.${index}.`, redirect))
                     }
                 })
                 Object.defineProperty(target, key, {enumerable: true, value: Object.freeze(array)})
             } else {
                 Object.defineProperty(target, key, {
-                    enumerable: true, value: bind(context, {}, entry as FieldSpec, `${name}.`)
+                    enumerable: true, value: bind(context, {}, entry as FieldSpec, `${name}.`, redirect)
                 })
             }
         })
@@ -72,11 +77,12 @@ export namespace Fields {
         return result
     }
 
-    export const accessor = (context: Context, target: object, key: string, name: string, field: AnyPrimitiveField): void => {
+    export const accessor = (context: Context, target: object, key: string, name: string, field: AnyPrimitiveField,
+                             redirect: Redirect = direct): void => {
         Object.defineProperty(target, key, {
             enumerable: true,
-            get: () => attached(field, name).getValue(),
-            set: (value: unknown) => context.edit(() => attached(field, name).setValue(Guard.field(field, value, name)))
+            get: () => redirect(attached(field, name)).getValue(),
+            set: (value: unknown) => context.edit(() => redirect(attached(field, name)).setValue(Guard.field(field, value, name)))
         })
     }
 

@@ -5,6 +5,7 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {
     AudioBusBoxAdapter,
     AudioUnitBoxAdapter,
+    AudioUnitGroups,
     DeviceHost,
     Devices,
     InstrumentBox,
@@ -15,13 +16,14 @@ import {
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectBox, EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
+import {PresetSource, Project} from "@opendaw/studio-core"
+import {EffectDrop} from "@/ui/devices/EffectDrop"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
-import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
 
 export namespace DevicePanelDragAndDrop {
     export const install = (service: StudioService,
@@ -37,7 +39,8 @@ export namespace DevicePanelDragAndDrop {
                 instrumentContainer.style.opacity = "1.0"
                 // A drop over a composite's branch list goes INTO a branch (or makes a new one), not into this
                 // parent chain. Its own target handles it, so suppress this chain's insert marker while there.
-                if (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]"))) {
+                if (SlotDragAndDrop.claims(event)
+                    || (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]")))) {
                     if (insertMarker.isConnected) {insertMarker.remove()}
                     return false
                 }
@@ -45,6 +48,9 @@ export namespace DevicePanelDragAndDrop {
                 if (editingDeviceChain.isEmpty()) {return false}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
                 const {type} = dragData
+                if (deviceHost instanceof AudioUnitBoxAdapter && AudioUnitGroups.isGroup(deviceHost.box)
+                    && (type === "instrument" || type === "midi-effect" || (type === "preset"
+                        && dragData.category !== "audio-effect" && dragData.category !== "audio-effect-chain"))) {return false}
                 if (type === "preset") {
                     if (dragData.category === "audio-unit" && deviceHost.isAudioUnit) {
                         instrumentContainer.style.opacity = "0.5"
@@ -97,7 +103,7 @@ export namespace DevicePanelDragAndDrop {
                 } else if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
                     if (!isDefined(dragData.device)) {return false}
                     const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[dragData.device]
-                    if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {return false}
+                    if (!isDefined(factory) || !InstrumentFactories.fitsCell(deviceHost.box, factory)) {return false}
                     instrumentContainer.style.opacity = "0.5"
                     return true
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {
@@ -136,6 +142,7 @@ export namespace DevicePanelDragAndDrop {
                 if (editingDeviceChain.isEmpty()) {return}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap("editingDeviceChain isEmpty").box, Devices.isHost)
                 if (type === "instrument" && deviceHost instanceof AudioUnitBoxAdapter) {
+                    if (AudioUnitGroups.isGroup(deviceHost.box)) {return}
                     if (dragData.device === null) {return}
                     const inputBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
                     if (isAbsent(inputBox)) {
@@ -168,37 +175,9 @@ export namespace DevicePanelDragAndDrop {
                 // because `drop` is reachable on its own.
                 const optField = DeviceHost.chainFieldOf(deviceHost, accepts)
                 if (optField.isEmpty()) {return}
-                const field = optField.unwrap()
                 const container = accepts === "audio" ? audioEffectsContainer : midiEffectsContainer
                 const [index] = DragAndDrop.findInsertLocation(event, container)
-                if (dragData.uuids === null) {
-                    editing.modify(() => {
-                        const factory = EffectFactories.MergedNamed[dragData.device]
-                        project.api.insertEffect(field, factory, index)
-                    })
-                } else {
-                    const uuids = dragData.uuids
-                    if (uuids.length === 0) {return}
-                    const deviceType = accepts === "audio" ? "audio-effect" : "midi-effect"
-                    const boxes = uuids
-                        .map(uuidStr => project.boxGraph.findBox(UUID.parse(uuidStr)).unwrapOrNull())
-                        .filter(isDefined)
-                        .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
-                    if (boxes.length === 0) {return}
-                    if (DragAndDrop.isCopy(event, dragData)) {
-                        editing.modify(() => project.api.copyEffects(field, boxes, index))
-                        return
-                    }
-                    const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
-                    if (sameChain) {
-                        // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.
-                        const startIndices = boxes.map(box => box.index.getValue()).toSorted((a, b) => a - b)
-                        editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
-                    } else {
-                        // A cross-chain MOVE (e.g. an effect dragged out of a composite branch): re-home it here.
-                        editing.modify(() => project.api.moveEffects(field, boxes, index))
-                    }
-                }
+                EffectDrop.apply(project, dragData, optField.unwrap(), index, DragAndDrop.isCopy(event, dragData))
             },
             enter: () => {},
             leave: () => {

@@ -7,8 +7,8 @@
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
-import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AudioAnalyser, AudioData, LowBandAnalyser, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
+import {Exec, int, isDefined, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {AudioAnalyser, AudioData, LowBandAnalyser, PcmData, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -21,6 +21,7 @@ import {
     EngineSettingsSchema,
     EngineStateSchema,
     PERF_BUFFER_SIZE,
+    EngineNotice,
     EngineToClient,
     MonitoringMapEntry,
     NoteSignal,
@@ -41,7 +42,7 @@ import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
-import {EngineExports, FieldKind, readSignalGraph, takeReportMessage} from "./engine-exports"
+import {EngineExports, FieldKind, readSignalGraph, takeNotices, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
 import {TransportAnchorEdges, TransportJump} from "./transport-anchor-edges"
@@ -58,9 +59,18 @@ import {createEngineMemory} from "./engine-modules"
 
 const GONIO_PAIRS = 512
 
+type ProcessorOptions = {processorOptions: EngineProcessorAttachment} & AudioNodeOptions
+
+let bootClient: Nullable<EngineToClient> = null
+
+const reportBootFailure = (error: unknown): void => {
+    if (isDefined(bootClient)) {bootClient.error(error)}
+}
+
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
     readonly #memory: WebAssembly.Memory
+    readonly #fetchSample: boolean
     readonly #engine: EngineExports
     readonly #hrClock: HRClock
     readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
@@ -107,19 +117,21 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #recordingStopTime: number = Number.NaN
     #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
-    constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
+    constructor({processorOptions}: ProcessorOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
+        this.#fetchSample = processorOptions.fetchSample === true
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
-        this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             messenger.channel("engine-to-client"),
             dispatcher => new class implements EngineToClient {
                 log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                 error(reason: unknown): void {dispatcher.dispatchAndForget(this.error, reason)}
+                notice(notice: EngineNotice): void {dispatcher.dispatchAndForget(this.notice, notice)}
                 deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
+                fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
                 fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                 fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
@@ -155,6 +167,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
+        bootClient = this.#engineToClient
+        this.#memory = createEngineMemory()
         this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
         const {engine, scriptBridges} = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
             this.#memory, sampleRate, this.#engineToClient, this.#wclap, () => this.#broadcaster ?? null)
@@ -293,6 +307,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.click_allocate(numberOfFrames, channels)
+                    if (pcm === 0) {
+                        this.#engineToClient.log(`click sound not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
@@ -308,7 +326,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.frozen_allocate(numberOfFrames, channels)
-                    if (pcm === 0) {return} // no engine instance: writing at 0 would corrupt memory (see boot.ts)
+                    if (pcm === 0) { // no engine instance or no room: writing at 0 would corrupt memory (see boot.ts)
+                        this.#engineToClient.log(`frozen audio not loaded: no allocation for ${numberOfFrames} frames`)
+                        return
+                    }
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
@@ -439,6 +460,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#announceRecordingEdges(engine)
         this.#announceTransportAnchors(engine)
         takeReportMessage(engine, this.#memory).ifSome(message => this.#engineToClient.error(new Error(`engine: ${message}`)))
+        takeNotices(engine, this.#memory).forEach(notice => this.#engineToClient.notice(notice))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
             const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)
@@ -629,7 +651,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes / SoundfontFileBox targets; dispatch their loads.
         drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources,
-            sampleRate, error => this.#fail(error))
+            sampleRate, error => this.#fail(error), this.#fetchSample)
     }
 
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a
@@ -688,6 +710,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
 
 }
 
-registerProcessor(WASM_ENGINE_PROCESSOR_NAME, WasmEngineProcessor)
+// processorerror carries no cause: a failing constructor sends its error over the port first
+registerProcessor(WASM_ENGINE_PROCESSOR_NAME, new Proxy(WasmEngineProcessor, {
+    construct: (target, args, newTarget): WasmEngineProcessor => {
+        bootClient = null
+        const {status, value, error} = tryCatch((): WasmEngineProcessor => Reflect.construct(target, args, newTarget))
+        if (status === "success") {return value}
+        reportBootFailure(error)
+        throw error
+    }
+}))
 
 export {} // isolate this file's module scope from other worklets

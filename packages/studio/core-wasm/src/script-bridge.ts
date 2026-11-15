@@ -16,6 +16,7 @@ import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, releaseSpielwerk, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
+import {resolveFloats, SAMPLE_REF_BYTES} from "./engine-exports"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -57,6 +58,7 @@ type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArr
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
     host_resolve_sample(handle: number, outPtr: number): number
+    host_resolve_sample_floats?(handle: number, outPtr: number): number
     host_resolve_input(id: number, outPtr: number): number
     input_reserve(length: number): number
     host_harmony_at(pulse: number, outPtr: number): void
@@ -287,7 +289,7 @@ export class ScriptBridges {
                 // Re-apply the parameters + samples the engine pushed before this swap (re-mapping each raw value
                 // through the new script's @param mapping).
                 for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
-                for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+                this.#deliverSamples(bridge)
                 bridge.collections = registry.collections ?? []
                 bridge.buffers = registry.buffers ?? []
                 this.#syncData(bridge, true)
@@ -341,13 +343,10 @@ export class ScriptBridges {
 
     #audio(handle: number, srcL: number, srcR: number, outL: number, outR: number,
            s0: number, s1: number, index: number, p0: number, p1: number, bpm: number, flags: number): number {
-        const buffer = this.#memory.buffer
-        const outLeft = new Float32Array(buffer, outL, RENDER_QUANTUM)
-        const outRight = new Float32Array(buffer, outR, RENDER_QUANTUM)
         // the engine keeps a device's output between quanta: every failure must clear it, or the last quantum loops
         const mute = (): number => {
-            outLeft.fill(0.0, s0, s1)
-            outRight.fill(0.0, s0, s1)
+            new Float32Array(this.#memory.buffer, outL, RENDER_QUANTUM).fill(0.0, s0, s1)
+            new Float32Array(this.#memory.buffer, outR, RENDER_QUANTUM).fill(0.0, s0, s1)
             return 1
         }
         const bridge = this.#bridges.get(handle)
@@ -356,16 +355,20 @@ export class ScriptBridges {
         if (proc === null) {return mute()}
         const block = {index, p0, p1, s0, s1, bpm, flags}
         if (!this.#syncData(bridge, false) || !this.#deliverMessages(bridge)) {return mute()}
+        // resolving a sample may grow the engine memory, so the views are taken after it
+        const delivered = tryCatch(() => this.#deliverSamples(bridge))
+        if (delivered.status === "failure") {
+            this.#silence(bridge, `Runtime error: ${delivered.error}`)
+            return mute()
+        }
+        const buffer = this.#memory.buffer
+        const outLeft = new Float32Array(buffer, outL, RENDER_QUANTUM)
+        const outRight = new Float32Array(buffer, outR, RENDER_QUANTUM)
         try {
             if (bridge.sidechains.length > 0) {
                 this.#deliverSidechains(bridge, s0, s1)
                 proc.sidechains = bridge.sidechainLookup
             }
-            // Re-resolve the @sample slots every block (mirrors the TS `#pollSamples`): a sample's PCM loads
-            // ASYNC after bind, so the handle is delivered before its frames are resident; re-resolving flips
-            // `samples[label]` from null to the AudioData once ready. Re-deriving the views each block also
-            // keeps them valid if the SharedArrayBuffer grew (same reason `#audio` re-derives its outputs).
-            for (const [sampleIndex, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, sampleIndex, sampleHandle)}
             if (bridge.kind === KIND_AUDIO_EFFECT) {
                 const io = {src: [new Float32Array(buffer, srcL, RENDER_QUANTUM), new Float32Array(buffer, srcR, RENDER_QUANTUM)], out: [outLeft, outRight]}
                 proc.process(io, block)
@@ -444,7 +447,7 @@ export class ScriptBridges {
         if (bridge === undefined) {return}
         const resolved = present !== 0 ? sampleHandle : -1
         bridge.sampleHandles.set(index, resolved)
-        this.#deliverSample(bridge, index, resolved)
+        this.#deliverSamples(bridge)
     }
 
     #notes(handle: number, inPtr: number, inCount: number, outPtr: number, outMax: number,
@@ -549,15 +552,23 @@ export class ScriptBridges {
         return true
     }
 
-    // Resolve a sample handle's resident planar frames and hand the user proc an AudioData view (no copy).
+    // a float copy may grow the memory and detach the views handed out before it, so those are taken again
+    #deliverSamples(bridge: Bridge): void {
+        const buffer = this.#memory.buffer
+        for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+        if (buffer === this.#memory.buffer) {return}
+        for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
+    }
+
+    // hands the proc a view of the float frames (no copy), null until they are resident
     #deliverSample(bridge: Bridge, index: number, sampleHandle: number): void {
         if (bridge.proc === null) {return}
         const label = bridge.sampleLabels.get(index)
         if (label === undefined) {return}
         if (sampleHandle < 0) {bridge.proc.samples[label] = null; return}
-        const scratch = this.#engine.input_reserve(16)
-        if (this.#engine.host_resolve_sample(sampleHandle, scratch) === 0) {bridge.proc.samples[label] = null; return}
-        const view = new DataView(this.#memory.buffer, scratch, 16)
+        const scratch = this.#engine.input_reserve(SAMPLE_REF_BYTES)
+        if (resolveFloats(this.#engine, sampleHandle, scratch) === 0) {bridge.proc.samples[label] = null; return}
+        const view = new DataView(this.#memory.buffer, scratch, SAMPLE_REF_BYTES)
         const framesPtr = view.getUint32(0, true)
         const frameCount = view.getUint32(4, true)
         const channelCount = view.getUint32(8, true)

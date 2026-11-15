@@ -1,0 +1,37 @@
+component
+  flex: 1 1 auto
+  min-height: 0
+  min-width: 24em
+  overflow: hidden auto
+  outline: none
+  padding: 1em 0
+  mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+  > div.grid
+    display: grid
+    grid-template-columns: auto 1fr auto
+    column-gap: 1em
+    row-gap: 0.5em
+    align-items: center
+
+    > div.section
+      grid-column: 1 / -1
+      padding-top: 0.5em
+      opacity: 0.6
+
+      &:first-child
+        padding-top: 0
+
+    > div.control
+      grid-column: 2 / -1
+
+    > div.control, > div.readout
+      display: flex
+      justify-content: end
+      align-items: center
+      column-gap: 0.5em
+      min-height: 2em
+
+      > span.unit
+        opacity: 0.6
+        white-space: nowrap

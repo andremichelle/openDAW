@@ -5,9 +5,9 @@ import {UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
 import {
     ApparatDeviceBox, AudioFileBox, AudioUnitBox, BoxIO, InstrumentCompositeBox, InstrumentCompositeCellBox,
-    NoteEventBox, NoteEventCollectionBox, NoteRegionBox, PlayfieldDeviceBox, PlayfieldSampleBox, TrackBox
+    NoteEventBox, NoteEventCollectionBox, NoteRegionBox, PlayfieldDeviceBox, TrackBox
 } from "@opendaw/studio-boxes"
-import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
+import {PlayfieldPads, ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -104,12 +104,7 @@ describe("instrument composite nesting", () => {
                 box.endInSeconds.setValue(1.0)
                 box.fileName.setValue("synthetic")
             })
-            PlayfieldSampleBox.create(graph, UUID.generate(), box => {
-                box.device.refer(playfield.samples)
-                box.file.refer(file)
-                box.index.setValue(60)
-                box.panning.setValue(-1.0)
-            })
+            PlayfieldPads.create(graph, playfield, file, 60).pan.setValue(-1.0)
         })
         expect(left, "the pad inside the layer sounds").toBeGreaterThan(0.2)
         expect(right, "the plain layer sounds").toBeCloseTo(0.25, 3)

@@ -4,7 +4,7 @@
 // ignores). This is a PURE decode (no OPFS / no engine) so it is node-testable; the BundlePlayer page writes the
 // returned samples into `SampleStorage` and boots the engine on the returned box graph.
 import {UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {BoxGraph} from "@opendaw/lib-box"
 
 export type Bundle = {
@@ -31,6 +31,7 @@ export const decodeBundle = async (arrayBuffer: ArrayBuffer): Promise<Bundle> =>
     if (projectFile === null) {return Promise.reject(new Error(`Bundle has no ${PROJECT_FILE}`))}
     const project = await projectFile.async("arraybuffer") as ArrayBuffer
     const {boxGraph} = ProjectSkeleton.decode(project)
+    DeviceMigration.migrate(boxGraph)
     const metaFile = zip.file(META_FILE)
     const meta = metaFile === null ? {} : JSON.parse(await metaFile.async("text"))
     // Extract each `samples/<uuid>/audio.wav`. JSZip's folder().forEach gives paths relative to the folder.

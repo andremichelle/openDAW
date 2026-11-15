@@ -1,14 +1,13 @@
-import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, Errors, Option, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {Box, IndexedBox} from "@opendaw/lib-box"
-import {AudioUnitType} from "@opendaw/studio-enums"
+import {Box} from "@opendaw/lib-box"
 import {
-    ApparatDeviceBox, AudioUnitBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox, WerkstattDeviceBox
+    ApparatDeviceBox, SpielwerkDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox, WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     DeviceHost, Devices, InstrumentBox, InstrumentFactories, InstrumentFactory, ScriptCompiler, WclapPluginInfo
 } from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, WclapBoxes, WclapStates, WclapStorage} from "@opendaw/studio-core"
+import {AudioUnitInsertion, EffectFactories, EffectFactory, PresetEntry, Project, WclapBoxes, WclapStates, WclapStorage} from "@opendaw/studio-core"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
@@ -17,12 +16,13 @@ import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
-import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 
 export namespace SpotlightCreate {
     export type Wclap = {
         readonly id: string, readonly name: string, readonly info: WclapPluginInfo
         readonly local: boolean, readonly license: string, readonly size: number
+        // the catalogue's description of the bundle, empty for a bundle stored on this device only
+        readonly description: string
     }
 
     // without a project a new one is started first
@@ -38,22 +38,11 @@ export namespace SpotlightCreate {
     const editingHost = (project: Project): Option<DeviceHost> => project.userEditingManager.audioUnit.get()
         .map(vertex => project.boxAdapters.adapterFor(vertex.box, Devices.isHost))
 
-    // the unit after the edit-mode instrument, a new unit is placed before it
-    export const anchorAfterEditing = (project: Project): Option<UUID.Bytes> => editingHost(project)
-        .flatMap(host => {
-            const unit = host.audioUnitBoxAdapter().box
-            if (unit.type.getValue() !== AudioUnitType.Instrument) {return Option.None}
-            const units = IndexedBox.collectIndexedBoxes(project.rootBox.audioUnits, AudioUnitBox)
-            return Option.wrap(units.at(unit.index.getValue() + 1)).map(next => next.address.uuid)
-        })
+    export const insertionAfterEditing = (project: Project): AudioUnitInsertion => project.api.insertionAfterEditing()
 
     const createInstrument = (service: StudioService, factory: InstrumentFactory): InstrumentBox => {
         const {project} = service
-        const anchor = anchorAfterEditing(project)
-        const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(factory)
-        project.api.placeAudioUnitBefore(audioUnitBox, anchor)
-        NewInstrumentRegion.create(project, service.timeline.snapping, audioUnitBox)
-        return instrumentBox
+        return project.api.createInstrumentAt(factory, insertionAfterEditing(project)).instrumentBox
     }
 
     const effectField = (project: Project, accepts: "audio" | "midi") =>
@@ -72,10 +61,10 @@ export namespace SpotlightCreate {
             switch (entry.category) {
                 case "instrument":
                     return PresetApplication.createNewAudioUnitFromInstrument(
-                        service, entry.uuid, entry.device, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.device, entry.source, insertionAfterEditing(project))
                 case "audio-unit":
                     return PresetApplication.createNewAudioUnitFromRack(
-                        service, entry.uuid, entry.source, anchorAfterEditing(project))
+                        service, entry.uuid, entry.source, insertionAfterEditing(project))
                 default:
                     return service.presets.activatePreset(entry)
             }
@@ -149,10 +138,10 @@ export namespace SpotlightCreate {
             WclapCatalog.get().all().catch(() => []),
             WclapDescriber.stored().catch(() => [])
         ])
-        const cloud = published.flatMap(({uuid, name, plugins, license, size}) => {
+        const cloud = published.flatMap(({uuid, name, plugins, license, size, description}) => {
             const shortNames = WclapNames.distinct(plugins.map(info => info.name))
             return plugins.map((info, index) => ({
-                id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info, local: false, license, size
+                id: uuid, name: plugins.length > 1 ? shortNames[index] : name, info, local: false, license, size, description
             }))
         })
         const cloudIds = new Set(published.map(({uuid}) => uuid))
@@ -165,7 +154,8 @@ export namespace SpotlightCreate {
                 const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
                 return bundle
                     .map(({info}, index) => ({
-                        id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0
+                        id: WclapStorage.idOf(url), name: shortNames[index], info, local: true, license: "", size: 0,
+                        description: ""
                     }))
                     .filter(({info}) => !cloudClapIds.has(info.clapId))
             })

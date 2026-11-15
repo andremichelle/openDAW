@@ -18,7 +18,8 @@
     "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "publish-sdk": "lerna publish"
+    "publish-sdk": "lerna publish",
+    "publish-sdk-beta": "lerna publish prerelease --preid beta --dist-tag next"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

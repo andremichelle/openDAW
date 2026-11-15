@@ -9,7 +9,7 @@ export const subscribePlayheads = (receiver: LiveStreamReceiver, adapter: NanoDe
     return receiver.subscribeFloats(adapter.positionsAddress, positions => {
         canvas.width = canvas.clientWidth
         canvas.height = canvas.clientHeight
-        adapter.file().flatMap(file => file.data).ifSome(data => {
+        adapter.file().flatMap(file => file.info).ifSome(data => {
             context.fillStyle = Colors.blue.toString()
             for (const position of positions) {
                 if (position === -1) {break}

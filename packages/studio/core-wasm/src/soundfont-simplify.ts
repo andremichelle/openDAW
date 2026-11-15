@@ -39,6 +39,7 @@ export type SimpleRegion = {
     keyLo: number, keyHi: number, velLo: number, velHi: number
     sampleIndex: number
     rootKey: number
+    tune?: number       // cents on top of the root key
     loopMode: number    // 0 = no loop, 1 = loop
     pan: number         // already /1000
     attack: number, decay: number, sustain: number, release: number // seconds / unit level (already converted)
@@ -106,6 +107,7 @@ export const encodeSoundfont = ({samples, presets}: SimpleSoundfont): ArrayBuffe
             view.setFloat32(base + 24, region.decay, true)
             view.setFloat32(base + 28, region.sustain, true)
             view.setFloat32(base + 32, region.release, true)
+            view.setFloat32(base + 36, region.tune ?? 0.0, true)
             regionCursor++
         }
     })
@@ -119,6 +121,8 @@ type Zone = {generators: Record<number, {value?: number, range?: {lo: number, hi
 const numeric = (zone: Zone, type: number): number | undefined => zone.generators[type]?.value
 // instrument-overrides-preset, matching TS `getCombinedGenerator`.
 const combined = (preset: Zone, inst: Zone, type: number): number | undefined => numeric(inst, type) ?? numeric(preset, type)
+// tuning generators of a preset add to the instrument's
+const summed = (preset: Zone, inst: Zone, type: number): number => (numeric(inst, type) ?? 0) + (numeric(preset, type) ?? 0)
 const timecentsToSeconds = (value: number | undefined): number => value !== undefined ? Math.pow(2.0, value / 1200.0) : 0.005
 const rangeOf = (zone: Zone, type: number): {lo: number, hi: number} => zone.generators[type]?.range ?? {lo: 0, hi: 127}
 
@@ -151,10 +155,12 @@ export const simplifySoundfont = (soundfont: SoundFont2): ArrayBuffer => {
                 if (sample === undefined) {continue}
                 const sampleIndex = internSample(sample)
                 const rootKey = numeric(instZone, GeneratorType.OverridingRootKey) ?? sample.header.originalPitch ?? 60
+                const tune = summed(presetZone, instZone, GeneratorType.CoarseTune) * 100
+                    + summed(presetZone, instZone, GeneratorType.FineTune) + (sample.header.pitchCorrection ?? 0)
                 const sampleModes = combined(presetZone, instZone, GeneratorType.SampleModes) ?? 0
                 const sustain = combined(presetZone, instZone, GeneratorType.SustainVolEnv)
                 regions.push({
-                    keyLo, keyHi, velLo, velHi, sampleIndex, rootKey,
+                    keyLo, keyHi, velLo, velHi, sampleIndex, rootKey, tune,
                     loopMode: sampleModes === 1 || sampleModes === 3 ? 1 : 0,
                     pan: (combined(presetZone, instZone, GeneratorType.Pan) ?? 0) / 1000.0,
                     attack: timecentsToSeconds(combined(presetZone, instZone, GeneratorType.AttackVolEnv)),

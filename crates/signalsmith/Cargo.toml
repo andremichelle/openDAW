@@ -13,6 +13,7 @@ crate-type = ["lib"]
 
 [dependencies]
 libm = "0.2"
+math = {path = "../math"}
 
 [dev-dependencies]
 signalsmith-stretch = "0.1"

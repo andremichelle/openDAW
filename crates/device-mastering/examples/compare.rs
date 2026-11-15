@@ -1,13 +1,13 @@
 // A/B tool, openDAW side: runs our analysis and limiter on the same two 44.1 kHz WAV files as tools/compare.py and
 // compares with Matchering's output in the same folder. Writes ours_raw.wav, ours_limited.wav (exact Matchering
-// curves) and ours_studio.wav (the studio: curves clamped to ±12 dB, limited).
+// curves) and ours_studio.wav (the studio: curves leveling off toward ±9 dB, limited).
 // Usage: cargo run --release -p device-mastering --example compare -- target.wav reference.wav out-folder
 
 use std::fs;
 use std::path::Path;
 use device_mastering::hyrax::Hyrax;
 use matchering::analysis::{analyse_reference, apply, match_target, MatchResult};
-use matchering::config::{BINS, CURVE_LIMIT_DB, SAMPLE_RATE, THRESHOLD};
+use matchering::config::{BINS, CURVE_LIMIT_DB, PEAK_BUDGET_DB, SAMPLE_RATE, THRESHOLD};
 
 struct Stereo {left: Vec<f64>, right: Vec<f64>}
 
@@ -124,7 +124,7 @@ fn curve_report(result: &MatchResult, path: &Path) {
              worst(&result.mid_curve, &theirs[..BINS]), worst(&result.side_curve, &theirs[BINS..]));
     let range = |curve: &[f64]| curve[1..].iter().fold((f64::MAX, f64::MIN), |(low, high), value| (low.min(db(*value)), high.max(db(*value))));
     let ((mid_low, mid_high), (side_low, side_high)) = (range(&result.mid_curve), range(&result.side_curve));
-    println!("curves: mid {mid_low:.1} to {mid_high:.1} dB, side {side_low:.1} to {side_high:.1} dB (the studio clamps to ±{CURVE_LIMIT_DB} dB)");
+    println!("curves: mid {mid_low:.1} to {mid_high:.1} dB, side {side_low:.1} to {side_high:.1} dB (the studio levels them off toward ±{CURVE_LIMIT_DB} dB)");
 }
 
 fn main() {
@@ -133,8 +133,8 @@ fn main() {
     let (target, reference, out) = (read_wav(Path::new(&arguments[1])), read_wav(Path::new(&arguments[2])), Path::new(&arguments[3]));
     fs::create_dir_all(out).unwrap();
     let profile = analyse_reference(&reference.left, &reference.right).expect("reference");
-    let exact = match_target(&target.left, &target.right, &profile, None, &mut |_| {}).expect("target");
-    let studio = match_target(&target.left, &target.right, &profile, Some(CURVE_LIMIT_DB), &mut |_| {}).expect("target");
+    let exact = match_target(&target.left, &target.right, &profile, None, None, &mut |_| {}).expect("target");
+    let studio = match_target(&target.left, &target.right, &profile, Some(CURVE_LIMIT_DB), Some(PEAK_BUDGET_DB), &mut |_| {}).expect("target");
     println!("match gain {:.2} dB, final amplitude {:.2} dB (studio match gain {:.2} dB)",
              db(exact.gain), db(exact.final_amplitude), db(studio.gain));
     curve_report(&exact, &out.join("matchering_curves.bin"));

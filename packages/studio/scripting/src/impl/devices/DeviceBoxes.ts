@@ -21,6 +21,8 @@ import {
     PitchDeviceBox,
     RevampDeviceBox,
     ScaleMatrixDeviceBox,
+    ChordKeysDeviceBox,
+    EuclidDeviceBox,
     ReverbDeviceBox,
     SpielwerkDeviceBox,
     StereoCompositeBox,
@@ -37,7 +39,7 @@ import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {AudioEffects, Instruments, MIDIEffects} from "../../Api"
 
 export type MIDIEffectBox =
-    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox
+    | ArpeggioDeviceBox | PitchDeviceBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | ChordKeysDeviceBox | EuclidDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox
     | SpielwerkDeviceBox
 
 export type AudioEffectBox =
@@ -51,7 +53,13 @@ export namespace DeviceBoxes {
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
-        Arpeggio: "Arpeggio", Pitch: "Pitch", NoteFilter: "Note Filter", ScaleMatrix: "Scale Matrix", Velocity: "Velocity",
+        Arpeggio: "Arpeggio",
+        Pitch: "Pitch",
+        NoteFilter: "Filter",
+        ScaleMatrix: "Scale Matrix",
+        ChordKeys: "Chord Keys",
+        Euclid: "Euclid",
+        Velocity: "Velocity",
         Zeitgeist: "Zeitgeist",
         Spielwerk: "Spielwerk"
     }
@@ -70,6 +78,8 @@ export namespace DeviceBoxes {
             case "PitchDeviceBox": return "Pitch"
             case "NoteFilterDeviceBox": return "NoteFilter"
             case "ScaleMatrixDeviceBox": return "ScaleMatrix"
+            case "ChordKeysDeviceBox": return "ChordKeys"
+            case "EuclidDeviceBox": return "Euclid"
             case "VelocityDeviceBox": return "Velocity"
             case "ZeitgeistDeviceBox": return "Zeitgeist"
             case "SpielwerkDeviceBox": return "Spielwerk"
@@ -109,11 +119,23 @@ export namespace DeviceBoxes {
             case "VaporisateurDeviceBox": return "Vaporisateur"
             case "PlayfieldDeviceBox": return "Playfield"
             case "NanoDeviceBox": return "Nano"
+            case "SamplerDeviceBox": return "Sampler"
             case "SoundfontDeviceBox": return "Soundfont"
             case "MIDIOutputDeviceBox": return "MIDIOutput"
             case "TapeDeviceBox": return "Tape"
             case "NeonDeviceBox": return "Neon"
             case "TubularDeviceBox": return "Tubular"
+            case "SurgeonDeviceBox": return "Surgeon"
+            case "OpenDrumKickDeviceBox": return "OpenDrumKick"
+            case "OpenDrumSnareDeviceBox": return "OpenDrumSnare"
+            case "OpenDrumClapDeviceBox": return "OpenDrumClap"
+            case "OpenDrumTomDeviceBox": return "OpenDrumTom"
+            case "OpenDrumRimDeviceBox": return "OpenDrumRim"
+            case "OpenDrumHatDeviceBox": return "OpenDrumHat"
+            case "OpenDrumShakerDeviceBox": return "OpenDrumShaker"
+            case "OpenDrumCymbalDeviceBox": return "OpenDrumCymbal"
+            case "OpenDrumBellDeviceBox": return "OpenDrumBell"
+            case "OpenDrumPercDeviceBox": return "OpenDrumPerc"
             case "CubedDeviceBox": return "Cubed"
             case "GuitarDeviceBox": return "Guitar"
             case "ApparatDeviceBox": return "Apparat"
@@ -123,7 +145,7 @@ export namespace DeviceBoxes {
     }
 
     export const isMIDIEffectBox = (boxName: string): boolean =>
-        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "ScaleMatrixDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
+        ["ArpeggioDeviceBox", "PitchDeviceBox", "NoteFilterDeviceBox", "ScaleMatrixDeviceBox", "ChordKeysDeviceBox", "EuclidDeviceBox", "VelocityDeviceBox", "ZeitgeistDeviceBox",
             "SpielwerkDeviceBox"]
             .includes(boxName)
 
@@ -135,8 +157,11 @@ export namespace DeviceBoxes {
             "StereoCompositeBox", "FrequencySplitBox", "AudioSinkDeviceBox"].includes(boxName)
 
     export const isInstrumentBox = (boxName: string): boolean =>
-        ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SoundfontDeviceBox",
-            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "TubularDeviceBox", "CubedDeviceBox", "GuitarDeviceBox", "ApparatDeviceBox",
+        ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SamplerDeviceBox", "SoundfontDeviceBox",
+            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "TubularDeviceBox", "SurgeonDeviceBox", "CubedDeviceBox", "GuitarDeviceBox", "ApparatDeviceBox",
+            "OpenDrumKickDeviceBox", "OpenDrumSnareDeviceBox", "OpenDrumClapDeviceBox", "OpenDrumTomDeviceBox",
+            "OpenDrumRimDeviceBox", "OpenDrumHatDeviceBox", "OpenDrumShakerDeviceBox", "OpenDrumCymbalDeviceBox",
+            "OpenDrumBellDeviceBox", "OpenDrumPercDeviceBox",
             "InstrumentCompositeBox"]
             .includes(boxName)
 
@@ -175,6 +200,18 @@ export namespace DeviceBoxes {
                 })
             case "ScaleMatrix":
                 return ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "ChordKeys":
+                return ChordKeysDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "Euclid":
+                return EuclidDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

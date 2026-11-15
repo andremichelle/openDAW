@@ -4,13 +4,15 @@ import {
     AudioRegionBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
-import {BinarySearch, Geom, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {AudioUnitFreeze, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
+import {AudioFadeAnchors} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeAnchors.ts"
+import {AudioFadeHandles} from "@/ui/timeline/tracks/audio-unit/regions/AudioFadeHandles.ts"
 
 export type RegionCaptureTarget =
     | { type: "region", part: "position", region: AnyRegionBoxAdapter }
@@ -18,8 +20,7 @@ export type RegionCaptureTarget =
     | { type: "region", part: "complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
-    | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
-    | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
+    | { type: "region", part: AudioFadeHandles.Part, region: AudioRegionBoxAdapter, track: TrackContext }
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
@@ -54,17 +55,9 @@ export namespace RegionCapturing {
                     const x0 = range.unitToX(region.position)
                     const x1 = range.unitToX(region.complete)
                     if (isInstanceOf(region, AudioRegionBoxAdapter)) {
-                        const {fading} = region
-                        const handleRadius = 3
-                        const handleY = track.position + RegionLabel.labelHeight()
-                        const fadeInX = range.unitToX(region.position + fading.in)
-                        const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
-                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
-                            return {type: "region", part: "fading-in", region}
-                        }
-                        if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
-                            return {type: "region", part: "fading-out", region}
-                        }
+                        const part = AudioFadeHandles.hitTest(range, region.fading, region.position, region.complete,
+                            track.size, AudioFadeAnchors.read(region.box), x, y - track.position)
+                        if (part.nonEmpty()) {return {type: "region", part: part.unwrap(), region, track}}
                     }
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
                         const bottomEdge = y > track.position + RegionLabel.labelHeight()

@@ -3,6 +3,7 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {StorageWalk} from "@opendaw/lib-fusion"
 import {StorageInspectorProtocol} from "./StorageInspectorProtocol"
 import {StorageScan} from "./StorageScan"
+import {SampleFormats} from "./SampleFormats"
 
 // the scan decodes projects with every box class, so it runs in its own worker that exists only while it runs
 export namespace StorageInspector {
@@ -13,12 +14,18 @@ export namespace StorageInspector {
                 scan(walkProgress: Procedure<int>, scanProgress: Procedure<unitValue>): Promise<StorageScan.Report> {
                     return router.dispatchAndReturn(this.scan, walkProgress, scanProgress)
                 }
+                scanSampleFormats(progress: Procedure<unitValue>): Promise<SampleFormats.Report> {
+                    return router.dispatchAndReturn(this.scanSampleFormats, progress)
+                }
             })
         return job(protocol).finally(() => worker.terminate())
     }
 
     export const scan = (walkProgress: Procedure<int>, scanProgress: Procedure<unitValue>): Promise<StorageScan.Report> =>
         run(protocol => protocol.scan(walkProgress, scanProgress))
+
+    export const scanSampleFormats = (progress: Procedure<unitValue>): Promise<SampleFormats.Report> =>
+        run(protocol => protocol.scanSampleFormats(progress))
 
     // sizes only, no decoding, so it walks on the main thread without the worker
     export const folderSize = async (path: string): Promise<int> => {

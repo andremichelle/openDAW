@@ -131,6 +131,8 @@ impl BlockFlags {
 /// `f64`s so `p0`/`p1` stay 8-aligned (no implicit padding mid-struct); `s0`/`s1` are sample indices as
 /// `u32` (the host casts to `usize` to slice). A device pulls each block's events with
 /// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
+/// `anchor` is the pulse the transport counts this block's frames from and `anchor_frame` its frame in the
+/// same coordinates as `s0`, so `dsp::ppqn::frame_at` places a pulse exactly (#536).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Block {
@@ -138,6 +140,8 @@ pub struct Block {
     pub flags: BlockFlags,
     pub p0: f64,
     pub p1: f64,
+    pub anchor: f64,
+    pub anchor_frame: i64,
     pub s0: u32,
     pub s1: u32,
     pub bpm: f32
@@ -166,6 +170,7 @@ extern "C" {
     fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_target_string(path_ptr: u32, path_len: u32, field_key: u32) -> u32;
+    fn host_observe_table(path_ptr: u32, path_len: u32, columns_ptr: u32, columns_len: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
@@ -272,7 +277,7 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
 pub fn block_at(pulse: f64) -> Option<(Block, u32)> {
     #[cfg(target_family = "wasm")]
     {
-        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0};
+        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0, bpm: 0.0};
         let serial = unsafe { host_block_at(pulse, &mut block as *mut Block as u32) };
         if serial == 0 { None } else { Some((block, serial)) }
     }
@@ -667,15 +672,58 @@ pub struct SampleRef {
     pub frames_ptr: u32,
     pub frame_count: u32,
     pub channel_count: u32,
-    pub sample_rate: f32
+    pub sample_rate: f32,
+    pub format: u32
+}
+
+pub const SAMPLE_FORMAT_F32: u32 = 0;
+pub const SAMPLE_FORMAT_I16: u32 = 1;
+
+/// Runs `$body` with the sample's two planes bound, expanded once per resident format.
+#[macro_export]
+macro_rules! with_planes {
+    ($sample:expr, |$left:ident, $right:ident| $body:expr) => {
+        match $sample.view() {
+            $crate::SampleView::F32 {left: $left, right: $right} => $body,
+            $crate::SampleView::I16 {left: $left, right: $right} => $body
+        }
+    };
+}
+
+/// The two planes a reader plays, in the format they are resident in. A mono sample answers right with left.
+#[derive(Clone, Copy)]
+pub enum SampleView<'a> {
+    F32 {left: &'a [f32], right: &'a [f32]},
+    I16 {left: &'a [i16], right: &'a [i16]}
 }
 
 impl SampleRef {
+    #[inline]
+    pub fn view(&self) -> SampleView<'_> {
+        let other = if self.channel_count > 1 {1} else {0};
+        if self.format == SAMPLE_FORMAT_I16 {
+            SampleView::I16 {left: self.plane_i16(0), right: self.plane_i16(other)}
+        } else {
+            SampleView::F32 {left: self.plane(0), right: self.plane(other)}
+        }
+    }
+
+    #[inline]
+    fn plane_i16(&self, channel: u32) -> &[i16] {
+        #[cfg(target_family = "wasm")]
+        {
+            let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 2;
+            unsafe { slice::from_raw_parts(offset as *const i16, self.frame_count as usize) }
+        }
+        #[cfg(not(target_family = "wasm"))]
+        { native_samples::plane_i16(self.frames_ptr, channel, self.frame_count) }
+    }
+
     /// The PLANAR frames of `channel` (0-based) as a safe slice (`frame_count` f32 at
     /// `frames_ptr + channel * frame_count * 4`). The one `unsafe` stays here in the shim; device DSP reads
     /// frames as a slice. The slice borrows the resident sample memory, valid while the sample stays resident.
     #[inline]
-    pub fn plane(&self, channel: u32) -> &[f32] {
+    fn plane(&self, channel: u32) -> &[f32] {
         #[cfg(target_family = "wasm")]
         {
             let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 4;
@@ -694,7 +742,7 @@ impl SampleRef {
 pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
     #[cfg(target_family = "wasm")]
     {
-        let mut out = SampleRef {frames_ptr: 0, frame_count: 0, channel_count: 0, sample_rate: 0.0};
+        let mut out = SampleRef {frames_ptr: 0, frame_count: 0, channel_count: 0, sample_rate: 0.0, format: SAMPLE_FORMAT_F32};
         if unsafe { host_resolve_sample(handle, &mut out as *mut SampleRef as u32) } != 0 {
             Some(out)
         } else {
@@ -712,6 +760,12 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
 #[cfg(not(target_family = "wasm"))]
 pub fn set_native_sample(handle: u32, planar: &'static [f32], channel_count: u32, sample_rate: f32) {
     native_samples::set(handle, planar, channel_count, sample_rate)
+}
+
+/// Native TEST SEAM: as [`set_native_sample`], the planes resident as 16 bit PCM.
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_sample_i16(handle: u32, planar: &'static [i16], channel_count: u32, sample_rate: f32) {
+    native_samples::set_i16(handle, planar, channel_count, sample_rate)
 }
 
 /// Native TEST SEAM: forget `handle`, so it resolves to `None` again (a sample removed while notes hold).
@@ -739,6 +793,7 @@ mod native_samples {
     static FRAMES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
     static CHANNELS: [AtomicU32; SLOTS] = [ZERO; SLOTS];
     static RATES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
+    static FORMATS: [AtomicU32; SLOTS] = [ZERO; SLOTS];
 
     fn slot(handle: u32) -> usize {
         assert!(handle >= 1 && handle as usize <= SLOTS, "native sample handle out of range: {handle}");
@@ -752,6 +807,18 @@ mod native_samples {
         FRAMES[index].store((planar.len() / channel_count as usize) as u32, Ordering::SeqCst);
         CHANNELS[index].store(channel_count, Ordering::SeqCst);
         RATES[index].store(sample_rate.to_bits(), Ordering::SeqCst);
+        FORMATS[index].store(super::SAMPLE_FORMAT_F32, Ordering::SeqCst);
+        PTRS[index].store(planar.as_ptr() as usize, Ordering::SeqCst);
+    }
+
+    pub fn set_i16(handle: u32, planar: &'static [i16], channel_count: u32, sample_rate: f32) {
+        assert!(channel_count >= 1, "a sample needs at least one channel");
+        assert_eq!(planar.len() % channel_count as usize, 0, "planar length must be a multiple of the channel count");
+        let index = slot(handle);
+        FRAMES[index].store((planar.len() / channel_count as usize) as u32, Ordering::SeqCst);
+        CHANNELS[index].store(channel_count, Ordering::SeqCst);
+        RATES[index].store(sample_rate.to_bits(), Ordering::SeqCst);
+        FORMATS[index].store(super::SAMPLE_FORMAT_I16, Ordering::SeqCst);
         PTRS[index].store(planar.as_ptr() as usize, Ordering::SeqCst);
     }
 
@@ -771,7 +838,8 @@ mod native_samples {
             frames_ptr: handle,
             frame_count: FRAMES[index].load(Ordering::SeqCst),
             channel_count: CHANNELS[index].load(Ordering::SeqCst),
-            sample_rate: f32::from_bits(RATES[index].load(Ordering::SeqCst))
+            sample_rate: f32::from_bits(RATES[index].load(Ordering::SeqCst)),
+            format: FORMATS[index].load(Ordering::SeqCst)
         })
     }
 
@@ -782,6 +850,15 @@ mod native_samples {
         assert!(channel < CHANNELS[index].load(Ordering::SeqCst), "channel {channel} out of range");
         let offset = base + channel as usize * frame_count as usize * core::mem::size_of::<f32>();
         unsafe { core::slice::from_raw_parts(offset as *const f32, frame_count as usize) }
+    }
+
+    pub fn plane_i16(handle: u32, channel: u32, frame_count: u32) -> &'static [i16] {
+        let index = slot(handle);
+        let base = PTRS[index].load(Ordering::SeqCst);
+        assert!(base != 0, "native sample {handle} is not registered");
+        assert!(channel < CHANNELS[index].load(Ordering::SeqCst), "channel {channel} out of range");
+        let offset = base + channel as usize * frame_count as usize * core::mem::size_of::<i16>();
+        unsafe { core::slice::from_raw_parts(offset as *const i16, frame_count as usize) }
     }
 }
 
@@ -881,6 +958,98 @@ pub fn observe_target_string(path: &[u16], field_key: u16) -> u32 {
     { unsafe { host_observe_target_string(path.as_ptr() as u32, path.len() as u32, field_key as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (path, field_key); 0 }
+}
+
+/// The child's own field as one 32-bit word: an int, the bits of a float, or a bool as 0 / 1.
+pub const TABLE_VALUE: u16 = 0;
+/// A pointer to an audio file: the sample handle to [`resolve_sample`], [`TABLE_NONE`] while unbound.
+pub const TABLE_SAMPLE: u16 = 1;
+/// A pointer to another box: that box's int field `target_key`, [`TABLE_NONE`] while unbound.
+pub const TABLE_TARGET: u16 = 2;
+/// The word of a pointer column with no target, and of a value column whose field does not exist.
+pub const TABLE_NONE: u32 = u32::MAX;
+
+/// One column of an observed table (WASM CONTRACT: three `u16`, read by the host as written).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TableColumn {
+    pub key: u16,
+    pub kind: u16,
+    pub target_key: u16
+}
+
+impl TableColumn {
+    pub const fn value(key: u16) -> Self {Self {key, kind: TABLE_VALUE, target_key: 0}}
+    pub const fn sample(key: u16) -> Self {Self {key, kind: TABLE_SAMPLE, target_key: 0}}
+    pub const fn target(key: u16, target_key: u16) -> Self {Self {key, kind: TABLE_TARGET, target_key}}
+}
+
+/// Observe the CHILD boxes under one of this device's hub fields (`hub_path`, e.g. `[10]` for the Sampler's
+/// `zones`) as a table: one row per child, one 32-bit word per entry of `columns`. Returns an id the device
+/// matches in [`Instrument::table_changed`]. The host watches the hub and every observed field, and delivers
+/// ONE snapshot per transaction (never during render): on catch-up, when a child joins or leaves, and when an
+/// observed field or pointer changes. Rows are ordered by the children's uuid, which is stable but carries no
+/// meaning, so a device that needs an order observes the field that holds it. A device calls this from
+/// `init`. Native stub returns 0.
+#[inline]
+pub fn observe_table(hub_path: &[u16], columns: &[TableColumn]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_table(hub_path.as_ptr() as u32, hub_path.len() as u32, columns.as_ptr() as u32, columns.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (hub_path, columns); 0 }
+}
+
+/// A table delivered through [`Instrument::table_changed`]. The words live in ENGINE memory and stay valid
+/// and unchanged until the next delivery for the same id, so a device keeps the `Table` in its state and
+/// reads it during render without copying. Rows may move between deliveries: anything that outlives one (a
+/// sounding voice) copies what it needs instead of keeping a row number.
+#[derive(Clone, Copy)]
+pub struct Table {
+    words: *const u32,
+    rows: u32,
+    columns: u32
+}
+
+impl Table {
+    pub const fn empty() -> Self {Self {words: core::ptr::null(), rows: 0, columns: 0}}
+
+    /// # Safety
+    /// `ptr` must point at `rows * columns` words that stay alive and unchanged until the next delivery.
+    #[inline]
+    pub unsafe fn from_wire(ptr: u32, rows: u32, columns: u32) -> Self {
+        Self {words: ptr as usize as *const u32, rows, columns}
+    }
+
+    /// A table over words the caller keeps alive, for native tests.
+    pub fn from_words(words: &'static [u32], columns: u32) -> Self {
+        assert!(columns > 0 && words.len() % columns as usize == 0, "words do not fill whole rows");
+        Self {words: words.as_ptr(), rows: words.len() as u32 / columns, columns}
+    }
+
+    #[inline]
+    pub fn rows(&self) -> usize {self.rows as usize}
+    #[inline]
+    pub fn columns(&self) -> usize {self.columns as usize}
+
+    #[inline]
+    pub fn word(&self, row: usize, column: usize) -> u32 {
+        assert!(row < self.rows as usize && column < self.columns as usize, "table cell out of range");
+        unsafe { *self.words.add(row * self.columns as usize + column) }
+    }
+
+    #[inline]
+    pub fn int(&self, row: usize, column: usize) -> i32 {self.word(row, column) as i32}
+    #[inline]
+    pub fn float(&self, row: usize, column: usize) -> f32 {f32::from_bits(self.word(row, column))}
+    #[inline]
+    pub fn bool(&self, row: usize, column: usize) -> bool {self.word(row, column) != 0}
+
+    /// A [`TABLE_SAMPLE`] or [`TABLE_TARGET`] cell, `None` while its pointer is unbound.
+    #[inline]
+    pub fn link(&self, row: usize, column: usize) -> Option<u32> {
+        let word = self.word(row, column);
+        if word == TABLE_NONE {None} else {Some(word)}
+    }
 }
 
 /// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box
@@ -1670,6 +1839,11 @@ pub trait Instrument {
     fn sample_changed(state: &mut Self::State, id: u32, sample: Option<u32>) {
         let _ = (state, id, sample);
     }
+    /// Take the new snapshot of an observed table for `id` (the value [`observe_table`] returned). Delivered
+    /// on catch-up and on every change, only inside a transaction. Default: nothing (no tables).
+    fn table_changed(state: &mut Self::State, id: u32, table: Table) {
+        let _ = (state, id, table);
+    }
     /// Apply this device's observed SOUNDFONT reference for `id` (the value [`observe_soundfont`] returned),
     /// storing the handle in `state`. `soundfont` is `Some(handle)` to later [`resolve_soundfont`] when the
     /// `file` pointer targets a `SoundfontFileBox`, or `None` when unbound. Delivered on catch-up and on
@@ -1709,7 +1883,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     for event in events {
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, anchor: block.anchor,
+                anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
             CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
@@ -1724,7 +1899,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         }
     }
     if cursor < s1 {
-        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, anchor: block.anchor,
+            anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
         CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
@@ -1850,7 +2026,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, bpm: block.bpm};
+                let sub = Block {p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, flags, ..*block};
                 E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
                 cursor = offset;
                 chunk_p0 = position;
@@ -1860,7 +2036,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             position = next_update_position(position);
         }
         if cursor < s1 {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor as u32, s1: s1 as u32, bpm: block.bpm};
+            let sub = Block {p0: chunk_p0, s0: cursor as u32, s1: s1 as u32, flags, ..*block};
             E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
         }
     }
@@ -1986,7 +2162,7 @@ mod tests {
     }
 
     fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: BlockFlags(0), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]
@@ -2034,7 +2210,7 @@ mod tests {
         let mut state = Recorder::default();
         let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
         let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::DISCONTINUOUS);
-        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[note_on(64, 64.0, 60)], &block);
         assert_eq!(state.chunks.len(), 2);
         assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");
@@ -2140,5 +2316,156 @@ mod groove_tests {
         assert!(!groove_still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
         assert!(groove_still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
         assert!(!groove_still_wrapped(true, None, 8000.0));
+    }
+}
+
+#[cfg(test)]
+mod table_tests {
+    //! The device side of an observed table: cells are read back as the type the device knows the column has,
+    //! pointer cells report unbound, and the column layout the host reads is three `u16` as written.
+    use super::{Table, TableColumn, TABLE_NONE, TABLE_SAMPLE, TABLE_TARGET, TABLE_VALUE};
+
+    #[test]
+    fn an_empty_table_has_no_rows() {
+        let table = Table::empty();
+        assert_eq!((table.rows(), table.columns()), (0, 0));
+    }
+
+    #[test]
+    fn cells_read_as_int_float_and_bool() {
+        static WORDS: [u32; 6] = [7, 0x3FC0_0000, 1, 0xFFFF_FFFB, 0xBF00_0000, 0];
+        let table = Table::from_words(&WORDS, 3);
+        assert_eq!((table.rows(), table.columns()), (2, 3));
+        assert_eq!(table.int(0, 0), 7);
+        assert_eq!(table.float(0, 1), 1.5);
+        assert!(table.bool(0, 2));
+        assert_eq!(table.int(1, 0), -5, "a negative int survives the word");
+        assert_eq!(table.float(1, 1), -0.5);
+        assert!(!table.bool(1, 2));
+    }
+
+    #[test]
+    fn the_largest_int_is_exact() {
+        static WORDS: [u32; 2] = [0x7FFF_FFFF, 0x8000_0000];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.int(0, 0), i32::MAX, "frame positions beyond 2^24 are not rounded");
+        assert_eq!(table.int(1, 0), i32::MIN);
+    }
+
+    #[test]
+    fn a_float_keeps_its_bits() {
+        static WORDS: [u32; 3] = [0x7FC0_0001, 0x8000_0000, 0x0000_0001];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.float(0, 0).to_bits(), 0x7FC0_0001, "a NaN payload is not normalized");
+        assert_eq!(table.float(1, 0).to_bits(), 0x8000_0000, "negative zero stays negative");
+        assert_eq!(table.float(2, 0).to_bits(), 1, "a denormal stays");
+    }
+
+    #[test]
+    fn a_pointer_cell_reports_unbound() {
+        static WORDS: [u32; 3] = [0, 0x0001_0002, TABLE_NONE];
+        let table = Table::from_words(&WORDS, 1);
+        assert_eq!(table.link(0, 0), Some(0), "handle 0 is a handle, not unbound");
+        assert_eq!(table.link(1, 0), Some(0x0001_0002));
+        assert_eq!(table.link(2, 0), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn a_row_past_the_end_panics() {
+        static WORDS: [u32; 2] = [1, 2];
+        Table::from_words(&WORDS, 2).word(1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn a_column_past_the_end_panics() {
+        static WORDS: [u32; 2] = [1, 2];
+        Table::from_words(&WORDS, 2).word(0, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "table cell out of range")]
+    fn reading_an_empty_table_panics() {
+        Table::empty().word(0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "words do not fill whole rows")]
+    fn words_that_do_not_fill_a_row_are_rejected() {
+        static WORDS: [u32; 3] = [1, 2, 3];
+        Table::from_words(&WORDS, 2);
+    }
+
+    #[test]
+    fn column_constructors_set_the_kind() {
+        assert_eq!(TableColumn::value(10), TableColumn {key: 10, kind: TABLE_VALUE, target_key: 0});
+        assert_eq!(TableColumn::sample(2), TableColumn {key: 2, kind: TABLE_SAMPLE, target_key: 0});
+        assert_eq!(TableColumn::target(3, 4), TableColumn {key: 3, kind: TABLE_TARGET, target_key: 4});
+    }
+
+    #[test]
+    fn a_column_is_three_u16_on_the_wire() {
+        assert_eq!(core::mem::size_of::<TableColumn>(), 6);
+        assert_eq!(core::mem::align_of::<TableColumn>(), 2);
+        let columns = [TableColumn::target(3, 4), TableColumn::sample(2)];
+        let wire = unsafe { core::slice::from_raw_parts(columns.as_ptr() as *const u16, 6) };
+        assert_eq!(wire, [3, 2, 4, 2, 1, 0], "key, kind, target key, in that order");
+    }
+}
+
+#[cfg(test)]
+mod sample_view_tests {
+    use super::{resolve_sample, set_native_sample, set_native_sample_i16, SampleView, SAMPLE_FORMAT_F32, SAMPLE_FORMAT_I16};
+
+    extern crate std;
+    use std::boxed::Box;
+    use std::vec;
+
+    #[test]
+    fn a_float_sample_resolves_to_float_planes() {
+        set_native_sample(20, Box::leak(vec![0.1f32, 0.2, 0.3, 0.4].into_boxed_slice()), 2, 48_000.0);
+        let sample = resolve_sample(20).unwrap();
+        assert_eq!(sample.format, SAMPLE_FORMAT_F32);
+        let SampleView::F32 {left, right} = sample.view() else {panic!("float frames expected")};
+        assert_eq!((left, right), (&[0.1f32, 0.2][..], &[0.3f32, 0.4][..]));
+    }
+
+    #[test]
+    fn a_sixteen_bit_sample_resolves_to_its_own_planes() {
+        set_native_sample_i16(21, Box::leak(vec![1i16, -2, 3, -4, 5, -6].into_boxed_slice()), 2, 44_100.0);
+        let sample = resolve_sample(21).unwrap();
+        assert_eq!((sample.format, sample.frame_count, sample.channel_count, sample.sample_rate), (SAMPLE_FORMAT_I16, 3, 2, 44_100.0));
+        let SampleView::I16 {left, right} = sample.view() else {panic!("16 bit frames expected")};
+        assert_eq!((left, right), (&[1i16, -2, 3][..], &[-4i16, 5, -6][..]));
+    }
+
+    #[test]
+    fn a_mono_sample_answers_right_with_left() {
+        set_native_sample_i16(22, Box::leak(vec![7i16, 8].into_boxed_slice()), 1, 48_000.0);
+        let ints = resolve_sample(22).unwrap();
+        let SampleView::I16 {left, right} = ints.view() else {panic!("16 bit frames expected")};
+        assert_eq!(left, right);
+        set_native_sample(23, Box::leak(vec![0.5f32, 0.25].into_boxed_slice()), 1, 48_000.0);
+        let floats = resolve_sample(23).unwrap();
+        let SampleView::F32 {left, right} = floats.view() else {panic!("float frames expected")};
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn re_registering_a_handle_changes_its_format() {
+        set_native_sample_i16(24, Box::leak(vec![1i16].into_boxed_slice()), 1, 48_000.0);
+        set_native_sample(24, Box::leak(vec![1.0f32].into_boxed_slice()), 1, 48_000.0);
+        assert_eq!(resolve_sample(24).unwrap().format, SAMPLE_FORMAT_F32);
+    }
+
+    #[test]
+    fn with_planes_runs_the_body_for_the_resident_format() {
+        set_native_sample_i16(25, Box::leak(vec![16_384i16, -32_768].into_boxed_slice()), 1, 48_000.0);
+        set_native_sample(26, Box::leak(vec![0.5f32, -1.0].into_boxed_slice()), 1, 48_000.0);
+        fn first<T: math::Pcm>(plane: &[T]) -> [f32; 2] {[plane[0].to_f32(), plane[1].to_f32()]}
+        let ints = resolve_sample(25).unwrap();
+        let floats = resolve_sample(26).unwrap();
+        assert_eq!(crate::with_planes!(ints, |left, _right| first(left)), crate::with_planes!(floats, |left, _right| first(left)));
     }
 }

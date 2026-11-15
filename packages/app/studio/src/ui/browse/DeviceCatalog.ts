@@ -88,6 +88,8 @@ export namespace DeviceCatalog {
     }
 
     export const compare = (left: DeviceEntry, right: DeviceEntry): int => {
+        const stock = Number(right.kind === "device") - Number(left.kind === "device")
+        if (stock !== 0) {return stock}
         const order = StringComparator(left.name.toLowerCase(), right.name.toLowerCase())
         return order !== 0 ? order : rankOf[left.kind] - rankOf[right.kind]
     }
@@ -210,17 +212,22 @@ export namespace DeviceCatalog {
         }
     })
 
+    // the list's one line: the description's first sentence, the vendor while the catalogue has none
+    const firstSentence = (text: string): string => text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? text
+
     const wclapEntry = (wclap: SpotlightCreate.Wclap, kind: WclapDescriber.Kind): DeviceEntry => ({
-        key: `wclap:${wclap.id}:${wclap.info.clapId}`, kind: "wclap", local: wclap.local, name: wclap.name, brief: wclap.info.vendor,
+        key: `wclap:${wclap.id}:${wclap.info.clapId}`, kind: "wclap", local: wclap.local, name: wclap.name,
+        brief: wclap.description.length > 0 ? firstSentence(wclap.description) : wclap.info.vendor,
         caption: `WebCLAP ${kind === "instrument" ? "instrument" : kind === "note-effect" ? "note effect" : "audio effect"} by ${wclap.info.vendor}`,
-        description: "", icon: IconSymbol.WebClap, iconUrl: Option.None, deviceKey: kind === "note-effect" ? "WclapMidi" : "Wclap",
+        description: wclap.description, icon: IconSymbol.WebClap, iconUrl: Option.None, deviceKey: kind === "note-effect" ? "WclapMidi" : "Wclap",
         facts: [
             {label: "Vendor", value: wclap.info.vendor},
             {label: "License", value: wclap.license.length > 0 ? wclap.license : "-"},
             {label: "Size", value: wclap.size > 0 ? Bytes.toString(wclap.size) : "-"},
             {label: "Stored", value: wclap.local ? "On this device" : "openDAW cloud"}
         ],
-        tags: wclap.info.features, preset: Option.None, bundle: Option.None,
+        // openDAW's own features (the device panel, its width) are for the studio, not tags
+        tags: wclap.info.features.filter(feature => !feature.startsWith("opendaw:")), preset: Option.None, bundle: Option.None,
         prepare: async () => {
             const url = await SpotlightCreate.storeWclap(wclap)
             const {clapId, name} = wclap.info

@@ -1,0 +1,15 @@
+[package]
+name = "opendrum-lab"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# dev only: measures the 808 / 909 reference hits and later fits the openDrum engines against them
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+dsp = {path = "../dsp"}
+opendrum = {path = "../opendrum"}
+math = {path = "../math"}
+libm = "0.2"

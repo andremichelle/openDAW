@@ -1,21 +1,19 @@
-import {asDefined, clamp, Lifecycle, Option} from "@opendaw/lib-std"
+import {asDefined, clamp, Lifecycle, MutableObservableValue, Option} from "@opendaw/lib-std"
 import {AnimationFrame, Dragging, Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {MaxTrackHeight} from "@opendaw/studio-enums"
-import {StudioService} from "@/service/StudioService"
 import {TrackHeaderClassName} from "./TrackStyles"
-import {TracksManager} from "./TracksManager"
+import type {TracksManager} from "./TracksManager"
+import {StudioService} from "@/service/StudioService"
 
 const AutoScrollPadding = 24
 const AutoScrollSpeed = 6.0 // px/s per px of depth into the padding
 
 export const installTrackResize = (lifecycle: Lifecycle, service: StudioService, trackManager: TracksManager,
-                                   adapter: TrackBoxAdapter, element: HTMLElement): void => {
+                                   height: MutableObservableValue<number>, element: HTMLElement): void => {
     const resizer: HTMLElement = <div className="track-resizer" title="Drag to resize track; double-click to reset"/>
     const header = asDefined(element.querySelector<HTMLElement>(`.${TrackHeaderClassName}`))
     header.appendChild(resizer)
-    const {height} = adapter.box
     const {editing} = service.project
     const {scrollableContainer, scrollModel} = trackManager
     const reset = () => {if (height.getValue() !== 0) {editing.modify(() => height.setValue(0))}}
@@ -49,8 +47,10 @@ export const installTrackResize = (lifecycle: Lifecycle, service: StudioService,
                 const elapsed = Math.min(now - lastTime, 100.0) / 1000.0
                 lastTime = now
                 const {top, bottom} = viewport.getBoundingClientRect()
-                const depth = pointerY > bottom - AutoScrollPadding ? pointerY - (bottom - AutoScrollPadding)
-                    : pointerY < top + AutoScrollPadding ? pointerY - (top + AutoScrollPadding) : 0
+                const depth = pointerY > startY && pointerY > bottom - AutoScrollPadding
+                    ? pointerY - Math.max(bottom - AutoScrollPadding, startY)
+                    : pointerY < startY && pointerY < top + AutoScrollPadding
+                        ? pointerY - Math.min(top + AutoScrollPadding, startY) : 0
                 if (depth === 0 || (depth > 0 && height.getValue() >= MaxTrackHeight)
                     || (depth < 0 && element.getBoundingClientRect().height <= minimum)) {
                     carry = 0.0

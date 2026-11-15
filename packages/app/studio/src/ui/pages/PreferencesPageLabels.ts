@@ -66,8 +66,7 @@ export namespace PreferencesPageLabels {
             label: "Editing",
             fields: {
                 "overlapping-regions-behaviour": "Overlapping regions behaviour",
-                "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)",
-                "new-instrument-note-region": "Create and edit a note region for a new instrument"
+                "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)"
             }
         },
         "webclap": {

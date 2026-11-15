@@ -52,6 +52,42 @@ synth.instrument.key === "Vaporisateur" && (synth.instrument.cutoff = 2000)
 Collections (`tracks`, `regions`, `events`, `audioEffects`, ...) are read-only arrays. Add with the `add...`
 method of the owner, delete with `remove()` on the item.
 
+## Asking for values
+
+{@link Api.showDialog} opens a dialog and waits for the user. Every field has a name, a type and a start value.
+The result holds one value under the name of each field, or it is `null` when the dialog was cancelled.
+
+```ts
+const values = await openDAW.showDialog({
+    headline: "New Pad",
+    okText: "Create",
+    fields: {
+        name: {type: "text", label: "Name", value: "Pad"},
+        voices: {type: "number", label: "Voices", value: 32, min: 1, max: 64, step: 1},
+        sound: {type: "section", label: "Sound"},
+        attack: {type: "slider", label: "Attack", value: 0.4, min: 0.01, max: 8, step: 0.01, mapping: "exp", unit: "s"},
+        zone: {type: "dropdown", label: "Semitones per zone", value: 3,
+            options: [{label: "One", value: 1}, {label: "Three", value: 3}, {label: "Six", value: 6}]},
+        demo: {type: "checkbox", label: "Demo notes", value: true}
+    }
+})
+if (values === null) {return}
+const project = openDAW.newProject(values.name)
+```
+
+| Type       | Returns          | Options                                                        |
+|------------|------------------|----------------------------------------------------------------|
+| `text`     | string           |                                                                |
+| `number`   | number           | `min`, `max`, `step`, `unit`                                   |
+| `slider`   | number           | `min`, `max` (both required), `step`, `mapping`, `unit`        |
+| `checkbox` | boolean          |                                                                |
+| `dropdown` | value of a choice | `options`, a list of `{label, value}` with text or number values |
+| `section`  | nothing          | a title for the fields below it                                |
+
+A `step` makes the value snap to its multiples. The slider `mapping` is `"linear"`, `"exp"` (finer at the low
+end, needs `min` above 0) or `"int"` (whole numbers). A dialog that makes no sense, such as a start value outside
+`min` and `max`, throws before it is shown.
+
 ## Where things live
 
 ```

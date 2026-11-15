@@ -68,15 +68,15 @@ impl ConvolverDevice {
             return;
         }
         let Some(sample) = abi::resolve_sample(handle) else { return };
-        let left = sample.plane(0);
         let stereo = sample.channel_count > 1;
-        let right = if stereo { sample.plane(1) } else { left };
-        if state.reload {
-            let ratio = if sample.sample_rate > 0.0 { sample.sample_rate / state.sample_rate } else { 1.0 };
-            state.convolver.begin_load(left, right, stereo, state.normalize, state.reverse, ratio);
-            state.reload = false;
-        }
-        state.convolver.load_step(left, right, LOAD_BUDGET);
+        abi::with_planes!(sample, |left, right| {
+            if state.reload {
+                let ratio = if sample.sample_rate > 0.0 { sample.sample_rate / state.sample_rate } else { 1.0 };
+                state.convolver.begin_load(left, right, stereo, state.normalize, state.reverse, ratio);
+                state.reload = false;
+            }
+            state.convolver.load_step(left, right, LOAD_BUDGET);
+        });
     }
 
     fn sample_changed(state: &mut ConvolverState, id: u32, sample: Option<u32>) {

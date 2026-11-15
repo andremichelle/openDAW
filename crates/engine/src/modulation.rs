@@ -165,6 +165,19 @@ pub(crate) fn hash_bipolar(seed: i32, index: i64) -> f32 {
     ((hash as u32) as f64 / 4294967295.0) as f32 * 2.0 - 1.0
 }
 
+/// WASM CONTRACT: mirrors `RandomModulatorBoxAdapter.focus` (packages/studio/adapters).
+fn focus(value: f32, bias: f32, focus: f32) -> f32 {
+    if focus <= 0.0 {
+        return value;
+    }
+    let extent = if value >= bias {1.0 - bias} else {1.0 + bias};
+    if focus >= 1.0 || extent <= 0.0 {
+        return bias;
+    }
+    let distance = (value - bias) / extent;
+    bias + distance.signum() * math::pow(distance.abs() as f64, 1.0 / (1.0 - focus as f64)) as f32 * extent
+}
+
 /// WASM CONTRACT: mirrors `RandomModulatorBoxAdapter.quantize` (packages/studio/adapters).
 fn quantize(value: f32, levels: i32) -> f32 {
     if levels < 2 {
@@ -189,6 +202,8 @@ pub(crate) struct RandomState {
     pub(crate) smooth: Cell<f32>,
     pub(crate) seed: Cell<i32>,
     pub(crate) levels: Cell<i32>,
+    pub(crate) bias: Cell<f32>,
+    pub(crate) focus: Cell<f32>,
     turns: Cell<f64>
 }
 
@@ -196,7 +211,7 @@ impl RandomState {
     pub(crate) fn new() -> Self {
         Self {loop_length: Cell::new(0), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
             phase: Cell::new(0.0), smooth: Cell::new(0.0), seed: Cell::new(1),
-            levels: Cell::new(0), turns: Cell::new(0.0)}
+            levels: Cell::new(0), bias: Cell::new(0.0), focus: Cell::new(0.0), turns: Cell::new(0.0)}
     }
 
     fn step_position(&self) -> f64 {
@@ -232,7 +247,8 @@ impl RandomState {
     }
 
     pub(crate) fn draw(&self, index: i64) -> f32 {
-        quantize(hash_bipolar(self.seed.get(), self.local_index(index)), self.levels.get())
+        let value = focus(hash_bipolar(self.seed.get(), self.local_index(index)), self.bias.get(), self.focus.get());
+        quantize(value, self.levels.get())
     }
 }
 
@@ -845,6 +861,27 @@ mod tests {
         assert!((state.value_at() - 1.0).abs() < 1.0e-6, "a stop, resume or jump re-anchors to that time");
         let synced = lfo(SHAPE_SINE, ONE_BAR);
         assert_eq!(synced.rate_absolute.get(), 0.0, "the default leaves the LFO purely tempo-synced");
+    }
+
+    #[test]
+    fn focus_pulls_random_draws_towards_the_bias() {
+        let state = RandomState::new();
+        let plain: Vec<f32> = (0..256).map(|index| state.draw(index)).collect();
+        state.bias.set(0.5);
+        assert!((0..256).all(|index| state.draw(index) == plain[index as usize]), "no focus leaves every draw untouched");
+        state.focus.set(0.75);
+        let near = |values: &[f32]| values.iter().filter(|value| (**value - 0.5).abs() < 0.25).count();
+        let focused: Vec<f32> = (0..256).map(|index| state.draw(index)).collect();
+        assert!(near(&focused) > near(&plain) * 2, "focus gathers the draws around the bias");
+        assert!(focused.iter().all(|value| (-1.0..=1.0).contains(value)), "and stays within the range");
+        assert!(focused.iter().zip(&plain).all(|(focused, plain)| (focused - 0.5).signum() == (plain - 0.5).signum()
+            || *focused == 0.5), "a draw keeps its side of the bias");
+        assert!(focused.iter().any(|value| *value < -0.5), "the far end is still reachable");
+        state.focus.set(1.0);
+        assert!((0..16).all(|index| state.draw(index) == 0.5), "full focus is the bias itself");
+        state.bias.set(-1.0);
+        state.focus.set(0.5);
+        assert!((0..256).all(|index| state.draw(index) >= -1.0), "a bias at the edge folds nothing below it");
     }
 
     #[test]

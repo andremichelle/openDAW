@@ -12,3 +12,6 @@ abi = {path = "../../abi"}
 math = {path = "../../math"}
 dsp = {path = "../../dsp"}
 libm = "0.2"
+
+[dev-dependencies]
+device-playfield-sample = {path = "../device-playfield-sample"}

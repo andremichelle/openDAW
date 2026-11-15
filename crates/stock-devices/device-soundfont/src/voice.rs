@@ -191,7 +191,7 @@ impl SoundfontVoice {
         self.looping = region.loop_mode != 0;
         self.position = 0.0;
         // pitchRatio = midiToHz(pitch + cent/100) / midiToHz(rootKey) = 2^((pitch + cent/100 - rootKey)/12).
-        let semis = pitch as f32 + cent / 100.0 - region.root_key as f32;
+        let semis = pitch as f32 + cent / 100.0 - region.root_key as f32 + region.tune / 100.0;
         let pitch_ratio = exp2f(semis / 12.0) as f64;
         self.playback_rate = pitch_ratio * sample.sample_rate as f64 / sample_rate as f64;
         // velocityToGain(v) = dbToGain(20*log10(v)) == v for v in (0,1]; 0 at v<=0.
@@ -251,5 +251,40 @@ impl SoundfontVoice {
             }
         }
         self.adsr.complete() && self.smooth.value() < SILENCE_THRESHOLD
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rate_of(root_key: u32, tune: f32, cent: f32) -> f64 {
+        let region = Region {
+            key_lo: 0, key_hi: 127, vel_lo: 0, vel_hi: 127, sample_index: 0, root_key, loop_mode: 0, pan: 0.0,
+            attack: 0.001, decay: 0.005, sustain: 1.0, release: 0.05, tune
+        };
+        let sample = Sample {pcm_ptr: 0, frame_count: 1_000, sample_rate: 48_000.0, loop_start: 0, loop_end: 1_000};
+        let mut voice = SoundfontVoice::default();
+        voice.start(1, 60, cent, 1.0, &region, &sample, 48_000.0);
+        voice.playback_rate
+    }
+
+    #[test]
+    fn no_tune_reads_as_before() {
+        assert_eq!(rate_of(60, 0.0, 0.0), 1.0);
+        assert_eq!(rate_of(48, 0.0, 0.0), 2.0);
+    }
+
+    #[test]
+    fn a_hundred_cents_of_tune_equal_a_root_key_one_lower() {
+        assert_eq!(rate_of(60, 100.0, 0.0).to_bits(), rate_of(59, 0.0, 0.0).to_bits());
+        assert_eq!(rate_of(60, -1200.0, 0.0), 0.5);
+    }
+
+    #[test]
+    fn tune_adds_to_the_cents_of_the_note() {
+        assert_eq!(rate_of(60, -50.0, 50.0), 1.0);
+        let detuned = rate_of(60, -50.0, 0.0);
+        assert!((detuned - libm::exp2(-0.5 / 12.0)).abs() < 1.0e-6, "{detuned}");
     }
 }

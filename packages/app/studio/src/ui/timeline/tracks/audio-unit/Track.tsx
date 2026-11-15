@@ -39,6 +39,6 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
     )
     const {box: {enabled}} = trackBoxAdapter
     lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
-    installTrackResize(lifecycle, service, trackManager, trackBoxAdapter, element)
+    installTrackResize(lifecycle, service, trackManager, service.project.userEditingManager.viewStates.height(trackBoxAdapter.box), element)
     return element
 }

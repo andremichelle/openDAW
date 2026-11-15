@@ -10,7 +10,7 @@
 
 use alloc::vec::Vec;
 use math::clamp;
-use engine_env::ppqn::pulses_to_samples;
+use engine_env::ppqn::frame_at;
 use transport::transport::Block;
 use value::event::{Event, EventCollection, EventSpan};
 use value::note::NoteEvent;
@@ -134,7 +134,8 @@ impl NoteSequencer {
 
     /// The sample offset within the quantum for a global pulse position, clamped to `[s0, s1]`.
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
-        let samples = pulses_to_samples(position - block.p0, block.bpm, self.sample_rate);
-        clamp(block.s0 as f64 + samples, block.s0 as f64, block.s1 as f64) as usize
+        if position <= block.p0 {return block.s0}
+        if position >= block.p1 {return block.s1}
+        frame_at(position, block.anchor, block.anchor_frame, block.bpm, self.sample_rate).clamp(block.s0 as i64, block.s1 as i64) as usize
     }
 }

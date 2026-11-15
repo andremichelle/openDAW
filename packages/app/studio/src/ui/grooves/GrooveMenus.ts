@@ -31,6 +31,13 @@ export namespace GrooveMenus {
             .setRuntimeChildrenProcedure(choiceItems(project, pointers))
     }
 
+    export const choiceRoot = (project: Project, pointer: PointerField<Pointers.Groove>): MenuItem =>
+        MenuItem.root().setRuntimeChildrenProcedure(choiceItems(project, [pointer]))
+
+    export const tooltip = (project: Project, pointer: PointerField<Pointers.Groove>) => (): string =>
+        `Groove: ${pointer.targetVertex
+            .mapOr(({box}) => Grooves.adapterOf(project, Grooves.asGrooveBox(box)).label, NoneLabel)}`
+
     export const choiceItems = (project: Project, pointers: ReadonlyArray<PointerField<Pointers.Groove>>) =>
         (parent: MenuItem): void => {
             const {editing} = project

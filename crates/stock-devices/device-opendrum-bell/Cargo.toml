@@ -1,0 +1,12 @@
+[package]
+name = "device-opendrum-bell"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+opendrum = {path = "../../opendrum"}
+opendrum-device = {path = "../../opendrum-device"}

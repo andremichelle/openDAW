@@ -1,6 +1,6 @@
 import css from "./ChannelStrip.sass?inline"
 import {EmptyExec, Lifecycle, MutableObservableValue, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitGroups, ColorCodes} from "@opendaw/studio-adapters"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {createElement, DomElement, Frag, Inject} from "@opendaw/lib-jsx"
 import {VolumeSlider} from "@/ui/components/VolumeSlider.tsx"
@@ -21,12 +21,17 @@ import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {AutomationControl} from "../components/AutomationControl"
-import {DragAndDrop} from "../DragAndDrop"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
+import {MixerDeviceList} from "./MixerDeviceList"
+import {DeviceNavigation} from "./DeviceNavigation"
+import {MiniPeakMeter} from "./MiniPeakMeter"
 
 const className = Html.adoptStyleSheet(css, "ChannelStrip")
+
+const CompactVolumeHeight = 96
 
 type Construct = {
     lifecycle: Lifecycle
@@ -39,11 +44,14 @@ type Construct = {
 export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: Construct) => {
     const {mute, panning, solo, volume} = adapter.namedParameter
     const {project} = service
-    const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning} = project
+    const {editing, mixer, rootBoxAdapter, liveStreamReceiver, midiLearning, userEditingManager: {viewStates}} = project
+    const groupCollapsed = viewStates.groupCollapsed(adapter.box)
+    const isGroup = AudioUnitGroups.isGroup(adapter.box)
     const isBus = adapter.type === AudioUnitType.Bus
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
     const inputLabel = lifecycle.own(Inject.value("No Input"))
+    const inputElement: HTMLElement = <h5 className="input">{inputLabel}</h5>
     const peaks = new Float32Array(2)
     const volumeLabel: HTMLDivElement = <div className="value-display"/>
     const maxPeakLabel: HTMLDivElement = <div className="value-display peak valid">-∞</div>
@@ -73,7 +81,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                            tracks={tracks} parameter={panning}>
             <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={panning}
                                        options={SnapCenter}>
-                <Knob lifecycle={lifecycle} value={panning} anchor={0.5}/>
+                <Knob lifecycle={lifecycle} color={Colors.cream} value={panning} anchor={0.5}/>
             </RelativeUnitValueDragging>
         </AutomationControl>
     )
@@ -117,14 +125,56 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                        }}/>
         {adapter.isInstrument && lockIcon}
     </div>
+    if (isGroup && !compact) {
+        const folderToggle: HTMLButtonElement = <button className="folder-toggle" onclick={() => {
+            editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))
+        }}/>
+        lifecycle.own(groupCollapsed.catchupAndSubscribe(owner => {
+            const collapsed = owner.getValue()
+            folderToggle.textContent = collapsed ? "▸" : "▾"
+            folderToggle.setAttribute("aria-expanded", String(!collapsed))
+            folderToggle.setAttribute("aria-label", collapsed ? "Expand group bus" : "Collapse group bus")
+            folderToggle.title = collapsed ? "Expand group bus" : "Collapse group bus"
+        }))
+        lifecycle.own(project.audioUnitLayout.value.catchupAndSubscribe(owner =>
+            folderToggle.classList.toggle("hidden", !owner.getValue().hasMembers(adapter.box))))
+        iconElement.appendChild(folderToggle)
+    }
     const classList = Html.buildClassList(className,
-        isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
+        isGroup && "group", isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
     const peakMeter: DomElement = (<PeakMeter lifecycle={lifecycle} peaks={peaks}/>)
+    const miniPeakMeter: HTMLElement = <MiniPeakMeter lifecycle={lifecycle} peaks={peaks}/>
+    const volumeKnobControl: HTMLElement = (
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={volume}>
+            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={volume}>
+                <Knob lifecycle={lifecycle} value={volume} anchor={0.0}/>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
+    )
+    volumeControl.classList.add("full")
+    peakMeter.classList.add("full")
+    miniPeakMeter.classList.add("meter")
+    const volumeLayout: HTMLElement = (
+        <div className="twin-layout volume">
+            {volumeLabel}
+            {maxPeakLabel}
+            {volumeControl}
+            {peakMeter}
+            <div className="compact-volume">
+                {volumeKnobControl}
+                {miniPeakMeter}
+            </div>
+        </div>
+    )
     const element: HTMLElement = (
         <div className={classList} data-drag>
+            <div className="unit-line"/>
             {!compact && (
                 <Frag>
                     {iconElement}
+                    <MixerDeviceList lifecycle={lifecycle} service={service} unit={adapter} kind="midi"
+                                     collapsed={viewStates.mixerEffectsCollapsed("midi")}/>
                     <DblClckTextInput resolversFactory={
                         () => {
                             const resolvers = Promise.withResolvers<string>()
@@ -132,8 +182,10 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                             return resolvers
                         }
                     } provider={() => ({value: adapter.input.label.unwrap("input.label"), unit: ""})}>
-                        <h5 className="input">{inputLabel}</h5>
+                        {inputElement}
                     </DblClckTextInput>
+                    <MixerDeviceList lifecycle={lifecycle} service={service} unit={adapter} kind="audio"
+                                     collapsed={viewStates.mixerEffectsCollapsed("audio")}/>
                     <AuxSendGroup lifecycle={lifecycle} project={project} audioUnitAdapter={adapter}
                                   mastering={mastering}/>
                     {isOutput
@@ -143,12 +195,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                     {panningControl}
                 </Frag>
             )}
-            <div className="twin-layout volume">
-                {volumeLabel}
-                {maxPeakLabel}
-                {volumeControl}
-                {peakMeter}
-            </div>
+            {volumeLayout}
             <div className="twin-layout mute-solo">
                 {muteControl}
                 {!isOutput && soloControl}
@@ -157,9 +204,21 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
     )
     lifecycle.ownAll(
         mixer.registerChannelStrip(adapter, {
-            silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
+            silent: (value: boolean) => {
+                peakMeter.classList.toggle("silent", value)
+                miniPeakMeter.classList.toggle("silent", value)
+            }
         } satisfies ChannelStripView),
+        Html.watchResize(volumeLayout, () =>
+            volumeLayout.classList.toggle("compact", volumeLayout.clientHeight < CompactVolumeHeight)),
         ContextMenu.subscribe(element, collector => {
+            if (!project.audioUnitSelection.isSelected(adapter.box)) {TrackGrouping.selectTracks(project, [adapter.box])}
+            collector.addItems(...TrackGrouping.groupingMenuItems(project, adapter.box))
+            if (isGroup && project.audioUnitLayout.snapshot.hasMembers(adapter.box)) {
+                collector.addItems(MenuItem.default({
+                    label: groupCollapsed.getValue() ? "Expand Group Bus" : "Collapse Group Bus"
+                }).setTriggerProcedure(() => editing.modify(() => groupCollapsed.setValue(!groupCollapsed.getValue()))))
+            }
             if (adapter.isInstrument) {
                 const isFrozen = project.audioUnitFreeze.isFrozen(adapter)
                 collector.addItems(
@@ -178,6 +237,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
                         .setTriggerProcedure(() => AutoEqAction.run(service, adapter).catch(console.warn)))
             } else {
                 collector.addItems(
+                    MenuItem.default({label: "Duplicate AudioUnit", selectable: project.audioUnitSelection.nonEmpty()})
+                        .setTriggerProcedure(() => TrackGrouping.duplicateSelectedTracks(project)),
                     MenuItem.default({label: `Delete '${adapter.input.label.unwrapOrElse("Untitled")}'`})
                         .setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(adapter.box))))
             }
@@ -196,6 +257,8 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
             )
         }),
         adapter.input.catchupAndSubscribeLabelChange(option => inputLabel.value = option.unwrapOrElse("No Input")),
+        Events.subscribe(inputElement, "click", () =>
+            adapter.input.adapter().ifSome(input => DeviceNavigation.reveal(service, adapter, input))),
         service.subscribeSignal(() => permanentPeak = Number.NEGATIVE_INFINITY, "reset-peaks"),
         Events.subscribe(maxPeakLabel, "pointerdown", (event) => {
             service.resetPeaks()
@@ -205,11 +268,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact, mastering}: 
         TextTooltip.default(maxPeakLabel, () => "Click to reset"),
         adapter.isOutput
             ? Terminable.Empty
-            : DragAndDrop.installSource(iconElement, () => ({
-                uuid: UUID.toString(adapter.uuid),
-                type: "channelstrip",
-                start_index: adapter.indexField.getValue()
-            }), element),
+            : TrackGrouping.installGroupTrackDrag(iconElement, project, adapter.box),
         volume.subscribe(updateVolumeLabel),
         adapter.isInstrument
             ? project.audioUnitFreeze.subscribe(uuid => {

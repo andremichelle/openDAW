@@ -14,6 +14,7 @@
 //! quantum); head partitions become audible first, the tail fades in over a few dozen ms.
 
 use crate::rfft::FftTables;
+use math::Pcm;
 
 pub const BLOCK: usize = 128;
 const HEAD: usize = 128;
@@ -277,17 +278,18 @@ const NORMALIZE_MAKEUP: f64 = 1.4125375;
 
 // Linear-interpolating read at `index * ratio` (IR resampled to the engine rate at load time).
 #[inline]
-fn read_resampled(source: &[f32], index: usize, ratio: f32) -> f32 {
+fn read_resampled<T: Pcm>(source: &[T], index: usize, ratio: f32) -> f32 {
     if ratio == 1.0 {
-        return if index < source.len() { source[index] } else { 0.0 };
+        return if index < source.len() { source[index].to_f32() } else { 0.0 };
     }
     let position = index as f64 * ratio as f64;
     let base = position as usize;
     if base + 1 >= source.len() {
-        return if base < source.len() { source[base] } else { 0.0 };
+        return if base < source.len() { source[base].to_f32() } else { 0.0 };
     }
     let fraction = (position - base as f64) as f32;
-    source[base] + fraction * (source[base + 1] - source[base])
+    let here = source[base].to_f32();
+    here + fraction * (source[base + 1].to_f32() - here)
 }
 
 /// The full convolver: stereo in, stereo IR (channel-wise), zero latency, wet predelay + wet/dry.
@@ -366,7 +368,7 @@ impl Convolver {
     /// louder than the input at any frequency); `ratio` = IR rate / engine rate (the IR is
     /// linear-resampled at load time). The transform runs via `load_step`, which also accumulates
     /// the IR spectrum and re-targets the gain to the portion loaded so far.
-    pub fn begin_load(&mut self, ir_left: &[f32], ir_right: &[f32], stereo: bool, normalize: bool, reverse: bool, ratio: f32) {
+    pub fn begin_load<T: Pcm>(&mut self, ir_left: &[T], ir_right: &[T], stereo: bool, normalize: bool, reverse: bool, ratio: f32) {
         let source_frames = if stereo { ir_left.len().min(ir_right.len()) } else { ir_left.len() };
         let frames = ((source_frames as f64 / ratio.max(1e-3) as f64) as usize).min(MAX_IR_FRAMES);
         let settle = !self.loaded;
@@ -441,7 +443,7 @@ impl Convolver {
     /// Transform up to `budget` FFT work units (1 unit = one 8192 partition; smaller partitions
     /// cost proportionally less). Returns true while loading continues. Call once per quantum with
     /// the resident IR frames.
-    pub fn load_step(&mut self, ir_left: &[f32], ir_right: &[f32], budget: usize) -> bool {
+    pub fn load_step<T: Pcm>(&mut self, ir_left: &[T], ir_right: &[T], budget: usize) -> bool {
         if !self.loader.active {
             return false;
         }

@@ -44,6 +44,8 @@ export namespace ClipboardManager {
             case "chords": return {one: "Chord", many: "Chords"}
             case "values": return {one: "Automation point", many: "Automation points"}
             case "audio-units": return {one: "AudioUnit", many: "AudioUnits"}
+            case "surgeon-pattern":
+            case "euclid-pattern": return {one: "Pattern", many: "Patterns"}
             default: return {one: "Selection", many: "Selection"}
         }
     }
@@ -58,10 +60,10 @@ export namespace ClipboardManager {
 
     export const peek = (): Option<AnyEntry> => fallbackEntry
 
-    export const write = (entry: AnyEntry): void => {
+    export const write = (entry: AnyEntry, cut: boolean = false): void => {
         fallbackEntry = Option.wrap(entry)
         Clipboard.writeText(encode(entry))
-        notify(entry, "copied", IconSymbol.Copy)
+        if (cut) {notify(entry, "cut", IconSymbol.Scissors)} else {notify(entry, "copied", IconSymbol.Copy)}
     }
 
     export const decode = (text: string): Option<AnyEntry> => {
