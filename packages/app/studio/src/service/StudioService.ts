@@ -38,6 +38,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {SampleEditorService} from "@/service/SampleEditorService"
+import {ScreenRecorder} from "@/service/ScreenRecorder"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
@@ -138,6 +139,7 @@ export class StudioService implements ProjectEnv {
     readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
+    readonly screenRecorder: ScreenRecorder
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
@@ -168,6 +170,7 @@ export class StudioService implements ProjectEnv {
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext, new WasmBpmDetector(STRETCH_WASM_URL))
+        this.screenRecorder = new ScreenRecorder(audioContext, this.engine)
         this.#sampleService.subscribe(([sample, _]) => this.#signals.notify({
             type: "import-sample",
             sample

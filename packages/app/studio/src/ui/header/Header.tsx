@@ -22,6 +22,7 @@ import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
+import {ScreenRecordButton} from "@/ui/header/ScreenRecordButton"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {Checkbox} from "@/ui/components/Checkbox"
 
@@ -152,6 +153,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             </div>
             <hr/>
             <PerformanceStats lifecycle={lifecycle} service={service}/>
+            <ScreenRecordButton lifecycle={lifecycle} recorder={service.screenRecorder}/>
         </header>
     )
 }

@@ -200,7 +200,8 @@ export enum IconSymbol {
     CallPhone,
     CallHangup,
     Broadcast,
-    Surgeon
+    Surgeon,
+    RecordStudio
 }
 
 export namespace IconSymbol {
