@@ -85,6 +85,7 @@ pub struct ChannelStripProcessor {
     mute_gain: LinearRamp,
     meter: crate::meter::Meter, // peaks/RMS of the strip output (a broadcast slot)
     scope: Option<crate::scope::Scope>,
+    scope_source: Option<SharedAudioBuffer>, // the scope watches this upstream buffer instead of the strip output
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
@@ -102,6 +103,7 @@ impl ChannelStripProcessor {
             gain_right: LinearRamp::linear(sample_rate),
             mute_gain: LinearRamp::linear(sample_rate),
             scope: None,
+            scope_source: None,
             meter: crate::meter::Meter::new(sample_rate),
             sample_rate,
             processing: false,
@@ -175,11 +177,27 @@ impl ChannelStripProcessor {
         self.meter.slot()
     }
 
-    /// An oscilloscope of the strip output, its slot and its subscription flag.
+    /// An oscilloscope (of the strip output unless a scope source is set), its slot and its subscription flag.
     pub fn enable_scope(&mut self) -> (crate::telemetry::BroadcastSlot, alloc::rc::Rc<core::cell::Cell<bool>>) {
         let sample_rate = self.sample_rate;
         let scope = self.scope.get_or_insert_with(|| crate::scope::Scope::new(sample_rate));
         (scope.slot(), scope.active())
+    }
+
+    /// The scope watches `source` (it must be processed before this strip), not the strip output.
+    pub fn set_scope_source(&mut self, source: SharedAudioBuffer) {
+        self.scope_source = Some(source);
+    }
+
+    fn process_scope(&mut self, output: &AudioBuffer) {
+        let Some(scope) = &mut self.scope else {return};
+        match &self.scope_source {
+            Some(source) => {
+                let source = source.borrow();
+                scope.process(&source.left, &source.right)
+            }
+            None => scope.process(&output.left, &output.right)
+        }
     }
 
     // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
@@ -224,7 +242,7 @@ impl Processor for ChannelStripProcessor {
             None => {
                 output.clear_range(0, RENDER_QUANTUM);
                 self.meter.process(&output.left, &output.right); // the held peak still decays while unwired
-                if let Some(scope) = &mut self.scope {scope.process(&output.left, &output.right)}
+                self.process_scope(&output);
                 return;
             }
         };
@@ -265,7 +283,7 @@ impl Processor for ChannelStripProcessor {
             }
         }
         self.meter.process(&output.left, &output.right);
-        if let Some(scope) = &mut self.scope {scope.process(&output.left, &output.right)}
+        self.process_scope(&output);
     }
 }
 

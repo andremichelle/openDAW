@@ -102,6 +102,16 @@ enum ChildBody {
         audio_obs: Option<IndexedCollection>, audio: Vec<Member>, edges: Vec<(NodeId, NodeId)>}
 }
 
+impl ChildBody {
+    /// The child's instrument output, before its own audio effects and strip.
+    fn instrument_output(&self) -> Option<SharedAudioBuffer> {
+        match self {
+            ChildBody::Slot {cluster, ..} => cluster.instrument.output.clone(),
+            ChildBody::Nested {binding} | ChildBody::NestedCell {binding, ..} => Some(binding.sum_buffer.clone())
+        }
+    }
+}
+
 /// What a CELL currently hosts: a plugin instrument or a MIDI Output, or a registered composite.
 enum CellHost {
     Instrument(Uuid, SlotInstrument),
@@ -544,6 +554,7 @@ impl Engine {
                             self.context.remove_edge(slot_strip.source_node, slot_strip.strip_id);
                             let cluster = self.reconcile_slot_cluster(Some(cluster), instrument_uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, pad.as_ref(), signal, invalidate, &rewire);
                             slot_strip.strip.borrow_mut().set_audio_source(cluster.output.clone());
+                            if let Some(source) = cluster.instrument.output.clone() {slot_strip.strip.borrow_mut().set_scope_source(source)}
                             self.context.register_edge(cluster.output_node, slot_strip.strip_id);
                             slot_strip.source_node = cluster.output_node;
                             (cluster, output, output_node, summed)
@@ -829,6 +840,7 @@ impl Engine {
         // edge, the sidechain registration) sees the POST-strip output, like an effect-composite entry.
         let strip = if spec.child_volume_key != 0 || spec.child_pan_key != 0 {
             let mut slot_strip = self.build_slot_strip(child_uuid, spec, &output, output_node);
+            if let Some(source) = body.instrument_output() {slot_strip.strip.borrow_mut().set_scope_source(source)}
             self.bind_slot_strip_params(child_uuid, &mut slot_strip, spec, invalidate);
             Some(slot_strip)
         } else {
