@@ -5,14 +5,21 @@ play on its strings. Every string is a physical model, so no two strokes sound e
 
 ---
 
+![screenshot](guitar.webp)
+
+---
+
 ## 0. Overview
 
-_Guitar_ reads left to right: the **fret display** shows the chord shape, the **pattern** decides when and how
-the strings are struck, the two columns on the right shape the **strum**, the **neck**, the **pick** and the **strings**.
+_Guitar_ reads left to right: the **fret display** shows the chord shape and builds your own shapes, the
+**pattern** decides when and how the strings are struck, the two columns on the right shape the **strum**, the
+**neck**, the **pick** and the **strings**.
 
 Example uses:
 
 - Rhythm guitar under a chord progression: write the chords once on the chord track, pick a pattern
+- An own progression with own chord shapes, independent of the chord track, by automating the chord source
+- A song with changing rhythms: verse and chorus patterns in different slots, switched by automation
 - Fingerpicking accompaniment with Travis or arpeggio patterns
 - Funk chops, reggae skanks, palm muted rock eighths
 - Playing single notes and chords from a keyboard, strummed like a guitarist would
@@ -92,8 +99,10 @@ it.
 - **Chuck**: a percussive hit with the strings muted
 - **Bass**: plucks the lowest string of the chord
 - **Alternate bass**: plucks the second lowest string
-- **Pick**: plucks the step's strings together, a single string shows its number
+- **Pick**: plucks the step's strings together, a single string shows its number. A new pick starts with no
+  strings, choose them in the Strings lane
 - **Stop**: silences the ringing strings
+- **Chop**: strums the step's strings and damps them right away, the short skank of reggae and funk
 - **Rest**: plays nothing, the strings keep ringing
 
 ### Lanes
@@ -101,7 +110,8 @@ it.
 Below the strokes, one lane at a time:
 
 - **Velocity**: how hard the step is played
-- **Strings**: which strings a strum crosses or a pick plucks, the top row is the high e
+- **Strings**: which strings a strum crosses or a pick plucks, the top row is the high e. Shift-click a string
+  to play only that string, right-click it for Only, All or No strings
 - **Speed**: how fast this stroke crosses the strings, the middle plays at the strum Speed
 
 ---

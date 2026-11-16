@@ -2336,9 +2336,9 @@ export type GuitarStroke = "rest" | "down" | "up" | "mute" | "chuck" | "bass" | 
 export interface GuitarStep {
     /** What the step plays */
     stroke: GuitarStroke
-    /** The strings the stroke plays as a mask, bit 0 is the low E, bit 5 the high e (0 to 63, default 63) */
+    /** The strings the stroke plays as a mask, bit 0 is the low E, bit 5 the high e (0 to 63, default 63). A strum crosses them, a pick plucks them together */
     strings: int
-    /** Velocity in percent (0 to 100, default 80) */
+    /** Velocity in percent, the velocity variation scales all strings of the step alike (0 to 100, default 80) */
     velocity: int
     /** Strum speed in percent, 50 strums at the device Speed (0 to 100, default 50) */
     speed: int
@@ -2360,8 +2360,20 @@ export interface GuitarSlot {
 }
 
 /**
- * Six string Karplus-Strong guitar. In mode 0 its pattern strums the chord track while the transport runs,
- * played notes sound on its strings in both modes
+ * Six string Karplus-Strong guitar. In mode 0 the pattern of the playing slot strums a chord while the transport
+ * runs: the chord of the chord track, or one of 16 custom shapes chosen with `chord`. A custom shape plays its exact
+ * frets, ignores the chord track and is heard by no other device. Automate `chord` and `slot` to play an own
+ * progression and change the rhythm. Played notes sound on the strings in both modes.
+ * @example
+ * ```ts
+ * const guitar = project.addInstrumentUnit("Guitar").instrument
+ * guitar.setShape(0, [-1, 3, 2, 0, 1, 0])
+ * guitar.setShape(1, [12, 0, 0, 0, 12, 0])
+ * guitar.chord = 1
+ * guitar.patterns[3].load("Travis")
+ * guitar.patterns[4].setSteps([{stroke: "bass"}, {stroke: "rest"}, {stroke: "pick", strings: 0b110000}, {stroke: "rest"}])
+ * guitar.slot = 4
+ * ```
  * @group Instruments
  */
 export interface Guitar extends Instrument {
@@ -2395,7 +2407,7 @@ export interface Guitar extends Instrument {
     pluck: unitValue
     /** Pick brightness variation per pluck (0.0 to 1.0, default 0.5) */
     pluckVariation: unitValue
-    /** Tightens the strings: brighter, firmer and longer ringing, up to two semitones higher (0.0 to 1.0, default 0.0) */
+    /** Shortens the ringing strings up to two octaves higher, every pick still sounds like the full string (0.0 to 1.0, default 0.0) */
     tension: unitValue
     /** Where the pick hits the string, from the bridge to the middle (0.0 to 1.0, default 0.2) */
     spot: unitValue

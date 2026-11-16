@@ -535,6 +535,21 @@ describe("Devices", () => {
         expect(project.audioUnits).toContain(unit)
     })
 
+    it("runs the Guitar example of the scripting docs", () => {
+        const {project} = createFixture()
+        const guitar = project.addInstrumentUnit("Guitar").instrument
+        guitar.setShape(0, [-1, 3, 2, 0, 1, 0])
+        guitar.setShape(1, [12, 0, 0, 0, 12, 0])
+        guitar.chord = 1
+        guitar.patterns[3].load("Travis")
+        guitar.patterns[4].setSteps([{stroke: "bass"}, {stroke: "rest"}, {stroke: "pick", strings: 0b110000}, {stroke: "rest"}])
+        guitar.slot = 4
+        expect(guitar.shapes[1]).toEqual([12, 0, 0, 0, 12, 0])
+        expect(guitar.chord).toBe(1)
+        expect(guitar.patterns[4].length).toBe(4)
+        expect(guitar.patterns[4].steps[2].strings).toBe(0b110000)
+        expect(guitar.slot).toBe(4)
+    })
     it("configures the Guitar pattern", () => {
         const {project} = createFixture()
         const guitar = project.addInstrumentUnit("Guitar").instrument
