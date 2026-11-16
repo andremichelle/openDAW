@@ -85,14 +85,21 @@ export namespace Guitar {
         }
     }
 
-    const walk = (search: Search, string: int): void => {
+    const countBits = (bits: int): int => {
+        let count = 0
+        for (let rest = bits; rest !== 0; rest &= rest - 1) {count++}
+        return count
+    }
+
+    const walk = (search: Search, string: int, covered: int): void => {
         if (string === Strings) {
             evaluate(search)
             return
         }
+        if (countBits(search.required & ~covered) > Strings - string) {return}
         for (const option of search.options[string]) {
             search.tab[string] = option
-            walk(search, string + 1)
+            walk(search, string + 1, option < 0 ? covered : covered | (1 << mod12(search.open[string] + option)))
         }
     }
 
@@ -112,6 +119,7 @@ export namespace Guitar {
         const order = PositionFrets.map((_, index) => index)
             .sort((left, right) => (Math.abs(left - at) - Math.abs(right - at)) || left - right)
         for (const required of [tones, withoutFifth, (1 << bass) | (1 << rootClass)]) {
+            if (countBits(required) > Strings) {continue}
             for (const candidate of order) {
                 const low = PositionFrets[candidate]
                 const options = open.map(pitch => {
@@ -126,7 +134,7 @@ export namespace Guitar {
                     open, low, options, bass, required, tones, tab: new Array(Strings).fill(Muted),
                     best: new Array(Strings).fill(Muted), bestScore: 0, found: false
                 }
-                walk(search, 0)
+                walk(search, 0, 0)
                 if (search.found) {return search.best}
             }
         }

@@ -100,14 +100,19 @@ impl Search {
         }
     }
 
-    fn walk(&mut self, string: usize) {
+    fn walk(&mut self, string: usize, covered: i32) {
         if string == STRINGS {
             self.evaluate();
             return;
         }
+        if (self.required & !covered).count_ones() as usize > STRINGS - string {
+            return;
+        }
         for option in 0..self.counts[string] {
-            self.tab[string] = self.options[string][option];
-            self.walk(string + 1);
+            let fret = self.options[string][option];
+            self.tab[string] = fret;
+            let class = if fret < 0 {0} else {1 << (self.open[string] + fret as i32).rem_euclid(12)};
+            self.walk(string + 1, covered | class);
         }
     }
 }
@@ -116,7 +121,7 @@ impl Search {
 pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
     let open = TUNINGS[tuning.min(TUNINGS.len() - 1)];
     let position = position.min(POSITION_FRETS.len() - 1);
-    let mut tones = 0;
+    let mut tones: i32 = 0;
     for interval in 0..31 {
         if voicing & (1 << interval) != 0 {
             tones |= 1 << (root + interval).rem_euclid(12);
@@ -135,6 +140,9 @@ pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
     }
     order.sort_unstable_by_key(|candidate| ((*candidate as i32 - position as i32).abs(), *candidate));
     for required in [tones, without_fifth, (1 << bass) | (1 << root_class)] {
+        if required.count_ones() as usize > STRINGS {
+            continue;
+        }
         for candidate in order {
             let low = POSITION_FRETS[candidate];
             let mut search = Search {
@@ -155,7 +163,7 @@ pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
                 }
                 search.counts[string] = count;
             }
-            search.walk(0);
+            search.walk(0, 0);
             if search.found {
                 return search.best;
             }
@@ -237,5 +245,16 @@ mod tests {
         assert_eq!(unpack_shape(1050751), [MUTED, 3, 2, 0, 1, 0]);
         assert_eq!(unpack_shape((1 << 30) - 1), [MUTED; STRINGS]);
         assert_eq!(unpack_shape(12 | 12 << 20), [12, 0, 0, 0, 12, 0]);
+    }
+
+    #[test]
+    fn a_chord_with_more_tones_than_strings_resolves_quickly() {
+        let thirteenth = 1 | 1 << 4 | 1 << 7 | 1 << 10 | 1 << 14 | 1 << 17 | 1 << 21;
+        let started = std::time::Instant::now();
+        for position in 0..POSITION_FRETS.len() {
+            tab(0, thirteenth, 0, position);
+        }
+        let elapsed = started.elapsed().as_millis();
+        assert!(elapsed < 200, "{elapsed} ms");
     }
 }

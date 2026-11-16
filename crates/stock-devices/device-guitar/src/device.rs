@@ -12,7 +12,9 @@ use crate::string::{self, GuitarString, Pick, Pluck, Touch, MAX_DELAY};
 use crate::strum::{self, STEP_COUNT};
 
 const STROKE_MARK: u32 = 0xC000_0000;
-const QUEUE: usize = 96;
+const QUEUE: usize = 256;
+const NO_KEY: u32 = u32::MAX;
+const BAR_MARKS: usize = 4; // the recent jump targets, a loop restart finds its bar number at once
 const PENDING: usize = 16;
 const SCRATCH: usize = 128;
 const KEYS_MIN_FRET: i32 = 0;
@@ -144,6 +146,8 @@ pub struct State {
     slot: usize,
     bpm: f32,
     bar: (f64, f64, i64),
+    bar_marks: [(f64, i64); BAR_MARKS],
+    bar_mark: usize,
     shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
@@ -153,6 +157,7 @@ pub struct State {
     now: u64,
     tab: Tab,
     display: Tab,
+    fretted: Tab,
     tab_key: (i32, i32, i32, i32),
     chord_root: i32,
     step: i32,
@@ -193,19 +198,26 @@ impl State {
         self.slot = 0;
         self.bpm = 120.0;
         self.bar = (-1.0, 0.0, 0);
+        self.bar_marks = [(-1.0, 0); BAR_MARKS];
+        self.bar_mark = 0;
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
+        self.fretted = [MUTED; STRINGS];
         self.tab_key = (-1, 0, 0, 0);
         self.chord_root = -1;
         self.step = -1;
         self.transporting = false;
-        self.keys = [0; STRINGS];
+        self.keys = [NO_KEY; STRINGS];
     }
 
     pub fn display(&self) -> Tab {self.display}
 
     pub fn lit(&self) -> i32 {self.lit}
+
+    pub fn sounding(&self) -> i32 {
+        (0..STRINGS).filter(|string| self.strings[*string].is_sounding()).fold(0, |mask, string| mask | 1 << string)
+    }
 
     pub fn scheduled_velocities(&self) -> impl Iterator<Item = f32> + '_ {
         self.queue[..self.queued].iter().map(|item| item.velocity)
@@ -241,24 +253,33 @@ impl State {
         if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
     }
 
-    // The number of `bar` on the signature track: the next one counts on, a jump counts the bars back to zero.
+    // The number of `bar` on the signature track: the next bar counts on, a jump looks up or counts back to zero.
     fn bar_index(&mut self, bar: &abi::Bar, bar_at: fn(f64) -> abi::Bar) -> i64 {
         let (start, length, index) = self.bar;
-        let counted = if bar.start == start {
-            index
-        } else if start >= 0.0 && (bar.start - (start + length)).abs() < 1.0e-6 {
+        if bar.start == start {
+            return index;
+        }
+        let counted = if start >= 0.0 && (bar.start - (start + length)).abs() < 1.0e-6 {
             index + 1
         } else {
-            let (mut at, mut count) = (bar.start, 0);
-            while at > 1.0e-6 {
-                let previous = bar_at(at - 1.0).start;
-                if previous >= at {
-                    break;
+            let counted = match self.bar_marks.iter().find(|(mark, _)| *mark == bar.start) {
+                Some(&(_, cached)) => cached,
+                None => {
+                    let (mut at, mut count) = (bar.start, 0);
+                    while at > 1.0e-6 {
+                        let previous = bar_at(at - 1.0).start;
+                        if previous >= at {
+                            break;
+                        }
+                        at = previous;
+                        count += 1;
+                    }
+                    count
                 }
-                at = previous;
-                count += 1;
-            }
-            count
+            };
+            self.bar_marks[self.bar_mark] = (bar.start, counted);
+            self.bar_mark = (self.bar_mark + 1) % BAR_MARKS;
+            counted
         };
         self.bar = (bar.start, bar.length, counted);
         counted
@@ -296,19 +317,19 @@ impl State {
             string.release();
         }
         self.queued = 0;
-        self.keys = [0; STRINGS];
+        self.keys = [NO_KEY; STRINGS];
     }
 
     // Silences what the pattern plays, notes played on the strings keep ringing.
     fn release_strummed(&mut self) {
         for string in 0..STRINGS {
-            if self.keys[string] == 0 {
+            if self.keys[string] == NO_KEY {
                 self.strings[string].release();
             }
         }
         let mut kept = 0;
         for index in 0..self.queued {
-            if self.queue[index].key != 0 {
+            if self.queue[index].key != NO_KEY {
                 self.queue[kept] = self.queue[index];
                 kept += 1;
             }
@@ -337,16 +358,18 @@ impl State {
             self.chord_tab(root, voicing)
         };
         self.display = tab;
-        for string in 0..STRINGS {
-            if tab[string] < 0 && self.keys[string] == 0 {
-                self.strings[string].release();
-            }
-        }
         let packed = event.duration as i32;
         let mask = packed & 0b111111;
         let bends = (packed >> 6) & BEND_MASK;
         let step_samples = strum::step_length(self.settings.rate) / 960.0 * 60.0 / self.bpm.max(1.0) as f64 * self.sample_rate as f64;
         let (strings, count) = strum::order(kind, mask, &tab);
+        for string in 0..STRINGS {
+            let moved = tab[string] < 0 || tab[string] != self.fretted[string];
+            if moved && self.keys[string] == NO_KEY && !strings[..count].contains(&string) {
+                self.strings[string].release();
+            }
+        }
+        self.fretted = tab;
         let mut bent = [0i32; STRINGS];
         if matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHOP) {
             for (string, amount) in bent.iter_mut().enumerate() {
@@ -379,10 +402,11 @@ impl State {
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
-                seed: strum::hash(seed, *string as i64, 3), key: 0,
+                seed: strum::hash(seed, *string as i64, 3), key: NO_KEY,
                 bend: BENDS[(bent[*string] as usize).min(BENDS.len() - 1)],
                 bend_length: (step_samples - delay as f64).max(step_samples * 0.5) as u32
             });
+            self.keys[*string] = NO_KEY;
             self.lit |= 1 << *string;
         }
     }
@@ -462,7 +486,7 @@ impl State {
         let base_frequency = abi::base_frequency();
         let string = item.string as usize;
         self.strings[string].pluck(&pluck, &self.body, &self.character, base_frequency);
-        if item.key != 0 && self.keys[string] != item.key {
+        if item.key != NO_KEY && self.keys[string] != item.key {
             self.strings[string].release();
         }
     }
@@ -508,6 +532,9 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
     if state.transporting && !transporting && state.settings.mode == CHORDS_MODE {
         state.release_all();
     }
+    if transporting && !state.transporting {
+        state.bar_marks = [(-1.0, 0); BAR_MARKS];
+    }
     state.transporting = transporting;
     if state.settings.mode != CHORDS_MODE || !transporting {
         state.step = -1;
@@ -516,22 +543,27 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
     }
     let step_length = strum::step_length(state.settings.rate);
     let (straight_from, straight_to) = state.groove.straight(from, to, flags.discontinuous());
-    let mut index = ceil(straight_from / step_length) as i64;
+    let mut bar = bar_at(straight_from);
+    let mut next = (ceil((straight_from - bar.start) / step_length) as i64).max(0);
     let mut count = 0;
     loop {
-        let grid = index as f64 * step_length;
+        let local = next;
+        let grid = bar.start + local as f64 * step_length;
+        if grid >= bar.start + bar.length - 1.0e-6 {
+            bar = bar_at(bar.start + bar.length);
+            next = 0;
+            continue;
+        }
         if grid >= straight_to {
             break;
         }
-        let position = state.groove.warp(grid);
-        let grid_index = index;
-        index += 1;
+        next += 1;
         if count >= out.len() {
             continue;
         }
-        let bar = bar_at(grid);
-        let per_bar = round(bar.length / step_length).max(1.0) as i64;
-        let local = round((grid - bar.start) / step_length) as i64;
+        let position = state.groove.warp(grid);
+        let grid_index = round(grid / step_length) as i64;
+        let per_bar = ceil(bar.length / step_length - 1.0e-6).max(1.0) as i64;
         let bars = state.bar_index(&bar, bar_at);
         let pattern = &state.patterns[state.slot];
         let span = (round(pattern.length as f64 / per_bar as f64) as i64).max(1);
@@ -567,8 +599,8 @@ pub fn handle(state: &mut State, event: &EventRecord) {
             state.pending_count -= 1;
         }
         for string in 0..STRINGS {
-            if state.keys[string] == event.id && event.id != 0 {
-                state.keys[string] = 0;
+            if state.keys[string] == event.id && event.id != NO_KEY {
+                state.keys[string] = NO_KEY;
                 if !state.queue[..state.queued].iter().any(|item| item.key == event.id) {
                     state.strings[string].release();
                 }
@@ -749,10 +781,11 @@ impl Instrument for Device {
         state.limiter.clear();
         state.queued = 0;
         state.pending_count = 0;
-        state.keys = [0; STRINGS];
+        state.keys = [NO_KEY; STRINGS];
         state.step = -1;
         state.transporting = false;
         state.lit = 0;
         state.display = [MUTED; STRINGS];
+        state.fretted = [MUTED; STRINGS];
     }
 }

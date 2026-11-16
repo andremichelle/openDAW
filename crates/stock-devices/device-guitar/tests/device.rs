@@ -330,6 +330,50 @@ fn bass_ignores_bends_and_a_moved_pick_keeps_its_own() {
 }
 
 #[test]
+fn the_first_played_note_stops_at_its_note_off() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 0, pitch: 52, velocity: 0.8, ..BLANK});
+    render(&mut state, 4800);
+    assert_ne!(state.sounding(), 0);
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_OFF, id: 0, pitch: 52, ..BLANK});
+    render(&mut state, 48000);
+    assert_eq!(state.sounding(), 0);
+}
+
+#[test]
+fn a_partial_strum_after_a_chord_change_stops_the_strings_that_moved() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::DOWN]);
+    state.set_lane(0, 1, &[0b111111, 0b111000, 0, 0]);
+    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 9600);
+    assert_eq!(state.sounding(), 0b111110);
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
+    device::handle(&mut state, &events[1]);
+    render(&mut state, 48000);
+    assert_eq!(state.sounding() & 0b000111, 0, "the moved bass strings still ring: {:#08b}", state.sounding());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+fn seven_sixteen(pulse: f64) -> Bar {
+    Bar {start: (pulse / 1680.0).floor() * 1680.0, length: 1680.0, beat: 240.0}
+}
+
+#[test]
+fn every_bar_of_an_odd_signature_starts_on_its_downbeat() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::RATE, ParamValue::Int(0));
+    pattern(&mut state, &[strum::BASS, strum::DOWN, strum::DOWN, strum::DOWN]);
+    let events = strokes(&mut state, 0.0, 1680.0 * 3.0, seven_sixteen);
+    let bass: Vec<f64> = events.iter().filter(|event| event.pitch == strum::BASS as u32).map(|event| event.position).collect();
+    assert_eq!(bass, vec![0.0, 1680.0, 3360.0]);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

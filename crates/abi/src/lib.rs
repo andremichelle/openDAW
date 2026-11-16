@@ -1983,7 +1983,8 @@ fn render_generating<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2
             for record in &mut event_scratch[..count] {
                 record.offset = pulse_to_offset(record.position);
             }
-            event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+            event_scratch[..count].sort_unstable_by(|first, second| first.offset.cmp(&second.offset)
+                .then(record_rank(first.kind).cmp(&record_rank(second.kind))));
             let sub = Block {index: block.index, flags: audio_flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
                 anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
             dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);
@@ -1997,9 +1998,7 @@ fn render_generating<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2
         if last {
             break;
         }
-        if let Some(pending) = split.replace(boundary) {
-            apply_param_changes::<I::State>(state, pending, I::parameter_changed);
-        }
+        split = Some(boundary);
         boundary = next_update_position(boundary);
     }
 }
