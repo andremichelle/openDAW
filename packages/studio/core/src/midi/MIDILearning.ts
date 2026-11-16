@@ -2,6 +2,7 @@ import {
     asDefined,
     asInstanceOf,
     Errors,
+    int,
     isNotNull,
     Nullable,
     Option,
@@ -59,6 +60,8 @@ export class MIDILearning implements Terminable {
             onRemoved: ({box: {address}}) => this.#connections.removeByKey(address).subscription.terminate()
         }))
     }
+
+    get numberOfConnections(): int {return this.#connections.size()}
 
     hasMidiConnection(address: Address): boolean {
         return this.#findConnectionByParameterAddress(address).nonEmpty()
