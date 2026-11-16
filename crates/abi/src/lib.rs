@@ -1805,6 +1805,8 @@ pub trait Instrument {
         let _ = (state, from, to, flags, out);
         0
     }
+    /// True for a device with `generate_events`: its blocks split at the update positions so it generates with the automation in charge.
+    const GENERATES: bool = false;
     /// Reset the device's RUNTIME state to silence on a transport STOP: drop every active voice, clear
     /// envelopes / read heads / filter history, so the next playback starts clean. Keep the bindings (the param
     /// / sample / field ids and the resolved parameter values, the sample rate) — only the sounding state is
@@ -1926,59 +1928,80 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    // Each split refreshes the parameters after the releases on it and before the next part generates (off, param, on).
     for block in blocks {
-        let mut sub_p0 = block.p0;
-        let mut sub_s0 = block.s0;
-        let mut flags = block.flags;
-        let mut audio_flags = block.flags;
-        let mut split: Option<f64> = None;
-        let mut boundary = first_update_position(block.p0);
-        loop {
-            let last = boundary >= block.p1;
-            let sub_p1 = if last {block.p1} else {boundary};
-            if last || sub_p1 > sub_p0 {
-                let sub_s1 = if last {block.s1} else {pulse_to_offset(sub_p1).clamp(sub_s0, block.s1)};
-                let mut count = pull_events(sub_p0, sub_p1, flags.0, event_scratch);
-                if let Some(at) = split.take() {
-                    let mut kept = 0;
-                    for index in 0..count {
-                        let event = event_scratch[index];
-                        if event.position == at && matches!(event.kind, EVENT_NOTE_OFF | EVENT_CHOKE) {
-                            I::handle_event(state, &event);
-                        } else {
-                            event_scratch[kept] = event;
-                            kept += 1;
-                        }
-                    }
-                    count = kept;
-                    apply_param_changes::<I::State>(state, at, I::parameter_changed);
-                }
-                count += I::generate_events(state, sub_p0, sub_p1, flags, &mut event_scratch[count..]);
-                for record in &mut event_scratch[..count] {
-                    record.offset = pulse_to_offset(record.position);
-                }
-                event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
-                let sub = Block {index: block.index, flags: audio_flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
-                    anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
-                dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);
-                flags.clear_event_flags();
-                if sub_s1 > sub_s0 {
-                    audio_flags.clear_event_flags();
-                }
-                sub_p0 = sub_p1;
-                sub_s0 = sub_s1;
-            }
-            if last {
-                break;
-            }
-            if let Some(pending) = split.replace(boundary) {
-                apply_param_changes::<I::State>(state, pending, I::parameter_changed);
-            }
-            boundary = next_update_position(boundary);
+        if I::GENERATES {
+            render_generating::<I>(state, [&mut *out_left, &mut *out_right], block, event_scratch);
+            continue;
         }
+        let mut count = pull_events(block.p0, block.p1, block.flags.0, event_scratch);
+        count += I::generate_events(state, block.p0, block.p1, block.flags, &mut event_scratch[count..]);
+        let mut position = first_update_position(block.p0);
+        while position < block.p1 && count < event_scratch.len() {
+            event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
+            count += 1;
+            position = next_update_position(position);
+        }
+        for record in &mut event_scratch[..count] {
+            record.offset = pulse_to_offset(record.position);
+        }
+        event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+        dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], block);
     }
     I::finish(state, [out_left, out_right]);
+}
+
+// Splits the block at its update positions: the releases on a split, then its parameters, then the next part generates.
+fn render_generating<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2], block: &Block, event_scratch: &mut [EventRecord]) {
+    let [out_left, out_right] = output;
+    let mut sub_p0 = block.p0;
+    let mut sub_s0 = block.s0;
+    let mut flags = block.flags;
+    let mut audio_flags = block.flags;
+    let mut split: Option<f64> = None;
+    let mut boundary = first_update_position(block.p0);
+    loop {
+        let last = boundary >= block.p1;
+        let sub_p1 = if last {block.p1} else {boundary};
+        if last || sub_p1 > sub_p0 {
+            let sub_s1 = if last {block.s1} else {pulse_to_offset(sub_p1).clamp(sub_s0, block.s1)};
+            let mut count = pull_events(sub_p0, sub_p1, flags.0, event_scratch);
+            if let Some(at) = split.take() {
+                let mut kept = 0;
+                for index in 0..count {
+                    let event = event_scratch[index];
+                    if event.position == at && matches!(event.kind, EVENT_NOTE_OFF | EVENT_CHOKE) {
+                        I::handle_event(state, &event);
+                    } else {
+                        event_scratch[kept] = event;
+                        kept += 1;
+                    }
+                }
+                count = kept;
+                apply_param_changes::<I::State>(state, at, I::parameter_changed);
+            }
+            count += I::generate_events(state, sub_p0, sub_p1, flags, &mut event_scratch[count..]);
+            for record in &mut event_scratch[..count] {
+                record.offset = pulse_to_offset(record.position);
+            }
+            event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+            let sub = Block {index: block.index, flags: audio_flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
+                anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
+            dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);
+            flags.clear_event_flags();
+            if sub_s1 > sub_s0 {
+                audio_flags.clear_event_flags();
+            }
+            sub_p0 = sub_p1;
+            sub_s0 = sub_s1;
+        }
+        if last {
+            break;
+        }
+        if let Some(pending) = split.replace(boundary) {
+            apply_param_changes::<I::State>(state, pending, I::parameter_changed);
+        }
+        boundary = next_update_position(boundary);
+    }
 }
 
 /// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one

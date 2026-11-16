@@ -140,6 +140,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         }
         editing.modify(() => shapeField().setValue(Guitar.packShape(tab)))
     }
+    const write = (element: HTMLElement, text: string) => {
+        if (element.textContent !== text) {element.textContent = text}
+    }
     const update = () => {
         const tuning = tuningParameter.getControlledValue()
         const position = positionParameter.getControlledValue()
@@ -152,10 +155,10 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         if (keys) {
             name.classList.remove("custom")
             shown.tab = live.frets
-            name.textContent = "Keys"
+            write(name, "Keys")
         } else if (editingShape()) {
             shown.tab = Guitar.unpackShape(shapeField().getValue())
-            name.textContent = Guitar.isEmptyShape(shown.tab) ? "Empty Shape" : Guitar.shapeName(shown.tab, tuning)
+            write(name, Guitar.isEmptyShape(shown.tab) ? "Empty Shape" : Guitar.shapeName(shown.tab, tuning))
             name.classList.toggle("custom", !Guitar.isEmptyShape(shown.tab))
         } else {
             name.classList.remove("custom")
@@ -168,14 +171,14 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
                 }
                 return voicing.tab
             }, new Array<int>(Guitar.Strings).fill(Guitar.Muted))
-            name.textContent = current.mapOr(value => Harmony.chordName(value), "No Chord")
+            write(name, current.mapOr(value => Harmony.chordName(value), "No Chord"))
         }
         shown.base = editingShape() ? edit.base : fitBase(shown.tab)
         shown.lit = engine.isPlaying.getValue() ? live.lit : 0
         footer.classList.toggle("editing", editingShape())
-        footerText.textContent = editingShape()
+        write(footerText, editingShape()
             ? `Frets ${edit.base} to ${edit.base + Frets - 1}`
-            : `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`
+            : `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`)
         const key = `${shown.tab.join(" ")} ${shown.lit} ${shown.base}`
         if (key !== painted.key) {
             painted.key = key

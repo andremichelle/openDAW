@@ -127,6 +127,8 @@ impl abi::Instrument for Device {
     /// The pattern's own steps, joined with the pulled input notes by the SDK. A `Unit` value is an
     /// AUTOMATION curve, which states its own timing and selects at once; an `Int` is the stored
     /// field, i.e. a manual selection, which waits for the next bar line.
+    const GENERATES: bool = true;
+
     fn generate_events(state: &mut State, from: f64, to: f64, flags: BlockFlags,
                        out: &mut [EventRecord]) -> usize {
         let straight = state.groove.straight(from, to, flags.discontinuous());

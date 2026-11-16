@@ -38,6 +38,7 @@ const CHOP_DULL: f32 = 0.6;
 const CHOP_GAIN: f32 = 2.5;
 const GAIN_FOLLOW_TIME: f32 = 0.002;
 const BEND_RISE: f32 = 0.2;
+const BEND_STEP: u32 = 16; // samples between two pitch updates of a bend
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Touch {
@@ -471,9 +472,11 @@ impl GuitarString {
         let mut energy = 0.0f32;
         for sample in out.iter_mut() {
             if self.bend_at < self.bend_length {
-                let factor = powf(2.0, -self.bend * bend_curve(self.bend_at, self.bend_length) / 12.0);
-                self.vertical.pitch_factor = factor;
-                self.horizontal.pitch_factor = factor;
+                if self.bend_at % BEND_STEP == 0 {
+                    let factor = powf(2.0, -self.bend * bend_curve(self.bend_at, self.bend_length) / 12.0);
+                    self.vertical.pitch_factor = factor;
+                    self.horizontal.pitch_factor = factor;
+                }
                 self.bend_at += 1;
                 if self.bend_at == self.bend_length {
                     self.vertical.pitch_factor = 1.0;

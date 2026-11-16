@@ -1078,7 +1078,11 @@ const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int):
         setSteps: (values: ReadonlyArray<Partial<GuitarStep>>): void => context.edit(() => {
             if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
             if (values.length > steps.length) {return panic(new RangeError(`setSteps: at most ${steps.length} steps`))}
-            values.forEach((value, stepIndex) => Props.apply(steps[stepIndex], value, `steps.${stepIndex}`))
+            values.forEach((value, stepIndex) => {
+                const {stroke, ...rest} = value
+                if (isDefined(stroke)) {steps[stepIndex].stroke = stroke}
+                Props.apply(steps[stepIndex], rest, `steps.${stepIndex}`)
+            })
             GuitarPatterns.setLength(pattern, values.length)
         }),
         load: (name: string): void => {

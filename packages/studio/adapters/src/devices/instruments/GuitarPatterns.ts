@@ -1,10 +1,7 @@
 import {int} from "@opendaw/lib-std"
 import {GuitarDeviceBox, GuitarPattern} from "@opendaw/studio-boxes"
 
-// The built in strum patterns: one letter per step. D down, U up, d/u down/up on the high strings, M palm muted
-// down, m palm muted on the low strings, p down on the low strings, X chuck, c chop on the high strings,
-// B bass, A alternate bass,
-// 1-6 pick one string (1 = high e), (13) picks strings 1 and 3 together, S stop the strings, . and - nothing.
+// The built in patterns use one letter per step, see `parse` for the letters.
 export namespace GuitarPatterns {
     // WASM CONTRACT: the stroke kinds mirror `strum.rs` in device-guitar
     export const Rest = 0
@@ -218,6 +215,8 @@ export namespace GuitarPatterns {
             pattern.stepBends.getField(index).setValue(0)
         } else if (strums(kind) && !strums(previous)) {
             pattern.stepStrings.getField(index).setValue(AllStrings)
+            pattern.stepBends.getField(index).setValue(0)
+        } else if (!strums(kind) && kind !== Pick) {
             pattern.stepBends.getField(index).setValue(0)
         }
         pattern.stepKinds.getField(index).setValue(kind)

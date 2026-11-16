@@ -548,6 +548,9 @@ describe("Devices", () => {
         expect(guitar.chord).toBe(1)
         expect(guitar.patterns[4].length).toBe(4)
         expect(guitar.patterns[4].steps[2].strings).toBe(0b110000)
+        guitar.patterns[5].setSteps([{strings: 0b110000, bends: [0, 0, 0, 0, 1, 0], stroke: "pick"}])
+        expect(guitar.patterns[5].steps[0].strings).toBe(0b110000)
+        expect(guitar.patterns[5].steps[0].bends).toEqual([0, 0, 0, 0, 1, 0])
         guitar.patterns[4].steps[2].bends = [0, 0, 0, 0, 3, 0]
         expect(guitar.patterns[4].steps[2].bends).toEqual([0, 0, 0, 0, 3, 0])
         expect(() => {guitar.patterns[4].steps[2].bends = [1, 2]}).toThrow(RangeError)

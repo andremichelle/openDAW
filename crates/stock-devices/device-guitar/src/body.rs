@@ -46,7 +46,8 @@ pub struct Body {
     ir: [f32; MAX_IR],
     length: usize,
     index: usize,
-    sample_rate: f32
+    sample_rate: f32,
+    resonance: Option<[f32; 5]>
 }
 
 impl Body {
@@ -62,6 +63,7 @@ impl Body {
             return;
         }
         self.index = index;
+        self.resonance = self.pickup_resonance();
         let preset = &PRESETS[index];
         self.ir.fill(0.0);
         if preset.modes.is_empty() {
@@ -150,7 +152,9 @@ impl Body {
     }
 
     /// The electric pickup's resonant lowpass as biquad coefficients (b0, b1, b2, a1, a2), None when acoustic.
-    pub fn resonance(&self) -> Option<[f32; 5]> {
+    pub fn resonance(&self) -> Option<[f32; 5]> {self.resonance}
+
+    fn pickup_resonance(&self) -> Option<[f32; 5]> {
         let (_, frequency, quality) = PRESETS[self.index.min(BODY_COUNT - 1)].pickup?;
         let omega = 2.0 * PI * frequency.min(self.sample_rate * 0.45) / self.sample_rate;
         let alpha = sinf(omega) / (2.0 * quality);

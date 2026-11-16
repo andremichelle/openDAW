@@ -299,11 +299,28 @@ impl State {
         self.keys = [0; STRINGS];
     }
 
+    // Silences what the pattern plays, notes played on the strings keep ringing.
+    fn release_strummed(&mut self) {
+        for string in 0..STRINGS {
+            if self.keys[string] == 0 {
+                self.strings[string].release();
+            }
+        }
+        let mut kept = 0;
+        for index in 0..self.queued {
+            if self.queue[index].key != 0 {
+                self.queue[kept] = self.queue[index];
+                kept += 1;
+            }
+        }
+        self.queued = kept;
+    }
+
     // One stroke of the pattern at the current sample: the chord at its position, its strings, their plucks.
     fn stroke(&mut self, event: &EventRecord) {
         let kind = event.pitch as i32;
         if kind == strum::STOP {
-            self.release_all();
+            self.release_strummed();
             return;
         }
         let custom = self.custom_shape();
@@ -313,7 +330,7 @@ impl State {
         } else {
             let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
                 self.chord_root = -1;
-                self.release_all();
+                self.release_strummed();
                 return;
             };
             self.chord_root = root;
@@ -321,7 +338,7 @@ impl State {
         };
         self.display = tab;
         for string in 0..STRINGS {
-            if tab[string] < 0 {
+            if tab[string] < 0 && self.keys[string] == 0 {
                 self.strings[string].release();
             }
         }
@@ -330,6 +347,18 @@ impl State {
         let bends = (packed >> 6) & BEND_MASK;
         let step_samples = strum::step_length(self.settings.rate) / 960.0 * 60.0 / self.bpm.max(1.0) as f64 * self.sample_rate as f64;
         let (strings, count) = strum::order(kind, mask, &tab);
+        let mut bent = [0i32; STRINGS];
+        if matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHOP) {
+            for (string, amount) in bent.iter_mut().enumerate() {
+                *amount = (bends >> (string * 3)) & 7;
+            }
+        } else if kind == strum::PICK {
+            for wanted in (0..STRINGS).rev().filter(|wanted| mask & (1 << wanted) != 0) {
+                if let Some(string) = strum::nearest_sounding(wanted, &tab) {
+                    bent[string] = (bends >> (wanted * 3)) & 7;
+                }
+            }
+        }
         let tilted = matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHUCK | strum::CHOP);
         let seed = event.id;
         let factor = if kind == strum::CHUCK {0.35} else {0.25 + event.cent * 1.5};
@@ -351,7 +380,7 @@ impl State {
                 due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
                 seed: strum::hash(seed, *string as i64, 3), key: 0,
-                bend: BENDS[(((bends >> (*string * 3)) & 7) as usize).min(BENDS.len() - 1)],
+                bend: BENDS[(bent[*string] as usize).min(BENDS.len() - 1)],
                 bend_length: (step_samples - delay as f64).max(step_samples * 0.5) as u32
             });
             self.lit |= 1 << *string;
@@ -670,6 +699,8 @@ impl Instrument for Device {
     fn handle_event(state: &mut State, event: &EventRecord) {
         handle(state, event);
     }
+
+    const GENERATES: bool = true;
 
     fn generate_events(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &mut [EventRecord]) -> usize {
         generate(state, from, to, flags, abi::bar_at, out)

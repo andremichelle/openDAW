@@ -295,6 +295,41 @@ fn a_two_bar_pattern_alternates_across_a_signature_change() {
 }
 
 #[test]
+fn a_played_note_keeps_ringing_through_a_step_without_chord_and_a_stop() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: None});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::STOP]);
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 5, pitch: 60, velocity: 0.8, ..BLANK});
+    let (before, _) = render(&mut state, 4800);
+    for event in strokes(&mut state, 0.0, 480.0, four_four) {
+        device::handle(&mut state, &event);
+    }
+    let (after, _) = render(&mut state, 9600);
+    assert!(rms(&after[4800..]) > rms(&before) * 0.3, "before {} after {}", rms(&before), rms(&after[4800..]));
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
+fn bass_ignores_bends_and_a_moved_pick_keeps_its_own() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let bends = |kind: i32, mask: i32, packed: i32| {
+        let mut state = state();
+        pattern(&mut state, &[kind]);
+        state.set_lane(0, 1, &[mask; 64]);
+        state.set_lane(0, 4, &[packed; 64]);
+        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        device::handle(&mut state, &events[0]);
+        let mut scheduled: Vec<(u8, f32)> = state.scheduled_bends().collect();
+        scheduled.sort_by_key(|(string, _)| *string);
+        scheduled
+    };
+    assert_eq!(bends(strum::BASS, 0b111111, 4 << 3), vec![(1, 0.0)]);
+    assert_eq!(bends(strum::PICK, 0b000001, 2), vec![(1, 0.5)]);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

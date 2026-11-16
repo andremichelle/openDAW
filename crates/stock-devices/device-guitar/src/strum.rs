@@ -64,9 +64,7 @@ pub fn order(kind: i32, mask: i32, tab: &Tab) -> ([usize; STRINGS], usize) {
                 if mask & (1 << wanted) == 0 {
                     continue;
                 }
-                let nearest = (0..STRINGS).filter(|string| sounding(*string))
-                    .min_by_key(|string| (*string as i32 - wanted as i32).abs());
-                if let Some(string) = nearest {
+                if let Some(string) = nearest_sounding(wanted, tab) {
                     if !strings[..count].contains(&string) {
                         strings[count] = string;
                         count += 1;
@@ -84,6 +82,11 @@ pub fn tilt_gain(string: usize, tilt: f32) -> f32 {
     let steps = if tilt >= 0.0 {STRINGS - 1 - string} else {string};
     let distance = steps as f32 / (STRINGS - 1) as f32;
     1.0 - TILT_DEPTH * tilt.abs() * distance
+}
+
+/// The sounding string a pick meant for `wanted` lands on.
+pub fn nearest_sounding(wanted: usize, tab: &Tab) -> Option<usize> {
+    (0..STRINGS).filter(|string| tab[*string] >= 0).min_by_key(|string| (*string as i32 - wanted as i32).abs())
 }
 
 pub fn hash(seed: u32, step: i64, salt: u32) -> u32 {
