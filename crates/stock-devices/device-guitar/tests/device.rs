@@ -392,6 +392,29 @@ fn a_strum_over_played_notes_still_queued_keeps_ringing() {
 }
 
 #[test]
+fn a_late_chord_note_takes_a_free_string_instead_of_a_held_one() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 1, pitch: 45, velocity: 0.8, ..BLANK});
+    render(&mut state, 64);
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 2, pitch: 49, velocity: 0.8, ..BLANK});
+    render(&mut state, 4800);
+    let sounding = state.sounding();
+    assert_eq!(sounding.count_ones(), 2, "{sounding:#08b}");
+}
+
+#[test]
+fn two_notes_that_fit_one_string_pluck_it_once() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 1, pitch: 40, velocity: 0.8, ..BLANK});
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 2, pitch: 41, velocity: 0.8, ..BLANK});
+    device::render(&mut state, [&mut [], &mut []]);
+    let queued: Vec<(u8, f32)> = state.scheduled_bends().collect();
+    assert_eq!(queued, vec![(0, 0.0)]);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

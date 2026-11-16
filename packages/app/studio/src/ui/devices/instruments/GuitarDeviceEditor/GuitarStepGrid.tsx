@@ -152,6 +152,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         )
         const laneArea: HTMLElement = <div className="lane-area">{laneCells}</div>
         if (!stringsLane) {
+            const drag = inner.own(new Terminator())
             inner.own(Events.subscribe(laneArea, "pointerdown", (event: PointerEvent) => {
                 if (event.button !== 0 || event.ctrlKey) {return}
                 let mark = true
@@ -174,7 +175,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                     mark = false
                 }
                 paint(event)
-                const drag = inner.own(new Terminator())
+                drag.terminate()
                 drag.ownAll(
                     Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => paint(moveEvent)),
                     Events.subscribe(window, "pointerup", () => drag.terminate()))

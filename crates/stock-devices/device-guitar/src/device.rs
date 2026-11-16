@@ -327,14 +327,10 @@ impl State {
 
     // The strum takes the string: a played note still queued for it no longer plucks.
     fn take_over(&mut self, string: usize) {
-        let key = self.keys[string];
-        if key == NO_KEY {
-            return;
-        }
         let mut kept = 0;
         for index in 0..self.queued {
             let item = self.queue[index];
-            if item.key != key || item.string as usize != string {
+            if item.key == NO_KEY || item.string as usize != string {
                 self.queue[kept] = item;
                 kept += 1;
             }
@@ -452,13 +448,22 @@ impl State {
             let fret_on = |string: usize| note.pitch - fretting::TUNINGS[tuning][string];
             let playable = |string: usize| (KEYS_MIN_FRET..=KEYS_MAX_FRET).contains(&fret_on(string));
             let in_window = |string: usize| fret_on(string) == 0 || (low - 1..=low + 4).contains(&fret_on(string));
-            let string = (0..STRINGS).find(|string| !taken[*string] && playable(*string) && in_window(*string))
+            let free = |string: usize| !taken[string] && self.keys[string] == NO_KEY;
+            let string = (0..STRINGS).find(|string| free(*string) && playable(*string) && in_window(*string))
+                .or_else(|| (0..STRINGS).filter(|string| free(*string) && playable(*string)).min_by_key(|string| fret_on(*string)))
+                .or_else(|| (0..STRINGS).find(|string| !taken[*string] && playable(*string) && in_window(*string)))
                 .or_else(|| (0..STRINGS).filter(|string| !taken[*string] && playable(*string)).min_by_key(|string| fret_on(*string)))
                 .or_else(|| (0..STRINGS).filter(|string| playable(*string)).min_by_key(|string| fret_on(*string)));
             let Some(string) = string else {continue};
+            let entry = (string, note.pitch, note.id, note.velocity);
+            match chosen[..placed].iter().position(|chose| chose.0 == string) {
+                Some(index) => chosen[index] = entry,
+                None => {
+                    chosen[placed] = entry;
+                    placed += 1;
+                }
+            }
             taken[string] = true;
-            chosen[placed] = (string, note.pitch, note.id, note.velocity);
-            placed += 1;
         }
         chosen[..placed].sort_unstable_by_key(|entry| entry.0);
         self.lit = 0;
@@ -655,7 +660,7 @@ fn resonate(coefficients: &[f32; 5], memory: &mut [f32; 4], signal: &mut [f32]) 
     let [b0, b1, b2, a1, a2] = *coefficients;
     for sample in signal.iter_mut() {
         let [x1, x2, y1, y2] = *memory;
-        let output = b0 * *sample + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        let output = b0 * *sample + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 + 1.0e-18 - 1.0e-18;
         *memory = [*sample, x1, output, y1];
         *sample = output;
     }
@@ -713,7 +718,10 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::VELOCITY_VARIATION => settings.velocity_variation = float_value(value, &UNIPOLAR),
         param::POSITION => settings.position = int_value(value, &POSITION_MAPPING),
         param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING),
-        param::BODY => state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize),
+        param::BODY => {
+            state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize);
+            state.pickup = [[0.0; 4]; 2];
+        }
         param::DAMPING => settings.damping = float_value(value, &UNIPOLAR),
         param::DAMPING_VARIATION => settings.damping_variation = float_value(value, &UNIPOLAR),
         param::PLUCK => settings.pluck = float_value(value, &UNIPOLAR),
@@ -800,6 +808,7 @@ impl Instrument for Device {
             string.reset();
         }
         state.forget_bars();
+        state.chord_root = -1;
         state.dc = [(0.0, 0.0); 2];
         state.pickup = [[0.0; 4]; 2];
         state.limiter.clear();
