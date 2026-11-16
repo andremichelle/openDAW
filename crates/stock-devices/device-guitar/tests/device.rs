@@ -561,6 +561,21 @@ fn switching_to_keys_releases_the_strum() {
 }
 
 #[test]
+fn a_played_note_keeps_the_ringing_strum_lit() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN]);
+    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 9600);
+    let strummed = state.lit();
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 7, pitch: 76, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    assert!(state.lit().count_ones() >= strummed.count_ones());
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

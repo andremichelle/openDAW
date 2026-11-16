@@ -218,7 +218,7 @@ export namespace InstrumentFactories {
         defaultIcon: IconSymbol.Guitar,
         briefDescription: "Strummed Guitar",
         description: "Strums the chord track with rhythm patterns or plays notes on six strings",
-        manualPage: "manuals/devices/instruments/guitar",
+        manualPage: DeviceManualUrls.Guitar,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,

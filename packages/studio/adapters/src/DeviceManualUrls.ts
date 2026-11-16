@@ -49,6 +49,7 @@ export namespace DeviceManualUrls {
     export const Neon = "manuals/devices/instruments/neon"
     export const Tubular = "manuals/devices/instruments/tubular"
     export const Surgeon = "manuals/devices/instruments/surgeon"
+    export const Guitar = "manuals/devices/instruments/guitar"
     export const OpenDrumKick = "manuals/devices/instruments/opendrum-kick"
     export const OpenDrumPerc = "manuals/devices/instruments/opendrum-perc"
     export const OpenDrumBell = "manuals/devices/instruments/opendrum-bell"

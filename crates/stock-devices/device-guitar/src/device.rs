@@ -480,7 +480,6 @@ impl State {
         for (string, ..) in chosen[..placed].iter().copied() {
             self.drop_queued(|item| item.string as usize == string);
         }
-        self.lit &= self.held();
         let mut delay = 0.0f32;
         for (index, (string, Pending {pitch, id, velocity, cent, ended})) in chosen[..placed].iter().copied().enumerate() {
             if index > 0 {
@@ -592,6 +591,9 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
     }
     state.transporting = transporting;
     if state.settings.mode != CHORDS_MODE || !transporting {
+        if transporting {
+            state.groove.straight(from, to, flags.discontinuous());
+        }
         state.step = -1;
         state.broadcast();
         return 0;
@@ -716,11 +718,13 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
     let mut done = 0;
     while done < length {
         let mut index = 0;
+        state.ended = [NO_KEY; ENDED];
         for string in 0..STRINGS {
             let due = state.release_due[string];
             if due != 0 && due <= state.now {
                 state.release_due[string] = 0;
                 state.strings[string].release();
+                state.lit &= !(1 << string);
             }
         }
         while index < state.queued {

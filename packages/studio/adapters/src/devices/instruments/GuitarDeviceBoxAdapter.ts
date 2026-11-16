@@ -10,6 +10,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 
 type ParameterPointers = Pointers.Automation | Pointers.MIDIControl | Pointers.Modulation
 
@@ -27,7 +28,7 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/instruments/guitar"
+    readonly manualUrl = DeviceManualUrls.Guitar
 
     readonly #context: BoxAdaptersContext
     readonly #box: GuitarDeviceBox
