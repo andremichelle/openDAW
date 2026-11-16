@@ -486,6 +486,32 @@ fn a_choke_silences_every_string() {
 }
 
 #[test]
+fn a_note_released_while_waiting_for_its_string_sounds_briefly() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 5, pitch: 52, velocity: 0.8, ..BLANK});
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_OFF, id: 5, pitch: 52, ..BLANK});
+    render(&mut state, 480);
+    assert_ne!(state.sounding(), 0);
+    render(&mut state, 96000);
+    assert_eq!(state.sounding(), 0);
+}
+
+#[test]
+fn a_held_note_stays_lit_when_another_note_arrives_and_a_choke_clears_both() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 1, pitch: 40, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 2, pitch: 64, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    assert_eq!(state.lit().count_ones(), 2);
+    device::handle(&mut state, &EventRecord {kind: abi::EVENT_CHOKE, id: 0, ..BLANK});
+    assert_eq!(state.lit(), 0);
+    assert!(state.display().iter().all(|fret| *fret < 0));
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

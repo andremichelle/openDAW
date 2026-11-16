@@ -262,7 +262,6 @@ impl State {
         if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
     }
 
-    // The number of `bar` on the signature track: the next bar counts on, a jump counts back to zero.
     fn bar_index(&mut self, bar: &abi::Bar, bar_at: fn(f64) -> abi::Bar) -> i64 {
         let (start, length, index) = self.bar;
         if bar.start == start {
@@ -318,14 +317,22 @@ impl State {
     }
 
     fn release_all(&mut self) {
-        for string in &mut self.strings {
-            string.release();
+        for string in 0..STRINGS {
+            self.strings[string].release();
+            if self.keys[string] != NO_KEY {
+                self.display[string] = if self.settings.mode == CHORDS_MODE {self.fretted[string]} else {MUTED};
+            }
         }
         self.queued = 0;
         self.keys = [NO_KEY; STRINGS];
+        self.lit = 0;
+        self.release_due = [0; STRINGS];
     }
 
-    // The strum takes the string: a played note still queued for it no longer plucks.
+    fn held(&self) -> i32 {
+        (0..STRINGS).filter(|string| self.keys[*string] != NO_KEY).fold(0, |mask, string| mask | 1 << string)
+    }
+
     fn take_over(&mut self, string: usize) {
         self.drop_queued(|item| item.key != NO_KEY && item.string as usize == string);
         self.keys[string] = NO_KEY;
@@ -343,7 +350,6 @@ impl State {
         self.queued = kept;
     }
 
-    // Silences what the pattern plays, notes played on the strings keep ringing.
     fn release_strummed(&mut self) {
         for string in 0..STRINGS {
             if self.keys[string] == NO_KEY {
@@ -353,7 +359,6 @@ impl State {
         self.drop_queued(|item| item.key == NO_KEY);
     }
 
-    // One stroke of the pattern at the current sample: the chord at its position, its strings, their plucks.
     fn stroke(&mut self, event: &EventRecord) {
         let kind = event.pitch as i32;
         if kind == strum::STOP {
@@ -373,11 +378,6 @@ impl State {
             self.chord_root = root;
             self.chord_tab(root, voicing)
         };
-        for string in 0..STRINGS {
-            if self.keys[string] == NO_KEY {
-                self.display[string] = tab[string];
-            }
-        }
         let packed = event.duration as i32;
         let mask = packed & 0b111111;
         let bends = (packed >> 6) & BEND_MASK;
@@ -411,7 +411,7 @@ impl State {
             strum::CHOP => Touch::Chop,
             _ => Touch::Open
         };
-        self.lit &= (0..STRINGS).filter(|string| self.keys[*string] != NO_KEY).fold(0, |mask, string| mask | 1 << string);
+        self.lit &= self.held();
         let level = event.velocity * (1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5);
         let mut delay = (0.5 + 0.5 * strum::bipolar(seed, 0, 13)) * self.settings.speed_variation * HUMANIZE * self.sample_rate;
         for (index, string) in strings[..count].iter().enumerate() {
@@ -429,9 +429,13 @@ impl State {
             self.take_over(*string);
             self.lit |= 1 << *string;
         }
+        for string in 0..STRINGS {
+            if self.keys[string] == NO_KEY {
+                self.display[string] = tab[string];
+            }
+        }
     }
 
-    // The notes that arrived together go to free strings near the Position, strummed from low to high.
     fn assign_pending(&mut self) {
         if self.pending_count == 0 {
             return;
@@ -443,7 +447,7 @@ impl State {
         let tuning = self.settings.tuning as usize;
         let low = fretting::POSITION_FRETS[self.settings.position.clamp(0, 5) as usize];
         let mut taken = [false; STRINGS];
-        let mut chosen = [(0usize, 0i32, 0u32, 0.0f32, 0.0f32, false); PENDING];
+        let mut chosen = [(0usize, Pending {id: 0, pitch: 0, cent: 0.0, velocity: 0.0, ended: false}); PENDING];
         let mut placed = 0;
         for note in &notes[..count] {
             let fret_on = |string: usize| note.pitch - fretting::TUNINGS[tuning][string];
@@ -457,7 +461,7 @@ impl State {
                 .or_else(|| (0..STRINGS).filter(|string| !taken[*string] && playable(*string)).min_by_key(|string| fret_on(*string)))
                 .or_else(|| (0..STRINGS).filter(|string| playable(*string)).min_by_key(|string| fret_on(*string)));
             let Some(string) = string else {continue};
-            let entry = (string, note.pitch, note.id, note.velocity, note.cent, note.ended);
+            let entry = (string, *note);
             match chosen[..placed].iter().position(|chose| chose.0 == string) {
                 Some(index) => chosen[index] = entry,
                 None => {
@@ -471,9 +475,9 @@ impl State {
         for (string, ..) in chosen[..placed].iter().copied() {
             self.drop_queued(|item| item.string as usize == string);
         }
-        self.lit = 0;
+        self.lit &= self.held();
         let mut delay = 0.0f32;
-        for (index, (string, pitch, id, velocity, cent, ended)) in chosen[..placed].iter().copied().enumerate() {
+        for (index, (string, Pending {pitch, id, velocity, cent, ended})) in chosen[..placed].iter().copied().enumerate() {
             if index > 0 {
                 delay += self.spacing(1.0, id, index as i64);
             }
@@ -490,7 +494,6 @@ impl State {
         }
     }
 
-    // The original variation laws: the damping variation only ever opens the string, the plug filter spreads around its value.
     fn fire(&mut self, item: Scheduled) {
         let settings = &self.settings;
         let bipolar = |salt: u32| strum::bipolar(item.seed, 0, salt);
@@ -643,10 +646,9 @@ pub fn handle(state: &mut State, event: &EventRecord) {
         }
     } else if event.kind == EVENT_NOTE_OFF {
         let mut matched = false;
-        if let Some(index) = state.pending[..state.pending_count].iter().position(|note| note.id == event.id) {
+        if let Some(note) = state.pending[..state.pending_count].iter_mut().find(|note| note.id == event.id) {
             matched = true;
-            state.pending.copy_within(index + 1..state.pending_count, index);
-            state.pending_count -= 1;
+            note.ended = true;
         }
         for string in 0..STRINGS {
             if state.keys[string] == event.id && event.id != NO_KEY {
@@ -863,6 +865,5 @@ impl Instrument for Device {
         state.fretted = [MUTED; STRINGS];
         state.release_due = [0; STRINGS];
         state.ended = [NO_KEY; ENDED];
-        state.pending_count = 0;
     }
 }
