@@ -1078,6 +1078,7 @@ const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int):
         setSteps: (values: ReadonlyArray<Partial<GuitarStep>>): void => context.edit(() => {
             if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
             if (values.length > steps.length) {return panic(new RangeError(`setSteps: at most ${steps.length} steps`))}
+            if (values.length === 0) {return panic(new RangeError("setSteps: at least one step"))}
             values.forEach((value, stepIndex) => {
                 const {stroke, ...rest} = value
                 if (isDefined(stroke)) {steps[stepIndex].stroke = stroke}

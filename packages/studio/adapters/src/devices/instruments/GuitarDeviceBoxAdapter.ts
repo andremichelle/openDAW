@@ -1,6 +1,7 @@
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Guitar} from "@opendaw/lib-dsp"
 import {GuitarDeviceBox} from "@opendaw/studio-boxes"
+import {GuitarPatterns} from "./GuitarPatterns"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, BooleanField, Float32Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -19,7 +20,7 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     static readonly Bodies: ReadonlyArray<string> = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge"]
     // WASM CONTRACT: the pick order mirrors `Pick` in device-guitar
     static readonly Picks: ReadonlyArray<string> = ["Finger", "Thumb", "Nail", "Plectrum"]
-    static readonly SlotCount = 16
+    static readonly SlotCount = GuitarPatterns.SlotCount
     static readonly ShapeCount = 16
     static readonly Chords: ReadonlyArray<string> =
         ["Chord Track", ...Array.from({length: GuitarDeviceBoxAdapter.ShapeCount}, (_, index) => `Shape ${index + 1}`)]

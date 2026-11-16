@@ -285,6 +285,11 @@ impl State {
         counted
     }
 
+    fn forget_bars(&mut self) {
+        self.bar = (-1.0, 0.0, 0);
+        self.bar_marks = [(-1.0, 0); BAR_MARKS];
+    }
+
     pub fn set_shapes(&mut self, values: &[i32]) {
         for (shape, packed) in self.shapes.iter_mut().zip(values.iter()) {
             *shape = fretting::unpack_shape(*packed);
@@ -318,6 +323,24 @@ impl State {
         }
         self.queued = 0;
         self.keys = [NO_KEY; STRINGS];
+    }
+
+    // The strum takes the string: a played note still queued for it no longer plucks.
+    fn take_over(&mut self, string: usize) {
+        let key = self.keys[string];
+        if key == NO_KEY {
+            return;
+        }
+        let mut kept = 0;
+        for index in 0..self.queued {
+            let item = self.queue[index];
+            if item.key != key || item.string as usize != string {
+                self.queue[kept] = item;
+                kept += 1;
+            }
+        }
+        self.queued = kept;
+        self.keys[string] = NO_KEY;
     }
 
     // Silences what the pattern plays, notes played on the strings keep ringing.
@@ -406,7 +429,7 @@ impl State {
                 bend: BENDS[(bent[*string] as usize).min(BENDS.len() - 1)],
                 bend_length: (step_samples - delay as f64).max(step_samples * 0.5) as u32
             });
-            self.keys[*string] = NO_KEY;
+            self.take_over(*string);
             self.lit |= 1 << *string;
         }
     }
@@ -533,7 +556,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         state.release_all();
     }
     if transporting && !state.transporting {
-        state.bar_marks = [(-1.0, 0); BAR_MARKS];
+        state.forget_bars();
     }
     state.transporting = transporting;
     if state.settings.mode != CHORDS_MODE || !transporting {
@@ -776,6 +799,7 @@ impl Instrument for Device {
         for string in &mut state.strings {
             string.reset();
         }
+        state.forget_bars();
         state.dc = [(0.0, 0.0); 2];
         state.pickup = [[0.0; 4]; 2];
         state.limiter.clear();

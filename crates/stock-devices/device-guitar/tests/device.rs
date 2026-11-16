@@ -374,6 +374,24 @@ fn every_bar_of_an_odd_signature_starts_on_its_downbeat() {
 }
 
 #[test]
+fn a_strum_over_played_notes_still_queued_keeps_ringing() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN]);
+    device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(1.0));
+    for (id, pitch) in [(1u32, 60u32), (2, 64), (3, 67)] {
+        device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id, pitch, velocity: 0.8, ..BLANK});
+    }
+    render(&mut state, 48);
+    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    device::handle(&mut state, &events[0]);
+    assert!(state.scheduled_bends().count() == 5, "the played plucks still queued are dropped");
+    render(&mut state, 72000);
+    assert_eq!(state.sounding() & 0b111110, 0b111110, "{:#08b}", state.sounding());
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

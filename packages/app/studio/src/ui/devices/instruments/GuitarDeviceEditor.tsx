@@ -274,8 +274,8 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                   {dragControl(tilt, {u: 1, v: 4})}
                                   {menuControl(mode, GuitarDeviceBoxAdapter.Modes.length, {u: 0, v: 6})}
                                   {menuControl(rate, GuitarDeviceBoxAdapter.Rates.length, {u: 1, v: 6})}
-                                  {menuControl(position, 6, {u: 0, v: 8})}
-                                  {menuControl(tuning, 4, {u: 1, v: 8})}
+                                  {menuControl(position, Guitar.PositionNames.length, {u: 0, v: 8})}
+                                  {menuControl(tuning, Guitar.TuningNames.length, {u: 1, v: 8})}
                               </div>
                               <div className="labels">
                                   {section("PICK", Colors.yellow.toString(), [1, 5], "first")}

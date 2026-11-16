@@ -174,11 +174,10 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                     mark = false
                 }
                 paint(event)
-                const move = Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => paint(moveEvent))
-                const up = Events.subscribe(window, "pointerup", () => {
-                    move.terminate()
-                    up.terminate()
-                })
+                const drag = inner.own(new Terminator())
+                drag.ownAll(
+                    Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => paint(moveEvent)),
+                    Events.subscribe(window, "pointerup", () => drag.terminate()))
             }))
         }
         replaceChildren(element,
