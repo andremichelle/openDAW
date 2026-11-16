@@ -619,7 +619,7 @@ mod tests {
     #[test]
     fn the_bend_rises_fast_and_falls_slower() {
         let length = 1000;
-        let peak = (0..length).max_by(|a, b| bend_curve(*a, length).total_cmp(&bend_curve(*b, length))).unwrap();
+        let peak = (0..length).max_by(|first, second| bend_curve(*first, length).total_cmp(&bend_curve(*second, length))).unwrap();
         assert!(peak <= length / 5, "peak at {peak}");
         assert_eq!(bend_curve(0, length), 0.0);
         assert!(bend_curve(length - 1, length) < 0.001);

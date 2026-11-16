@@ -4,6 +4,7 @@ export namespace DeviceTags {
     const Stock: Readonly<Record<string, ReadonlyArray<string>>> = {
         Apparat: ["synth", "script"],
         Cubed: ["synth", "fm"],
+        Guitar: ["guitar", "strum", "physical-modeling"],
         InstrumentComposite: ["layer", "utility"],
         Neon: ["synth", "phase-distortion"],
         Tubular: ["synth", "subtractive"],

@@ -1073,8 +1073,13 @@ const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string
 const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int): GuitarSlot => {
     const steps = Object.freeze(Array.from({length: GuitarPatterns.StepCount},
         (_, stepIndex) => createGuitarStep(context, pattern, `patterns.${index}.steps.${stepIndex}`, stepIndex)))
-    const target = {
+    return Object.freeze({
         steps,
+        get length(): int {return pattern.length.getValue()},
+        set length(value: int) {
+            context.edit(() => GuitarPatterns.setLength(pattern,
+                Guard.int32({min: 1, max: GuitarPatterns.StepCount}, value, `patterns.${index}.length`)))
+        },
         setSteps: (values: ReadonlyArray<Partial<GuitarStep>>): void => context.edit(() => {
             if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
             if (values.length > steps.length) {return panic(new RangeError(`setSteps: at most ${steps.length} steps`))}
@@ -1091,14 +1096,7 @@ const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int):
             if (library < 0) {return panic(new RangeError(`load: no pattern named '${name}'`))}
             context.edit(() => GuitarPatterns.load(pattern, library))
         }
-    }
-    Object.defineProperty(target, "length", {
-        enumerable: true,
-        get: () => pattern.length.getValue(),
-        set: (value: int) => context.edit(() => GuitarPatterns.setLength(pattern,
-            Guard.int32({min: 1, max: GuitarPatterns.StepCount}, value, `patterns.${index}.length`)))
     })
-    return target as unknown as GuitarSlot
 }
 
 export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Guitar {

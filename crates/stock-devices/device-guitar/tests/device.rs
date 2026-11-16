@@ -453,6 +453,39 @@ fn a_new_stroke_drops_the_unplucked_strings_of_the_previous_one() {
 }
 
 #[test]
+fn a_played_note_keeps_its_cents() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 3, pitch: 52, cent: 50.0, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    let pitches: Vec<f32> = (0..6).map(|string| state.string_pitch(string)).filter(|pitch| *pitch > 0.0).collect();
+    assert_eq!(pitches, vec![52.5]);
+}
+
+#[test]
+fn a_note_ending_on_its_own_sample_sounds_briefly_and_frees_its_string() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_OFF, id: 9, pitch: 52, ..BLANK});
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 9, pitch: 52, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    assert_ne!(state.sounding(), 0);
+    render(&mut state, 96000);
+    assert_eq!(state.sounding(), 0);
+}
+
+#[test]
+fn a_choke_silences_every_string() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 4, pitch: 52, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    device::handle(&mut state, &EventRecord {kind: abi::EVENT_CHOKE, id: 0, ..BLANK});
+    render(&mut state, 48000);
+    assert_eq!(state.sounding(), 0);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

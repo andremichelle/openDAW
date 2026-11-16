@@ -1,6 +1,6 @@
 //! The Guitar device: patterns strum the chord track or a custom shape, played notes land on the strings.
 
-use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
+use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue, EVENT_CHOKE, EVENT_NOTE_ON, EVENT_NOTE_OFF};
 use libm::{ceil, round};
 use math::value_mapping::{Decibel, Linear, LinearInteger};
 
@@ -14,6 +14,7 @@ use crate::strum::{self, STEP_COUNT};
 const STROKE_MARK: u32 = 0xC000_0000;
 const QUEUE: usize = 256;
 const NO_KEY: u32 = u32::MAX;
+const ENDED: usize = 8; // note-offs that came before their note-on on the same sample
 const SHORT_NOTE: f32 = 0.06; // seconds a played note sounds when it ended before its pluck
 const PENDING: usize = 16;
 const SCRATCH: usize = 128;
@@ -96,7 +97,9 @@ struct Scheduled {
 struct Pending {
     id: u32,
     pitch: i32,
-    velocity: f32
+    cent: f32,
+    velocity: f32,
+    ended: bool
 }
 
 pub struct Settings {
@@ -159,6 +162,8 @@ pub struct State {
     display: Tab,
     fretted: Tab,
     release_due: [u64; STRINGS],
+    ended: [u32; ENDED],
+    ended_at: usize,
     tab_key: (i32, i32, i32, i32),
     chord_root: i32,
     step: i32,
@@ -204,6 +209,8 @@ impl State {
         self.display = [MUTED; STRINGS];
         self.fretted = [MUTED; STRINGS];
         self.release_due = [0; STRINGS];
+        self.ended = [NO_KEY; ENDED];
+        self.ended_at = 0;
         self.tab_key = (-1, 0, 0, 0);
         self.chord_root = -1;
         self.step = -1;
@@ -214,6 +221,8 @@ impl State {
     pub fn display(&self) -> Tab {self.display}
 
     pub fn lit(&self) -> i32 {self.lit}
+
+    pub fn string_pitch(&self, string: usize) -> f32 {self.strings[string].pitch()}
 
     pub fn sounding(&self) -> i32 {
         (0..STRINGS).filter(|string| self.strings[*string].is_sounding()).fold(0, |mask, string| mask | 1 << string)
@@ -364,7 +373,11 @@ impl State {
             self.chord_root = root;
             self.chord_tab(root, voicing)
         };
-        self.display = tab;
+        for string in 0..STRINGS {
+            if self.keys[string] == NO_KEY {
+                self.display[string] = tab[string];
+            }
+        }
         let packed = event.duration as i32;
         let mask = packed & 0b111111;
         let bends = (packed >> 6) & BEND_MASK;
@@ -398,7 +411,7 @@ impl State {
             strum::CHOP => Touch::Chop,
             _ => Touch::Open
         };
-        self.lit = 0;
+        self.lit &= (0..STRINGS).filter(|string| self.keys[*string] != NO_KEY).fold(0, |mask, string| mask | 1 << string);
         let level = event.velocity * (1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5);
         let mut delay = (0.5 + 0.5 * strum::bipolar(seed, 0, 13)) * self.settings.speed_variation * HUMANIZE * self.sample_rate;
         for (index, string) in strings[..count].iter().enumerate() {
@@ -430,7 +443,7 @@ impl State {
         let tuning = self.settings.tuning as usize;
         let low = fretting::POSITION_FRETS[self.settings.position.clamp(0, 5) as usize];
         let mut taken = [false; STRINGS];
-        let mut chosen = [(0usize, 0i32, 0u32, 0.0f32); PENDING];
+        let mut chosen = [(0usize, 0i32, 0u32, 0.0f32, 0.0f32, false); PENDING];
         let mut placed = 0;
         for note in &notes[..count] {
             let fret_on = |string: usize| note.pitch - fretting::TUNINGS[tuning][string];
@@ -444,7 +457,7 @@ impl State {
                 .or_else(|| (0..STRINGS).filter(|string| !taken[*string] && playable(*string)).min_by_key(|string| fret_on(*string)))
                 .or_else(|| (0..STRINGS).filter(|string| playable(*string)).min_by_key(|string| fret_on(*string)));
             let Some(string) = string else {continue};
-            let entry = (string, note.pitch, note.id, note.velocity);
+            let entry = (string, note.pitch, note.id, note.velocity, note.cent, note.ended);
             match chosen[..placed].iter().position(|chose| chose.0 == string) {
                 Some(index) => chosen[index] = entry,
                 None => {
@@ -460,16 +473,16 @@ impl State {
         }
         self.lit = 0;
         let mut delay = 0.0f32;
-        for (index, (string, pitch, id, velocity)) in chosen[..placed].iter().copied().enumerate() {
+        for (index, (string, pitch, id, velocity, cent, ended)) in chosen[..placed].iter().copied().enumerate() {
             if index > 0 {
                 delay += self.spacing(1.0, id, index as i64);
             }
-            self.keys[string] = id;
+            self.keys[string] = if ended {NO_KEY} else {id};
             self.display[string] = (pitch - fretting::TUNINGS[tuning][string]) as i8;
             let seed = strum::hash(id, string as i64, 5);
             let varied = 1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5;
             self.enqueue(Scheduled {
-                due: self.now + delay as u64, string: string as u8, pitch: pitch as f32,
+                due: self.now + delay as u64, string: string as u8, pitch: pitch as f32 + cent,
                 velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id,
                 bend: 0.0, bend_length: 0, step: 0.0, stroke_at: self.now
             });
@@ -562,6 +575,9 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
     if transporting && !state.transporting {
         state.forget_bars();
     }
+    if transporting && flags.discontinuous() {
+        state.drop_queued(|item| item.key == NO_KEY);
+    }
     state.transporting = transporting;
     if state.settings.mode != CHORDS_MODE || !transporting {
         state.step = -1;
@@ -616,17 +632,25 @@ pub fn handle(state: &mut State, event: &EventRecord) {
         state.stroke(event);
         state.broadcast();
     } else if event.kind == EVENT_NOTE_ON {
+        let ended = state.ended.iter().position(|id| *id == event.id);
+        if let Some(index) = ended {
+            state.ended[index] = NO_KEY;
+        }
         if state.pending_count < PENDING {
-            state.pending[state.pending_count] = Pending {id: event.id, pitch: event.pitch as i32, velocity: event.velocity};
+            state.pending[state.pending_count] = Pending {id: event.id, pitch: event.pitch as i32, cent: event.cent / 100.0,
+                velocity: event.velocity, ended: ended.is_some()};
             state.pending_count += 1;
         }
     } else if event.kind == EVENT_NOTE_OFF {
+        let mut matched = false;
         if let Some(index) = state.pending[..state.pending_count].iter().position(|note| note.id == event.id) {
+            matched = true;
             state.pending.copy_within(index + 1..state.pending_count, index);
             state.pending_count -= 1;
         }
         for string in 0..STRINGS {
             if state.keys[string] == event.id && event.id != NO_KEY {
+                matched = true;
                 state.keys[string] = NO_KEY;
                 state.lit &= !(1 << string);
                 state.display[string] = if state.settings.mode == CHORDS_MODE {state.fretted[string]} else {MUTED};
@@ -635,6 +659,13 @@ pub fn handle(state: &mut State, event: &EventRecord) {
                 }
             }
         }
+        if !matched && !state.queue[..state.queued].iter().any(|item| item.key == event.id) {
+            state.ended[state.ended_at] = event.id;
+            state.ended_at = (state.ended_at + 1) % ENDED;
+        }
+    } else if event.kind == EVENT_CHOKE {
+        state.pending_count = 0;
+        state.release_all();
     }
 }
 
@@ -831,5 +862,7 @@ impl Instrument for Device {
         state.display = [MUTED; STRINGS];
         state.fretted = [MUTED; STRINGS];
         state.release_due = [0; STRINGS];
+        state.ended = [NO_KEY; ENDED];
+        state.pending_count = 0;
     }
 }
