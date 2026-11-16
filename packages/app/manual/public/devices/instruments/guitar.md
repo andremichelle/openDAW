@@ -40,23 +40,46 @@ Shows the chord name and the shape the guitar plays: a dot per fretted string, a
 cross for a muted one, and the first fret when the shape sits higher up the neck. Strings light up as they are
 struck. Below it are the tuning and the position.
 
+### Custom Shapes
+
+Below the chord name is the chord source. Chord Track strums the chords of the chord track. Shape 1 to 16 strum a
+shape of your own instead, the chord track is ignored and no other device hears it. The name turns orange while a
+custom shape plays, choosing Chord Track again returns to the chord track.
+
+Click the neck to build a shape: a click on a string sets that fret, a second click on the same fret makes the
+string open, a click above the nut switches the string between open and muted. The arrows below the neck, or the
+mouse wheel, move the five frets shown up to fret 24. The menu copies the chord track's current voicing into the
+shape or clears it. An empty shape strums the chord track.
+
+Automate the chord source on the Guitar's track to play your own progression: Shape 1 for two bars, Shape 2 for
+one, back to the chord track after that. Every change takes over at once.
+
 ---
 
 ## 3. Pattern
 
+### Slots
+
+The Guitar holds 16 patterns. The Slot number picks the one that plays and that the editor shows, a change takes
+over at once. Slots never move, so automating the slot always reaches the same pattern. A new Guitar fills the
+slots with sixteen built in patterns.
+
 ### Patterns
 
-The menu holds the built in patterns, grouped by style: Strumming, Rock, Funk and Soul, Reggae and Ska, Latin,
-Country, Fingerstyle, Metal, Afro and Caribbean, Ambient and Cinematic, Modern Pop and Blues. Editing any step turns the pattern into Custom, your edits stay.
+The menu next to the Slot number shows the slot's pattern and holds the built in patterns, grouped by style:
+Strumming, Rock, Funk and Soul, Reggae and Ska, Latin, Country, Fingerstyle, Metal, Afro and Caribbean, Ambient and
+Cinematic, Modern Pop and Blues. Choosing one, or walking with the arrows next to the menu, loads it into the current
+slot. The menu also copies, pastes and clears the slot's pattern. Editing any step turns the slot into Custom, your
+edits stay.
 
 ### Length
 
 The number of steps, up to 64 on four pages. A pattern as long as a bar or two restarts with every bar of the
 signature track.
 
-### Shift and Clear
+### Shift
 
-The arrows move all steps one to the left or right, Clear empties the pattern.
+The arrows next to the strokes move all steps one to the left or right.
 
 ### Strokes
 

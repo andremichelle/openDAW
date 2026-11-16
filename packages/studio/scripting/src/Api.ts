@@ -2345,6 +2345,21 @@ export interface GuitarStep {
 }
 
 /**
+ * One of the 16 Guitar pattern slots
+ * @group Instrument Parts
+ */
+export interface GuitarSlot {
+    /** Number of steps played (1 to 64, default 16) */
+    length: int
+    /** 64 steps */
+    readonly steps: ReadonlyArray<GuitarStep>
+    /** Replace the steps from the beginning and set the length */
+    setSteps(steps: ReadonlyArray<Partial<GuitarStep>>): void
+    /** Load a built in pattern by name into this slot, see {@link Guitar.patternNames} */
+    load(name: string): void
+}
+
+/**
  * Six string Karplus-Strong guitar. In mode 0 its pattern strums the chord track while the transport runs,
  * played notes sound on its strings in both modes
  * @group Instruments
@@ -2390,16 +2405,18 @@ export interface Guitar extends Instrument {
     spread: unitValue
     /** Volume in dB (default -6) */
     volume: float
-    /** Number of steps played (1 to 64, default 16) */
-    patternLength: int
+    /** The slot that plays (0 to 15, default 0), a change takes over at once */
+    slot: int
+    /** 0 strums the chord track, 1 to 16 the custom shape of that number (default 0). An empty shape strums the chord track */
+    chord: int
+    /** The 16 custom shapes, each six frets from the low E: -1 mutes a string, 0 is open, up to 24 */
+    readonly shapes: ReadonlyArray<ReadonlyArray<int>>
+    /** Sets a custom shape (0 to 15) from six frets, low E first: -1 mutes a string, 0 is open, up to 24, out of range frets are clamped */
+    setShape(index: int, frets: ReadonlyArray<int>): void
     /** The groove the pattern plays through, null for none. Set a groove of the project or null. */
     groove: Nullable<AnyGroove>
-    /** 64 steps */
-    readonly steps: ReadonlyArray<GuitarStep>
-    /** Replace the steps from the beginning and set the pattern length */
-    setSteps(steps: ReadonlyArray<Partial<GuitarStep>>): void
-    /** Load a built in pattern by name, see {@link Guitar.patternNames} */
-    loadPattern(name: string): void
+    /** The 16 pattern slots, a new Guitar fills them with built in patterns */
+    readonly patterns: ReadonlyArray<GuitarSlot>
     /** The names of the built in patterns */
     readonly patternNames: ReadonlyArray<string>
 }

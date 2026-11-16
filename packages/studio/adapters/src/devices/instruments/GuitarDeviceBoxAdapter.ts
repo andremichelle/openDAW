@@ -19,6 +19,10 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     static readonly Bodies: ReadonlyArray<string> = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge"]
     // WASM CONTRACT: the pick order mirrors `Pick` in device-guitar
     static readonly Picks: ReadonlyArray<string> = ["Finger", "Thumb", "Nail", "Plectrum"]
+    static readonly SlotCount = 16
+    static readonly ShapeCount = 16
+    static readonly Chords: ReadonlyArray<string> =
+        ["Chord Track", ...Array.from({length: GuitarDeviceBoxAdapter.ShapeCount}, (_, index) => `Shape ${index + 1}`)]
 
     readonly type = "instrument"
     readonly accepts = "midi"
@@ -86,6 +90,9 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             spot: unipolar(box.spot, "Spot"),
             pick: choice(box.pick, GuitarDeviceBoxAdapter.Picks, "Pick"),
             spread: unipolar(box.spread, "Spread"),
+            slot: this.#parametric.createParameter(box.slot, ValueMapping.linearInteger(0, GuitarDeviceBoxAdapter.SlotCount - 1),
+                StringMapping.oneBasedIndex(), "Slot"),
+            chord: choice(box.chord, GuitarDeviceBoxAdapter.Chords, "Chord"),
             volume: this.#parametric.createParameter(
                 box.volume, ValueMapping.DefaultDecibel, StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Volume")
         } as const

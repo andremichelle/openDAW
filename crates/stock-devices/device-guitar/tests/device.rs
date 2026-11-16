@@ -24,10 +24,14 @@ fn state() -> Box<State> {
 }
 
 fn pattern(state: &mut State, kinds: &[i32]) {
+    slot_pattern(state, 0, kinds);
+}
+
+fn slot_pattern(state: &mut State, slot: usize, kinds: &[i32]) {
     let mut lane = [0i32; 64];
     lane[..kinds.len()].copy_from_slice(kinds);
-    state.set_lane(0, &lane);
-    state.set_length(kinds.len() as i32);
+    state.set_lane(slot, 0, &lane);
+    state.set_length(slot, kinds.len() as i32);
 }
 
 fn playing() -> BlockFlags {
@@ -100,6 +104,30 @@ fn the_pattern_restarts_with_every_bar() {
 }
 
 #[test]
+fn the_slot_switches_the_playing_pattern_at_once() {
+    let mut state = state();
+    slot_pattern(&mut state, 0, &[strum::DOWN, 0, 0, 0]);
+    slot_pattern(&mut state, 15, &[0, strum::UP, 0, 0]);
+    let first: Vec<u32> = strokes(&mut state, 0.0, 960.0, four_four).iter().map(|event| event.pitch).collect();
+    assert_eq!(first, vec![strum::DOWN as u32]);
+    device::apply_parameter(&mut state, param::SLOT, ParamValue::Int(15));
+    let events = strokes(&mut state, 960.0, 1920.0, four_four);
+    let second: Vec<(f64, u32)> = events.iter().map(|event| (event.position, event.pitch)).collect();
+    assert_eq!(second, vec![(1200.0, strum::UP as u32)]);
+}
+
+#[test]
+fn every_slot_keeps_its_own_length() {
+    let mut state = state();
+    slot_pattern(&mut state, 0, &[strum::DOWN, 0]);
+    slot_pattern(&mut state, 1, &[strum::DOWN, 0, 0, 0, 0, 0, 0, 0]);
+    let count = |state: &mut State| strokes(state, 0.0, 3840.0, four_four).len();
+    assert_eq!(count(&mut state), 8);
+    device::apply_parameter(&mut state, param::SLOT, ParamValue::Int(1));
+    assert_eq!(count(&mut state), 2);
+}
+
+#[test]
 fn keys_mode_strums_nothing_on_its_own() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
@@ -145,6 +173,45 @@ fn a_stroke_strums_the_chord_track_and_stays_silent_without_a_chord() {
     let (left, _) = render(&mut silent, 4800);
     assert_eq!(rms(&left), 0.0);
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+fn pack(tab: [i32; 6]) -> i32 {
+    tab.iter().enumerate().fold(0, |packed, (string, fret)| packed | (if *fret < 0 {31} else {*fret}) << (string * 5))
+}
+
+#[test]
+fn a_custom_shape_plays_its_exact_frets_without_the_chord_track() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN]);
+    let mut shapes = [pack([-1; 6]); 16];
+    shapes[2] = pack([12, 0, 0, 0, 12, 0]);
+    state.set_shapes(&shapes);
+    device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(3));
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: None});
+    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    device::handle(&mut state, &events[0]);
+    assert_eq!(state.display(), [12, 0, 0, 0, 12, 0]);
+    let (left, _) = render(&mut state, 9600);
+    assert!(rms(&left) > 1.0e-3);
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
+fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    for chord in [0, 2] {
+        let mut state = state();
+        pattern(&mut state, &[strum::DOWN]);
+        let mut shapes = [pack([-1; 6]); 16];
+        shapes[0] = pack([12, 0, 0, 0, 12, 0]);
+        state.set_shapes(&shapes);
+        device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(chord));
+        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        device::handle(&mut state, &events[0]);
+        assert_eq!(state.display(), [-1, 3, 2, 0, 1, 0], "chord {chord}");
+    }
 }
 
 #[test]
@@ -269,7 +336,7 @@ fn every_string_is_plucked_about_equally_hard() {
         let energy: f32 = (0..8).map(|step| {
             let mut state = state();
             pattern(&mut state, &[strum::PICK]);
-            state.set_lane(1, &[1 << string; 64]);
+            state.set_lane(0, 1, &[1 << string; 64]);
             device::apply_parameter(&mut state, param::BODY, ParamValue::Int(0));
             let from = step as f64 * 240.0;
             let events = strokes(&mut state, from, from + 240.0, four_four);

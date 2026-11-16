@@ -1,5 +1,5 @@
 import {int} from "@opendaw/lib-std"
-import {GuitarDeviceBox} from "@opendaw/studio-boxes"
+import {GuitarDeviceBox, GuitarPattern} from "@opendaw/studio-boxes"
 
 // The built in strum patterns: one letter per step. D down, U up, d/u down/up on the high strings, M palm muted
 // down, m palm muted on the low strings, p down on the low strings, X chuck, c chop on the high strings,
@@ -95,6 +95,11 @@ export namespace GuitarPatterns {
 
     export const Styles: ReadonlyArray<string> = Array.from(new Set(Library.map(({style}) => style)))
     export const DefaultPattern = Library.findIndex(({name}) => name === "Folk")
+    export const SlotCount = 16
+    export const SeedNames: ReadonlyArray<string> = [
+        "Folk", "Pop", "Down Up Eighths", "Ballad Strum", "Rock Eighths", "Power Drive", "Funk Sixteenths", "Reggae",
+        "Bossa Nova", "Boom Chick", "Train Beat", "Waltz", "Travis", "Arpeggio Up", "Ballad Picking", "Pinch"
+    ]
 
     export type Step = { readonly kind: int, readonly strings: int, readonly velocity: int, readonly speed: int }
 
@@ -142,37 +147,72 @@ export namespace GuitarPatterns {
         }
     })
 
-    export const write = (box: GuitarDeviceBox, steps: ReadonlyArray<Step>, length: int): void => {
+    export const write = (pattern: GuitarPattern, steps: ReadonlyArray<Step>, length: int): void => {
         for (let index = 0; index < StepCount; index++) {
             const step = steps[index] ?? {kind: Rest, strings: AllStrings, velocity: 80, speed: 50}
-            box.stepKinds.getField(index).setValue(step.kind)
-            box.stepStrings.getField(index).setValue(step.strings)
-            box.stepVelocities.getField(index).setValue(step.velocity)
-            box.stepSpeeds.getField(index).setValue(step.speed)
+            pattern.stepKinds.getField(index).setValue(step.kind)
+            pattern.stepStrings.getField(index).setValue(step.strings)
+            pattern.stepVelocities.getField(index).setValue(step.velocity)
+            pattern.stepSpeeds.getField(index).setValue(step.speed)
         }
-        box.patternLength.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
     }
 
-    export const load = (box: GuitarDeviceBox, index: int): void => {
+    export const load = (pattern: GuitarPattern, index: int): void => {
         const steps = parse(Library[index].text)
-        write(box, steps, steps.length)
-        box.pattern.setValue(index)
+        write(pattern, steps, steps.length)
+        pattern.library.setValue(index)
     }
+
+    export type Snapshot = {
+        readonly kinds: ReadonlyArray<int>
+        readonly strings: ReadonlyArray<int>
+        readonly velocities: ReadonlyArray<int>
+        readonly speeds: ReadonlyArray<int>
+        readonly length: int
+        readonly library: int
+    }
+
+    export const snapshot = (pattern: GuitarPattern): Snapshot => ({
+        kinds: pattern.stepKinds.fields().map(field => field.getValue()),
+        strings: pattern.stepStrings.fields().map(field => field.getValue()),
+        velocities: pattern.stepVelocities.fields().map(field => field.getValue()),
+        speeds: pattern.stepSpeeds.fields().map(field => field.getValue()),
+        length: pattern.length.getValue(),
+        library: pattern.library.getValue()
+    })
+
+    export const apply = (pattern: GuitarPattern, {kinds, strings, velocities, speeds, length, library}: Snapshot): void => {
+        for (let index = 0; index < StepCount; index++) {
+            pattern.stepKinds.getField(index).setValue(Math.max(Rest, Math.min(Chop, kinds[index] ?? Rest)))
+            pattern.stepStrings.getField(index).setValue((strings[index] ?? AllStrings) & AllStrings)
+            pattern.stepVelocities.getField(index).setValue(Math.max(0, Math.min(100, velocities[index] ?? 80)))
+            pattern.stepSpeeds.getField(index).setValue(Math.max(0, Math.min(100, speeds[index] ?? 50)))
+        }
+        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.library.setValue(library >= 0 && library < Library.length ? library : -1)
+    }
+
+    export const slot = (box: GuitarDeviceBox, index: int): GuitarPattern =>
+        box.patterns.getField(Math.max(0, Math.min(SlotCount - 1, index)))
+
+    export const seed = (box: GuitarDeviceBox): void => SeedNames.forEach((name, index) =>
+        load(slot(box, index), Library.findIndex(pattern => pattern.name === name)))
 
     // Rotates every lane within the pattern length, positive moves the steps to the left.
-    export const rotate = (box: GuitarDeviceBox, offset: int): void => {
-        const length = box.patternLength.getValue()
-        for (const array of [box.stepKinds, box.stepStrings, box.stepVelocities, box.stepSpeeds]) {
+    export const rotate = (pattern: GuitarPattern, offset: int): void => {
+        const length = pattern.length.getValue()
+        for (const array of [pattern.stepKinds, pattern.stepStrings, pattern.stepVelocities, pattern.stepSpeeds]) {
             const fields = array.fields().slice(0, length)
             const values = fields.map(field => field.getValue())
             fields.forEach((field, index) => field.setValue(values[(index + offset + length) % length]))
         }
-        box.pattern.setValue(-1)
+        pattern.library.setValue(-1)
     }
 
-    export const clear = (box: GuitarDeviceBox): void => {
-        write(box, [], box.patternLength.getValue())
-        box.pattern.setValue(-1)
+    export const clear = (pattern: GuitarPattern): void => {
+        write(pattern, [], pattern.length.getValue())
+        pattern.library.setValue(-1)
     }
 
     export const nameOf = (index: int): string => Library[index]?.name ?? "Custom"

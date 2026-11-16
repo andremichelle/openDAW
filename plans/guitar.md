@@ -101,23 +101,22 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 4. ~~Chords mode with the built in patterns.~~
 5. ~~Editor with the fret diagram and step row, live broadcast.~~
 6. ~~Custom pattern, scripting, manual page.~~
-7. Chord shapes from frets (below).
-8. Sixteen pattern slots (below).
+7. ~~Custom shapes and a chord source (below), replaces the plan to store frets on global chords.~~
+8. ~~Sixteen pattern slots (below).~~
 
-## Chord shapes from frets
+## Custom shapes
 
-1. A chord on the chord track can be entered as frets, low E to high e: `x` mutes a string, `0` is open, `1` to
-   `24` is the fret. Example: `12 0 0 0 12 0`, then `11 0 0 0 11 0`, then `10 0 0 0 10 0`.
-2. The frets are turned into pitches (Standard tuning), the chord is detected from them (root, shape bits,
-   inversion from the lowest note) and written as a normal chord: degree and shift from the key, the 12 bit shape.
-   Every root works (a degree of the key or one semitone off). Unknown shapes show their `*` suffix as today.
-3. Every device that follows the chord track hears the detected chord. No special treatment.
-4. The chord keeps its frets in a new field (`ChordEventBox` field 9, int32, -1 is none, 5 bits per string, 31 is
-   `x`). The Guitar plays exactly these frets. Any later edit of the chord (degree, shift, shape, notes, inversion)
-   drops the frets and the Guitar finds its own voicing again.
-5. A Guitar in another tuning moves each string by the tuning difference, a string that would go below fret 0 falls
-   back to the voicing search for the whole chord.
-6. Input: a fret field in the chord editor (text), with a fret diagram to click.
+1. 16 custom shapes per Guitar (`shapes`, field 44): one int32 each, 5 bits per string from the low E, 31 mutes a
+   string, all muted is empty. Entered by clicking the neck in the fret display.
+2. The `chord` parameter (field 43, automatable): 0 strums the chord track, 1 to 16 strums that shape and ignores
+   the chord track. An empty shape strums the chord track. Nothing reaches the global chord track, other devices
+   are not affected. A progression is the automation of `chord` on the Guitar's track, safe on seek and loop.
+3. The name shows orange while a shape plays, Chord Track in the selector removes the override.
+4. Dropped for now: frets stored on global chords with chord detection (it changes what every device hears),
+   notes on the Guitar's track selecting shapes (held notes are not resent after a seek or loop wrap), a Chord lane
+   per pattern step, a Guitar chord lane on the timeline (new track type).
+5. Later: a per step shape lane for riffs inside one pattern, a capo shift, shape names, copy and paste of shapes,
+   a shape library, a timeline lane with chord diagrams.
 
 ## Sixteen pattern slots
 

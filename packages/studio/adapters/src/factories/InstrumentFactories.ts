@@ -229,7 +229,7 @@ export namespace InstrumentFactories {
                 box.label.setValue(name)
                 box.icon.setValue(IconSymbol.toName(icon))
                 box.host.refer(host)
-                GuitarPatterns.load(box, GuitarPatterns.DefaultPattern)
+                GuitarPatterns.seed(box)
             })
     }
 

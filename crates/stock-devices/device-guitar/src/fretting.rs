@@ -19,6 +19,20 @@ const MAX_OPTIONS: usize = 9;
 
 pub type Tab = [i8; STRINGS];
 
+// WASM CONTRACT: `Guitar.packShape` in lib-dsp, 5 bits per string from the low E, 31 mutes a string
+pub const MAX_FRET: i32 = 24;
+
+pub fn unpack_shape(packed: i32) -> Tab {
+    let mut tab = [MUTED; STRINGS];
+    for (string, fret) in tab.iter_mut().enumerate() {
+        let value = (packed >> (string * 5)) & 31;
+        if value <= MAX_FRET {
+            *fret = value as i8;
+        }
+    }
+    tab
+}
+
 struct Search {
     open: [i32; STRINGS],
     low: i32,
@@ -221,5 +235,12 @@ mod tests {
             rows += 1;
         }
         assert_eq!(rows, 3744);
+    }
+
+    #[test]
+    fn unpacks_the_shapes_lib_dsp_packs() {
+        assert_eq!(unpack_shape(1050751), [MUTED, 3, 2, 0, 1, 0]);
+        assert_eq!(unpack_shape((1 << 30) - 1), [MUTED; STRINGS]);
+        assert_eq!(unpack_shape(12 | 12 << 20), [12, 0, 0, 0, 12, 0]);
     }
 }

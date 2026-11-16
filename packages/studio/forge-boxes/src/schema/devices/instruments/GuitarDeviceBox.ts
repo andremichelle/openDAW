@@ -20,14 +20,26 @@ export const GuitarDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
     25: {type: "float32", name: "tension", pointerRules: ParameterPointerRules, value: 0.0, ...UnipolarConstraints},
     28: {type: "float32", name: "spread", pointerRules: ParameterPointerRules, value: 0.6, ...UnipolarConstraints},
     29: {type: "float32", name: "volume", pointerRules: ParameterPointerRules, value: -6.0, constraints: "decibel", unit: "dB"},
-    30: {type: "array", name: "step-kinds", length: 64, element: {type: "int32", value: 0, constraints: {min: 0, max: 9}, unit: ""}},
-    31: {type: "array", name: "step-strings", length: 64, element: {type: "int32", value: 63, constraints: {min: 0, max: 63}, unit: ""}},
-    32: {type: "array", name: "step-velocities", length: 64, element: {type: "int32", value: 80, constraints: {min: 0, max: 100}, unit: "%"}},
-    33: {type: "array", name: "step-speeds", length: 64, element: {type: "int32", value: 50, constraints: {min: 0, max: 100}, unit: "%"}},
-    34: {type: "int32", name: "pattern-length", value: 16, constraints: {min: 1, max: 64}, unit: ""},
-    35: {type: "int32", name: "pattern", value: -1, constraints: {min: -1, max: 255}, unit: ""},
     36: {type: "float32", name: "spot", pointerRules: ParameterPointerRules, value: 0.2, ...UnipolarConstraints},
     37: {type: "int32", name: "pick", pointerRules: ParameterPointerRules, value: 3, constraints: {min: 0, max: 3}, unit: ""},
     38: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false},
-    39: {type: "float32", name: "tilt", pointerRules: ParameterPointerRules, value: 0.0, ...BipolarConstraints}
+    39: {type: "float32", name: "tilt", pointerRules: ParameterPointerRules, value: 0.0, ...BipolarConstraints},
+    41: {type: "int32", name: "slot", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 15}, unit: ""},
+    43: {type: "int32", name: "chord", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 16}, unit: ""},
+    // 5 bits per string from the low E, 31 mutes a string, all muted is an empty shape
+    44: {type: "array", name: "shapes", length: 16, element: {type: "int32", value: 1073741823, constraints: "any", unit: ""}},
+    42: {
+        type: "array", name: "patterns", length: 16, element: {
+            type: "object", class: {
+                name: "GuitarPattern", fields: {
+                    1: {type: "array", name: "step-kinds", length: 64, element: {type: "int32", value: 0, constraints: {min: 0, max: 9}, unit: ""}},
+                    2: {type: "array", name: "step-strings", length: 64, element: {type: "int32", value: 63, constraints: {min: 0, max: 63}, unit: ""}},
+                    3: {type: "array", name: "step-velocities", length: 64, element: {type: "int32", value: 80, constraints: {min: 0, max: 100}, unit: "%"}},
+                    4: {type: "array", name: "step-speeds", length: 64, element: {type: "int32", value: 50, constraints: {min: 0, max: 100}, unit: "%"}},
+                    5: {type: "int32", name: "length", value: 16, constraints: {min: 1, max: 64}, unit: ""},
+                    6: {type: "int32", name: "library", value: -1, constraints: {min: -1, max: 255}, unit: ""}
+                }
+            }
+        }
+    }
 })

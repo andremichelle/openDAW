@@ -1,9 +1,10 @@
 import css from "./GuitarStepGrid.sass?inline"
-import {clamp, DefaultObservableValue, Editing, int, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, Editing, int, Lifecycle, ObservableValue, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {GuitarDeviceBoxAdapter, GuitarPatterns} from "@opendaw/studio-adapters"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "GuitarStepGrid")
 
@@ -16,10 +17,11 @@ type Construct = {
     page: DefaultObservableValue<int>
     lane: DefaultObservableValue<int>
     brush: DefaultObservableValue<int>
+    slot: ObservableValue<int>
     receiver: LiveStreamReceiver
 }
 
-export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, receiver}: Construct) => {
+export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, slot, receiver}: Construct) => {
     const {box} = adapter
     const element: HTMLElement = <div className={className}/>
     const inner = lifecycle.own(new Terminator())
@@ -28,14 +30,15 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         || kind === GuitarPatterns.Bass || kind === GuitarPatterns.Alternate
     const strums = (kind: int) => kind === GuitarPatterns.Down || kind === GuitarPatterns.Up
         || kind === GuitarPatterns.Mute || kind === GuitarPatterns.Chop
-    const custom = () => box.pattern.setValue(-1)
     const rebuild = () => {
         inner.terminate()
+        const pattern = GuitarPatterns.slot(box, slot.getValue())
+        const custom = () => pattern.library.setValue(-1)
         const columns = Array.from({length: 16}, (_, column) => page.getValue() * 16 + column)
         const indexCells: ReadonlyArray<HTMLElement> = columns.map(index => {
             const cell: HTMLElement = <div className="index">{String(index + 1)}</div>
-            const render = () => cell.classList.toggle("beyond", index >= box.patternLength.getValue())
-            inner.own(box.patternLength.subscribe(render))
+            const render = () => cell.classList.toggle("beyond", index >= pattern.length.getValue())
+            inner.own(pattern.length.subscribe(render))
             render()
             return cell
         })
@@ -46,8 +49,8 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         }))
         const strokeCells: ReadonlyArray<HTMLElement> = columns.map(index => {
             const cell: HTMLElement = <div className="stroke"/>
-            const kindField = box.stepKinds.getField(index)
-            const stringsField = box.stepStrings.getField(index)
+            const kindField = pattern.stepKinds.getField(index)
+            const stringsField = pattern.stepStrings.getField(index)
             const render = () => {
                 const kind = kindField.getValue()
                 const entry = GuitarPatterns.Kinds.find(candidate => candidate.kind === kind)
@@ -55,10 +58,10 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                 const single = kind === GuitarPatterns.Pick && (strings & (strings - 1)) === 0 && strings !== 0
                 cell.textContent = kind === GuitarPatterns.Rest ? "" : single ? String(6 - Math.log2(strings)) : entry?.glyph ?? ""
                 cell.classList.toggle("quiet", kind === GuitarPatterns.Mute || kind === GuitarPatterns.Chuck || kind === GuitarPatterns.Stop)
-                cell.classList.toggle("beyond", index >= box.patternLength.getValue())
+                cell.classList.toggle("beyond", index >= pattern.length.getValue())
                 cell.title = `Step ${index + 1}: ${entry?.label ?? "Rest"}`
             }
-            inner.ownAll(kindField.subscribe(render), stringsField.subscribe(render), box.patternLength.subscribe(render),
+            inner.ownAll(kindField.subscribe(render), stringsField.subscribe(render), pattern.length.subscribe(render),
                 Events.subscribe(cell, "click", () => editing.modify(() => {
                     const kind = brush.getValue()
                     const previous = kindField.getValue()
@@ -75,18 +78,26 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         })
         const laneIndex = lane.getValue()
         const stringsLane = laneIndex === 1
-        const valuesOf = laneIndex === 0 ? box.stepVelocities : box.stepSpeeds
+        const valuesOf = laneIndex === 0 ? pattern.stepVelocities : pattern.stepSpeeds
         const laneCells: ReadonlyArray<HTMLElement> = columns.map(index => {
-            const kindField = box.stepKinds.getField(index)
+            const kindField = pattern.stepKinds.getField(index)
             if (stringsLane) {
-                const field = box.stepStrings.getField(index)
+                const field = pattern.stepStrings.getField(index)
                 const dots: ReadonlyArray<HTMLElement> = Array.from({length: 6}, (_, row) => {
                     const string = 5 - row
                     const dot: HTMLElement = <div/>
-                    inner.own(Events.subscribe(dot, "click", () => editing.modify(() => {
-                        field.setValue(field.getValue() ^ (1 << string))
+                    const setMask = (mask: int) => editing.modify(() => {
+                        field.setValue(mask)
                         custom()
-                    })))
+                    })
+                    inner.ownAll(
+                        Events.subscribe(dot, "click", (event: MouseEvent) =>
+                            setMask(event.shiftKey ? 1 << string : field.getValue() ^ (1 << string))),
+                        ContextMenu.subscribe(dot, collector => collector.addItems(
+                            MenuItem.default({label: `Only String ${6 - string}`}).setTriggerProcedure(() => setMask(1 << string)),
+                            MenuItem.default({label: "All Strings"}).setTriggerProcedure(() => setMask(GuitarPatterns.AllStrings)),
+                            MenuItem.default({label: "No Strings"}).setTriggerProcedure(() => setMask(0)))))
+                    dot.title = `String ${6 - string} (Shift-click plays only this string)`
                     return dot
                 })
                 const cell: HTMLElement = <div className="lane strings">{dots}</div>
@@ -94,9 +105,9 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                     const mask = field.getValue()
                     dots.forEach((dot, row) => dot.classList.toggle("on", (mask & (1 << (5 - row))) !== 0))
                     cell.classList.toggle("inactive", ignoresStrings(kindField.getValue()))
-                    cell.classList.toggle("beyond", index >= box.patternLength.getValue())
+                    cell.classList.toggle("beyond", index >= pattern.length.getValue())
                 }
-                inner.ownAll(field.subscribe(render), kindField.subscribe(render), box.patternLength.subscribe(render))
+                inner.ownAll(field.subscribe(render), kindField.subscribe(render), pattern.length.subscribe(render))
                 render()
                 return cell
             }
@@ -107,10 +118,10 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                 const value = field.getValue()
                 fill.style.setProperty("--value", String(value / 100))
                 cell.classList.toggle("inactive", silent(kindField.getValue()))
-                cell.classList.toggle("beyond", index >= box.patternLength.getValue())
+                cell.classList.toggle("beyond", index >= pattern.length.getValue())
                 cell.title = `${Lanes[laneIndex]} ${value}%`
             }
-            inner.ownAll(field.subscribe(render), kindField.subscribe(render), box.patternLength.subscribe(render))
+            inner.ownAll(field.subscribe(render), kindField.subscribe(render), pattern.length.subscribe(render))
             render()
             return cell
         })
@@ -134,7 +145,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                     })
                     if (column < 0) {return}
                     const index = columns[column]
-                    if (silent(box.stepKinds.getField(index).getValue())) {return}
+                    if (silent(pattern.stepKinds.getField(index).getValue())) {return}
                     const rect = laneCells[column].getBoundingClientRect()
                     const value = Math.round(clamp(1.0 - (pointer.clientY - rect.top - 3) / (rect.height - 6), 0.0, 1.0) * 100)
                     const field = valuesOf.getField(index)
@@ -159,7 +170,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
             <div className="header">Stroke</div>, ...strokeCells,
             laneLabels, laneArea)
     }
-    lifecycle.ownAll(page.subscribe(rebuild), lane.subscribe(rebuild))
+    lifecycle.ownAll(page.subscribe(rebuild), lane.subscribe(rebuild), slot.subscribe(rebuild))
     rebuild()
     return element
 }

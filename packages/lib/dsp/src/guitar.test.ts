@@ -42,4 +42,26 @@ describe("Guitar.tab", () => {
         if (process.env.GUITAR_FIXTURE === "write") {writeFileSync(Fixture, rows())}
         expect(rows()).toBe(readFileSync(Fixture, "utf8"))
     })
+    it("packs custom shapes into one int32 and back", () => {
+        const shape = [12, 0, 0, 0, 12, 0]
+        expect(Guitar.unpackShape(Guitar.packShape(shape))).toEqual(shape)
+        expect(Guitar.unpackShape(Guitar.packShape([-1, 3, 2, 0, 1, 0]))).toEqual([-1, 3, 2, 0, 1, 0])
+        expect(Guitar.unpackShape(Guitar.packShape([24, 25, -7, 0, 0, 0]))).toEqual([24, -1, -1, 0, 0, 0])
+        expect(Guitar.isEmptyShape(Guitar.unpackShape(Guitar.EmptyShape))).toBe(true)
+        expect(Guitar.EmptyShape).toBeLessThan(2 ** 31)
+        expect(Guitar.packShape([-1, 3, 2, 0, 1, 0])).toBe(1050751)
+    })
+    it("names shapes that are exactly a known chord, else shows their frets", () => {
+        expect(Guitar.shapeName([-1, 3, 2, 0, 1, 0], 0)).toBe("C")
+        expect(Guitar.shapeName([-1, 0, 2, 2, 1, 0], 0)).toBe("Am")
+        expect(Guitar.shapeName([3, 2, 0, 0, 0, 3], 0)).toBe("G")
+        expect(Guitar.shapeName([0, 2, 2, 1, 0, 0], 0)).toBe("E")
+        expect(Guitar.shapeName([-1, 0, 2, 0, 2, 0], 0)).toBe("A7")
+        expect(Guitar.shapeName([3, 5, 5, -1, -1, -1], 0)).toBe("G5")
+        expect(Guitar.shapeName([0, 2, 2, 1, 0, -1], 0)).toBe("E")
+        expect(Guitar.shapeName([-1, -1, 0, 2, 3, 2], 0)).toBe("D")
+        expect(Guitar.shapeName([2, -1, 2, 2, 2, -1], 0)).toBe("F#m7")
+        expect(Guitar.shapeName([12, 0, 0, 0, 12, 0], 0)).toBe("12 0 0 0 12 0")
+        expect(Guitar.shapeName([-1, -1, -1, -1, -1, -1], 0)).toBe("No Shape")
+    })
 })

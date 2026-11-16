@@ -1,7 +1,7 @@
 import css from "./FretDisplay.sass?inline"
-import {int, Lifecycle} from "@opendaw/lib-std"
+import {clamp, int, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {Guitar, Harmony} from "@opendaw/lib-dsp"
 import {GuitarDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter, Project} from "@opendaw/studio-core"
@@ -11,26 +11,37 @@ import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 const className = Html.adoptStyleSheet(css, "GuitarFretDisplay")
 
 const Frets = 5
+const MaxBase = Guitar.MaxFret - Frets + 1
+const WheelStep = 40
+const Inlays: ReadonlyArray<int> = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24]
 
 type Construct = {
     lifecycle: Lifecycle
     project: Project
     adapter: GuitarDeviceBoxAdapter
+    selector: HTMLElement
 }
 
-export const FretDisplay = ({lifecycle, project, adapter}: Construct) => {
-    const {box} = adapter
-    const {engine, timelineBoxAdapter: {chordTrack}, liveStreamReceiver} = project
+export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) => {
+    const {box, namedParameter: {chord}} = adapter
+    const {editing, engine, timelineBoxAdapter: {chordTrack}, liveStreamReceiver} = project
     const name: HTMLElement = <div className="name"/>
-    const detail: HTMLElement = <div className="detail"/>
-    const footer: HTMLElement = <div className="footer"/>
-    const shown = {tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0}
+    const lower: HTMLElement = <span className="arrow">‹</span>
+    const higher: HTMLElement = <span className="arrow">›</span>
+    const footerText: HTMLElement = <span/>
+    const footer: HTMLElement = <div className="footer">{lower}{footerText}{higher}</div>
+    const shown = {tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0, base: 1}
+    const edit = {index: 0, base: 1, wheel: 0}
+    const editingShape = () => edit.index > 0 && box.mode.getValue() === 0
+    const shapeField = () => box.shapes.getField(edit.index - 1)
+    const fitBase = (tab: ReadonlyArray<int>): int => {
+        const fretted = tab.filter(fret => fret > 0)
+        return fretted.length === 0 || Math.max(...fretted) <= Frets - 1 ? 1 : clamp(Math.min(...fretted), 1, MaxBase)
+    }
     const live = {frets: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0}
     const canvas: HTMLCanvasElement = <canvas/>
     const painter = lifecycle.own(new CanvasPainter(canvas, ({devicePixelRatio, context, actualWidth, actualHeight}) => {
-        const {tab, lit} = shown
-        const fretted = tab.filter(fret => fret > 0)
-        const base = fretted.length === 0 || Math.max(...fretted) <= Frets - 1 ? 1 : Math.min(...fretted)
+        const {tab, lit, base} = shown
         const top = 14 * devicePixelRatio
         const left = 12 * devicePixelRatio
         const right = actualWidth - 14 * devicePixelRatio
@@ -48,12 +59,27 @@ export const FretDisplay = ({lifecycle, project, adapter}: Construct) => {
         if (base === 1) {
             context.fillStyle = Colors.cream.toString()
             context.fillRect(left - devicePixelRatio, top - 2 * devicePixelRatio, right - left + 2 * devicePixelRatio, 2.5 * devicePixelRatio)
-        } else {
-            context.fillStyle = Colors.cream.toString()
-            context.font = `${8 * devicePixelRatio}px Rubik, sans-serif`
-            context.textAlign = "left"
-            context.textBaseline = "middle"
-            context.fillText(String(base), right + 4 * devicePixelRatio, (fretY(0) + fretY(1)) / 2)
+        }
+        context.font = `${8 * devicePixelRatio}px Rubik, sans-serif`
+        context.textAlign = "left"
+        context.textBaseline = "middle"
+        for (let row = 0; row < Frets; row++) {
+            const fret = base + row
+            const inlay = Inlays.includes(fret)
+            const centerY = (fretY(row) + fretY(row + 1)) / 2
+            if (inlay) {
+                context.fillStyle = DisplayPaint.gridStyle(0.25)
+                const pairs = fret % 12 === 0 ? [1.5, 3.5] : [2.5]
+                pairs.forEach(between => {
+                    context.beginPath()
+                    context.arc(left + (right - left) * between / (Guitar.Strings - 1), centerY, 2.5 * devicePixelRatio, 0, Math.PI * 2)
+                    context.fill()
+                })
+            }
+            if (inlay || (row === 0 && base > 1)) {
+                context.fillStyle = row === 0 && base > 1 ? Colors.cream.toString() : Colors.shadow.toString()
+                context.fillText(String(fret), right + 4 * devicePixelRatio, centerY)
+            }
         }
         const radius = 4.5 * devicePixelRatio
         context.font = `${9 * devicePixelRatio}px Rubik, sans-serif`
@@ -78,34 +104,87 @@ export const FretDisplay = ({lifecycle, project, adapter}: Construct) => {
                 context.beginPath()
                 context.arc(x, markY, 2.75 * devicePixelRatio, 0, Math.PI * 2)
                 context.stroke()
-            } else {
+            } else if (fret >= base && fret < base + Frets) {
                 context.fillStyle = on ? Colors.white.toString() : DisplayPaint.strokeStyle(0.9)
                 context.beginPath()
                 context.arc(x, (fretY(fret - base) + fretY(fret - base + 1)) / 2, radius, 0, Math.PI * 2)
                 context.fill()
+            } else {
+                context.fillStyle = on ? Colors.white.toString() : DisplayPaint.strokeStyle(0.9)
+                context.beginPath()
+                context.arc(x, fret < base ? top : bottom, radius * 0.5, 0, Math.PI * 2)
+                context.fill()
             }
         })
     }))
+    const moveWindow = (delta: int) => {
+        if (!editingShape()) {return}
+        edit.base = clamp(edit.base + delta, 1, MaxBase)
+        update()
+    }
+    const toggleFret = (event: PointerEvent) => {
+        if (!editingShape() || event.button !== 0) {return}
+        const rect = canvas.getBoundingClientRect()
+        const [top, left, right, bottom] = [14, 12, rect.width - 14, rect.height - 4]
+        const x = event.clientX - rect.left
+        const y = event.clientY - rect.top
+        const string = clamp(Math.round((x - left) / (right - left) * (Guitar.Strings - 1)), 0, Guitar.Strings - 1)
+        const tab = Guitar.unpackShape(shapeField().getValue()).slice()
+        if (y < top + 2) {
+            tab[string] = tab[string] < 0 ? 0 : Guitar.Muted
+        } else {
+            const fret = edit.base + clamp(Math.floor((y - top) / ((bottom - top) / Frets)), 0, Frets - 1)
+            tab[string] = tab[string] === fret ? 0 : fret
+        }
+        editing.modify(() => shapeField().setValue(Guitar.packShape(tab)))
+    }
     const update = () => {
         const tuning = box.tuning.getValue()
         const position = box.position.getValue()
         const keys = box.mode.getValue() === 1
-        const chord = chordTrack.chordAt(engine.position.getValue())
+        const index = chord.getControlledValue()
+        if (index !== edit.index) {
+            edit.index = index
+            edit.base = index > 0 ? fitBase(Guitar.unpackShape(shapeField().getValue())) : 1
+        }
         if (keys) {
+            name.classList.remove("custom")
             shown.tab = live.frets
             name.textContent = "Keys"
-            detail.textContent = "played on the strings"
+        } else if (editingShape()) {
+            shown.tab = Guitar.unpackShape(shapeField().getValue())
+            name.textContent = Guitar.isEmptyShape(shown.tab) ? "Empty Shape" : Guitar.shapeName(shown.tab, tuning)
+            name.classList.toggle("custom", !Guitar.isEmptyShape(shown.tab))
         } else {
-            shown.tab = chord.mapOr(({root, bits}) => Guitar.tab(root, bits, tuning, position),
+            name.classList.remove("custom")
+            const current = chordTrack.chordAt(engine.position.getValue())
+            shown.tab = current.mapOr(({root, bits}) => Guitar.tab(root, bits, tuning, position),
                 new Array<int>(Guitar.Strings).fill(Guitar.Muted))
-            name.textContent = chord.mapOr(chord => Harmony.chordName(chord), "No Chord")
-            detail.textContent = chord.nonEmpty() ? "from the chord track" : "add chords to the chord track"
+            name.textContent = current.mapOr(value => Harmony.chordName(value), "No Chord")
         }
+        shown.base = editingShape() ? edit.base : fitBase(shown.tab)
         shown.lit = engine.isPlaying.getValue() ? live.lit : 0
-        footer.textContent = `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`
+        footer.classList.toggle("editing", editingShape())
+        footerText.textContent = editingShape()
+            ? `Frets ${edit.base} to ${edit.base + Frets - 1}`
+            : `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`
         painter.requestUpdate()
     }
     lifecycle.ownAll(
+        Events.subscribe(canvas, "pointerdown", toggleFret),
+        Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
+            if (!editingShape()) {return}
+            event.preventDefault()
+            edit.wheel += event.deltaY
+            if (Math.abs(edit.wheel) >= WheelStep) {
+                moveWindow(Math.sign(edit.wheel))
+                edit.wheel = 0
+            }
+        }, {passive: false}),
+        Events.subscribe(lower, "click", () => moveWindow(-1)),
+        Events.subscribe(higher, "click", () => moveWindow(1)),
+        chord.subscribe(update),
+        ...box.shapes.fields().map(field => field.subscribe(update)),
         engine.position.subscribe(update),
         engine.isPlaying.subscribe(update),
         chordTrack.subscribe(update),
@@ -123,7 +202,7 @@ export const FretDisplay = ({lifecycle, project, adapter}: Construct) => {
         <div className={className}>
             <header>
                 {name}
-                {detail}
+                <div className="selector">{selector}</div>
                 {canvas}
                 {footer}
             </header>

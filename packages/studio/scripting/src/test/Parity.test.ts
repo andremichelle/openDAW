@@ -61,12 +61,12 @@ describe("Schema parity", () => {
                 `patterns.${pattern}.length`,
                 ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.steps.${step}`)
             ]).flat(),
-            // steps are exposed as GuitarStep objects, the pattern index only names the loaded pattern in the editor
-            Guitar: [
+            // slots are exposed as GuitarSlot objects with GuitarStep objects, the library index only names the slot in the editor
+            Guitar: Array.from({length: 16}, (_, pattern) => [
                 ...["stepKinds", "stepStrings", "stepVelocities", "stepSpeeds"]
-                    .flatMap(lane => Array.from({length: 64}, (_, step) => `${lane}.${step}`)),
-                "pattern"
-            ],
+                    .flatMap(lane => Array.from({length: 64}, (_, step) => `patterns.${pattern}.${lane}.${step}`)),
+                `patterns.${pattern}.length`, `patterns.${pattern}.library`
+            ]).flat().concat(Array.from({length: 16}, (_, shape) => `shapes.${shape}`)),
             Apparat: [],
             InstrumentComposite: [],
             OpenDrumKick: [],

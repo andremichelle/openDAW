@@ -25,6 +25,8 @@ const CLIP_KNEE: f32 = 0.7;
 
 const MODE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 1};
 const RATE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
+const SLOT_MAPPING: LinearInteger = LinearInteger {min: 0, max: SLOTS as i32 - 1};
+const CHORD_MAPPING: LinearInteger = LinearInteger {min: 0, max: SHAPES as i32};
 const POSITION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 5};
 const TUNING_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const BODY_MAPPING: LinearInteger = LinearInteger {min: 0, max: BODY_COUNT as i32 - 1};
@@ -53,13 +55,19 @@ pub mod param {
     pub const VOLUME: usize = 16;
     pub const PICK: usize = 17;
     pub const TILT: usize = 18;
-    pub const COUNT: usize = 19;
+    pub const SLOT: usize = 19;
+    pub const CHORD: usize = 20;
+    pub const COUNT: usize = 21;
 }
 
 // WASM CONTRACT: GuitarDeviceBox field keys (studio-boxes)
-const PARAM_FIELDS: [u16; param::COUNT] = [10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25, 36, 28, 29, 37, 39];
-const LANE_FIELDS: [u16; 4] = [30, 31, 32, 33];
-const LENGTH_FIELD: u16 = 34;
+const PARAM_FIELDS: [u16; param::COUNT] = [10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25, 36, 28, 29, 37, 39, 41, 43];
+const PATTERNS_FIELD: u16 = 42;
+const LANE_KEYS: [u16; 4] = [1, 2, 3, 4];
+const LENGTH_KEY: u16 = 5;
+pub const SLOTS: usize = 16;
+pub const SHAPES: usize = 16;
+const SHAPES_FIELD: u16 = 44;
 const GROOVE_FIELD: u16 = 38;
 
 const CHORDS_MODE: i32 = 0;
@@ -102,7 +110,24 @@ pub struct Settings {
     pub pick: i32,
     pub spread: f32,
     pub tilt: f32,
+    pub chord: i32,
     pub gain: f32
+}
+
+#[derive(Clone, Copy)]
+struct Pattern {
+    kinds: [i32; STEP_COUNT],
+    masks: [i32; STEP_COUNT],
+    velocities: [f32; STEP_COUNT],
+    speeds: [f32; STEP_COUNT],
+    length: usize
+}
+
+impl Pattern {
+    const EMPTY: Pattern = Pattern {
+        kinds: [strum::REST; STEP_COUNT], masks: [0b111111; STEP_COUNT], velocities: [0.8; STEP_COUNT],
+        speeds: [0.5; STEP_COUNT], length: 16
+    };
 }
 
 pub struct State {
@@ -110,11 +135,9 @@ pub struct State {
     body: Body,
     character: [f32; MAX_DELAY],
     pub settings: Settings,
-    kinds: [i32; STEP_COUNT],
-    masks: [i32; STEP_COUNT],
-    velocities: [f32; STEP_COUNT],
-    speeds: [f32; STEP_COUNT],
-    length: usize,
+    patterns: [Pattern; SLOTS],
+    slot: usize,
+    shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
     pending: [Pending; PENDING],
@@ -133,8 +156,9 @@ pub struct State {
     limiter: SimpleLimiter,
     sample_rate: f32,
     ids: [u32; param::COUNT],
-    lane_ids: [u32; 4],
-    length_id: u32,
+    lane_ids: [[u32; 4]; SLOTS],
+    length_ids: [u32; SLOTS],
+    shapes_id: u32,
     groove: abi::GrooveFollower,
     broadcast: u32
 }
@@ -150,7 +174,7 @@ impl State {
         self.settings = Settings {
             mode: CHORDS_MODE, rate: 1, speed: 0.3, speed_variation: 0.2, velocity: 0.8, velocity_variation: 0.75,
             position: 0, tuning: 0, damping: 0.33, damping_variation: 0.5, pluck: 0.5,
-            pluck_variation: 0.5, tension: 0.0, spot: 0.2, character: 0.5, pick: 3, spread: 0.6, tilt: 0.0,
+            pluck_variation: 0.5, tension: 0.0, spot: 0.2, character: 0.5, pick: 3, spread: 0.6, tilt: 0.0, chord: 0,
             gain: dsp::db_to_gain(-6.0)
         };
         let mut noise = 65535u32;
@@ -158,11 +182,9 @@ impl State {
             noise = noise.wrapping_mul(1664525).wrapping_add(1013904223);
             *value = (noise >> 8) as f32 / 8388608.0 - 1.0;
         }
-        self.kinds = [strum::REST; STEP_COUNT];
-        self.masks = [0b111111; STEP_COUNT];
-        self.velocities = [0.8; STEP_COUNT];
-        self.speeds = [0.5; STEP_COUNT];
-        self.length = 16;
+        self.patterns = [Pattern::EMPTY; SLOTS];
+        self.slot = 0;
+        self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
         self.tab_key = (-1, 0, 0, 0);
@@ -174,19 +196,35 @@ impl State {
 
     pub fn display(&self) -> Tab {self.display}
 
-    pub fn set_lane(&mut self, lane: usize, values: &[i32]) {
+    pub fn set_lane(&mut self, slot: usize, lane: usize, values: &[i32]) {
+        let pattern = &mut self.patterns[slot];
         for (step, value) in values.iter().take(STEP_COUNT).enumerate() {
             match lane {
-                0 => self.kinds[step] = (*value).clamp(strum::REST, strum::CHOP),
-                1 => self.masks[step] = *value & 0b111111,
-                2 => self.velocities[step] = (*value).clamp(0, 100) as f32 / 100.0,
-                _ => self.speeds[step] = (*value).clamp(0, 100) as f32 / 100.0
+                0 => pattern.kinds[step] = (*value).clamp(strum::REST, strum::CHOP),
+                1 => pattern.masks[step] = *value & 0b111111,
+                2 => pattern.velocities[step] = (*value).clamp(0, 100) as f32 / 100.0,
+                _ => pattern.speeds[step] = (*value).clamp(0, 100) as f32 / 100.0
             }
         }
     }
 
-    pub fn set_length(&mut self, length: i32) {
-        self.length = length.clamp(1, STEP_COUNT as i32) as usize;
+    pub fn set_length(&mut self, slot: usize, length: i32) {
+        self.patterns[slot].length = length.clamp(1, STEP_COUNT as i32) as usize;
+    }
+
+    fn custom_shape(&self) -> Option<Tab> {
+        let index = self.settings.chord;
+        if index < 1 || index > SHAPES as i32 {
+            return None;
+        }
+        let tab = self.shapes[index as usize - 1];
+        if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
+    }
+
+    pub fn set_shapes(&mut self, values: &[i32]) {
+        for (shape, packed) in self.shapes.iter_mut().zip(values.iter()) {
+            *shape = fretting::unpack_shape(*packed);
+        }
     }
 
     fn chord_tab(&mut self, root: i32, voicing: i32) -> Tab {
@@ -225,13 +263,19 @@ impl State {
             self.release_all();
             return;
         }
-        let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
+        let custom = self.custom_shape();
+        let tab = if let Some(tab) = custom {
             self.chord_root = -1;
-            self.release_all();
-            return;
+            tab
+        } else {
+            let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
+                self.chord_root = -1;
+                self.release_all();
+                return;
+            };
+            self.chord_root = root;
+            self.chord_tab(root, voicing)
         };
-        self.chord_root = root;
-        let tab = self.chord_tab(root, voicing);
         self.display = tab;
         for string in 0..STRINGS {
             if tab[string] < 0 {
@@ -408,17 +452,18 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         let per_bar = round(bar.length / step_length).max(1.0) as i64;
         let local = round((grid - bar.start) / step_length) as i64;
         let bars = round(bar.start / bar.length.max(1.0)) as i64;
-        let span = (round(state.length as f64 / per_bar as f64) as i64).max(1);
-        let step = (bars.rem_euclid(span) * per_bar + local).rem_euclid(state.length as i64) as usize;
+        let pattern = &state.patterns[state.slot];
+        let span = (round(pattern.length as f64 / per_bar as f64) as i64).max(1);
+        let step = (bars.rem_euclid(span) * per_bar + local).rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
-        let kind = state.kinds[step];
+        let kind = pattern.kinds[step];
         if kind == strum::REST {
             continue;
         }
-        let level = (state.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
+        let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
         out[count] = EventRecord {
             position, offset: 0, kind: EVENT_NOTE_ON, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
-            velocity: level, cent: state.speeds[step], duration: state.masks[step] as f64
+            velocity: level, cent: pattern.speeds[step], duration: pattern.masks[step] as f64
         };
         count += 1;
     }
@@ -543,6 +588,8 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::VOLUME => settings.gain = dsp::db_to_gain(float_value(value, &VOLUME_MAPPING)),
         param::PICK => settings.pick = int_value(value, &PICK_MAPPING),
         param::TILT => settings.tilt = float_value(value, &BIPOLAR),
+        param::CHORD => settings.chord = int_value(value, &CHORD_MAPPING).clamp(0, SHAPES as i32),
+        param::SLOT => state.slot = int_value(value, &SLOT_MAPPING).clamp(0, SLOTS as i32 - 1) as usize,
         _ => {}
     }
 }
@@ -557,10 +604,13 @@ impl Instrument for Device {
         for index in 0..param::COUNT {
             state.ids[index] = abi::bind_parameter(&[PARAM_FIELDS[index]]);
         }
-        for (lane, field) in LANE_FIELDS.iter().enumerate() {
-            state.lane_ids[lane] = abi::observe_field(&[*field]);
+        for slot in 0..SLOTS {
+            for (lane, key) in LANE_KEYS.iter().enumerate() {
+                state.lane_ids[slot][lane] = abi::observe_field(&[PATTERNS_FIELD, slot as u16, *key]);
+            }
+            state.length_ids[slot] = abi::observe_field(&[PATTERNS_FIELD, slot as u16, LENGTH_KEY]);
         }
-        state.length_id = abi::observe_field(&[LENGTH_FIELD]);
+        state.shapes_id = abi::observe_field(&[SHAPES_FIELD]);
         state.groove = abi::GrooveFollower::observe(&[GROOVE_FIELD]);
         state.broadcast = abi::bind_broadcast_int_array(&[0], 9);
     }
@@ -584,13 +634,24 @@ impl Instrument for Device {
     }
 
     fn field_changed(state: &mut State, id: u32, value: FieldValue) {
-        if id == state.length_id {
-            if let FieldValue::Int(length) = value {
-                state.set_length(length);
-            }
-        } else if let Some(lane) = state.lane_ids.iter().position(|bound| *bound == id) {
+        if id == state.shapes_id {
             if let FieldValue::Ints(values) = value {
-                state.set_lane(lane, values);
+                state.set_shapes(values);
+            }
+            return;
+        }
+        if let Some(slot) = state.length_ids.iter().position(|bound| *bound == id) {
+            if let FieldValue::Int(length) = value {
+                state.set_length(slot, length);
+            }
+            return;
+        }
+        for slot in 0..SLOTS {
+            if let Some(lane) = state.lane_ids[slot].iter().position(|bound| *bound == id) {
+                if let FieldValue::Ints(values) = value {
+                    state.set_lane(slot, lane, values);
+                }
+                return;
             }
         }
     }

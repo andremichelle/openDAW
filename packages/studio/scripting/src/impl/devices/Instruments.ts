@@ -3,6 +3,7 @@ import {
     AudioFileBox,
     CubedDeviceBox,
     GuitarDeviceBox,
+    GuitarPattern,
     InstrumentCompositeBox,
     InstrumentCompositeCellBox,
     MIDIOutputDeviceBox,
@@ -34,7 +35,7 @@ import {
     VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
-import {ClassicWaveform} from "@opendaw/lib-dsp"
+import {ClassicWaveform, Guitar as DSPGuitar} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
 import {
     CellInstrument,
@@ -57,6 +58,7 @@ import {
     CubedStep,
     DeepPartial,
     Guitar,
+    GuitarSlot,
     GuitarStep,
     GuitarStroke,
     InstrumentAudioUnit,
@@ -1038,15 +1040,14 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
 // WASM CONTRACT: the index is the stroke kind of `GuitarPatterns` (step-kinds field 30)
 const GuitarStrokes: ReadonlyArray<GuitarStroke> = ["rest", "down", "up", "mute", "chuck", "bass", "alternate", "pick", "stop", "chop"]
 
-const createGuitarStep = (context: Context, box: GuitarDeviceBox, index: int): GuitarStep => {
-    const name = `steps.${index}`
-    const kind = box.stepKinds.getField(index)
-    const strings = box.stepStrings.getField(index)
-    const velocity = box.stepVelocities.getField(index)
-    const speed = box.stepSpeeds.getField(index)
+const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string, index: int): GuitarStep => {
+    const kind = pattern.stepKinds.getField(index)
+    const strings = pattern.stepStrings.getField(index)
+    const velocity = pattern.stepVelocities.getField(index)
+    const speed = pattern.stepSpeeds.getField(index)
     const write = (procedure: () => void) => context.edit(() => {
         procedure()
-        box.pattern.setValue(-1)
+        pattern.library.setValue(-1)
     })
     return Object.freeze({
         get stroke(): GuitarStroke {return GuitarStrokes[kind.getValue()] ?? "rest"},
@@ -1058,6 +1059,27 @@ const createGuitarStep = (context: Context, box: GuitarDeviceBox, index: int): G
         get speed(): int {return speed.getValue()},
         set speed(value: int) {write(() => speed.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.speed`)))}
     })
+}
+
+const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int): GuitarSlot => {
+    const steps = Object.freeze(Array.from({length: GuitarPatterns.StepCount},
+        (_, stepIndex) => createGuitarStep(context, pattern, `patterns.${index}.steps.${stepIndex}`, stepIndex)))
+    const target = {
+        steps,
+        setSteps: (values: ReadonlyArray<Partial<GuitarStep>>): void => context.edit(() => {
+            if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
+            if (values.length > steps.length) {return panic(new RangeError(`setSteps: at most ${steps.length} steps`))}
+            values.forEach((value, stepIndex) => Props.apply(steps[stepIndex], value, `steps.${stepIndex}`))
+            pattern.length.setValue(clamp(values.length, 1, steps.length))
+        }),
+        load: (name: string): void => {
+            const library = GuitarPatterns.Library.findIndex(entry => entry.name === Guard.string(name, "load"))
+            if (library < 0) {return panic(new RangeError(`load: no pattern named '${name}'`))}
+            context.edit(() => GuitarPatterns.load(pattern, library))
+        }
+    }
+    Fields.bind(context, target, {length: pattern.length}, `patterns.${index}.`)
+    return target as unknown as GuitarSlot
 }
 
 export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Guitar {
@@ -1081,8 +1103,9 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
     declare pick: int
     declare spread: unitValue
     declare volume: float
-    declare patternLength: int
-    readonly steps: ReadonlyArray<GuitarStep>
+    declare slot: int
+    declare chord: int
+    readonly patterns: ReadonlyArray<GuitarSlot>
 
     constructor(context: Context, box: GuitarDeviceBox) {
         super(context, box)
@@ -1091,10 +1114,9 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
             velocityVariation: box.velocityVariation, tilt: box.tilt, position: box.position,
             tuning: box.tuning, body: box.body, damping: box.damping, dampingVariation: box.dampingVariation,
             pluck: box.pluck, pluckVariation: box.pluckVariation, tension: box.tension, spot: box.spot,
-            pick: box.pick, spread: box.spread, volume: box.volume,
-            patternLength: box.patternLength
+            pick: box.pick, spread: box.spread, volume: box.volume, slot: box.slot, chord: box.chord
         })
-        this.steps = Object.freeze(Array.from({length: GuitarPatterns.StepCount}, (_, index) => createGuitarStep(context, box, index)))
+        this.patterns = Object.freeze(box.patterns.fields().map((pattern, index) => createGuitarSlot(context, pattern, index)))
     }
 
     get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
@@ -1102,19 +1124,17 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
 
     get patternNames(): ReadonlyArray<string> {return GuitarPatterns.Library.map(({name}) => name)}
 
-    setSteps(values: ReadonlyArray<Partial<GuitarStep>>): void {
-        this.context.edit(() => {
-            if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
-            if (values.length > this.steps.length) {return panic(new RangeError(`setSteps: at most ${this.steps.length} steps`))}
-            values.forEach((value, index) => Props.apply(this.steps[index], value, `steps.${index}`))
-            this.box.patternLength.setValue(clamp(values.length, 1, this.steps.length))
-        })
+    get shapes(): ReadonlyArray<ReadonlyArray<int>> {
+        return this.box.shapes.fields().map(field => DSPGuitar.unpackShape(field.getValue()))
     }
 
-    loadPattern(name: string): void {
-        const index = GuitarPatterns.Library.findIndex(pattern => pattern.name === Guard.string(name, "loadPattern"))
-        if (index < 0) {return panic(new RangeError(`loadPattern: no pattern named '${name}'`))}
-        this.context.edit(() => GuitarPatterns.load(this.box, index))
+    setShape(index: int, frets: ReadonlyArray<int>): void {
+        const slot = Guard.int32({length: this.box.shapes.fields().length}, index, "setShape")
+        if (!Array.isArray(frets) || frets.length !== DSPGuitar.Strings) {
+            return panic(new RangeError(`setShape: expected ${DSPGuitar.Strings} frets`))
+        }
+        const checked = frets.map((fret, string) => Guard.int32({min: -1, max: DSPGuitar.MaxFret}, fret, `setShape.frets.${string}`))
+        this.context.edit(() => this.box.shapes.getField(slot).setValue(DSPGuitar.packShape(checked)))
     }
 }
 

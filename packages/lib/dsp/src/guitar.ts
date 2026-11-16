@@ -1,4 +1,6 @@
-import {int} from "@opendaw/lib-std"
+import {int, isDefined, Nullable} from "@opendaw/lib-std"
+import {Harmony} from "./harmony"
+import {MidiKeys} from "./midi-keys"
 
 // The twin of `fretting.rs` in device-guitar: the guitar test and the crate test share one parity table.
 export namespace Guitar {
@@ -133,4 +135,41 @@ export namespace Guitar {
 
     export const pitch = (tuning: int, string: int, fret: int): int =>
         Tunings[Math.min(tuning, Tunings.length - 1)][string] + fret
+
+    // WASM CONTRACT: a custom shape packs 5 bits per string, low E in bits 0 to 4, 31 mutes the string
+    export const MaxFret = 24
+    const PackedMuted = 31
+    export const EmptyShape: int = (1 << (Strings * 5)) - 1
+
+    export const packShape = (tab: Tab): int => tab.reduce((packed, fret, string) =>
+        packed | ((fret < 0 || fret > MaxFret ? PackedMuted : fret) << (string * 5)), 0)
+
+    export const unpackShape = (packed: int): Tab => Array.from({length: Strings}, (_, string) => {
+        const fret = (packed >>> (string * 5)) & PackedMuted
+        return fret > MaxFret ? Muted : fret
+    })
+
+    export const isEmptyShape = (tab: Tab): boolean => tab.every(fret => fret < 0)
+
+    export const shapeText = (tab: Tab): string => tab.map(fret => fret < 0 ? "x" : String(fret)).join(" ")
+
+    export const shapeName = (tab: Tab, tuning: int): string => {
+        const pitches = tab.flatMap((fret, string) => fret < 0 ? [] : [pitch(tuning, string, fret)])
+        if (pitches.length === 0) {return "No Shape"}
+        const classes = pitches.reduce((bits, value) => bits | (1 << (value % 12)), 0)
+        const bass = Math.min(...pitches) % 12
+        const names = MidiKeys.Names.English
+        for (let root = 0; root < 12; root++) {
+            if ((classes & (1 << root)) === 0) {continue}
+            const relative = Array.from({length: 12}, (_, interval) => interval)
+                .reduce((bits, interval) => (classes & (1 << ((root + interval) % 12))) !== 0 ? bits | (1 << interval) : bits, 0)
+            const suffix: Nullable<string> = Harmony.ChordShapes.find(({bits}) => bits === relative
+                || (bits & ~(1 << 7)) === relative && Harmony.countNotes(bits) === 4)?.suffix
+                ?? (relative === 0b10000001 ? "5" : null)
+            if (isDefined(suffix)) {
+                return `${names[root]}${suffix}${bass === root ? "" : `/${names[bass]}`}`
+            }
+        }
+        return shapeText(tab)
+    }
 }

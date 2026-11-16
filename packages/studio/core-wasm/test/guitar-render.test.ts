@@ -2,6 +2,7 @@
 // stays audible and finite, a project without chords stays silent, and live notes play in Keys mode.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
+import {Guitar} from "@opendaw/lib-dsp"
 import {AudioUnitBox, ChordEventBox, GuitarDeviceBox} from "@opendaw/studio-boxes"
 import {GuitarDeviceBoxAdapter, GuitarPatterns, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -24,7 +25,7 @@ const render = async ({chords, apply}: Scene, quanta: number,
     })
     GuitarDeviceBox.create(source, UUID.generate(), box => {
         box.host.refer(unit.input)
-        GuitarPatterns.load(box, GuitarPatterns.DefaultPattern)
+        GuitarPatterns.seed(box)
         apply?.(box)
     })
     if (chords ?? true) {
@@ -82,9 +83,26 @@ describe("Guitar in the full engine", () => {
             }
         }, 60000)
     }
+    it("strums a custom shape without the chord track and ignores an empty one", async () => {
+        const shaped = (chord: number) => render({chords: false, apply: box => {
+            box.shapes.getField(0).setValue(Guitar.packShape([-1, 3, 2, 0, 1, 0]))
+            box.chord.setValue(chord)
+        }}, 400)
+        expect(rms(await shaped(1))).toBeGreaterThan(0.002)
+        expect(rms(await shaped(2))).toBe(0)
+        expect(rms(await shaped(0))).toBe(0)
+    })
+    it("plays the pattern of the chosen slot", async () => {
+        const left = await render({apply: box => {
+            GuitarPatterns.clear(GuitarPatterns.slot(box, 0))
+            box.slot.setValue(4)
+        }}, 400)
+        expect(rms(left)).toBeGreaterThan(0.002)
+        expect(rms(await render({apply: box => GuitarPatterns.clear(GuitarPatterns.slot(box, 0))}, 400))).toBe(0)
+    })
     it("plays every built in pattern", async () => {
         for (let index = 0; index < GuitarPatterns.Library.length; index += 5) {
-            const left = await render({apply: box => GuitarPatterns.load(box, index)}, 400)
+            const left = await render({apply: box => GuitarPatterns.load(GuitarPatterns.slot(box, 0), index)}, 400)
             expect(left.every(Number.isFinite), GuitarPatterns.Library[index].name).toBe(true)
             expect(rms(left), GuitarPatterns.Library[index].name).toBeGreaterThan(0.002)
         }

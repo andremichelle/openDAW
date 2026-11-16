@@ -538,23 +538,40 @@ describe("Devices", () => {
     it("configures the Guitar pattern", () => {
         const {project} = createFixture()
         const guitar = project.addInstrumentUnit("Guitar").instrument
-        expect(guitar.steps.length).toBe(64)
+        expect(guitar.patterns.length).toBe(16)
+        expect(guitar.slot).toBe(0)
+        const [first, second] = guitar.patterns
+        expect(first.steps.length).toBe(64)
         expect(guitar.patternNames).toContain("Travis")
-        expect(guitar.patternLength).toBe(16)
-        expect(guitar.steps[0].stroke).toBe("down")
-        guitar.steps[1].stroke = "chuck"
-        guitar.steps[1].strings = 0b000111
-        expect(guitar.steps[1].stroke).toBe("chuck")
-        expect(guitar.steps[1].strings).toBe(7)
-        expect(() => {guitar.steps[1].stroke = "strum" as any}).toThrow()
-        guitar.setSteps([{stroke: "bass"}, {stroke: "pick", strings: 0b100000, velocity: 60}, {stroke: "up"}])
-        expect(guitar.patternLength).toBe(3)
-        expect(guitar.steps[1].velocity).toBe(60)
-        guitar.loadPattern("Travis")
-        expect(guitar.steps[0].stroke).toBe("bass")
-        expect(guitar.steps[2].stroke).toBe("pick")
-        expect(guitar.steps[2].strings).toBe(0b001000)
-        expect(() => guitar.loadPattern("Nope")).toThrow(RangeError)
+        expect(first.length).toBe(16)
+        expect(first.steps[0].stroke).toBe("down")
+        first.steps[1].stroke = "chuck"
+        first.steps[1].strings = 0b000111
+        expect(first.steps[1].stroke).toBe("chuck")
+        expect(first.steps[1].strings).toBe(7)
+        expect(() => {first.steps[1].stroke = "strum" as any}).toThrow()
+        second.setSteps([{stroke: "bass"}, {stroke: "pick", strings: 0b100000, velocity: 60}, {stroke: "up"}])
+        expect(second.length).toBe(3)
+        expect(second.steps[1].velocity).toBe(60)
+        expect(first.steps[1].stroke).toBe("chuck")
+        guitar.patterns[15].load("Travis")
+        expect(guitar.patterns[15].steps[0].stroke).toBe("bass")
+        expect(guitar.patterns[15].steps[2].stroke).toBe("pick")
+        expect(guitar.patterns[15].steps[2].strings).toBe(0b001000)
+        expect(() => guitar.patterns[15].load("Nope")).toThrow(RangeError)
+        guitar.slot = 15
+        expect(guitar.slot).toBe(15)
+        expect(guitar.chord).toBe(0)
+        expect(guitar.shapes.length).toBe(16)
+        expect(guitar.shapes[0]).toEqual([-1, -1, -1, -1, -1, -1])
+        guitar.setShape(2, [12, 0, 0, 0, 12, 0])
+        expect(guitar.shapes[2]).toEqual([12, 0, 0, 0, 12, 0])
+        guitar.setShape(1, [25, -5, 0, 0, 0, 0])
+        expect(guitar.shapes[1]).toEqual([24, -1, 0, 0, 0, 0])
+        expect(() => guitar.setShape(16, [0, 0, 0, 0, 0, 0])).toThrow()
+        expect(() => guitar.setShape(0, [0, 0, 0])).toThrow(RangeError)
+        guitar.chord = 3
+        expect(guitar.chord).toBe(3)
         guitar.body = 5
         guitar.tuning = 1
         guitar.spot = 0.5
