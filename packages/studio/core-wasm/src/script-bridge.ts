@@ -212,9 +212,9 @@ export class ScriptBridges {
     /// The `host_script_*` (+ no engine `host_self_uuid`) closures to bind into each scriptable device's `env`.
     imports(): Record<string, (...args: number[]) => number | void> {
         return {
-            host_script_create: (uuidPtr, kind, statePtr) => this.#create(uuidPtr, kind, statePtr),
+            host_script_create: (uuidPtr, kind, statePtr) => this.#create(uuidPtr >>> 0, kind, statePtr >>> 0),
             host_script_audio: (handle, srcL, srcR, outL, outR, s0, s1, index, p0, p1, bpm, flags) =>
-                this.#audio(handle, srcL, srcR, outL, outR, s0, s1, index, p0, p1, bpm, flags),
+                this.#audio(handle, srcL >>> 0, srcR >>> 0, outL >>> 0, outR >>> 0, s0, s1, index, p0, p1, bpm, flags),
             host_script_note_on: (handle, pitch, velocity, cent, id) => this.#noteOn(handle, pitch, velocity, cent, id),
             host_script_note_off: (handle, id) => this.#noteOff(handle, id),
             host_script_reset: (handle) => this.#reset(handle),
@@ -222,11 +222,11 @@ export class ScriptBridges {
                 this.#param(handle, index, kind, value, modulation),
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
-                this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
-            host_script_release_notes: (handle, outPtr, outMax, position) => this.#releaseNotes(handle, outPtr, outMax, position),
+                this.#notes(handle, inPtr >>> 0, inCount, outPtr >>> 0, outMax, from, to, bpm, flags, s0, s1),
+            host_script_release_notes: (handle, outPtr, outMax, position) => this.#releaseNotes(handle, outPtr >>> 0, outMax, position),
             host_script_release: (handle) => this.#release(handle),
             host_script_latency: (handle) => this.#latency(handle),
-            host_script_data: (handle, collection, ptr, records, fields) => this.#data(handle, collection, ptr, records, fields)
+            host_script_data: (handle, collection, ptr, records, fields) => this.#data(handle, collection, ptr >>> 0, records, fields)
         }
     }
 

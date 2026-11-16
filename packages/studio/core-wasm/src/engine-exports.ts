@@ -212,6 +212,28 @@ export type EngineExports = {
     compensation_pending: () => number // 1 while a latency change awaits the next render's compensation pass
 }
 
+// A wasm32 pointer arrives as a signed i32, negative above 2 GiB of memory.
+export const withUnsignedPointers = (raw: EngineExports): EngineExports => ({
+    ...raw,
+    device_alloc: size => raw.device_alloc(size) >>> 0,
+    input_ptr: () => raw.input_ptr() >>> 0,
+    input_reserve: length => raw.input_reserve(length) >>> 0,
+    output_ptr: () => raw.output_ptr() >>> 0,
+    analysis_ptr: () => raw.analysis_ptr() >>> 0,
+    engine_state_ptr: () => raw.engine_state_ptr() >>> 0,
+    click_allocate: (frameCount, channels) => raw.click_allocate(frameCount, channels) >>> 0,
+    checksum_ptr: () => raw.checksum_ptr() >>> 0,
+    monitor_input_ptr: () => raw.monitor_input_ptr() >>> 0,
+    monitor_output_ptr: () => raw.monitor_output_ptr() >>> 0,
+    stem_output_ptr: () => raw.stem_output_ptr() >>> 0,
+    frozen_allocate: (frameCount, channels) => raw.frozen_allocate(frameCount, channels) >>> 0,
+    soundfont_allocate: (handle, byteLength) => raw.soundfont_allocate(handle, byteLength) >>> 0,
+    sample_allocate: (handle, byteLength) => raw.sample_allocate(handle, byteLength) >>> 0,
+    panic_message_ptr: () => raw.panic_message_ptr() >>> 0,
+    report_message_ptr: () => raw.report_message_ptr() >>> 0,
+    notice_message_ptr: () => raw.notice_message_ptr() >>> 0
+})
+
 // Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
 // Decoded WITHOUT TextDecoder — the AudioWorkletGlobalScope has none, and this runs exactly when a
 // worklet must report a panic.

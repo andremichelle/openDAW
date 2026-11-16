@@ -4,7 +4,7 @@
 import {isDefined, Nullable, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {EngineToClient} from "@opendaw/studio-adapters"
-import {EngineExports, readPanicMessage} from "./engine-exports"
+import {EngineExports, readPanicMessage, withUnsignedPointers} from "./engine-exports"
 import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
 import {linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
@@ -57,8 +57,8 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
-    const engine = new WebAssembly.Instance(modules.engineModule,
-        {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
+    const engine = withUnsignedPointers(new WebAssembly.Instance(modules.engineModule,
+        {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports)
     engine.init(sampleRate)
     wclapBridges.attachEngine(engine)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
