@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {Mixing} from "@opendaw/lib-dsp"
 import {createFixture, sample} from "./Fixture"
-import {AudioEffects, MIDIEffects} from "../Api"
+import {AudioEffects, GuitarStroke, MIDIEffects} from "../Api"
 
 describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
@@ -570,7 +570,7 @@ describe("Devices", () => {
         first.steps[1].strings = 0b000111
         expect(first.steps[1].stroke).toBe("chuck")
         expect(first.steps[1].strings).toBe(7)
-        expect(() => {first.steps[1].stroke = "strum" as any}).toThrow()
+        expect(() => {first.steps[1].stroke = "strum" as unknown as GuitarStroke}).toThrow()
         second.setSteps([{stroke: "bass"}, {stroke: "pick", strings: 0b100000, velocity: 60}, {stroke: "up"}])
         expect(second.length).toBe(3)
         expect(second.steps[1].velocity).toBe(60)

@@ -55,6 +55,7 @@ describe("Guitar.tab", () => {
         expect(Guitar.shapeName([-1, 3, 2, 0, 1, 0], 0)).toBe("C")
         expect(Guitar.shapeName([-1, 0, 2, 2, 1, 0], 0)).toBe("Am")
         expect(Guitar.shapeName([3, 2, 0, 0, 0, 3], 0)).toBe("G")
+        expect(Guitar.shapeName([-1, 0, 2, 2, 3, 0], 0)).toBe("Asus4")
         expect(Guitar.shapeName([0, 2, 2, 1, 0, 0], 0)).toBe("E")
         expect(Guitar.shapeName([-1, 0, 2, 0, 2, 0], 0)).toBe("A7")
         expect(Guitar.shapeName([3, 5, 5, -1, -1, -1], 0)).toBe("G5")

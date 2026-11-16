@@ -625,7 +625,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         let step = (bars.rem_euclid(span) * per_bar + local).rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
         let kind = pattern.kinds[step];
-        if kind == strum::REST {
+        if kind == strum::REST || kind != strum::STOP && pattern.velocities[step] <= 0.0 {
             continue;
         }
         let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
@@ -759,9 +759,16 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
 }
 
 pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
+    if index == param::MODE {
+        let mode = int_value(value, &MODE_MAPPING);
+        if mode != CHORDS_MODE && state.settings.mode == CHORDS_MODE {
+            state.release_strummed();
+        }
+        state.settings.mode = mode;
+        return;
+    }
     let settings = &mut state.settings;
     match index {
-        param::MODE => settings.mode = int_value(value, &MODE_MAPPING),
         param::RATE => settings.rate = int_value(value, &RATE_MAPPING),
         param::SPEED => settings.speed = float_value(value, &UNIPOLAR),
         param::SPEED_VARIATION => settings.speed_variation = float_value(value, &UNIPOLAR),

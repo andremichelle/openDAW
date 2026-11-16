@@ -2340,7 +2340,7 @@ export interface GuitarStep {
     strings: int
     /** Velocity in percent, the velocity variation scales all strings of the step alike (0 to 100, default 80) */
     velocity: int
-    /** Strum speed in percent, 50 strums at the device Speed (0 to 100, default 50) */
+    /** How long the stroke takes to cross the strings in percent, higher is slower, 50 strums at the device Speed (0 to 100, default 50) */
     speed: int
     /** How far each string bends up and back within the step, low E first: 0 = none, 1 = ¼, 2 = ½, 3 = 1, 4 = 2 semitones (default all 0) */
     bends: ReadonlyArray<int>
@@ -2385,7 +2385,7 @@ export interface Guitar extends Instrument {
     mode: 0 | 1
     /** Pattern speed: 0 = eighths, 1 = sixteenths, 2 = thirty-seconds (default 1) */
     rate: 0 | 1 | 2
-    /** Strum speed across the strings (0.0 to 1.0, default 0.3) */
+    /** How long a strum takes to cross the strings, higher is slower (0.0 to 1.0, default 0.3) */
     speed: unitValue
     /** Strum timing variation (0.0 to 1.0, default 0.2) */
     speedVariation: unitValue

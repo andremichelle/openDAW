@@ -167,7 +167,8 @@ export namespace Guitar {
         const classes = pitches.reduce((bits, value) => bits | (1 << (value % 12)), 0)
         const bass = Math.min(...pitches) % 12
         const names = MidiKeys.Names.English
-        for (let root = 0; root < 12; root++) {
+        for (let index = 0; index < 12; index++) {
+            const root = (bass + index) % 12
             if ((classes & (1 << root)) === 0) {continue}
             const relative = Array.from({length: 12}, (_, interval) => interval)
                 .reduce((bits, interval) => (classes & (1 << ((root + interval) % 12))) !== 0 ? bits | (1 << interval) : bits, 0)

@@ -535,6 +535,32 @@ fn a_stop_stroke_unlights_the_stopped_strings() {
 }
 
 #[test]
+fn a_silent_step_does_not_strum() {
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::UP]);
+    let mut velocities = [80i32; 64];
+    velocities[1] = 0;
+    state.set_lane(0, 2, &velocities);
+    let kinds: Vec<u32> = strokes(&mut state, 0.0, 480.0, four_four).iter().map(|event| event.pitch).collect();
+    assert_eq!(kinds, vec![strum::DOWN as u32]);
+}
+
+#[test]
+fn switching_to_keys_releases_the_strum() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(1.0));
+    pattern(&mut state, &[strum::DOWN]);
+    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 480);
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    assert_eq!(state.scheduled_bends().count(), 0);
+    assert_eq!(state.lit(), 0);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
