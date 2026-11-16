@@ -341,6 +341,11 @@ Processor) and `host.color` (the studio and display colours). Hover any of them 
 The mouse wheel over the view scrolls the device panel. A view that uses the wheel itself calls
 `event.preventDefault()` in its wheel listener to keep it.
 
+A view with keyboard focus receives every key before the studio does, the studio shortcuts included. The view
+is a document of its own, the studio hears a key only after the view passed it on. Space still starts and stops
+playback, but the view's key listeners receive it too, and a button that was clicked last still has the focus.
+Call `blur()` on a button after its click and ignore the keys the studio uses, or the view acts on them as well.
+
 A parameter the view controls itself does not need a knob. Mark it with `[omit-default-ui]` and attach it to the
 element that controls it, so a right click there opens the regular parameter menu (automation, modulation, MIDI
 learn, reset):

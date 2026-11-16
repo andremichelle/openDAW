@@ -319,7 +319,7 @@
         globalThis.addEventListener(kind, event => {
             const tag = typeof event.target?.tagName === "string" ? event.target.tagName : ""
             if (!event.isTrusted || event.defaultPrevented || tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable === true) {return}
-            if (event.metaKey || event.ctrlKey) {event.preventDefault()}
+            event.preventDefault()
             post({
                 type: "key", kind, init: {
                     key: event.key, code: event.code, metaKey: event.metaKey, ctrlKey: event.ctrlKey,
