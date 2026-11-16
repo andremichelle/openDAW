@@ -87,7 +87,9 @@ struct Scheduled {
     seed: u32,
     key: u32,
     bend: f32,
-    bend_length: u32
+    bend_length: u32,
+    step: f32,
+    stroke_at: u64
 }
 
 #[derive(Clone, Copy)]
@@ -316,16 +318,20 @@ impl State {
 
     // The strum takes the string: a played note still queued for it no longer plucks.
     fn take_over(&mut self, string: usize) {
+        self.drop_queued(|item| item.key != NO_KEY && item.string as usize == string);
+        self.keys[string] = NO_KEY;
+    }
+
+    fn drop_queued(&mut self, dropped: impl Fn(&Scheduled) -> bool) {
         let mut kept = 0;
         for index in 0..self.queued {
             let item = self.queue[index];
-            if item.key == NO_KEY || item.string as usize != string {
+            if !dropped(&item) {
                 self.queue[kept] = item;
                 kept += 1;
             }
         }
         self.queued = kept;
-        self.keys[string] = NO_KEY;
     }
 
     // Silences what the pattern plays, notes played on the strings keep ringing.
@@ -335,14 +341,7 @@ impl State {
                 self.strings[string].release();
             }
         }
-        let mut kept = 0;
-        for index in 0..self.queued {
-            if self.queue[index].key != NO_KEY {
-                self.queue[kept] = self.queue[index];
-                kept += 1;
-            }
-        }
-        self.queued = kept;
+        self.drop_queued(|item| item.key == NO_KEY);
     }
 
     // One stroke of the pattern at the current sample: the chord at its position, its strings, their plucks.
@@ -369,7 +368,6 @@ impl State {
         let packed = event.duration as i32;
         let mask = packed & 0b111111;
         let bends = (packed >> 6) & BEND_MASK;
-        let step_samples = strum::step_length(self.settings.rate) / 960.0 * 60.0 / self.bpm.max(1.0) as f64 * self.sample_rate as f64;
         let (strings, count) = strum::order(kind, mask, &tab);
         for string in 0..STRINGS {
             let moved = tab[string] < 0 || tab[string] != self.fretted[string];
@@ -378,6 +376,7 @@ impl State {
             }
         }
         self.fretted = tab;
+        self.drop_queued(|item| item.key == NO_KEY);
         let mut bent = [0i32; STRINGS];
         if matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHOP) {
             for (string, amount) in bent.iter_mut().enumerate() {
@@ -412,7 +411,7 @@ impl State {
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
                 seed: strum::hash(seed, *string as i64, 3), key: NO_KEY,
                 bend: BENDS[(bent[*string] as usize).min(BENDS.len() - 1)],
-                bend_length: (step_samples - delay as f64).max(step_samples * 0.5) as u32
+                bend_length: 0, step: strum::step_length(self.settings.rate) as f32, stroke_at: self.now
             });
             self.take_over(*string);
             self.lit |= 1 << *string;
@@ -457,15 +456,7 @@ impl State {
         }
         chosen[..placed].sort_unstable_by_key(|entry| entry.0);
         for (string, ..) in chosen[..placed].iter().copied() {
-            let mut kept = 0;
-            for index in 0..self.queued {
-                let item = self.queue[index];
-                if item.key != NO_KEY || item.string as usize != string {
-                    self.queue[kept] = item;
-                    kept += 1;
-                }
-            }
-            self.queued = kept;
+            self.drop_queued(|item| item.string as usize == string);
         }
         self.lit = 0;
         let mut delay = 0.0f32;
@@ -480,7 +471,7 @@ impl State {
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: string as u8, pitch: pitch as f32,
                 velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id,
-                bend: 0.0, bend_length: 0
+                bend: 0.0, bend_length: 0, step: 0.0, stroke_at: self.now
             });
             self.lit |= 1 << string;
         }
@@ -510,7 +501,12 @@ impl State {
             up: item.up,
             noise_seed: item.seed,
             bend: item.bend,
-            bend_length: item.bend_length
+            bend_length: if item.step > 0.0 {
+                let step = item.step / 960.0 * 60.0 / self.bpm.max(1.0) * self.sample_rate;
+                (step - (self.now - item.stroke_at) as f32).max(step * 0.5) as u32
+            } else {
+                item.bend_length
+            }
         };
         let base_frequency = abi::base_frequency();
         let string = item.string as usize;
@@ -732,8 +728,9 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::POSITION => settings.position = int_value(value, &POSITION_MAPPING),
         param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING),
         param::BODY => {
-            state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize);
-            state.pickup = [[0.0; 4]; 2];
+            if state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize) {
+                state.pickup = [[0.0; 4]; 2];
+            }
         }
         param::DAMPING => settings.damping = float_value(value, &UNIPOLAR),
         param::DAMPING_VARIATION => settings.damping_variation = float_value(value, &UNIPOLAR),

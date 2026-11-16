@@ -437,6 +437,22 @@ fn a_short_played_chord_sounds_on_every_string() {
 }
 
 #[test]
+fn a_new_stroke_drops_the_unplucked_strings_of_the_previous_one() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(1.0));
+    pattern(&mut state, &[strum::DOWN, strum::UP]);
+    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 480);
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
+    device::handle(&mut state, &events[1]);
+    assert_eq!(state.scheduled_bends().count(), 6, "only the new stroke's six strings are queued");
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

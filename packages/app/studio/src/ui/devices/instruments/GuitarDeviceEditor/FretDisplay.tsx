@@ -1,5 +1,5 @@
 import css from "./FretDisplay.sass?inline"
-import {clamp, int, Lifecycle} from "@opendaw/lib-std"
+import {clamp, int, isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Guitar, Harmony} from "@opendaw/lib-dsp"
@@ -131,7 +131,8 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         const x = event.clientX - rect.left
         const y = event.clientY - rect.top
         const string = clamp(Math.round((x - left) / (right - left) * (Guitar.Strings - 1)), 0, Guitar.Strings - 1)
-        const tab = Guitar.unpackShape(shapeField().getValue()).slice()
+        const own = Guitar.unpackShape(shapeField().getValue())
+        const tab = (Guitar.isEmptyShape(own) ? shown.tab : own).slice()
         if (y < top + 2) {
             tab[string] = tab[string] < 0 ? 0 : Guitar.Muted
         } else {
@@ -156,22 +157,25 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
             name.classList.remove("custom")
             shown.tab = live.frets
             write(name, "Keys")
-        } else if (editingShape()) {
-            shown.tab = Guitar.unpackShape(shapeField().getValue())
-            write(name, Guitar.isEmptyShape(shown.tab) ? "Empty Shape" : Guitar.shapeName(shown.tab, tuning))
-            name.classList.toggle("custom", !Guitar.isEmptyShape(shown.tab))
         } else {
-            name.classList.remove("custom")
-            const current = chordTrack.chordAt(engine.position.getValue())
-            shown.tab = current.mapOr(({root, bits}) => {
-                const key = `${root} ${bits} ${tuning} ${position}`
-                if (key !== voicing.key) {
-                    voicing.key = key
-                    voicing.tab = Guitar.tab(root, bits, tuning, position)
-                }
-                return voicing.tab
-            }, new Array<int>(Guitar.Strings).fill(Guitar.Muted))
-            write(name, current.mapOr(value => Harmony.chordName(value), "No Chord"))
+            const own: Nullable<Guitar.Tab> = editingShape() ? Guitar.unpackShape(shapeField().getValue()) : null
+            if (isDefined(own) && !Guitar.isEmptyShape(own)) {
+                shown.tab = own
+                write(name, Guitar.shapeName(own, tuning))
+                name.classList.add("custom")
+            } else {
+                name.classList.remove("custom")
+                const current = chordTrack.chordAt(engine.position.getValue())
+                shown.tab = current.mapOr(({root, bits}) => {
+                    const key = `${root} ${bits} ${tuning} ${position}`
+                    if (key !== voicing.key) {
+                        voicing.key = key
+                        voicing.tab = Guitar.tab(root, bits, tuning, position)
+                    }
+                    return voicing.tab
+                }, new Array<int>(Guitar.Strings).fill(Guitar.Muted))
+                write(name, isDefined(own) ? "Empty Shape" : current.mapOr(value => Harmony.chordName(value), "No Chord"))
+            }
         }
         shown.base = editingShape() ? edit.base : fitBase(shown.tab)
         shown.lit = engine.isPlaying.getValue() ? live.lit : 0

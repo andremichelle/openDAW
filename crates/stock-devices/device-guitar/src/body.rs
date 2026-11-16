@@ -57,10 +57,11 @@ impl Body {
         self.select(1);
     }
 
-    pub fn select(&mut self, index: usize) {
+    /// Builds the body `index`, false when it is already the one in use.
+    pub fn select(&mut self, index: usize) -> bool {
         let index = index.min(BODY_COUNT - 1);
         if index == self.index {
-            return;
+            return false;
         }
         self.index = index;
         self.resonance = self.pickup_resonance();
@@ -68,7 +69,7 @@ impl Body {
         self.ir.fill(0.0);
         if preset.modes.is_empty() {
             self.length = 0;
-            return;
+            return true;
         }
         let length = ((LENGTH_SECONDS * self.sample_rate) as usize).min(MAX_IR);
         let nyquist = self.sample_rate * 0.45;
@@ -106,6 +107,7 @@ impl Body {
         }
         self.length = length;
         self.normalize();
+        true
     }
 
     // Every body carries the same energy above the lowest strings, so a body changes the tone, not the level.
