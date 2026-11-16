@@ -104,5 +104,9 @@ component
             background: color-mix(in srgb, var(--color-blue) 55%, transparent)
             box-shadow: 0 0 0 0.5px var(--color-blue) inset
 
+          &.bent
+            background: linear-gradient(to right, var(--color-orange) calc(var(--bend) * 100%), color-mix(in srgb, var(--color-blue) 55%, transparent) 0)
+            box-shadow: 0 0 0 0.5px var(--color-orange) inset
+
       &.inactive > *, &.beyond > *
         opacity: 0.15

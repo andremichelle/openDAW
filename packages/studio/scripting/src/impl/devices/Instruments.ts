@@ -1045,6 +1045,7 @@ const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string
     const strings = pattern.stepStrings.getField(index)
     const velocity = pattern.stepVelocities.getField(index)
     const speed = pattern.stepSpeeds.getField(index)
+    const bend = pattern.stepBends.getField(index)
     const write = (procedure: () => void) => context.edit(() => {
         procedure()
         pattern.library.setValue(-1)
@@ -1057,7 +1058,13 @@ const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string
         get velocity(): int {return velocity.getValue()},
         set velocity(value: int) {write(() => velocity.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.velocity`)))},
         get speed(): int {return speed.getValue()},
-        set speed(value: int) {write(() => speed.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.speed`)))}
+        set speed(value: int) {write(() => speed.setValue(Guard.int32({min: 0, max: 100}, value, `${name}.speed`)))},
+        get bends(): ReadonlyArray<int> {return Array.from({length: 6}, (_, string) => GuitarPatterns.bendOf(bend.getValue(), string))},
+        set bends(values: ReadonlyArray<int>) {
+            if (!Array.isArray(values) || values.length !== 6) {panic(new RangeError(`${name}.bends: expected 6 amounts`))}
+            write(() => bend.setValue(values.reduce((packed, value, string) =>
+                GuitarPatterns.withBend(packed, string, Guard.int32({min: 0, max: 4}, value, `${name}.bends.${string}`)), 0)))
+        }
     })
 }
 

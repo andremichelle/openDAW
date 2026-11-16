@@ -71,7 +71,10 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                             kindField.setValue(GuitarPatterns.Rest)
                         } else {
                             if (strums(kind) && !strums(previous)) {stringsField.setValue(GuitarPatterns.AllStrings)}
-                            if (kind === GuitarPatterns.Pick) {stringsField.setValue(0)}
+                            if (kind === GuitarPatterns.Pick) {
+                                stringsField.setValue(0)
+                                pattern.stepBends.getField(index).setValue(0)
+                            }
                             kindField.setValue(kind)
                         }
                         custom()
@@ -87,33 +90,54 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
             const kindField = pattern.stepKinds.getField(index)
             if (stringsLane) {
                 const field = pattern.stepStrings.getField(index)
+                const bendsField = pattern.stepBends.getField(index)
+                const states = GuitarPatterns.Bends.length + 1
+                const stateOf = (string: int) => (field.getValue() & (1 << string)) === 0
+                    ? 0 : 1 + GuitarPatterns.bendOf(bendsField.getValue(), string)
+                const setState = (string: int, state: int) => editing.modify(() => {
+                    const on = state > 0
+                    field.setValue(on ? field.getValue() | (1 << string) : field.getValue() & ~(1 << string))
+                    bendsField.setValue(GuitarPatterns.withBend(bendsField.getValue(), string, on ? state - 1 : 0))
+                    custom()
+                })
+                const setStrings = (mask: int) => editing.modify(() => {
+                    field.setValue(mask)
+                    bendsField.setValue(0)
+                    custom()
+                })
                 const dots: ReadonlyArray<HTMLElement> = Array.from({length: 6}, (_, row) => {
                     const string = 5 - row
                     const dot: HTMLElement = <div/>
-                    const setMask = (mask: int) => editing.modify(() => {
-                        field.setValue(mask)
-                        custom()
-                    })
                     inner.ownAll(
                         Events.subscribe(dot, "click", (event: MouseEvent) => {
                             if (event.ctrlKey) {return}
-                            setMask(event.shiftKey ? 1 << string : field.getValue() ^ (1 << string))
+                            setState(string, (stateOf(string) + 1) % states)
                         }),
                         ContextMenu.subscribe(dot, collector => collector.addItems(
-                            MenuItem.default({label: `Only String ${6 - string}`}).setTriggerProcedure(() => setMask(1 << string)),
-                            MenuItem.default({label: "All Strings"}).setTriggerProcedure(() => setMask(GuitarPatterns.AllStrings)),
-                            MenuItem.default({label: "No Strings"}).setTriggerProcedure(() => setMask(0)))))
-                    dot.title = `String ${6 - string} (Shift-click plays only this string)`
+                            ...GuitarPatterns.Bends.map((label, amount) => MenuItem.default({
+                                label: amount === 0 ? "No Bend" : `Bend ${label}`, checked: stateOf(string) === amount + 1
+                            }).setTriggerProcedure(() => setState(string, amount + 1))),
+                            MenuItem.default({label: "All Strings", separatorBefore: true})
+                                .setTriggerProcedure(() => setStrings(GuitarPatterns.AllStrings)),
+                            MenuItem.default({label: "No Strings"}).setTriggerProcedure(() => setStrings(0)))))
                     return dot
                 })
                 const cell: HTMLElement = <div className="lane strings">{dots}</div>
                 const render = () => {
-                    const mask = field.getValue()
-                    dots.forEach((dot, row) => dot.classList.toggle("on", (mask & (1 << (5 - row))) !== 0))
+                    dots.forEach((dot, row) => {
+                        const string = 5 - row
+                        const state = stateOf(string)
+                        dot.classList.toggle("on", state > 0)
+                        dot.classList.toggle("bent", state > 1)
+                        dot.style.setProperty("--bend", String(Math.max(0, state - 1) / (GuitarPatterns.Bends.length - 1)))
+                        dot.title = state === 0 ? `String ${6 - string}`
+                            : state === 1 ? `String ${6 - string} plucked` : `String ${6 - string} bent ${GuitarPatterns.Bends[state - 1]}`
+                    })
                     cell.classList.toggle("inactive", ignoresStrings(kindField.getValue()))
                     cell.classList.toggle("beyond", index >= pattern.length.getValue())
                 }
-                inner.ownAll(field.subscribe(render), kindField.subscribe(render), pattern.length.subscribe(render))
+                inner.ownAll(field.subscribe(render), bendsField.subscribe(render), kindField.subscribe(render),
+                    pattern.length.subscribe(render))
                 render()
                 return cell
             }

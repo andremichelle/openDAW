@@ -20,6 +20,10 @@ const SCRATCH: usize = 128;
 const KEYS_MIN_FRET: i32 = 0;
 const KEYS_MAX_FRET: i32 = 19;
 const HUMANIZE: f32 = 0.012;
+// WASM CONTRACT: the bend amounts mirror `GuitarPatterns.Bends` in studio-adapters (step-bends key 7)
+const BENDS: [f32; 5] = [0.0, 0.25, 0.5, 1.0, 2.0];
+// 3 bits per string from the low E
+const BEND_MASK: i32 = (1 << 18) - 1;
 const MAKEUP: f32 = 2.5118864; // +8 dB
 const CLIP_KNEE: f32 = 0.7;
 
@@ -63,7 +67,7 @@ pub mod param {
 // WASM CONTRACT: GuitarDeviceBox field keys (studio-boxes)
 const PARAM_FIELDS: [u16; param::COUNT] = [10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25, 36, 28, 29, 37, 39, 41, 43];
 const PATTERNS_FIELD: u16 = 42;
-const LANE_KEYS: [u16; 4] = [1, 2, 3, 4];
+const LANE_KEYS: [u16; 5] = [1, 2, 3, 4, 7];
 const LENGTH_KEY: u16 = 5;
 pub const SLOTS: usize = 16;
 pub const SHAPES: usize = 16;
@@ -81,7 +85,9 @@ struct Scheduled {
     touch: Touch,
     up: bool,
     seed: u32,
-    key: u32
+    key: u32,
+    bend: f32,
+    bend_length: u32
 }
 
 #[derive(Clone, Copy)]
@@ -120,13 +126,14 @@ struct Pattern {
     masks: [i32; STEP_COUNT],
     velocities: [f32; STEP_COUNT],
     speeds: [f32; STEP_COUNT],
+    bends: [i32; STEP_COUNT],
     length: usize
 }
 
 impl Pattern {
     const EMPTY: Pattern = Pattern {
         kinds: [strum::REST; STEP_COUNT], masks: [0b111111; STEP_COUNT], velocities: [0.8; STEP_COUNT],
-        speeds: [0.5; STEP_COUNT], length: 16
+        speeds: [0.5; STEP_COUNT], bends: [0; STEP_COUNT], length: 16
     };
 }
 
@@ -137,6 +144,7 @@ pub struct State {
     pub settings: Settings,
     patterns: [Pattern; SLOTS],
     slot: usize,
+    bpm: f32,
     shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
@@ -156,7 +164,7 @@ pub struct State {
     limiter: SimpleLimiter,
     sample_rate: f32,
     ids: [u32; param::COUNT],
-    lane_ids: [[u32; 4]; SLOTS],
+    lane_ids: [[u32; 5]; SLOTS],
     length_ids: [u32; SLOTS],
     shapes_id: u32,
     groove: abi::GrooveFollower,
@@ -184,6 +192,7 @@ impl State {
         }
         self.patterns = [Pattern::EMPTY; SLOTS];
         self.slot = 0;
+        self.bpm = 120.0;
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
@@ -202,6 +211,10 @@ impl State {
         self.queue[..self.queued].iter().map(|item| item.velocity)
     }
 
+    pub fn scheduled_bends(&self) -> impl Iterator<Item = (u8, f32)> + '_ {
+        self.queue[..self.queued].iter().map(|item| (item.string, item.bend))
+    }
+
     pub fn set_lane(&mut self, slot: usize, lane: usize, values: &[i32]) {
         let pattern = &mut self.patterns[slot];
         for (step, value) in values.iter().take(STEP_COUNT).enumerate() {
@@ -209,7 +222,8 @@ impl State {
                 0 => pattern.kinds[step] = (*value).clamp(strum::REST, strum::CHOP),
                 1 => pattern.masks[step] = *value & 0b111111,
                 2 => pattern.velocities[step] = (*value).clamp(0, 100) as f32 / 100.0,
-                _ => pattern.speeds[step] = (*value).clamp(0, 100) as f32 / 100.0
+                3 => pattern.speeds[step] = (*value).clamp(0, 100) as f32 / 100.0,
+                _ => pattern.bends[step] = *value & BEND_MASK
             }
         }
     }
@@ -288,7 +302,10 @@ impl State {
                 self.strings[string].release();
             }
         }
-        let mask = event.duration as i32;
+        let packed = event.duration as i32;
+        let mask = packed & 0b111111;
+        let bends = (packed >> 6) & BEND_MASK;
+        let step_samples = strum::step_length(self.settings.rate) / 960.0 * 60.0 / self.bpm.max(1.0) as f64 * self.sample_rate as f64;
         let (strings, count) = strum::order(kind, mask, &tab);
         let tilted = matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHUCK | strum::CHOP);
         let seed = event.id;
@@ -310,7 +327,9 @@ impl State {
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
-                seed: strum::hash(seed, *string as i64, 3), key: 0
+                seed: strum::hash(seed, *string as i64, 3), key: 0,
+                bend: BENDS[(((bends >> (*string * 3)) & 7) as usize).min(BENDS.len() - 1)],
+                bend_length: (step_samples - delay as f64).max(1.0) as u32
             });
             self.lit |= 1 << *string;
         }
@@ -355,7 +374,8 @@ impl State {
             let varied = 1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5;
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: string as u8, pitch: pitch as f32,
-                velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id
+                velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id,
+                bend: 0.0, bend_length: 0
             });
             self.lit |= 1 << string;
         }
@@ -383,7 +403,9 @@ impl State {
             touch: item.touch,
             pick: Pick::from_index(settings.pick),
             up: item.up,
-            noise_seed: item.seed
+            noise_seed: item.seed,
+            bend: item.bend,
+            bend_length: item.bend_length
         };
         let base_frequency = abi::base_frequency();
         let string = item.string as usize;
@@ -471,7 +493,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
         out[count] = EventRecord {
             position, offset: 0, kind: EVENT_NOTE_ON, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
-            velocity: level, cent: pattern.speeds[step], duration: pattern.masks[step] as f64
+            velocity: level, cent: pattern.speeds[step], duration: (pattern.masks[step] | pattern.bends[step] << 6) as f64
         };
         count += 1;
     }
@@ -631,7 +653,8 @@ impl Instrument for Device {
         generate(state, from, to, flags, abi::bar_at, out)
     }
 
-    fn process_audio(state: &mut State, output: [&mut [f32]; 2], _block: &Block) {
+    fn process_audio(state: &mut State, output: [&mut [f32]; 2], block: &Block) {
+        state.bpm = block.bpm;
         render(state, output);
     }
 

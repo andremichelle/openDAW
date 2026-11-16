@@ -46,6 +46,7 @@ const CHOP_T60: f32 = 0.08;
 const CHOP_DULL: f32 = 0.6;
 const CHOP_GAIN: f32 = 2.5;
 const GAIN_FOLLOW_TIME: f32 = 0.002;
+const BEND_RISE: f32 = 0.2;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Touch {
@@ -113,7 +114,22 @@ pub struct Pluck {
     pub touch: Touch,
     pub pick: Pick,
     pub up: bool,
-    pub noise_seed: u32
+    pub noise_seed: u32,
+    /// Semitones the string bends up after the pluck, 0 plays it straight.
+    pub bend: f32,
+    /// Samples from the pluck until the bend is back at pitch.
+    pub bend_length: u32
+}
+
+// The bend over its length: a fast rise to the full bend in the first fifth, then a slower fall back to pitch.
+fn bend_curve(at: u32, length: u32) -> f32 {
+    let rise = (length as f32 * BEND_RISE).max(1.0);
+    let at = at as f32;
+    if at < rise {
+        sinf(0.5 * PI * at / rise)
+    } else {
+        0.5 + 0.5 * cosf(PI * ((at - rise) / (length as f32 - rise).max(1.0)).min(1.0))
+    }
 }
 
 #[inline]
@@ -201,7 +217,8 @@ struct Loop {
     dispersion: f32,
     dispersion_state: [(f32, f32); DISPERSION_STAGES],
     mute_samples: usize,
-    mute_gain: f32
+    mute_gain: f32,
+    pitch_factor: f32
 }
 
 impl Loop {
@@ -216,6 +233,7 @@ impl Loop {
         self.bend = 0.0;
         self.dispersion_state = [(0.0, 0.0); DISPERSION_STAGES];
         self.mute_samples = 0;
+        self.pitch_factor = 1.0;
     }
 
     fn set_delay(&mut self, delay: f32) {
@@ -270,7 +288,7 @@ impl Loop {
         if self.bend != 0.0 {
             self.bend = if self.bend < 1.0e-7 {0.0} else {self.bend * self.bend_decay};
         }
-        let wanted = self.delay * (1.0 - self.bend);
+        let wanted = self.delay * (1.0 - self.bend) * self.pitch_factor;
         if wanted != self.applied {
             self.set_delay(wanted);
         }
@@ -311,7 +329,10 @@ pub struct GuitarString {
     pitch: f32,
     sounding: bool,
     released: bool,
-    sample_rate: f32
+    sample_rate: f32,
+    bend: f32,
+    bend_length: u32,
+    bend_at: u32
 }
 
 impl GuitarString {
@@ -332,6 +353,7 @@ impl GuitarString {
         self.pitch = -1.0;
         self.sounding = false;
         self.released = false;
+        self.bend_length = 0;
     }
 
     pub fn pitch(&self) -> f32 {self.pitch}
@@ -425,6 +447,12 @@ impl GuitarString {
         self.level_state = 0.0;
         self.pitch = pluck.pitch;
         self.sounding = true;
+        self.bend = pluck.bend;
+        self.bend_length = if pluck.bend > 0.0 {pluck.bend_length} else {0};
+        self.bend_at = 0;
+        for polarization in [&mut self.vertical, &mut self.horizontal] {
+            polarization.pitch_factor = 1.0;
+        }
         self.released = false;
     }
 
@@ -454,6 +482,16 @@ impl GuitarString {
         }
         let mut energy = 0.0f32;
         for sample in out.iter_mut() {
+            if self.bend_at < self.bend_length {
+                let factor = powf(2.0, -self.bend * bend_curve(self.bend_at, self.bend_length) / 12.0);
+                self.vertical.pitch_factor = factor;
+                self.horizontal.pitch_factor = factor;
+                self.bend_at += 1;
+                if self.bend_at == self.bend_length {
+                    self.vertical.pitch_factor = 1.0;
+                    self.horizontal.pitch_factor = 1.0;
+                }
+            }
             let input = if self.position < self.length {
                 let raw = self.excitation(self.position, body);
                 self.position += 1;
@@ -511,7 +549,7 @@ mod tests {
 
     fn pluck(pitch: f32) -> Pluck {
         Pluck {pitch, velocity: 0.8, decay: overtone_decay(0.33, pitch), plug: 0.5, position: 0.13,
-            tension: 0.0, character: 0.5, touch: Touch::Open, pick: Pick::Plectrum, up: false, noise_seed: 7}
+            tension: 0.0, character: 0.5, touch: Touch::Open, pick: Pick::Plectrum, up: false, noise_seed: 7, bend: 0.0, bend_length: 0}
     }
 
     fn render(string: &mut GuitarString, seconds: f32, body: &Body) -> Vec<f32> {
@@ -571,6 +609,29 @@ mod tests {
             let error = cents(measured_frequency(&signal, hertz(pitch)), hertz(pitch));
             assert!(error.abs() < 2.0, "pitch {pitch}: {error:.2} cents");
         }
+    }
+
+    #[test]
+    fn a_bend_rises_to_its_amount_and_returns_to_pitch() {
+        let (table, body) = (character(), body(1));
+        let mut string = boxed_string();
+        string.pluck(&Pluck {bend: 2.0, bend_length: (5.0 * RATE) as u32, ..pluck(52.0)}, &body, &table, 440.0);
+        let signal = render(&mut string, 5.8, &body);
+        let peak = &signal[(0.5 * RATE) as usize..];
+        let error = cents(measured_frequency(peak, hertz(54.0)), hertz(54.0));
+        assert!(error.abs() < 15.0, "at the peak {error:.1} cents off two semitones up");
+        let back = &signal[(5.0 * RATE) as usize..];
+        let error = cents(measured_frequency(back, hertz(52.0)), hertz(52.0));
+        assert!(error.abs() < 3.0, "after the bend {error:.1} cents off the fretted pitch");
+    }
+
+    #[test]
+    fn the_bend_rises_fast_and_falls_slower() {
+        let length = 1000;
+        let peak = (0..length).max_by(|a, b| bend_curve(*a, length).total_cmp(&bend_curve(*b, length))).unwrap();
+        assert!(peak <= length / 5, "peak at {peak}");
+        assert_eq!(bend_curve(0, length), 0.0);
+        assert!(bend_curve(length - 1, length) < 0.001);
     }
 
     #[test]

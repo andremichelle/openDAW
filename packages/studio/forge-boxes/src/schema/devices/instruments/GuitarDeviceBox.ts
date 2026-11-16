@@ -37,7 +37,8 @@ export const GuitarDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
                     3: {type: "array", name: "step-velocities", length: 64, element: {type: "int32", value: 80, constraints: {min: 0, max: 100}, unit: "%"}},
                     4: {type: "array", name: "step-speeds", length: 64, element: {type: "int32", value: 50, constraints: {min: 0, max: 100}, unit: "%"}},
                     5: {type: "int32", name: "length", value: 16, constraints: {min: 1, max: 64}, unit: ""},
-                    6: {type: "int32", name: "library", value: -1, constraints: {min: -1, max: 255}, unit: ""}
+                    6: {type: "int32", name: "library", value: -1, constraints: {min: -1, max: 255}, unit: ""},
+                    7: {type: "array", name: "step-bends", length: 64, element: {type: "int32", value: 0, constraints: {min: 0, max: 262143}, unit: ""}}
                 }
             }
         }

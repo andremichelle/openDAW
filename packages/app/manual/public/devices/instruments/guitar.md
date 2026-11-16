@@ -110,8 +110,10 @@ it.
 Below the strokes, one lane at a time:
 
 - **Velocity**: how hard the step is played
-- **Strings**: which strings a strum crosses or a pick plucks, the top row is the high e. Shift-click a string
-  to play only that string, right-click it for Only, All or No strings
+- **Strings**: which strings a strum crosses or a pick plucks, and how far each one bends, the top row is the high
+  e. A click steps a string from off to plucked, then bent by a quarter, half, one or two semitones, then off
+  again. A bent string rises fast and falls back to pitch slower within the step, the other strings keep their
+  pitch. Right-click a string to set its bend directly, or to play all strings or none
 - **Speed**: how fast this stroke crosses the strings, the middle plays at the strum Speed
 
 ---

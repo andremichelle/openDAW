@@ -65,7 +65,8 @@ describe("Schema parity", () => {
             Guitar: Array.from({length: 16}, (_, pattern) => [
                 ...["stepKinds", "stepStrings", "stepVelocities", "stepSpeeds"]
                     .flatMap(lane => Array.from({length: 64}, (_, step) => `patterns.${pattern}.${lane}.${step}`)),
-                `patterns.${pattern}.length`, `patterns.${pattern}.library`
+                `patterns.${pattern}.length`, `patterns.${pattern}.library`,
+                ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.stepBends.${step}`)
             ]).flat().concat(Array.from({length: 16}, (_, shape) => `shapes.${shape}`)),
             Apparat: [],
             InstrumentComposite: [],

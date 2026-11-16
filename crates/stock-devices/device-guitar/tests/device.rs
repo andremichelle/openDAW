@@ -240,6 +240,32 @@ fn the_velocity_variation_is_one_value_for_the_whole_step() {
 }
 
 #[test]
+fn a_step_carries_the_bend_of_every_string_to_the_stroke() {
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::DOWN]);
+    state.set_lane(0, 4, &[0, 4 | 2 << 12, 0, 0]);
+    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    let bends: Vec<i32> = events.iter().map(|event| event.duration as i32 >> 6).collect();
+    let masks: Vec<i32> = events.iter().map(|event| event.duration as i32 & 0b111111).collect();
+    assert_eq!(bends, vec![0, 4 | 2 << 12]);
+    assert_eq!(masks, vec![0b111111, 0b111111]);
+}
+
+#[test]
+fn only_the_bent_string_bends() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN]);
+    state.set_lane(0, 4, &[3 << 12; 64]);
+    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    device::handle(&mut state, &events[0]);
+    let mut bends: Vec<(u8, f32)> = state.scheduled_bends().collect();
+    bends.sort_by_key(|(string, _)| *string);
+    assert_eq!(bends, vec![(1, 0.0), (2, 0.0), (3, 0.0), (4, 1.0), (5, 0.0)]);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

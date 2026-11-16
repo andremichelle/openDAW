@@ -96,6 +96,17 @@ export namespace GuitarPatterns {
     export const Styles: ReadonlyArray<string> = Array.from(new Set(Library.map(({style}) => style)))
     export const DefaultPattern = Library.findIndex(({name}) => name === "Folk")
     export const SlotCount = 16
+    // WASM CONTRACT: the bend amounts mirror `BENDS` in device-guitar
+    export const Bends: ReadonlyArray<string> = ["None", "¼", "½", "1", "2"]
+
+    // WASM CONTRACT: a step's bends pack 3 bits per string from the low E, read by `stroke` in device-guitar
+    export const bendOf = (bends: int, string: int): int => Math.min(Bends.length - 1, (bends >>> (string * 3)) & 7)
+
+    export const withBend = (bends: int, string: int, amount: int): int =>
+        (bends & ~(7 << (string * 3))) | (Math.max(0, Math.min(Bends.length - 1, amount)) << (string * 3))
+
+    export const sanitizeBends = (bends: int): int =>
+        Array.from({length: 6}, (_, string) => string).reduce((packed, string) => withBend(packed, string, bendOf(bends, string)), 0)
     export const SeedNames: ReadonlyArray<string> = [
         "Folk", "Pop", "Down Up Eighths", "Ballad Strum", "Rock Eighths", "Power Drive", "Funk Sixteenths", "Reggae",
         "Bossa Nova", "Boom Chick", "Train Beat", "Waltz", "Travis", "Arpeggio Up", "Ballad Picking", "Pinch"
@@ -154,6 +165,7 @@ export namespace GuitarPatterns {
             pattern.stepStrings.getField(index).setValue(step.strings)
             pattern.stepVelocities.getField(index).setValue(step.velocity)
             pattern.stepSpeeds.getField(index).setValue(step.speed)
+            pattern.stepBends.getField(index).setValue(0)
         }
         pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
     }
@@ -169,6 +181,7 @@ export namespace GuitarPatterns {
         readonly strings: ReadonlyArray<int>
         readonly velocities: ReadonlyArray<int>
         readonly speeds: ReadonlyArray<int>
+        readonly bends: ReadonlyArray<int>
         readonly length: int
         readonly library: int
     }
@@ -178,16 +191,18 @@ export namespace GuitarPatterns {
         strings: pattern.stepStrings.fields().map(field => field.getValue()),
         velocities: pattern.stepVelocities.fields().map(field => field.getValue()),
         speeds: pattern.stepSpeeds.fields().map(field => field.getValue()),
+        bends: pattern.stepBends.fields().map(field => field.getValue()),
         length: pattern.length.getValue(),
         library: pattern.library.getValue()
     })
 
-    export const apply = (pattern: GuitarPattern, {kinds, strings, velocities, speeds, length, library}: Snapshot): void => {
+    export const apply = (pattern: GuitarPattern, {kinds, strings, velocities, speeds, bends, length, library}: Snapshot): void => {
         for (let index = 0; index < StepCount; index++) {
             pattern.stepKinds.getField(index).setValue(Math.max(Rest, Math.min(Chop, kinds[index] ?? Rest)))
             pattern.stepStrings.getField(index).setValue((strings[index] ?? AllStrings) & AllStrings)
             pattern.stepVelocities.getField(index).setValue(Math.max(0, Math.min(100, velocities[index] ?? 80)))
             pattern.stepSpeeds.getField(index).setValue(Math.max(0, Math.min(100, speeds[index] ?? 50)))
+            pattern.stepBends.getField(index).setValue(sanitizeBends(bends[index] ?? 0))
         }
         pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
         pattern.library.setValue(library >= 0 && library < Library.length ? library : -1)
@@ -202,7 +217,7 @@ export namespace GuitarPatterns {
     // Rotates every lane within the pattern length, positive moves the steps to the left.
     export const rotate = (pattern: GuitarPattern, offset: int): void => {
         const length = pattern.length.getValue()
-        for (const array of [pattern.stepKinds, pattern.stepStrings, pattern.stepVelocities, pattern.stepSpeeds]) {
+        for (const array of [pattern.stepKinds, pattern.stepStrings, pattern.stepVelocities, pattern.stepSpeeds, pattern.stepBends]) {
             const fields = array.fields().slice(0, length)
             const values = fields.map(field => field.getValue())
             fields.forEach((field, index) => field.setValue(values[(index + offset + length) % length]))

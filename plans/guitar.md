@@ -103,6 +103,9 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 6. ~~Custom pattern, scripting, manual page.~~
 7. ~~Custom shapes and a chord source (below), replaces the plan to store frets on global chords.~~
 8. ~~Sixteen pattern slots (below).~~
+9. ~~Bends per string (below).~~
+10. Finger squeak (below).
+11. Tonal chuck (below).
 
 ## Custom shapes
 
@@ -132,6 +135,30 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 4. A new Guitar seeds the 16 slots with 16 library patterns, so automating to a stored pattern works at once.
 5. Unreleased: fields 30 to 35 are replaced, no migration.
 6. Later, not now: notes select slots, and a pattern lane on the timeline.
+
+## Bends per string
+
+1. Every step stores a bend per string (`step-bends`, 3 bits per string from the low E): none, ¼, ½, 1 or 2
+   semitones. A real bend is one finger on one string, the other strings keep their pitch.
+2. The Strings lane cycles a string off, plucked, bent ¼, ½, 1, 2, off. Right-click sets the bend directly or plays
+   all or no strings. A newly painted pick clears all strings and bends.
+3. A bent string is plucked at pitch, rises fast to the bend and falls back slower, within the step. The string's
+   loop length follows the curve. Pre-bend (start bent, release to pitch) is left out unless asked for.
+
+## Finger squeak
+
+1. When the chord or custom shape changes between two strokes, the wound strings (low E, A, D) that change their
+   fret squeak along the frets just before the next stroke: a short tonal noise, longer and higher the further
+   the finger travels. Open strings and strings that keep their fret stay silent.
+2. A new Squeak knob, off by default so existing sounds stay identical. It sits in a new column at the end of the
+   editor for now, its final place comes later.
+
+## Tonal chuck
+
+1. The chuck (×) excites the muted strings with the pick shape at the chord's pitches instead of pure noise,
+   darker and damped within a few tens of milliseconds, a little pick noise on top. A percussive thunk that still
+   carries the chord.
+2. This changes the sound of the chuck: render before and after for listening.
 
 ## Open
 

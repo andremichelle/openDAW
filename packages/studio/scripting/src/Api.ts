@@ -2342,6 +2342,8 @@ export interface GuitarStep {
     velocity: int
     /** Strum speed in percent, 50 strums at the device Speed (0 to 100, default 50) */
     speed: int
+    /** How far each string bends up and back within the step, low E first: 0 = none, 1 = ¼, 2 = ½, 3 = 1, 4 = 2 semitones (default all 0) */
+    bends: ReadonlyArray<int>
 }
 
 /**
