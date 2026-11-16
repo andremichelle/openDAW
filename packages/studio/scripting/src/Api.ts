@@ -2377,7 +2377,7 @@ export interface Guitar extends Instrument {
     speedVariation: unitValue
     /** Velocity (0.0 to 1.0, default 0.8) */
     velocity: unitValue
-    /** Velocity variation per pluck (0.0 to 1.0, default 0.75) */
+    /** Velocity variation per stroke, the same for all its strings (0.0 to 1.0, default 0.75) */
     velocityVariation: unitValue
     /** Strum level across the strings: above 0 the treble strings are louder, below 0 the bass strings (-1.0 to 1.0, default 0.0) */
     tilt: bipolar

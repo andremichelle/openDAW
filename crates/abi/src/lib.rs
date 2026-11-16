@@ -1916,11 +1916,10 @@ fn record_rank(kind: u32) -> u8 {
     }
 }
 
-/// The full per-quantum instrument path a device calls from `process`: clear the output, PULL each block's
-/// notes into the scratch (Route A) AND append a param-update marker at each `next_update_position` in the
-/// block (Route D — generated here from the engine's update clock, not injected into the stream), resolve
-/// every record's sample offset, sort, dispatch the quantum (`dispatch_range` voices notes and refreshes
-/// parameters at the markers), then run the once-per-quantum `finish`.
+/// The full per-quantum instrument path a device calls from `process`: clear the output, split each block at the
+/// engine's update positions (Route D), refresh the parameters at every split, and per part PULL its notes
+/// (Route A), GENERATE the device's own events, resolve their sample offsets, sort and dispatch. Then the
+/// once-per-quantum `finish`.
 pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     let Ports {output, state, blocks, event_scratch, ..} = ports;
     let [out_left, out_right] = output;
@@ -1930,24 +1929,37 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    // Go block by block (like `render_effect`), so each chunk's `process_audio` gets its own block. Per block:
-    // PULL its notes (Route A) plus a param-update marker at each update position (Route D — INCLUSIVE seed,
-    // STRICT advance, none when un-automated), resolve sample offsets, sort (off -> param -> on at a tie),
-    // and dispatch. Then the once-per-quantum `finish`.
+    // Each block splits at its update positions (Route D), the parameters refresh at every split BEFORE the next
+    // part pulls and generates its events, so a generator reads the automation in charge at its position.
     for block in blocks {
-        let mut count = pull_events(block.p0, block.p1, block.flags.0, event_scratch);
-        count += I::generate_events(state, block.p0, block.p1, block.flags, &mut event_scratch[count..]);
-        let mut position = first_update_position(block.p0);
-        while position < block.p1 && count < event_scratch.len() {
-            event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
-            count += 1;
-            position = next_update_position(position);
+        let mut sub_p0 = block.p0;
+        let mut sub_s0 = block.s0;
+        let mut flags = block.flags;
+        let mut boundary = first_update_position(block.p0);
+        loop {
+            let last = boundary >= block.p1;
+            let sub_p1 = if last {block.p1} else {boundary};
+            if last || sub_p1 > sub_p0 {
+                let sub_s1 = if last {block.s1} else {pulse_to_offset(sub_p1).clamp(sub_s0, block.s1)};
+                let sub = Block {index: block.index, flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
+                    anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
+                let mut count = pull_events(sub_p0, sub_p1, flags.0, event_scratch);
+                count += I::generate_events(state, sub_p0, sub_p1, flags, &mut event_scratch[count..]);
+                for record in &mut event_scratch[..count] {
+                    record.offset = pulse_to_offset(record.position);
+                }
+                event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+                dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);
+                flags.clear_event_flags();
+                sub_p0 = sub_p1;
+                sub_s0 = sub_s1;
+            }
+            if last {
+                break;
+            }
+            apply_param_changes::<I::State>(state, boundary, I::parameter_changed);
+            boundary = next_update_position(boundary);
         }
-        for record in &mut event_scratch[..count] {
-            record.offset = pulse_to_offset(record.position);
-        }
-        event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
-        dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], block);
     }
     I::finish(state, [out_left, out_right]);
 }

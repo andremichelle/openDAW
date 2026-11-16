@@ -123,7 +123,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         update()
     }
     const toggleFret = (event: PointerEvent) => {
-        if (!editingShape() || event.button !== 0) {return}
+        if (!editingShape() || event.button !== 0 || event.ctrlKey) {return}
         const rect = canvas.getBoundingClientRect()
         const [top, left, right, bottom] = [14, 12, rect.width - 14, rect.height - 4]
         const x = event.clientX - rect.left

@@ -196,6 +196,12 @@ impl State {
 
     pub fn display(&self) -> Tab {self.display}
 
+    pub fn lit(&self) -> i32 {self.lit}
+
+    pub fn scheduled_velocities(&self) -> impl Iterator<Item = f32> + '_ {
+        self.queue[..self.queued].iter().map(|item| item.velocity)
+    }
+
     pub fn set_lane(&mut self, slot: usize, lane: usize, values: &[i32]) {
         let pattern = &mut self.patterns[slot];
         for (step, value) in values.iter().take(STEP_COUNT).enumerate() {
@@ -294,6 +300,7 @@ impl State {
             _ => Touch::Open
         };
         self.lit = 0;
+        let level = event.velocity * (1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5);
         let mut delay = (0.5 + 0.5 * strum::bipolar(seed, 0, 13)) * self.settings.speed_variation * HUMANIZE * self.sample_rate;
         for (index, string) in strings[..count].iter().enumerate() {
             if index > 0 && kind != strum::PICK {
@@ -302,7 +309,7 @@ impl State {
             let pitch = fretting::pitch(self.settings.tuning as usize, *string, tab[*string]) as f32;
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
-                velocity: if tilted {event.velocity * strum::tilt_gain(*string, self.settings.tilt)} else {event.velocity},
+                velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
                 seed: strum::hash(seed, *string as i64, 3), key: 0
             });
             self.lit |= 1 << *string;
@@ -344,10 +351,11 @@ impl State {
             }
             self.keys[string] = id;
             self.display[string] = (pitch - fretting::TUNINGS[tuning][string]) as i8;
+            let seed = strum::hash(id, string as i64, 5);
+            let varied = 1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5;
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: string as u8, pitch: pitch as f32,
-                velocity: velocity * (0.4 + self.settings.velocity * 0.8), touch: Touch::Open, up: false, seed: strum::hash(id, string as i64, 5),
-                key: id
+                velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id
             });
             self.lit |= 1 << string;
         }
@@ -366,7 +374,7 @@ impl State {
         let (low, high) = (plug - (plug - 0.1) * spread, plug + (0.9 - plug) * spread);
         let pluck = Pluck {
             pitch: item.pitch,
-            velocity: (item.velocity * (1.0 + bipolar(1) * settings.velocity_variation * 0.5)).clamp(0.02, 1.2),
+            velocity: item.velocity.clamp(0.02, 1.2),
             decay,
             plug: ((low + unit(4) * (high - low)) * brightness).min(0.95),
             position: 0.04 + 0.46 * settings.spot + bipolar(6) * 0.03 * settings.character,

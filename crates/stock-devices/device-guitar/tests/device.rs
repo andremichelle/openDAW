@@ -198,6 +198,48 @@ fn a_custom_shape_plays_its_exact_frets_without_the_chord_track() {
 }
 
 #[test]
+fn every_pick_of_a_repeated_two_string_pick_plays_both_strings() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = state();
+    let mut kinds = [0; 8];
+    kinds[4] = strum::PICK;
+    kinds[6] = strum::PICK;
+    slot_pattern(&mut state, 0, &kinds);
+    state.set_lane(0, 1, &[1 | 1 << 4; 64]);
+    let mut shapes = [pack([-1; 6]); 16];
+    shapes[0] = pack([3, -1, 0, 0, 3, -1]);
+    state.set_shapes(&shapes);
+    device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(1));
+    let events = strokes(&mut state, 0.0, 3840.0, four_four);
+    assert_eq!(events.len(), 4);
+    for event in &events {
+        device::handle(&mut state, event);
+        assert_eq!(state.lit(), 1 | 1 << 4, "stroke at {}", event.position);
+        render(&mut state, 4800);
+    }
+}
+
+#[test]
+fn the_velocity_variation_is_one_value_for_the_whole_step() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::PICK, strum::DOWN, strum::PICK]);
+    state.set_lane(0, 1, &[0b111111; 64]);
+    device::apply_parameter(&mut state, param::VELOCITY_VARIATION, ParamValue::Float(1.0));
+    let mut levels = Vec::new();
+    for event in strokes(&mut state, 0.0, 960.0, four_four) {
+        device::handle(&mut state, &event);
+        let velocities: Vec<f32> = state.scheduled_velocities().collect();
+        assert!(velocities.len() > 1);
+        assert!(velocities.iter().all(|velocity| *velocity == velocities[0]), "{velocities:?}");
+        levels.push(velocities[0]);
+        render(&mut state, 9600);
+    }
+    assert!(levels.windows(2).any(|pair| pair[0] != pair[1]), "steps still vary: {levels:?}");
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
@@ -441,3 +483,5 @@ fn a_chop_lets_the_chord_through_and_stops_it_soon() {
     assert!(tail(strum::DOWN) - tail(strum::CHOP) > 20.0, "down {:.1} chop {:.1}", tail(strum::DOWN), tail(strum::CHOP));
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
 }
+
+

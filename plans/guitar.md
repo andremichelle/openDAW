@@ -117,6 +117,10 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
    per pattern step, a Guitar chord lane on the timeline (new track type).
 5. Later: a per step shape lane for riffs inside one pattern, a capo shift, shape names, copy and paste of shapes,
    a shape library, a timeline lane with chord diagrams.
+6. Later: "Add to Chord Track" in the chord source menu. An explicit action that detects the selected shape's chord
+   (root, shape bits, inversion from the lowest note, degree and shift against the key) and writes it to the chord
+   track at the playhead, so other devices follow it only when the user asks. A shape that is no known chord
+   writes its pitch classes as a shaped chord (shown with `*`).
 
 ## Sixteen pattern slots
 

@@ -62,17 +62,21 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                 cell.title = `Step ${index + 1}: ${entry?.label ?? "Rest"}`
             }
             inner.ownAll(kindField.subscribe(render), stringsField.subscribe(render), pattern.length.subscribe(render),
-                Events.subscribe(cell, "click", () => editing.modify(() => {
-                    const kind = brush.getValue()
-                    const previous = kindField.getValue()
-                    if (previous === kind) {
-                        kindField.setValue(GuitarPatterns.Rest)
-                    } else {
-                        if (strums(kind) && !strums(previous)) {stringsField.setValue(GuitarPatterns.AllStrings)}
-                        kindField.setValue(kind)
-                    }
-                    custom()
-                })))
+                Events.subscribe(cell, "click", (event: MouseEvent) => {
+                    if (event.ctrlKey) {return}
+                    editing.modify(() => {
+                        const kind = brush.getValue()
+                        const previous = kindField.getValue()
+                        if (previous === kind) {
+                            kindField.setValue(GuitarPatterns.Rest)
+                        } else {
+                            if (strums(kind) && !strums(previous)) {stringsField.setValue(GuitarPatterns.AllStrings)}
+                            if (kind === GuitarPatterns.Pick) {stringsField.setValue(0)}
+                            kindField.setValue(kind)
+                        }
+                        custom()
+                    })
+                }))
             render()
             return cell
         })
@@ -91,8 +95,10 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                         custom()
                     })
                     inner.ownAll(
-                        Events.subscribe(dot, "click", (event: MouseEvent) =>
-                            setMask(event.shiftKey ? 1 << string : field.getValue() ^ (1 << string))),
+                        Events.subscribe(dot, "click", (event: MouseEvent) => {
+                            if (event.ctrlKey) {return}
+                            setMask(event.shiftKey ? 1 << string : field.getValue() ^ (1 << string))
+                        }),
                         ContextMenu.subscribe(dot, collector => collector.addItems(
                             MenuItem.default({label: `Only String ${6 - string}`}).setTriggerProcedure(() => setMask(1 << string)),
                             MenuItem.default({label: "All Strings"}).setTriggerProcedure(() => setMask(GuitarPatterns.AllStrings)),
@@ -136,7 +142,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         const laneArea: HTMLElement = <div className="lane-area">{laneCells}</div>
         if (!stringsLane) {
             inner.own(Events.subscribe(laneArea, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0) {return}
+                if (event.button !== 0 || event.ctrlKey) {return}
                 let mark = true
                 const paint = (pointer: PointerEvent) => {
                     const column = laneCells.findIndex(cell => {

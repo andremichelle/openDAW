@@ -114,7 +114,8 @@ How long a strum takes to cross the strings. Its variation changes the timing of
 
 ### Velocity
 
-The overall loudness of the pattern. Its variation changes the loudness of every pluck slightly.
+The overall loudness of the pattern. Its variation changes the loudness of every stroke, all strings of a stroke
+alike. Notes played in Keys mode vary one by one.
 
 ### Groove
 
