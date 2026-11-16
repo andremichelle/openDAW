@@ -36,12 +36,13 @@ const TENSION_SHORTENING: f32 = 0.75;
 const RING_T60: f32 = 30.0;
 const RELEASE_T60: f32 = 0.08;
 const PALM_T60: f32 = 0.16;
-const CHUCK_T60: f32 = 0.025;
+const CHUCK_T60: f32 = 0.08;
 const PALM_DULL: f32 = 0.45;
 const PALM_GAIN: f32 = 2.0;
-const CHUCK_GAIN: f32 = 8.0;
+const CHUCK_GAIN: f32 = 1.7;
 const CHUCK_PLUG: f32 = 0.9;
-const CHUCK_DULL: f32 = 0.3;
+const CHUCK_TONE: f32 = 0.8; // the pick shape's share of the chuck, the rest is noise
+const CHUCK_DULL: f32 = 0.45;
 const CHOP_T60: f32 = 0.08;
 const CHOP_DULL: f32 = 0.6;
 const CHOP_GAIN: f32 = 2.5;
@@ -416,8 +417,8 @@ impl GuitarString {
         };
         for index in 0..period {
             let rough = character[index] * (1.0 - fresh) + lcg(&mut noise) * fresh;
-            let raw = if chuck {rough} else {
-                let ramp = ((index as f32 + 0.5 - corner) / width + 0.5).clamp(0.0, 1.0);
+            let ramp = ((index as f32 + 0.5 - corner) / width + 0.5).clamp(0.0, 1.0);
+            let raw = if chuck {CHUCK_TONE * (1.0 - spot - ramp) + (1.0 - CHUCK_TONE) * rough} else {
                 1.0 - spot - ramp + rough * contact.roughness
             };
             smooth += (raw - smooth) * plug;
@@ -793,5 +794,30 @@ mod tests {
                 assert!(out.iter().all(|value| value.is_finite() && value.abs() < 4.0), "pitch {pitch} rate {rate}");
             }
         }
+    }
+
+    fn chuck_profile(pitch: f32) -> (f32, f32) {
+        let (table, body) = (character(), body(1));
+        let mut string = boxed_string();
+        string.pluck(&Pluck {touch: Touch::Chuck, ..pluck(pitch)}, &body, &table, 440.0);
+        let signal = render(&mut string, 0.08, &body);
+        let period = (RATE / hertz(pitch)).round() as usize;
+        let window = &signal[period..period * 4];
+        let earlier = &signal[0..period * 3];
+        let dot: f32 = window.iter().zip(earlier).map(|(a, b)| a * b).sum();
+        let norm = (window.iter().map(|value| value * value).sum::<f32>() * earlier.iter().map(|value| value * value).sum::<f32>()).sqrt();
+        (rms(&signal[..(0.06 * RATE) as usize]), dot / norm.max(1.0e-12))
+    }
+
+    #[test]
+    fn a_chuck_carries_the_pitch_of_its_string_at_the_level_it_had() {
+        let mut levels = 0.0;
+        for pitch in [43.0f32, 48.0, 55.0, 64.0] {
+            let (level, tone) = chuck_profile(pitch);
+            assert!(tone > 0.35, "pitch {pitch}: tone {tone:.2}");
+            levels += level / 4.0;
+        }
+        let decibels = 20.0 * (levels / 0.0373).log10();
+        assert!(decibels.abs() < 1.5, "the chuck moved {decibels:.1} dB from its level before it carried a pitch");
     }
 }

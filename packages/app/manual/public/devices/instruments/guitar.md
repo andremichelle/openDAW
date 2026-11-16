@@ -96,7 +96,7 @@ it.
 - **Down**: strums the step's strings from the low E up
 - **Up**: strums them from the high e down, a little softer
 - **Palm mute**: a short, muted down strum
-- **Chuck**: a percussive hit with the strings muted
+- **Chuck**: a percussive hit with the strings muted, a short thunk that still carries the chord
 - **Bass**: plucks the lowest string of the chord
 - **Alternate bass**: plucks the second lowest string
 - **Pick**: plucks the step's strings together, a single string shows its number. A new pick starts with no

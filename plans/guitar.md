@@ -104,8 +104,8 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 7. ~~Custom shapes and a chord source (below), replaces the plan to store frets on global chords.~~
 8. ~~Sixteen pattern slots (below).~~
 9. ~~Bends per string (below).~~
-10. Finger squeak (below).
-11. Tonal chuck (below).
+10. ~~Finger squeak (below), dropped.~~
+11. ~~Tonal chuck (below).~~
 
 ## Custom shapes
 
@@ -145,7 +145,12 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 3. A bent string is plucked at pitch, rises fast to the bend and falls back slower, within the step. The string's
    loop length follows the curve. Pre-bend (start bent, release to pitch) is left out unless asked for.
 
-## Finger squeak
+## Finger squeak (dropped)
+
+Built and dropped 2026-11-16: a synthesized squeak (a filtered pulse train at the rate the finger passes the
+windings, led half a step before the stroke) sounded like a cat. A convincing squeak would need a physical model
+(the finger's friction exciting the gliding string itself) and many listening rounds, sample libraries record it.
+It also never fired for automated custom shapes, the shape switches only at the stroke. The original idea:
 
 1. When the chord or custom shape changes between two strokes, the wound strings (low E, A, D) that change their
    fret squeak along the frets just before the next stroke: a short tonal noise, longer and higher the further
