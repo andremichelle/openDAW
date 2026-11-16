@@ -1,9 +1,4 @@
-//! The guitar bodies as impulse responses for commuted synthesis: each body is the sum of its modes (the
-//! Helmholtz air mode, the top plate modes, the higher plate and back modes) plus a short burst of wood noise.
-//! Every pluck reads it through the pick filter as its excitation, so the body sounds inside each note and
-//! nothing rings on top of the strings. Off is no body at all, the bare original pluck. The electric bodies have
-//! no acoustic body but a magnetic pickup: it hears the string at its position (a comb) and rolls off the highs
-//! with a resonant peak, the signal an amp simulation expects.
+//! The guitar bodies as impulse responses for commuted synthesis, the electric ones as pickups instead.
 
 use libm::{cosf, expf, powf, sinf};
 
@@ -19,10 +14,7 @@ pub const MAX_IR: usize = 19_200;
 pub const BODY_NAMES: [&str; 8] = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge"];
 pub const BODY_COUNT: usize = BODY_NAMES.len();
 
-// (frequency Hz, T60 seconds, amplitude) per mode, `wood` the level of its wood noise, `level` tames a peaky body,
-// `brightness` the strings that go with the body (a classical has nylon, an archtop flatwounds), `bare` the pluck
-// gain without a body, `pickup` the electric pickup (position on the string, resonance Hz, resonance Q), `stiffness`
-// scales the inharmonicity of its strings (nylon is far less stiff than steel).
+// modes are (frequency Hz, T60 seconds, amplitude), pickup is (position on the string, resonance Hz, resonance Q)
 struct Preset {
     modes: &'static [(f32, f32, f32)],
     wood: f32,

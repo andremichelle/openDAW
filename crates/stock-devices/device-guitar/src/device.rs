@@ -1,6 +1,4 @@
-//! The Guitar device: the step pattern strums the chord track (Chords mode) and played notes land on the
-//! strings (both modes). A stroke is an internal note event placed by the SDK at its sample, it then queues
-//! one pluck per string at the strum spacing. Parameters are fields 10..15, 17..25, 28, 29, 36 and 37, the pattern lanes 30..34, the groove 38.
+//! The Guitar device: patterns strum the chord track or a custom shape, played notes land on the strings.
 
 use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
 use libm::{ceil, round};
@@ -145,6 +143,7 @@ pub struct State {
     patterns: [Pattern; SLOTS],
     slot: usize,
     bpm: f32,
+    bar: (f64, f64, i64),
     shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
@@ -193,6 +192,7 @@ impl State {
         self.patterns = [Pattern::EMPTY; SLOTS];
         self.slot = 0;
         self.bpm = 120.0;
+        self.bar = (-1.0, 0.0, 0);
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
@@ -239,6 +239,29 @@ impl State {
         }
         let tab = self.shapes[index as usize - 1];
         if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
+    }
+
+    // The number of `bar` on the signature track: the next one counts on, a jump counts the bars back to zero.
+    fn bar_index(&mut self, bar: &abi::Bar, bar_at: fn(f64) -> abi::Bar) -> i64 {
+        let (start, length, index) = self.bar;
+        let counted = if bar.start == start {
+            index
+        } else if start >= 0.0 && (bar.start - (start + length)).abs() < 1.0e-6 {
+            index + 1
+        } else {
+            let (mut at, mut count) = (bar.start, 0);
+            while at > 1.0e-6 {
+                let previous = bar_at(at - 1.0).start;
+                if previous >= at {
+                    break;
+                }
+                at = previous;
+                count += 1;
+            }
+            count
+        };
+        self.bar = (bar.start, bar.length, counted);
+        counted
     }
 
     pub fn set_shapes(&mut self, values: &[i32]) {
@@ -329,7 +352,7 @@ impl State {
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
                 seed: strum::hash(seed, *string as i64, 3), key: 0,
                 bend: BENDS[(((bends >> (*string * 3)) & 7) as usize).min(BENDS.len() - 1)],
-                bend_length: (step_samples - delay as f64).max(1.0) as u32
+                bend_length: (step_samples - delay as f64).max(step_samples * 0.5) as u32
             });
             self.lit |= 1 << *string;
         }
@@ -449,8 +472,7 @@ impl State {
     }
 }
 
-/// The pattern's strokes for `[from, to)`: one internal note-on per non-rest step, carrying its kind, lane
-/// strings, level and strum speed. The pattern restarts with every bar of the signature track.
+/// The strokes of `[from, to)` as internal note-ons, the pattern restarts with every bar.
 pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at: fn(f64) -> abi::Bar,
                 out: &mut [EventRecord]) -> usize {
     let transporting = flags.transporting();
@@ -481,7 +503,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         let bar = bar_at(grid);
         let per_bar = round(bar.length / step_length).max(1.0) as i64;
         let local = round((grid - bar.start) / step_length) as i64;
-        let bars = round(bar.start / bar.length.max(1.0)) as i64;
+        let bars = state.bar_index(&bar, bar_at);
         let pattern = &state.patterns[state.slot];
         let span = (round(pattern.length as f64 / per_bar as f64) as i64).max(1);
         let step = (bars.rem_euclid(span) * per_bar + local).rem_euclid(pattern.length as i64) as usize;

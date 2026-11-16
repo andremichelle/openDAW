@@ -208,6 +208,27 @@ export namespace GuitarPatterns {
         pattern.library.setValue(library >= 0 && library < Library.length ? library : -1)
     }
 
+    export const strums = (kind: int): boolean => kind === Down || kind === Up || kind === Mute || kind === Chop
+
+    // A pick starts without strings, a strum after a stroke that ignored them takes all six again.
+    export const setStroke = (pattern: GuitarPattern, index: int, kind: int): void => {
+        const previous = pattern.stepKinds.getField(index).getValue()
+        if (kind === Pick && previous !== Pick) {
+            pattern.stepStrings.getField(index).setValue(0)
+            pattern.stepBends.getField(index).setValue(0)
+        } else if (strums(kind) && !strums(previous)) {
+            pattern.stepStrings.getField(index).setValue(AllStrings)
+            pattern.stepBends.getField(index).setValue(0)
+        }
+        pattern.stepKinds.getField(index).setValue(kind)
+        pattern.library.setValue(-1)
+    }
+
+    export const setLength = (pattern: GuitarPattern, length: int): void => {
+        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.library.setValue(-1)
+    }
+
     export const slot = (box: GuitarDeviceBox, index: int): GuitarPattern =>
         box.patterns.getField(Math.max(0, Math.min(SlotCount - 1, index)))
 

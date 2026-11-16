@@ -2334,7 +2334,7 @@ export type GuitarStroke = "rest" | "down" | "up" | "mute" | "chuck" | "bass" | 
  * @group Instrument Parts
  */
 export interface GuitarStep {
-    /** What the step plays */
+    /** What the step plays. Like the editor, a new pick starts without strings and a strum after a stroke that ignored them takes all six */
     stroke: GuitarStroke
     /** The strings the stroke plays as a mask, bit 0 is the low E, bit 5 the high e (0 to 63, default 63). A strum crosses them, a pick plucks them together */
     strings: int

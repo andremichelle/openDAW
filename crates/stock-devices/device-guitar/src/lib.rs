@@ -1,6 +1,4 @@
-//! Guitar, a strummed Karplus-Strong INSTRUMENT: six strings with a modal body. It strums the chord track with
-//! a step pattern and plays incoming notes on its strings. Heap-free: the state lives in the engine-assigned
-//! state block.
+//! Guitar, a strummed Karplus-Strong instrument with six strings and a modal body, heap-free.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 

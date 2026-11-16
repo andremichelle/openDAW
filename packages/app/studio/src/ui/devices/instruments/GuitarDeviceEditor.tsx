@@ -112,7 +112,12 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             <label>Length</label>,
             <NumberInput lifecycle={slotBound} maxChars={2}
                          guard={{guard: value => clamp(value, 1, GuitarPatterns.StepCount)}}
-                         model={EditWrapper.forValue(editing, length)}/>)
+                         model={{
+                             getValue: () => length.getValue(),
+                             setValue: (value: int) => editing.modify(() => GuitarPatterns.setLength(currentPattern(), value)),
+                             subscribe: observer => length.subscribe(observer),
+                             catchupAndSubscribe: observer => length.catchupAndSubscribe(observer)
+                         }}/>)
     }
     lifecycle.own(current.subscribe(bindSlot))
     bindSlot()

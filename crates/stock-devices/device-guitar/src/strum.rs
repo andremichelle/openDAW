@@ -1,9 +1,8 @@
-//! Strokes and the step grid: which strings a stroke plays in which order, where the steps of a rate fall in
-//! the bar, and the deterministic per-pluck variation.
+//! Strokes and the step grid: which strings a stroke plays, the step lengths and the per-pluck variation.
 
 use crate::fretting::{Tab, STRINGS};
 
-// WASM CONTRACT: stroke kinds mirror `GuitarPatterns.Kinds` in studio-adapters (step-kinds field 30).
+// WASM CONTRACT: stroke kinds mirror `GuitarPatterns.Kinds` in studio-adapters (patterns field 42, step-kinds key 1)
 pub const REST: i32 = 0;
 pub const DOWN: i32 = 1;
 pub const UP: i32 = 2;

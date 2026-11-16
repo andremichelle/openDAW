@@ -265,6 +265,35 @@ fn only_the_bent_string_bends() {
     assert_eq!(bends, vec![(1, 0.0), (2, 0.0), (3, 0.0), (4, 1.0), (5, 0.0)]);
 }
 
+fn three_bars_then_three_four(pulse: f64) -> Bar {
+    if pulse < 3840.0 * 3.0 {
+        four_four(pulse)
+    } else {
+        let start = 11520.0 + ((pulse - 11520.0) / 2880.0).floor() * 2880.0;
+        Bar {start, length: 2880.0, beat: 960.0}
+    }
+}
+
+#[test]
+fn a_two_bar_pattern_alternates_across_a_signature_change() {
+    let mut state = state();
+    let mut kinds = [0; 24];
+    kinds[0] = strum::BASS;
+    kinds[12] = strum::DOWN;
+    pattern(&mut state, &kinds);
+    let first = |state: &mut State, start: f64| -> Vec<u32> {
+        strokes(state, start, start + 240.0, three_bars_then_three_four).iter().map(|event| event.pitch).collect()
+    };
+    let bass = vec![strum::BASS as u32];
+    let down = vec![strum::DOWN as u32];
+    for start in [0.0, 3840.0, 7680.0] {
+        first(&mut state, start);
+    }
+    assert_eq!(first(&mut state, 11520.0), down, "the fourth bar is odd");
+    assert_eq!(first(&mut state, 14400.0), bass);
+    assert_eq!(first(&mut state, 11520.0), down, "after a jump back");
+}
+
 #[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());

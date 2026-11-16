@@ -1,14 +1,4 @@
-//! One guitar string, a Karplus-Strong string with the established extensions. The pluck is the string's
-//! velocity when it leaves the pick: displaced into a triangle at the Spot and let go, its corner rounded by the
-//! width of the finger, thumb, nail or plectrum, roughened by the original noise table blended with fresh noise
-//! (every pick a little different), smoothed by the plug filter. A hard pluck starts a few cents sharp (tension
-//! modulation), a pick stops a ringing string before it plucks it, and the pick angle sets how the two slightly
-//! detuned polarizations ring: the vertical one gives its energy to the body and fades fast on high notes, the
-//! horizontal one sustains. A dynamic-level lowpass makes soft picks darker, the body's impulse response joins
-//! the pluck (commuted synthesis). The loop lowpass fades the overtones at a rate per second measured on a steel
-//! string acoustic, a chain of allpasses makes the string stiff (its overtones run sharp, measured too), an
-//! allpass fractional delay corrected by the loop's phase delay keeps every fret in tune. Tension shortens the
-//! ringing string while the pluck keeps the fretted string's length. An electric body's pickup hears the string at its position, a comb on the output.
+//! One guitar string: a two-polarization Karplus-Strong loop with pick, stiffness, tension and body.
 
 use libm::{atan2f, cosf, expf, floorf, powf, sinf, sqrtf};
 
@@ -77,9 +67,7 @@ impl Pick {
     }
 }
 
-// How a pick touches the string. `width` is the contact as a fraction of the string, `soften` scales the plug
-// filter, `roughness` the surface noise, `stop` what is left of a ringing string it touches, `twang` the start
-// sharpness in cents at full velocity, `drive` the horizontal polarization (the pick angle).
+// How a pick touches the string: `width` as a fraction of the string, `twang` in cents at full velocity.
 struct Contact {
     width: f32,
     soften: f32,
@@ -153,8 +141,7 @@ fn one_pole_delay(coefficient: f32, omega: f32) -> f32 {
     atan2f(keep * sinf(omega), 1.0 - keep * cosf(omega)) / omega
 }
 
-/// The overtone decay in dB per second at 3 kHz for Damping (0 to 1), 0.33 matches a steel string acoustic.
-/// The wound strings lose their overtones faster than the plain ones.
+/// The overtone decay in dB per second at 3 kHz for Damping (0 to 1), faster on the wound strings.
 pub fn overtone_decay(damping: f32, pitch: f32) -> f32 {
     let wound = 1.0 + 1.2 * ((64.0 - pitch) / 24.0).clamp(0.0, 1.0);
     8.0 * powf(100.0, damping.clamp(0.0, 1.0)) * wound

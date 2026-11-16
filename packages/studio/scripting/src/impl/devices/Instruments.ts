@@ -1037,7 +1037,7 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
     set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
 }
 
-// WASM CONTRACT: the index is the stroke kind of `GuitarPatterns` (step-kinds field 30)
+// WASM CONTRACT: the index is the stroke kind of `GuitarPatterns` (patterns field 42, step-kinds key 1)
 const GuitarStrokes: ReadonlyArray<GuitarStroke> = ["rest", "down", "up", "mute", "chuck", "bass", "alternate", "pick", "stop", "chop"]
 
 const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string, index: int): GuitarStep => {
@@ -1052,7 +1052,9 @@ const createGuitarStep = (context: Context, pattern: GuitarPattern, name: string
     })
     return Object.freeze({
         get stroke(): GuitarStroke {return GuitarStrokes[kind.getValue()] ?? "rest"},
-        set stroke(value: GuitarStroke) {write(() => kind.setValue(GuitarStrokes.indexOf(Guard.oneOf(value, GuitarStrokes, `${name}.stroke`))))},
+        set stroke(value: GuitarStroke) {
+            write(() => GuitarPatterns.setStroke(pattern, index, GuitarStrokes.indexOf(Guard.oneOf(value, GuitarStrokes, `${name}.stroke`))))
+        },
         get strings(): int {return strings.getValue()},
         set strings(value: int) {write(() => strings.setValue(Guard.int32({min: 0, max: 63}, value, `${name}.strings`)))},
         get velocity(): int {return velocity.getValue()},
@@ -1077,7 +1079,7 @@ const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int):
             if (!Array.isArray(values)) {return panic(new TypeError("setSteps: expected an array"))}
             if (values.length > steps.length) {return panic(new RangeError(`setSteps: at most ${steps.length} steps`))}
             values.forEach((value, stepIndex) => Props.apply(steps[stepIndex], value, `steps.${stepIndex}`))
-            pattern.length.setValue(clamp(values.length, 1, steps.length))
+            GuitarPatterns.setLength(pattern, values.length)
         }),
         load: (name: string): void => {
             const library = GuitarPatterns.Library.findIndex(entry => entry.name === Guard.string(name, "load"))
@@ -1085,7 +1087,12 @@ const createGuitarSlot = (context: Context, pattern: GuitarPattern, index: int):
             context.edit(() => GuitarPatterns.load(pattern, library))
         }
     }
-    Fields.bind(context, target, {length: pattern.length}, `patterns.${index}.`)
+    Object.defineProperty(target, "length", {
+        enumerable: true,
+        get: () => pattern.length.getValue(),
+        set: (value: int) => context.edit(() => GuitarPatterns.setLength(pattern,
+            Guard.int32({min: 1, max: GuitarPatterns.StepCount}, value, `patterns.${index}.length`)))
+    })
     return target as unknown as GuitarSlot
 }
 

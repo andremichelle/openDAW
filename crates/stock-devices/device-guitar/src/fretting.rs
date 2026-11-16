@@ -1,7 +1,4 @@
-//! Chord to tab: one fret per string (or muted) for a chord root and voicing mask. Every chord tone sounds,
-//! the lowest sounding string plays the chord's bass, muted strings sit only below it, the shape spans at most
-//! four frets with at most four fingers (the lowest fret may be barred), and it stays near the Position. The
-//! TS twin is `Guitar.tab` in lib-dsp; the shared table in both tests keeps them equal.
+//! Chord to tab, the twin of `Guitar.tab` in lib-dsp (a shared table in both tests keeps them equal).
 
 pub const STRINGS: usize = 6;
 pub const MUTED: i8 = -1;
@@ -115,9 +112,7 @@ impl Search {
     }
 }
 
-/// The tab for the chord `root` (pitch class) with `voicing` (interval mask from the root, the lowest set bit
-/// is the bass) on `tuning` near `position`. A chord missing at the position moves to the nearest one that has
-/// it, a chord no shape holds drops its fifth, then everything but root and bass. All muted when nothing fits.
+/// The tab for `root` (pitch class) and `voicing` (interval mask, lowest bit the bass) near `position`.
 pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
     let open = TUNINGS[tuning.min(TUNINGS.len() - 1)];
     let position = position.min(POSITION_FRETS.len() - 1);

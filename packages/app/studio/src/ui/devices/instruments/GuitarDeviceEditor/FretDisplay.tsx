@@ -23,7 +23,7 @@ type Construct = {
 }
 
 export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) => {
-    const {box, namedParameter: {chord}} = adapter
+    const {box, namedParameter: {chord, tuning: tuningParameter, position: positionParameter, mode}} = adapter
     const {editing, engine, timelineBoxAdapter: {chordTrack}, liveStreamReceiver} = project
     const name: HTMLElement = <div className="name"/>
     const lower: HTMLElement = <span className="arrow">‹</span>
@@ -32,7 +32,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     const footer: HTMLElement = <div className="footer">{lower}{footerText}{higher}</div>
     const shown = {tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0, base: 1}
     const edit = {index: 0, base: 1, wheel: 0}
-    const editingShape = () => edit.index > 0 && box.mode.getValue() === 0
+    const editingShape = () => edit.index > 0 && mode.getControlledValue() === 0
+    const voicing = {key: "", tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>}
+    const painted = {key: ""}
     const shapeField = () => box.shapes.getField(edit.index - 1)
     const fitBase = (tab: ReadonlyArray<int>): int => {
         const fretted = tab.filter(fret => fret > 0)
@@ -139,9 +141,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         editing.modify(() => shapeField().setValue(Guitar.packShape(tab)))
     }
     const update = () => {
-        const tuning = box.tuning.getValue()
-        const position = box.position.getValue()
-        const keys = box.mode.getValue() === 1
+        const tuning = tuningParameter.getControlledValue()
+        const position = positionParameter.getControlledValue()
+        const keys = mode.getControlledValue() === 1
         const index = chord.getControlledValue()
         if (index !== edit.index) {
             edit.index = index
@@ -158,8 +160,14 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         } else {
             name.classList.remove("custom")
             const current = chordTrack.chordAt(engine.position.getValue())
-            shown.tab = current.mapOr(({root, bits}) => Guitar.tab(root, bits, tuning, position),
-                new Array<int>(Guitar.Strings).fill(Guitar.Muted))
+            shown.tab = current.mapOr(({root, bits}) => {
+                const key = `${root} ${bits} ${tuning} ${position}`
+                if (key !== voicing.key) {
+                    voicing.key = key
+                    voicing.tab = Guitar.tab(root, bits, tuning, position)
+                }
+                return voicing.tab
+            }, new Array<int>(Guitar.Strings).fill(Guitar.Muted))
             name.textContent = current.mapOr(value => Harmony.chordName(value), "No Chord")
         }
         shown.base = editingShape() ? edit.base : fitBase(shown.tab)
@@ -168,7 +176,11 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         footerText.textContent = editingShape()
             ? `Frets ${edit.base} to ${edit.base + Frets - 1}`
             : `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`
-        painter.requestUpdate()
+        const key = `${shown.tab.join(" ")} ${shown.lit} ${shown.base}`
+        if (key !== painted.key) {
+            painted.key = key
+            painter.requestUpdate()
+        }
     }
     lifecycle.ownAll(
         Events.subscribe(canvas, "pointerdown", toggleFret),
@@ -188,9 +200,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         engine.position.subscribe(update),
         engine.isPlaying.subscribe(update),
         chordTrack.subscribe(update),
-        box.tuning.subscribe(update),
-        box.position.subscribe(update),
-        box.mode.subscribe(update),
+        tuningParameter.subscribe(update),
+        positionParameter.subscribe(update),
+        mode.subscribe(update),
         liveStreamReceiver.subscribeIntegers(adapter.address.append(0), array => {
             live.frets = Array.from(array.slice(2, 8))
             live.lit = array[8]

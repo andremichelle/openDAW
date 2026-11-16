@@ -1916,10 +1916,7 @@ fn record_rank(kind: u32) -> u8 {
     }
 }
 
-/// The full per-quantum instrument path a device calls from `process`: clear the output, split each block at the
-/// engine's update positions (Route D), refresh the parameters at every split, and per part PULL its notes
-/// (Route A), GENERATE the device's own events, resolve their sample offsets, sort and dispatch. Then the
-/// once-per-quantum `finish`.
+/// The per-quantum instrument path: blocks split at the update positions, every part pulls, generates and dispatches.
 pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     let Ports {output, state, blocks, event_scratch, ..} = ports;
     let [out_left, out_right] = output;
@@ -1929,35 +1926,55 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    // Each block splits at its update positions (Route D), the parameters refresh at every split BEFORE the next
-    // part pulls and generates its events, so a generator reads the automation in charge at its position.
+    // Each split refreshes the parameters after the releases on it and before the next part generates (off, param, on).
     for block in blocks {
         let mut sub_p0 = block.p0;
         let mut sub_s0 = block.s0;
         let mut flags = block.flags;
+        let mut audio_flags = block.flags;
+        let mut split: Option<f64> = None;
         let mut boundary = first_update_position(block.p0);
         loop {
             let last = boundary >= block.p1;
             let sub_p1 = if last {block.p1} else {boundary};
             if last || sub_p1 > sub_p0 {
                 let sub_s1 = if last {block.s1} else {pulse_to_offset(sub_p1).clamp(sub_s0, block.s1)};
-                let sub = Block {index: block.index, flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
-                    anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
                 let mut count = pull_events(sub_p0, sub_p1, flags.0, event_scratch);
+                if let Some(at) = split.take() {
+                    let mut kept = 0;
+                    for index in 0..count {
+                        let event = event_scratch[index];
+                        if event.position == at && matches!(event.kind, EVENT_NOTE_OFF | EVENT_CHOKE) {
+                            I::handle_event(state, &event);
+                        } else {
+                            event_scratch[kept] = event;
+                            kept += 1;
+                        }
+                    }
+                    count = kept;
+                    apply_param_changes::<I::State>(state, at, I::parameter_changed);
+                }
                 count += I::generate_events(state, sub_p0, sub_p1, flags, &mut event_scratch[count..]);
                 for record in &mut event_scratch[..count] {
                     record.offset = pulse_to_offset(record.position);
                 }
                 event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+                let sub = Block {index: block.index, flags: audio_flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
+                    anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
                 dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);
                 flags.clear_event_flags();
+                if sub_s1 > sub_s0 {
+                    audio_flags.clear_event_flags();
+                }
                 sub_p0 = sub_p1;
                 sub_s0 = sub_s1;
             }
             if last {
                 break;
             }
-            apply_param_changes::<I::State>(state, boundary, I::parameter_changed);
+            if let Some(pending) = split.replace(boundary) {
+                apply_param_changes::<I::State>(state, pending, I::parameter_changed);
+            }
             boundary = next_update_position(boundary);
         }
     }
