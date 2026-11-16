@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {clamp, int} from "@opendaw/lib-std"
 import {GuitarDeviceBox, GuitarPattern} from "@opendaw/studio-boxes"
 
 // The built in patterns use one letter per step, see `parse` for the letters.
@@ -100,7 +100,7 @@ export namespace GuitarPatterns {
     export const bendOf = (bends: int, string: int): int => Math.min(Bends.length - 1, (bends >>> (string * 3)) & 7)
 
     export const withBend = (bends: int, string: int, amount: int): int =>
-        (bends & ~(7 << (string * 3))) | (Math.max(0, Math.min(Bends.length - 1, amount)) << (string * 3))
+        (bends & ~(7 << (string * 3))) | (clamp(amount, 0, Bends.length - 1) << (string * 3))
 
     export const sanitizeBends = (bends: int): int =>
         Array.from({length: 6}, (_, string) => string).reduce((packed, string) => withBend(packed, string, bendOf(bends, string)), 0)
@@ -164,7 +164,7 @@ export namespace GuitarPatterns {
             pattern.stepSpeeds.getField(index).setValue(step.speed)
             pattern.stepBends.getField(index).setValue(0)
         }
-        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.length.setValue(clamp(length, 1, StepCount))
     }
 
     export const load = (pattern: GuitarPattern, index: int): void => {
@@ -195,13 +195,13 @@ export namespace GuitarPatterns {
 
     export const apply = (pattern: GuitarPattern, {kinds, strings, velocities, speeds, bends, length, library}: Snapshot): void => {
         for (let index = 0; index < StepCount; index++) {
-            pattern.stepKinds.getField(index).setValue(Math.max(Rest, Math.min(Chop, kinds[index] ?? Rest)))
+            pattern.stepKinds.getField(index).setValue(clamp(kinds[index] ?? Rest, Rest, Chop))
             pattern.stepStrings.getField(index).setValue((strings[index] ?? AllStrings) & AllStrings)
-            pattern.stepVelocities.getField(index).setValue(Math.max(0, Math.min(100, velocities[index] ?? 80)))
-            pattern.stepSpeeds.getField(index).setValue(Math.max(0, Math.min(100, speeds[index] ?? 50)))
+            pattern.stepVelocities.getField(index).setValue(clamp(velocities[index] ?? 80, 0, 100))
+            pattern.stepSpeeds.getField(index).setValue(clamp(speeds[index] ?? 50, 0, 100))
             pattern.stepBends.getField(index).setValue(sanitizeBends(bends[index] ?? 0))
         }
-        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.length.setValue(clamp(length, 1, StepCount))
         pattern.library.setValue(library >= 0 && library < Library.length ? library : -1)
     }
 
@@ -224,12 +224,12 @@ export namespace GuitarPatterns {
     }
 
     export const setLength = (pattern: GuitarPattern, length: int): void => {
-        pattern.length.setValue(Math.max(1, Math.min(StepCount, length)))
+        pattern.length.setValue(clamp(length, 1, StepCount))
         pattern.library.setValue(-1)
     }
 
     export const slot = (box: GuitarDeviceBox, index: int): GuitarPattern =>
-        box.patterns.getField(Math.max(0, Math.min(SlotCount - 1, index)))
+        box.patterns.getField(clamp(index, 0, SlotCount - 1))
 
     export const seed = (box: GuitarDeviceBox): void => SeedNames.forEach((name, index) =>
         load(slot(box, index), Library.findIndex(pattern => pattern.name === name)))

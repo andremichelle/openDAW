@@ -184,7 +184,7 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         ...Arrays.create(index => {
             const frets = shapeAt(index)
             const label = Guitar.isEmptyShape(frets) ? `Shape ${index + 1}`
-                : `Shape ${index + 1} · ${Guitar.shapeName(frets, box.tuning.getValue())}`
+                : `Shape ${index + 1} · ${Guitar.shapeName(frets, tuning.getControlledValue())}`
             return MenuItem.default({label, checked: chord.getControlledValue() === index + 1, separatorBefore: index === 0})
                 .setTriggerProcedure(() => editing.modify(() => chord.setValue(index + 1)))
         }, GuitarDeviceBoxAdapter.ShapeCount),

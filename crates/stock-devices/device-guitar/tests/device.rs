@@ -415,6 +415,28 @@ fn two_notes_that_fit_one_string_pluck_it_once() {
 }
 
 #[test]
+fn a_short_played_chord_sounds_on_every_string() {
+    let level = |release: bool| {
+        let mut state = state();
+        device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+        let notes = [(1u32, 40u32), (2, 45), (3, 50), (4, 55), (5, 59), (6, 64)];
+        for (id, pitch) in notes {
+            device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id, pitch, velocity: 0.8, ..BLANK});
+        }
+        render(&mut state, 48);
+        if release {
+            for (id, pitch) in notes {
+                device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_OFF, id, pitch, ..BLANK});
+            }
+        }
+        let (left, _) = render(&mut state, 2400);
+        rms(&left[960..])
+    };
+    let (short, held) = (level(true), level(false));
+    assert!(short > held * 0.8, "short {short} held {held}");
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});

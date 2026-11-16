@@ -14,7 +14,7 @@ use crate::strum::{self, STEP_COUNT};
 const STROKE_MARK: u32 = 0xC000_0000;
 const QUEUE: usize = 256;
 const NO_KEY: u32 = u32::MAX;
-const BAR_MARKS: usize = 4; // the recent jump targets, a loop restart finds its bar number at once
+const SHORT_NOTE: f32 = 0.06; // seconds a played note sounds when it ended before its pluck
 const PENDING: usize = 16;
 const SCRATCH: usize = 128;
 const KEYS_MIN_FRET: i32 = 0;
@@ -146,8 +146,6 @@ pub struct State {
     slot: usize,
     bpm: f32,
     bar: (f64, f64, i64),
-    bar_marks: [(f64, i64); BAR_MARKS],
-    bar_mark: usize,
     shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
@@ -158,6 +156,7 @@ pub struct State {
     tab: Tab,
     display: Tab,
     fretted: Tab,
+    release_due: [u64; STRINGS],
     tab_key: (i32, i32, i32, i32),
     chord_root: i32,
     step: i32,
@@ -198,12 +197,11 @@ impl State {
         self.slot = 0;
         self.bpm = 120.0;
         self.bar = (-1.0, 0.0, 0);
-        self.bar_marks = [(-1.0, 0); BAR_MARKS];
-        self.bar_mark = 0;
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
         self.fretted = [MUTED; STRINGS];
+        self.release_due = [0; STRINGS];
         self.tab_key = (-1, 0, 0, 0);
         self.chord_root = -1;
         self.step = -1;
@@ -253,7 +251,7 @@ impl State {
         if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
     }
 
-    // The number of `bar` on the signature track: the next bar counts on, a jump looks up or counts back to zero.
+    // The number of `bar` on the signature track: the next bar counts on, a jump counts back to zero.
     fn bar_index(&mut self, bar: &abi::Bar, bar_at: fn(f64) -> abi::Bar) -> i64 {
         let (start, length, index) = self.bar;
         if bar.start == start {
@@ -262,24 +260,16 @@ impl State {
         let counted = if start >= 0.0 && (bar.start - (start + length)).abs() < 1.0e-6 {
             index + 1
         } else {
-            let counted = match self.bar_marks.iter().find(|(mark, _)| *mark == bar.start) {
-                Some(&(_, cached)) => cached,
-                None => {
-                    let (mut at, mut count) = (bar.start, 0);
-                    while at > 1.0e-6 {
-                        let previous = bar_at(at - 1.0).start;
-                        if previous >= at {
-                            break;
-                        }
-                        at = previous;
-                        count += 1;
-                    }
-                    count
+            let (mut at, mut count) = (bar.start, 0);
+            while at > 1.0e-6 {
+                let previous = bar_at(at - 1.0).start;
+                if previous >= at {
+                    break;
                 }
-            };
-            self.bar_marks[self.bar_mark] = (bar.start, counted);
-            self.bar_mark = (self.bar_mark + 1) % BAR_MARKS;
-            counted
+                at = previous;
+                count += 1;
+            }
+            count
         };
         self.bar = (bar.start, bar.length, counted);
         counted
@@ -287,7 +277,6 @@ impl State {
 
     fn forget_bars(&mut self) {
         self.bar = (-1.0, 0.0, 0);
-        self.bar_marks = [(-1.0, 0); BAR_MARKS];
     }
 
     pub fn set_shapes(&mut self, values: &[i32]) {
@@ -448,7 +437,8 @@ impl State {
             let fret_on = |string: usize| note.pitch - fretting::TUNINGS[tuning][string];
             let playable = |string: usize| (KEYS_MIN_FRET..=KEYS_MAX_FRET).contains(&fret_on(string));
             let in_window = |string: usize| fret_on(string) == 0 || (low - 1..=low + 4).contains(&fret_on(string));
-            let free = |string: usize| !taken[string] && self.keys[string] == NO_KEY;
+            let strummed = |string: usize| self.queue[..self.queued].iter().any(|item| item.key == NO_KEY && item.string as usize == string);
+            let free = |string: usize| !taken[string] && self.keys[string] == NO_KEY && !strummed(string);
             let string = (0..STRINGS).find(|string| free(*string) && playable(*string) && in_window(*string))
                 .or_else(|| (0..STRINGS).filter(|string| free(*string) && playable(*string)).min_by_key(|string| fret_on(*string)))
                 .or_else(|| (0..STRINGS).find(|string| !taken[*string] && playable(*string) && in_window(*string)))
@@ -466,6 +456,17 @@ impl State {
             taken[string] = true;
         }
         chosen[..placed].sort_unstable_by_key(|entry| entry.0);
+        for (string, ..) in chosen[..placed].iter().copied() {
+            let mut kept = 0;
+            for index in 0..self.queued {
+                let item = self.queue[index];
+                if item.key != NO_KEY || item.string as usize != string {
+                    self.queue[kept] = item;
+                    kept += 1;
+                }
+            }
+            self.queued = kept;
+        }
         self.lit = 0;
         let mut delay = 0.0f32;
         for (index, (string, pitch, id, velocity)) in chosen[..placed].iter().copied().enumerate() {
@@ -514,9 +515,11 @@ impl State {
         let base_frequency = abi::base_frequency();
         let string = item.string as usize;
         self.strings[string].pluck(&pluck, &self.body, &self.character, base_frequency);
-        if item.key != NO_KEY && self.keys[string] != item.key {
-            self.strings[string].release();
-        }
+        self.release_due[string] = if item.key != NO_KEY && self.keys[string] != item.key {
+            self.now + (SHORT_NOTE * self.sample_rate) as u64
+        } else {
+            0
+        };
     }
 
     fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
@@ -629,6 +632,8 @@ pub fn handle(state: &mut State, event: &EventRecord) {
         for string in 0..STRINGS {
             if state.keys[string] == event.id && event.id != NO_KEY {
                 state.keys[string] = NO_KEY;
+                state.lit &= !(1 << string);
+                state.display[string] = if state.settings.mode == CHORDS_MODE {state.fretted[string]} else {MUTED};
                 if !state.queue[..state.queued].iter().any(|item| item.key == event.id) {
                     state.strings[string].release();
                 }
@@ -673,6 +678,13 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
     let mut done = 0;
     while done < length {
         let mut index = 0;
+        for string in 0..STRINGS {
+            let due = state.release_due[string];
+            if due != 0 && due <= state.now {
+                state.release_due[string] = 0;
+                state.strings[string].release();
+            }
+        }
         while index < state.queued {
             if state.queue[index].due <= state.now {
                 let item = state.queue[index];
@@ -683,7 +695,8 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
                 index += 1;
             }
         }
-        let next = state.queue[..state.queued].iter().map(|item| item.due).min().unwrap_or(u64::MAX);
+        let next = state.queue[..state.queued].iter().map(|item| item.due)
+            .chain(state.release_due.iter().copied().filter(|due| *due != 0)).min().unwrap_or(u64::MAX);
         let chunk = ((length - done) as u64).min(next - state.now).min(SCRATCH as u64).max(1) as usize;
         let mut left = [0.0f32; SCRATCH];
         let mut right = [0.0f32; SCRATCH];
@@ -820,5 +833,6 @@ impl Instrument for Device {
         state.lit = 0;
         state.display = [MUTED; STRINGS];
         state.fretted = [MUTED; STRINGS];
+        state.release_due = [0; STRINGS];
     }
 }
