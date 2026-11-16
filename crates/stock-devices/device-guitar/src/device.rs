@@ -12,6 +12,7 @@ use crate::string::{self, GuitarString, Pick, Pluck, Touch, MAX_DELAY};
 use crate::strum::{self, STEP_COUNT};
 
 const STROKE_MARK: u32 = 0xC000_0000;
+const EVENT_STROKE: u32 = 0x100; // private kind of the generated strokes, ranked like a note-on
 const QUEUE: usize = 256;
 const NO_KEY: u32 = u32::MAX;
 const ENDED: usize = 8; // note-offs that came before their note-on on the same sample
@@ -354,6 +355,10 @@ impl State {
         for string in 0..STRINGS {
             if self.keys[string] == NO_KEY {
                 self.strings[string].release();
+                self.lit &= !(1 << string);
+                if self.settings.mode != CHORDS_MODE {
+                    self.display[string] = MUTED;
+                }
             }
         }
         self.drop_queued(|item| item.key == NO_KEY);
@@ -572,8 +577,12 @@ impl State {
 pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at: fn(f64) -> abi::Bar,
                 out: &mut [EventRecord]) -> usize {
     let transporting = flags.transporting();
-    if state.transporting && !transporting && state.settings.mode == CHORDS_MODE {
-        state.release_all();
+    if state.transporting && !transporting {
+        if state.settings.mode == CHORDS_MODE {
+            state.release_all();
+        } else {
+            state.release_strummed();
+        }
     }
     if transporting && !state.transporting {
         state.forget_bars();
@@ -621,7 +630,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         }
         let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
         out[count] = EventRecord {
-            position, offset: 0, kind: EVENT_NOTE_ON, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
+            position, offset: 0, kind: EVENT_STROKE, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
             velocity: level, cent: pattern.speeds[step], duration: (pattern.masks[step] | pattern.bends[step] << 6) as f64
         };
         count += 1;
@@ -631,7 +640,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
 }
 
 pub fn handle(state: &mut State, event: &EventRecord) {
-    if event.kind == EVENT_NOTE_ON && event.id & STROKE_MARK == STROKE_MARK {
+    if event.kind == EVENT_STROKE {
         state.stroke(event);
         state.broadcast();
     } else if event.kind == EVENT_NOTE_ON {

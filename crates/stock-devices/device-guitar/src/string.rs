@@ -645,7 +645,7 @@ mod tests {
             string.pluck(&Pluck {noise_seed: seed, character, ..pluck(52.0)}, &body, &table, 440.0);
             render(&mut string, 0.02, &body)
         };
-        let difference = |left: &[f32], right: &[f32]| rms(&left.iter().zip(right).map(|(a, b)| a - b).collect::<Vec<_>>());
+        let difference = |left: &[f32], right: &[f32]| rms(&left.iter().zip(right).map(|(first, second)| first - second).collect::<Vec<_>>());
         assert_eq!(difference(&attack(1, 0.0), &attack(2, 0.0)), 0.0);
         assert!(difference(&attack(1, 0.5), &attack(2, 0.5)) > 0.1 * rms(&attack(1, 0.5)));
     }
@@ -794,7 +794,7 @@ mod tests {
         let period = (RATE / hertz(pitch)).round() as usize;
         let window = &signal[period..period * 4];
         let earlier = &signal[0..period * 3];
-        let dot: f32 = window.iter().zip(earlier).map(|(a, b)| a * b).sum();
+        let dot: f32 = window.iter().zip(earlier).map(|(first, second)| first * second).sum();
         let norm = (window.iter().map(|value| value * value).sum::<f32>() * earlier.iter().map(|value| value * value).sum::<f32>()).sqrt();
         (rms(&signal[..(0.06 * RATE) as usize]), dot / norm.max(1.0e-12))
     }

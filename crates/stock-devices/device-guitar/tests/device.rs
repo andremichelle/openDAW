@@ -512,6 +512,29 @@ fn a_held_note_stays_lit_when_another_note_arrives_and_a_choke_clears_both() {
 }
 
 #[test]
+fn a_note_with_the_stroke_bits_in_its_id_is_played_not_strummed() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 0xC000_0007, pitch: 52, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    assert_ne!(state.sounding(), 0);
+}
+
+#[test]
+fn a_stop_stroke_unlights_the_stopped_strings() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::STOP]);
+    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 9600);
+    assert_ne!(state.lit(), 0);
+    device::handle(&mut state, &events[1]);
+    assert_eq!(state.lit(), 0);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
