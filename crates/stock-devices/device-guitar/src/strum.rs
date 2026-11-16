@@ -13,9 +13,11 @@ pub const BASS: i32 = 5;
 pub const ALTERNATE: i32 = 6;
 pub const PICK: i32 = 7;
 pub const STOP: i32 = 8;
+pub const CHOP: i32 = 9;
 
 pub const STEP_COUNT: usize = 64;
 const SIXTEENTH: f64 = 240.0;
+const TILT_DEPTH: f32 = 0.6;
 
 /// The step length in pulses for the rate (0 half, 1 normal, 2 double speed).
 pub fn step_length(rate: i32) -> f64 {
@@ -32,7 +34,7 @@ pub fn order(kind: i32, mask: i32, tab: &Tab) -> ([usize; STRINGS], usize) {
     let mut count = 0;
     let sounding = |string: usize| tab[string] >= 0;
     match kind {
-        DOWN | MUTE | UP => {
+        DOWN | MUTE | UP | CHOP => {
             for string in 0..STRINGS {
                 if mask & (1 << string) != 0 && sounding(string) {
                     strings[count] = string;
@@ -76,6 +78,13 @@ pub fn order(kind: i32, mask: i32, tab: &Tab) -> ([usize; STRINGS], usize) {
         _ => {}
     }
     (strings, count)
+}
+
+/// The gain of a string in a strum, Tilt above zero favours the treble strings, below zero the bass strings.
+pub fn tilt_gain(string: usize, tilt: f32) -> f32 {
+    let steps = if tilt >= 0.0 {STRINGS - 1 - string} else {string};
+    let distance = steps as f32 / (STRINGS - 1) as f32;
+    1.0 - TILT_DEPTH * tilt.abs() * distance
 }
 
 pub fn hash(seed: u32, step: i64, salt: u32) -> u32 {
@@ -129,6 +138,22 @@ mod tests {
     fn rest_and_stop_play_no_string() {
         assert_eq!(order(REST, 0b111111, &OPEN_C).1, 0);
         assert_eq!(order(STOP, 0b111111, &OPEN_C).1, 0);
+    }
+
+    #[test]
+    fn tilt_zero_keeps_every_string_at_full_level() {
+        for string in 0..STRINGS {
+            assert_eq!(tilt_gain(string, 0.0), 1.0);
+        }
+    }
+
+    #[test]
+    fn tilt_favours_one_end_and_softens_the_other() {
+        assert_eq!(tilt_gain(5, 1.0), 1.0);
+        assert!((tilt_gain(0, 1.0) - 0.4).abs() < 1.0e-6);
+        assert_eq!(tilt_gain(0, -1.0), 1.0);
+        assert!((tilt_gain(5, -1.0) - 0.4).abs() < 1.0e-6);
+        assert!(tilt_gain(2, 0.5) > tilt_gain(1, 0.5));
     }
 
     #[test]

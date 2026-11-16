@@ -13,9 +13,6 @@ component
     row-gap: 1px
     height: 100%
 
-    &.six
-      grid-template-rows: repeat(12, 1fr)
-
     > section, > h3.rotated
       &.first, &.middle
         margin-bottom: 2px
@@ -67,9 +64,12 @@ component
       justify-content: center
       padding: 0 4px
 
+      &.groove
+        padding: 0
+
       > h3
         font-size: 9px
-        height: 12px
+        height: 10px
         letter-spacing: 0.5px
         text-align: center
         text-transform: capitalize
@@ -78,6 +78,24 @@ component
 
       button > label
         font-size: 0.5em
+
+      // borrowed from ParameterLabel (framed, center)
+      button.tiny-triangle:after
+        top: 0
+        font-size: 0.5em
+
+      button > label.groove
+        display: block
+        max-width: 5em
+        padding: 0 0.25em 0 0.5em
+        border-radius: 0.25em
+        font-size: 8px
+        line-height: 18px
+        text-align: center
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+        color: var(--color-gray)
 
   // toolbar borrowed from ArpeggioDeviceEditor
   > .sequencer
@@ -110,6 +128,14 @@ component
 
           &.wide
             flex: 1
+
+          &.menu
+            padding: 0
+
+            > button
+              align-self: stretch
+              justify-content: flex-start
+              padding: 0.125em 0.75em
 
           > label
             opacity: 0.7

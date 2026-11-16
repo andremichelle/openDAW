@@ -8,7 +8,7 @@
 //! the pluck (commuted synthesis). The loop lowpass fades the overtones at a rate per second measured on a steel
 //! string acoustic, a chain of allpasses makes the string stiff (its overtones run sharp, measured too), an
 //! allpass fractional delay corrected by the loop's phase delay keeps every fret in tune. Tension shortens the
-//! string. An electric body's pickup hears the string at its position, a comb on the output.
+//! ringing string while the pluck keeps the fretted string's length. An electric body's pickup hears the string at its position, a comb on the output.
 
 use libm::{atan2f, cosf, expf, floorf, powf, sinf, sqrtf};
 
@@ -32,7 +32,7 @@ const EQUAL_LIMIT: f32 = 2.5;
 const REFERENCE_PITCH: f32 = 57.0;
 const PLUCK_GAIN: f32 = 0.3;
 const BODY_MIX: f32 = 0.3;
-const TENSION_SHORTENING: f32 = 0.5;
+const TENSION_SHORTENING: f32 = 0.75;
 const RING_T60: f32 = 30.0;
 const RELEASE_T60: f32 = 0.08;
 const PALM_T60: f32 = 0.16;
@@ -42,13 +42,17 @@ const PALM_GAIN: f32 = 2.0;
 const CHUCK_GAIN: f32 = 8.0;
 const CHUCK_PLUG: f32 = 0.9;
 const CHUCK_DULL: f32 = 0.3;
+const CHOP_T60: f32 = 0.08;
+const CHOP_DULL: f32 = 0.6;
+const CHOP_GAIN: f32 = 2.5;
 const GAIN_FOLLOW_TIME: f32 = 0.002;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Touch {
     Open,
     Palm,
-    Chuck
+    Chuck,
+    Chop
 }
 
 // WASM CONTRACT: the order mirrors `GuitarDeviceBoxAdapter.Picks` (pick field 37)
@@ -102,7 +106,7 @@ pub struct Pluck {
     pub plug: f32,
     /// The spot the pick hits as a fraction of the string (0.13 is typical).
     pub position: f32,
-    /// 0 is the fretted string, 1 shortens it to sound an octave higher.
+    /// 0 is the fretted string, 1 shortens the ringing string to sound two octaves higher.
     pub tension: f32,
     /// The chaos of the pick: fresh noise replaces the fixed table and the contact varies, 0 plays identical picks.
     pub character: f32,
@@ -347,7 +351,8 @@ impl GuitarString {
         let (vertical_t60, horizontal_t60, dull) = match pluck.touch {
             Touch::Open => (60.0 / body_decay, RING_T60, 1.0),
             Touch::Palm => (PALM_T60, PALM_T60, PALM_DULL),
-            Touch::Chuck => (CHUCK_T60, CHUCK_T60, CHUCK_DULL)
+            Touch::Chuck => (CHUCK_T60, CHUCK_T60, CHUCK_DULL),
+            Touch::Chop => (CHOP_T60, CHOP_T60, CHOP_DULL)
         };
         let contact = &CONTACTS[pluck.pick as usize];
         let chuck = pluck.touch == Touch::Chuck;
@@ -377,7 +382,7 @@ impl GuitarString {
             }
         }
         self.drive = (contact.drive * (1.0 + 0.6 * chaos())).clamp(0.0, 1.0);
-        let period = ((sample_rate / frequency) as usize).clamp(2, MAX_DELAY - 1);
+        let period = ((sample_rate / fretted) as usize).clamp(2, MAX_DELAY - 1);
         let spot = pluck.position.clamp(0.02, 0.5);
         let corner = spot * period as f32;
         let width = (contact.width * (1.0 + 0.5 * chaos()) * period as f32).max(1.0);
@@ -402,14 +407,15 @@ impl GuitarString {
             *value -= mean;
         }
         self.burst_length = period;
-        self.pickup = body.pickup().map_or(0, |position| ((position * period as f32) as usize).max(1));
+        self.pickup = body.pickup().map_or(0, |position| ((position * period_samples as f32) as usize).max(1));
         self.comb = ((spot * period as f32) as usize).max(1);
         self.length = body.length().max(period) + self.comb;
         self.position = 0;
         let touch_gain = match pluck.touch {
             Touch::Open => 1.0,
             Touch::Palm => PALM_GAIN,
-            Touch::Chuck => CHUCK_GAIN
+            Touch::Chuck => CHUCK_GAIN,
+            Touch::Chop => CHOP_GAIN
         };
         let reference = sample_rate / (base_frequency * powf(2.0, (REFERENCE_PITCH - 69.0) / 12.0));
         let equal = powf(reference / period as f32, EQUAL_PLUCK).min(EQUAL_LIMIT);
@@ -568,9 +574,9 @@ mod tests {
     }
 
     #[test]
-    fn tension_shortens_the_string_up_to_an_octave() {
+    fn tension_shortens_the_string_up_to_two_octaves() {
         let (table, body) = (character(), body(1));
-        for (tension, expected) in [(0.5f32, hertz(52.0) / 0.75), (1.0, hertz(64.0))] {
+        for (tension, expected) in [(0.5f32, hertz(52.0) / 0.625), (1.0, hertz(76.0))] {
             let mut string = boxed_string();
             string.pluck(&Pluck {tension, ..pluck(52.0)}, &body, &table, 440.0);
             let signal = render(&mut string, 0.8, &body);

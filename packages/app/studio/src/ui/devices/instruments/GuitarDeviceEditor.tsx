@@ -2,7 +2,9 @@ import css from "./GuitarDeviceEditor.sass?inline"
 import {Arrays, clamp, DefaultObservableValue, int, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
-import {AutomatableParameterFieldAdapter, DeviceHost, GuitarDeviceBoxAdapter, GuitarPatterns, InstrumentFactories} from "@opendaw/studio-adapters"
+import {
+    AutomatableParameterFieldAdapter, DeviceHost, Grooves, GuitarDeviceBoxAdapter, GuitarPatterns, InstrumentFactories
+} from "@opendaw/studio-adapters"
 import {MenuItem} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -19,6 +21,7 @@ import {Button} from "@/ui/components/Button"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {FretDisplay} from "@/ui/devices/instruments/GuitarDeviceEditor/FretDisplay"
 import {GuitarStepGrid} from "@/ui/devices/instruments/GuitarDeviceEditor/GuitarStepGrid"
+import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 
 const className = Html.adoptStyleSheet(css, "GuitarDeviceEditor")
 
@@ -33,8 +36,8 @@ type Construct = {
 
 export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
-        mode, rate, speed, speedVariation, velocity, velocityVariation, swing, accent, position, tuning, body,
-        damping, dampingVariation, pluck, pluckVariation, tension, spot, characterVariation, pick, spread, volume
+        mode, rate, speed, speedVariation, velocity, velocityVariation, tilt, position, tuning, body,
+        damping, dampingVariation, pluck, pluckVariation, tension, spot, pick, spread, volume
     } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning} = project
@@ -76,6 +79,17 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             ))}
         </div>
     )
+    const grooveName: HTMLElement = <label className="groove"/>
+    lifecycle.own(box.groove.catchupAndSubscribe(pointer => grooveName.textContent = pointer.targetVertex
+        .mapOr(({box: target}) => Grooves.adapterOf(project, Grooves.asGrooveBox(target)).label, GrooveMenus.NoneLabel)))
+    const grooveControl = (cell: Cell) => (
+        <div className="control groove" style={{gridArea: area(cell)}}>
+            <h3>Groove</h3>
+            <MenuButton root={GrooveMenus.choiceRoot(project, box.groove)}
+                        appearance={{tooltip: GrooveMenus.tooltip(project, box.groove), tinyTriangle: true}}
+                        pointer>{grooveName}</MenuButton>
+        </div>
+    )
     const section = (name: string, color: string, rows: [int, int], edge: string) => [
         <section className={edge} style={{gridRow: `${rows[0]} / ${rows[1]}`, "--color": color}}/>,
         <h3 className={Html.buildClassList("rotated", edge)}
@@ -91,6 +105,17 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     .filter(({pattern}) => pattern.style === style)
                     .map(({pattern, index}) => MenuItem.default({label: pattern.name, checked: index === box.pattern.getValue()})
                         .setTriggerProcedure(() => editing.modify(() => GuitarPatterns.load(box, index)))))))))
+    const menuOrder: ReadonlyArray<int> = GuitarPatterns.Styles.flatMap(style => GuitarPatterns.Library
+        .map((pattern, index) => ({pattern, index}))
+        .filter(({pattern}) => pattern.style === style)
+        .map(({index}) => index))
+    const walkPattern = (delta: int) => {
+        const position = menuOrder.indexOf(box.pattern.getValue())
+        const next = position === -1
+            ? (delta > 0 ? 0 : menuOrder.length - 1)
+            : (position + delta + menuOrder.length) % menuOrder.length
+        editing.modify(() => GuitarPatterns.load(box, menuOrder[next]))
+    }
     const brushes: HTMLElement = (
         <div className="brushes">
             {GuitarPatterns.Kinds.map(({kind, glyph, label}) => {
@@ -109,10 +134,18 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     const toolbar: HTMLElement = (
         <div className="toolbars">
             <div className="toolbar">
-                <div className="field wide">
-                    <MenuButton root={patternMenu} appearance={{tinyTriangle: true, color: Colors.dark}} pointer>
+                <div className="field wide menu">
+                    <MenuButton root={patternMenu} appearance={{tinyTriangle: true, color: Colors.dark}} pointer stretch>
                         {patternName}
                     </MenuButton>
+                </div>
+                <div className="field">
+                    <div className="group">
+                        <Button lifecycle={lifecycle} onClick={() => walkPattern(-1)}
+                                appearance={{framed: true, color: Colors.blue}}>{"<"}</Button>
+                        <Button lifecycle={lifecycle} onClick={() => walkPattern(1)}
+                                appearance={{framed: true, color: Colors.blue}}>{">"}</Button>
+                    </div>
                 </div>
                 <div className="field">
                     <label>Length</label>
@@ -167,28 +200,27 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                   {dragControl(speedVariation, {u: 1, v: 0})}
                                   {dragControl(velocity, {u: 0, v: 2})}
                                   {dragControl(velocityVariation, {u: 1, v: 2})}
-                                  {dragControl(swing, {u: 0, v: 4})}
-                                  {dragControl(accent, {u: 1, v: 4})}
+                                  {grooveControl({u: 0, v: 4})}
+                                  {dragControl(tilt, {u: 1, v: 4})}
                                   {menuControl(mode, GuitarDeviceBoxAdapter.Modes.length, {u: 0, v: 6})}
                                   {menuControl(rate, GuitarDeviceBoxAdapter.Rates.length, {u: 1, v: 6})}
                                   {menuControl(position, 6, {u: 0, v: 8})}
                                   {menuControl(tuning, 4, {u: 1, v: 8})}
                               </div>
-                              <div className="labels six">
-                                  {section("PICK", Colors.yellow.toString(), [1, 7], "first")}
-                                  {section("STRING", Colors.green.toString(), [7, 11], "middle")}
-                                  {section("OUT", Colors.cream.toString(), [11, 13], "last")}
+                              <div className="labels">
+                                  {section("PICK", Colors.yellow.toString(), [1, 5], "first")}
+                                  {section("STRING", Colors.green.toString(), [5, 9], "middle")}
+                                  {section("OUT", Colors.cream.toString(), [9, 11], "last")}
                                   {menuControl(pick, GuitarDeviceBoxAdapter.Picks.length, {u: 0, v: 0})}
                                   {dragControl(spot, {u: 1, v: 0})}
                                   {dragControl(pluck, {u: 0, v: 2})}
                                   {dragControl(pluckVariation, {u: 1, v: 2})}
-                                  {dragControl(characterVariation, {u: 0, v: 4})}
-                                  {dragControl(damping, {u: 0, v: 6})}
-                                  {dragControl(dampingVariation, {u: 1, v: 6})}
-                                  {dragControl(tension, {u: 0, v: 8})}
-                                  {menuControl(body, GuitarDeviceBoxAdapter.Bodies.length, {u: 1, v: 8})}
-                                  {dragControl(spread, {u: 0, v: 10})}
-                                  {dragControl(volume, {u: 1, v: 10})}
+                                  {dragControl(damping, {u: 0, v: 4})}
+                                  {dragControl(dampingVariation, {u: 1, v: 4})}
+                                  {dragControl(tension, {u: 0, v: 6})}
+                                  {menuControl(body, GuitarDeviceBoxAdapter.Bodies.length, {u: 1, v: 6})}
+                                  {dragControl(spread, {u: 0, v: 8})}
+                                  {dragControl(volume, {u: 1, v: 8})}
                               </div>
                           </div>
                       )}

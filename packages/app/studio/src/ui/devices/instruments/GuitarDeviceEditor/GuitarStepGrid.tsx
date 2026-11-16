@@ -26,6 +26,8 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
     const silent = (kind: int) => kind === GuitarPatterns.Rest || kind === GuitarPatterns.Stop
     const ignoresStrings = (kind: int) => silent(kind) || kind === GuitarPatterns.Chuck
         || kind === GuitarPatterns.Bass || kind === GuitarPatterns.Alternate
+    const strums = (kind: int) => kind === GuitarPatterns.Down || kind === GuitarPatterns.Up
+        || kind === GuitarPatterns.Mute || kind === GuitarPatterns.Chop
     const custom = () => box.pattern.setValue(-1)
     const rebuild = () => {
         inner.terminate()
@@ -59,7 +61,13 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
             inner.ownAll(kindField.subscribe(render), stringsField.subscribe(render), box.patternLength.subscribe(render),
                 Events.subscribe(cell, "click", () => editing.modify(() => {
                     const kind = brush.getValue()
-                    kindField.setValue(kindField.getValue() === kind ? GuitarPatterns.Rest : kind)
+                    const previous = kindField.getValue()
+                    if (previous === kind) {
+                        kindField.setValue(GuitarPatterns.Rest)
+                    } else {
+                        if (strums(kind) && !strums(previous)) {stringsField.setValue(GuitarPatterns.AllStrings)}
+                        kindField.setValue(kind)
+                    }
                     custom()
                 })))
             render()

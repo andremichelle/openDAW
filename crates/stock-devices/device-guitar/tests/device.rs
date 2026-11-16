@@ -73,19 +73,9 @@ fn half_and_double_rate() {
 }
 
 #[test]
-fn swing_delays_the_offbeat_steps() {
-    let mut state = state();
-    pattern(&mut state, &[strum::DOWN, strum::UP]);
-    device::apply_parameter(&mut state, param::SWING, ParamValue::Float(0.5));
-    let positions: Vec<f64> = strokes(&mut state, 0.0, 960.0, four_four).iter().map(|event| event.position).collect();
-    assert_eq!(positions, vec![0.0, 300.0, 480.0, 780.0]);
-}
-
-#[test]
 fn blocks_split_anywhere_yield_the_same_strokes() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, 0, strum::UP, strum::MUTE]);
-    device::apply_parameter(&mut state, param::SWING, ParamValue::Float(0.3));
     let whole: Vec<f64> = strokes(&mut state, 0.0, 7680.0, four_four).iter().map(|event| event.position).collect();
     let mut split = Vec::new();
     let mut from = 0.0;
@@ -313,3 +303,74 @@ fn speed_spreads_the_strum() {
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
 }
 
+
+// Strums the low E string of a G chord, then optionally runs `after`, and returns the level a while later.
+fn low_e_ring(after: impl Fn(&mut State, &EventRecord)) -> f32 {
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN]);
+    let mut stroke = strokes(&mut state, 0.0, 240.0, four_four)[0];
+    stroke.duration = 1.0;
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
+    device::handle(&mut state, &stroke);
+    render(&mut state, 4800);
+    after(&mut state, &stroke);
+    let (left, right) = render(&mut state, 24000);
+    rms(&left[14400..]) + rms(&right[14400..])
+}
+
+#[test]
+fn a_chord_without_a_string_mutes_that_string() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let ringing = low_e_ring(|_, _| {});
+    let muted = low_e_ring(|state, stroke| {
+        abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+        device::handle(state, stroke);
+    });
+    assert!(ringing > 1.0e-3, "ringing {ringing}");
+    assert!(muted < ringing * 0.01, "muted {muted} ringing {ringing}");
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
+fn a_stroke_without_a_chord_mutes_the_strings() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let ringing = low_e_ring(|_, _| {});
+    let muted = low_e_ring(|state, stroke| {
+        abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: None});
+        device::handle(state, stroke);
+    });
+    assert!(muted < ringing * 0.01, "muted {muted} ringing {ringing}");
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
+fn stopping_the_transport_mutes_the_last_stroke() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let generate = |state: &mut State, transporting: bool| {
+        let mut out = [BLANK; 64];
+        device::generate(state, 3840.0, 3840.0, BlockFlags::create(transporting, false, transporting, false), four_four, &mut out);
+    };
+    let ringing = low_e_ring(|state, _| generate(state, true));
+    let stopped = low_e_ring(|state, _| generate(state, false));
+    assert!(stopped < ringing * 0.01, "stopped {stopped} ringing {ringing}");
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}
+
+#[test]
+fn a_chop_lets_the_chord_through_and_stops_it_soon() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
+    let level = |kind: i32, from: usize, to: usize| -> f32 {
+        let mut state = state();
+        pattern(&mut state, &[kind]);
+        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        device::handle(&mut state, &events[0]);
+        let (left, _) = render(&mut state, 24000);
+        20.0 * rms(&left[from..to]).max(1.0e-9).log10()
+    };
+    let body = |kind: i32| level(kind, 2880, 4800);
+    let tail = |kind: i32| level(kind, 4800, 9600);
+    assert!(body(strum::CHOP) - body(strum::CHUCK) > 15.0, "chop {:.1} chuck {:.1}", body(strum::CHOP), body(strum::CHUCK));
+    assert!(tail(strum::DOWN) - tail(strum::CHOP) > 20.0, "down {:.1} chop {:.1}", tail(strum::DOWN), tail(strum::CHOP));
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+}

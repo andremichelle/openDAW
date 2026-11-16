@@ -1036,7 +1036,7 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
 }
 
 // WASM CONTRACT: the index is the stroke kind of `GuitarPatterns` (step-kinds field 30)
-const GuitarStrokes: ReadonlyArray<GuitarStroke> = ["rest", "down", "up", "mute", "chuck", "bass", "alternate", "pick", "stop"]
+const GuitarStrokes: ReadonlyArray<GuitarStroke> = ["rest", "down", "up", "mute", "chuck", "bass", "alternate", "pick", "stop", "chop"]
 
 const createGuitarStep = (context: Context, box: GuitarDeviceBox, index: int): GuitarStep => {
     const name = `steps.${index}`
@@ -1068,8 +1068,7 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
     declare speedVariation: unitValue
     declare velocity: unitValue
     declare velocityVariation: unitValue
-    declare swing: unitValue
-    declare accent: unitValue
+    declare tilt: bipolar
     declare position: int
     declare tuning: int
     declare body: int
@@ -1079,7 +1078,6 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
     declare pluckVariation: unitValue
     declare tension: unitValue
     declare spot: unitValue
-    declare characterVariation: unitValue
     declare pick: int
     declare spread: unitValue
     declare volume: float
@@ -1090,14 +1088,17 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
         super(context, box)
         this.bind({
             mode: box.mode, rate: box.rate, speed: box.speed, speedVariation: box.speedVariation, velocity: box.velocity,
-            velocityVariation: box.velocityVariation, swing: box.swing, accent: box.accent, position: box.position,
+            velocityVariation: box.velocityVariation, tilt: box.tilt, position: box.position,
             tuning: box.tuning, body: box.body, damping: box.damping, dampingVariation: box.dampingVariation,
             pluck: box.pluck, pluckVariation: box.pluckVariation, tension: box.tension, spot: box.spot,
-            characterVariation: box.characterVariation, pick: box.pick, spread: box.spread, volume: box.volume,
+            pick: box.pick, spread: box.spread, volume: box.volume,
             patternLength: box.patternLength
         })
         this.steps = Object.freeze(Array.from({length: GuitarPatterns.StepCount}, (_, index) => createGuitarStep(context, box, index)))
     }
+
+    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
+    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
 
     get patternNames(): ReadonlyArray<string> {return GuitarPatterns.Library.map(({name}) => name)}
 

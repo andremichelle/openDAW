@@ -2323,10 +2323,11 @@ export interface Cubed extends Instrument {
 /**
  * What a Guitar step plays: strums cross the step's strings (down from the low E, up from the high e), "mute" is
  * a palm muted down strum, "chuck" a muted percussive hit, "bass" and "alternate" the lowest and second lowest
- * sounding string, "pick" plucks the step's strings together, "stop" silences the strings, "rest" plays nothing
+ * sounding string, "pick" plucks the step's strings together, "stop" silences the strings, "chop" strums the
+ * step's strings and damps them right away, "rest" plays nothing
  * @group Instrument Parts
  */
-export type GuitarStroke = "rest" | "down" | "up" | "mute" | "chuck" | "bass" | "alternate" | "pick" | "stop"
+export type GuitarStroke = "rest" | "down" | "up" | "mute" | "chuck" | "bass" | "alternate" | "pick" | "stop" | "chop"
 
 /**
  * One step of the Guitar pattern
@@ -2361,12 +2362,10 @@ export interface Guitar extends Instrument {
     speedVariation: unitValue
     /** Velocity (0.0 to 1.0, default 0.8) */
     velocity: unitValue
-    /** Velocity variation per pluck (0.0 to 1.0, default 0.15) */
+    /** Velocity variation per pluck (0.0 to 1.0, default 0.75) */
     velocityVariation: unitValue
-    /** Swing of the odd steps (0.0 to 1.0, default 0.0) */
-    swing: unitValue
-    /** Accent on the bar and the beats (0.0 to 1.0, default 0.3) */
-    accent: unitValue
+    /** Strum level across the strings: above 0 the treble strings are louder, below 0 the bass strings (-1.0 to 1.0, default 0.0) */
+    tilt: bipolar
     /** Neck position: 0 = Open, 1 = 3rd, 2 = 5th, 3 = 7th, 4 = 9th, 5 = 12th fret (default 0) */
     position: int
     /** Tuning: 0 = Standard, 1 = Drop D, 2 = Open G, 3 = DADGAD (default 0) */
@@ -2381,12 +2380,10 @@ export interface Guitar extends Instrument {
     pluck: unitValue
     /** Pick brightness variation per pluck (0.0 to 1.0, default 0.5) */
     pluckVariation: unitValue
-    /** Tightens the strings, which shortens them and raises the pitch up to an octave (0.0 to 1.0, default 0.0) */
+    /** Tightens the strings: brighter, firmer and longer ringing, up to two semitones higher (0.0 to 1.0, default 0.0) */
     tension: unitValue
     /** Where the pick hits the string, from the bridge to the middle (0.0 to 1.0, default 0.2) */
     spot: unitValue
-    /** How different every pick sounds from the last, 0 plays identical picks (0.0 to 1.0, default 0.5) */
-    characterVariation: unitValue
     /** What plucks the strings: 0 = Finger, 1 = Thumb, 2 = Nail, 3 = Plectrum (default 3) */
     pick: int
     /** Stereo spread of the strings (0.0 to 1.0, default 0.6) */
@@ -2395,6 +2392,8 @@ export interface Guitar extends Instrument {
     volume: float
     /** Number of steps played (1 to 64, default 16) */
     patternLength: int
+    /** The groove the pattern plays through, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
     /** 64 steps */
     readonly steps: ReadonlyArray<GuitarStep>
     /** Replace the steps from the beginning and set the pattern length */

@@ -1,10 +1,12 @@
 //! The Guitar device: the step pattern strums the chord track (Chords mode) and played notes land on the
 //! strings (both modes). A stroke is an internal note event placed by the SDK at its sample, it then queues
-//! one pluck per string at the strum spacing. Parameters are fields 10..25, 27..29, 36 and 37, the pattern lanes 30..34.
+//! one pluck per string at the strum spacing. Parameters are fields 10..15, 17..25, 28, 29, 36 and 37, the pattern lanes 30..34, the groove 38.
 
 use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue, EVENT_NOTE_ON, EVENT_NOTE_OFF};
-use libm::{floor, round};
+use libm::{ceil, round};
 use math::value_mapping::{Decibel, Linear, LinearInteger};
+
+use dsp::simple_limiter::SimpleLimiter;
 
 use crate::body::{Body, BODY_COUNT};
 use crate::fretting::{self, Tab, MUTED, STRINGS};
@@ -18,6 +20,8 @@ const SCRATCH: usize = 128;
 const KEYS_MIN_FRET: i32 = 0;
 const KEYS_MAX_FRET: i32 = 19;
 const HUMANIZE: f32 = 0.012;
+const MAKEUP: f32 = 2.5118864; // +8 dB
+const CLIP_KNEE: f32 = 0.7;
 
 const MODE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 1};
 const RATE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
@@ -26,6 +30,7 @@ const TUNING_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const BODY_MAPPING: LinearInteger = LinearInteger {min: 0, max: BODY_COUNT as i32 - 1};
 const PICK_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const UNIPOLAR: Linear = Linear::unipolar();
+const BIPOLAR: Linear = Linear::bipolar();
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
 
 pub mod param {
@@ -35,28 +40,27 @@ pub mod param {
     pub const SPEED_VARIATION: usize = 3;
     pub const VELOCITY: usize = 4;
     pub const VELOCITY_VARIATION: usize = 5;
-    pub const SWING: usize = 6;
-    pub const ACCENT: usize = 7;
-    pub const POSITION: usize = 8;
-    pub const TUNING: usize = 9;
-    pub const BODY: usize = 10;
-    pub const DAMPING: usize = 11;
-    pub const DAMPING_VARIATION: usize = 12;
-    pub const PLUCK: usize = 13;
-    pub const PLUCK_VARIATION: usize = 14;
-    pub const TENSION: usize = 15;
-    pub const SPOT: usize = 16;
-    pub const CHARACTER: usize = 17;
-    pub const SPREAD: usize = 18;
-    pub const VOLUME: usize = 19;
-    pub const PICK: usize = 20;
-    pub const COUNT: usize = 21;
+    pub const POSITION: usize = 6;
+    pub const TUNING: usize = 7;
+    pub const BODY: usize = 8;
+    pub const DAMPING: usize = 9;
+    pub const DAMPING_VARIATION: usize = 10;
+    pub const PLUCK: usize = 11;
+    pub const PLUCK_VARIATION: usize = 12;
+    pub const TENSION: usize = 13;
+    pub const SPOT: usize = 14;
+    pub const SPREAD: usize = 15;
+    pub const VOLUME: usize = 16;
+    pub const PICK: usize = 17;
+    pub const TILT: usize = 18;
+    pub const COUNT: usize = 19;
 }
 
 // WASM CONTRACT: GuitarDeviceBox field keys (studio-boxes)
-const PARAM_FIELDS: [u16; param::COUNT] = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 36, 27, 28, 29, 37];
+const PARAM_FIELDS: [u16; param::COUNT] = [10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25, 36, 28, 29, 37, 39];
 const LANE_FIELDS: [u16; 4] = [30, 31, 32, 33];
 const LENGTH_FIELD: u16 = 34;
+const GROOVE_FIELD: u16 = 38;
 
 const CHORDS_MODE: i32 = 0;
 
@@ -86,8 +90,6 @@ pub struct Settings {
     pub speed_variation: f32,
     pub velocity: f32,
     pub velocity_variation: f32,
-    pub swing: f32,
-    pub accent: f32,
     pub position: i32,
     pub tuning: i32,
     pub damping: f32,
@@ -99,6 +101,7 @@ pub struct Settings {
     pub character: f32,
     pub pick: i32,
     pub spread: f32,
+    pub tilt: f32,
     pub gain: f32
 }
 
@@ -124,12 +127,15 @@ pub struct State {
     chord_root: i32,
     step: i32,
     lit: i32,
+    transporting: bool,
     dc: [(f32, f32); 2],
     pickup: [[f32; 4]; 2],
+    limiter: SimpleLimiter,
     sample_rate: f32,
     ids: [u32; param::COUNT],
     lane_ids: [u32; 4],
     length_id: u32,
+    groove: abi::GrooveFollower,
     broadcast: u32
 }
 
@@ -140,10 +146,11 @@ impl State {
             string.init(sample_rate);
         }
         self.body.init(sample_rate);
+        self.limiter.prepare(sample_rate);
         self.settings = Settings {
-            mode: CHORDS_MODE, rate: 1, speed: 0.3, speed_variation: 0.2, velocity: 0.8, velocity_variation: 0.15,
-            swing: 0.0, accent: 0.3, position: 0, tuning: 0, damping: 0.33, damping_variation: 0.5, pluck: 0.5,
-            pluck_variation: 0.5, tension: 0.0, spot: 0.2, character: 0.5, pick: 3, spread: 0.6,
+            mode: CHORDS_MODE, rate: 1, speed: 0.3, speed_variation: 0.2, velocity: 0.8, velocity_variation: 0.75,
+            position: 0, tuning: 0, damping: 0.33, damping_variation: 0.5, pluck: 0.5,
+            pluck_variation: 0.5, tension: 0.0, spot: 0.2, character: 0.5, pick: 3, spread: 0.6, tilt: 0.0,
             gain: dsp::db_to_gain(-6.0)
         };
         let mut noise = 65535u32;
@@ -161,6 +168,7 @@ impl State {
         self.tab_key = (-1, 0, 0, 0);
         self.chord_root = -1;
         self.step = -1;
+        self.transporting = false;
         self.keys = [0; STRINGS];
     }
 
@@ -169,7 +177,7 @@ impl State {
     pub fn set_lane(&mut self, lane: usize, values: &[i32]) {
         for (step, value) in values.iter().take(STEP_COUNT).enumerate() {
             match lane {
-                0 => self.kinds[step] = (*value).clamp(strum::REST, strum::STOP),
+                0 => self.kinds[step] = (*value).clamp(strum::REST, strum::CHOP),
                 1 => self.masks[step] = *value & 0b111111,
                 2 => self.velocities[step] = (*value).clamp(0, 100) as f32 / 100.0,
                 _ => self.speeds[step] = (*value).clamp(0, 100) as f32 / 100.0
@@ -219,27 +227,28 @@ impl State {
         }
         let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
             self.chord_root = -1;
+            self.release_all();
             return;
         };
         self.chord_root = root;
         let tab = self.chord_tab(root, voicing);
         self.display = tab;
+        for string in 0..STRINGS {
+            if tab[string] < 0 {
+                self.strings[string].release();
+            }
+        }
         let mask = event.duration as i32;
         let (strings, count) = strum::order(kind, mask, &tab);
+        let tilted = matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHUCK | strum::CHOP);
         let seed = event.id;
         let factor = if kind == strum::CHUCK {0.35} else {0.25 + event.cent * 1.5};
         let touch = match kind {
             strum::MUTE => Touch::Palm,
             strum::CHUCK => Touch::Chuck,
+            strum::CHOP => Touch::Chop,
             _ => Touch::Open
         };
-        if kind == strum::CHUCK {
-            for string in 0..STRINGS {
-                if tab[string] < 0 {
-                    self.strings[string].release();
-                }
-            }
-        }
         self.lit = 0;
         let mut delay = (0.5 + 0.5 * strum::bipolar(seed, 0, 13)) * self.settings.speed_variation * HUMANIZE * self.sample_rate;
         for (index, string) in strings[..count].iter().enumerate() {
@@ -248,7 +257,8 @@ impl State {
             }
             let pitch = fretting::pitch(self.settings.tuning as usize, *string, tab[*string]) as f32;
             self.enqueue(Scheduled {
-                due: self.now + delay as u64, string: *string as u8, pitch, velocity: event.velocity, touch, up: kind == strum::UP,
+                due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
+                velocity: if tilted {event.velocity * strum::tilt_gain(*string, self.settings.tilt)} else {event.velocity},
                 seed: strum::hash(seed, *string as i64, 3), key: 0
             });
             self.lit |= 1 << *string;
@@ -369,24 +379,29 @@ impl State {
 /// strings, level and strum speed. The pattern restarts with every bar of the signature track.
 pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at: fn(f64) -> abi::Bar,
                 out: &mut [EventRecord]) -> usize {
-    if state.settings.mode != CHORDS_MODE || !flags.transporting() {
+    let transporting = flags.transporting();
+    if state.transporting && !transporting && state.settings.mode == CHORDS_MODE {
+        state.release_all();
+    }
+    state.transporting = transporting;
+    if state.settings.mode != CHORDS_MODE || !transporting {
         state.step = -1;
         state.broadcast();
         return 0;
     }
     let step_length = strum::step_length(state.settings.rate);
-    let swing = state.settings.swing as f64 * 0.5 * step_length;
-    let mut index = floor((from - swing) / step_length) as i64;
+    let (straight_from, straight_to) = state.groove.straight(from, to, flags.discontinuous());
+    let mut index = ceil(straight_from / step_length) as i64;
     let mut count = 0;
     loop {
         let grid = index as f64 * step_length;
-        if grid >= to {
+        if grid >= straight_to {
             break;
         }
-        let position = if index.rem_euclid(2) == 1 {grid + swing} else {grid};
+        let position = state.groove.warp(grid);
         let grid_index = index;
         index += 1;
-        if position < from || position >= to || count >= out.len() {
+        if count >= out.len() {
             continue;
         }
         let bar = bar_at(grid);
@@ -400,10 +415,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         if kind == strum::REST {
             continue;
         }
-        let downbeat = local == 0;
-        let on_beat = bar.beat > 0.0 && ((grid - bar.start) % bar.beat).abs() < 1.0e-6;
-        let accent = if downbeat {1.0 + state.settings.accent * 0.6} else if on_beat {1.0 + state.settings.accent * 0.2} else {1.0};
-        let level = (state.velocities[step] * (0.4 + state.settings.velocity * 0.8) * accent).min(1.2);
+        let level = (state.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
         out[count] = EventRecord {
             position, offset: 0, kind: EVENT_NOTE_ON, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
             velocity: level, cent: state.speeds[step], duration: state.masks[step] as f64
@@ -437,6 +449,17 @@ pub fn handle(state: &mut State, event: &EventRecord) {
             }
         }
     }
+}
+
+// unchanged below the knee, the pick's few sample spikes bend into full scale
+#[inline]
+fn soft_clip(input: f32) -> f32 {
+    let magnitude = input.abs();
+    if magnitude <= CLIP_KNEE {
+        return input;
+    }
+    let bent = CLIP_KNEE + (1.0 - CLIP_KNEE) * libm::tanhf((magnitude - CLIP_KNEE) / (1.0 - CLIP_KNEE));
+    bent.copysign(input)
 }
 
 #[inline]
@@ -483,10 +506,15 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
             resonate(&coefficients, &mut state.pickup[0], &mut left[..chunk]);
             resonate(&coefficients, &mut state.pickup[1], &mut right[..chunk]);
         }
+        for sample in 0..chunk {
+            left[sample] = dc_block(&mut state.dc[0], left[sample]) * MAKEUP;
+            right[sample] = dc_block(&mut state.dc[1], right[sample]) * MAKEUP;
+        }
+        state.limiter.replace(&mut left, &mut right, 0, chunk);
         let gain = state.settings.gain;
         for sample in 0..chunk {
-            out_left[done + sample] += dc_block(&mut state.dc[0], left[sample]) * gain;
-            out_right[done + sample] += dc_block(&mut state.dc[1], right[sample]) * gain;
+            out_left[done + sample] += soft_clip(left[sample]) * gain;
+            out_right[done + sample] += soft_clip(right[sample]) * gain;
         }
         state.now += chunk as u64;
         done += chunk;
@@ -502,8 +530,6 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::SPEED_VARIATION => settings.speed_variation = float_value(value, &UNIPOLAR),
         param::VELOCITY => settings.velocity = float_value(value, &UNIPOLAR),
         param::VELOCITY_VARIATION => settings.velocity_variation = float_value(value, &UNIPOLAR),
-        param::SWING => settings.swing = float_value(value, &UNIPOLAR),
-        param::ACCENT => settings.accent = float_value(value, &UNIPOLAR),
         param::POSITION => settings.position = int_value(value, &POSITION_MAPPING),
         param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING),
         param::BODY => state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize),
@@ -513,10 +539,10 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::PLUCK_VARIATION => settings.pluck_variation = float_value(value, &UNIPOLAR),
         param::TENSION => settings.tension = float_value(value, &UNIPOLAR),
         param::SPOT => settings.spot = float_value(value, &UNIPOLAR),
-        param::CHARACTER => settings.character = float_value(value, &UNIPOLAR),
         param::SPREAD => settings.spread = float_value(value, &UNIPOLAR),
         param::VOLUME => settings.gain = dsp::db_to_gain(float_value(value, &VOLUME_MAPPING)),
         param::PICK => settings.pick = int_value(value, &PICK_MAPPING),
+        param::TILT => settings.tilt = float_value(value, &BIPOLAR),
         _ => {}
     }
 }
@@ -535,6 +561,7 @@ impl Instrument for Device {
             state.lane_ids[lane] = abi::observe_field(&[*field]);
         }
         state.length_id = abi::observe_field(&[LENGTH_FIELD]);
+        state.groove = abi::GrooveFollower::observe(&[GROOVE_FIELD]);
         state.broadcast = abi::bind_broadcast_int_array(&[0], 9);
     }
 
@@ -574,10 +601,12 @@ impl Instrument for Device {
         }
         state.dc = [(0.0, 0.0); 2];
         state.pickup = [[0.0; 4]; 2];
+        state.limiter.clear();
         state.queued = 0;
         state.pending_count = 0;
         state.keys = [0; STRINGS];
         state.step = -1;
+        state.transporting = false;
         state.lit = 0;
         state.display = [MUTED; STRINGS];
     }

@@ -23,8 +23,9 @@ Example uses:
 
 ### Chords
 
-While the transport runs, the pattern strums the chord at the playhead. Without a chord on the chord track the
-guitar stays silent. Notes you play still sound on the strings.
+While the transport runs, the pattern strums the chord at the playhead. A string the chord does not use falls
+silent when the chord arrives, and stopping the transport silences the strings. Without a chord on the chord track
+the guitar stays silent. Notes you play still sound on the strings.
 
 ### Keys
 
@@ -46,7 +47,7 @@ struck. Below it are the tuning and the position.
 ### Patterns
 
 The menu holds the built in patterns, grouped by style: Strumming, Rock, Funk and Soul, Reggae and Ska, Latin,
-Country and Fingerstyle. Editing any step turns the pattern into Custom, your edits stay.
+Country, Fingerstyle, Metal, Afro and Caribbean, Ambient and Cinematic, Modern Pop and Blues. Editing any step turns the pattern into Custom, your edits stay.
 
 ### Length
 
@@ -92,13 +93,15 @@ How long a strum takes to cross the strings. Its variation changes the timing of
 
 The overall loudness of the pattern. Its variation changes the loudness of every pluck slightly.
 
-### Swing
+### Groove
 
-Delays every second step, up to a dotted feel.
+The groove the pattern plays through, chosen from the grooves of the project or made new from the menu. None
+plays the steps straight.
 
-### Accent
+### Tilt
 
-Plays the first step of every bar louder, and the beats a little louder.
+Which strings of a strum sound loudest. Turned right the treble strings are louder, turned left the bass strings,
+centered every string plays at the same level. Single picked notes and bass notes are not affected.
 
 ---
 
@@ -149,11 +152,6 @@ Where the pick hits the string, from right at the bridge (thin and bright) towar
 
 The brightness of the pick. Its variation gives every pick its own color.
 
-### Character
-
-How different every pick sounds from the last, like the never identical touch of a finger or a pick: where it
-hits, its angle, its surface and its click. At zero every pick sounds the same.
-
 ---
 
 ## 8. String
@@ -167,7 +165,7 @@ ring into the body quickly and then sustain softly. A hard pick starts a little 
 
 ### Tension
 
-Tightens the strings. Tighter strings are shorter and sound higher, up to an octave.
+Shortens the ringing strings, up to two octaves higher, while every pick still sounds like the full string.
 
 ### Body
 

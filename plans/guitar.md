@@ -101,6 +101,34 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 4. ~~Chords mode with the built in patterns.~~
 5. ~~Editor with the fret diagram and step row, live broadcast.~~
 6. ~~Custom pattern, scripting, manual page.~~
+7. Chord shapes from frets (below).
+8. Sixteen pattern slots (below).
+
+## Chord shapes from frets
+
+1. A chord on the chord track can be entered as frets, low E to high e: `x` mutes a string, `0` is open, `1` to
+   `24` is the fret. Example: `12 0 0 0 12 0`, then `11 0 0 0 11 0`, then `10 0 0 0 10 0`.
+2. The frets are turned into pitches (Standard tuning), the chord is detected from them (root, shape bits,
+   inversion from the lowest note) and written as a normal chord: degree and shift from the key, the 12 bit shape.
+   Every root works (a degree of the key or one semitone off). Unknown shapes show their `*` suffix as today.
+3. Every device that follows the chord track hears the detected chord. No special treatment.
+4. The chord keeps its frets in a new field (`ChordEventBox` field 9, int32, -1 is none, 5 bits per string, 31 is
+   `x`). The Guitar plays exactly these frets. Any later edit of the chord (degree, shift, shape, notes, inversion)
+   drops the frets and the Guitar finds its own voicing again.
+5. A Guitar in another tuning moves each string by the tuning difference, a string that would go below fret 0 falls
+   back to the voicing search for the whole chord.
+6. Input: a fret field in the chord editor (text), with a fret diagram to click.
+
+## Sixteen pattern slots
+
+1. The Guitar holds 16 pattern slots (array of objects like Surgeon's patterns): kinds, strings, velocities, speeds
+   (64 steps each), length, and the library pattern it was loaded from.
+2. A `slot` parameter (int32, 0 to 15, automatable) picks the slot that plays. A change takes over immediately.
+3. Slots never move or reorder, so automation keeps pointing at the same slot. The library menu and its `<` `>`
+   load a pattern into the current slot, overwriting it.
+4. A new Guitar seeds the 16 slots with 16 library patterns, so automating to a stored pattern works at once.
+5. Unreleased: fields 30 to 35 are replaced, no migration.
+6. Later, not now: notes select slots, and a pattern lane on the timeline.
 
 ## Open
 

@@ -73,8 +73,8 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             speedVariation: unipolar(box.speedVariation, "± Speed"),
             velocity: unipolar(box.velocity, "Velocity"),
             velocityVariation: unipolar(box.velocityVariation, "± Velocity"),
-            swing: unipolar(box.swing, "Swing"),
-            accent: unipolar(box.accent, "Accent"),
+            tilt: this.#parametric.createParameter(
+                box.tilt, ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Tilt", 0.5),
             position: choice(box.position, Guitar.PositionNames, "Position"),
             tuning: choice(box.tuning, Guitar.TuningNames, "Tuning"),
             body: choice(box.body, GuitarDeviceBoxAdapter.Bodies, "Body"),
@@ -84,7 +84,6 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             pluckVariation: unipolar(box.pluckVariation, "± Pluck"),
             tension: unipolar(box.tension, "Tension"),
             spot: unipolar(box.spot, "Spot"),
-            characterVariation: unipolar(box.characterVariation, "Character"),
             pick: choice(box.pick, GuitarDeviceBoxAdapter.Picks, "Pick"),
             spread: unipolar(box.spread, "Spread"),
             volume: this.#parametric.createParameter(

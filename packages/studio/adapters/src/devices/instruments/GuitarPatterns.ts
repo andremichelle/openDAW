@@ -2,7 +2,9 @@ import {int} from "@opendaw/lib-std"
 import {GuitarDeviceBox} from "@opendaw/studio-boxes"
 
 // The built in strum patterns: one letter per step. D down, U up, d/u down/up on the high strings, M palm muted
-// down, X chuck, B bass, A alternate bass, 1-6 pick one string (1 = high e), S stop the strings, . and - nothing.
+// down, m palm muted on the low strings, p down on the low strings, X chuck, c chop on the high strings,
+// B bass, A alternate bass,
+// 1-6 pick one string (1 = high e), (13) picks strings 1 and 3 together, S stop the strings, . and - nothing.
 export namespace GuitarPatterns {
     // WASM CONTRACT: the stroke kinds mirror `strum.rs` in device-guitar
     export const Rest = 0
@@ -14,6 +16,7 @@ export namespace GuitarPatterns {
     export const Alternate = 6
     export const Pick = 7
     export const Stop = 8
+    export const Chop = 9
 
     export const StepCount = 64
     export const AllStrings = 0b111111
@@ -24,6 +27,7 @@ export namespace GuitarPatterns {
         {kind: Up, glyph: "↑", label: "Up"},
         {kind: Mute, glyph: "⇣", label: "Palm mute"},
         {kind: Chuck, glyph: "×", label: "Chuck"},
+        {kind: Chop, glyph: "↧", label: "Chop"},
         {kind: Bass, glyph: "●", label: "Bass"},
         {kind: Alternate, glyph: "○", label: "Alternate bass"},
         {kind: Pick, glyph: "♪", label: "Pick the lane strings"},
@@ -45,7 +49,7 @@ export namespace GuitarPatterns {
             ["Rock Eighths", "M.M.M.M.M.M.M.M."], ["Power Drive", "D.MMD.MMD.MMD.MM"], ["Gallop", "M.MMM.MMM.MMM.MM"],
             ["Punk", "DDDDDDDDDDDDDDDD"], ["Anthem", "D.......D...D.U."]]),
         ...style("Funk and Soul", [
-            ["Funk Sixteenths", "D.XUX.UXD.XUX.UX"], ["Funk Chops", "X.u...u.X.u..uX."], ["Motown", "....DS......DS.."],
+            ["Funk Sixteenths", "D.XUX.UXD.XUX.UX"], ["Funk Chops", "c.u...u.c.u..uc."], ["Motown", "....DS......DS.."],
             ["Disco", "X.u.X.u.X.u.X.u."], ["Soul Ballad", "D...d.u.X...d.u."]]),
         ...style("Reggae and Ska", [
             ["Reggae", "....u.......u..."], ["One Drop", "....u.u.....u.u."], ["Ska", "..u...u...u...u."],
@@ -59,7 +63,34 @@ export namespace GuitarPatterns {
         ...style("Fingerstyle", [
             ["Travis", "B.3.A.2.B.3.A.2."], ["Arpeggio Up", "B.3.2.1.B.3.2.1."], ["Arpeggio Up Down", "B.4.3.2.1.2.3.4."],
             ["Ballad Picking", "B.3.2.3.1.3.2.3."], ["Pinch", "B.2.3.2.A.2.3.2."], ["Six Eight", "B.3.2.1.2.3."],
-            ["Classical", "B321B321A321A321"]])
+            ["Classical", "B321B321A321A321"]]),
+        ...style("Rock", [
+            ["Arena Chug", "m.mmp.mmm.mmp.mm"], ["Jangle", "dudududududududu"], ["Grunge Stop", "D..D..D.D..D..DS"]]),
+        ...style("Metal", [
+            ["Chug", "mmm.mmm.mmm.mm.."], ["Gallop Chug", "m.mmm.mmm.mmm.mm"], ["Djent", "m.mm..m.m..mm.m."],
+            ["Breakdown", "p..m..m.p..m..mS"], ["Blast", "mmmmmmmmmmmmmmmm"], ["Power Hits", "pS..pS.pS.p.pS.."]]),
+        ...style("Funk and Soul", [
+            ["Chicken Scratch", "XuXuDuXuXuXuDuXu"], ["Ghost Notes", "DXUXDXUXDXUXDXUX"], ["Stabs", "D.S.....D.S..D.S"]]),
+        ...style("Afro and Caribbean", [
+            ["Highlife", "1.2.31.2.1.23.2."], ["Soukous", "3232121232321212"], ["Afrobeat", "X.u.X.uuX.u.XuX."],
+            ["Calypso", "D.DUUDU.D.DUUDU."]]),
+        ...style("Ambient and Cinematic", [
+            ["Swell", "D..............."], ["Shimmer", "1.2.1.3.1.2.1.4."], ["Cascade", "6543212345654321"],
+            ["Glass", "1...2...3...2..."], ["Heartbeat", "B..B............"]]),
+        ...style("Modern Pop", [
+            ["Offbeat Pulse", ".d.d.d.d.d.d.d.d"], ["Tresillo", "D..D..D.D..D..D."], ["Tropical", "..u..u.u..u..u.u"],
+            ["Bedroom Pop", "d.u.d.uud.u.d.uu"]]),
+        ...style("Blues", [
+            ["Boogie", "B.B.A.A.B.B.A.A."], ["Stop Time", "DS......DS......"]]),
+        ...style("Strumming", [
+            ["Build Up", "D.......D.......D...D...D.D.DDDD"], ["Verse to Chorus", "D...D.U...U.D.U.D.DUD.DUD.DUD.DU"]]),
+        ...style("Fingerstyle", [
+            ["Travis Pinch", "(61).3.(42).3.(51).3.(42).3."], ["Folk Pinch", "(61).2.3.2.(51).2.3.2."],
+            ["Double Stops", "6.(12).5.(23).6.(12).5.(23)."], ["Triad Rolls", "(123)...(234)...(123).3.(234)..."],
+            ["Harp Thirds", "(13).2.(24).3.(13).2.(24).3."], ["Waltz Pinch", "6.(123).(123).5.(123).(123)."],
+            ["Forward Roll", "6.2.1.6.2.1.6.2."], ["Spanish Arpeggio", "(64)321(53)212(64)321(53)212"],
+            ["Bass and Pinch", "6.(123).4.(123).5.(123).4.(123)."], ["Rolling Pinch", "(61)23(12)(52)34(23)(61)23(12)(52)34(23)"],
+            ["Lullaby", "(61)...3...(12)...3..."]])
     ]
 
     export const Styles: ReadonlyArray<string> = Array.from(new Set(Library.map(({style}) => style)))
@@ -68,9 +99,16 @@ export namespace GuitarPatterns {
     export type Step = { readonly kind: int, readonly strings: int, readonly velocity: int, readonly speed: int }
 
     const treble = 0b111100
+    const bass = 0b000111
 
-    export const parse = (text: string): ReadonlyArray<Step> => Array.from(text).map((letter, index): Step => {
+    export const tokens = (text: string): ReadonlyArray<string> => text.match(/\([1-6]+\)|./g) ?? []
+
+    export const parse = (text: string): ReadonlyArray<Step> => tokens(text).map((letter, index): Step => {
         const accent = index % 4 === 0 ? 95 : index % 2 === 0 ? 80 : 70
+        if (letter.startsWith("(")) {
+            const strings = Array.from(letter.slice(1, -1)).reduce((mask, digit) => mask | 1 << (6 - Number(digit)), 0)
+            return {kind: Pick, strings, velocity: accent, speed: 50}
+        }
         if (letter >= "1" && letter <= "6") {
             return {kind: Pick, strings: 1 << (6 - Number(letter)), velocity: accent, speed: 50}
         }
@@ -85,8 +123,14 @@ export namespace GuitarPatterns {
                 return {kind: Up, strings: treble, velocity: 56, speed: 40}
             case "M":
                 return {kind: Mute, strings: AllStrings, velocity: accent, speed: 40}
+            case "m":
+                return {kind: Mute, strings: bass, velocity: accent, speed: 30}
+            case "p":
+                return {kind: Down, strings: bass, velocity: accent, speed: 30}
             case "X":
                 return {kind: Chuck, strings: AllStrings, velocity: 50, speed: 30}
+            case "c":
+                return {kind: Chop, strings: treble, velocity: accent, speed: 20}
             case "B":
                 return {kind: Bass, strings: AllStrings, velocity: accent, speed: 50}
             case "A":
@@ -110,8 +154,8 @@ export namespace GuitarPatterns {
     }
 
     export const load = (box: GuitarDeviceBox, index: int): void => {
-        const pattern = Library[index]
-        write(box, parse(pattern.text), pattern.text.length)
+        const steps = parse(Library[index].text)
+        write(box, steps, steps.length)
         box.pattern.setValue(index)
     }
 
