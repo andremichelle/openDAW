@@ -58,9 +58,6 @@ export const BusySlot = ({
     const scope = new Float32Array(PlayfieldPads.ScopePoints)
     let scopePeak = 0.0
     const labelName: HTMLElement = (<div className="label"/>)
-    const muteValue = new DefaultObservableValue(false)
-    const soloValue = new DefaultObservableValue(false)
-    const excludeValue = new DefaultObservableValue(false)
     const waveform: HTMLCanvasElement = (<canvas/>)
     const waveformPainter = lifecycle.own(new CanvasPainter(waveform, painter => nano.match({
         none: () => {if (pad.inputAdapter.nonEmpty()) {SlotUtils.scope(painter, scope, scopePeak, semitone)}},
@@ -75,22 +72,24 @@ export const BusySlot = ({
         </header>
     )
     const {mute, solo} = pad.namedParameter
-    const muteWrapper = EditWrapper.forAutomatableParameter(editing, mute)
-    const soloWrapper = EditWrapper.forAutomatableParameter(editing, solo)
+    const excludeModel: MutableObservableValue<boolean> = pad.excludeParameter.match({
+        none: () => new DefaultObservableValue(false),
+        some: exclude => EditWrapper.forAutomatableParameter(editing, exclude)
+    })
     const exclusionGroup: HTMLElement = (
         <div className="checkboxes">
             <Checkbox lifecycle={lifecycle}
-                      model={muteValue}
+                      model={EditWrapper.forAutomatableParameter(editing, mute)}
                       appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute pad"}}>
                 <Icon symbol={IconSymbol.Mute}/>
             </Checkbox>
             <Checkbox lifecycle={lifecycle}
-                      model={soloValue}
+                      model={EditWrapper.forAutomatableParameter(editing, solo)}
                       appearance={{activeColor: Colors.yellow, framed: true, tooltip: "Solo pad"}}>
                 <Icon symbol={IconSymbol.Solo}/>
             </Checkbox>
             <Checkbox lifecycle={lifecycle}
-                      model={excludeValue}
+                      model={excludeModel}
                       className="exclude"
                       appearance={{activeColor: Colors.orange, framed: true, tooltip: "Exclude group"}}>
                 <Icon symbol={IconSymbol.Exclude}/>
@@ -166,10 +165,6 @@ export const BusySlot = ({
         })
     })
     lifecycle.ownAll(
-        connectBoolean(muteValue, muteWrapper),
-        connectBoolean(soloValue, soloWrapper),
-        pad.excludeParameter.mapOr(exclude =>
-            connectBoolean(excludeValue, EditWrapper.forAutomatableParameter(editing, exclude)), Terminable.Empty),
         TextTooltip.default(iconEdit, () => "Edit Pad"),
         audioEffectsField.catchupAndSubscribe({
             onAdded: () => iconEdit.classList.toggle("has-effects", audioEffectsField.nonEmpty()),
@@ -263,15 +258,6 @@ export const BusySlot = ({
         }
     )
     return element
-}
-
-const connectBoolean = (value: MutableObservableValue<boolean>,
-                        wrapper: MutableObservableValue<boolean>): Terminable => {
-    value.setValue(wrapper.getValue())
-    return Terminable.many(
-        value.subscribe(owner => wrapper.setValue(owner.getValue())),
-        wrapper.subscribe(owner => value.setValue(owner.getValue()))
-    )
 }
 
 const resetBooleanItem = (editing: Editing,

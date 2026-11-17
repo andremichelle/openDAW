@@ -1,4 +1,4 @@
-import {isDefined, MutableObservableValue, Nullable, Optional, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Optional, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {EffectBox, EffectFactory, Project} from "@opendaw/studio-core"
@@ -6,15 +6,6 @@ import {EffectBox, EffectFactory, Project} from "@opendaw/studio-core"
 export namespace CompositeRows {
     export type Zone = "before" | "onto" | "after"
     export type Mark = "insert-before" | "insert-after" | "drop-target"
-
-    export const connectBoolean = (value: MutableObservableValue<boolean>,
-                                   wrapper: MutableObservableValue<boolean>): Terminable => {
-        value.setValue(wrapper.getValue())
-        return Terminable.many(
-            value.subscribe(owner => wrapper.setValue(owner.getValue())),
-            wrapper.subscribe(owner => value.setValue(owner.getValue()))
-        )
-    }
 
     export const effectIcon = (box: Box, factories: Record<string, EffectFactory>): IconSymbol => {
         const factory: Optional<EffectFactory> = factories[box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")]

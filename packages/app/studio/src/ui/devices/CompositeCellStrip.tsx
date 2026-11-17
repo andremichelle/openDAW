@@ -1,4 +1,4 @@
-import {DefaultObservableValue, isDefined, Lifecycle} from "@opendaw/lib-std"
+import {isDefined, Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AutomatableParameterFieldAdapter, CompositeCell} from "@opendaw/studio-adapters"
@@ -10,7 +10,6 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {CompositeRows} from "@/ui/devices/CompositeRows"
 import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 import {SendButton} from "@/ui/devices/SendButton"
 
@@ -26,9 +25,7 @@ export const CompositeCellStrip = ({lifecycle, project, cell, noun, send}: Const
     const {editing, midiLearning} = project
     const {gain, pan, mute} = cell.namedParameter
     const tracks = cell.audioUnitBoxAdapter().tracks
-    const muteValue = new DefaultObservableValue(false)
     const exclusiveSolo = ExclusiveSolo.forCell(editing, cell)
-    lifecycle.own(CompositeRows.connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, mute)))
     return (
         <Frag>
             <div className="channel-mix">
@@ -50,11 +47,11 @@ export const CompositeCellStrip = ({lifecycle, project, cell, noun, send}: Const
             <div className="channel-isolation">
                 {isDefined(send) ? (
                     <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
-                                       tracks={tracks} parameter={send}>
+                                       tracks={tracks} parameter={send} offset={2}>
                         <SendButton lifecycle={lifecycle} editing={editing} parameter={send}/>
                     </AutomationControl>
                 ) : null}
-                <Checkbox lifecycle={lifecycle} model={muteValue}
+                <Checkbox lifecycle={lifecycle} model={EditWrapper.forAutomatableParameter(editing, mute)}
                           appearance={{activeColor: Colors.orange, framed: true, tooltip: `Mute ${noun}`}}>
                     <Icon symbol={IconSymbol.Mute}/>
                 </Checkbox>

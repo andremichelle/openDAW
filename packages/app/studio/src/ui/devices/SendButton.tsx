@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Editing, Lifecycle, Terminable, Terminator} from "@opendaw/lib-std"
+import {Editing, Lifecycle, Terminable, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -6,7 +6,6 @@ import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {CompositeRows} from "@/ui/devices/CompositeRows"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -17,11 +16,10 @@ type Construct = {
 const HoldThresholdMs = 250
 
 export const SendButton = ({lifecycle, editing, parameter}: Construct) => {
-    const model = new DefaultObservableValue(false)
+    const model = EditWrapper.forAutomatableParameter(editing, parameter)
     const hold = lifecycle.own(new Terminator())
     let held = false
     let suppressClick = false
-    lifecycle.own(CompositeRows.connectBoolean(model, EditWrapper.forAutomatableParameter(editing, parameter)))
     const install = (element: HTMLElement): void => {
         lifecycle.ownAll(
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
