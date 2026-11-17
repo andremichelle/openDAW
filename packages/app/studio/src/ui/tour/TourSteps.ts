@@ -57,7 +57,7 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
     },
     soundfonts: {
         screen: "default", placement: "right", frame: 4, headline: "Soundfonts",
-        text: "General MIDI style instrument banks. Create the Soundfont device to use them.",
+        text: "General MIDI style instrument banks. Double-click one to play a preset of it in a new Sampler.",
         prepare: browse(BrowseScope.Soundfonts)
     },
     clips: {

@@ -755,7 +755,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     element.tabIndex = -1
     requestAnimationFrame(takeFocus)
     lifecycle.ownAll(
-        SamplerSamples.installDrop(element, mapDisplay, service, dropped),
+        SamplerSamples.installDrop(element, mapDisplay, service, adapter, dropped),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (!Keyboard.isDelete(event) || selection.length === 0 || Events.isTextInput(document.activeElement)) {return}
             event.preventDefault()

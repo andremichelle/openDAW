@@ -50,7 +50,7 @@ export const SamplerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       )}
                       populateControls={() => (
                           <div className={className} onInit={element => lifecycle.own(
-                              SamplerSamples.installDrop(element, element, service,
+                              SamplerSamples.installDrop(element, element, service, adapter,
                                   () => samples => SamplerSamples.add(project, adapter, undefined, samples)))}>
                               <div className="stacks">{stacks.slice(0, 3)}</div>
                               <div className="stacks">{stacks.slice(3)}</div>

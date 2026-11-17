@@ -4,7 +4,7 @@ import {Arrays, Exec, isDefined, Lifecycle, Objects, Option, UUID} from "@openda
 import {Soundfont} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, MenuItem, SoundfontStorage} from "@opendaw/studio-core"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {SoundfontSelection} from "@/ui/browse/SoundfontSelection"
 import {contextTargets} from "@/ui/browse/ResourceSelection"
@@ -12,6 +12,7 @@ import {ResourceMenus} from "@/ui/browse/ResourceMenus"
 import {LocalTree} from "@/ui/browse/LocalTree"
 import {FileIcon} from "@/ui/browse/FileIcon"
 import {SoundfontDialogs} from "@/ui/browse/SoundfontDialogs"
+import {SoundfontToSampler} from "@/ui/browse/SoundfontToSampler"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 
@@ -58,6 +59,7 @@ export const SoundfontView = ({lifecycle, service, soundfontSelection, soundfont
     )
     lifecycle.ownAll(
         DragAndDrop.installSource(element, () => ({type: "soundfont", soundfont})),
+        Events.subscribe(element, "dblclick", () => SoundfontToSampler.run(service, soundfont).catch(console.warn)),
         ContextMenu.subscribe(element, collector => {
             const targets = contextTargets(element, soundfont, () => soundfontSelection.selected())
             collector.addItems(
@@ -66,6 +68,8 @@ export const SoundfontView = ({lifecycle, service, soundfontSelection, soundfont
                     icon: IconSymbol.AudioFile,
                     color: Colors.blue
                 }),
+                MenuItem.default({label: "Create Sampler", selectable: targets.length === 1})
+                    .setTriggerProcedure(() => SoundfontToSampler.run(service, soundfont).catch(console.warn)),
                 MenuItem.default({label: "Create Soundfont Device"})
                     .setTriggerProcedure(() => soundfontSelection.requestDevice(targets)),
                 MenuItem.default({

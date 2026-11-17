@@ -1,4 +1,4 @@
-import {Arrays, DefaultObservableValue, Func, isDefined, Optional, Procedure, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {Arrays, DefaultObservableValue, Func, isDefined, Option, Optional, Procedure, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {SamplerGroupBox, SamplerZoneBox} from "@opendaw/studio-boxes"
 import {Sample, SamplerDeviceBoxAdapter, SamplerZones} from "@opendaw/studio-adapters"
@@ -7,6 +7,7 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {DragAndDrop} from "@/ui/DragAndDrop"
+import {SoundfontToSampler} from "@/ui/browse/SoundfontToSampler"
 
 // Samples on their way into a Sampler: from files, from the sample browser, dropped or chosen.
 export namespace SamplerSamples {
@@ -48,11 +49,17 @@ export namespace SamplerSamples {
 
     // `locate` reads where the drop lands, at once, and returns what takes the samples when they are ready
     export const installDrop = (target: HTMLElement, highlight: HTMLElement, service: StudioService,
+                                adapter: SamplerDeviceBoxAdapter,
                                 locate: Func<DragEvent, Procedure<ReadonlyArray<Sample>>>): Terminable => {
         const {project} = service
         return DragAndDrop.installTarget(target, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
+            drag: (_event: DragEvent, data: AnyDragData): boolean =>
+                data.type === "sample" || data.type === "file" || data.type === "soundfont",
             drop: async (event: DragEvent, data: AnyDragData): Promise<void> => {
+                if (data.type === "soundfont") {
+                    await SoundfontToSampler.run(service, data.soundfont, Option.wrap(adapter))
+                    return
+                }
                 const place = locate(event)
                 if (data.type === "sample") {
                     place([data.sample])

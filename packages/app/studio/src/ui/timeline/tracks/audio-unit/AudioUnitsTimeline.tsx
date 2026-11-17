@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {DefaultObservableValue, int, isInstanceOf, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, int, isInstanceOf, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -20,7 +20,7 @@ import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
-import {AudioUnitBox, InstrumentCompositeCellBox, PlayfieldDeviceBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, InstrumentCompositeCellBox, PlayfieldDeviceBox, SamplerDeviceBox} from "@opendaw/studio-boxes"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
@@ -28,6 +28,7 @@ import {Config} from "@/ui/timeline/Config"
 import {UnitInsertion} from "./UnitInsertion"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {SoundfontToSampler} from "@/ui/browse/SoundfontToSampler"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
@@ -126,6 +127,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         (dragData.type === "instrument" && dragData.device !== null)
         || (dragData.type === "preset" && (dragData.category === "instrument" || dragData.category === "audio-unit"))
         || (dragData.type === "script" && dragData.script.target === "apparat")
+        || dragData.type === "soundfont"
         || draggedPad(dragData).nonEmpty()
     lifecycle.ownAll(
         // The root sees drags over headers, lanes, gaps and the empty band alike, so a new unit can land
@@ -154,6 +156,10 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                         PresetApplication.createNewAudioUnitFromInstrument(
                             service, dragData.uuid, dragData.device, dragData.source, api.insertionBefore(anchor)).catch(console.warn)
                     }
+                } else if (dragData.type === "soundfont") {
+                    SoundfontToSampler.run(service, dragData.soundfont, Option.None, project => asInstanceOf(project.api
+                        .createInstrumentAt(InstrumentFactories.Sampler, project.api.insertionBefore(anchor)).instrumentBox,
+                        SamplerDeviceBox)).catch(console.warn)
                 } else if (dragData.type === "script") {
                     SpotlightCreate.script(service, dragData.script, Option.wrap(project => {
                         return Option.wrap(project.api.createInstrumentAt(

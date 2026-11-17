@@ -1,7 +1,7 @@
-import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator, UUID} from "@opendaw/lib-std"
+import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {SoundfontDeviceBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
+import {SamplerDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler, Soundfont} from "@opendaw/studio-adapters"
 import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapBoxes, WclapStates} from "@opendaw/studio-core"
 import {OpenSoundfontAPI} from "@/opendaw-api"
@@ -15,6 +15,7 @@ import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 import {DeviceTags} from "@/ui/browse/DeviceTags"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
 import {ScriptCompilers} from "@/ui/devices/ScriptCompilers"
+import type {SamplerImporter} from "@/ui/devices/instruments/SamplerDeviceEditor/SamplerImporter"
 
 // a device, preset, script or plugin applied at a slot: `apply` runs inside an unmarked modify, `settle` after it
 export interface DeviceCandidate {
@@ -262,15 +263,28 @@ export namespace DeviceCatalog {
             {label: "Stored", value: local ? "On this device" : "openDAW cloud"}
         ],
         tags: ["soundfont"], preset: Option.None, bundle: Option.None,
-        prepare: () => Promise.resolve(plainCandidate((project, slot) => {
-            const {boxGraph} = project
-            const uuid = UUID.parse(soundfont.uuid)
-            const device = DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Soundfont)
-                .map(box => asInstanceOf(box, SoundfontDeviceBox))
-            device.ifSome(box => box.file.refer(boxGraph.findBox<SoundfontFileBox>(uuid).unwrapOrElse(() =>
-                SoundfontFileBox.create(boxGraph, uuid, file => file.fileName.setValue(soundfont.name)))))
-            return device.nonEmpty()
-        }))
+        // the preset is chosen and its samples stored once, every pick of the entry then only applies them
+        prepare: async () => {
+            const created: { box: Option<SamplerDeviceBox> } = {box: Option.None}
+            let prepared: Option<Promise<Option<SamplerImporter.Prepared>>> = Option.None
+            return {
+                offersTimeline: false,
+                apply: (project, slot) => {
+                    created.box = DeviceSlot.placeInstrument(project, slot, InstrumentFactories.Sampler)
+                        .map(box => asInstanceOf(box, SamplerDeviceBox))
+                    return created.box.nonEmpty()
+                },
+                settle: async service => {
+                    const {SamplerImporter} = await import("@/ui/devices/instruments/SamplerDeviceEditor/SamplerImporter")
+                    if (prepared.isEmpty()) {prepared = Option.wrap(SamplerImporter.prepareFromLibrary(service, soundfont))}
+                    const result = await prepared.unwrap()
+                    const {project} = service
+                    created.box.ifSome(box => result.ifSome(stored => {
+                        if (box.isAttached()) {project.editing.modify(() => SamplerImporter.applyPrepared(project, box, stored), false)}
+                    }))
+                }
+            }
+        }
     })
 
     export const entriesFor = (slot: DeviceSlot, {presets, scripts, wclaps, soundfonts}: Sources): ReadonlyArray<DeviceEntry> => {
@@ -302,7 +316,7 @@ export namespace DeviceCatalog {
                 ? scripts.filter(script => script.target === scriptTarget).map(script => scriptEntry(script, scriptTarget, scriptHost))
                 : []),
             ...soundfonts.flatMap(source => {
-                const player = stockByKey.get("Soundfont")
+                const player = stockByKey.get("Sampler")
                 return isDefined(player) ? [soundfontEntry(source, player)] : []
             }),
             ...(stockByKey.has(wclapStock)
