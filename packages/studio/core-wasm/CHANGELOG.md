@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.1](/compare/@opendaw/studio-core-wasm@0.1.0...@opendaw/studio-core-wasm@0.1.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
 # [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.28...@opendaw/studio-core-wasm@0.1.0) (2026-11-10)
 
 ### Bug Fixes

@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.13](/compare/@opendaw/studio-icons@0.0.12...@opendaw/studio-icons@0.0.13) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
 ## [0.0.12](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.11...@opendaw/studio-icons@0.0.12) (2026-11-09)
 
 **Note:** Version bump only for package @opendaw/studio-icons

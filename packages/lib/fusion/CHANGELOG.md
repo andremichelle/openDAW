@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.114](/compare/@opendaw/lib-fusion@0.0.113...@opendaw/lib-fusion@0.0.114) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
 ## [0.0.113](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.112...@opendaw/lib-fusion@0.0.113) (2026-11-06)
 
 **Note:** Version bump only for package @opendaw/lib-fusion
