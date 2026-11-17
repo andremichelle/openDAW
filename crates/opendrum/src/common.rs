@@ -91,8 +91,11 @@ impl Drive {
         let gain = libm::powf(10.0, drive / 20.0);
         let dc_coefficient = 1.0 - 2.0 * core::f32::consts::PI * self.dc_block / sample_rate;
         self.oversampler.upsample(input, &mut self.oversampled, 0, frames);
+        let curve = gain - 1.0;
         let offset = libm::tanhf(bias);
-        self.oversampled[..frames * 2].iter_mut().for_each(|value| *value = libm::tanhf(*value * gain + bias) - offset);
+        let scale = gain / (curve * (1.0 - offset * offset));
+        self.oversampled[..frames * 2].iter_mut()
+            .for_each(|value| *value = (libm::tanhf(*value * curve + bias) - offset) * scale);
         self.oversampler.downsample(&self.oversampled, output, 0, frames);
         for value in output.iter_mut() {
             let input = *value;
