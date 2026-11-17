@@ -134,13 +134,15 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         valid: (value: unknown): value is GuitarPatterns.Snapshot => PatternClipboard.sameShape(snapshotTemplate, value)
     }
     const copySlot = () => PatternClipboard.encode(PatternFormat, GuitarPatterns.snapshot(currentPattern()))
-    const pasteSlot = (copied: GuitarPatterns.Snapshot) => editing.modify(() => GuitarPatterns.apply(currentPattern(), copied))
+    const pasteInto = (index: int) => (copied: GuitarPatterns.Snapshot) =>
+        editing.modify(() => GuitarPatterns.apply(GuitarPatterns.slot(box, index), copied))
+    const pasteSlot = (copied: GuitarPatterns.Snapshot) => pasteInto(current.getValue())(copied)
     const patternMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
         ...libraryItems(),
         MenuItem.default({label: "Copy Pattern", separatorBefore: true})
             .setTriggerProcedure(() => ClipboardManager.write(copySlot())),
         MenuItem.default({label: "Paste Pattern", selectable: PatternClipboard.pastable(PatternFormat)})
-            .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteSlot)),
+            .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteInto(current.getValue()))),
         MenuItem.default({label: "Clear Pattern"})
             .setTriggerProcedure(() => editing.modify(() => GuitarPatterns.clear(currentPattern())))))
     const menuOrder: ReadonlyArray<int> = GuitarPatterns.Styles.flatMap(style => GuitarPatterns.Library
@@ -266,7 +268,7 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         collector.addItems(
             MenuItem.default({label: `Copy ${label}`}).setTriggerProcedure(() => ClipboardManager.write(copySlot())),
             MenuItem.default({label: `Paste into ${label}`, selectable: PatternClipboard.pastable(PatternFormat)})
-                .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteSlot)))
+                .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteInto(current.getValue()))))
     }))
     return (
         <DeviceEditor lifecycle={lifecycle}

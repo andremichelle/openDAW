@@ -111,7 +111,7 @@ pub struct Pluck {
     pub bend_length: u32
 }
 
-// The bend over its length: a fast rise to the full bend in the first fifth, then a slower fall back to pitch.
+// The bend over its length: an even rise to the full bend at the middle and fall back to pitch.
 fn bend_curve(at: u32, length: u32) -> f32 {
     let rise = (length as f32 * BEND_RISE).max(1.0);
     let at = at as f32;
