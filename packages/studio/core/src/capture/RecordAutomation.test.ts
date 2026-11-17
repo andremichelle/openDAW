@@ -325,8 +325,34 @@ describe("RecordAutomation", () => {
             const previous = parameter.getUnitValue()
             project.editing.modify(() => parameter.setValueAt(true, Option.wrap(PPQN.Bar)), false)
             expect(parameter.getValue()).toBe(true)
-            expect(events().map(event => [event.position, event.value])).toEqual([[0, previous], [PPQN.Bar - PPQN.Quarter, 1]])
+            expect(events().map(event => [event.position, event.value])).toEqual([[0, previous], [PPQN.Bar, 1]])
             expect(events()[1].interpolation.type).toBe("none")
+        })
+
+        it("opens the take at the bar the write was made in", async () => {
+            const {parameter, project, record, seek, regions, positions} = await setup({target: "mute"})
+            record(true)
+            seek(PPQN.Bar + PPQN.Quarter + 13)
+            project.editing.modify(() => parameter.setValueAt(true, Option.wrap(PPQN.Bar * 2)), false)
+            expect(regions()[0].position).toBe(PPQN.Bar)
+            expect(positions()).toEqual([0, PPQN.Bar])
+        })
+
+        it("opens the take where the last region ends when that is later than the bar", async () => {
+            const {parameter, project, record, seek, stop, regions} = await setup({target: "mute"})
+            record(true)
+            seek(PPQN.Quarter)
+            project.editing.modify(() => parameter.setValueAt(true, Option.wrap(PPQN.Bar)), false)
+            seek(PPQN.Bar + PPQN.Quarter)
+            stop()
+            const ended = regions()[0].complete
+            const next = await import("./RecordAutomation")
+            const recorder = next.RecordAutomation.start(project)
+            record(true)
+            seek(PPQN.Bar + PPQN.Quarter * 2)
+            project.editing.modify(() => parameter.setValueAt(false, Option.wrap(PPQN.Bar * 2)), false)
+            expect(regions().map(region => region.position)).toEqual([0, ended])
+            recorder.terminate()
         })
 
         it("adds a later step to an open take at its position", async () => {

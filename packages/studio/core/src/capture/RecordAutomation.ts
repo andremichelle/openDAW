@@ -289,6 +289,10 @@ export namespace RecordAutomation {
         const activeRecordings: SortedSet<Address, RecordingState> =
             Address.newSet<RecordingState>(state => state.adapter.address)
         let lastPosition: ppqn = engine.position.getValue()
+        // a write that takes effect later opens its take at the bar it was made in, or where the last region ends
+        const deferredStart = (track: TrackBoxAdapter, position: ppqn): ppqn => track.regions.collection.asArray()
+            .reduce((start, region) => region.complete <= position ? Math.max(start, region.complete) : start,
+                project.timelineBoxAdapter.signatureTrack.floorToBar(position))
         // Latch: any write while recording opens the take, and only the transport (or a loop wrap) ever closes
         // it. The producer stays out of it, so a knob, a MIDI controller and a checkbox all record alike.
         const handleWrite = ({adapter, previousUnitValue, position: writtenAt}: ParameterWriteEvent): void => {
@@ -301,9 +305,9 @@ export namespace RecordAutomation {
                 editing.modify(() => {
                     const trackOpt = findOrCreateTrack(ctx, adapter)
                     if (trackOpt.isEmpty()) {return}
-                    const startPos = quantizeFloor(position, PPQN.SemiQuaver)
-                    const floating = adapter.valueMapping.floating()
                     const deferred = at > position
+                    const startPos = deferred ? deferredStart(trackOpt.unwrap(), position) : quantizeFloor(position, PPQN.SemiQuaver)
+                    const floating = adapter.valueMapping.floating()
                     const state = createRegion(ctx, trackOpt.unwrap(), adapter, startPos, previousUnitValue,
                         deferred ? previousUnitValue : value, floating)
                     if (deferred) {handleWriteUpdate(project, state, at, value)}
