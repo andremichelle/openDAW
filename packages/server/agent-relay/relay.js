@@ -9,7 +9,8 @@ const ReplacedCode = 4000
 const fallbackInstructions = "These tools reach an openDAW studio in the browser. If no tools are listed or the studio is not " +
     "connected, ask the user to open openDAW and connect the agent: openDAW menu > Connect Agent. " +
     "Call get_api with part 1 first, it starts with the rules."
-const notConnected = "The studio is not connected. Ask the user to open openDAW and connect the agent: openDAW menu > Connect Agent."
+const notConnected = "No studio is connected with this token. Ask the user to open openDAW, choose openDAW menu > Connect Agent > " +
+    "Copy Command and run the copied command again, then start a new session."
 
 export const createRelay = ({
                                 host = "127.0.0.1", port = 8790, tokenFile = null, origins,

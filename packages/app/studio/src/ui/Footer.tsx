@@ -48,6 +48,18 @@ export const Footer = ({lifecycle, service}: Construct) => {
                     Events.subscribe(window, "offline", updateOnline))
                 updateOnline()
             }}/>
+            <FooterItem title="Agent" className="agent" minWidth="10ch" onInit={({component, value}) => {
+                component.title = "Click to disconnect the agent"
+                const {agentConnection} = service
+                lifecycle.ownAll(
+                    agentConnection.state.catchupAndSubscribe(owner => {
+                        const state = owner.getValue()
+                        value.textContent = state === "connected" ? "Connected" : "Connecting"
+                        component.classList.toggle("connected", state === "connected")
+                        component.classList.toggle("hidden", state === "off")
+                    }),
+                    Events.subscribe(component, "click", () => agentConnection.disconnect()))
+            }}/>
             <FooterItem className="name" title="Project"
                         onInit={({component, value}) => {
                             const profileLifecycle = lifecycle.own(new Terminator())
