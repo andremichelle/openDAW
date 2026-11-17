@@ -170,6 +170,6 @@ export class MIDILearning implements Terminable {
     }
 
     #findConnectionByParameterAddress(address: Address): Option<MIDIConnection> {
-        return Option.wrap(this.#connections.values().find(({box}) => box.parameter.targetAddress.unwrap("parameter.targetAddr") === address))
+        return Option.wrap(this.#connections.values().find(({box}) => box.parameter.targetAddress.unwrap("parameter.targetAddr").equals(address)))
     }
 }
