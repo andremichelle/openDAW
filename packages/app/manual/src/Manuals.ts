@@ -40,6 +40,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
             {type: "page", label: "Community Scripts", path: "/manuals/community-scripts"},
             {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
+            {type: "page", label: "Connect AI Agent", path: "/manuals/connect-ai-agent"},
             {type: "page", label: "Connect MIDI Device", path: "/manuals/connect-midi-device"},
             {type: "page", label: "Delay Compensation", path: "/manuals/delay-compensation"},
             {type: "page", label: "Device Browser", path: "/manuals/device-browser"},

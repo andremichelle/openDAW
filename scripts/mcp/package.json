@@ -1,7 +1,25 @@
 {
-  "name": "opendaw-mcp-relay",
-  "private": true,
+  "name": "@opendaw/mcp-relay",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Connects an AI agent (Claude Code or any MCP client) to an openDAW studio on this computer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andremichelle/opendaw",
+    "directory": "scripts/mcp"
+  },
+  "keywords": ["opendaw", "mcp", "ai-agent", "claude", "daw"],
+  "bin": {
+    "opendaw-mcp-relay": "relay.mjs"
+  },
+  "files": ["relay.mjs", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "ws": "^8.18.3"
   }
