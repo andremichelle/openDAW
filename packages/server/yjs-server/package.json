@@ -5,7 +5,7 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "test": "echo \"No tests to run\"",
+    "test": "node --test test/*.test.js",
     "dev": "NODE_ENV=development HOST=0.0.0.0 PORT=1234 node server.js",
     "start": "NODE_ENV=production HOST=0.0.0.0 PORT=443 node server.js",
     "yjs-server": "HOST=0.0.0.0 PORT=443 y-websocket"
