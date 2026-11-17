@@ -1,8 +1,13 @@
 import {afterEach, describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {Interpolation} from "@opendaw/lib-dsp"
-import {AudioUnitBoxAdapter, ProjectSkeleton, TrackBoxAdapter, TrackType, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
-import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {
+    ApparatDeviceBoxAdapter, AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, TrackBoxAdapter, TrackType,
+    ValueRegionBoxAdapter
+} from "@opendaw/studio-adapters"
+import {
+    ApparatDeviceBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox, WerkstattParameterBox
+} from "@opendaw/studio-boxes"
 import {StudioPreferences} from "../StudioPreferences"
 import type {ProjectEnv} from "./ProjectEnv"
 
@@ -91,5 +96,31 @@ describe("new automation region seeds an inherited node (#271)", () => {
     it("a non-floating parameter's seed steps instead of ramping", async () => {
         const {seedInterpolation} = await buildValueTrack("mute")
         expect(seedInterpolation(0, 3840).type).toBe("none")
+    })
+    it("a script dial declared int steps although its field stores a float (#555)", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(env(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const trackBox = project.editing.modify(() => {
+            const {audioUnitBox, instrumentBox} = project.api.createAnyInstrument(InstrumentFactories.Apparat)
+            const apparat = instrumentBox as ApparatDeviceBox
+            apparat.code.setValue("// @param octave 0 -2 2 int\nclass Processor {}")
+            const paramBox = WerkstattParameterBox.create(project.boxGraph, UUID.generate(), box => {
+                box.owner.refer(apparat.parameters)
+                box.label.setValue("octave")
+            })
+            project.boxAdapters.adapterFor(apparat, ApparatDeviceBoxAdapter)
+            return TrackBox.create(project.boxGraph, UUID.generate(), box => {
+                box.type.setValue(TrackType.Value)
+                box.tracks.refer(audioUnitBox.tracks)
+                box.target.refer(paramBox.value)
+                box.index.setValue(1)
+            })
+        }).unwrap("modify")
+        project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        const regionBox = project.editing.modify(() => project.api.createTrackRegion(trackBox, 0, 3840))
+            .unwrap("modify").unwrap("region") as ValueRegionBox
+        const [event] = project.boxAdapters.adapterFor(regionBox, ValueRegionBoxAdapter).events.unwrap("events").asArray()
+        expect(event.interpolation.type).toBe("none")
+        project.terminate()
     })
 })

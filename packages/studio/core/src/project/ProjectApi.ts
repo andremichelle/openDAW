@@ -19,7 +19,7 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -717,7 +717,7 @@ export class ProjectApi {
             .flatMap(vertex => this.#project.parameterFieldAdapters.opt(vertex.address))
             .map(parameter => {
                 const dial = parameter.getControlledUnitValue()
-                const interpolation = InterpolationFieldAdapter.map(parameter.type)
+                const interpolation = parameter.valueMapping.floating() ? Interpolation.Linear : Interpolation.None
                 const preceding = trackAdapter.regions.collection.lowerEqual(position)
                 if (isDefined(preceding) && preceding.isValueRegion()) {
                     return {value: preceding.outgoingValue(dial), interpolation}
