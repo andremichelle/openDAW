@@ -25,7 +25,6 @@ import {SnapSelector} from "@/ui/timeline/SnapSelector.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {TimeAxis} from "@/ui/timeline/TimeAxis.tsx"
-import {installEditorPinchZoom} from "./EditorPinchZoom"
 import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
 import {ValueEventsEditor} from "./value/ValueEventsEditor.tsx"
 import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
@@ -258,8 +257,6 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         }),
         Html.watchResize(element, () =>
             element.style.setProperty("--cursor-height", `${(contentEditor.clientHeight + 1)}px`)),
-        installEditorPinchZoom(contentEditor, element.querySelector<HTMLElement>(".time-axis")!,
-            range, () => owner.nonEmpty()),
         Html.watchResize(contentEditor, () => range.width = contentEditor.clientWidth),
         range.subscribe((() => {
             // FIXME Tried it with a timeout, but it did not behave correctly

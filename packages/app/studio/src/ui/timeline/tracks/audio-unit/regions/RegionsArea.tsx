@@ -43,6 +43,7 @@ import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Layers} from "@/ui/surface/Layers"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AnyDragData} from "@/ui/AnyDragData"
+import {WheelAxis} from "@/ui/timeline/WheelAxis"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ClipboardManager, ElementCapturing, RegionsClipboard, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
@@ -372,12 +373,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 event.stopPropagation()
                 moveByWheelPixels(range, event)
             } else {
-                const deltaX = event.deltaX
-                const threshold = 5.0
-                const clamped = Math.max(deltaX - threshold, 0.0) + Math.min(deltaX + threshold, 0.0)
-                if (Math.abs(clamped) > 0) {
+                if (WheelAxis.of(event) === "horizontal") {
                     event.preventDefault()
-                    range.moveBy(clamped * 0.0003)
+                    event.stopPropagation()
+                    range.moveBy(event.deltaX * 0.0003)
                 }
             }
         }, {passive: false}),

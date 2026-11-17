@@ -215,6 +215,7 @@ const openChopDialog = (
         range.subscribe(painter.requestUpdate),
         attachWheelScroll(canvas, range),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
+            if (event.ctrlKey) {return}
             if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
                 event.preventDefault()
                 const {left, width} = canvas.getBoundingClientRect()

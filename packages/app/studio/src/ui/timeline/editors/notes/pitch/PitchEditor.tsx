@@ -1,4 +1,5 @@
 import css from "./PitchEditor.sass?inline"
+import {WheelAxis} from "@/ui/timeline/WheelAxis"
 import {
     byte,
     isInstanceOf,
@@ -208,8 +209,9 @@ export const PitchEditor = ({
         }),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
-            if (event.shiftKey || event.altKey) {return}
+            if (event.ctrlKey || event.shiftKey || event.altKey) {return}
             event.preventDefault()
+            if (WheelAxis.of(event) === "horizontal") {return}
             positioner.scrollModel.moveBy(event.deltaY)
         }, {passive: false}),
         Events.subscribeDblDwn(canvas, event => {
