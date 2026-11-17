@@ -209,25 +209,32 @@ impl State {
         self.slot = 0;
         self.bpm = 120.0;
         self.now = 0;
+        self.shapes = [[MUTED; STRINGS]; SHAPES];
+        self.tab = [MUTED; STRINGS];
+        self.tab_key = (-1, 0, 0, 0);
+        self.notes = [fretting::OFF; STRINGS];
+        self.clear_runtime();
+    }
+
+    fn clear_runtime(&mut self) {
         self.queued = 0;
         self.pending_count = 0;
         self.keys = [NO_KEY; STRINGS];
         self.lit = 0;
         self.dc = [(0.0, 0.0); 2];
         self.pickup = [[0.0; 4]; 2];
-        self.shapes = [[MUTED; STRINGS]; SHAPES];
-        self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
         self.fretted = [MUTED; STRINGS];
         self.release_due = [0; STRINGS];
         self.ended = [NO_KEY; ENDED];
         self.ended_at = 0;
-        self.tab_key = (-1, 0, 0, 0);
-        self.notes = [fretting::OFF; STRINGS];
         self.chord_root = -1;
         self.step = -1;
         self.transporting = false;
-        self.keys = [NO_KEY; STRINGS];
+    }
+
+    fn rest_display(&self, string: usize) -> i8 {
+        if self.settings.mode == CHORDS_MODE {self.fretted[string]} else {MUTED}
     }
 
     pub fn display(&self) -> Tab {self.display}
@@ -287,7 +294,7 @@ impl State {
                 self.keys[string] = NO_KEY;
                 self.strings[string].release();
                 self.lit &= !(1 << string);
-                self.display[string] = if self.settings.mode == CHORDS_MODE {self.fretted[string]} else {MUTED};
+                self.display[string] = self.rest_display(string);
             }
         }
         if value < 0 {
@@ -295,7 +302,7 @@ impl State {
             return;
         }
         let (string, pitch) = ((value & 7) as usize, value >> 3);
-        if string >= STRINGS || !(fretting::LOWEST_NOTE..=fretting::HIGHEST_NOTE + fretting::MAX_FRET).contains(&pitch) {
+        if string >= STRINGS || self.keys[string] != NO_KEY || !(fretting::LOWEST_NOTE..=fretting::HIGHEST_NOTE + fretting::MAX_FRET).contains(&pitch) {
             return;
         }
         let open = self.open();
@@ -355,7 +362,7 @@ impl State {
         for string in 0..STRINGS {
             self.strings[string].release();
             if self.keys[string] != NO_KEY {
-                self.display[string] = if self.settings.mode == CHORDS_MODE {self.fretted[string]} else {MUTED};
+                self.display[string] = self.rest_display(string);
             }
         }
         self.queued = 0;
@@ -649,7 +656,8 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &
         let step = index.rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
         let kind = pattern.kinds[step];
-        let silent = kind != strum::STOP && pattern.velocities[step] <= 0.0 || kind == strum::PICK && pattern.masks[step] == 0;
+        let stringless = matches!(kind, strum::DOWN | strum::UP | strum::MUTE | strum::CHOP | strum::PICK) && pattern.masks[step] == 0;
+        let silent = kind != strum::STOP && pattern.velocities[step] <= 0.0 || stringless;
         if kind == strum::REST || silent {
             continue;
         }
@@ -689,7 +697,7 @@ pub fn handle(state: &mut State, event: &EventRecord) {
                 matched = true;
                 state.keys[string] = NO_KEY;
                 state.lit &= !(1 << string);
-                state.display[string] = if state.settings.mode == CHORDS_MODE {state.fretted[string]} else {MUTED};
+                state.display[string] = state.rest_display(string);
                 if !state.queue[..state.queued].iter().any(|item| item.key == event.id) {
                     state.strings[string].release();
                 }
@@ -908,19 +916,7 @@ impl Instrument for Device {
         for string in &mut state.strings {
             string.reset();
         }
-        state.chord_root = -1;
-        state.dc = [(0.0, 0.0); 2];
-        state.pickup = [[0.0; 4]; 2];
         state.limiter.clear();
-        state.queued = 0;
-        state.pending_count = 0;
-        state.keys = [NO_KEY; STRINGS];
-        state.step = -1;
-        state.transporting = false;
-        state.lit = 0;
-        state.display = [MUTED; STRINGS];
-        state.fretted = [MUTED; STRINGS];
-        state.release_due = [0; STRINGS];
-        state.ended = [NO_KEY; ENDED];
+        state.clear_runtime();
     }
 }

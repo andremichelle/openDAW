@@ -37,7 +37,7 @@ const CHOP_T60: f32 = 0.08;
 const CHOP_DULL: f32 = 0.6;
 const CHOP_GAIN: f32 = 2.5;
 const GAIN_FOLLOW_TIME: f32 = 0.002;
-const BEND_RISE: f32 = 0.2;
+const BEND_RISE: f32 = 0.5;
 const BEND_STEP: u32 = 16; // samples between two pitch updates of a bend
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -116,7 +116,7 @@ fn bend_curve(at: u32, length: u32) -> f32 {
     let rise = (length as f32 * BEND_RISE).max(1.0);
     let at = at as f32;
     if at < rise {
-        sinf(0.5 * PI * at / rise)
+        0.5 - 0.5 * cosf(PI * at / rise)
     } else {
         0.5 + 0.5 * cosf(PI * ((at - rise) / (length as f32 - rise).max(1.0)).min(1.0))
     }
@@ -617,7 +617,7 @@ mod tests {
         let mut string = boxed_string();
         string.pluck(&Pluck {bend: 2.0, bend_length: (5.0 * RATE) as u32, ..pluck(52.0)}, &body, &table, 440.0);
         let signal = render(&mut string, 5.8, &body);
-        let peak = &signal[(0.5 * RATE) as usize..];
+        let peak = &signal[(2.0 * RATE) as usize..];
         let error = cents(measured_frequency(peak, hertz(54.0)), hertz(54.0));
         assert!(error.abs() < 15.0, "at the peak {error:.1} cents off two semitones up");
         let back = &signal[(5.0 * RATE) as usize..];
@@ -626,10 +626,11 @@ mod tests {
     }
 
     #[test]
-    fn the_bend_rises_fast_and_falls_slower() {
+    fn the_bend_rises_and_falls_evenly() {
         let length = 1000;
         let peak = (0..length).max_by(|first, second| bend_curve(*first, length).total_cmp(&bend_curve(*second, length))).unwrap();
-        assert!(peak <= length / 5, "peak at {peak}");
+        assert_eq!(peak, length / 2);
+        assert!((bend_curve(length / 4, length) - bend_curve(length * 3 / 4, length)).abs() < 1.0e-3);
         assert_eq!(bend_curve(0, length), 0.0);
         assert!(bend_curve(length - 1, length) < 0.001);
     }

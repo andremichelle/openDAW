@@ -99,13 +99,16 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                             if (event.ctrlKey) {return}
                             setState(string, stateOf(string) === 0 ? 1 : 0)
                         }),
-                        ContextMenu.subscribe(dot, collector => collector.addItems(
-                            ...GuitarPatterns.Bends.map((label, amount) => MenuItem.default({
-                                label: amount === 0 ? "No Bend" : `Bend ${label}`, checked: stateOf(string) === amount + 1
-                            }).setTriggerProcedure(() => setState(string, amount + 1))),
-                            MenuItem.default({label: "All Strings", separatorBefore: true})
-                                .setTriggerProcedure(() => setStrings(GuitarPatterns.AllStrings)),
-                            MenuItem.default({label: "No Strings"}).setTriggerProcedure(() => setStrings(0)))))
+                        ContextMenu.subscribe(dot, collector => {
+                            collector.stopPropagation()
+                            collector.addItems(
+                                ...GuitarPatterns.Bends.map((label, amount) => MenuItem.default({
+                                    label: amount === 0 ? "No Bend" : `Bend ${label}`, checked: stateOf(string) === amount + 1
+                                }).setTriggerProcedure(() => setState(string, amount + 1))),
+                                MenuItem.default({label: "All Strings", separatorBefore: true})
+                                    .setTriggerProcedure(() => setStrings(GuitarPatterns.AllStrings)),
+                                MenuItem.default({label: "No Strings"}).setTriggerProcedure(() => setStrings(0)))
+                        }))
                     return dot
                 })
                 const cell: HTMLElement = <div className="lane strings">{dots}</div>

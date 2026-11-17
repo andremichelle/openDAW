@@ -143,7 +143,7 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
    semitones. A real bend is one finger on one string, the other strings keep their pitch.
 2. The Strings lane cycles a string off, plucked, bent ¼, ½, 1, 2, off. Right-click sets the bend directly or plays
    all or no strings. A newly painted pick clears all strings and bends.
-3. A bent string is plucked at pitch, rises fast to the bend and falls back slower, within the step. The string's
+3. A bent string is plucked at pitch, rises to the bend and falls back at the same speed, within the step (even since 2026-11-17). The string's
    loop length follows the curve. Pre-bend (start bent, release to pitch) is left out unless asked for.
 
 ## Finger squeak (dropped)

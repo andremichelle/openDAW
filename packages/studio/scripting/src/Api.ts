@@ -2355,7 +2355,7 @@ export interface GuitarSlot {
     length: int
     /** 64 steps */
     readonly steps: ReadonlyArray<GuitarStep>
-    /** Set the given fields of the steps from the beginning and set the length, fields left out keep their value */
+    /** Set the given fields of the steps from the beginning and set the length. Fields left out keep their value, except that a stroke of another kind resets strings and bends like the editor */
     setSteps(steps: ReadonlyArray<Partial<GuitarStep>>): void
     /** Load a built in pattern by name into this slot, see {@link Guitar.patternNames} */
     load(name: string): void

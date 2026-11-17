@@ -272,11 +272,13 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
             const open = adapter.openStrings()
             const off = open[string] === Guitar.Off
             const last = open.filter(note => note !== Guitar.Off).length === 1
+            const held = tuningParameter.getControlledValue() !== tuningParameter.getValue()
+                && tuningParameter.getControlledValue() !== Guitar.Custom
             collector.addItems(
-                MenuItem.default({label: off ? "String On" : "String Off", selectable: off || !last})
+                MenuItem.default({label: off ? "String On" : "String Off", selectable: !held && (off || !last)})
                     .setTriggerProcedure(() => tuneString(string, off ? Guitar.Tunings[0][string] : Guitar.Off, true)),
                 ...Guitar.TuningNames.slice(0, Guitar.Custom).map((label, index) => MenuItem.default({
-                    label: `Copy ${label}`, separatorBefore: index === 0
+                    label: `Copy ${label}`, separatorBefore: index === 0, selectable: !held
                 }).setTriggerProcedure(() => editing.modify(() => {
                     Guitar.Tunings[index].forEach((value, which) => box.notes.getField(which).setValue(value))
                     tuningParameter.setValue(Guitar.Custom)
