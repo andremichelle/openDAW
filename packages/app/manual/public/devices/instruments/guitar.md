@@ -37,7 +37,8 @@ the guitar stays silent. Notes you play still sound on the strings.
 ### Keys
 
 The pattern is off. Every note you play lands on a string near the Position, notes played together are
-strummed from the low string up with the strum Speed.
+strummed from the low string up with the strum Speed. A note no string reaches between the open string and the
+19th fret stays silent.
 
 ---
 

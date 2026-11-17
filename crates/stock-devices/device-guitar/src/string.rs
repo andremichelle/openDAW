@@ -4,7 +4,7 @@ use libm::{atan2f, cosf, expf, floorf, powf, sinf, sqrtf};
 
 use crate::body::Body;
 
-pub const MAX_DELAY: usize = 4096;
+pub const MAX_DELAY: usize = 8192;
 const PI: f32 = core::f32::consts::PI;
 const DETUNE: f32 = 1.0007;
 const HORIZONTAL_DARKER: f32 = 0.85;
@@ -600,6 +600,19 @@ mod tests {
             let error = cents(measured_frequency(&signal, hertz(pitch)), hertz(pitch));
             assert!(error.abs() < 2.0, "pitch {pitch}: {error:.2} cents");
         }
+    }
+
+    #[test]
+    fn the_lowest_bass_notes_are_in_tune_and_fit_the_line_at_192_khz() {
+        let (table, body) = (character(), body(9));
+        for pitch in [24.0f32, 28.0, 33.0] {
+            let mut string = boxed_string();
+            string.pluck(&pluck(pitch), &body, &table, 440.0);
+            let signal = render(&mut string, 0.8, &body);
+            let error = cents(measured_frequency(&signal, hertz(pitch)), hertz(pitch));
+            assert!(error.abs() < 2.0, "pitch {pitch}: {error:.2} cents");
+        }
+        assert!(192_000.0 / hertz(24.0) < (MAX_DELAY - 4) as f32);
     }
 
     #[test]

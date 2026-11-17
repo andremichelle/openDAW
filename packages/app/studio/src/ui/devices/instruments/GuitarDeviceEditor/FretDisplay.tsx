@@ -142,9 +142,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         const string = clamp(Math.round((clientX - rect.left - left) / (right - left) * (Guitar.Strings - 1)), 0, Guitar.Strings - 1)
         return {string, y: clientY - rect.top, bottom: rect.height - Margin.bottom, strip: clientY - rect.top > rect.height - Margin.bottom}
     }
-    const tuneString = (string: int, note: int, mark: boolean) => {
+    const tuneString = (string: int, note: int, mark: boolean): boolean => {
         const open = adapter.openStrings()
-        if (open[string] === note) {return}
+        if (open[string] === note) {return false}
         editing.modify(() => {
             if (tuningParameter.getValue() !== Guitar.Custom) {
                 open.forEach((value, index) => box.notes.getField(index).setValue(value))
@@ -152,6 +152,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
             }
             box.notes.getField(string).setValue(note)
         }, mark)
+        return true
     }
     const drag = lifecycle.own(new Terminator())
     const startTuning = (event: PointerEvent) => {
@@ -164,8 +165,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         drag.ownAll(
             Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => {
                 const note = clamp(start + Math.round((event.clientY - moveEvent.clientY) / DragStep), Guitar.LowestNote, Guitar.HighestNote)
-                tuneString(string, note, mark)
-                mark = false
+                if (tuneString(string, note, mark)) {mark = false}
             }),
             Events.subscribe(window, "pointerup", () => drag.terminate()))
         return true
@@ -261,9 +261,11 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         ContextMenu.subscribe(canvas, collector => {
             const {string, strip} = locate(collector.client.clientX, collector.client.clientY)
             if (!strip) {return}
-            const off = adapter.openStrings()[string] === Guitar.Off
+            const open = adapter.openStrings()
+            const off = open[string] === Guitar.Off
+            const last = open.filter(note => note !== Guitar.Off).length === 1
             collector.addItems(
-                MenuItem.default({label: off ? "String On" : "String Off"})
+                MenuItem.default({label: off ? "String On" : "String Off", selectable: off || !last})
                     .setTriggerProcedure(() => tuneString(string, off ? Guitar.Tunings[0][string] : Guitar.Off, true)),
                 ...Guitar.TuningNames.slice(0, Guitar.Custom).map((label, index) => MenuItem.default({
                     label: `Copy ${label}`, separatorBefore: index === 0
