@@ -518,6 +518,7 @@ fn switching_to_keys_releases_the_strum() {
     device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
     assert_eq!(state.scheduled_bends().count(), 0);
     assert_eq!(state.lit(), 0);
+    assert!(state.display().iter().all(|fret| *fret < 0), "Keys mode shows no chord");
 }
 
 #[test]

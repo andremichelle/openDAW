@@ -27,7 +27,8 @@ export namespace Guitar {
     // WASM CONTRACT: `State::open` in device-guitar, an all-off custom tuning plays Standard
     export const openStrings = (tuning: int, notes: ReadonlyArray<int>): Tuning =>
         tuning < Tunings.length ? Tunings[Math.max(0, tuning)]
-            : notes.some(note => note !== Off) ? notes : Tunings[0]
+            : notes.some(note => note !== Off)
+                ? notes.map(note => note < 0 ? Off : Math.min(Math.max(note, LowestNote), HighestNote)) : Tunings[0]
     export const PositionNames: ReadonlyArray<string> = ["Open", "3rd", "5th", "7th", "9th", "12th"]
     export const PositionFrets: ReadonlyArray<int> = [0, 3, 5, 7, 9, 12]
 

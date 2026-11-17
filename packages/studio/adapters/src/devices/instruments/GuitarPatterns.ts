@@ -240,7 +240,7 @@ export namespace GuitarPatterns {
         for (const array of [pattern.stepKinds, pattern.stepStrings, pattern.stepVelocities, pattern.stepSpeeds, pattern.stepBends]) {
             const fields = array.fields().slice(0, length)
             const values = fields.map(field => field.getValue())
-            fields.forEach((field, index) => field.setValue(values[(index + offset + length) % length]))
+            fields.forEach((field, index) => field.setValue(values[(((index + offset) % length) + length) % length]))
         }
         pattern.library.setValue(-1)
     }

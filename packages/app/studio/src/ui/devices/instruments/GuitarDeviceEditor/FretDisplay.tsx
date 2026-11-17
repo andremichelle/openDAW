@@ -87,7 +87,6 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
             }
         }
         const radius = 4.5 * devicePixelRatio
-        context.font = `${9 * devicePixelRatio}px Rubik, sans-serif`
         context.textAlign = "center"
         context.textBaseline = "middle"
         context.font = `${7 * devicePixelRatio}px Rubik, sans-serif`
@@ -146,11 +145,8 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         const open = adapter.openStrings()
         if (open[string] === note) {return false}
         editing.modify(() => {
-            if (tuningParameter.getValue() !== Guitar.Custom) {
-                open.forEach((value, index) => box.notes.getField(index).setValue(value))
-                tuningParameter.setValue(Guitar.Custom)
-            }
-            box.notes.getField(string).setValue(note)
+            open.forEach((value, index) => box.notes.getField(index).setValue(index === string ? note : value))
+            if (tuningParameter.getValue() !== Guitar.Custom) {tuningParameter.setValue(Guitar.Custom)}
         }, mark)
         return true
     }

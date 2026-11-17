@@ -743,10 +743,11 @@ pub fn render(state: &mut State, output: [&mut [f32]; 2]) {
 pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
     if index == param::MODE {
         let mode = int_value(value, &MODE_MAPPING);
-        if mode != CHORDS_MODE && state.settings.mode == CHORDS_MODE {
+        let leaving = mode != CHORDS_MODE && state.settings.mode == CHORDS_MODE;
+        state.settings.mode = mode;
+        if leaving {
             state.release_strummed();
         }
-        state.settings.mode = mode;
         return;
     }
     let settings = &mut state.settings;
