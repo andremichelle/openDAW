@@ -3,9 +3,11 @@ import {DefaultObservableValue, isDefined, Terminator} from "@opendaw/lib-std"
 import {Browser, Clipboard, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
 import {Button} from "@/ui/components/Button"
+import {Icon} from "@/ui/components/Icon"
+import {openManual} from "@/ui/manuals"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Surface} from "@/ui/surface/Surface"
 import {AgentConnection, AgentRelayMode} from "@/script/AgentConnection"
@@ -139,6 +141,12 @@ export namespace AgentConnectDialog {
             <Dialog headline="Connect Agent"
                     icon={IconSymbol.Robot}
                     cancelable={true}
+                    leading={
+                        <Button lifecycle={lifecycle} onClick={() => openManual("/manuals/connect-ai-agent")}
+                                appearance={{color: Colors.gray, tooltip: "Open the manual"}}>
+                            <Icon symbol={IconSymbol.Help}/><span>Manual</span>
+                        </Button>
+                    }
                     buttons={[
                         {text: "Done", onClick: handler => handler.close()},
                         {
