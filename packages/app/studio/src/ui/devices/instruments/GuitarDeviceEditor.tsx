@@ -6,7 +6,7 @@ import {Guitar} from "@opendaw/lib-dsp"
 import {
     AutomatableParameterFieldAdapter, DeviceHost, Grooves, GuitarDeviceBoxAdapter, GuitarPatterns, InstrumentFactories
 } from "@opendaw/studio-adapters"
-import {ClipboardManager, MenuItem} from "@opendaw/studio-core"
+import {ClipboardManager, ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -133,14 +133,14 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         type: "guitar-pattern",
         valid: (value: unknown): value is GuitarPatterns.Snapshot => PatternClipboard.sameShape(snapshotTemplate, value)
     }
+    const copySlot = () => PatternClipboard.encode(PatternFormat, GuitarPatterns.snapshot(currentPattern()))
+    const pasteSlot = (copied: GuitarPatterns.Snapshot) => editing.modify(() => GuitarPatterns.apply(currentPattern(), copied))
     const patternMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
         ...libraryItems(),
         MenuItem.default({label: "Copy Pattern", separatorBefore: true})
-            .setTriggerProcedure(() => ClipboardManager.write(
-                PatternClipboard.encode(PatternFormat, GuitarPatterns.snapshot(currentPattern())))),
+            .setTriggerProcedure(() => ClipboardManager.write(copySlot())),
         MenuItem.default({label: "Paste Pattern", selectable: PatternClipboard.pastable(PatternFormat)})
-            .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box,
-                copied => editing.modify(() => GuitarPatterns.apply(currentPattern(), copied)))),
+            .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteSlot)),
         MenuItem.default({label: "Clear Pattern"})
             .setTriggerProcedure(() => editing.modify(() => GuitarPatterns.clear(currentPattern())))))
     const menuOrder: ReadonlyArray<int> = GuitarPatterns.Styles.flatMap(style => GuitarPatterns.Library
@@ -252,6 +252,22 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             </div>
         </div>
     )
+    const sequencer: HTMLElement = (
+        <div className="sequencer" tabIndex={-1}>
+            {toolbar}
+            <GuitarStepGrid lifecycle={lifecycle} editing={editing} adapter={adapter} page={page}
+                            lane={lane} brush={brush} slot={current} receiver={project.liveStreamReceiver}/>
+        </div>
+    )
+    PatternClipboard.install(lifecycle, sequencer, PatternFormat, [sequencer], copySlot,
+        (_index, entry) => PatternClipboard.decode(PatternFormat, entry).ifSome(pasteSlot))
+    lifecycle.own(ContextMenu.subscribe(sequencer, collector => {
+        const label = `Slot ${current.getValue() + 1}`
+        collector.addItems(
+            MenuItem.default({label: `Copy ${label}`}).setTriggerProcedure(() => ClipboardManager.write(copySlot())),
+            MenuItem.default({label: `Paste into ${label}`, selectable: PatternClipboard.pastable(PatternFormat)})
+                .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(PatternFormat, box, pasteSlot)))
+    }))
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -260,11 +276,7 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                       populateControls={() => (
                           <div className={className}>
                               <FretDisplay lifecycle={lifecycle} project={project} adapter={adapter} selector={chordSelector}/>
-                              <div className="sequencer">
-                                  {toolbar}
-                                  <GuitarStepGrid lifecycle={lifecycle} editing={editing} adapter={adapter} page={page}
-                                                  lane={lane} brush={brush} slot={current} receiver={project.liveStreamReceiver}/>
-                              </div>
+                              {sequencer}
                               <div className="labels">
                                   {section("STRUM", Colors.blue.toString(), [1, 7], "first")}
                                   {section("PLAY", Colors.purple.toString(), [7, 9], "middle")}
