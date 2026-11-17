@@ -1,5 +1,6 @@
 import {Notifier, Observer, Option, SortedSet, Subscription, Terminable, unitValue} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
+import {ppqn} from "@opendaw/lib-dsp"
 import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
 import {ParameterTracks} from "./timeline/ParameterTracks"
 
@@ -8,6 +9,8 @@ export type AutomationMode = "read" | "touch" | "latch"
 export type ParameterWriteEvent = {
     adapter: AutomatableParameterFieldAdapter
     previousUnitValue: unitValue
+    // where the value takes effect, None at the playhead
+    position: Option<ppqn>
 }
 
 export class ParameterFieldAdapters {
@@ -48,7 +51,8 @@ export class ParameterFieldAdapters {
         return this.#writeNotifier.subscribe(observer)
     }
 
-    notifyWrite(adapter: AutomatableParameterFieldAdapter, previousUnitValue: unitValue): void {
-        this.#writeNotifier.notify({adapter, previousUnitValue})
+    notifyWrite(adapter: AutomatableParameterFieldAdapter, previousUnitValue: unitValue,
+                position: Option<ppqn> = Option.None): void {
+        this.#writeNotifier.notify({adapter, previousUnitValue, position})
     }
 }

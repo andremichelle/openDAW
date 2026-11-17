@@ -214,11 +214,13 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         return this.#controlSource.subscribe(observer)
     }
     getValue(): T {return this.#field.getValue()}
-    setValue(value: T) {
+    setValue(value: T) {this.setValueAt(value, Option.None)}
+    /** Sets the value now, a recording writes it at `position`, where a device applies it later (a next bar). */
+    setValueAt(value: T, position: Option<ppqn>): void {
         if (value === this.getValue()) {return}
         const previousUnitValue = this.getUnitValue()
         this.#field.setValue(value)
-        this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue)
+        this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue, position)
     }
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}

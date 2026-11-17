@@ -317,6 +317,36 @@ describe("RecordAutomation", () => {
         })
     })
 
+    describe("writes that take effect later", () => {
+        it("records a step at the given position, holding the previous value until then", async () => {
+            const {parameter, project, record, seek, events} = await setup({target: "mute"})
+            record(true)
+            seek(PPQN.Quarter + 13)
+            const previous = parameter.getUnitValue()
+            project.editing.modify(() => parameter.setValueAt(true, Option.wrap(PPQN.Bar)), false)
+            expect(parameter.getValue()).toBe(true)
+            expect(events().map(event => [event.position, event.value])).toEqual([[0, previous], [PPQN.Bar - PPQN.Quarter, 1]])
+            expect(events()[1].interpolation.type).toBe("none")
+        })
+
+        it("adds a later step to an open take at its position", async () => {
+            const {parameter, project, record, seek, positions} = await setup({target: "mute"})
+            record(true)
+            project.editing.modify(() => parameter.setValueAt(true, Option.wrap(PPQN.Bar)), false)
+            seek(PPQN.Bar + PPQN.Quarter)
+            project.editing.modify(() => parameter.setValueAt(false, Option.wrap(PPQN.Bar * 2)), false)
+            expect(positions()).toEqual([0, PPQN.Bar, PPQN.Bar * 2])
+        })
+
+        it("never records a step behind the playhead", async () => {
+            const {parameter, project, record, seek, positions} = await setup({target: "mute"})
+            record(true)
+            seek(PPQN.Quarter)
+            project.editing.modify(() => parameter.setValueAt(true, Option.wrap(0)), false)
+            expect(positions()).toEqual([0, 0])
+        })
+    })
+
     describe("latching", () => {
         it("keeps the take open across a gap in the writes", async () => {
             const {record, seek, write, regions} = await setup()

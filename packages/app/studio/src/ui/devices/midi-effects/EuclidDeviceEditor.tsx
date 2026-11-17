@@ -27,6 +27,7 @@ import {EuclidRhythm} from "@/ui/devices/midi-effects/Euclid/EuclidRhythm"
 import {EuclidCircle} from "@/ui/devices/midi-effects/Euclid/EuclidCircle"
 import {EuclidNotes} from "@/ui/devices/midi-effects/Euclid/EuclidNotes"
 import {PatternClipboard} from "@/ui/devices/PatternClipboard"
+import {PatternSwitch} from "@/ui/devices/PatternSwitch"
 
 const className = Html.adoptStyleSheet(css, "EuclidDeviceEditor")
 
@@ -348,7 +349,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             Events.subscribe(tile, "pointerdown", () => tile.focus()),
             Events.subscribe(tile, "click", () => {
                 if (!off) {edited = index}
-                editing.modify(() => namedParameter.pattern.setValue(pattern))
+                editing.modify(() => namedParameter.pattern.setValueAt(pattern, PatternSwitch.at(project)))
             }),
             ContextMenu.subscribe(tile, collector => {
                 if (off) {return}

@@ -291,9 +291,10 @@ export namespace RecordAutomation {
         let lastPosition: ppqn = engine.position.getValue()
         // Latch: any write while recording opens the take, and only the transport (or a loop wrap) ever closes
         // it. The producer stays out of it, so a knob, a MIDI controller and a checkbox all record alike.
-        const handleWrite = ({adapter, previousUnitValue}: ParameterWriteEvent): void => {
+        const handleWrite = ({adapter, previousUnitValue, position: writtenAt}: ParameterWriteEvent): void => {
             if (!engine.isRecording.getValue()) {return}
             const position = engine.position.getValue()
+            const at = Math.max(position, writtenAt.unwrapOrElse(position))
             const value = adapter.getUnitValue()
             const existingState = activeRecordings.opt(adapter.address)
             if (existingState.isEmpty()) {
@@ -302,12 +303,14 @@ export namespace RecordAutomation {
                     if (trackOpt.isEmpty()) {return}
                     const startPos = quantizeFloor(position, PPQN.SemiQuaver)
                     const floating = adapter.valueMapping.floating()
-                    const state = createRegion(
-                        ctx, trackOpt.unwrap(), adapter, startPos, previousUnitValue, value, floating)
+                    const deferred = at > position
+                    const state = createRegion(ctx, trackOpt.unwrap(), adapter, startPos, previousUnitValue,
+                        deferred ? previousUnitValue : value, floating)
+                    if (deferred) {handleWriteUpdate(project, state, at, value)}
                     activeRecordings.add(state)
                 })
             } else {
-                editing.modify(() => handleWriteUpdate(project, existingState.unwrap(), position, value), false)
+                editing.modify(() => handleWriteUpdate(project, existingState.unwrap(), at, value), false)
             }
         }
         const handlePosition = (): void => {

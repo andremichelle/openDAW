@@ -1,6 +1,7 @@
 import {Arrays, asDefined, clamp, int, isDefined, Option, panic, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SurgeonDeviceBox, SurgeonPattern, SurgeonSound, SurgeonSoundFields} from "@opendaw/studio-boxes"
 import {Address, BooleanField, Float32Field, Int32Field, StringField} from "@opendaw/lib-box"
+import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -216,8 +217,9 @@ export class SurgeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     }
 
     // call inside a transaction: a pattern, or Surgeon.Off. The engine takes over at the next bar
-    select(slot: int): void {
-        this.#box.slot.setValue(slot)
+    /** `at` is where the engine switches (the next bar), a recording writes the switch there. */
+    select(slot: int, at: Option<ppqn> = Option.None): void {
+        this.namedParameter.slot.setValueAt(slot, at)
         const left = this.#box.pattern.getValue()
         if (slot === Surgeon.Off || slot === left) {return}
         Surgeon.All.forEach(({key}) => {

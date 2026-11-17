@@ -28,6 +28,7 @@ import {MenuButton} from "@/ui/components/MenuButton"
 import {Icon} from "@/ui/components/Icon"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 import {PatternClipboard} from "@/ui/devices/PatternClipboard"
+import {PatternSwitch} from "@/ui/devices/PatternSwitch"
 
 const className = Html.adoptStyleSheet(css, "SurgeonDeviceEditor")
 
@@ -54,6 +55,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver, engine} = project
     const {box, namedParameter} = adapter
+    const select = (slot: int): void => act(() => adapter.select(slot, PatternSwitch.at(project)))
     const {Lanes, PatternCount, Off, LaneNames} = Surgeon
     const rollSeed = (): int => Math.floor(Math.random() * 100_000)
     const act = (action: Procedure<void>): void => {
@@ -142,7 +144,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         PatternClipboard.decode(PatternFormat, entry).ifSome(copied => applyPattern(index, copied))
     tiles.forEach((tile, index) => lifecycle.ownAll(
         Events.subscribe(tile, "pointerdown", () => tile.focus()),
-        Events.subscribe(tile, "click", () => act(() => adapter.select(index))),
+        Events.subscribe(tile, "click", () => select(index)),
         ContextMenu.subscribe(tile, collector => collector.addItems(
             ...slotItems(),
             MenuItem.default({label: "Copy pattern", separatorBefore: true})
@@ -153,7 +155,7 @@ export const SurgeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const circles: HTMLElement = <div className="circles">{tiles}{offTile}</div>
     PatternClipboard.install(lifecycle, circles, PatternFormat, tiles, copyPattern, pastePattern)
     lifecycle.ownAll(
-        Events.subscribe(offTile, "click", () => act(() => adapter.select(Off))),
+        Events.subscribe(offTile, "click", () => select(Off)),
         ContextMenu.subscribe(offTile, collector => collector.addItems(...slotItems())))
     const canvas: HTMLCanvasElement = <canvas/>
     const painted = {step: -1, fontFamily: ""}
