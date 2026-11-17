@@ -16,3 +16,16 @@ hidden. This is how browsers are designed. Granting microphone access ensures op
 all connected audio devices properly.
 
 [Lookup 'enumerateDevices'](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices)
+
+## MIDI
+
+openDAW asks for MIDI access when you learn a MIDI control, select a MIDI input or output, or open a project with learned
+MIDI controls. If you declined it once, the browser remembers that and blocks MIDI on this website.
+
+To allow it again:
+
+* **Chrome / Edge**: Click the icon left of the address bar, set **MIDI devices** to **Allow** (or reset the permission),
+  then reload the page.
+* **Firefox**: Click the icon left of the address bar and remove the blocked MIDI permission, then reload the page.
+  Firefox asks again and installs a small site permission add-on for openDAW.
+* **Safari**: Safari does not support MIDI in the browser.

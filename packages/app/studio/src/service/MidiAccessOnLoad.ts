@@ -1,26 +1,26 @@
 import {isDefined, Option, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {MidiDevices, Project} from "@opendaw/studio-core"
+import {CaptureMidi, MidiDevices, Project} from "@opendaw/studio-core"
 
 export namespace MidiAccessOnLoad {
     const headline = "MIDI Controls"
 
     export const check = async (project: Project): Promise<void> => {
-        const count = project.midiLearning.numberOfConnections
-        if (count === 0 || MidiDevices.available().getValue() || !MidiDevices.canRequestMidiAccess()) {return}
-        const controls = count === 1 ? "1 learned MIDI control" : `${count} learned MIDI controls`
+        const controls = project.midiLearning.numberOfConnections
+        const tracks = project.captureDevices.allCaptures()
+            .filter(capture => capture instanceof CaptureMidi && capture.armed.getValue()).length
+        if (controls + tracks === 0 || MidiDevices.available().getValue() || !MidiDevices.canRequestMidiAccess()) {return}
+        const uses = [
+            controls === 0 ? "" : controls === 1 ? "1 learned MIDI control" : `${controls} learned MIDI controls`,
+            tracks === 0 ? "" : tracks === 1 ? "1 armed MIDI track" : `${tracks} armed MIDI tracks`
+        ].filter(text => text.length > 0).join(" and ")
         const state = await queryPermission()
-        if (state.contains("granted")) {
+        if (state.contains("granted") || state.contains("denied")) {
             MidiDevices.available().setValue(true)
-        } else if (state.contains("denied")) {
-            await RuntimeNotifier.info({
-                headline,
-                message: `This project has ${controls}, but MIDI access is blocked in your browser's site settings. Allow MIDI there to use them.`
-            })
         } else {
             const approved = await RuntimeNotifier.approve({
                 headline,
-                message: `This project has ${controls}. Turn on MIDI access so they respond?`,
+                message: `This project has ${uses}. Turn on MIDI access so they respond?`,
                 approveText: "Turn on MIDI",
                 cancelText: "Not now"
             })
