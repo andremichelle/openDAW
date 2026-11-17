@@ -78,7 +78,6 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
             if (stringsLane) {
                 const field = pattern.stepStrings.getField(index)
                 const bendsField = pattern.stepBends.getField(index)
-                const states = GuitarPatterns.Bends.length + 1
                 const stateOf = (string: int) => (field.getValue() & (1 << string)) === 0
                     ? 0 : 1 + GuitarPatterns.bendOf(bendsField.getValue(), string)
                 const setState = (string: int, state: int) => editing.modify(() => {
@@ -98,7 +97,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
                     inner.ownAll(
                         Events.subscribe(dot, "click", (event: MouseEvent) => {
                             if (event.ctrlKey) {return}
-                            setState(string, (stateOf(string) + 1) % states)
+                            setState(string, stateOf(string) === 0 ? 1 : 0)
                         }),
                         ContextMenu.subscribe(dot, collector => collector.addItems(
                             ...GuitarPatterns.Bends.map((label, amount) => MenuItem.default({
