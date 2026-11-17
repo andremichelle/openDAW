@@ -456,6 +456,13 @@ describe("Devices", () => {
         expect(snare.rhythms.length).toBe(8)
         snare.rhythms[2].fade = -0.5
         expect(snare.rhythms[2].fade).toBeCloseTo(-0.5)
+        snare.rhythms[3].mute = true
+        kick.rhythms[4].solo = true
+        expect(snare.rhythms.map(rhythm => rhythm.mute)).toEqual([false, false, false, true, false, false, false, false])
+        expect(kick.rhythms.map(rhythm => rhythm.solo)).toEqual([false, false, false, false, true, false, false, false])
+        const flagged = euclid.addLane({note: 40, rhythms: [{mute: true}, {solo: true}]})
+        expect([flagged.rhythms[0].mute, flagged.rhythms[1].solo, flagged.rhythms[2].mute]).toEqual([true, true, false])
+        flagged.remove()
         euclid.pattern = 2
         euclid.rate = 3
         euclid.length = 32

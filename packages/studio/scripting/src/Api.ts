@@ -356,10 +356,14 @@ export interface EuclidRhythm {
     repeats: int
     /** How the triggers of a burst fall in level (-1.0 to 1.0, below 0 they rise, default 0) */
     fade: bipolar
+    /** Silence the lane in this pattern */
+    mute: boolean
+    /** Play only the soloed lanes of this pattern */
+    solo: boolean
 }
 
 /**
- * One lane of Euclid: the note it plays and its rhythm in each of the eight patterns
+ * One lane of Euclid: the note it plays and its rhythm, mute and solo in each of the eight patterns
  * @group MIDI Effect Parts
  */
 export interface EuclidLane {
@@ -373,11 +377,7 @@ export interface EuclidLane {
     chance: unitValue
     /** Note length: 0 = one step, 1 = until the lane's next hit (default 0) */
     gate: 0 | 1
-    /** Silence the lane */
-    mute: boolean
-    /** Play only the soloed lanes */
-    solo: boolean
-    /** The rhythm in each pattern, index 0 to 7 */
+    /** The rhythm, mute and solo in each pattern, index 0 to 7 */
     readonly rhythms: ReadonlyArray<EuclidRhythm>
     /** Remove the lane */
     remove(): void

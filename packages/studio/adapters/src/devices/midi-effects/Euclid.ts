@@ -1,5 +1,5 @@
 import {asInstanceOf, int, UUID} from "@opendaw/lib-std"
-import {BoxGraph, Float32Field, IndexedBox, Int32Field} from "@opendaw/lib-box"
+import {BooleanField, BoxGraph, Float32Field, IndexedBox, Int32Field} from "@opendaw/lib-box"
 import {EuclidDeviceBox, EuclidLaneBox} from "@opendaw/studio-boxes"
 
 /** What the Euclid editor, the scripts and the engine share. */
@@ -28,16 +28,19 @@ export namespace Euclid {
         readonly steps: Int32Field, readonly pulses: Int32Field, readonly rotate: Int32Field, readonly rate: Int32Field
         readonly accents: Int32Field, readonly accentRotate: Int32Field
         readonly bursts: Int32Field, readonly burstRotate: Int32Field, readonly repeats: Int32Field, readonly fade: Float32Field
+        readonly mute: BooleanField, readonly solo: BooleanField
     }
 
-    // keys 10 + pattern * 10 + entry, in the order of EuclidLaneBox
+    // keys 10 + pattern * 10 + entry in the order of EuclidLaneBox, mute 90 + pattern, solo 100 + pattern
     export const rhythmOf = (lane: EuclidLaneBox, pattern: int): Rhythm => {
         const record = lane.record()
         const int = (entry: int): Int32Field => asInstanceOf(record[String(10 + pattern * 10 + entry)], Int32Field)
         return {
             steps: int(0), pulses: int(1), rotate: int(2), rate: int(3), accents: int(4), accentRotate: int(5),
             bursts: int(6), burstRotate: int(7), repeats: int(8),
-            fade: asInstanceOf(record[String(10 + pattern * 10 + 9)], Float32Field)
+            fade: asInstanceOf(record[String(10 + pattern * 10 + 9)], Float32Field),
+            mute: asInstanceOf(record[String(90 + pattern)], BooleanField),
+            solo: asInstanceOf(record[String(100 + pattern)], BooleanField)
         }
     }
 

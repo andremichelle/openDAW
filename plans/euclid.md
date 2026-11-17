@@ -72,7 +72,8 @@ triggers one MIDI note (0 to 127), so every lane can play one pad. Branch `eucli
    instrument. The editor redraws on every graph update, so a renamed pad shows at once.
 2. ~~Boxes~~: `EuclidDeviceBox` (pattern -1 to 7, length, rate, seed, the lanes hub, 8 `EuclidPattern` with a groove)
    and `EuclidLaneBox` (index, note, velocity, chance, gate, mute, solo, then the ten rhythm values of each pattern at
-   keys 10 + pattern * 10, named `steps-a` to `fade-h`). New pointer type `Pointers.EuclidLane`.
+   keys 10 + pattern * 10, named `steps-a` to `fade-h`, mute and solo moved into each pattern at keys 90 and 100,
+   `mute-a` to `solo-h`, the lane-wide 7 and 8 are deprecated and migrated). New pointer type `Pointers.EuclidLane`.
 3. ~~Engine~~ (`crates/stock-devices/device-euclid`): the lanes arrive as one table (`abi::observe_table`, a MIDI
    effect can export `table_changed` like any device). Pulses, Rotate and the accent and burst counts go up to 32 in
    the editor and the engine clamps them to the lane. Generated notes take ids from the upper half (0x8000_0000) so

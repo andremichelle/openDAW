@@ -165,14 +165,12 @@ export class EuclidLaneImpl extends Facade<EuclidLaneBox> implements EuclidLane 
     declare velocity: unitValue
     declare chance: unitValue
     declare gate: 0 | 1
-    declare mute: boolean
-    declare solo: boolean
     declare readonly rhythms: ReadonlyArray<EuclidRhythm>
 
     private constructor(context: Context, box: EuclidLaneBox) {
         super(context, box)
         this.bind({
-            note: box.note, velocity: box.velocity, chance: box.chance, gate: box.gate, mute: box.mute, solo: box.solo,
+            note: box.note, velocity: box.velocity, chance: box.chance, gate: box.gate,
             rhythms: Array.from({length: Euclid.Patterns}, (_, pattern) => ({...Euclid.rhythmOf(box, pattern)}))
         })
     }

@@ -39,9 +39,9 @@ type Construct = {
 
 const PatternEntry = "euclid-pattern"
 type CopiedPattern = { readonly rhythms: ReadonlyArray<ReadonlyArray<number>>, readonly groove: Maybe<UUID.String> }
-const RhythmKeys: ReadonlyArray<keyof Euclid.Rhythm> =
-    ["steps", "pulses", "rotate", "rate", "accents", "accentRotate", "bursts", "burstRotate", "repeats", "fade"]
-const RhythmTemplate: ReadonlyArray<number> = RhythmKeys.map(() => 0)
+const RhythmKeys = ["steps", "pulses", "rotate", "rate", "accents", "accentRotate", "bursts", "burstRotate", "repeats", "fade"] as const
+const FlagKeys = ["mute", "solo"] as const
+const RhythmTemplate: ReadonlyArray<number> = [...RhythmKeys, ...FlagKeys].map(() => 0)
 const PatternFormat: PatternClipboard.Format<CopiedPattern> = {
     type: PatternEntry,
     valid: (value: unknown): value is CopiedPattern => isRecord(value)
@@ -163,9 +163,12 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             bursts: rhythm.bursts.getValue(), burstRotate: rhythm.burstRotate.getValue()
         })
     }
-    const audibleIn = (all: ReadonlyArray<EuclidLaneBox>) => {
-        const soloed = all.some(other => other.solo.getValue())
-        return (each: EuclidLaneBox): boolean => !each.mute.getValue() && (each.solo.getValue() || !soloed)
+    const audibleIn = (all: ReadonlyArray<EuclidLaneBox>, pattern: int) => {
+        const soloed = all.some(other => Euclid.rhythmOf(other, pattern).solo.getValue())
+        return (each: EuclidLaneBox): boolean => {
+            const {mute, solo} = Euclid.rhythmOf(each, pattern)
+            return !mute.getValue() && (solo.getValue() || !soloed)
+        }
     }
     const sounding = (tracked: Tracked): boolean => {
         const step = stepOf(tracked)
@@ -182,8 +185,8 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     let moved: boolean = false
     const track = (): void => {
         const all = lanes()
-        const audible = audibleIn(all)
         const pattern = Math.max(0, playingPattern())
+        const audible = audibleIn(all, pattern)
         tracked = all.map((each, index) => ({
             lane: each, dot: rowDots[index], steps: stepsOf(each, pattern),
             duration: stepDuration(Euclid.rhythmOf(each, pattern)), audible: audible(each)
@@ -191,10 +194,11 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     }
     const renderList = (): void => {
         const all = lanes()
-        const audible = audibleIn(all)
+        const audible = audibleIn(all, edited)
         const signature = all.map(each => [UUID.toString(each.address.uuid), each.note.getValue(),
-            noteName(each.note.getValue()).unwrapOrElse(""), each.mute.getValue(), each.solo.getValue(), audible(each)
-        ].join(":")).join("|")
+            noteName(each.note.getValue()).unwrapOrElse(""), Euclid.rhythmOf(each, edited).mute.getValue(),
+            Euclid.rhythmOf(each, edited).solo.getValue(), audible(each)
+        ].join(":")).join("|") + `#${edited}`
         const current = Math.min(selected, all.length - 1)
         if (signature === rendering) {
             rowElements.forEach((row, index) => row.classList.toggle("selected", index === current))
@@ -216,13 +220,14 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             }
             const dot: HTMLElement = <span className="dot"/>
             const note = each.note.getValue()
+            const {mute, solo} = Euclid.rhythmOf(each, edited)
             const row: HTMLElement = (
                 <div className={Html.buildClassList("lane", !audible(each) && "silent")}>
                     <span className="note">{MidiKeys.toFullString(note)}</span>
                     {dot}
                     <span className="name">{noteName(note).unwrapOrElse("")}</span>
-                    {toggle("M", each.mute.getValue(), () => each.mute.setValue(!each.mute.getValue()))}
-                    {toggle("S", each.solo.getValue(), () => each.solo.setValue(!each.solo.getValue()))}
+                    {toggle("M", mute.getValue(), () => mute.setValue(!mute.getValue()))}
+                    {toggle("S", solo.getValue(), () => solo.setValue(!solo.getValue()))}
                 </div>
             )
             rows.ownAll(
@@ -296,7 +301,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode(PatternFormat, {
         rhythms: lanes().map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
-            return RhythmKeys.map(key => rhythm[key].getValue())
+            return [...RhythmKeys.map(key => rhythm[key].getValue()), ...FlagKeys.map(key => rhythm[key].getValue() ? 1 : 0)]
         }),
         groove: PatternClipboard.grooveOf(box.patterns.fields()[pattern].groove)
     })
@@ -308,6 +313,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             if (!isDefined(values)) {return}
             const rhythm = Euclid.rhythmOf(each, pattern)
             RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
+            FlagKeys.forEach((key, at) => rhythm[key].setValue(values[RhythmKeys.length + at] !== 0))
         })
         PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
     })}
@@ -319,7 +325,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         const period = length > 0 ? length * 240 / factor() : Infinity
         const duration = length > 0 ? period : 3840
         const all = lanes()
-        const audible = audibleIn(all)
+        const audible = audibleIn(all, pattern)
         const notes = EuclidNotes.of(all.map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
             return {

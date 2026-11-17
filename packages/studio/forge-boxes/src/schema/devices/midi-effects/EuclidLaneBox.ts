@@ -1,4 +1,4 @@
-import {BoxSchema, FieldRecord} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated, FieldRecord} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {IndexConstraints, MidiNoteConstraints, UnipolarConstraints} from "../../std/Defaults"
 
@@ -21,7 +21,10 @@ const rhythm = (pattern: number, name: string = "abcdefgh"[pattern]): FieldRecor
     {type: "float32", name: `fade-${name}`, value: 0.0, constraints: "bipolar", unit: "%"} as const
 ].map((field, entry) => [10 + pattern * 10 + entry, field])) as FieldRecord<Pointers>
 
-// One lane: the note it plays and its rhythm in each of the eight patterns
+const flags = (key: number, prefix: string): FieldRecord<Pointers> => Object.fromEntries(Array.from({length: 8}, (_, pattern) =>
+    [key + pattern, {type: "boolean", name: `${prefix}-${"abcdefgh"[pattern]}`, value: false} as const])) as FieldRecord<Pointers>
+
+// One lane: the note it plays, its rhythm, mute and solo in each of the eight patterns
 export const EuclidLaneBox: BoxSchema<Pointers> = {
     type: "box",
     class: {
@@ -34,9 +37,11 @@ export const EuclidLaneBox: BoxSchema<Pointers> = {
             5: {type: "float32", name: "chance", value: 1.0, ...UnipolarConstraints},
             // 0 a note lasts one step, 1 until the next hit
             6: {type: "int32", name: "gate", value: 0, constraints: {min: 0, max: 1}, unit: ""},
-            7: {type: "boolean", name: "mute", value: false},
-            8: {type: "boolean", name: "solo", value: false},
-            ...Object.assign({}, ...Array.from({length: 8}, (_, pattern) => rhythm(pattern)))
+            7: {type: "boolean", name: "mute", value: false, deprecated}, // per pattern from key 90
+            8: {type: "boolean", name: "solo", value: false, deprecated}, // per pattern from key 100
+            ...Object.assign({}, ...Array.from({length: 8}, (_, pattern) => rhythm(pattern))),
+            ...flags(90, "mute"),
+            ...flags(100, "solo")
         }
     },
     pointerRules: {accepts: [], mandatory: false}

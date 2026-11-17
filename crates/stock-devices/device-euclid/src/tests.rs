@@ -14,24 +14,25 @@ impl Default for Rhythm {
 }
 
 #[derive(Clone, Copy)]
-struct LaneSpec {note: u32, velocity: f32, chance: f32, gate: i32, mute: bool, solo: bool, rhythms: [Rhythm; 8]}
+struct LaneSpec {note: u32, velocity: f32, chance: f32, gate: i32, mute: [bool; 8], solo: [bool; 8], rhythms: [Rhythm; 8]}
 
 impl Default for LaneSpec {
     fn default() -> Self {
-        LaneSpec {note: 60, velocity: 0.5, chance: 1.0, gate: 0, mute: false, solo: false, rhythms: [Rhythm::default(); 8]}
+        LaneSpec {note: 60, velocity: 0.5, chance: 1.0, gate: 0, mute: [false; 8], solo: [false; 8], rhythms: [Rhythm::default(); 8]}
     }
 }
 
 fn words(lanes: &[LaneSpec]) -> Table {
     let mut words = Vec::new();
     for (index, lane) in lanes.iter().enumerate() {
-        words.extend([index as u32, lane.note, lane.velocity.to_bits(), lane.chance.to_bits(), lane.gate as u32,
-            lane.mute as u32, lane.solo as u32]);
+        words.extend([index as u32, lane.note, lane.velocity.to_bits(), lane.chance.to_bits(), lane.gate as u32]);
         for rhythm in &lane.rhythms {
             words.extend([rhythm.steps as u32, rhythm.pulses as u32, rhythm.rotate as u32, rhythm.rate as u32,
                 rhythm.accents as u32, rhythm.accent_rotate as u32, rhythm.bursts as u32, rhythm.burst_rotate as u32,
                 rhythm.repeats as u32, rhythm.fade.to_bits()]);
         }
+        words.extend(lane.mute.map(|mute| mute as u32));
+        words.extend(lane.solo.map(|solo| solo as u32));
     }
     Table::from_words(Box::leak(words.into_boxed_slice()), COLUMNS as u32)
 }
@@ -127,14 +128,34 @@ fn two_lanes_on_one_note_send_one_note_on_the_louder() {
 #[test]
 fn mute_and_solo_silence_lanes() {
     let kick = LaneSpec {note: 36, ..LaneSpec::default()};
-    let snare = LaneSpec {note: 38, mute: true, ..LaneSpec::default()};
+    let snare = LaneSpec {note: 38, mute: [true; 8], ..LaneSpec::default()};
     let hat = LaneSpec {note: 42, ..LaneSpec::default()};
     let mut state = state(&[kick, snare, hat]);
     let pitches: Vec<u32> = ons(&render(&mut state, 0.0, 960.0, &[])).iter().map(|on| on.1).collect();
     assert_eq!(pitches, vec![36, 42]);
-    let mut state = super::tests::state(&[kick, snare, LaneSpec {solo: true, ..hat}]);
+    let mut state = super::tests::state(&[kick, snare, LaneSpec {solo: [true; 8], ..hat}]);
     let pitches: Vec<u32> = ons(&render(&mut state, 0.0, 960.0, &[])).iter().map(|on| on.1).collect();
     assert_eq!(pitches, vec![42]);
+}
+
+#[test]
+fn mute_and_solo_belong_to_their_pattern() {
+    let mut muted = [false; 8];
+    muted[1] = true;
+    let mut soloed = [false; 8];
+    soloed[2] = true;
+    let kick = LaneSpec {note: 36, mute: muted, ..LaneSpec::default()};
+    let hat = LaneSpec {note: 42, solo: soloed, ..LaneSpec::default()};
+    let pitches = |pattern: i32| -> Vec<u32> {
+        let mut state = state(&[kick, hat]);
+        state.active = pattern;
+        state.requested = pattern;
+        state.compose();
+        ons(&render(&mut state, 0.0, 240.0, &[])).iter().map(|on| on.1).collect()
+    };
+    assert_eq!(pitches(0), vec![36, 42]);
+    assert_eq!(pitches(1), vec![42]);
+    assert_eq!(pitches(2), vec![42]);
 }
 
 #[test]

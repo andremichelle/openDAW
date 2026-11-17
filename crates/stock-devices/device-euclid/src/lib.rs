@@ -40,10 +40,13 @@ const LENGTH_MAPPING: LinearInteger = LinearInteger {min: 0, max: 128};
 const RATE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 4};
 const GLOBAL_RATES: [f64; 5] = [0.25, 0.5, 1.0, 2.0, 4.0];
 
-// the lane box: index, note, velocity, chance, gate, mute, solo, then ten rhythm values per pattern from key 10
-const LANE_VALUES: usize = 7;
+// the lane box: index, note, velocity, chance, gate, ten rhythm values per pattern from key 10,
+// then the mute of each pattern from key 90 and the solo of each pattern from key 100
+const LANE_VALUES: usize = 5;
 const RHYTHM_VALUES: usize = 10;
-pub const COLUMNS: usize = LANE_VALUES + PATTERNS * RHYTHM_VALUES;
+const MUTES: usize = LANE_VALUES + PATTERNS * RHYTHM_VALUES;
+const SOLOS: usize = MUTES + PATTERNS;
+pub const COLUMNS: usize = SOLOS + PATTERNS;
 const fn lane_columns() -> [TableColumn; COLUMNS] {
     let mut columns = [TableColumn::value(0); COLUMNS];
     let mut index = 0;
@@ -51,8 +54,16 @@ const fn lane_columns() -> [TableColumn; COLUMNS] {
         columns[index] = TableColumn::value(2 + index as u16);
         index += 1;
     }
-    while index < COLUMNS {
+    while index < MUTES {
         columns[index] = TableColumn::value(10 + (index - LANE_VALUES) as u16);
+        index += 1;
+    }
+    while index < SOLOS {
+        columns[index] = TableColumn::value(90 + (index - MUTES) as u16);
+        index += 1;
+    }
+    while index < COLUMNS {
+        columns[index] = TableColumn::value(100 + (index - SOLOS) as u16);
         index += 1;
     }
     columns
@@ -145,7 +156,7 @@ fn unit_hash(note: u32, step: i64) -> f32 {
 }
 
 impl EuclidState {
-    /// The lanes from the table, in list order, with the steps of the active pattern.
+    /// The lanes from the table, in list order, with the steps, the mute and the solo of the active pattern.
     pub fn compose(&mut self) {
         self.dirty = false;
         let pattern = self.active.clamp(0, PATTERNS as i32 - 1) as usize;
@@ -157,7 +168,7 @@ impl EuclidState {
                 value(rhythm + 5), value(rhythm + 6), value(rhythm + 7));
             self.lanes[row] = Lane {
                 order: value(0), note: value(1).clamp(0, 127) as u32, velocity: self.table.float(row, 2),
-                chance: self.table.float(row, 3), gate: value(4), mute: self.table.bool(row, 5), solo: self.table.bool(row, 6),
+                chance: self.table.float(row, 3), gate: value(4), mute: self.table.bool(row, MUTES + pattern), solo: self.table.bool(row, SOLOS + pattern),
                 rate: value(rhythm + 3), repeats: value(rhythm + 8).clamp(2, 8), fade: self.table.float(row, rhythm + 9),
                 length, steps
             };
