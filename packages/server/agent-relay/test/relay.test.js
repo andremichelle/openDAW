@@ -121,7 +121,7 @@ describe("agent relay", () => {
         assert.equal((await pending).body.result.content[0].text, "The studio disconnected.")
         await wait(50)
         const gone = await call(port, studio.token, "z")
-        assert.match(gone.body.result.content[0].text, /not connected/)
+        assert.match(gone.body.result.content[0].text, /No studio is connected with this token/)
         const list = await rpc(port, studio.token, {jsonrpc: "2.0", id: 2, method: "tools/list"})
         assert.deepEqual(list.body.result.tools, Tools)
     })

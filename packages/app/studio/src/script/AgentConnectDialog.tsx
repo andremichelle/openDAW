@@ -15,11 +15,12 @@ const className = Html.adoptStyleSheet(css, "AgentConnectDialog")
 export namespace AgentConnectDialog {
     const TokenTimeoutMillis = 5000
     const Quiet = Browser.isWindows() ? ">$null 2>&1" : ">/dev/null 2>&1"
-    const LocalCommand =
-        `claude mcp remove -s user opendaw-local ${Quiet}; claude mcp add -s user opendaw-local -- npx -y @opendaw/mcp-relay`
+    const removeEverywhere = (name: string): string =>
+        `claude mcp remove -s local ${name} ${Quiet}; claude mcp remove -s user ${name} ${Quiet};`
+    const LocalCommand = `${removeEverywhere("opendaw-local")} claude mcp add -s user opendaw-local -- npx -y @opendaw/mcp-relay`
 
     const serverCommand = (token: string): string =>
-        `claude mcp remove -s user opendaw ${Quiet}; claude mcp add -s user --transport http opendaw ${AgentConnection.ServerMcpUrl} --header "Authorization: Bearer ${token}"`
+        `${removeEverywhere("opendaw")} claude mcp add -s user --transport http opendaw ${AgentConnection.ServerMcpUrl} --header "Authorization: Bearer ${token}"`
 
     export const show = (connection: AgentConnection): void => {
         const lifecycle = new Terminator()
