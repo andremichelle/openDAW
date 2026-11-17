@@ -1910,6 +1910,13 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
 
 /// Order resolved records for `dispatch_range`: by sample offset, then at an equal offset note-off ->
 /// param-update -> note-on, so a note starting at an update position sees the refreshed parameter.
+fn resolve_and_sort(records: &mut [EventRecord]) {
+    for record in records.iter_mut() {
+        record.offset = pulse_to_offset(record.position);
+    }
+    records.sort_unstable_by(|first, second| first.offset.cmp(&second.offset).then(record_rank(first.kind).cmp(&record_rank(second.kind))));
+}
+
 fn record_rank(kind: u32) -> u8 {
     match kind {
         EVENT_NOTE_OFF | EVENT_CHOKE => 0, // releases first, so a choke at a position precedes any note-on there
@@ -1941,10 +1948,7 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
             count += 1;
             position = next_update_position(position);
         }
-        for record in &mut event_scratch[..count] {
-            record.offset = pulse_to_offset(record.position);
-        }
-        event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+        resolve_and_sort(&mut event_scratch[..count]);
         dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], block);
     }
     I::finish(state, [out_left, out_right]);
@@ -1980,11 +1984,7 @@ fn render_generating<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2
                 apply_param_changes::<I::State>(state, at, I::parameter_changed);
             }
             count += I::generate_events(state, sub_p0, sub_p1, flags, &mut event_scratch[count..]);
-            for record in &mut event_scratch[..count] {
-                record.offset = pulse_to_offset(record.position);
-            }
-            event_scratch[..count].sort_unstable_by(|first, second| first.offset.cmp(&second.offset)
-                .then(record_rank(first.kind).cmp(&record_rank(second.kind))));
+            resolve_and_sort(&mut event_scratch[..count]);
             let sub = Block {index: block.index, flags: audio_flags, p0: sub_p0, p1: sub_p1, anchor: block.anchor,
                 anchor_frame: block.anchor_frame, s0: sub_s0, s1: sub_s1, bpm: block.bpm};
             dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], &sub);

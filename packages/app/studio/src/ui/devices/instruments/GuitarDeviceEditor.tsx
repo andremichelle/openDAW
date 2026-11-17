@@ -48,7 +48,7 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     const page = lifecycle.own(new DefaultObservableValue<int>(0))
     const lane = lifecycle.own(new DefaultObservableValue<int>(0))
     const brush = lifecycle.own(new DefaultObservableValue<int>(GuitarPatterns.Down))
-    const area = ({u, v}: Cell) => `${v + 1} / ${u + 1} / ${v + 3} / ${u + 2}`
+    const area = ({u: column, v: row}: Cell) => `${row + 1} / ${column + 1} / ${row + 3} / ${column + 2}`
     const label = (parameter: AutomatableParameterFieldAdapter) => (
         <ParameterLabel lifecycle={lifecycle} parameter={parameter} classList={["center"]} framed={true}/>
     )

@@ -778,8 +778,8 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::SPEED_VARIATION => settings.speed_variation = float_value(value, &UNIPOLAR),
         param::VELOCITY => settings.velocity = float_value(value, &UNIPOLAR),
         param::VELOCITY_VARIATION => settings.velocity_variation = float_value(value, &UNIPOLAR),
-        param::POSITION => settings.position = int_value(value, &POSITION_MAPPING),
-        param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING),
+        param::POSITION => settings.position = int_value(value, &POSITION_MAPPING).clamp(0, fretting::POSITION_FRETS.len() as i32 - 1),
+        param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING).clamp(0, fretting::TUNINGS.len() as i32 - 1),
         param::BODY => {
             if state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize) {
                 state.pickup = [[0.0; 4]; 2];

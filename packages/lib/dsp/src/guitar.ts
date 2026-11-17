@@ -25,7 +25,7 @@ export namespace Guitar {
 
     type Search = {
         open: ReadonlyArray<int>, low: int, options: ReadonlyArray<ReadonlyArray<int>>,
-        bass: int, required: int, tones: int, tab: Array<int>, best: Array<int>, bestScore: int, found: boolean
+        bass: int, required: int, tones: int, toneCount: int, tab: Array<int>, best: Array<int>, bestScore: int, found: boolean
     }
 
     const evaluate = (search: Search): void => {
@@ -41,9 +41,7 @@ export namespace Guitar {
         }
         for (let string = first; string <= last; string++) {if (tab[string] < 0) {return}}
         const sounding = last - first + 1
-        let toneCount = 0
-        for (let bit = 0; bit < 12; bit++) {if ((search.tones & (1 << bit)) !== 0) {toneCount++}}
-        if (sounding < Math.min(3, toneCount)) {return}
+        if (sounding < Math.min(3, search.toneCount)) {return}
         if (mod12(open[first] + tab[first]) !== search.bass) {return}
         let classes = 0, lowest = Number.MAX_SAFE_INTEGER, highest = Number.MIN_SAFE_INTEGER, opens = 0
         for (let string = first; string <= last; string++) {
@@ -85,18 +83,12 @@ export namespace Guitar {
         }
     }
 
-    const countBits = (bits: int): int => {
-        let count = 0
-        for (let rest = bits; rest !== 0; rest &= rest - 1) {count++}
-        return count
-    }
-
     const walk = (search: Search, string: int, covered: int): void => {
         if (string === Strings) {
             evaluate(search)
             return
         }
-        if (countBits(search.required & ~covered) > Strings - string) {return}
+        if (Harmony.countNotes(search.required & ~covered) > Strings - string) {return}
         for (const option of search.options[string]) {
             search.tab[string] = option
             walk(search, string + 1, option < 0 ? covered : covered | (1 << mod12(search.open[string] + option)))
@@ -119,7 +111,7 @@ export namespace Guitar {
         const order = PositionFrets.map((_, index) => index)
             .sort((left, right) => (Math.abs(left - at) - Math.abs(right - at)) || left - right)
         for (const required of [tones, withoutFifth, (1 << bass) | (1 << rootClass)]) {
-            if (countBits(required) > Strings) {continue}
+            if (Harmony.countNotes(required) > Strings) {continue}
             for (const candidate of order) {
                 const low = PositionFrets[candidate]
                 const options = open.map(pitch => {
@@ -131,7 +123,7 @@ export namespace Guitar {
                     return list
                 })
                 const search: Search = {
-                    open, low, options, bass, required, tones, tab: new Array(Strings).fill(Muted),
+                    open, low, options, bass, required, tones, toneCount: Harmony.countNotes(tones), tab: new Array(Strings).fill(Muted),
                     best: new Array(Strings).fill(Muted), bestScore: 0, found: false
                 }
                 walk(search, 0, 0)
