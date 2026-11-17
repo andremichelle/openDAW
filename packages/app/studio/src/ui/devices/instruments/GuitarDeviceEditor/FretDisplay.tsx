@@ -145,10 +145,11 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     }
     const tuneString = (string: int, note: int, mark: boolean): boolean => {
         const open = adapter.openStrings()
-        if (open[string] === note) {return false}
+        const automated = tuningParameter.getControlledValue() !== tuningParameter.getValue()
+        if (open[string] === note || automated && tuningParameter.getControlledValue() !== Guitar.Custom) {return false}
         editing.modify(() => {
             open.forEach((value, index) => box.notes.getField(index).setValue(index === string ? note : value))
-            if (tuningParameter.getValue() !== Guitar.Custom) {tuningParameter.setValue(Guitar.Custom)}
+            if (!automated && tuningParameter.getValue() !== Guitar.Custom) {tuningParameter.setValue(Guitar.Custom)}
         }, mark)
         return true
     }

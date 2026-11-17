@@ -208,6 +208,13 @@ impl State {
         self.patterns = [Pattern::EMPTY; SLOTS];
         self.slot = 0;
         self.bpm = 120.0;
+        self.now = 0;
+        self.queued = 0;
+        self.pending_count = 0;
+        self.keys = [NO_KEY; STRINGS];
+        self.lit = 0;
+        self.dc = [(0.0, 0.0); 2];
+        self.pickup = [[0.0; 4]; 2];
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
@@ -288,13 +295,13 @@ impl State {
             return;
         }
         let (string, pitch) = ((value & 7) as usize, value >> 3);
-        let open = self.open();
-        if string >= STRINGS || open[string] == fretting::OFF || pitch < open[string] {
+        if string >= STRINGS || !(fretting::LOWEST_NOTE..=fretting::HIGHEST_NOTE + fretting::MAX_FRET).contains(&pitch) {
             return;
         }
+        let open = self.open();
         self.drop_queued(|item| item.string as usize == string);
         self.keys[string] = AUDITION_KEY;
-        self.display[string] = (pitch - open[string]) as i8;
+        self.display[string] = (pitch - open[string]).clamp(0, fretting::MAX_FRET) as i8;
         self.lit |= 1 << string;
         let seed = strum::hash(AUDITION_KEY, string as i64, 5);
         self.enqueue(Scheduled {
@@ -576,6 +583,9 @@ impl State {
         let spread = self.settings.spread;
         let body = &self.body;
         for (index, string) in self.strings.iter_mut().enumerate() {
+            if !string.is_sounding() {
+                continue;
+            }
             let length = left.len();
             mono[..length].fill(0.0);
             if !string.render(&mut mono[..length], body) {
@@ -639,7 +649,8 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &
         let step = index.rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
         let kind = pattern.kinds[step];
-        if kind == strum::REST || kind != strum::STOP && pattern.velocities[step] <= 0.0 {
+        let silent = kind != strum::STOP && pattern.velocities[step] <= 0.0 || kind == strum::PICK && pattern.masks[step] == 0;
+        if kind == strum::REST || silent {
             continue;
         }
         let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);

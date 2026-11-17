@@ -582,6 +582,17 @@ fn an_auditioned_string_plays_exactly_that_string_until_it_is_let_go() {
 }
 
 #[test]
+fn a_pick_step_without_strings_is_silent_like_a_rest() {
+    let mut state = state();
+    pattern(&mut state, &[strum::DOWN, strum::PICK]);
+    let mut strings = [0b111111i32; 64];
+    strings[1] = 0;
+    state.set_lane(0, 1, &strings);
+    let kinds: Vec<u32> = strokes(&mut state, 0.0, 480.0).iter().map(|event| event.pitch).collect();
+    assert_eq!(kinds, vec![strum::DOWN as u32]);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
