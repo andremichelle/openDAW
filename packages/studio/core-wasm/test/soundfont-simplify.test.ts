@@ -3,7 +3,7 @@
 // conversion, sustain 1−x/1000, root-key override with sample fallback, loop mode from sampleModes, pan ÷1000.
 // It decodes the produced blob (the same layout blob.rs reads) and asserts the flattened region + sample.
 import {describe, expect, it} from "vitest"
-import type {SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "@opendaw/studio-adapters"
 import {simplifySoundfont} from "../src/soundfont-simplify"
 
 const gen = (value: number) => ({value})
@@ -11,7 +11,7 @@ const range = (lo: number, hi: number) => ({range: {lo, hi}})
 
 // A synthetic parsed-SF2 shape (only the fields the walker reads). One preset zone (key 36..72, pan 250) whose
 // instrument zone (key 48..84) sets attack/sustain/sampleModes/rootKey and OVERRIDES pan.
-const syntheticSoundfont = (): SoundFont2 => {
+const syntheticSoundfont = (): SoundfontBank.Bank => {
     const sample = {
         data: Int16Array.from([0, 16384, -16384, 32767, -32768, 0, 100, 200]),
         header: {sampleRate: 44100, startLoop: 10, endLoop: 90, originalPitch: 48}
@@ -36,7 +36,7 @@ const syntheticSoundfont = (): SoundFont2 => {
                 }
             }]
         }]
-    } as unknown as SoundFont2
+    } as unknown as SoundfontBank.Bank
 }
 
 // Minimal decoder over the blob (mirrors blob.rs offsets).

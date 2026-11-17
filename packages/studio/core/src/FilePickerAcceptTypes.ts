@@ -8,7 +8,7 @@ export namespace FilePickerAcceptTypes {
     export const SoundfontFiles: FilePickerOptions = {
         types: [{
             description: "soundfont-file",
-            accept: {"audio/x-soundfont": [".sf2"]}
+            accept: {"audio/x-soundfont": [".sf2", ".sf3", ".dls"]}
         }]
     }
     export const WclapFiles: FilePickerOptions = {

@@ -3,11 +3,11 @@
 // this flattens it into a compact, directly-indexable structure so the wasm never parses SF2/RIFF.
 //
 // `encodeSoundfont` serializes a plain description (samples + per-preset regions) into the blob. `simplify-
-// Soundfont` walks a parsed `SoundFont2` into that description, resolving every SF2 generator EXACTLY as the TS
+// Soundfont` walks a parsed `SoundfontBank.Bank` into that description, resolving every SF2 generator EXACTLY as the TS
 // `SoundfontVoice` does: preset-zone × instrument-zone flattening, instrument-overrides-preset precedence,
 // timecent→seconds envelope conversion, sustain 1−x/1000, root-key/loop/pan resolution.
 
-import type {SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "@opendaw/studio-adapters"
 
 // SF2 generator IDs (spec-fixed), the only ones the TS `SoundfontVoice` honors. Inlined to avoid a brittle
 // cross-package deep import; they are a frozen contract.
@@ -126,7 +126,7 @@ const summed = (preset: Zone, inst: Zone, type: number): number => (numeric(inst
 const timecentsToSeconds = (value: number | undefined): number => value !== undefined ? Math.pow(2.0, value / 1200.0) : 0.005
 const rangeOf = (zone: Zone, type: number): {lo: number, hi: number} => zone.generators[type]?.range ?? {lo: 0, hi: 127}
 
-export const simplifySoundfont = (soundfont: SoundFont2): ArrayBuffer => {
+export const simplifySoundfont = (soundfont: SoundfontBank.Bank): ArrayBuffer => {
     const samples: SimpleSample[] = []
     const sampleIndexByRef = new Map<object, number>()
     const internSample = (sample: {data: Int16Array, header: {sampleRate: number, startLoop: number, endLoop: number}}): number => {

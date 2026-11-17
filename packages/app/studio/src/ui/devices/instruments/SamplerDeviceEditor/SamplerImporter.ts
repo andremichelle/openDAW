@@ -13,7 +13,7 @@ export namespace SamplerImporter {
     const Folder = "Multi Samples"
     const Accept: OpenFilePickerOptions = {
         multiple: true,
-        types: [{description: "Soundfont, or SFZ with its samples", accept: {"application/octet-stream": [".sf2", ".sfz", ".wav"]}}]
+        types: [{description: "Soundfont, or SFZ with its samples", accept: {"application/octet-stream": [".sf2", ".sf3", ".dls", ".sfz", ".wav"]}}]
     }
     type Source = { readonly name: string, readonly read: () => Promise<ArrayBuffer> }
 
@@ -26,7 +26,7 @@ export namespace SamplerImporter {
         const {project} = service
         const {status, value: files} = await Promises.tryCatch(Files.open(Accept))
         if (status === "rejected") {return}
-        const soundfont = files.find(file => hasExtension(file, ".sf2"))
+        const soundfont = files.find(file => [".sf2", ".sf3", ".dls"].some(extension => hasExtension(file, extension)))
         const sfz = files.find(file => hasExtension(file, ".sfz"))
         if (isDefined(soundfont)) {
             await importSoundfont(service, project, adapter, soundfont)
@@ -35,19 +35,19 @@ export namespace SamplerImporter {
         } else {
             await RuntimeNotifier.info({
                 headline: "Nothing to Import",
-                message: "Choose a soundfont (.sf2), or an SFZ file together with the samples it names."
+                message: "Choose a soundfont (.sf2, .sf3, .dls), or an SFZ file together with the samples it names."
             })
         }
     }
 
     const importSoundfont = async (service: StudioService, project: Project, adapter: SamplerDeviceBoxAdapter,
                                    file: File): Promise<void> => {
-        const library = await ExternalLib.SoundFont2()
+        const library = await ExternalLib.Soundfont()
         if (library.status === "rejected") {
             await RuntimeNotifier.info({headline: "Import Failed", message: "The soundfont reader could not be loaded."})
             return
         }
-        const parsed = await Promises.tryCatch(file.arrayBuffer().then(buffer => new library.value(new Uint8Array(buffer))))
+        const parsed = await Promises.tryCatch(file.arrayBuffer().then(buffer => library.value(buffer)))
         if (parsed.status === "rejected") {
             await RuntimeNotifier.info({headline: "Import Failed", message: `'${file.name}' is not a soundfont that can be read.`})
             return

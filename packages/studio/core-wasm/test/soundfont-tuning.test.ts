@@ -2,7 +2,7 @@
 // correction), so a soundfont that tunes its samples that way played out of tune.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import type {SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "@opendaw/studio-adapters"
 import {AudioUnitBox, CaptureMidiBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, SoundfontDeviceBox, SoundfontFileBox, TrackBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -12,11 +12,11 @@ import {encodeSoundfont, simplifySoundfont, SimpleRegion} from "../src/soundfont
 type Generators = Record<number, { value: number }>
 const CoarseTune = 51, FineTune = 52, RootKey = 58
 
-const soundfontOf = (instrument: Generators, preset: Generators = {}, pitchCorrection?: number): SoundFont2 => {
+const soundfontOf = (instrument: Generators, preset: Generators = {}, pitchCorrection?: number): SoundfontBank.Bank => {
     const sample = {data: Int16Array.from([0, 100, 200, 300]), header: {sampleRate: 44100, startLoop: 0, endLoop: 4, originalPitch: 60, pitchCorrection}}
-    return {samples: [sample], presets: [{zones: [{generators: preset, instrument: {zones: [{generators: instrument, sample}]}}]}]} as unknown as SoundFont2
+    return {samples: [sample], presets: [{zones: [{generators: preset, instrument: {zones: [{generators: instrument, sample}]}}]}]} as unknown as SoundfontBank.Bank
 }
-const tuneOf = (soundfont: SoundFont2): number => {
+const tuneOf = (soundfont: SoundfontBank.Bank): number => {
     const view = new DataView(simplifySoundfont(soundfont))
     return view.getFloat32(view.getUint32(24, true) + 36, true)
 }

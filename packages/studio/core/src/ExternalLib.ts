@@ -1,5 +1,6 @@
 import {Promises} from "@opendaw/lib-runtime"
 import {int} from "@opendaw/lib-std"
+import {SoundfontBank} from "@opendaw/studio-adapters"
 
 export namespace ExternalLib {
     const callback = (error: unknown, count: int) => {
@@ -10,6 +11,10 @@ export namespace ExternalLib {
     export const JSZip = async () => await Promises.tryCatch(Promises.guardedRetry(() =>
         import("jszip").then(({default: JSZip}) => JSZip), callback))
 
-    export const SoundFont2 = async () => await Promises.tryCatch(Promises.guardedRetry(() =>
-        import("soundfont2").then(({SoundFont2}) => SoundFont2), callback))
+    export type SoundfontReader = (bytes: ArrayBuffer) => SoundfontBank.Bank
+
+    // reads SF2, SF3 and DLS
+    export const Soundfont = async () => await Promises.tryCatch(Promises.guardedRetry(() =>
+        import("spessasynth_core").then(({SoundBankLoader}): SoundfontReader =>
+            bytes => SoundfontBank.from(SoundBankLoader.fromArrayBuffer(bytes), bytes)), callback))
 }

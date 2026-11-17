@@ -38,6 +38,7 @@ import {
     OfflineEngineRenderConfig,
     ProjectSkeleton,
     SignalGraph,
+    SoundfontBank,
     TransportAnchor,
     WclapBundle,
     WclapGuiInfo,
@@ -49,7 +50,6 @@ import {
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
-import type {SoundFont2} from "soundfont2"
 import {EngineExports, settleCompensation, takeNotices, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
@@ -159,7 +159,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                     fetchSample(uuid: UUID.Bytes): Promise<PcmData> {return dispatcher.dispatchAndReturn(this.fetchSample, uuid)}
-                    fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
+                    fetchSoundfont(uuid: UUID.Bytes): Promise<SoundfontBank.Bank> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
                     fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
                     wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}

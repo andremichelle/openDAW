@@ -1,7 +1,8 @@
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
 import {AudioFileBox, AudioUnitBox, SamplerDeviceBox} from "@opendaw/studio-boxes"
-import {SoundFont2} from "soundfont2"
+import {SoundBankLoader} from "spessasynth_core"
+import {SoundfontBank} from "../../../soundfont/SoundfontBank"
 import {ProjectSkeleton} from "../../../project/ProjectSkeleton"
 import {SamplerImport} from "./SamplerImport"
 import {SamplerSoundfont} from "./SamplerSoundfont"
@@ -15,14 +16,15 @@ const zone = (overrides: Partial<SamplerImport.Zone> = {}): SamplerImport.Zone =
 })
 const ramp = (length: number, offset: number = 0): Int16Array => Int16Array.from({length}, (_, index) => index + offset)
 const group: SamplerImport.Group = {label: "Group 1", roundRobin: 0, choke: 0, trigger: 0}
+const read = (buffer: ArrayBuffer): SoundfontBank.Bank => SoundfontBank.from(SoundBankLoader.fromArrayBuffer(buffer), buffer)
 const roundTrip = (instrument: SamplerImport.Instrument, samples: ReadonlyArray<SamplerImport.Sample>) =>
-    SamplerSoundfont.convert(new SoundFont2(new Uint8Array(SamplerSoundfontExport.encode(instrument, samples))), 0)
+    SamplerSoundfont.convert(read(SamplerSoundfontExport.encode(instrument, samples)), 0)
 
 describe("SamplerSoundfontExport.encode", () => {
     it("writes a soundfont the reader accepts, with one preset named after the instrument", () => {
-        const soundfont = new SoundFont2(new Uint8Array(SamplerSoundfontExport.encode(
+        const soundfont = read(SamplerSoundfontExport.encode(
             {name: "Upright", groups: [group], zones: [zone()], envelope: undefined, filter: undefined},
-            [{name: "C4", sampleRate: 48000, channels: [ramp(500)]}])))
+            [{name: "C4", sampleRate: 48000, channels: [ramp(500)]}]))
         expect(soundfont.presets).toHaveLength(1)
         expect(soundfont.presets[0].header.name).toBe("Upright")
         expect(SamplerSoundfont.presetNames(soundfont)).toEqual(["000:000 Upright"])

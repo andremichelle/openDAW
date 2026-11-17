@@ -18,7 +18,7 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {SoundfontLoader} from "../../soundfont/SoundfontLoader"
-import type {Preset, SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "../../soundfont/SoundfontBank"
 
 export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
@@ -34,8 +34,8 @@ export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly namedParameter // let typescript infer the type
 
     readonly #loader: MutableObservableOption<SoundfontLoader>
-    readonly #soundfont: MutableObservableOption<SoundFont2>
-    readonly #preset: MutableObservableOption<Preset>
+    readonly #soundfont: MutableObservableOption<SoundfontBank.Bank>
+    readonly #preset: MutableObservableOption<SoundfontBank.Preset>
 
     #loaderSubscription: Subscription = Terminable.Empty
 
@@ -46,8 +46,8 @@ export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.namedParameter = this.#wrapParameters(box)
 
         this.#loader = new MutableObservableOption<SoundfontLoader>()
-        this.#soundfont = new MutableObservableOption<SoundFont2>()
-        this.#preset = new MutableObservableOption<Preset>()
+        this.#soundfont = new MutableObservableOption<SoundfontBank.Bank>()
+        this.#preset = new MutableObservableOption<SoundfontBank.Preset>()
 
         this.#terminator.ownAll(
             this.#loader.subscribe(this.#loaderObserver),
@@ -61,8 +61,8 @@ export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         )
     }
     get loader(): ObservableOption<SoundfontLoader> {return this.#loader}
-    get soundfont(): ObservableOption<SoundFont2> {return this.#soundfont}
-    get preset(): ObservableOption<Preset> {return this.#preset}
+    get soundfont(): ObservableOption<SoundfontBank.Bank> {return this.#soundfont}
+    get preset(): ObservableOption<SoundfontBank.Preset> {return this.#preset}
     get presetIndex(): int {return this.#box.presetIndex.getValue()}
     get box(): SoundfontDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}

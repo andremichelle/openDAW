@@ -46,6 +46,7 @@
     "@opendaw/studio-boxes": "^0.0.123-beta.0",
     "@opendaw/studio-enums": "^0.1.14-beta.0",
     "dropbox": "^10.34.0",
+    "spessasynth_core": "4.4.10",
     "y-websocket": "^1.4.5",
     "yjs": "^13.6.27",
     "zod": "^4.1.12"

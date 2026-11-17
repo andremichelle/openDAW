@@ -3,12 +3,11 @@ import {int, Lifecycle, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {DeviceHost, InstrumentFactories, Soundfont, SoundfontDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceHost, InstrumentFactories, Soundfont, SoundfontBank, SoundfontDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@opendaw/studio-core"
-import type {Preset} from "soundfont2"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {Icon} from "@/ui/components/Icon"
 import {FlexSpacer} from "@/ui/components/FlexSpacer"
@@ -143,7 +142,7 @@ export const SoundfontDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                   <MenuButton
                                       root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                                           ...adapter.soundfont.mapOr(sf => sf.presets
-                                                  .map((preset: Preset, index: int) => MenuItem.default({
+                                                  .map((preset: SoundfontBank.Preset, index: int) => MenuItem.default({
                                                       label: `#${index + 1} ${preset.header.name}`,
                                                       checked: adapter.presetIndex === index
                                                   }).setTriggerProcedure(() =>

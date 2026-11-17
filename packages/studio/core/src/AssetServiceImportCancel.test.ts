@@ -39,12 +39,11 @@ vi.spyOn(SoundfontStorage, "get").mockReturnValue({
 } as unknown as SoundfontStorage)
 vi.spyOn(Wait, "frame").mockResolvedValue(undefined)
 let parsed = 0
-class FakeSoundFont2 {
-    readonly metaData = {name: "Fake", copyright: undefined}
-    constructor() {parsed++}
+const fakeReader: ExternalLib.SoundfontReader = () => {
+    parsed++
+    return {metaData: {name: "Fake", copyright: undefined}, presets: [], samples: []}
 }
-vi.spyOn(ExternalLib, "SoundFont2").mockImplementation(async () =>
-    ({status: "resolved", value: FakeSoundFont2}) as unknown as Awaited<ReturnType<typeof ExternalLib.SoundFont2>>)
+vi.spyOn(ExternalLib, "Soundfont").mockImplementation(async () => ({status: "resolved", value: fakeReader, error: undefined}))
 
 const Threshold = 1 << 24
 

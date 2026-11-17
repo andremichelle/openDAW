@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
 import {AudioFileBox, AudioUnitBox, SamplerDeviceBox, SamplerGroupBox, SamplerZoneBox} from "@opendaw/studio-boxes"
-import type {SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "../../../soundfont/SoundfontBank"
 import {ProjectSkeleton} from "../../../project/ProjectSkeleton"
 import {SamplerImport} from "./SamplerImport"
 import {SamplerSfz} from "./SamplerSfz"
@@ -136,10 +136,10 @@ const generators = (values: Record<number, number>, ranges: Record<number, [numb
         ...Object.fromEntries(Object.entries(ranges).map(([type, [lo, hi]]) => [type, {range: {lo, hi}}]))
     }
 })
-const soundfont = (samples: ReadonlyArray<FakeSample>, instrumentZones: ReadonlyArray<object>, presetZone: object = generators({})): SoundFont2 => ({
+const soundfont = (samples: ReadonlyArray<FakeSample>, instrumentZones: ReadonlyArray<object>, presetZone: object = generators({})): SoundfontBank.Bank => ({
     samples,
     presets: [{header: {name: " Piano ", bank: 0, preset: 3}, zones: [{...presetZone, instrument: {zones: instrumentZones}}]}]
-}) as unknown as SoundFont2
+}) as unknown as SoundfontBank.Bank
 
 describe("SamplerImport.apply on a device that already uses the samples", () => {
     it("keeps a file the old and the new zones share", () => {

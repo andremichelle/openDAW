@@ -44,6 +44,7 @@ import {
     ProcessorOptions,
     SampleLoader,
     SignalGraph,
+    SoundfontBank,
     TransportAnchor,
     WclapBundle,
     WclapParamGesture,
@@ -65,7 +66,6 @@ import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
 import {HRClockWorker} from "./HRClockWorker"
 import {WclapBundles, WclapFailures, WclapGuis, WclapParameters, WclapStates} from "./wclap"
-import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
     static ID: int = 0 | 0
@@ -267,7 +267,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     fetchSample(uuid, loader => SampleLoader.frames(loader)),
                 fetchSample: (uuid: UUID.Bytes): Promise<PcmData> =>
                     fetchSample(uuid, loader => SampleLoader.stored(loader)),
-                fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundFont2> => {
+                fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundfontBank.Bank> => {
                     return new Promise((resolve, reject) => {
                         const handler = project.soundfontManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {

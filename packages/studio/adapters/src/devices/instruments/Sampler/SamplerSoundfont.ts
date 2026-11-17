@@ -1,5 +1,5 @@
 import {clamp, int, isDefined, Optional} from "@opendaw/lib-std"
-import type {Sample as SoundfontSample, SoundFont2} from "soundfont2"
+import type {SoundfontBank} from "../../../soundfont/SoundfontBank"
 import {SamplerImport} from "./SamplerImport"
 
 // One preset of a soundfont as a Sampler instrument. Envelopes and the filter are per zone in a soundfont and
@@ -21,14 +21,14 @@ export namespace SamplerSoundfont {
     // real instruments are far quieter with the attenuation taken at face value, players scale it like this
     const AttenuationScale = 0.04
 
-    export const presetNames = (soundfont: SoundFont2): ReadonlyArray<string> =>
+    export const presetNames = (soundfont: SoundfontBank.Bank): ReadonlyArray<string> =>
         soundfont.presets.map(({header: {name, bank, preset}}) => `${String(bank).padStart(3, "0")}:${String(preset).padStart(3, "0")} ${name}`)
 
     const valueOf = (generators: Generators, type: int): Optional<number> => generators[type]?.value
     const rangeOf = (generators: Generators, type: int): { lo: number, hi: number } => generators[type]?.range ?? {lo: 0, hi: 127}
     const seconds = (timecents: number): number => timecents <= TimecentsOff ? 0.0 : Math.pow(2.0, timecents / 1200.0)
 
-    export const convert = (soundfont: SoundFont2, presetIndex: int): Result => {
+    export const convert = (soundfont: SoundfontBank.Bank, presetIndex: int): Result => {
         const preset = soundfont.presets[presetIndex]
         const samples: Array<SamplerImport.Sample> = []
         const sampleIndices = new Map<string, int>()
@@ -66,7 +66,7 @@ export namespace SamplerSoundfont {
                 const keyLow = Math.max(keys.lo, presetKeys.lo), keyHigh = Math.min(keys.hi, presetKeys.hi)
                 const velocityLow = Math.max(velocities.lo, presetVelocities.lo, 1)
                 const velocityHigh = Math.min(velocities.hi, presetVelocities.hi)
-                const sample: Optional<SoundfontSample> = zone.sample
+                const sample: Optional<SoundfontBank.Sample> = zone.sample
                 if (keyLow > keyHigh || velocityLow > velocityHigh || !isDefined(sample) || sample.data.length === 0) {return}
                 const {header} = sample
                 // the other side of a stereo pair is a zone of its own on the same keys and velocities

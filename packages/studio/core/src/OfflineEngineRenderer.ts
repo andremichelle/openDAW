@@ -29,14 +29,13 @@ import {
     OfflineEngineProtocol,
     OfflineEngineRenderConfig,
     SampleLoader
-, ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
+, ScriptCompiler, SignalGraph, SoundfontBank, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
 import {MixdownSection} from "./MixdownSection"
 import {RenderQuantum} from "./RenderQuantum"
-import type {SoundFont2} from "soundfont2"
 
 // The engine worker every offline render runs in: the wasm engine, installed by `WasmEngine.install`.
 // studio-core cannot import studio-core-wasm (that package depends on THIS one), so the url + artifact
@@ -96,7 +95,7 @@ export class OfflineEngineRenderer {
             ready: (): void => {},
             fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => SampleLoader.frames(source.sampleManager.getOrCreate(uuid)),
             fetchSample: (uuid: UUID.Bytes): Promise<PcmData> => SampleLoader.stored(source.sampleManager.getOrCreate(uuid)),
-            fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundFont2> => new Promise((resolve, reject) => {
+            fetchSoundfont: (uuid: UUID.Bytes): Promise<SoundfontBank.Bank> => new Promise((resolve, reject) => {
                 const handler = source.soundfontManager.getOrCreate(uuid)
                 const subscription = handler.subscribe(state => {
                     if (state.type === "error") {
