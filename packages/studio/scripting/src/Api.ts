@@ -956,6 +956,8 @@ export interface AudioEffectCompositeEntry extends AudioEffectHost {
     mute: boolean
     /** Solo the entry */
     solo: boolean
+    /** Send audio into the entry, its output stays on (default true, only honoured by {@link AudioEffectCompositeEffect}) */
+    send: boolean
     /** Pan (-1.0 to 1.0, default 0.0) */
     pan: bipolar
     /** Remove the entry (only possible on {@link AudioEffectCompositeEffect}) */
@@ -976,7 +978,7 @@ export interface AudioEffectCompositeEffect extends AudioEffect {
     /** All entries ordered by index */
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
     /** Add a parallel entry */
-    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
+    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "send" | "pan">>): AudioEffectCompositeEntry
 }
 
 /**

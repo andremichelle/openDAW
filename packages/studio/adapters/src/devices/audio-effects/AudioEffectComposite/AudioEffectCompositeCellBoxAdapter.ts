@@ -113,7 +113,8 @@ export class AudioEffectCompositeCellBoxAdapter implements CompositeCell, Indexe
                 StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Gain"),
             pan: this.#parametric.createParameter(box.pan, ValueMapping.bipolar(), StringMapping.panning, "Pan", 0.5),
             mute: this.#parametric.createParameter(box.mute, ValueMapping.bool, StringMapping.bool, "Mute"),
-            solo: this.#parametric.createParameter(box.solo, ValueMapping.bool, StringMapping.bool, "Solo")
+            solo: this.#parametric.createParameter(box.solo, ValueMapping.bool, StringMapping.bool, "Solo"),
+            send: this.#parametric.createParameter(box.send, ValueMapping.bool, StringMapping.bool, "Send")
         } as const
     }
 }

@@ -179,6 +179,7 @@ pub(crate) struct EffectCompositeSpec {
     pub(crate) pan_key: u16,                 // the entry's pan (bipolar); 0 = none (its strip stays centred)
     pub(crate) mute_key: u16,                // the entry's mute (automatable; an entry has no `enabled`)
     pub(crate) solo_key: u16,                // the entry's solo (resolved across siblings, like the mixer's)
+    pub(crate) send_key: u16,                // the entry's send: gates the entry's INPUT; 0 = none (always open)
     pub(crate) dry_key: u16,                 // the composite's dry gain (dB); 0 for a midi composite
     pub(crate) wet_key: u16,                 // the composite's wet gain (dB); 0 for a midi composite
     pub(crate) input_tap_field: u16,         // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
@@ -1915,10 +1916,10 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per facet, matching the loader
     fn register_effect_composite(&mut self, box_type: String, kind: u8, distributor: Distributor, entries_field: u16,
                                  index_key: u16, chain_field: u16, label_key: u16, gain_key: u16, pan_key: u16,
-                                 mute_key: u16, solo_key: u16, dry_key: u16, wet_key: u16, input_tap_field: u16,
-                                 crossover_keys: [u16; 3]) {
+                                 mute_key: u16, solo_key: u16, send_key: u16, dry_key: u16, wet_key: u16,
+                                 input_tap_field: u16, crossover_keys: [u16; 3]) {
         self.effect_composites.push(EffectCompositeSpec {box_type, kind, distributor, entries_field, index_key,
-            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, dry_key, wet_key, input_tap_field,
+            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, send_key, dry_key, wet_key, input_tap_field,
             crossover_keys});
     }
 
@@ -3952,8 +3953,8 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distributor: u32, entries_field: u32,
                                             index_key: u32, chain_field: u32, label_key: u32, gain_key: u32,
-                                            pan_key: u32, mute_key: u32, solo_key: u32, dry_key: u32, wet_key: u32,
-                                            input_tap_field: u32, crossover1_key: u32, crossover2_key: u32,
+                                            pan_key: u32, mute_key: u32, solo_key: u32, send_key: u32, dry_key: u32,
+                                            wet_key: u32, input_tap_field: u32, crossover1_key: u32, crossover2_key: u32,
                                             crossover3_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
@@ -3964,7 +3965,7 @@ pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distribu
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_effect_composite(String::from(name), kind as u8, Distributor::from_u32(distributor),
                 entries_field as u16, index_key as u16, chain_field as u16, label_key as u16, gain_key as u16,
-                pan_key as u16, mute_key as u16, solo_key as u16, dry_key as u16, wet_key as u16,
+                pan_key as u16, mute_key as u16, solo_key as u16, send_key as u16, dry_key as u16, wet_key as u16,
                 input_tap_field as u16,
                 [crossover1_key as u16, crossover2_key as u16, crossover3_key as u16]);
         }

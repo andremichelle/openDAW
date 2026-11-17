@@ -3,7 +3,7 @@ import {Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioEffectCompositeBoxAdapter, AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
 import {EffectFactories} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
@@ -42,7 +42,8 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
             {indexLabel}
             {iconsElement}
             <EntryPeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver} address={entry.address}/>
-            <CompositeCellStrip lifecycle={lifecycle} project={project} cell={entry} noun="entry"/>
+            <CompositeCellStrip lifecycle={lifecycle} project={project} cell={entry} noun="entry"
+                                send={composite instanceof AudioEffectCompositeBoxAdapter ? entry.namedParameter.send : undefined}/>
             {remove}
         </div>
     )

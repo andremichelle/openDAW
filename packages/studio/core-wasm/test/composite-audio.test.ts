@@ -3,7 +3,7 @@
 // entry mute, the stereo split, per-entry pan). An Apparat sine (equal L/R) drives every case.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoCompositeBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, ReverbDeviceBox, StereoCompositeBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
 import type {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Box, BoxGraph} from "@opendaw/lib-box"
 import {buildEffectProject, renderEffect, renderEffectToggling, peakOf, allFinite} from "./helpers/effect-harness"
@@ -135,6 +135,57 @@ describe("AudioComposite (audible)", () => {
         const out = await renderEffectToggling(source, () => entry.mute.setValue(true), {quanta: 48, toggleAt: 24})
         expect(peakOf(settled(out, 4, 20))).toBeGreaterThan(0.1)   // audible before the toggle
         expect(peakOf(settled(out, 40, 48))).toBeLessThan(1e-3)    // silent after it
+    }, 30000)
+
+    it("an entry's SEND defaults on and the entry sounds", async () => {
+        const {source} = buildOneEntry()
+        const out = await renderEffect(source)
+        expect(peakOf(out)).toBeGreaterThan(0.1)
+    }, 30000)
+
+    it("closing an entry's SEND after load silences its input", async () => {
+        const {source, entry} = buildOneEntry()
+        expect(entry.send.getValue()).toBe(true)
+        const out = await renderEffectToggling(source, () => entry.send.setValue(false), {quanta: 48, toggleAt: 24})
+        expect(peakOf(settled(out, 4, 20))).toBeGreaterThan(0.1)   // audible before
+        expect(peakOf(settled(out, 40, 48))).toBeLessThan(1e-3)    // the entry receives silence after
+    }, 30000)
+
+    // A long reverb in the entry (dry off, so only its tail can sound once the input is gone): closing SEND keeps
+    // the tail ringing, MUTE cuts the entry's output.
+    const reverbEntry = (): {source: BoxGraph, entry: AudioEffectCompositeCellBox} => {
+        let cell: AudioEffectCompositeCellBox | undefined
+        const source = buildEffectProject(0.3, (src: BoxGraph, unit: AudioUnitBox): Box => {
+            const composite = AudioEffectCompositeBox.create(src, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+            })
+            const entry = AudioEffectCompositeCellBox.create(src, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            cell = entry
+            ReverbDeviceBox.create(src, UUID.generate(), box => {
+                box.host.refer(entry.audioEffects)
+                box.index.setValue(0)
+                box.decay.setValue(0.95)
+                box.dry.setValue(Number.NEGATIVE_INFINITY)
+                box.wet.setValue(0.0)
+            })
+            return composite
+        })
+        if (cell === undefined) {throw new Error("entry not built")}
+        return {source, entry: cell}
+    }
+
+    it("closing SEND lets the entry's reverb tail ring out, MUTE cuts it", async () => {
+        const sendClosed = reverbEntry()
+        const tail = await renderEffectToggling(sendClosed.source, () => sendClosed.entry.send.setValue(false), {quanta: 48, toggleAt: 24})
+        const muted = reverbEntry()
+        const cut = await renderEffectToggling(muted.source, () => muted.entry.mute.setValue(true), {quanta: 48, toggleAt: 24})
+        expect(peakOf(settled(tail, 4, 20))).toBeGreaterThan(0.01)  // the reverb sounds before
+        expect(peakOf(settled(tail, 40, 48))).toBeGreaterThan(1e-3) // its tail still rings after send closed
+        expect(peakOf(settled(cut, 40, 48))).toBeLessThan(1e-4)     // mute silences the output
     }, 30000)
 
     it("toggling an entry's PAN hard right after load moves it off the left", async () => {

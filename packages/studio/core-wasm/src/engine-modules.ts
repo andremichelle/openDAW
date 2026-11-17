@@ -42,6 +42,7 @@ export type EffectCompositeSpec = {
     panKey: number          // the entry's pan (bipolar); 0 = none
     muteKey: number         // the entry's mute (automatable; an entry has no `enabled`)
     soloKey: number         // the entry's solo (resolved across siblings)
+    sendKey: number         // the entry's send, gates its INPUT; 0 = none (always open)
     dryKey: number          // the composite's dry gain (dB); 0 for a midi composite
     wetKey: number          // the composite's wet gain (dB); 0 for a midi composite
     inputTapField: number   // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
@@ -152,7 +153,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
         boxType: "AudioEffectCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Broadcast,
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
-        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, sendKey: 44, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
     // The stereo SPLIT: same shape and same entry box, but entry 0 gets left and entry 1 gets right.
@@ -160,7 +161,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
         boxType: "StereoCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Stereo,
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
-        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, sendKey: 0, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
     // The frequency SPLIT: the input is separated into bands (one per entry, low to high) by the Frequency
@@ -169,7 +170,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
         boxType: "FrequencySplitBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Frequency,
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
-        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, sendKey: 0, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [14, 15, 16]
     }
 ]

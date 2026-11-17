@@ -28,7 +28,9 @@ export const AudioEffectCompositeCellBox: BoxSchema<Pointers> = {
             41: {type: "boolean", name: "mute", pointerRules: ParameterPointerRules},
             42: {type: "boolean", name: "solo", pointerRules: ParameterPointerRules},
             // The entry's pan, applied by its ChannelStrip (the branch has its own strip). Bipolar, centre 0.
-            43: {type: "float32", name: "pan", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""}
+            43: {type: "float32", name: "pan", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""},
+            // Gates the entry's INPUT (its output stays on). Only the FX Composite shows and honours it.
+            44: {type: "boolean", name: "send", pointerRules: ParameterPointerRules, value: true}
         }
     },
     pointerRules: {accepts: [Pointers.Editing, Pointers.Selection], mandatory: false}

@@ -1,7 +1,7 @@
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {CompositeCell} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter, CompositeCell} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -12,15 +12,17 @@ import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {CompositeRows} from "@/ui/devices/CompositeRows"
 import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
+import {SendButton} from "@/ui/devices/SendButton"
 
 type Construct = {
     lifecycle: Lifecycle
     project: Project
     cell: CompositeCell
     noun: string
+    send?: AutomatableParameterFieldAdapter<boolean>
 }
 
-export const CompositeCellStrip = ({lifecycle, project, cell, noun}: Construct) => {
+export const CompositeCellStrip = ({lifecycle, project, cell, noun, send}: Construct) => {
     const {editing, midiLearning} = project
     const {gain, pan, mute} = cell.namedParameter
     const tracks = cell.audioUnitBoxAdapter().tracks
@@ -46,6 +48,12 @@ export const CompositeCellStrip = ({lifecycle, project, cell, noun}: Construct) 
                 </AutomationControl>
             </div>
             <div className="channel-isolation">
+                {isDefined(send) ? (
+                    <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                       tracks={tracks} parameter={send}>
+                        <SendButton lifecycle={lifecycle} editing={editing} parameter={send}/>
+                    </AutomationControl>
+                ) : null}
                 <Checkbox lifecycle={lifecycle} model={muteValue}
                           appearance={{activeColor: Colors.orange, framed: true, tooltip: `Mute ${noun}`}}>
                     <Icon symbol={IconSymbol.Mute}/>

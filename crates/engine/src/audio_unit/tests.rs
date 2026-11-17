@@ -3525,7 +3525,7 @@ fn engine_with_composite() -> Engine {
     let mut engine = engine_with_devices();
     engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
         crate::Distributor::Broadcast, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
-        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, 0, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
         [0, 0, 0]);
     engine
 }
@@ -3732,7 +3732,11 @@ fn entry_box_gain(uuid: Uuid, index: i32, label: &str, gain_db: f32) -> GraphBox
 }
 
 fn fx_render_graph(gain_a_db: f32, gain_b_db: f32) -> BoxGraph {
-    BoxGraph::from_boxes(vec![
+    BoxGraph::from_boxes(fx_render_boxes(gain_a_db, gain_b_db))
+}
+
+fn fx_render_boxes(gain_a_db: f32, gain_b_db: f32) -> Vec<GraphBox> {
+    vec![
         graph_box(UNIT, "AudioUnitBox", &[
             (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
             (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
@@ -3751,7 +3755,7 @@ fn fx_render_graph(gain_a_db: f32, gain_b_db: f32) -> BoxGraph {
         ]),
         entry_box_gain(ENTRY_A, 0, "A", gain_a_db),
         entry_box_gain(ENTRY_B, 1, "B", gain_b_db)
-    ])
+    ]
 }
 
 // Feed a DC of 1.0 straight into the distributor (reconcile re-points it at the silent stub instrument, so
@@ -3824,6 +3828,146 @@ fn muting_an_entry_through_the_production_loop_removes_it_from_the_mix() {
     assert!((muted_left - 0.251).abs() < 0.02, "muting A leaves only B (got {muted_left})");
 }
 
+const ENTRY_SEND_KEY: u16 = 44;
+
+fn engine_with_send_composite() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
+        crate::Distributor::Broadcast, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, ENTRY_SEND_KEY, DRY_KEY, WET_KEY,
+        INPUT_TAP_FIELD, [0, 0, 0]);
+    engine
+}
+
+// `fx_render_graph` with a `send` field on both entries.
+fn fx_send_boxes(send_a: bool, send_b: bool) -> Vec<GraphBox> {
+    let mut boxes = fx_render_boxes(0.0, -12.0);
+    for (uuid, send) in [(ENTRY_A, send_a), (ENTRY_B, send_b)] {
+        boxes.iter_mut().find(|graph_box| graph_box.uuid == uuid).expect("entry")
+            .fields.insert(ENTRY_SEND_KEY, FieldValue::Boolean(send));
+    }
+    boxes
+}
+
+fn fx_send_graph(send_a: bool, send_b: bool) -> BoxGraph {
+    BoxGraph::from_boxes(fx_send_boxes(send_a, send_b))
+}
+
+fn live_composite(engine: &Engine) -> &crate::effect_composite::EffectCompositeBinding {
+    composite_of(engine.audio_units.iter().find(|binding| binding.unit == UNIT).expect("unit"))
+}
+
+#[test]
+fn an_open_send_renders_bit_identical_to_a_composite_without_send() {
+    let mut plain = engine_with_composite();
+    plain.graph = fx_render_graph(0.0, -12.0);
+    plain.unit_changes.borrow_mut().added.push(UNIT);
+    plain.reconcile_units();
+    let mut gated = engine_with_send_composite();
+    gated.graph = fx_send_graph(true, true);
+    gated.unit_changes.borrow_mut().added.push(UNIT);
+    gated.reconcile_units();
+    assert_eq!(render_mix_live(&mut gated, UNIT), render_mix_live(&mut plain, UNIT));
+}
+
+#[test]
+fn closing_a_send_silences_that_entry_s_input_and_keeps_its_output_strip_open() {
+    let mut engine = engine_with_send_composite();
+    engine.graph = fx_send_graph(true, true);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let (open_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((open_left - 1.251).abs() < 0.02, "both entries sum (got {open_left})");
+    set_bool(&mut engine, ENTRY_A, ENTRY_SEND_KEY, true, false);
+    engine.reconcile_units();
+    let (closed_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((closed_left - 0.251).abs() < 0.02, "A receives silence, only B remains (got {closed_left})");
+    let composite = live_composite(&engine);
+    assert_eq!(composite.entry_send_open_at(ENTRY_A, 0.0, true), Some(false));
+    assert_eq!(composite.entry_send_open_at(ENTRY_B, 0.0, true), Some(true), "the sibling stays open");
+    assert_eq!(composite.entry_silent(ENTRY_A), Some(false), "the send never touches the output strip");
+    set_bool(&mut engine, ENTRY_A, ENTRY_SEND_KEY, false, true);
+    engine.reconcile_units();
+    let (reopened_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((reopened_left - 1.251).abs() < 0.02, "reopening restores A (got {reopened_left})");
+}
+
+#[test]
+fn a_composite_without_send_key_builds_no_gate() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_send_graph(false, false);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    assert_eq!(live_composite(&engine).entry_send_open_at(ENTRY_A, 0.0, true), None);
+    let (left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((left - 1.251).abs() < 0.02, "a send field is ignored when the spec declares none (got {left})");
+}
+
+#[test]
+fn an_automated_send_follows_its_curve_and_detaching_restores_the_field() {
+    const VALUE_TRACK: Uuid = [90u8; 16];
+    const VALUE_REGION: Uuid = [91u8; 16];
+    const VALUE_COLLECTION: Uuid = [92u8; 16];
+    const VALUE_EVENT: Uuid = [93u8; 16];
+    let mut engine = engine_with_send_composite();
+    let mut boxes = fx_send_boxes(true, true);
+    boxes.push(graph_box(VALUE_TRACK, "TrackBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+        (2, FieldValue::Pointer(None)),
+        (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+        (TRACK_REGIONS_KEY, FieldValue::Hook),
+        (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+        (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+    ]));
+    boxes.push(graph_box(VALUE_REGION, "ValueRegionBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VALUE_TRACK, vec![TRACK_REGIONS_KEY])))),
+        (2, FieldValue::Pointer(Some(Address::of(VALUE_COLLECTION, vec![2])))),
+        (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+        (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+    ]));
+    boxes.push(graph_box(VALUE_COLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]));
+    boxes.push(graph_box(VALUE_EVENT, "ValueEventBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VALUE_COLLECTION, vec![1])))),
+        (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.0))
+    ]));
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_of(&unit).entry_send_open_at(ENTRY_A, 0.0, true), Some(true), "static field: open");
+    let baseline = engine.graph.subscription_count();
+    for _cycle in 0..2 {
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(VALUE_TRACK, vec![2]), old: None, new: Some(Address::of(ENTRY_A, vec![ENTRY_SEND_KEY]))
+        }], &engine.registry).expect("aim the track at the send field");
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_of(&unit).entry_send_open_at(ENTRY_A, 0.0, true), Some(false),
+            "a curve at 0 closes the send");
+        assert_eq!(composite_of(&unit).entry_send_open_at(ENTRY_B, 0.0, true), Some(true), "the sibling stays static");
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(VALUE_TRACK, vec![2]), old: Some(Address::of(ENTRY_A, vec![ENTRY_SEND_KEY])), new: None
+        }], &engine.registry).expect("detach the track");
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_of(&unit).entry_send_open_at(ENTRY_A, 0.0, true), Some(true), "detaching reopens");
+    }
+    assert_eq!(engine.graph.subscription_count(), baseline, "attach / detach cycles leave no observers behind");
+}
+
+#[test]
+fn removing_a_composite_with_send_gates_leaks_nothing() {
+    let residue = |mut engine: Engine, graph: BoxGraph| {
+        engine.graph = graph;
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(COMP, vec![HOST_KEY]), old: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])), new: None
+        }], &engine.registry).expect("detach the composite");
+        engine.reconcile_one(&mut unit);
+        (engine.graph.subscription_count(), engine.context.debug_counts()[0])
+    };
+    assert_eq!(residue(engine_with_send_composite(), fx_send_graph(true, false)),
+        residue(engine_with_composite(), fx_send_graph(true, false)));
+}
+
 #[test]
 fn soloing_an_entry_through_the_production_loop_keeps_only_that_entry() {
     let mut engine = engine_with_composite();
@@ -3855,7 +3999,7 @@ fn engine_with_frequency_composite() -> Engine {
     let mut engine = engine_with_devices();
     engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
         crate::Distributor::Frequency, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
-        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, 0, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
         [CROSSOVER1_KEY, 0, 0]);
     engine
 }
@@ -3888,7 +4032,7 @@ fn engine_with_frequency_composite_bands() -> Engine {
     let mut engine = engine_with_devices();
     engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
         crate::Distributor::Frequency, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
-        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, 0, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
         [CROSSOVER1_KEY, CROSSOVER2_KEY, CROSSOVER3_KEY]);
     engine
 }

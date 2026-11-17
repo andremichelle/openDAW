@@ -7,7 +7,14 @@ import {Promises} from "@opendaw/lib-runtime"
 import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {CompositeCell, DeviceHost, InstrumentCompositeCellBoxAdapter, NoteLifeCycle} from "@opendaw/studio-adapters"
+import {
+    AudioEffectCompositeBoxAdapter,
+    AudioEffectCompositeCellBoxAdapter,
+    CompositeCell,
+    DeviceHost,
+    InstrumentCompositeCellBoxAdapter,
+    NoteLifeCycle
+} from "@opendaw/studio-adapters"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {Icon} from "@/ui/components/Icon"
 import {CompositeCellStrip} from "@/ui/devices/CompositeCellStrip"
@@ -73,7 +80,10 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
         none: () => <div/>,
         some: entry => (
             <div className="controls">
-                <CompositeCellStrip lifecycle={lifecycle} project={service.project} cell={entry} noun={noun}/>
+                <CompositeCellStrip lifecycle={lifecycle} project={service.project} cell={entry} noun={noun}
+                                    send={entry instanceof AudioEffectCompositeCellBoxAdapter
+                                    && entry.compositeDevice() instanceof AudioEffectCompositeBoxAdapter
+                                        ? entry.namedParameter.send : undefined}/>
             </div>
         )
     })

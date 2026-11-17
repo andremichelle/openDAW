@@ -34,7 +34,7 @@ use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
-use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams, StripValueSource};
 use engine_env::composite_mix::{DistributorMode, DistributorProcessor, DryWetMixProcessor, DryWetParams};
 use engine_env::engine_context::NodeId;
 use bindings::value_collection::ValueCollection;
@@ -77,7 +77,16 @@ pub(crate) struct CompositeEntry {
     edges: Vec<(NodeId, NodeId)>,      // the entry's internal edges (distributor -> fx... -> strip -> wet sum)
     summed: bool,                      // whether `strip_output` is currently a source of the wet sum
     effects_dirty: Rc<Cell<bool>>,     // set by a member `enabled` toggle -> re-wire THIS entry
-    wired_index: usize                 // the distributor branch this entry is currently wired to
+    wired_index: usize,                // the distributor branch this entry is currently wired to
+    send: Option<SendGate>             // the entry's input gate, only when the spec declares `send_key`
+}
+
+/// An entry's SEND: a strip at unity whose mute is `!send`, between the distributor branch and the entry's chain.
+struct SendGate {
+    strip: Rc<RefCell<ChannelStripProcessor>>,
+    strip_id: NodeId,
+    params: Rc<StripParams>,
+    automation: Rc<StripAutomation>
 }
 
 /// An effect composite's PERSISTENT cascade, owned by the chain member it is. Its nodes (`distributor` /
@@ -232,6 +241,16 @@ impl EffectCompositeBinding {
                 ProcHandle::EffectComposite(binding) => Some(&**binding),
                 _ => None
             })
+    }
+
+    /// Whether the entry's send is open at `position` (automation, else the static cell); `None` without a gate.
+    #[cfg(test)]
+    pub(crate) fn entry_send_open_at(&self, uuid: Uuid, position: f64, transporting: bool) -> Option<bool> {
+        let send = self.members.iter().find(|entry| entry.uuid == uuid)?.send.as_ref()?;
+        Some(match send.automation.mute.borrow().as_ref() {
+            Some(source) => source(position, transporting, 0) < 0.5,
+            None => !send.params.mute.get()
+        })
     }
 
     #[cfg(test)]
@@ -454,6 +473,14 @@ impl Engine {
             entry.strip_params.mute.set(handle.field.get() >= 0.5);
             *entry.strip_automation.mute.borrow_mut() = resolver;
         }
+        if let Some(send) = &entry.send {
+            *send.automation.mute.borrow_mut() = None;
+            let (_, resolver) = self.observe_field_automation(entry.uuid, &[spec.send_key], 4,
+                &mut entry.param_subs, &mut entry.param_collections, invalidate, host_bool);
+            *send.automation.mute.borrow_mut() = resolver.map(|source| -> StripValueSource {
+                Rc::new(move |position: f64, transporting: bool, lag: u32| 1.0 - source(position, transporting, lag))
+            });
+        }
         if spec.solo_key != 0 {
             // Observed so an edit enqueues the unit (the reconcile re-resolves every sibling's silent state);
             // the strip never reads solo itself.
@@ -595,10 +622,27 @@ impl Engine {
                     if let Some(value) = value.as_float32() { params.panning.set(value) }
                 }));
         }
+        let send = (spec.send_key != 0).then(|| {
+            let params = Rc::new(StripParams::new());
+            let automation = Rc::new(StripAutomation::new());
+            let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params.clone(), automation.clone(),
+                self.sample_rate)));
+            let strip_id = self.context.register_processor(strip.clone());
+            self.context.set_label(strip_id, alloc::string::String::from("composite-entry-send"));
+            self.context.set_owner(strip_id, uuid);
+            SendGate {strip, strip_id, params, automation}
+        });
+        if let Some(send) = &send {
+            let params = send.params.clone();
+            field_subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![spec.send_key]),
+                move |value| {
+                    if let Some(value) = value.as_bool() { params.mute.set(!value) }
+                }));
+        }
         let mut entry = CompositeEntry {
             uuid, chain, audio, strip, strip_id, strip_params, strip_automation, strip_output,
             param_subs: Vec::new(), param_collections: Vec::new(), field_subs, edges: Vec::new(),
-            summed: false, effects_dirty, wired_index: usize::MAX
+            summed: false, effects_dirty, wired_index: usize::MAX, send
         };
         self.wire_entry(binding, &mut entry, index);
         self.bind_entry_params(&mut entry, spec, invalidate);
@@ -611,6 +655,13 @@ impl Engine {
     fn wire_entry(&mut self, binding: &EffectCompositeBinding, entry: &mut CompositeEntry, index: usize) {
         let mut output = binding.distributor.borrow().branch(index);
         let mut output_node = binding.distributor_id;
+        if let Some(send) = &entry.send {
+            send.strip.borrow_mut().set_audio_source(output);
+            self.context.register_edge(output_node, send.strip_id);
+            entry.edges.push((output_node, send.strip_id));
+            output = send.strip.borrow().audio_output();
+            output_node = send.strip_id;
+        }
         for member in &entry.audio {
             if !self.device_enabled(member.uuid) {
                 continue; // a disabled effect is bypassed: not wired, processor untouched
@@ -670,6 +721,9 @@ impl Engine {
             self.graph.unsubscribe(sub);
         }
         self.context.remove_processor(entry.strip_id);
+        if let Some(send) = entry.send.take() {
+            self.context.remove_processor(send.strip_id);
+        }
     }
 
     /// Terminate a whole effect composite (its chain member left, or the unit is gone): every entry, its own
