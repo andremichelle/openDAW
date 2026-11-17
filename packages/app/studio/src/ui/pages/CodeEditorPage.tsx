@@ -9,50 +9,17 @@ import {Icon} from "@/ui/components/Icon"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {TopLevelReturn} from "./code-editor/TopLevelReturn"
-import {
-    Arrays,
-    DefaultObservableValue,
-    Errors,
-    isDefined,
-    isNull,
-    Option,
-    Optional,
-    panic,
-    RuntimeNotifier,
-    Terminable,
-    UUID
-} from "@opendaw/lib-std"
+import {Errors, isDefined, isNull, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {MixdownOptions, ScriptHost, ScriptPreamble} from "@opendaw/studio-scripting"
+import {ScriptPreamble} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {
-    AudioContexts,
-    FilePickerAcceptTypes,
-    MenuItem,
-    OfflineEngineRenderer,
-    Project,
-    ScriptMeta,
-    ScriptStorage
-} from "@opendaw/studio-core"
-import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import scriptWorkerUrl from "@opendaw/studio-scripting/ScriptWorker.js?worker&url"
+import {FilePickerAcceptTypes, MenuItem, ScriptMeta, ScriptStorage} from "@opendaw/studio-core"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
-import {ProjectSkeleton, Sample} from "@opendaw/studio-adapters"
-import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
-import {BoxIO} from "@opendaw/studio-boxes"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
-import {ScriptFormDialog} from "@/script/ScriptFormDialog"
 import {ScriptSession} from "./code-editor/ScriptSession"
 import {ScriptTemplates} from "./code-editor/StockScripts"
-
-const isMimeType = (value: string): value is `${string}/${string}` => /^[^/]+\/[^/]+$/.test(value)
-const isExtension = (value: string): value is `.${string}` => value.length > 1 && value.startsWith(".")
-const acceptTypes = (fileName: string, mimeType: string): Optional<Array<FilePickerAcceptType>> => {
-    const extension = fileName.substring(fileName.lastIndexOf("."))
-    if (!isMimeType(mimeType) || !isExtension(extension)) {return undefined}
-    return [{description: mimeType, accept: {[mimeType]: [extension]}}]
-}
+import {StudioScriptHost} from "@/script/StudioScriptHost"
 
 const ctrl = true
 const shift = true
@@ -67,77 +34,7 @@ const className = Html.adoptStyleSheet(css, "CodeEditorPage")
 const loadMonacoSetup = dynamicImportWithRetry(() => import("./code-editor/monaco-setup"))
 
 export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
-    const pendingSamples = UUID.newSet<UUID.Bytes>(uuid => uuid)
-    const host = new ScriptHost({
-        openProject: async (buffer: ArrayBufferLike, name?: string): Promise<void> => {
-            if (!await service.projectProfileService.approveLosingChanges()) {return}
-            const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-            boxGraph.fromArrayBuffer(buffer, false)
-            const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
-            const project = Project.fromSkeleton(service, {boxGraph, mandatoryBoxes})
-            pendingSamples.forEach(uuid => project.trackUserCreatedSample(uuid))
-            pendingSamples.clear()
-            service.projectProfileService.setProject(project, name ?? "Scripted Project")
-        },
-        applyUpdates: (updates: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>, checksum: Int8Array): void =>
-            service.optProject.match({
-                none: () => RuntimeNotifier.notify({message: "No project to apply the script to.", icon: "Warning"}),
-                some: project => {
-                    if (!Arrays.equals(project.boxGraph.checksum(), checksum)) {
-                        RuntimeNotifier.notify({message: "The project changed while the script ran. Run it again.", icon: "Warning"})
-                        return
-                    }
-                    project.editing.modify(() => applyUpdateTasks(project.boxGraph, updates))
-                    RouteLocation.get().navigateTo("/create")
-                }
-            }),
-        hasProject: async (): Promise<boolean> => service.projectProfileService.getValue().nonEmpty(),
-        showInfo: (headline: string, message: string): Promise<void> => RuntimeNotifier.info({headline, message}),
-        showDialog: request => ScriptFormDialog.show(request),
-        fetchProject: async (): Promise<{ buffer: ArrayBuffer; name: string }> => {
-            return service.projectProfileService.getValue().match({
-                none: () => panic("No project available"),
-                some: ({project, meta}) => ({
-                    buffer: ProjectSkeleton.encode(project.boxGraph) as ArrayBuffer,
-                    name: meta.name
-                })
-            })
-        },
-        addSample: async (data: AudioData, name: string): Promise<Sample> => {
-            const sample = await service.sampleService.importFile({
-                name, arrayBuffer: WavFile.encodeFloats(data)
-            })
-            const uuid = UUID.parse(sample.uuid)
-            service.optProject.match({
-                none: () => {pendingSamples.add(uuid)},
-                some: project => {project.trackUserCreatedSample(uuid)}
-            })
-            return sample
-        },
-        listSamples: async (): Promise<ReadonlyArray<Sample>> => service.sampleService.list(),
-        renderMixdown: async (buffer: ArrayBufferLike, {sampleRate}: MixdownOptions): Promise<AudioData> => {
-            const project = Project.load(service, buffer as ArrayBuffer)
-            const abortController = new AbortController()
-            const progress = new DefaultObservableValue(0.0)
-            const dialog = RuntimeNotifier.progress({
-                headline: "Rendering mixdown...",
-                progress,
-                cancel: () => abortController.abort()
-            })
-            await service.audioContext.suspend()
-            const result = await Promises.tryCatch(OfflineEngineRenderer
-                .start(project, Option.None, progress, abortController.signal, sampleRate))
-            dialog.terminate()
-            project.terminate()
-            AudioContexts.resume(service.audioContext).then()
-            if (result.status === "rejected") {return Promise.reject(result.error)}
-            return result.value
-        },
-        saveFile: async (buffer: ArrayBuffer, fileName: string, mimeType: string): Promise<void> =>
-            Files.saveWithApproval({
-                buffer, headline: "Save File", suggestedName: fileName, types: acceptTypes(fileName, mimeType)
-            })
-    }, scriptWorkerUrl)
+    const host = StudioScriptHost.create(service)
     const storage = ScriptStorage.get()
     return (
         <div className={className}>

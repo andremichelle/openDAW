@@ -135,6 +135,9 @@ export class AudioRegionImpl extends RegionFacade<AudioRegionBox> implements Aud
 export type AnyRegionImpl = NoteRegionImpl | AudioRegionImpl | ValueRegionImpl
 
 export namespace Regions {
+    export const isBox = (box: Box): boolean =>
+        box instanceof NoteRegionBox || box instanceof AudioRegionBox || box instanceof ValueRegionBox
+
     export const wrap = (context: Context, box: Box): AnyRegionImpl => {
         if (box instanceof NoteRegionBox) {return NoteRegionImpl.wrap(context, box)}
         if (box instanceof AudioRegionBox) {return AudioRegionImpl.wrap(context, box)}

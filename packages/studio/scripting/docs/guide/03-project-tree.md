@@ -26,7 +26,8 @@ drums.output = bus
 bus.addAudioEffect("Compressor", {threshold: -18, ratio: 4})
 ```
 
-`project.findAudioUnit(label)` looks a unit up by its label.
+`project.findAudioUnit(label)` looks a unit up by its label. `project.findByUuid(uuid)` finds any unit, device,
+track, region or note by its `uuid`, or returns null.
 
 ## Instruments
 
@@ -35,6 +36,14 @@ for synths and samplers, an audio track for Tape. `unit.setInstrument(key)` swap
 tracks and effects.
 
 Available keys are the properties of {@link Instruments}.
+
+## Devices scripts cannot edit yet
+
+A project can hold devices without script support: WebCLAP plugins, Korpus, Modular and placeholders for unknown
+devices. They appear as {@link UnsupportedInstrument}, {@link UnsupportedMIDIEffect} and
+{@link UnsupportedAudioEffect} (`key` is `"WebCLAP"`, `"Korpus"`, `"Noop"`, `"Modular"` or `"Unknown"`). Label,
+enabled, minimized, move and remove work, the parameters are not exposed. The unit and its tracks work as usual,
+and `setInstrument(key)` replaces such an instrument with a supported one.
 
 ## Effects
 

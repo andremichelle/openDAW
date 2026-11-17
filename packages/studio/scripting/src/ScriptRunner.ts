@@ -34,9 +34,13 @@ export class ScriptRunner {
     get api(): Api {return this.#api}
 
     async run(jsCode: string, context: ScriptExecutionContext): Promise<void> {
+        await this.evaluate(jsCode, context)
+    }
+
+    async evaluate(jsCode: string, context: ScriptExecutionContext): Promise<unknown> {
         Object.assign(globalThis, ScriptGlobals.create(this.#api, context))
         // Runs as a function body, not a module, so a script may `return` early
-        const AsyncFunction = (async () => {}).constructor as new (body: string) => () => Promise<void>
-        await new AsyncFunction(jsCode.replace(/^\s*export\s*\{\s*\};?/m, ""))()
+        const AsyncFunction = (async () => {}).constructor as new (body: string) => () => Promise<unknown>
+        return new AsyncFunction(jsCode.replace(/^\s*export\s*\{\s*\};?/m, ""))()
     }
 }

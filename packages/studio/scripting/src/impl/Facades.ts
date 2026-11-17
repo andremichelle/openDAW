@@ -64,9 +64,9 @@ export namespace Facades {
     export const forBox = (context: Context, box: Box): Nullable<object> => {
         if (box instanceof AudioUnitBox) {return AudioUnitImpls.wrap(context, box)}
         if (box instanceof AudioBusBox) {return AudioUnitImpls.wrap(context, audioUnitBoxOf(box))}
-        if (InstrumentImpls.isBox(box)) {return InstrumentImpls.wrap(context, box)}
-        if (MIDIEffectImpls.isBox(box)) {return MIDIEffectImpls.wrap(context, box)}
-        if (AudioEffectImpls.isBox(box)) {return AudioEffectImpls.wrap(context, box)}
+        if (InstrumentImpls.isBox(box) || InstrumentImpls.isUnsupportedBox(box)) {return InstrumentImpls.wrap(context, box)}
+        if (MIDIEffectImpls.isBox(box) || MIDIEffectImpls.isUnsupportedBox(box)) {return MIDIEffectImpls.wrap(context, box)}
+        if (AudioEffectImpls.isBox(box) || AudioEffectImpls.isUnsupportedBox(box)) {return AudioEffectImpls.wrap(context, box)}
         if (box instanceof InstrumentCompositeCellBox) {
             return PlayfieldSlotImpl.isSlot(box) ? PlayfieldSlotImpl.wrap(context, box) : InstrumentCompositeLayerImpl.wrap(context, box)
         }

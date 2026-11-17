@@ -41,6 +41,7 @@ import {KeyTrackImpl} from "./timeline/KeyTrackImpl"
 import {ChordTrackImpl} from "./timeline/ChordTrackImpl"
 import {ModulatorImpls} from "./Modulators"
 import {Regions} from "./timeline/Regions"
+import {Facades} from "./Facades"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
 
 class TimeSignatureImpl implements TimeSignature {
@@ -196,6 +197,13 @@ export class ProjectImpl implements Project {
     findAudioUnit(label: string): Nullable<AnyAudioUnit> {
         const name = Guard.string(label, "label")
         return this.audioUnits.find(unit => unit.label === name) ?? null
+    }
+
+    findByUuid(uuid: string): Nullable<object> {
+        const parsed = tryCatch(() => UUID.parse(Guard.string(uuid, "uuid")))
+        if (parsed.status === "failure") {return null}
+        return this.#context.boxGraph.findBox(parsed.value).mapOr(box => Regions.isBox(box)
+            ? Regions.wrap(this.#context, box) : Facades.forBox(this.#context, box), null)
     }
 
     addInstrumentUnit<K extends keyof Instruments>(key: K, props?: AudioUnitProps, instrument?: DeepPartial<Instruments[K]>): InstrumentAudioUnit<K> {

@@ -28,6 +28,9 @@ export class ScriptHost implements ScriptExecutionProtocol {
                 executeScript(script: string, context: ScriptExecutionContext): Promise<void> {
                     return dispatcher.dispatchAndReturn(this.executeScript, script, context)
                 }
+                evaluateScript(script: string, context: ScriptExecutionContext): Promise<Nullable<string>> {
+                    return dispatcher.dispatchAndReturn(this.evaluateScript, script, context)
+                }
             })
     }
 
@@ -41,6 +44,10 @@ export class ScriptHost implements ScriptExecutionProtocol {
             console.warn(error)
             RuntimeNotifier.notify({message: "The script caused an error.", icon: "Warning"})
         }
+    }
+
+    evaluateScript(script: string, context: ScriptExecutionContext): Promise<Nullable<string>> {
+        return this.#executor.evaluateScript(script, context)
     }
 
     async #showDialog(host: ScriptHostProtocol, request: DialogRequest): Promise<Nullable<ReadonlyArray<DialogValue>>> {

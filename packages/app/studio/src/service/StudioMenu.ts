@@ -9,6 +9,7 @@ import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
+import {AgentConnectDialog} from "@/script/AgentConnectDialog"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
@@ -98,6 +99,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         icon: IconSymbol.Connected,
                         separatorBefore: true
                     }).setTriggerProcedure(() => connectRoom(service)),
+                    MenuItem.default({
+                        label: "Connect Agent...",
+                        icon: IconSymbol.Robot
+                    }).setTriggerProcedure(() => AgentConnectDialog.show(service.agentConnection)),
                     MenuItem.default({
                         label: "Show MIDI-Keyboard",
                         icon: IconSymbol.Piano,

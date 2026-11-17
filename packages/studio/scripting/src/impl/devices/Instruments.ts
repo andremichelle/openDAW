@@ -32,7 +32,10 @@ import {
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
-    VaporisateurDeviceBox
+    VaporisateurDeviceBox,
+    KorpusDeviceBox,
+    NoopInstrumentBox,
+    WclapInstrumentBox
 } from "@opendaw/studio-boxes"
 import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform, Guitar as DSPGuitar} from "@opendaw/lib-dsp"
@@ -110,7 +113,7 @@ import {
     Vaporisateur,
     VaporisateurLFO,
     VaporisateurNoise,
-    VaporisateurOscillator
+    VaporisateurOscillator, UnsupportedInstrument
 } from "../../Api"
 import {Context} from "../Context"
 import {Accessors, Facade, Props} from "../Common"
@@ -136,7 +139,7 @@ export type InstrumentDeviceBox = Box & {
 }
 
 export abstract class InstrumentFacade<B extends InstrumentDeviceBox = InstrumentDeviceBox> extends Facade<B> {
-    abstract readonly key: keyof Instruments
+    abstract readonly key: keyof Instruments | UnsupportedInstrument["key"]
     declare label: string
     declare icon: string
     declare enabled: boolean
@@ -164,7 +167,18 @@ export type AnyInstrumentImpl =
     | GuitarImpl
     | OpenDrumKickImpl | OpenDrumSnareImpl | OpenDrumClapImpl | OpenDrumTomImpl | OpenDrumRimImpl | OpenDrumHatImpl
     | OpenDrumShakerImpl | OpenDrumCymbalImpl | OpenDrumBellImpl | OpenDrumPercImpl
-    | ApparatImpl | InstrumentCompositeImpl
+    | ApparatImpl | InstrumentCompositeImpl | UnsupportedInstrumentImpl
+
+type UnsupportedInstrumentBox = WclapInstrumentBox | KorpusDeviceBox | NoopInstrumentBox
+
+export class UnsupportedInstrumentImpl extends InstrumentFacade<UnsupportedInstrumentBox> implements UnsupportedInstrument {
+    readonly key: UnsupportedInstrument["key"]
+
+    constructor(context: Context, box: UnsupportedInstrumentBox) {
+        super(context, box)
+        this.key = box instanceof WclapInstrumentBox ? "WebCLAP" : box instanceof KorpusDeviceBox ? "Korpus" : "Noop"
+    }
+}
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
     readonly key = "Vaporisateur" as const
@@ -1491,9 +1505,13 @@ export namespace InstrumentImpls {
         if (box instanceof GuitarDeviceBox) {return new GuitarImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
         if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}
+        if (InstrumentImpls.isUnsupportedBox(box)) {return new UnsupportedInstrumentImpl(context, box)}
         return panic(`${box.name} is not a supported instrument`)
     }) as AnyInstrumentImpl
 
     export const isBox = (box: Box): box is InstrumentDeviceBox => DeviceBoxes.isInstrumentBox(box.name)
+
+    export const isUnsupportedBox = (box: Box): box is UnsupportedInstrumentBox =>
+        box instanceof WclapInstrumentBox || box instanceof KorpusDeviceBox || box instanceof NoopInstrumentBox
 
 }

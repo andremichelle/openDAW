@@ -4,6 +4,7 @@ import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptRunner} from "./ScriptRunner"
+import {ScriptResult} from "./ScriptResult"
 import {Nullable} from "@opendaw/lib-std"
 import {DialogRequest, DialogValue, ScriptHostProtocol} from "./ScriptHostProtocol"
 import {MixdownOptions, Sample} from "./Api"
@@ -49,5 +50,9 @@ Communicator.executor(messenger.channel("scripting-execution"), new class implem
 
     executeScript(script: string, context: ScriptExecutionContext): Promise<void> {
         return this.#scriptExecutor.run(script, context)
+    }
+
+    async evaluateScript(script: string, context: ScriptExecutionContext): Promise<Nullable<string>> {
+        return ScriptResult.toText(await this.#scriptExecutor.evaluate(script, context))
     }
 })

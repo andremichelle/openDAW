@@ -8,7 +8,9 @@ import {
     EuclidLaneBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
-    ZeitgeistDeviceBox
+    ZeitgeistDeviceBox,
+    UnknownMidiEffectDeviceBox,
+    WclapMidiEffectBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
 import {asInstanceOf, bipolar, float, int, Nullable, panic, unitValue} from "@opendaw/lib-std"
@@ -32,7 +34,7 @@ import {
     ScriptSample,
     SpielwerkEffect,
     VelocityEffect,
-    ZeitgeistEffect
+    ZeitgeistEffect, UnsupportedMIDIEffect
 } from "../../Api"
 import {Context} from "../Context"
 import {EffectDeviceBox, EffectFacade} from "./EffectChain"
@@ -43,12 +45,23 @@ import {ScriptSupport} from "./ScriptDevices"
 import {MIDIEffectBox} from "./DeviceBoxes"
 
 export abstract class MIDIEffectFacade<B extends EffectDeviceBox = EffectDeviceBox> extends EffectFacade<B> {
-    abstract readonly key: keyof MIDIEffects
+    abstract readonly key: keyof MIDIEffects | UnsupportedMIDIEffect["key"]
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
 export type AnyMIDIEffectImpl = ArpeggioEffectImpl | PitchEffectImpl | NoteFilterEffectImpl | ScaleMatrixEffectImpl | ChordKeysEffectImpl
-    | EuclidEffectImpl | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl
+    | EuclidEffectImpl | VelocityEffectImpl | ZeitgeistEffectImpl | SpielwerkEffectImpl | UnsupportedMIDIEffectImpl
+
+type UnsupportedMIDIEffectBox = WclapMidiEffectBox | UnknownMidiEffectDeviceBox
+
+export class UnsupportedMIDIEffectImpl extends MIDIEffectFacade<UnsupportedMIDIEffectBox> implements UnsupportedMIDIEffect {
+    readonly key: UnsupportedMIDIEffect["key"]
+
+    constructor(context: Context, box: UnsupportedMIDIEffectBox) {
+        super(context, box)
+        this.key = box instanceof WclapMidiEffectBox ? "WebCLAP" : "Unknown"
+    }
+}
 
 export class ArpeggioEffectImpl extends MIDIEffectFacade<ArpeggioDeviceBox> implements ArpeggioEffect {
     readonly key = "Arpeggio" as const
@@ -246,6 +259,7 @@ export namespace MIDIEffectImpls {
         if (box instanceof VelocityDeviceBox) {return new VelocityEffectImpl(context, box)}
         if (box instanceof ZeitgeistDeviceBox) {return new ZeitgeistEffectImpl(context, box)}
         if (box instanceof SpielwerkDeviceBox) {return new SpielwerkEffectImpl(context, box)}
+        if (MIDIEffectImpls.isUnsupportedBox(box)) {return new UnsupportedMIDIEffectImpl(context, box)}
         return panic(`${box.name} is not a supported midi-effect`)
     }) as AnyMIDIEffectImpl
 
@@ -253,4 +267,7 @@ export namespace MIDIEffectImpls {
         box instanceof ArpeggioDeviceBox || box instanceof PitchDeviceBox || box instanceof VelocityDeviceBox
         || box instanceof NoteFilterDeviceBox || box instanceof ScaleMatrixDeviceBox || box instanceof ChordKeysDeviceBox || box instanceof EuclidDeviceBox || box instanceof ZeitgeistDeviceBox
         || box instanceof SpielwerkDeviceBox
+
+    export const isUnsupportedBox = (box: Box): box is UnsupportedMIDIEffectBox =>
+        box instanceof WclapMidiEffectBox || box instanceof UnknownMidiEffectDeviceBox
 }
