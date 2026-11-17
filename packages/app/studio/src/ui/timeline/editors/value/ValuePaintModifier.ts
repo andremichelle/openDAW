@@ -28,6 +28,7 @@ type Construct = Readonly<{
     selection: Selection<ValueEventBoxAdapter>
     snapping: Snapping
     valueAxis: ValueAxis
+    interpolation: Interpolation
 }>
 
 type Stroke = { position: ppqn, value: unitValue }
@@ -41,6 +42,7 @@ export class ValuePaintModifier implements ValueModifier {
     readonly #selection: Selection<ValueEventBoxAdapter>
     readonly #snapping: Snapping
     readonly #valueAxis: ValueAxis
+    readonly #interpolation: Interpolation
 
     readonly #notifier: Notifier<void>
     readonly #strokes: Array<Stroke>
@@ -49,7 +51,7 @@ export class ValuePaintModifier implements ValueModifier {
     #lastValue: unitValue = NaN
     #lastIndex: int = 0
 
-    private constructor({editing, element, reader, selection, snapping, valueAxis}: Construct) {
+    private constructor({editing, element, reader, selection, snapping, valueAxis, interpolation}: Construct) {
         this.#editing = editing
         this.#element = element
         this.#reader = reader
@@ -57,6 +59,7 @@ export class ValuePaintModifier implements ValueModifier {
         this.#selection.deselectAll()
         this.#snapping = snapping
         this.#valueAxis = valueAxis
+        this.#interpolation = interpolation
 
         this.#notifier = new Notifier<void>()
         this.#strokes = []
@@ -93,7 +96,7 @@ export class ValuePaintModifier implements ValueModifier {
             type: "value-event",
             position: stroke.position - this.#reader.offset,
             value: stroke.value,
-            interpolation: Interpolation.Linear,
+            interpolation: this.#interpolation,
             index: 0,
             isSelected: true,
             direction: 0
@@ -153,7 +156,7 @@ export class ValuePaintModifier implements ValueModifier {
             this.#selection.select(...this.#strokes.map(stroke => content.createEvent({
                 position: stroke.position - offset,
                 value: stroke.value,
-                interpolation: Interpolation.Linear,
+                interpolation: this.#interpolation,
                 index: 0
             })))
         })

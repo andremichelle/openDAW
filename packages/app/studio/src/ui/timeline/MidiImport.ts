@@ -6,6 +6,7 @@ import {
     int,
     isDefined,
     Maybe,
+    Option,
     quantizeCeil,
     RuntimeNotifier,
     tryCatch,
@@ -14,7 +15,7 @@ import {
 } from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {Promises, Wait} from "@opendaw/lib-runtime"
@@ -23,7 +24,8 @@ import {Project} from "@opendaw/studio-core"
 import {ControlType, MidiFile} from "@opendaw/lib-midi"
 
 export namespace MidiImport {
-    export const toTracks = async (project: Project, audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
+    export const toTracks = async (project: Project, audioUnitBoxAdapter: AudioUnitBoxAdapter,
+                                   optStartTrack: Option<TrackBoxAdapter> = Option.None) => {
         const browseResult = await Promises.tryCatch(Files.open())
         if (browseResult.status === "rejected") {
             if (Errors.isAbort(browseResult.error) || Errors.isNotAllowed(browseResult.error)) {return}
@@ -50,7 +52,9 @@ export namespace MidiImport {
         }
         const {value: format} = formatResult
         const {boxGraph, editing} = project
-        let reuseTrackBox: Maybe<TrackBox> = Arrays.peekLast(audioUnitBoxAdapter.tracks.collection.adapters())?.box
+        const fromLane = optStartTrack.nonEmpty()
+        let reuseTrackBox: Maybe<TrackBox> = optStartTrack.mapOr(track => track.box,
+            Arrays.peekLast(audioUnitBoxAdapter.tracks.collection.adapters())?.box)
         let trackIndex: int = 0
         if (isDefined(reuseTrackBox)) {
             if (reuseTrackBox.type.getValue() === TrackType.Notes && reuseTrackBox.regions.pointerHub.isEmpty()) {
@@ -104,6 +108,8 @@ export namespace MidiImport {
                         trackBox = reuseTrackBox
                         reuseTrackBox = null
                         trackIndex++
+                    } else if (fromLane) {
+                        trackBox = project.api.createNoteTrack(audioUnitBoxAdapter.box, trackIndex++)
                     } else {
                         trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
                             box.type.setValue(TrackType.Notes)

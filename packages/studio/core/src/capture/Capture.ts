@@ -37,7 +37,8 @@ export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Te
             this.#captureBox.deviceId.catchupAndSubscribe(owner => {
                 const id = owner.getValue()
                 this.#deviceId.setValue(id.length > 0 ? Option.wrap(id) : Option.None)
-            })
+            }),
+            this.#armed.subscribe(owner => this.#storeArmed(owner.getValue()))
         )
     }
 
@@ -56,6 +57,19 @@ export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Te
     own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
     ownAll<T extends Terminable>(...terminables: ReadonlyArray<T>): void {this.#terminator.ownAll(...terminables)}
     terminate(): void {this.#terminator.terminate()}
+
+    #storeArmed(armed: boolean): void {
+        const {boxGraph, liveSync} = this.#manager.project
+        const field = this.#captureBox.armed
+        if (liveSync.nonEmpty() || !this.#captureBox.isAttached() || field.getValue() === armed) {return}
+        if (boxGraph.inTransaction()) {
+            field.setValue(armed)
+        } else {
+            boxGraph.beginTransaction()
+            field.setValue(armed)
+            boxGraph.endTransaction()
+        }
+    }
 
     addRecordedRegion(region: AnyRegionBox): void {this.#recordedRegions.push(region)}
     recordedRegions(): ReadonlyArray<AnyRegionBox> {return this.#recordedRegions}

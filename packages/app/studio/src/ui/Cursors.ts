@@ -18,11 +18,12 @@ const iconSymbolToCursor = (symbol: IconSymbol, hotspotX: number, hotspotY: numb
 }
 
 export const enum Cursor {
-    Pencil, Scissors, ExpandWidth, LoopEnd, LoopStart, Speaker, Erase
+    Pencil, Scissors, ExpandWidth, LoopEnd, LoopStart, Speaker, Erase, PencilStep
 }
 
 export const installCursors = () => {
     CssUtils.registerCustomCursor(Cursor.Pencil, iconSymbolToCursor(IconSymbol.Pencil, 3, 16, "pointer"))
+    CssUtils.registerCustomCursor(Cursor.PencilStep, iconSymbolToCursor(IconSymbol.PencilStep, 3, 16, "pointer"))
     CssUtils.registerCustomCursor(Cursor.ExpandWidth, iconSymbolToCursor(IconSymbol.ExpandWidth, 10, 10, "col-resize"))
     CssUtils.registerCustomCursor(Cursor.Scissors, iconSymbolToCursor(IconSymbol.Scissors, 10, 10, "auto"))
     CssUtils.registerCustomCursor(Cursor.LoopEnd, iconSymbolToCursor(IconSymbol.LoopEnd, 8, 8, "auto"))

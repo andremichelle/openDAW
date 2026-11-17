@@ -12,6 +12,7 @@ import {NamBridges} from "../../src/nam-bridge"
 import {WclapBridges, WclapHostCallbacks} from "../../src/wclap/wclap-bridge"
 import {linkDevice, registerComposite, registerEffectComposite} from "../../src/device-linker"
 import {COMPOSITES, CompositeSpec, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
+import {EngineExports, withUnsignedPointers} from "../../src/engine-exports"
 
 const DIST = path.resolve(__dirname, "../../dist")
 
@@ -52,10 +53,10 @@ export const loadFullEngine = async (sampleRate = 48000,
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(engineWasmPath))
-    const engine = new WebAssembly.Instance(engineModule, {env: {
+    const engine: any = withUnsignedPointers(new WebAssembly.Instance(engineModule, {env: {
         memory, __indirect_function_table: table,
         host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler
-    }}).exports as any
+    }}).exports as unknown as EngineExports)
     engine.init(sampleRate)
     // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it in node so the
     // scriptable devices behave exactly as in the worklet.

@@ -91,6 +91,10 @@ export const IconLibrary = () => (
                 <path
                     d="M12.8995 6.85431L17.1421 11.0969L7.24264 20.9964H3V16.7538L12.8995 6.85431ZM14.3137 5.44009L16.435 3.31877C16.8256 2.92825 17.4587 2.92825 17.8492 3.31877L20.6777 6.1472C21.0682 6.53772 21.0682 7.17089 20.6777 7.56141L18.5563 9.68273L14.3137 5.44009Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.PencilStep)} fill="currentColor" stroke="none" viewBox="0 0 24 24">
+                <path
+                    d="M12.8995 6.85431L17.1421 11.0969L7.24264 20.9964H3V16.7538L12.8995 6.85431ZM14.3137 5.44009L16.435 3.31877C16.8256 2.92825 17.4587 2.92825 17.8492 3.31877L20.6777 6.1472C21.0682 6.53772 21.0682 7.17089 20.6777 7.56141L18.5563 9.68273L14.3137 5.44009ZM1 10H4V4H10V6H6V12H1Z"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Waveform)} fill="currentColor" stroke="none"
                     viewBox="0 0 100 100">
                 <path

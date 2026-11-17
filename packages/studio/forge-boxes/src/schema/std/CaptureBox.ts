@@ -4,7 +4,8 @@ import {Pointers} from "@opendaw/studio-enums"
 const CaptureAttributes = {
     1: {type: "string", name: "device-id"},
     2: {type: "string", name: "record-mode", value: "normal"}, // "normal" | "replace" | "punch"
-    ...reserveMany(3, 4, 5, 6, 7, 8, 9)
+    3: {type: "boolean", name: "armed", value: false},
+    ...reserveMany(4, 5, 6, 7, 8, 9)
 } as const satisfies FieldRecord<Pointers>
 
 export const CaptureAudioBox: BoxSchema<Pointers> = {

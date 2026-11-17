@@ -201,7 +201,8 @@ export enum IconSymbol {
     CallHangup,
     Broadcast,
     Surgeon,
-    RecordStudio
+    RecordStudio,
+    PencilStep,
 }
 
 export namespace IconSymbol {

@@ -121,3 +121,7 @@ The view must look like it was always part of openDAW. Derived from the stock de
     a short hint how to open it.
 11. Fresh data: host.data.<buffer>.toArray() returns a copy. Re-read it in the subscribe callback instead of
     keeping an old array, or a reopened view or another view's edit shows stale data.
+12. Keys reach the view first: the view is its own iframe document, with keyboard focus it receives every key
+    before the studio, the studio shortcuts included (Space plays and stops). The studio cannot stop a key
+    before the view sees it. Call blur() on a button after its click and ignore Space and other studio
+    shortcuts in key listeners, or the view reacts to them as well.

@@ -189,18 +189,18 @@ export class WclapBridges {
 
     imports(): Record<string, (...args: Array<number>) => number | void> {
         return {
-            host_wclap_create: (uuidPtr) => this.#create(uuidPtr),
-            host_wclap_load: (handle, urlPtr, urlLen, idPtr, idLen) => this.#load(handle, urlPtr, urlLen, idPtr, idLen),
+            host_wclap_create: (uuidPtr) => this.#create(uuidPtr >>> 0),
+            host_wclap_load: (handle, urlPtr, urlLen, idPtr, idLen) => this.#load(handle, urlPtr >>> 0, urlLen, idPtr >>> 0, idLen),
             host_wclap_process: (handle, in0, in1, out0, out1, frames, bpm, position, flags) =>
-                this.#process(handle, in0, in1, out0, out1, frames, bpm, position, flags),
-            host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left, right, frames),
+                this.#process(handle, in0 >>> 0, in1 >>> 0, out0 >>> 0, out1 >>> 0, frames, bpm, position, flags),
+            host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left >>> 0, right >>> 0, frames),
             host_wclap_note: (handle, on, key, velocity) => this.#note(handle, on !== 0, key, velocity),
             host_wclap_process_notes: (handle, serial, inPtr, inCount, outPtr, outMax, frames, bpm, position, flags) =>
-                this.#processNotes(handle, serial >>> 0, inPtr, inCount, outPtr, outMax, frames, bpm, position, flags),
+                this.#processNotes(handle, serial >>> 0, inPtr >>> 0, inCount, outPtr >>> 0, outMax, frames, bpm, position, flags),
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
             host_wclap_state: (handle, ptr, len) =>
-                this.#state(handle, decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr, len).slice()))),
-            host_wclap_state_bytes: (handle, ptr, len) => this.#state(handle, new Uint8Array(this.#memory.buffer, ptr, len).slice()),
+                this.#state(handle, decodeBase64(decodeUtf8(new Uint8Array(this.#memory.buffer, ptr >>> 0, len).slice()))),
+            host_wclap_state_bytes: (handle, ptr, len) => this.#state(handle, new Uint8Array(this.#memory.buffer, ptr >>> 0, len).slice()),
             host_wclap_reset: (handle) => this.#reset(handle),
             host_wclap_latency: (handle) => this.#latency(handle),
             host_wclap_release: (handle) => this.#release(handle),

@@ -98,7 +98,7 @@ const setup = async () => {
         loopArea.enabled.setValue(true)
     })
     const resolve = () => capture.resolveCapture().unwrap("nothing captured")
-    return {project, worklet, audioContext, capture, at, key, play, jump, loop, resolve}
+    return {project, worklet, audioContext, capture, captureBox, at, key, play, jump, loop, resolve}
 }
 
 const seconds = (pulses: ppqn) => PPQN.pulsesToSeconds(pulses, 120)
@@ -161,5 +161,14 @@ describe("CaptureMidi", () => {
         capture.resetCapture()
         expect(capture.captureNoteOnCount.getValue()).toBe(0)
         expect(capture.resolveCapture().isEmpty()).toBe(true)
+    })
+    it("stores arming in its box without an undo step, so a reload can arm it again", async () => {
+        const {project, capture, captureBox} = await setup()
+        expect(captureBox.armed.getValue()).toBe(true)
+        capture.armed.setValue(false)
+        expect(captureBox.armed.getValue()).toBe(false)
+        capture.armed.setValue(true)
+        project.editing.undo()
+        expect(captureBox.isAttached(), "the only undo step is creating the capture").toBe(false)
     })
 })

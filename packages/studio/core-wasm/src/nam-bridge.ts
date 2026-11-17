@@ -64,11 +64,11 @@ export class NamBridges {
     /// The `host_nam_*` closures to bind into each device's `env`.
     imports(): Record<string, (...args: Array<number>) => number | void> {
         return {
-            host_nam_create: (uuidPtr) => this.#create(uuidPtr),
-            host_nam_load: (handle, jsonPtr, jsonLen) => this.#load(handle, jsonPtr, jsonLen),
+            host_nam_create: (uuidPtr) => this.#create(uuidPtr >>> 0),
+            host_nam_load: (handle, jsonPtr, jsonLen) => this.#load(handle, jsonPtr >>> 0, jsonLen),
             host_nam_set_mono: (handle, mono) => this.#setMono(handle, mono !== 0),
             host_nam_process: (handle, in0, in1, out0, out1, frames, channels) =>
-                this.#process(handle, in0, in1, out0, out1, frames, channels),
+                this.#process(handle, in0 >>> 0, in1 >>> 0, out0 >>> 0, out1 >>> 0, frames, channels),
             host_nam_reset: (handle) => this.#reset(handle),
             host_nam_release: (handle) => this.#release(handle)
         }
