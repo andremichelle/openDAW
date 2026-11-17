@@ -86,6 +86,7 @@ import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
+import {MidiAccessOnLoad} from "@/service/MidiAccessOnLoad"
 import {ChatService} from "@/chat/ChatService"
 import {CallService} from "@/call/CallService"
 import {FollowService} from "@/follow/FollowService"
@@ -553,6 +554,7 @@ export class StudioService implements ProjectEnv {
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)
                 )
                 this.#navigation.onProjectOpened()
+                MidiAccessOnLoad.check(project).then(EmptyExec, EmptyExec)
             } else {
                 this.engine.releaseWorklet()
                 range.maxUnits = PPQN.fromSignature(128, 1)
