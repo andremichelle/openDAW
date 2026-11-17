@@ -19,7 +19,7 @@ bursts. While the transport runs, the step that plays is lit.
 
 1. The lane list shows each lane's note and, on a Playfield, the name of its pad. The dot lights while the lane's note
    sounds. Drag a lane up or down to reorder the list, right click a lane to remove it. **M** mutes a lane, **S**
-   plays only the soloed lanes.
+   plays only the soloed lanes, both in the shown pattern.
 2. **+ Lane** adds a lane on the next note without one, up to 127 lanes.
 3. **Roll Lane** and **Roll All** throw a new rhythm for the selected lane or for every lane of the pattern. The rate and
    the bursts stay as they are.
@@ -35,8 +35,8 @@ Example uses:
 
 ## 1. Pattern
 
-Eight patterns, each holds the rhythm of every lane. The lanes' notes, velocities and gates are the same in every
-pattern.
+Eight patterns, each holds the rhythm, the mute and the solo of every lane. The lanes' notes, velocities and gates are
+the same in every pattern. Automating the pattern also mutes and solos lanes.
 
 1. **1 to 8**: plays that pattern from the next bar. A tile flashes until its bar. **Off** stops the lanes at the next
    bar, notes from the track still pass. The pattern can be automated.
