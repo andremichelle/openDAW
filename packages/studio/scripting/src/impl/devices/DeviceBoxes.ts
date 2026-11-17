@@ -215,6 +215,7 @@ export namespace DeviceBoxes {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)
+                    box.seed.setValue(Math.floor(Math.random() * 0x7FFF0000))
                 })
             case "Velocity":
                 return VelocityDeviceBox.create(boxGraph, UUID.generate(), box => {

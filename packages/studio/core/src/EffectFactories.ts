@@ -150,6 +150,7 @@ export namespace EffectFactories {
                 box.label.setValue("Euclid")
                 box.index.setValue(index)
                 box.host.refer(hostField)
+                box.seed.setValue(Math.floor(Math.random() * 0x7FFF0000))
             })
             EuclidLanes.createLane(boxGraph, device, firstNote(hostField))
             return device
