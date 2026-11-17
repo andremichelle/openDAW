@@ -35,7 +35,8 @@ toast and nothing is applied.
 ## The script body
 
 A script is the body of an async function, not a module. `await` works everywhere and `return` ends the script
-early. There is no `import`, everything is a global (see [Globals](./08-globals.md)). Types like
+early. A value returned at the top level is the script's result, an agent connected to the studio receives it as
+JSON. There is no `import`, everything is a global (see [Globals](./08-globals.md)). Types like
 `AnyAudioEffect` or `NoteRegion` are available for annotations.
 
 ## Reading and writing

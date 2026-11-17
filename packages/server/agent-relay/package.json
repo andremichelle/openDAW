@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "name": "agent-relay",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "NODE_ENV=development PORT=8791 node server.js",
+    "start": "NODE_ENV=production node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

@@ -1,0 +1,14 @@
+[Unit]
+Description=openDAW agent relay (forwarded by opendaw-yjs under live.opendaw.studio/agent/)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/agent-relay
+Environment=NODE_ENV=production
+Environment=PORT=8790
+ExecStart=/usr/bin/env node server.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

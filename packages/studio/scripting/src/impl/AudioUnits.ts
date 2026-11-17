@@ -193,7 +193,8 @@ export class InstrumentAudioUnitImpl extends SendableAudioUnitFacade implements 
             const previous = this.instrumentBox
             const label = this.label
             const trackType = InstrumentFactories.Named[key].trackType
-            const previousTrackType = InstrumentFactories.Named[DeviceBoxes.instrumentKeyOf(previous.name)].trackType
+            const previousKey = InstrumentFactories.keyOfBox(previous)
+            const previousTrackType = isDefined(previousKey) ? InstrumentFactories.Named[previousKey].trackType : TrackType.Notes
             previous.delete()
             if (trackType !== previousTrackType) {
                 this.box.capture.targetVertex.ifSome(vertex => vertex.box.delete())

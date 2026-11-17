@@ -3,6 +3,21 @@ import {Interpolation, PPQN} from "@opendaw/lib-dsp"
 import {createFixture} from "./Fixture"
 
 describe("Project", () => {
+    it("finds objects by uuid", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const track = unit.noteTracks[0]
+        const region = track.addRegion({position: 0, duration: PPQN.Bar})
+        const note = region.addEvent({position: 0, pitch: 60, duration: PPQN.Quarter})
+        expect(project.findByUuid(unit.uuid)).toBe(unit)
+        expect(project.findByUuid(unit.instrument.uuid)).toBe(unit.instrument)
+        expect(project.findByUuid(track.uuid)).toBe(track)
+        expect(project.findByUuid(region.uuid)).toBe(region)
+        expect(project.findByUuid(note.uuid)).toBe(note)
+        expect(project.findByUuid("00000000-0000-4000-8000-000000000000")).toBeNull()
+        expect(project.findByUuid("not a uuid")).toBeNull()
+    })
+
     it("creates an empty project with an output unit", () => {
         const {project} = createFixture()
         expect(project.name).toBe("Test")

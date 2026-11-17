@@ -6,6 +6,7 @@ import fs from "fs"
 import * as number from "lib0/number"
 import {setupWSConnection, ROOM_CLEANUP_DELAY_MS} from "./utils.js"
 import * as map from 'lib0/map'
+import {createAgentProxy} from "./agent-proxy.js"
 
 const host = process.env.HOST || "0.0.0.0"
 const port = number.parseInt(process.env.PORT || "443")
@@ -25,7 +26,13 @@ const corsAllowedOrigins = [
     'https://localhost:8080'
 ]
 
+const agentProxy = createAgentProxy({port: number.parseInt(process.env.AGENT_PORT || "8790")})
+
 const server = https.createServer(certConfig, (req, res) => {
+    if (agentProxy.matches(req)) {
+        agentProxy.handleRequest(req, res)
+        return
+    }
     const origin = req.headers.origin
     if (origin && corsAllowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin)
@@ -155,6 +162,10 @@ signalingWss.on('connection', (conn, req) => {
 })
 
 server.on("upgrade", (req, socket, head) => {
+    if (agentProxy.matches(req)) {
+        agentProxy.handleUpgrade(req, socket, head)
+        return
+    }
     const url = req.url || '/'
     console.log("HTTP upgrade request from", req.headers.origin, url)
 

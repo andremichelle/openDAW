@@ -1,0 +1,70 @@
+component
+  padding: 1em 0
+  display: grid
+  row-gap: 16px
+
+  color: var(--color-shadow)
+
+  > p
+    margin: 0
+
+  > .mode
+    justify-self: start
+    column-gap: 1.5em
+
+    > label
+      padding: 0
+
+    > label:first-of-type:after
+      content: "or"
+      position: absolute
+      left: 100%
+      width: 1.5em
+      text-align: center
+      color: var(--color-shadow)
+      pointer-events: none
+
+  > .panels
+    display: grid
+
+    > .panel
+      grid-area: 1 / 1
+      display: grid
+      row-gap: 8px
+      align-content: start
+
+      &.inactive
+        visibility: hidden
+
+      .dim
+        opacity: 0.3
+
+      .note
+        color: var(--color-shadow)
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+      > label
+        margin-top: 8px
+        font-size: 0.75rem
+        color: var(--color-shadow)
+
+      > .buttons
+        display: flex
+        column-gap: 0.5em
+
+      > .row
+        display: grid
+        grid-template-columns: 1fr auto
+        column-gap: 0.5em
+        align-items: center
+
+        > .command
+          margin: 0
+          top: 0
+          height: 1.5em
+          box-sizing: border-box
+          min-width: 0
+          font-family: monospace
+

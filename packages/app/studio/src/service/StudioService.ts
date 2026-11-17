@@ -92,6 +92,7 @@ import {ArmedCaptures} from "@/service/ArmedCaptures"
 import {ChatService} from "@/chat/ChatService"
 import {CallService} from "@/call/CallService"
 import {FollowService} from "@/follow/FollowService"
+import {AgentConnection} from "@/script/AgentConnection"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -140,6 +141,7 @@ export class StudioService implements ProjectEnv {
     readonly engine = new EngineFacade()
     readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
+    readonly agentConnection = new AgentConnection(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
     readonly screenRecorder: ScreenRecorder
 

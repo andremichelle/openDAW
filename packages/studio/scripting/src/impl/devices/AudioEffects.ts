@@ -23,7 +23,10 @@ import {
     TidalDeviceBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
-    WerkstattDeviceBox
+    WerkstattDeviceBox,
+    ModularDeviceBox,
+    UnknownAudioEffectDeviceBox,
+    WclapDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {Mixing, Waveshaper} from "@opendaw/lib-dsp"
@@ -64,7 +67,7 @@ import {
     TidalEffect,
     VocoderEffect,
     WaveshaperEffect,
-    WerkstattEffect
+    WerkstattEffect, UnsupportedAudioEffect
 } from "../../Api"
 import {Context} from "../Context"
 import {Accessors, Facade, Props} from "../Common"
@@ -78,7 +81,7 @@ import {AudioUnitImpls} from "../AudioUnits"
 import {Sends} from "../Sends"
 
 export abstract class AudioEffectFacade<B extends EffectDeviceBox = EffectDeviceBox> extends EffectFacade<B> {
-    abstract readonly key: keyof AudioEffects
+    abstract readonly key: keyof AudioEffects | UnsupportedAudioEffect["key"]
     get audioUnit(): AnyAudioUnit {return Facades.audioUnitOf(this.context, this.box)}
 }
 
@@ -113,6 +116,18 @@ export type AnyAudioEffectImpl =
     | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
     | ReverbEffectImpl | StereoToolEffectImpl | SinkEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
     | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | FrequencySplitEffectImpl
+    | UnsupportedAudioEffectImpl
+
+type UnsupportedAudioEffectBox = WclapDeviceBox | ModularDeviceBox | UnknownAudioEffectDeviceBox
+
+export class UnsupportedAudioEffectImpl extends AudioEffectFacade<UnsupportedAudioEffectBox> implements UnsupportedAudioEffect {
+    readonly key: UnsupportedAudioEffect["key"]
+
+    constructor(context: Context, box: UnsupportedAudioEffectBox) {
+        super(context, box)
+        this.key = box instanceof WclapDeviceBox ? "WebCLAP" : box instanceof ModularDeviceBox ? "Modular" : "Unknown"
+    }
+}
 
 export class AutotuneEffectImpl extends AudioEffectFacade<AutotuneDeviceBox> implements AutotuneEffect {
     readonly key = "Autotune" as const
@@ -599,10 +614,14 @@ export namespace AudioEffectImpls {
         if (box instanceof AudioEffectCompositeBox) {return new AudioEffectCompositeImpl(context, box)}
         if (box instanceof StereoCompositeBox) {return new StereoSplitEffectImpl(context, box)}
         if (box instanceof FrequencySplitBox) {return new FrequencySplitEffectImpl(context, box)}
+        if (AudioEffectImpls.isUnsupportedBox(box)) {return new UnsupportedAudioEffectImpl(context, box)}
         return panic(`${box.name} is not a supported audio-effect`)
     }) as AnyAudioEffectImpl
 
     export const isBox = (box: Box): box is AudioEffectBox => DeviceBoxes.isAudioEffectBox(box.name)
+
+    export const isUnsupportedBox = (box: Box): box is UnsupportedAudioEffectBox =>
+        box instanceof WclapDeviceBox || box instanceof ModularDeviceBox || box instanceof UnknownAudioEffectDeviceBox
 
     export const isCompositeBox = (box: Box): box is CompositeBox =>
         box instanceof AudioEffectCompositeBox || box instanceof StereoCompositeBox || box instanceof FrequencySplitBox

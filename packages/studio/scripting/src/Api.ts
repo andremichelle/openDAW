@@ -500,7 +500,19 @@ export interface MIDIEffects {
  * Any MIDI effect
  * @group MIDI Effects
  */
-export type AnyMIDIEffect = MIDIEffects[keyof MIDIEffects]
+/**
+ * A MIDI effect scripts reach but cannot edit yet: a WebCLAP plugin or a placeholder for an unknown device.
+ * Label, enabled, minimized, move and remove work, its parameters are not exposed
+ * @group Devices
+ */
+export interface UnsupportedMIDIEffect extends Effect {
+    /** "WebCLAP" or "Unknown" */
+    readonly key: "WebCLAP" | "Unknown"
+    /** The audio unit this effect belongs to */
+    readonly audioUnit: AnyAudioUnit
+}
+
+export type AnyMIDIEffect = MIDIEffects[keyof MIDIEffects] | UnsupportedMIDIEffect
 
 // ---- Audio effects
 
@@ -1070,7 +1082,19 @@ export interface AudioEffects {
  * Any audio effect
  * @group Audio Effects
  */
-export type AnyAudioEffect = AudioEffects[keyof AudioEffects]
+/**
+ * An audio effect scripts reach but cannot edit yet: a WebCLAP plugin, Modular or a placeholder for an unknown device.
+ * Label, enabled, minimized, move and remove work, its parameters are not exposed
+ * @group Devices
+ */
+export interface UnsupportedAudioEffect extends Effect {
+    /** "WebCLAP", "Modular" or "Unknown" */
+    readonly key: "WebCLAP" | "Modular" | "Unknown"
+    /** The audio unit this effect belongs to */
+    readonly audioUnit: AnyAudioUnit
+}
+
+export type AnyAudioEffect = AudioEffects[keyof AudioEffects] | UnsupportedAudioEffect
 
 // ---- Effect hosts
 
@@ -2895,7 +2919,24 @@ export interface Instruments {
  * Any instrument
  * @group Instruments
  */
-export type AnyInstrument = Instruments[keyof Instruments]
+/**
+ * An instrument scripts reach but cannot edit yet: a WebCLAP plugin, Korpus or a placeholder ("Noop").
+ * Label, icon, enabled, minimized and remove work, its parameters are not exposed.
+ * {@link InstrumentAudioUnit.setInstrument} replaces it with a supported instrument
+ * @group Devices
+ */
+export interface UnsupportedInstrument extends Device {
+    /** "WebCLAP", "Korpus" or "Noop" */
+    readonly key: "WebCLAP" | "Korpus" | "Noop"
+    /** The audio unit this instrument belongs to */
+    readonly audioUnit: InstrumentAudioUnit
+    /** Icon name (see IconSymbol) */
+    icon: string
+    /** Removes the whole audio unit */
+    remove(): void
+}
+
+export type AnyInstrument = Instruments[keyof Instruments] | UnsupportedInstrument
 
 /**
  * Any instrument or effect
@@ -2992,8 +3033,8 @@ export interface AudioUnit extends MIDIEffectHost, AudioEffectHost {
 export interface InstrumentAudioUnit<K extends keyof Instruments = keyof Instruments> extends AudioUnit, Sendable {
     /** Always "instrument" */
     readonly kind: "instrument"
-    /** The instrument */
-    readonly instrument: Instruments[K]
+    /** The instrument, an {@link UnsupportedInstrument} for instruments scripts cannot edit yet */
+    readonly instrument: [keyof Instruments] extends [K] ? AnyInstrument : Instruments[K]
     /**
      * Replace the instrument with another type (keeps effects and automation, and keeps note or audio tracks
      * unless the new instrument takes the other input, which replaces them with one empty track)
@@ -4072,6 +4113,8 @@ export interface Project {
     readonly groupUnits: ReadonlyArray<GroupAudioUnit>
     /** Find a unit by its label */
     findAudioUnit(label: string): Nullable<AnyAudioUnit>
+    /** Find any object (unit, device, track, region, note, ...) by its `uuid`, null if there is none */
+    findByUuid(uuid: string): Nullable<object>
     /**
      * Add an instrument unit. It comes with one default track matching the instrument.
      * @param key - Instrument type
