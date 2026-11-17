@@ -99,6 +99,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-surgeon]
 opt-level = 3
+[profile.release.package.device-guitar]
+opt-level = 3
 [profile.release.package.device-opendrum-kick]
 opt-level = 3
 [profile.release.package.device-opendrum-perc]

@@ -16,6 +16,7 @@ const EVENT_STROKE: u32 = 0x100; // private kind of the generated strokes, ranke
 const QUEUE: usize = 256;
 const NO_KEY: u32 = u32::MAX;
 const AUDITION_KEY: u32 = u32::MAX - 1;
+const CHARACTER: f32 = 0.5;
 const ENDED: usize = 8; // note-offs that came before their note-on on the same sample
 const SHORT_NOTE: f32 = 0.06; // seconds a played note sounds when it ended before its pluck
 const PENDING: usize = 16;
@@ -120,7 +121,6 @@ pub struct Settings {
     pub pluck_variation: f32,
     pub tension: f32,
     pub spot: f32,
-    pub character: f32,
     pub pick: i32,
     pub spread: f32,
     pub tilt: f32,
@@ -197,7 +197,7 @@ impl State {
         self.settings = Settings {
             mode: CHORDS_MODE, rate: 1, speed: 0.3, speed_variation: 0.2, velocity: 0.8, velocity_variation: 0.75,
             position: 0, tuning: 0, damping: 0.33, damping_variation: 0.5, pluck: 0.5,
-            pluck_variation: 0.5, tension: 0.0, spot: 0.2, character: 0.5, pick: 3, spread: 0.6, tilt: 0.0, chord: 0,
+            pluck_variation: 0.5, tension: 0.0, spot: 0.2, pick: 3, spread: 0.6, tilt: 0.0, chord: 0,
             gain: dsp::db_to_gain(-6.0)
         };
         let mut noise = 65535u32;
@@ -306,6 +306,9 @@ impl State {
             return;
         }
         let open = self.open();
+        if open[string] == fretting::OFF {
+            return;
+        }
         self.drop_queued(|item| item.string as usize == string);
         self.keys[string] = AUDITION_KEY;
         self.display[string] = (pitch - open[string]).clamp(0, fretting::MAX_FRET) as i8;
@@ -560,9 +563,9 @@ impl State {
             velocity: item.velocity.clamp(0.02, 1.2),
             decay,
             plug: ((low + unit(4) * (high - low)) * brightness).min(0.95),
-            position: 0.04 + 0.46 * settings.spot + bipolar(6) * 0.03 * settings.character,
+            position: 0.04 + 0.46 * settings.spot + bipolar(6) * 0.03 * CHARACTER,
             tension: settings.tension,
-            character: settings.character,
+            character: CHARACTER,
             touch: item.touch,
             pick: Pick::from_index(settings.pick),
             up: item.up,
