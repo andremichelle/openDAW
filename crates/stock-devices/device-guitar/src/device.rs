@@ -1,7 +1,7 @@
 //! The Guitar device: patterns strum the chord track or a custom shape, played notes land on the strings.
 
 use abi::{float_value, int_value, Block, BlockFlags, EventRecord, FieldValue, Instrument, ParamValue, EVENT_CHOKE, EVENT_NOTE_ON, EVENT_NOTE_OFF};
-use libm::{ceil, round};
+use libm::ceil;
 use math::value_mapping::{Decibel, Linear, LinearInteger};
 
 use dsp::simple_limiter::SimpleLimiter;
@@ -150,7 +150,6 @@ pub struct State {
     patterns: [Pattern; SLOTS],
     slot: usize,
     bpm: f32,
-    bar: (f64, f64, i64),
     shapes: [Tab; SHAPES],
     queue: [Scheduled; QUEUE],
     queued: usize,
@@ -203,7 +202,6 @@ impl State {
         self.patterns = [Pattern::EMPTY; SLOTS];
         self.slot = 0;
         self.bpm = 120.0;
-        self.bar = (-1.0, 0.0, 0);
         self.shapes = [[MUTED; STRINGS]; SHAPES];
         self.tab = [MUTED; STRINGS];
         self.display = [MUTED; STRINGS];
@@ -260,33 +258,6 @@ impl State {
         }
         let tab = self.shapes[index as usize - 1];
         if tab.iter().any(|fret| *fret >= 0) {Some(tab)} else {None}
-    }
-
-    fn bar_index(&mut self, bar: &abi::Bar, bar_at: fn(f64) -> abi::Bar) -> i64 {
-        let (start, length, index) = self.bar;
-        if bar.start == start {
-            return index;
-        }
-        let counted = if start >= 0.0 && (bar.start - (start + length)).abs() < 1.0e-6 {
-            index + 1
-        } else {
-            let (mut at, mut count) = (bar.start, 0);
-            while at > 1.0e-6 {
-                let previous = bar_at(at - 1.0).start;
-                if previous >= at {
-                    break;
-                }
-                at = previous;
-                count += 1;
-            }
-            count
-        };
-        self.bar = (bar.start, bar.length, counted);
-        counted
-    }
-
-    fn forget_bars(&mut self) {
-        self.bar = (-1.0, 0.0, 0);
     }
 
     pub fn set_shapes(&mut self, values: &[i32]) {
@@ -571,15 +542,11 @@ impl State {
     }
 }
 
-/// The strokes of `[from, to)` as internal note-ons, the pattern restarts with every bar.
-pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at: fn(f64) -> abi::Bar,
-                out: &mut [EventRecord]) -> usize {
+/// The strokes of `[from, to)` as internal note-ons, the pattern runs on from the start of the song.
+pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &mut [EventRecord]) -> usize {
     let transporting = flags.transporting();
     if state.transporting && !transporting {
         state.release_strummed();
-    }
-    if transporting && !state.transporting {
-        state.forget_bars();
     }
     if transporting && flags.discontinuous() {
         state.drop_queued(|item| item.key == NO_KEY);
@@ -595,31 +562,18 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
     }
     let step_length = strum::step_length(state.settings.rate);
     let (straight_from, straight_to) = state.groove.straight(from, to, flags.discontinuous());
-    let mut bar = bar_at(straight_from);
-    let mut next = (ceil((straight_from - bar.start) / step_length) as i64).max(0);
+    let mut grid_index = (ceil(straight_from / step_length) as i64).max(0);
     let mut count = 0;
     loop {
-        let local = next;
-        let grid = bar.start + local as f64 * step_length;
-        if grid >= bar.start + bar.length - 1.0e-6 {
-            bar = bar_at(bar.start + bar.length);
-            next = 0;
-            continue;
-        }
-        if grid >= straight_to {
+        let grid = grid_index as f64 * step_length;
+        if grid >= straight_to || count >= out.len() {
             break;
         }
-        next += 1;
-        if count >= out.len() {
-            continue;
-        }
+        let index = grid_index;
+        grid_index += 1;
         let position = state.groove.warp(grid);
-        let grid_index = round(grid / step_length) as i64;
-        let per_bar = ceil(bar.length / step_length - 1.0e-6).max(1.0) as i64;
-        let bars = state.bar_index(&bar, bar_at);
         let pattern = &state.patterns[state.slot];
-        let span = (round(pattern.length as f64 / per_bar as f64) as i64).max(1);
-        let step = (bars.rem_euclid(span) * per_bar + local).rem_euclid(pattern.length as i64) as usize;
+        let step = index.rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
         let kind = pattern.kinds[step];
         if kind == strum::REST || kind != strum::STOP && pattern.velocities[step] <= 0.0 {
@@ -627,7 +581,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
         }
         let level = (pattern.velocities[step] * (0.4 + state.settings.velocity * 0.8)).min(1.2);
         out[count] = EventRecord {
-            position, offset: 0, kind: EVENT_STROKE, id: STROKE_MARK | (grid_index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
+            position, offset: 0, kind: EVENT_STROKE, id: STROKE_MARK | (index as u32 & 0x3FFF_FFFF), pitch: kind as u32,
             velocity: level, cent: pattern.speeds[step], duration: (pattern.masks[step] | pattern.bends[step] << 6) as f64
         };
         count += 1;
@@ -824,7 +778,7 @@ impl Instrument for Device {
     const GENERATES: bool = true;
 
     fn generate_events(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &mut [EventRecord]) -> usize {
-        generate(state, from, to, flags, abi::bar_at, out)
+        generate(state, from, to, flags, out)
     }
 
     fn process_audio(state: &mut State, output: [&mut [f32]; 2], block: &Block) {
@@ -865,7 +819,6 @@ impl Instrument for Device {
         for string in &mut state.strings {
             string.reset();
         }
-        state.forget_bars();
         state.chord_root = -1;
         state.dc = [(0.0, 0.0); 2];
         state.pickup = [[0.0; 4]; 2];

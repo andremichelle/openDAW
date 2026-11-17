@@ -1,4 +1,4 @@
-use abi::{Bar, BlockFlags, EventRecord, Harmony, ParamValue, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{BlockFlags, EventRecord, Harmony, ParamValue, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use device_guitar::device::{self, param, State};
 use device_guitar::strum;
 
@@ -9,13 +9,7 @@ static HARMONY: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 const BLANK: EventRecord = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
 
-fn four_four(pulse: f64) -> Bar {
-    Bar {start: (pulse / 3840.0).floor() * 3840.0, length: 3840.0, beat: 960.0}
-}
 
-fn three_four(pulse: f64) -> Bar {
-    Bar {start: (pulse / 2880.0).floor() * 2880.0, length: 2880.0, beat: 960.0}
-}
 
 fn state() -> Box<State> {
     let mut state: Box<State> = unsafe {Box::new_zeroed().assume_init()};
@@ -38,9 +32,9 @@ fn playing() -> BlockFlags {
     BlockFlags::create(true, false, true, false)
 }
 
-fn strokes(state: &mut State, from: f64, to: f64, bar_at: fn(f64) -> Bar) -> Vec<EventRecord> {
+fn strokes(state: &mut State, from: f64, to: f64) -> Vec<EventRecord> {
     let mut out = [BLANK; 64];
-    let count = device::generate(state, from, to, playing(), bar_at, &mut out);
+    let count = device::generate(state, from, to, playing(), &mut out);
     out[..count].to_vec()
 }
 
@@ -61,7 +55,7 @@ fn rms(signal: &[f32]) -> f32 {
 fn the_pattern_places_its_strokes_on_the_rate_grid() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, 0, 0, 0, strum::UP, 0, 0, 0]);
-    let events = strokes(&mut state, 0.0, 3840.0, four_four);
+    let events = strokes(&mut state, 0.0, 3840.0);
     let found: Vec<(f64, u32)> = events.iter().map(|event| (event.position, event.pitch)).collect();
     assert_eq!(found, vec![(0.0, 1), (960.0, 2), (1920.0, 1), (2880.0, 2)]);
 }
@@ -71,36 +65,45 @@ fn half_and_double_rate() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, strum::UP]);
     device::apply_parameter(&mut state, param::RATE, ParamValue::Int(0));
-    assert_eq!(strokes(&mut state, 0.0, 960.0, four_four).len(), 2);
+    assert_eq!(strokes(&mut state, 0.0, 960.0).len(), 2);
     device::apply_parameter(&mut state, param::RATE, ParamValue::Int(2));
-    assert_eq!(strokes(&mut state, 0.0, 960.0, four_four).len(), 8);
+    assert_eq!(strokes(&mut state, 0.0, 960.0).len(), 8);
 }
 
 #[test]
 fn blocks_split_anywhere_yield_the_same_strokes() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, 0, strum::UP, strum::MUTE]);
-    let whole: Vec<f64> = strokes(&mut state, 0.0, 7680.0, four_four).iter().map(|event| event.position).collect();
+    let whole: Vec<f64> = strokes(&mut state, 0.0, 7680.0).iter().map(|event| event.position).collect();
     let mut split = Vec::new();
     let mut from = 0.0;
     while from < 7680.0 {
         let to = (from + 97.3f64).min(7680.0);
-        split.extend(strokes(&mut state, from, to, four_four).iter().map(|event| event.position));
+        split.extend(strokes(&mut state, from, to).iter().map(|event| event.position));
         from = to;
     }
     assert_eq!(whole, split);
 }
 
 #[test]
-fn the_pattern_restarts_with_every_bar() {
+fn the_pattern_runs_on_across_bars() {
     let mut state = state();
     let mut kinds = vec![0; 16];
     kinds[0] = strum::BASS;
     kinds[12] = strum::DOWN;
     pattern(&mut state, &kinds);
-    let events = strokes(&mut state, 0.0, 2880.0 * 2.0, three_four);
-    let kinds: Vec<u32> = events.iter().map(|event| event.pitch).collect();
-    assert_eq!(kinds, vec![strum::BASS as u32, strum::BASS as u32]);
+    let events: Vec<(f64, u32)> = strokes(&mut state, 0.0, 2880.0 * 2.0).iter().map(|event| (event.position, event.pitch)).collect();
+    assert_eq!(events, vec![(0.0, strum::BASS as u32), (2880.0, strum::DOWN as u32), (3840.0, strum::BASS as u32)]);
+}
+
+#[test]
+fn every_step_of_a_long_pattern_plays() {
+    let mut state = state();
+    let mut kinds = vec![0; 20];
+    kinds[19] = strum::DOWN;
+    pattern(&mut state, &kinds);
+    let events: Vec<f64> = strokes(&mut state, 0.0, 9600.0).iter().map(|event| event.position).collect();
+    assert_eq!(events, vec![4560.0, 9360.0]);
 }
 
 #[test]
@@ -108,10 +111,10 @@ fn the_slot_switches_the_playing_pattern_at_once() {
     let mut state = state();
     slot_pattern(&mut state, 0, &[strum::DOWN, 0, 0, 0]);
     slot_pattern(&mut state, 15, &[0, strum::UP, 0, 0]);
-    let first: Vec<u32> = strokes(&mut state, 0.0, 960.0, four_four).iter().map(|event| event.pitch).collect();
+    let first: Vec<u32> = strokes(&mut state, 0.0, 960.0).iter().map(|event| event.pitch).collect();
     assert_eq!(first, vec![strum::DOWN as u32]);
     device::apply_parameter(&mut state, param::SLOT, ParamValue::Int(15));
-    let events = strokes(&mut state, 960.0, 1920.0, four_four);
+    let events = strokes(&mut state, 960.0, 1920.0);
     let second: Vec<(f64, u32)> = events.iter().map(|event| (event.position, event.pitch)).collect();
     assert_eq!(second, vec![(1200.0, strum::UP as u32)]);
 }
@@ -121,7 +124,7 @@ fn every_slot_keeps_its_own_length() {
     let mut state = state();
     slot_pattern(&mut state, 0, &[strum::DOWN, 0]);
     slot_pattern(&mut state, 1, &[strum::DOWN, 0, 0, 0, 0, 0, 0, 0]);
-    let count = |state: &mut State| strokes(state, 0.0, 3840.0, four_four).len();
+    let count = |state: &mut State| strokes(state, 0.0, 3840.0).len();
     assert_eq!(count(&mut state), 8);
     device::apply_parameter(&mut state, param::SLOT, ParamValue::Int(1));
     assert_eq!(count(&mut state), 2);
@@ -132,7 +135,7 @@ fn keys_mode_strums_nothing_on_its_own() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
     device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
-    assert!(strokes(&mut state, 0.0, 3840.0, four_four).is_empty());
+    assert!(strokes(&mut state, 0.0, 3840.0).is_empty());
 }
 
 #[test]
@@ -159,7 +162,7 @@ fn a_stroke_strums_the_chord_track_and_stays_silent_without_a_chord() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     assert_eq!(state.display(), [-1, 3, 2, 0, 1, 0]);
     let (left, right) = render(&mut state, 24000);
@@ -168,7 +171,7 @@ fn a_stroke_strums_the_chord_track_and_stays_silent_without_a_chord() {
     let mut silent = self::state();
     pattern(&mut silent, &[strum::DOWN]);
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: None});
-    let events = strokes(&mut silent, 0.0, 240.0, four_four);
+    let events = strokes(&mut silent, 0.0, 240.0);
     device::handle(&mut silent, &events[0]);
     let (left, _) = render(&mut silent, 4800);
     assert_eq!(rms(&left), 0.0);
@@ -189,7 +192,7 @@ fn a_custom_shape_plays_its_exact_frets_without_the_chord_track() {
     state.set_shapes(&shapes);
     device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(3));
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: None});
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     assert_eq!(state.display(), [12, 0, 0, 0, 12, 0]);
     let (left, _) = render(&mut state, 9600);
@@ -210,7 +213,7 @@ fn every_pick_of_a_repeated_two_string_pick_plays_both_strings() {
     shapes[0] = pack([3, -1, 0, 0, 3, -1]);
     state.set_shapes(&shapes);
     device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(1));
-    let events = strokes(&mut state, 0.0, 3840.0, four_four);
+    let events = strokes(&mut state, 0.0, 3840.0);
     assert_eq!(events.len(), 4);
     for event in &events {
         device::handle(&mut state, event);
@@ -228,7 +231,7 @@ fn the_velocity_variation_is_one_value_for_the_whole_step() {
     state.set_lane(0, 1, &[0b111111; 64]);
     device::apply_parameter(&mut state, param::VELOCITY_VARIATION, ParamValue::Float(1.0));
     let mut levels = Vec::new();
-    for event in strokes(&mut state, 0.0, 960.0, four_four) {
+    for event in strokes(&mut state, 0.0, 960.0) {
         device::handle(&mut state, &event);
         let velocities: Vec<f32> = state.scheduled_velocities().collect();
         assert!(velocities.len() > 1);
@@ -244,7 +247,7 @@ fn a_step_carries_the_bend_of_every_string_to_the_stroke() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, strum::DOWN]);
     state.set_lane(0, 4, &[0, 4 | 2 << 12, 0, 0]);
-    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    let events = strokes(&mut state, 0.0, 480.0);
     let bends: Vec<i32> = events.iter().map(|event| event.duration as i32 >> 6).collect();
     let masks: Vec<i32> = events.iter().map(|event| event.duration as i32 & 0b111111).collect();
     assert_eq!(bends, vec![0, 4 | 2 << 12]);
@@ -258,40 +261,11 @@ fn only_the_bent_string_bends() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
     state.set_lane(0, 4, &[3 << 12; 64]);
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     let mut bends: Vec<(u8, f32)> = state.scheduled_bends().collect();
     bends.sort_by_key(|(string, _)| *string);
     assert_eq!(bends, vec![(1, 0.0), (2, 0.0), (3, 0.0), (4, 1.0), (5, 0.0)]);
-}
-
-fn three_bars_then_three_four(pulse: f64) -> Bar {
-    if pulse < 3840.0 * 3.0 {
-        four_four(pulse)
-    } else {
-        let start = 11520.0 + ((pulse - 11520.0) / 2880.0).floor() * 2880.0;
-        Bar {start, length: 2880.0, beat: 960.0}
-    }
-}
-
-#[test]
-fn a_two_bar_pattern_alternates_across_a_signature_change() {
-    let mut state = state();
-    let mut kinds = [0; 24];
-    kinds[0] = strum::BASS;
-    kinds[12] = strum::DOWN;
-    pattern(&mut state, &kinds);
-    let first = |state: &mut State, start: f64| -> Vec<u32> {
-        strokes(state, start, start + 240.0, three_bars_then_three_four).iter().map(|event| event.pitch).collect()
-    };
-    let bass = vec![strum::BASS as u32];
-    let down = vec![strum::DOWN as u32];
-    for start in [0.0, 3840.0, 7680.0] {
-        first(&mut state, start);
-    }
-    assert_eq!(first(&mut state, 11520.0), down, "the fourth bar is odd");
-    assert_eq!(first(&mut state, 14400.0), bass);
-    assert_eq!(first(&mut state, 11520.0), down, "after a jump back");
 }
 
 #[test]
@@ -302,7 +276,7 @@ fn a_played_note_keeps_ringing_through_a_step_without_chord_and_a_stop() {
     pattern(&mut state, &[strum::DOWN, strum::STOP]);
     device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 5, pitch: 60, velocity: 0.8, ..BLANK});
     let (before, _) = render(&mut state, 4800);
-    for event in strokes(&mut state, 0.0, 480.0, four_four) {
+    for event in strokes(&mut state, 0.0, 480.0) {
         device::handle(&mut state, &event);
     }
     let (after, _) = render(&mut state, 9600);
@@ -319,7 +293,7 @@ fn bass_ignores_bends_and_a_moved_pick_keeps_its_own() {
         pattern(&mut state, &[kind]);
         state.set_lane(0, 1, &[mask; 64]);
         state.set_lane(0, 4, &[packed; 64]);
-        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        let events = strokes(&mut state, 0.0, 240.0);
         device::handle(&mut state, &events[0]);
         let mut scheduled: Vec<(u8, f32)> = state.scheduled_bends().collect();
         scheduled.sort_by_key(|(string, _)| *string);
@@ -348,7 +322,7 @@ fn a_partial_strum_after_a_chord_change_stops_the_strings_that_moved() {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, strum::DOWN]);
     state.set_lane(0, 1, &[0b111111, 0b111000, 0, 0]);
-    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    let events = strokes(&mut state, 0.0, 480.0);
     device::handle(&mut state, &events[0]);
     render(&mut state, 9600);
     assert_eq!(state.sounding(), 0b111110);
@@ -357,20 +331,6 @@ fn a_partial_strum_after_a_chord_change_stops_the_strings_that_moved() {
     render(&mut state, 48000);
     assert_eq!(state.sounding() & 0b000111, 0, "the moved bass strings still ring: {:#08b}", state.sounding());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
-}
-
-fn seven_sixteen(pulse: f64) -> Bar {
-    Bar {start: (pulse / 1680.0).floor() * 1680.0, length: 1680.0, beat: 240.0}
-}
-
-#[test]
-fn every_bar_of_an_odd_signature_starts_on_its_downbeat() {
-    let mut state = state();
-    device::apply_parameter(&mut state, param::RATE, ParamValue::Int(0));
-    pattern(&mut state, &[strum::BASS, strum::DOWN, strum::DOWN, strum::DOWN]);
-    let events = strokes(&mut state, 0.0, 1680.0 * 3.0, seven_sixteen);
-    let bass: Vec<f64> = events.iter().filter(|event| event.pitch == strum::BASS as u32).map(|event| event.position).collect();
-    assert_eq!(bass, vec![0.0, 1680.0, 3360.0]);
 }
 
 #[test]
@@ -384,7 +344,7 @@ fn a_strum_over_played_notes_still_queued_keeps_ringing() {
         device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id, pitch, velocity: 0.8, ..BLANK});
     }
     render(&mut state, 48);
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     assert!(state.scheduled_bends().count() == 5, "the played plucks still queued are dropped");
     render(&mut state, 72000);
@@ -443,7 +403,7 @@ fn a_new_stroke_drops_the_unplucked_strings_of_the_previous_one() {
     let mut state = state();
     device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(1.0));
     pattern(&mut state, &[strum::DOWN, strum::UP]);
-    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    let events = strokes(&mut state, 0.0, 480.0);
     device::handle(&mut state, &events[0]);
     render(&mut state, 480);
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
@@ -526,7 +486,7 @@ fn a_stop_stroke_unlights_the_stopped_strings() {
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
     let mut state = state();
     pattern(&mut state, &[strum::DOWN, strum::STOP]);
-    let events = strokes(&mut state, 0.0, 480.0, four_four);
+    let events = strokes(&mut state, 0.0, 480.0);
     device::handle(&mut state, &events[0]);
     render(&mut state, 9600);
     assert_ne!(state.lit(), 0);
@@ -541,7 +501,7 @@ fn a_silent_step_does_not_strum() {
     let mut velocities = [80i32; 64];
     velocities[1] = 0;
     state.set_lane(0, 2, &velocities);
-    let kinds: Vec<u32> = strokes(&mut state, 0.0, 480.0, four_four).iter().map(|event| event.pitch).collect();
+    let kinds: Vec<u32> = strokes(&mut state, 0.0, 480.0).iter().map(|event| event.pitch).collect();
     assert_eq!(kinds, vec![strum::DOWN as u32]);
 }
 
@@ -552,7 +512,7 @@ fn switching_to_keys_releases_the_strum() {
     let mut state = state();
     device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(1.0));
     pattern(&mut state, &[strum::DOWN]);
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     render(&mut state, 480);
     device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
@@ -566,7 +526,7 @@ fn a_played_note_keeps_the_ringing_strum_lit() {
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     render(&mut state, 9600);
     let strummed = state.lit();
@@ -586,7 +546,7 @@ fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
         shapes[0] = pack([12, 0, 0, 0, 12, 0]);
         state.set_shapes(&shapes);
         device::apply_parameter(&mut state, param::CHORD, ParamValue::Int(chord));
-        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        let events = strokes(&mut state, 0.0, 240.0);
         device::handle(&mut state, &events[0]);
         assert_eq!(state.display(), [-1, 3, 2, 0, 1, 0], "chord {chord}");
     }
@@ -604,7 +564,7 @@ fn every_body_strums_at_a_similar_level_without_clipping() {
             device::apply_parameter(&mut state, param::BODY, ParamValue::Int(body));
             let minor = if root == 9 {0b1000_1001} else {MAJOR};
             abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((root, minor))});
-            let events = strokes(&mut state, 0.0, 240.0, four_four);
+            let events = strokes(&mut state, 0.0, 240.0);
             device::handle(&mut state, &events[0]);
             let (left, right) = render(&mut state, 48000);
             peak = left.iter().chain(right.iter()).fold(peak, |peak, value| peak.max(value.abs()));
@@ -639,7 +599,7 @@ fn strum_centroid(kind: i32, setup: impl Fn(&mut State)) -> f32 {
     let mut state = state();
     pattern(&mut state, &[kind]);
     setup(&mut state);
-    let events = strokes(&mut state, 0.0, 240.0, four_four);
+    let events = strokes(&mut state, 0.0, 240.0);
     device::handle(&mut state, &events[0]);
     centroid(&render(&mut state, 24000).0)
 }
@@ -675,7 +635,7 @@ fn speed_variation_humanizes_the_timing_of_the_strokes() {
             pattern(&mut state, &[strum::DOWN]);
             device::apply_parameter(&mut state, param::SPEED_VARIATION, ParamValue::Float(variation));
             let from = step as f64 * 240.0;
-            let events = strokes(&mut state, from, from + 240.0, four_four);
+            let events = strokes(&mut state, from, from + 240.0);
             device::handle(&mut state, &events[0]);
             first_onset(&mut state)
         }).collect()
@@ -695,7 +655,7 @@ fn chucks_and_palm_mutes_are_heard() {
     let peak = |kind: i32| -> f32 {
         let mut state = state();
         pattern(&mut state, &[kind]);
-        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        let events = strokes(&mut state, 0.0, 240.0);
         device::handle(&mut state, &events[0]);
         let (left, _) = render(&mut state, 24000);
         20.0 * left.iter().fold(0.0f32, |peak, value| peak.max(value.abs())).log10()
@@ -717,7 +677,7 @@ fn every_string_is_plucked_about_equally_hard() {
             state.set_lane(0, 1, &[1 << string; 64]);
             device::apply_parameter(&mut state, param::BODY, ParamValue::Int(0));
             let from = step as f64 * 240.0;
-            let events = strokes(&mut state, from, from + 240.0, four_four);
+            let events = strokes(&mut state, from, from + 240.0);
             device::handle(&mut state, &events[0]);
             let (left, _) = render(&mut state, 9600);
             rms(&left) * rms(&left)
@@ -737,7 +697,7 @@ fn speed_spreads_the_strum() {
         let mut state = state();
         pattern(&mut state, &[strum::DOWN]);
         device::apply_parameter(&mut state, param::SPEED, ParamValue::Float(speed));
-        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        let events = strokes(&mut state, 0.0, 240.0);
         device::handle(&mut state, &events[0]);
         let (left, _) = render(&mut state, 28800);
         let energy = |range: &[f32]| range.iter().map(|value| value * value).sum::<f32>();
@@ -753,7 +713,7 @@ fn speed_spreads_the_strum() {
 fn low_e_ring(after: impl Fn(&mut State, &EventRecord)) -> f32 {
     let mut state = state();
     pattern(&mut state, &[strum::DOWN]);
-    let mut stroke = strokes(&mut state, 0.0, 240.0, four_four)[0];
+    let mut stroke = strokes(&mut state, 0.0, 240.0)[0];
     stroke.duration = 1.0;
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((7, MAJOR))});
     device::handle(&mut state, &stroke);
@@ -793,7 +753,7 @@ fn stopping_the_transport_mutes_the_last_stroke() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let generate = |state: &mut State, transporting: bool| {
         let mut out = [BLANK; 64];
-        device::generate(state, 3840.0, 3840.0, BlockFlags::create(transporting, false, transporting, false), four_four, &mut out);
+        device::generate(state, 3840.0, 3840.0, BlockFlags::create(transporting, false, transporting, false), &mut out);
     };
     let ringing = low_e_ring(|state, _| generate(state, true));
     let stopped = low_e_ring(|state, _| generate(state, false));
@@ -808,7 +768,7 @@ fn a_chop_lets_the_chord_through_and_stops_it_soon() {
     let level = |kind: i32, from: usize, to: usize| -> f32 {
         let mut state = state();
         pattern(&mut state, &[kind]);
-        let events = strokes(&mut state, 0.0, 240.0, four_four);
+        let events = strokes(&mut state, 0.0, 240.0);
         device::handle(&mut state, &events[0]);
         let (left, _) = render(&mut state, 24000);
         20.0 * rms(&left[from..to]).max(1.0e-9).log10()

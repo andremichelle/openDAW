@@ -81,8 +81,8 @@ edits stay.
 
 ### Length
 
-The number of steps, up to 64 on four pages. A pattern as long as a bar or two restarts with every bar of the
-signature track.
+The number of steps, up to 64 on four pages. The pattern runs on from the start of the song and plays every
+step, whatever the signature.
 
 ### Shift
 

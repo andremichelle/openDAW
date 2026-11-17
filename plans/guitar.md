@@ -63,7 +63,7 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 4. 37 built in patterns in seven styles: Strumming, Rock, Funk and Soul, Reggae and Ska, Latin, Country, Fingerstyle.
    Changing a step turns the pattern into Custom, which keeps the edits.
 5. Global strum controls: Speed, Velocity, Swing, Accent (bar downbeat, beats lighter). Shift and Clear as in Arpeggio.
-6. The pattern restarts every bar of the signature track (or every two bars for a two bar pattern).
+6. ~~The pattern restarts every bar of the signature track~~ The pattern runs on from the song start like Cubed (2026-11-17).
 
 ## Schema
 
