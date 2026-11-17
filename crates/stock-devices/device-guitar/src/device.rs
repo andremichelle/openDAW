@@ -89,7 +89,6 @@ struct Scheduled {
     seed: u32,
     key: u32,
     bend: f32,
-    bend_length: u32,
     step: f32,
     stroke_at: u64
 }
@@ -429,7 +428,7 @@ impl State {
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
                 seed: strum::hash(seed, *string as i64, 3), key: NO_KEY,
                 bend: BENDS[(bent[*string] as usize).min(BENDS.len() - 1)],
-                bend_length: 0, step: strum::step_length(self.settings.rate) as f32, stroke_at: self.now
+                step: strum::step_length(self.settings.rate) as f32, stroke_at: self.now
             });
             self.take_over(*string);
             self.lit |= 1 << *string;
@@ -492,7 +491,7 @@ impl State {
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: string as u8, pitch: pitch as f32 + cent,
                 velocity: velocity * (0.4 + self.settings.velocity * 0.8) * varied, touch: Touch::Open, up: false, seed, key: id,
-                bend: 0.0, bend_length: 0, step: 0.0, stroke_at: self.now
+                bend: 0.0, step: 0.0, stroke_at: self.now
             });
             self.lit |= 1 << string;
         }
@@ -525,7 +524,7 @@ impl State {
                 let step = item.step / 960.0 * 60.0 / self.bpm.max(1.0) * self.sample_rate;
                 (step - (self.now - item.stroke_at) as f32).max(step * 0.5) as u32
             } else {
-                item.bend_length
+                0
             }
         };
         let base_frequency = abi::base_frequency();
@@ -577,11 +576,7 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, bar_at
                 out: &mut [EventRecord]) -> usize {
     let transporting = flags.transporting();
     if state.transporting && !transporting {
-        if state.settings.mode == CHORDS_MODE {
-            state.release_all();
-        } else {
-            state.release_strummed();
-        }
+        state.release_strummed();
     }
     if transporting && !state.transporting {
         state.forget_bars();

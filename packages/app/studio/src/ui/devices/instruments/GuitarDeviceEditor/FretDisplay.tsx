@@ -177,7 +177,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
                 write(name, isDefined(own) ? "Empty Shape" : current.mapOr(value => Harmony.chordName(value), "No Chord"))
             }
         }
-        shown.lit = engine.isPlaying.getValue() ? live.lit : 0
+        shown.lit = live.lit
         if (!keys && !editingShape() && shown.lit !== 0) {
             shown.tab = shown.tab.map((fret, string) => (shown.lit & (1 << string)) !== 0 ? live.frets[string] : fret)
         }
