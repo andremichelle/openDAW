@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // MCP server over stdio for an agent, the studio connects in over a WebSocket and provides tools and texts
 import {createInterface} from "node:readline"
 import {WebSocketServer} from "ws"
@@ -79,4 +80,4 @@ createInterface({input: process.stdin}).on("line", line => {
     Promise.resolve(message).then(handle).then(
         result => send({jsonrpc: "2.0", id: message.id, result}),
         error => send({jsonrpc: "2.0", id: message.id, error: {code: error.code ?? -32603, message: String(error.message ?? error)}}))
-})
+}).on("close", () => process.exit(0))
