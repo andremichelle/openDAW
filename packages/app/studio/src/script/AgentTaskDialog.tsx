@@ -18,6 +18,7 @@ export namespace AgentTaskDialog {
     export const show = (task: AgentTask, onCancel: Exec): Terminable => {
         const elapsed: HTMLElement = <span className="value">00:00</span>
         const calls: HTMLElement = <span className="value">0</span>
+        const title: HTMLElement = <p/>
         const dialog: HTMLDialogElement = (
             <Dialog headline="Agent at Work"
                     icon={IconSymbol.Robot}
@@ -30,7 +31,7 @@ export namespace AgentTaskDialog {
                         }
                     }]}>
                 <div className={className}>
-                    <p>{task.title}</p>
+                    {title}
                     <div className="stats">
                         <span>Time</span>{elapsed}
                         <span>Calls</span>{calls}
@@ -40,10 +41,13 @@ export namespace AgentTaskDialog {
         )
         const interval = window.setInterval(() =>
             elapsed.textContent = formatElapsed(performance.now() - task.startTime), 1000)
-        const subscription = task.calls.catchupAndSubscribe(owner => calls.textContent = String(owner.getValue()))
+        const subscriptions = [
+            task.calls.catchupAndSubscribe(owner => calls.textContent = String(owner.getValue())),
+            task.title.catchupAndSubscribe(owner => title.textContent = owner.getValue())
+        ]
         dialog.addEventListener("close", () => {
             clearInterval(interval)
-            subscription.terminate()
+            subscriptions.forEach(subscription => subscription.terminate())
         })
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()

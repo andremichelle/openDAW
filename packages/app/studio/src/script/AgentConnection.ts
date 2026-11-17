@@ -82,6 +82,8 @@ export class AgentConnection {
     static readonly ModeKey = "agent-relay-mode"
     static readonly RetryMillis = 2000
     static readonly IdleMillis = 120_000
+    static readonly ReadingTitle = "The agent is reading the project."
+    static readonly ChangingTitle = "The agent is changing the project."
     static readonly CancelledMessage = "The user cancelled. Stop and report what you did so far."
 
     readonly #service: StudioService
@@ -186,6 +188,9 @@ export class AgentConnection {
     }
 
     async #callTool(name: string, args: unknown): Promise<AgentToolResult> {
+        if (name !== "begin_task" && name !== "end_task" && !this.#cancelled && this.#task.isEmpty()) {
+            this.#beginTask(AgentConnection.ReadingTitle)
+        }
         switch (name) {
             case "get_api": {
                 this.#countCall()
@@ -211,7 +216,14 @@ export class AgentConnection {
                 return ok(JSON.stringify(this.#context(), null, 2))
             case "begin_task": {
                 const title = argumentOf(args, "title")
-                this.#beginTask(typeof title === "string" ? title : "The agent is changing the project.")
+                const text = typeof title === "string" ? title : AgentConnection.ChangingTitle
+                this.#task.match({
+                    none: () => this.#beginTask(text),
+                    some: ({task}) => {
+                        task.rename(text)
+                        this.#touch()
+                    }
+                })
                 return ok("ok")
             }
             case "end_task":
@@ -258,7 +270,7 @@ export class AgentConnection {
 
     async #runInTask(code: string): Promise<AgentRunResult> {
         if (this.#cancelled) {return {result: null, error: AgentConnection.CancelledMessage}}
-        if (this.#task.isEmpty()) {this.#beginTask("The agent is changing the project.")}
+        if (this.#task.isEmpty()) {this.#beginTask(AgentConnection.ChangingTitle)}
         this.#countCall()
         const outcome = await this.#run(code)
         this.#touch()
