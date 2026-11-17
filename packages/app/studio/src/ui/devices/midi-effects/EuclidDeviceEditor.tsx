@@ -348,7 +348,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             Events.subscribe(tile, "pointerdown", () => tile.focus()),
             Events.subscribe(tile, "click", () => {
                 if (!off) {edited = index}
-                editing.modify(() => box.pattern.setValue(pattern))
+                editing.modify(() => namedParameter.pattern.setValue(pattern))
             }),
             ContextMenu.subscribe(tile, collector => {
                 if (off) {return}
