@@ -61,7 +61,7 @@ No new domain, DNS record or certificate. The live room server (`yjs-server`) ow
 
 1. ~~Move the agent texts into the studio, local relay uses them (no visible change).~~
 2. ~~Server: token store, studio socket, MCP endpoint, rate limit. Tests with a fake studio and a fake agent in node, including: wrong token, expired token, token of another studio, second studio with the same token, disconnect mid call.~~
-3. Studio: server mode, dialog with copy command and new token.
-4. Infrastructure: `/agent/` forwarding in `yjs-server`, systemd service, deploy script. Deploy, then test with Claude Code against dev.opendaw.studio.
+3. ~~Studio: server mode, dialog with copy command and new token.~~
+4. ~~Infrastructure: `/agent/` forwarding in `yjs-server`, systemd service, deploy script. Deploy, then test with Claude Code against dev.opendaw.studio.~~
 5. Publish `@opendaw/mcp-relay`.
-6. Manual page "Connect an AI agent".
+6. ~~Manual page "Connect an AI agent".~~
