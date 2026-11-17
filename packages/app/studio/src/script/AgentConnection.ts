@@ -1,4 +1,18 @@
-import {DefaultObservableValue, Errors, Nullable, ObservableValue, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    Errors,
+    isDefined,
+    MutableObservableOption,
+    Nullable,
+    ObservableOption,
+    ObservableValue,
+    Option,
+    Optional,
+    Terminable,
+    tryCatch,
+    UUID
+} from "@opendaw/lib-std"
+import {Browser} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {Vertex} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
@@ -7,13 +21,17 @@ import {StudioService} from "@/service/StudioService"
 import {StudioScriptHost} from "@/script/StudioScriptHost"
 import {AgentTask} from "@/script/AgentTask"
 import {AgentTaskDialog} from "@/script/AgentTaskDialog"
+import {AgentTexts} from "@/script/AgentTexts"
 
 export type AgentConnectionState = "off" | "waiting" | "connected"
 
-type AgentRequest =
-    | { readonly id: number, readonly kind: "run", readonly code: string }
-    | { readonly id: number, readonly kind: "context" | "end" | "called" }
-    | { readonly id: number, readonly kind: "begin", readonly title: string }
+export type AgentRelayMode = "server" | "local"
+
+export type AgentToken = { readonly token: string, readonly expires: number }
+
+type AgentToolCall = { readonly id: number, readonly kind: "tool", readonly name: string, readonly arguments: unknown }
+
+type AgentToolResult = { readonly text: string, readonly isError: boolean }
 
 type AgentRunResult = { readonly result: Nullable<string>, readonly error: Nullable<string> }
 
@@ -28,47 +46,85 @@ type AgentContext = {
     readonly loop: { readonly enabled: boolean, readonly from: ppqn, readonly to: ppqn }
 }
 
-const isAgentRequest = (value: unknown): value is AgentRequest => {
-    if (typeof value !== "object" || value === null || typeof Reflect.get(value, "id") !== "number") {return false}
-    const kind: unknown = Reflect.get(value, "kind")
-    return kind === "context" || kind === "end" || kind === "called"
-        || (kind === "run" && typeof Reflect.get(value, "code") === "string")
-        || (kind === "begin" && typeof Reflect.get(value, "title") === "string")
+const isToolCall = (value: unknown): value is AgentToolCall =>
+    typeof value === "object" && value !== null && typeof Reflect.get(value, "id") === "number"
+    && Reflect.get(value, "kind") === "tool" && typeof Reflect.get(value, "name") === "string"
+
+const argumentOf = (args: unknown, name: string): unknown =>
+    typeof args === "object" && args !== null ? Reflect.get(args, name) : undefined
+
+const isTokenMessage = (value: unknown): value is { readonly type: "token", readonly token?: string, readonly expires: number } =>
+    typeof value === "object" && value !== null && Reflect.get(value, "type") === "token"
+    && typeof Reflect.get(value, "expires") === "number"
+
+const isAgentToken = (value: unknown): value is AgentToken =>
+    typeof value === "object" && value !== null
+    && typeof Reflect.get(value, "token") === "string" && typeof Reflect.get(value, "expires") === "number"
+
+const readStorage = (key: string): Nullable<string> => {
+    const result = tryCatch(() => localStorage.getItem(key))
+    return result.status === "success" ? result.value : null
 }
+
+const writeStorage = (key: string, value: string): void => {tryCatch(() => localStorage.setItem(key, value))}
+
+const ok = (text: string): AgentToolResult => ({text, isError: false})
+const failure = (text: string): AgentToolResult => ({text, isError: true})
 
 const describe = (vertex: Vertex): AgentObject =>
     ({type: vertex.box.name, uuid: UUID.toString(vertex.box.address.uuid)})
 
 export class AgentConnection {
-    static readonly DefaultUrl = "ws://127.0.0.1:8790"
+    static readonly LocalUrl = "ws://127.0.0.1:8790"
+    static readonly ServerUrl = Browser.isLocalHost() ? "ws://127.0.0.1:8791/agent/studio" : "wss://live.opendaw.studio/agent/studio"
+    static readonly ServerMcpUrl = Browser.isLocalHost() ? "http://127.0.0.1:8791/agent/mcp" : "https://live.opendaw.studio/agent/mcp"
+    static readonly TokenKey = "agent-relay-token"
+    static readonly ModeKey = "agent-relay-mode"
     static readonly RetryMillis = 2000
     static readonly IdleMillis = 120_000
     static readonly CancelledMessage = "The user cancelled. Stop and report what you did so far."
 
     readonly #service: StudioService
     readonly #state: DefaultObservableValue<AgentConnectionState>
+    readonly #mode: DefaultObservableValue<AgentRelayMode>
+    readonly #token: MutableObservableOption<AgentToken>
 
     #host: Option<ScriptHost> = Option.None
-    #url: string = AgentConnection.DefaultUrl
     #socket: Option<WebSocket> = Option.None
     #retry: Option<number> = Option.None
     #task: Option<{ readonly task: AgentTask, readonly dialog: Terminable }> = Option.None
     #idle: Option<number> = Option.None
     #cancelled: boolean = false
+    #apiParts: Option<Promise<ReadonlyArray<string>>> = Option.None
 
     constructor(service: StudioService) {
         this.#service = service
         this.#state = new DefaultObservableValue<AgentConnectionState>("off")
+        this.#mode = new DefaultObservableValue<AgentRelayMode>(readStorage(AgentConnection.ModeKey) === "local" ? "local" : "server")
+        this.#token = new MutableObservableOption<AgentToken>()
+        const stored = tryCatch(() => JSON.parse(readStorage(AgentConnection.TokenKey) ?? "null"))
+        if (stored.status === "success" && isAgentToken(stored.value) && stored.value.expires > Date.now()) {
+            this.#token.wrap(stored.value)
+        }
     }
 
     get state(): ObservableValue<AgentConnectionState> {return this.#state}
-    get url(): string {return this.#url}
+    get mode(): ObservableValue<AgentRelayMode> {return this.#mode}
+    get token(): ObservableOption<AgentToken> {return this.#token}
 
-    connect(url: string): void {
+    connect(mode: AgentRelayMode): void {
         this.disconnect()
-        this.#url = url
+        this.#mode.setValue(mode)
+        writeStorage(AgentConnection.ModeKey, mode)
         this.#state.setValue("waiting")
         this.#open()
+    }
+
+    renew(): void {
+        if (this.#mode.getValue() !== "server") {return}
+        this.#socket.ifSome(socket => {
+            if (socket.readyState === WebSocket.OPEN) {socket.send(JSON.stringify({type: "renew"}))}
+        })
     }
 
     disconnect(): void {
@@ -83,34 +139,32 @@ export class AgentConnection {
 
     #open(): void {
         this.#retry = Option.None
-        const socket = new WebSocket(this.#url)
+        const server = this.#mode.getValue() === "server"
+        const socket = new WebSocket(server ? AgentConnection.ServerUrl : AgentConnection.LocalUrl)
         this.#socket = Option.wrap(socket)
-        socket.onopen = async () => {
-            this.#state.setValue("connected")
-            socket.send(JSON.stringify({type: "api", texts: await this.#api()}))
+        const sendAgent = () =>
+            socket.send(JSON.stringify({type: "agent", instructions: AgentTexts.Instructions, tools: AgentTexts.Tools}))
+        socket.onopen = () => {
+            if (server) {
+                socket.send(JSON.stringify({type: "hello", token: this.#token.match({none: () => null, some: ({token}) => token})}))
+            } else {
+                this.#state.setValue("connected")
+                sendAgent()
+            }
         }
         socket.onmessage = async (event: MessageEvent) => {
             const request: unknown = JSON.parse(String(event.data))
-            if (!isAgentRequest(request)) {return}
-            switch (request.kind) {
-                case "begin":
-                    this.#beginTask(request.title)
-                    socket.send(JSON.stringify({type: "result", id: request.id, result: null, error: null}))
-                    return
-                case "end":
-                    this.#endTask()
-                    socket.send(JSON.stringify({type: "result", id: request.id, result: null, error: null}))
-                    return
-                case "called":
-                    this.#countCall()
-                    return
-                case "context":
-                    this.#countCall()
-                    socket.send(JSON.stringify({type: "context", id: request.id, context: this.#context()}))
-                    return
-                case "run":
-                    socket.send(JSON.stringify({type: "result", id: request.id, ...await this.#runInTask(request.code)}))
+            if (isTokenMessage(request)) {
+                this.#storeToken(request.token, request.expires)
+                if (this.#state.getValue() !== "connected") {
+                    this.#state.setValue("connected")
+                    sendAgent()
+                }
+                return
             }
+            if (!isToolCall(request)) {return}
+            const {text, isError} = await this.#callTool(request.name, request.arguments)
+            socket.send(JSON.stringify({type: "tool-result", id: request.id, text, isError}))
         }
         socket.onclose = () => {
             if (this.#socket.unwrapOrNull() !== socket) {return}
@@ -120,6 +174,51 @@ export class AgentConnection {
             if (this.#state.getValue() === "off") {return}
             this.#state.setValue("waiting")
             this.#retry = Option.wrap(window.setTimeout(() => this.#open(), AgentConnection.RetryMillis))
+        }
+    }
+
+    #storeToken(token: Optional<string>, expires: number): void {
+        const value = isDefined(token) ? token : this.#token.match({none: () => null, some: current => current.token})
+        if (!isDefined(value)) {return}
+        const next: AgentToken = {token: value, expires}
+        this.#token.wrap(next)
+        writeStorage(AgentConnection.TokenKey, JSON.stringify(next))
+    }
+
+    async #callTool(name: string, args: unknown): Promise<AgentToolResult> {
+        switch (name) {
+            case "get_api": {
+                this.#countCall()
+                const loaded = await Promises.tryCatch(this.#api())
+                if (loaded.status === "rejected") {
+                    this.#apiParts = Option.None
+                    return failure(`The studio could not load the API: ${Errors.toString(loaded.error)}`)
+                }
+                const parts = loaded.value
+                const part = argumentOf(args, "part")
+                const text = typeof part === "number" ? parts.at(part - 1) : undefined
+                return text === undefined ? failure(`There are ${parts.length} parts.`)
+                    : ok(`Part ${part} of ${parts.length}\n\n${text}`)
+            }
+            case "run_script": {
+                const code = argumentOf(args, "code")
+                if (typeof code !== "string") {return failure("run_script needs code")}
+                const {result, error} = await this.#runInTask(code)
+                return error === null ? ok(result ?? "ok") : failure(error)
+            }
+            case "get_context":
+                this.#countCall()
+                return ok(JSON.stringify(this.#context(), null, 2))
+            case "begin_task": {
+                const title = argumentOf(args, "title")
+                this.#beginTask(typeof title === "string" ? title : "The agent is changing the project.")
+                return ok("ok")
+            }
+            case "end_task":
+                this.#endTask()
+                return ok("ok")
+            default:
+                return failure(`Unknown tool ${name}`)
         }
     }
 
@@ -180,12 +279,14 @@ export class AgentConnection {
         return status === "rejected" ? {result: null, error: Errors.toString(error)} : {result: value, error: null}
     }
 
-    async #api(): Promise<ReadonlyArray<string>> {
-        const modules = await Promise.all([
-            import("@opendaw/studio-scripting/api.declaration?raw"),
-            import("@opendaw/studio-scripting/library?raw")
-        ])
-        return modules.map(module => module.default)
+    #api(): Promise<ReadonlyArray<string>> {
+        if (this.#apiParts.isEmpty()) {
+            this.#apiParts = Option.wrap(Promise.all([
+                import("@opendaw/studio-scripting/api.declaration?raw"),
+                import("@opendaw/studio-scripting/library?raw")
+            ]).then(modules => AgentTexts.apiParts(modules.map(module => module.default))))
+        }
+        return this.#apiParts.unwrap()
     }
 
     #context(): AgentContext {

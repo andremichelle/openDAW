@@ -99,10 +99,11 @@ export const populateStudioMenu = (service: StudioService) => {
                         icon: IconSymbol.Connected,
                         separatorBefore: true
                     }).setTriggerProcedure(() => connectRoom(service)),
-                    MenuItem.default({
-                        label: "Connect Agent...",
-                        icon: IconSymbol.Robot
-                    }).setTriggerProcedure(() => AgentConnectDialog.show(service.agentConnection)),
+                    service.agentConnection.state.getValue() === "off"
+                        ? MenuItem.default({label: "Connect Agent...", icon: IconSymbol.Robot})
+                            .setTriggerProcedure(() => AgentConnectDialog.show(service.agentConnection))
+                        : MenuItem.default({label: "Disconnect Agent", icon: IconSymbol.Robot})
+                            .setTriggerProcedure(() => service.agentConnection.disconnect()),
                     MenuItem.default({
                         label: "Show MIDI-Keyboard",
                         icon: IconSymbol.Piano,
