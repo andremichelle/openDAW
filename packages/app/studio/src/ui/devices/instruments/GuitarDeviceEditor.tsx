@@ -224,6 +224,9 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                         <Button lifecycle={lifecycle} onClick={() => walkPattern(1)}
                                 appearance={{framed: true, color: Colors.blue, tooltip: "Next library pattern"}}>{">"}</Button>
                     </div>
+                    <Button lifecycle={lifecycle}
+                            onClick={() => editing.modify(() => GuitarPatterns.clear(currentPattern()))}
+                            appearance={{framed: true, color: Colors.green, tooltip: "Clear the pattern"}}>Clear</Button>
                 </div>
                 {lengthField}
             </div>
@@ -233,10 +236,10 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     <div className="group">
                         <Button lifecycle={lifecycle}
                                 onClick={() => editing.modify(() => GuitarPatterns.rotate(currentPattern(), 1))}
-                                appearance={{framed: true, color: Colors.blue, tooltip: "Shift steps left"}}>{"<"}</Button>
+                                appearance={{framed: true, color: Colors.orange, tooltip: "Shift steps left"}}>{"<"}</Button>
                         <Button lifecycle={lifecycle}
                                 onClick={() => editing.modify(() => GuitarPatterns.rotate(currentPattern(), -1))}
-                                appearance={{framed: true, color: Colors.blue, tooltip: "Shift steps right"}}>{">"}</Button>
+                                appearance={{framed: true, color: Colors.orange, tooltip: "Shift steps right"}}>{">"}</Button>
                     </div>
                 </div>
                 <div className="field">
