@@ -200,6 +200,7 @@ export enum IconSymbol {
     CallPhone,
     CallHangup,
     Broadcast,
+    PencilStep,
 }
 
 export namespace IconSymbol {

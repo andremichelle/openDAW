@@ -37,7 +37,7 @@ import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
-import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
 import {createValueMenu} from "./ValueMenu"
@@ -120,6 +120,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             return (event: PointerEvent) => {
                 const target: Nullable<ValueCaptureTarget> = capturing.captureEvent(event)
                 const altKey = event.altKey
+                const step = Keyboard.isControlKey(event)
                 const now = Date.now()
                 const dblclck = now - lastDownTime < Events.DOUBLE_DOWN_THRESHOLD
                 lastDownTime = now
@@ -144,7 +145,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             : context.quantize(clickValue)
                         return editing.modify(() =>
                             ValueEventEditing.createOrMoveEvent(reader.content, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None, side), false)
+                                context.floating && !step ? Interpolation.Linear : Interpolation.None, side), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
@@ -166,7 +167,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                         eventMapping,
                                         reference: adapter,
                                         collection: reader.content,
-                                        chainPending: true
+                                        chainPending: true,
+                                        copyable: !step
                                     }))
                                 }
                             })
@@ -183,7 +185,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             reader,
                             selection,
                             snapping,
-                            valueAxis
+                            valueAxis,
+                            interpolation: step ? Interpolation.None : Interpolation.Linear
                         }))
                     }
                 } else if (target.type === "midpoint" || target.type === "curve") {
@@ -313,6 +316,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 const onCurve = target?.type === "curve" || target?.type === "midpoint"
                 const controlKey = event.altKey && event.buttons === 0
                 if (target === null) {
+                    if (event.buttons === 0 && Keyboard.isControlKey(event)) {return Cursor.PencilStep}
                     if (controlKey) {return Cursor.Pencil}
                 } else if (target.type === "event") {
                     return "move"
