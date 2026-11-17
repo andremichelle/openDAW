@@ -354,10 +354,6 @@ impl GuitarString {
         let fretted = base_frequency * powf(2.0, (pluck.pitch - 69.0) / 12.0);
         let frequency = fretted / (1.0 - TENSION_SHORTENING * pluck.tension.clamp(0.0, 1.0));
         let ringing = self.sounding;
-        if !ringing {
-            self.vertical.clear();
-            self.horizontal.clear();
-        }
         let body_decay = (1.0 + BODY_DECAY * (frequency / 330.0) * (frequency / 330.0)).min(BODY_DECAY_LIMIT);
         let (vertical_t60, horizontal_t60, dull) = match pluck.touch {
             Touch::Open => (60.0 / body_decay, RING_T60, 1.0),

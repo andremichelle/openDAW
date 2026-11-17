@@ -15,6 +15,7 @@ const STROKE_MARK: u32 = 0xC000_0000;
 const EVENT_STROKE: u32 = 0x100; // private kind of the generated strokes, ranked like a note-on
 const QUEUE: usize = 256;
 const NO_KEY: u32 = u32::MAX;
+const AUDITION_KEY: u32 = u32::MAX - 1;
 const ENDED: usize = 8; // note-offs that came before their note-on on the same sample
 const SHORT_NOTE: f32 = 0.06; // seconds a played note sounds when it ended before its pluck
 const PENDING: usize = 16;
@@ -75,6 +76,7 @@ pub const SLOTS: usize = 16;
 pub const SHAPES: usize = 16;
 const SHAPES_FIELD: u16 = 44;
 const NOTES_FIELD: u16 = 45;
+const AUDITION_FIELD: u16 = 46; // no box field: a local value, delivered only by `override_device_field`
 const GROOVE_FIELD: u16 = 38;
 
 const CHORDS_MODE: i32 = 0;
@@ -179,6 +181,7 @@ pub struct State {
     length_ids: [u32; SLOTS],
     shapes_id: u32,
     notes_id: u32,
+    audition_id: u32,
     groove: abi::GrooveFollower,
     broadcast: u32
 }
@@ -268,6 +271,37 @@ impl State {
         for (shape, packed) in self.shapes.iter_mut().zip(values.iter()) {
             *shape = fretting::unpack_shape(*packed);
         }
+    }
+
+    /// The editor plucks one string: `pitch << 3 | string` presses it, a negative value lets every auditioned string go.
+    pub fn audition(&mut self, value: i32) {
+        for string in 0..STRINGS {
+            if self.keys[string] == AUDITION_KEY {
+                self.keys[string] = NO_KEY;
+                self.strings[string].release();
+                self.lit &= !(1 << string);
+                self.display[string] = if self.settings.mode == CHORDS_MODE {self.fretted[string]} else {MUTED};
+            }
+        }
+        if value < 0 {
+            self.broadcast();
+            return;
+        }
+        let (string, pitch) = ((value & 7) as usize, value >> 3);
+        let open = self.open();
+        if string >= STRINGS || open[string] == fretting::OFF || pitch < open[string] {
+            return;
+        }
+        self.drop_queued(|item| item.string as usize == string);
+        self.keys[string] = AUDITION_KEY;
+        self.display[string] = (pitch - open[string]) as i8;
+        self.lit |= 1 << string;
+        let seed = strum::hash(AUDITION_KEY, string as i64, 5);
+        self.enqueue(Scheduled {
+            due: self.now, string: string as u8, pitch: pitch as f32, velocity: 0.8 * (0.4 + self.settings.velocity * 0.8),
+            touch: Touch::Open, up: false, seed, key: AUDITION_KEY, bend: 0.0, step: 0.0, stroke_at: self.now
+        });
+        self.broadcast();
     }
 
     pub fn set_notes(&mut self, values: &[i32]) {
@@ -798,6 +832,7 @@ impl Instrument for Device {
         }
         state.shapes_id = abi::observe_field(&[SHAPES_FIELD]);
         state.notes_id = abi::observe_field(&[NOTES_FIELD]);
+        state.audition_id = abi::observe_field(&[AUDITION_FIELD]);
         state.groove = abi::GrooveFollower::observe(&[GROOVE_FIELD]);
         state.broadcast = abi::bind_broadcast_int_array(&[0], 9);
     }
@@ -827,6 +862,12 @@ impl Instrument for Device {
         if id == state.shapes_id {
             if let FieldValue::Ints(values) = value {
                 state.set_shapes(values);
+            }
+            return;
+        }
+        if id == state.audition_id {
+            if let FieldValue::Float(value) = value {
+                state.audition(value as i32);
             }
             return;
         }

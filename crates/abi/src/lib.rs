@@ -1908,8 +1908,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     }
 }
 
-/// Order resolved records for `dispatch_range`: by sample offset, then at an equal offset note-off ->
-/// param-update -> note-on, so a note starting at an update position sees the refreshed parameter.
+/// Order resolved records for `dispatch_range`: by sample offset, then by `record_rank`.
 fn resolve_and_sort(records: &mut [EventRecord]) {
     for record in records.iter_mut() {
         record.offset = pulse_to_offset(record.position);
@@ -1917,6 +1916,7 @@ fn resolve_and_sort(records: &mut [EventRecord]) {
     records.sort_unstable_by(|first, second| first.offset.cmp(&second.offset).then(record_rank(first.kind).cmp(&record_rank(second.kind))));
 }
 
+/// At an equal offset note-off -> param-update -> note-on, so a note starting at an update position sees the refreshed parameter.
 fn record_rank(kind: u32) -> u8 {
     match kind {
         EVENT_NOTE_OFF | EVENT_CHOKE => 0, // releases first, so a choke at a position precedes any note-on there

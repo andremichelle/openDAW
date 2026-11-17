@@ -16,6 +16,8 @@ const WheelStep = 40
 const Inlays: ReadonlyArray<int> = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24]
 const Margin = {top: 14, left: 12, right: 14, bottom: 13}
 const DragStep = 6
+// WASM CONTRACT: `AUDITION_FIELD` in device-guitar, `pitch << 3 | string` plucks one string, -1 lets go
+const AuditionKey = 46
 
 type Construct = {
     lifecycle: Lifecycle
@@ -156,14 +158,23 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         if (!strip || event.button !== 0 || event.ctrlKey) {return false}
         const start = adapter.openStrings()[string]
         if (start === Guitar.Off) {return true}
+        const finger = Math.max(0, shown.tab[string])
+        const pluck = (pitch: int) => engine.overrideDeviceField(adapter.uuid, AuditionKey, pitch << 3 | string)
         let mark = true
+        let sounding = start + finger
         drag.terminate()
+        pluck(sounding)
         drag.ownAll(
             Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => {
                 const note = clamp(start + Math.round((event.clientY - moveEvent.clientY) / DragStep), Guitar.LowestNote, Guitar.HighestNote)
                 if (tuneString(string, note, mark)) {mark = false}
+                if (note + finger !== sounding) {
+                    sounding = note + finger
+                    pluck(sounding)
+                }
             }),
-            Events.subscribe(window, "pointerup", () => drag.terminate()))
+            Events.subscribe(window, "pointerup", () => drag.terminate()),
+            {terminate: () => engine.overrideDeviceField(adapter.uuid, AuditionKey, -1)})
         return true
     }
     const toggleFret = (event: PointerEvent) => {

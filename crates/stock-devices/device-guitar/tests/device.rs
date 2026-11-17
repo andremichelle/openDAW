@@ -566,6 +566,22 @@ fn a_custom_tuning_plays_its_own_notes_and_an_empty_one_plays_standard() {
 }
 
 #[test]
+fn an_auditioned_string_plays_exactly_that_string_until_it_is_let_go() {
+    let mut state = state();
+    state.audition(64 << 3 | 5);
+    render(&mut state, 480);
+    assert_eq!(state.string_pitch(5), 64.0);
+    assert_eq!(state.lit(), 1 << 5);
+    assert!((0..5).all(|string| state.string_pitch(string) < 0.0), "no other string sounds");
+    state.audition(57 << 3 | 1);
+    render(&mut state, 480);
+    assert_eq!(state.string_pitch(1), 57.0, "the A string at fret 12");
+    assert_eq!(state.lit(), 1 << 1, "the previous audition lets go");
+    state.audition(-1);
+    assert_eq!(state.lit(), 0);
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
