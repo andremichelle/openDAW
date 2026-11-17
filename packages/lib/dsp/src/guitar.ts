@@ -9,13 +9,25 @@ export namespace Guitar {
 
     export type Tab = ReadonlyArray<int>
 
-    export const TuningNames: ReadonlyArray<string> = ["Standard", "Drop D", "Open G", "DADGAD"]
-    export const Tunings: ReadonlyArray<ReadonlyArray<int>> = [
+    // The open note of each string, Off for a string that never sounds.
+    export type Tuning = ReadonlyArray<int>
+    export const Off = -1
+    export const LowestNote = 24
+    export const HighestNote = 88
+    export const TuningNames: ReadonlyArray<string> = ["Standard", "Drop D", "Open G", "DADGAD", "Bass", "Custom"]
+    export const Tunings: ReadonlyArray<Tuning> = [
         [40, 45, 50, 55, 59, 64],
         [38, 45, 50, 55, 59, 64],
         [38, 43, 50, 55, 59, 62],
-        [38, 45, 50, 55, 57, 62]
+        [38, 45, 50, 55, 57, 62],
+        [28, 33, 38, 43, Off, Off]
     ]
+    export const Custom = Tunings.length
+
+    // WASM CONTRACT: `State::open` in device-guitar, an all-off custom tuning plays Standard
+    export const openStrings = (tuning: int, notes: ReadonlyArray<int>): Tuning =>
+        tuning < Tunings.length ? Tunings[Math.max(0, tuning)]
+            : notes.some(note => note !== Off) ? notes : Tunings[0]
     export const PositionNames: ReadonlyArray<string> = ["Open", "3rd", "5th", "7th", "9th", "12th"]
     export const PositionFrets: ReadonlyArray<int> = [0, 3, 5, 7, 9, 12]
 
@@ -96,8 +108,7 @@ export namespace Guitar {
     }
 
     // One fret per string or Muted for the chord root with its voicing mask (the lowest bit is the bass).
-    export const tab = (root: int, voicing: int, tuning: int, position: int): Tab => {
-        const open = Tunings[Math.min(tuning, Tunings.length - 1)]
+    export const tab = (root: int, voicing: int, open: Tuning, position: int): Tab => {
         const at = Math.min(position, PositionFrets.length - 1)
         let tones = 0
         for (let interval = 0; interval < 31; interval++) {
@@ -116,6 +127,7 @@ export namespace Guitar {
                 const low = PositionFrets[candidate]
                 const options = open.map(pitch => {
                     const list: Array<int> = [Muted]
+                    if (pitch === Off) {return list}
                     for (let fret = Math.max(low - 1, 0); fret <= low + 4; fret++) {
                         if ((tones & (1 << mod12(pitch + fret))) !== 0 && list.length < MaxOptions) {list.push(fret)}
                     }
@@ -133,8 +145,7 @@ export namespace Guitar {
         return new Array(Strings).fill(Muted)
     }
 
-    export const pitch = (tuning: int, string: int, fret: int): int =>
-        Tunings[Math.min(tuning, Tunings.length - 1)][string] + fret
+    export const pitch = (open: Tuning, string: int, fret: int): int => open[string] + fret
 
     // WASM CONTRACT: a custom shape packs 5 bits per string, low E in bits 0 to 4, 31 mutes the string
     export const MaxFret = 24
@@ -153,8 +164,8 @@ export namespace Guitar {
 
     export const shapeText = (tab: Tab): string => tab.map(fret => fret < 0 ? "x" : String(fret)).join(" ")
 
-    export const shapeName = (tab: Tab, tuning: int): string => {
-        const pitches = tab.flatMap((fret, string) => fret < 0 ? [] : [pitch(tuning, string, fret)])
+    export const shapeName = (tab: Tab, open: Tuning): string => {
+        const pitches = tab.flatMap((fret, string) => fret < 0 || open[string] === Off ? [] : [pitch(open, string, fret)])
         if (pitches.length === 0) {return "No Shape"}
         const classes = pitches.reduce((bits, value) => bits | (1 << (value % 12)), 0)
         const bass = Math.min(...pitches) % 12

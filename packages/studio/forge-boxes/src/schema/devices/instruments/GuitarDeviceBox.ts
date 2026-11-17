@@ -11,8 +11,8 @@ export const GuitarDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
     14: {type: "float32", name: "velocity", pointerRules: ParameterPointerRules, value: 0.8, ...UnipolarConstraints},
     15: {type: "float32", name: "velocity-variation", pointerRules: ParameterPointerRules, value: 0.75, ...UnipolarConstraints},
     18: {type: "int32", name: "position", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 5}, unit: ""},
-    19: {type: "int32", name: "tuning", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 3}, unit: ""},
-    20: {type: "int32", name: "body", pointerRules: ParameterPointerRules, value: 1, constraints: {min: 0, max: 7}, unit: ""},
+    19: {type: "int32", name: "tuning", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 5}, unit: ""},
+    20: {type: "int32", name: "body", pointerRules: ParameterPointerRules, value: 1, constraints: {min: 0, max: 9}, unit: ""},
     21: {type: "float32", name: "damping", pointerRules: ParameterPointerRules, value: 0.33, ...UnipolarConstraints},
     22: {type: "float32", name: "damping-variation", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     23: {type: "float32", name: "pluck", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
@@ -28,6 +28,7 @@ export const GuitarDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
     43: {type: "int32", name: "chord", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 16}, unit: ""},
     // 5 bits per string from the low E, 31 mutes a string, all muted is an empty shape
     44: {type: "array", name: "shapes", length: 16, element: {type: "int32", value: 1073741823, constraints: "any", unit: ""}},
+    45: {type: "array", name: "notes", length: 6, element: {type: "int32", value: -1, constraints: {min: -1, max: 88}, unit: ""}},
     42: {
         type: "array", name: "patterns", length: 16, element: {
             type: "object", class: {

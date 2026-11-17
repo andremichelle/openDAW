@@ -1153,6 +1153,19 @@ export class GuitarImpl extends InstrumentFacade<GuitarDeviceBox> implements Gui
         const checked = frets.map((fret, string) => Guard.int32({min: -1, max: DSPGuitar.MaxFret}, fret, `setShape.frets.${string}`))
         this.context.edit(() => this.box.shapes.getField(slot).setValue(DSPGuitar.packShape(checked)))
     }
+
+    get notes(): ReadonlyArray<int> {return this.box.notes.fields().map(field => field.getValue())}
+
+    setNotes(notes: ReadonlyArray<int>): void {
+        if (!Array.isArray(notes) || notes.length !== DSPGuitar.Strings) {
+            return panic(new RangeError(`setNotes: expected ${DSPGuitar.Strings} notes`))
+        }
+        const checked = notes.map((note, string) => {
+            const value = Guard.int32({min: DSPGuitar.Off, max: DSPGuitar.HighestNote}, note, `setNotes.${string}`)
+            return value === DSPGuitar.Off ? value : Math.max(DSPGuitar.LowestNote, value)
+        })
+        this.context.edit(() => checked.forEach((note, string) => this.box.notes.getField(string).setValue(note)))
+    }
 }
 
 export class ApparatImpl extends InstrumentFacade<ApparatDeviceBox> implements Apparat {

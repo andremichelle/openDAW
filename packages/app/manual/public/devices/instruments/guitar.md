@@ -162,7 +162,12 @@ A chord that has no shape there moves to the nearest position that has one.
 
 ### Tuning
 
-Standard, Drop D, Open G or DADGAD. The chord shapes follow the tuning.
+Standard, Drop D, Open G, DADGAD, Bass or Custom. The chord shapes follow the tuning. Bass plays four strings
+(E A D G an octave below the guitar), the two high strings are off.
+
+The notes under the neck are the open strings. Drag a note up or down or turn the wheel over it to retune that
+string, right-click it to switch the string off or on, or to copy a preset. Retuning a preset turns it into Custom,
+your own six notes, shown in orange. A string that is off never sounds: strums, picks and played notes skip it.
 
 ---
 
@@ -215,6 +220,8 @@ The guitar itself: its body and the strings that go with it.
 - **Archtop**: a jazz box with flatwound strings and a strong midrange
 - **Electric Neck**: a solid body with the pickup at the neck, round and warm, made for an amp simulation
 - **Electric Bridge**: the pickup at the bridge, bright and cutting, made for an amp simulation
+- **Acoustic Bass**: a big wooden bass body with deep low modes
+- **Electric Bass**: a solid bass body with a darker pickup and stiffer strings
 
 ---
 

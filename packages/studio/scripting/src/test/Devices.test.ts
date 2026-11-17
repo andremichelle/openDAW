@@ -591,6 +591,12 @@ describe("Devices", () => {
         expect(guitar.shapes[1]).toEqual([24, -1, 0, 0, 0, 0])
         expect(() => guitar.setShape(16, [0, 0, 0, 0, 0, 0])).toThrow()
         expect(() => guitar.setShape(0, [0, 0, 0])).toThrow(RangeError)
+        expect(guitar.notes).toEqual([-1, -1, -1, -1, -1, -1])
+        guitar.setNotes([28, 33, 38, 43, -1, -1])
+        expect(guitar.notes).toEqual([28, 33, 38, 43, -1, -1])
+        guitar.setNotes([10, 99, -7, 40, 45, 50])
+        expect(guitar.notes).toEqual([24, 88, -1, 40, 45, 50])
+        expect(() => guitar.setNotes([40, 45])).toThrow(RangeError)
         guitar.chord = 3
         expect(guitar.chord).toBe(3)
         guitar.body = 5

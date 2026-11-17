@@ -34,7 +34,7 @@ const RATE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
 const SLOT_MAPPING: LinearInteger = LinearInteger {min: 0, max: SLOTS as i32 - 1};
 const CHORD_MAPPING: LinearInteger = LinearInteger {min: 0, max: SHAPES as i32};
 const POSITION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 5};
-const TUNING_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
+const TUNING_MAPPING: LinearInteger = LinearInteger {min: 0, max: fretting::CUSTOM as i32};
 const BODY_MAPPING: LinearInteger = LinearInteger {min: 0, max: BODY_COUNT as i32 - 1};
 const PICK_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const UNIPOLAR: Linear = Linear::unipolar();
@@ -74,6 +74,7 @@ const LENGTH_KEY: u16 = 5;
 pub const SLOTS: usize = 16;
 pub const SHAPES: usize = 16;
 const SHAPES_FIELD: u16 = 44;
+const NOTES_FIELD: u16 = 45;
 const GROOVE_FIELD: u16 = 38;
 
 const CHORDS_MODE: i32 = 0;
@@ -151,6 +152,7 @@ pub struct State {
     slot: usize,
     bpm: f32,
     shapes: [Tab; SHAPES],
+    notes: fretting::Tuning,
     queue: [Scheduled; QUEUE],
     queued: usize,
     pending: [Pending; PENDING],
@@ -176,6 +178,7 @@ pub struct State {
     lane_ids: [[u32; 5]; SLOTS],
     length_ids: [u32; SLOTS],
     shapes_id: u32,
+    notes_id: u32,
     groove: abi::GrooveFollower,
     broadcast: u32
 }
@@ -210,6 +213,7 @@ impl State {
         self.ended = [NO_KEY; ENDED];
         self.ended_at = 0;
         self.tab_key = (-1, 0, 0, 0);
+        self.notes = [fretting::OFF; STRINGS];
         self.chord_root = -1;
         self.step = -1;
         self.transporting = false;
@@ -266,11 +270,30 @@ impl State {
         }
     }
 
+    pub fn set_notes(&mut self, values: &[i32]) {
+        for (note, value) in self.notes.iter_mut().zip(values.iter()) {
+            *note = if *value < 0 {fretting::OFF} else {(*value).clamp(fretting::LOWEST_NOTE, fretting::HIGHEST_NOTE)};
+        }
+        self.tab_key = (-1, 0, 0, 0);
+    }
+
+    /// The open strings: a preset, or the custom notes once any string has one.
+    pub fn open(&self) -> fretting::Tuning {
+        let tuning = self.settings.tuning as usize;
+        if tuning < fretting::TUNINGS.len() {
+            fretting::TUNINGS[tuning]
+        } else if self.notes.iter().any(|note| *note != fretting::OFF) {
+            self.notes
+        } else {
+            fretting::TUNINGS[0]
+        }
+    }
+
     fn chord_tab(&mut self, root: i32, voicing: i32) -> Tab {
         let key = (root, voicing, self.settings.tuning, self.settings.position);
         if key != self.tab_key {
             self.tab_key = key;
-            self.tab = fretting::tab(root, voicing, self.settings.tuning as usize, self.settings.position as usize);
+            self.tab = fretting::tab(root, voicing, &self.open(), self.settings.position as usize);
         }
         self.tab
     }
@@ -341,8 +364,14 @@ impl State {
             return;
         }
         let custom = self.custom_shape();
-        let tab = if let Some(tab) = custom {
+        let open = self.open();
+        let tab = if let Some(mut tab) = custom {
             self.chord_root = -1;
+            for (fret, note) in tab.iter_mut().zip(open.iter()) {
+                if *note == fretting::OFF {
+                    *fret = MUTED;
+                }
+            }
             tab
         } else {
             let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
@@ -393,7 +422,7 @@ impl State {
             if index > 0 && kind != strum::PICK {
                 delay += self.spacing(factor, seed, index as i64);
             }
-            let pitch = fretting::pitch(self.settings.tuning as usize, *string, tab[*string]) as f32;
+            let pitch = fretting::pitch(&open, *string, tab[*string]) as f32;
             self.enqueue(Scheduled {
                 due: self.now + delay as u64, string: *string as u8, pitch, touch, up: kind == strum::UP,
                 velocity: if tilted {level * strum::tilt_gain(*string, self.settings.tilt)} else {level},
@@ -419,14 +448,14 @@ impl State {
         let count = self.pending_count;
         self.pending_count = 0;
         notes[..count].sort_unstable_by_key(|note| note.pitch);
-        let tuning = self.settings.tuning as usize;
+        let open = self.open();
         let low = fretting::POSITION_FRETS[self.settings.position.clamp(0, 5) as usize];
         let mut taken = [false; STRINGS];
         let mut chosen = [(0usize, Pending {id: 0, pitch: 0, cent: 0.0, velocity: 0.0, ended: false}); PENDING];
         let mut placed = 0;
         for note in &notes[..count] {
-            let fret_on = |string: usize| note.pitch - fretting::TUNINGS[tuning][string];
-            let playable = |string: usize| (KEYS_MIN_FRET..=KEYS_MAX_FRET).contains(&fret_on(string));
+            let fret_on = |string: usize| note.pitch - open[string];
+            let playable = |string: usize| open[string] != fretting::OFF && (KEYS_MIN_FRET..=KEYS_MAX_FRET).contains(&fret_on(string));
             let in_window = |string: usize| fret_on(string) == 0 || (low - 1..=low + 4).contains(&fret_on(string));
             let strummed = |string: usize| self.queue[..self.queued].iter().any(|item| item.key == NO_KEY && item.string as usize == string);
             let free = |string: usize| !taken[string] && self.keys[string] == NO_KEY && !strummed(string);
@@ -456,7 +485,7 @@ impl State {
                 delay += self.spacing(1.0, id, index as i64);
             }
             self.keys[string] = if ended {NO_KEY} else {id};
-            self.display[string] = (pitch - fretting::TUNINGS[tuning][string]) as i8;
+            self.display[string] = (pitch - open[string]) as i8;
             let seed = strum::hash(id, string as i64, 5);
             let varied = 1.0 + strum::bipolar(seed, 0, 1) * self.settings.velocity_variation * 0.5;
             self.enqueue(Scheduled {
@@ -728,7 +757,7 @@ pub fn apply_parameter(state: &mut State, index: usize, value: ParamValue) {
         param::VELOCITY => settings.velocity = float_value(value, &UNIPOLAR),
         param::VELOCITY_VARIATION => settings.velocity_variation = float_value(value, &UNIPOLAR),
         param::POSITION => settings.position = int_value(value, &POSITION_MAPPING).clamp(0, fretting::POSITION_FRETS.len() as i32 - 1),
-        param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING).clamp(0, fretting::TUNINGS.len() as i32 - 1),
+        param::TUNING => settings.tuning = int_value(value, &TUNING_MAPPING).clamp(0, fretting::CUSTOM as i32),
         param::BODY => {
             if state.body.select(int_value(value, &BODY_MAPPING).max(0) as usize) {
                 state.pickup = [[0.0; 4]; 2];
@@ -767,6 +796,7 @@ impl Instrument for Device {
             state.length_ids[slot] = abi::observe_field(&[PATTERNS_FIELD, slot as u16, LENGTH_KEY]);
         }
         state.shapes_id = abi::observe_field(&[SHAPES_FIELD]);
+        state.notes_id = abi::observe_field(&[NOTES_FIELD]);
         state.groove = abi::GrooveFollower::observe(&[GROOVE_FIELD]);
         state.broadcast = abi::bind_broadcast_int_array(&[0], 9);
     }
@@ -796,6 +826,12 @@ impl Instrument for Device {
         if id == state.shapes_id {
             if let FieldValue::Ints(values) = value {
                 state.set_shapes(values);
+            }
+            return;
+        }
+        if id == state.notes_id {
+            if let FieldValue::Ints(values) = value {
+                state.set_notes(values);
             }
             return;
         }

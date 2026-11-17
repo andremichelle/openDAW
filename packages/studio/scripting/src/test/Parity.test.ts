@@ -67,7 +67,7 @@ describe("Schema parity", () => {
                     .flatMap(lane => Array.from({length: 64}, (_, step) => `patterns.${pattern}.${lane}.${step}`)),
                 `patterns.${pattern}.length`, `patterns.${pattern}.library`,
                 ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.stepBends.${step}`)
-            ]).flat().concat(Array.from({length: 16}, (_, shape) => `shapes.${shape}`)),
+            ]).flat().concat(Array.from({length: 16}, (_, shape) => `shapes.${shape}`), Array.from({length: 6}, (_, note) => `notes.${note}`)),
             Apparat: [],
             InstrumentComposite: [],
             OpenDrumKick: [],

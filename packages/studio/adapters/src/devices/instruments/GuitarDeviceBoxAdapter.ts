@@ -18,7 +18,8 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     static readonly Modes: ReadonlyArray<string> = ["Chords", "Keys"]
     static readonly Rates: ReadonlyArray<string> = ["½×", "1×", "2×"]
     // WASM CONTRACT: the body order mirrors `BODY_NAMES` in device-guitar
-    static readonly Bodies: ReadonlyArray<string> = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge"]
+    static readonly Bodies: ReadonlyArray<string> = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge",
+        "Acoustic Bass", "Electric Bass"]
     // WASM CONTRACT: the pick order mirrors `Pick` in device-guitar
     static readonly Picks: ReadonlyArray<string> = ["Finger", "Thumb", "Nail", "Plectrum"]
     static readonly SlotCount = GuitarPatterns.SlotCount
@@ -44,6 +45,10 @@ export class GuitarDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     }
 
     get box(): GuitarDeviceBox {return this.#box}
+
+    openStrings(): Guitar.Tuning {
+        return Guitar.openStrings(this.namedParameter.tuning.getControlledValue(), this.#box.notes.fields().map(field => field.getValue()))
+    }
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get labelField(): StringField {return this.#box.label}

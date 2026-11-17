@@ -1,10 +1,10 @@
 import css from "./FretDisplay.sass?inline"
-import {clamp, int, isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
+import {clamp, int, isDefined, Lifecycle, Nullable, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Guitar, Harmony} from "@opendaw/lib-dsp"
+import {Guitar, Harmony, MidiKeys} from "@opendaw/lib-dsp"
 import {GuitarDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {CanvasPainter, Project} from "@opendaw/studio-core"
+import {CanvasPainter, ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
@@ -14,6 +14,8 @@ const Frets = 5
 const MaxBase = Guitar.MaxFret - Frets + 1
 const WheelStep = 40
 const Inlays: ReadonlyArray<int> = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24]
+const Margin = {top: 14, left: 12, right: 14, bottom: 13}
+const DragStep = 6
 
 type Construct = {
     lifecycle: Lifecycle
@@ -30,7 +32,8 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     const higher: HTMLElement = <span className="arrow">›</span>
     const footerText: HTMLElement = <span/>
     const footer: HTMLElement = <div className="footer">{lower}{footerText}{higher}</div>
-    const shown = {tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0, base: 1}
+    const shown = {tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0, base: 1,
+        open: Guitar.Tunings[0], custom: false}
     const edit = {index: 0, base: 1, wheel: 0}
     const editingShape = () => edit.index > 0 && mode.getControlledValue() === 0
     const voicing = {key: "", tab: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>}
@@ -43,11 +46,11 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     const live = {frets: new Array<int>(Guitar.Strings).fill(Guitar.Muted) as ReadonlyArray<int>, lit: 0}
     const canvas: HTMLCanvasElement = <canvas/>
     const painter = lifecycle.own(new CanvasPainter(canvas, ({devicePixelRatio, context, actualWidth, actualHeight}) => {
-        const {tab, lit, base} = shown
-        const top = 14 * devicePixelRatio
-        const left = 12 * devicePixelRatio
-        const right = actualWidth - 14 * devicePixelRatio
-        const bottom = actualHeight - 4 * devicePixelRatio
+        const {tab, lit, base, open, custom} = shown
+        const top = Margin.top * devicePixelRatio
+        const left = Margin.left * devicePixelRatio
+        const right = actualWidth - Margin.right * devicePixelRatio
+        const bottom = actualHeight - Margin.bottom * devicePixelRatio
         const stringX = (string: int) => left + (right - left) * string / (Guitar.Strings - 1)
         const fretY = (line: int) => top + (bottom - top) * line / Frets
         context.lineWidth = devicePixelRatio
@@ -87,17 +90,26 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         context.font = `${9 * devicePixelRatio}px Rubik, sans-serif`
         context.textAlign = "center"
         context.textBaseline = "middle"
+        context.font = `${7 * devicePixelRatio}px Rubik, sans-serif`
+        open.forEach((note, string) => {
+            context.fillStyle = custom ? Colors.orange.toString() : Colors.shadow.toString()
+            context.fillText(note === Guitar.Off ? "–" : MidiKeys.toFullString(note), stringX(string), actualHeight - 5 * devicePixelRatio)
+        })
+        context.font = `${9 * devicePixelRatio}px Rubik, sans-serif`
         tab.forEach((fret, string) => {
             const on = (lit & (1 << string)) !== 0
             const x = stringX(string)
+            const off = open[string] === Guitar.Off
             context.lineWidth = (0.8 + (Guitar.Strings - 1 - string) * 0.2) * devicePixelRatio
-            context.strokeStyle = on ? DisplayPaint.strokeStyle(1.0) : DisplayPaint.gridStyle(0.5)
+            context.strokeStyle = on ? DisplayPaint.strokeStyle(1.0) : DisplayPaint.gridStyle(off ? 0.12 : 0.5)
             context.beginPath()
             context.moveTo(x, top)
             context.lineTo(x, bottom)
             context.stroke()
             const markY = top - 7 * devicePixelRatio
-            if (fret < 0) {
+            if (off) {
+                return
+            } else if (fret < 0) {
                 context.fillStyle = Colors.shadow.toString()
                 context.fillText("×", x, markY)
             } else if (fret === 0) {
@@ -124,13 +136,46 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         edit.base = clamp(edit.base + delta, 1, MaxBase)
         update()
     }
-    const toggleFret = (event: PointerEvent) => {
-        if (!editingShape() || event.button !== 0 || event.ctrlKey) {return}
+    const locate = (clientX: number, clientY: number) => {
         const rect = canvas.getBoundingClientRect()
-        const [top, left, right, bottom] = [14, 12, rect.width - 14, rect.height - 4]
-        const x = event.clientX - rect.left
-        const y = event.clientY - rect.top
-        const string = clamp(Math.round((x - left) / (right - left) * (Guitar.Strings - 1)), 0, Guitar.Strings - 1)
+        const [left, right] = [Margin.left, rect.width - Margin.right]
+        const string = clamp(Math.round((clientX - rect.left - left) / (right - left) * (Guitar.Strings - 1)), 0, Guitar.Strings - 1)
+        return {string, y: clientY - rect.top, bottom: rect.height - Margin.bottom, strip: clientY - rect.top > rect.height - Margin.bottom}
+    }
+    const tuneString = (string: int, note: int, mark: boolean) => {
+        const open = adapter.openStrings()
+        if (open[string] === note) {return}
+        editing.modify(() => {
+            if (tuningParameter.getValue() !== Guitar.Custom) {
+                open.forEach((value, index) => box.notes.getField(index).setValue(value))
+                tuningParameter.setValue(Guitar.Custom)
+            }
+            box.notes.getField(string).setValue(note)
+        }, mark)
+    }
+    const drag = lifecycle.own(new Terminator())
+    const startTuning = (event: PointerEvent) => {
+        const {string, strip} = locate(event.clientX, event.clientY)
+        if (!strip || event.button !== 0 || event.ctrlKey) {return false}
+        const start = adapter.openStrings()[string]
+        if (start === Guitar.Off) {return true}
+        let mark = true
+        drag.terminate()
+        drag.ownAll(
+            Events.subscribe(window, "pointermove", (moveEvent: PointerEvent) => {
+                const note = clamp(start + Math.round((event.clientY - moveEvent.clientY) / DragStep), Guitar.LowestNote, Guitar.HighestNote)
+                tuneString(string, note, mark)
+                mark = false
+            }),
+            Events.subscribe(window, "pointerup", () => drag.terminate()))
+        return true
+    }
+    const toggleFret = (event: PointerEvent) => {
+        if (startTuning(event)) {return}
+        if (!editingShape() || event.button !== 0 || event.ctrlKey) {return}
+        const {string, y, bottom} = locate(event.clientX, event.clientY)
+        if (shown.open[string] === Guitar.Off) {return}
+        const top = Margin.top
         const own = Guitar.unpackShape(shapeField().getValue())
         const tab = (Guitar.isEmptyShape(own) ? shown.tab : own).slice()
         if (y < top + 2) {
@@ -146,6 +191,9 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     }
     const update = () => {
         const tuning = tuningParameter.getControlledValue()
+        const open = adapter.openStrings()
+        shown.open = open
+        shown.custom = tuning === Guitar.Custom
         const position = positionParameter.getControlledValue()
         const keys = mode.getControlledValue() === 1
         const index = chord.getControlledValue()
@@ -161,16 +209,16 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
             const own: Nullable<Guitar.Tab> = editingShape() ? Guitar.unpackShape(shapeField().getValue()) : null
             if (isDefined(own) && !Guitar.isEmptyShape(own)) {
                 shown.tab = own
-                write(name, Guitar.shapeName(own, tuning))
+                write(name, Guitar.shapeName(own, open))
                 name.classList.add("custom")
             } else {
                 name.classList.remove("custom")
                 const current = chordTrack.chordAt(engine.position.getValue())
                 shown.tab = current.mapOr(({root, bits}) => {
-                    const key = `${root} ${bits} ${tuning} ${position}`
+                    const key = `${root} ${bits} ${open.join(" ")} ${position}`
                     if (key !== voicing.key) {
                         voicing.key = key
-                        voicing.tab = Guitar.tab(root, bits, tuning, position)
+                        voicing.tab = Guitar.tab(root, bits, open, position)
                     }
                     return voicing.tab
                 }, new Array<int>(Guitar.Strings).fill(Guitar.Muted))
@@ -186,7 +234,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
         write(footerText, editingShape()
             ? `Frets ${edit.base} to ${edit.base + Frets - 1}`
             : `${Guitar.TuningNames[tuning]} · ${Guitar.PositionNames[position]}`)
-        const key = `${shown.tab.join(" ")} ${shown.lit} ${shown.base}`
+        const key = `${shown.tab.join(" ")} ${shown.lit} ${shown.base} ${open.join(" ")} ${shown.custom}`
         if (key !== painted.key) {
             painted.key = key
             painter.requestUpdate()
@@ -195,18 +243,40 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     lifecycle.ownAll(
         Events.subscribe(canvas, "pointerdown", toggleFret),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
-            if (!editingShape()) {return}
+            const {string, strip} = locate(event.clientX, event.clientY)
+            const note = adapter.openStrings()[string]
+            const tuning = strip && note !== Guitar.Off
+            if (!tuning && !editingShape()) {return}
             event.preventDefault()
             edit.wheel += event.deltaY
             if (Math.abs(edit.wheel) >= WheelStep) {
-                moveWindow(Math.sign(edit.wheel))
+                if (tuning) {
+                    tuneString(string, clamp(note - Math.sign(edit.wheel), Guitar.LowestNote, Guitar.HighestNote), true)
+                } else {
+                    moveWindow(Math.sign(edit.wheel))
+                }
                 edit.wheel = 0
             }
         }, {passive: false}),
+        ContextMenu.subscribe(canvas, collector => {
+            const {string, strip} = locate(collector.client.clientX, collector.client.clientY)
+            if (!strip) {return}
+            const off = adapter.openStrings()[string] === Guitar.Off
+            collector.addItems(
+                MenuItem.default({label: off ? "String On" : "String Off"})
+                    .setTriggerProcedure(() => tuneString(string, off ? Guitar.Tunings[0][string] : Guitar.Off, true)),
+                ...Guitar.TuningNames.slice(0, Guitar.Custom).map((label, index) => MenuItem.default({
+                    label: `Copy ${label}`, separatorBefore: index === 0
+                }).setTriggerProcedure(() => editing.modify(() => {
+                    Guitar.Tunings[index].forEach((value, which) => box.notes.getField(which).setValue(value))
+                    tuningParameter.setValue(Guitar.Custom)
+                }))))
+        }),
         Events.subscribe(lower, "click", () => moveWindow(-1)),
         Events.subscribe(higher, "click", () => moveWindow(1)),
         chord.subscribe(update),
         ...box.shapes.fields().map(field => field.subscribe(update)),
+        ...box.notes.fields().map(field => field.subscribe(update)),
         engine.position.subscribe(update),
         engine.isPlaying.subscribe(update),
         chordTrack.subscribe(update),

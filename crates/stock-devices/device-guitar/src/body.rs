@@ -11,7 +11,8 @@ const ENERGY: f32 = 0.002;
 const AUDIBLE_FROM: f32 = 150.0;
 pub const MAX_IR: usize = 19_200;
 
-pub const BODY_NAMES: [&str; 8] = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge"];
+pub const BODY_NAMES: [&str; 10] = ["Off", "Dreadnought", "Classical", "Parlor", "Jumbo", "Archtop", "Electric Neck", "Electric Bridge",
+    "Acoustic Bass", "Electric Bass"];
 pub const BODY_COUNT: usize = BODY_NAMES.len();
 
 // modes are (frequency Hz, T60 seconds, amplitude), pickup is (position on the string, resonance Hz, resonance Q)
@@ -39,7 +40,10 @@ const PRESETS: [Preset; BODY_COUNT] = [
     Preset {modes: &[(110.0, 0.12, 0.3), (230.0, 0.12, 0.5), (350.0, 0.1, 0.9), (520.0, 0.08, 1.0), (800.0, 0.06, 0.8),
         (1300.0, 0.04, 0.45), (2000.0, 0.03, 0.2)], wood: 0.68, level: 0.72, brightness: 0.85, bare: 1.0, pickup: None, stiffness: 1.2},
     Preset {modes: &[], wood: 0.0, level: 1.0, brightness: 1.15, bare: 0.8, pickup: Some((0.25, 2500.0, 1.5)), stiffness: 0.9},
-    Preset {modes: &[], wood: 0.0, level: 1.0, brightness: 1.15, bare: 1.15, pickup: Some((0.08, 4500.0, 2.2)), stiffness: 0.9}
+    Preset {modes: &[], wood: 0.0, level: 1.0, brightness: 1.15, bare: 1.15, pickup: Some((0.08, 4500.0, 2.2)), stiffness: 0.9},
+    Preset {modes: &[(62.0, 0.38, 1.2), (118.0, 0.26, 0.9), (165.0, 0.2, 0.6), (270.0, 0.12, 0.4), (420.0, 0.08, 0.3),
+        (700.0, 0.05, 0.18), (1100.0, 0.03, 0.08)], wood: 0.8, level: 1.0, brightness: 0.72, bare: 1.0, pickup: None, stiffness: 1.6},
+    Preset {modes: &[], wood: 0.0, level: 1.0, brightness: 0.8, bare: 1.0, pickup: Some((0.18, 1800.0, 1.2)), stiffness: 1.5}
 ];
 
 pub struct Body {

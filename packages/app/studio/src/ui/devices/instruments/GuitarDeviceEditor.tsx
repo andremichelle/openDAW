@@ -177,14 +177,14 @@ export const GuitarDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     }
     const chordTrackTab = (): Option<ReadonlyArray<int>> => project.timelineBoxAdapter.chordTrack
         .chordAt(project.engine.position.getValue())
-        .map(({root, bits}) => Guitar.tab(root, bits, tuning.getControlledValue(), position.getControlledValue()))
+        .map(({root, bits}) => Guitar.tab(root, bits, adapter.openStrings(), position.getControlledValue()))
     const chordMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
         MenuItem.default({label: "Chord Track", checked: chord.getControlledValue() === 0})
             .setTriggerProcedure(() => editing.modify(() => chord.setValue(0))),
         ...Arrays.create(index => {
             const frets = shapeAt(index)
             const label = Guitar.isEmptyShape(frets) ? `Shape ${index + 1}`
-                : `Shape ${index + 1} · ${Guitar.shapeName(frets, tuning.getControlledValue())}`
+                : `Shape ${index + 1} · ${Guitar.shapeName(frets, adapter.openStrings())}`
             return MenuItem.default({label, checked: chord.getControlledValue() === index + 1, separatorBefore: index === 0})
                 .setTriggerProcedure(() => editing.modify(() => chord.setValue(index + 1)))
         }, GuitarDeviceBoxAdapter.ShapeCount),

@@ -106,6 +106,7 @@ Karplus-Strong strings, a noise burst per pluck shaped by a seeded character noi
 9. ~~Bends per string (below).~~
 10. ~~Finger squeak (below), dropped.~~
 11. ~~Tonal chuck (below).~~
+12. Free running patterns (done) and own tunings with a bass (below).
 
 ## Custom shapes
 
@@ -164,6 +165,17 @@ It also never fired for automated custom shapes, the shape switches only at the 
    darker and damped within a few tens of milliseconds, a little pick noise on top. A percussive thunk that still
    carries the chord.
 2. This changes the sound of the chuck: render before and after for listening.
+
+## Own tunings and bass
+
+1. Tuning menu: Standard, Drop D, Open G, DADGAD, Bass (E1 A1 D2 G2, the two high strings off), Custom. Tuning
+   stays automatable over these entries.
+2. Custom plays six notes of the device (box field 45), a note per string or off. Editing a note on the neck while
+   a preset is chosen copies the preset into Custom and switches to it.
+3. A string that is off never sounds: strums, picks, played notes, voicing search and custom shapes skip it.
+4. Neck: the note names at the nut change by drag or wheel, right-click toggles the string off, off strings are dim.
+5. Two bass bodies: Acoustic Bass (low wooden modes) and Electric Bass (pickup, darker, stiffer strings).
+6. Notes from C1 to E6, the string delay line holds C1 up to 96 kHz.
 
 ## Open
 

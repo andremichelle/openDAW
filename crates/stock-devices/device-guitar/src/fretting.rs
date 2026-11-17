@@ -4,12 +4,20 @@ pub const STRINGS: usize = 6;
 pub const MUTED: i8 = -1;
 
 // WASM CONTRACT: the tuning and position tables mirror `Guitar.Tunings` / `Guitar.PositionFrets` in lib-dsp.
-pub const TUNINGS: [[i32; STRINGS]; 4] = [
+pub const TUNINGS: [Tuning; 5] = [
     [40, 45, 50, 55, 59, 64],
     [38, 45, 50, 55, 59, 64],
     [38, 43, 50, 55, 59, 62],
-    [38, 45, 50, 55, 57, 62]
+    [38, 45, 50, 55, 57, 62],
+    [28, 33, 38, 43, OFF, OFF]
 ];
+pub const CUSTOM: usize = TUNINGS.len();
+pub const OFF: i32 = -1;
+pub const LOWEST_NOTE: i32 = 24;
+pub const HIGHEST_NOTE: i32 = 88;
+
+/// The open note of each string, `OFF` for a string that never sounds.
+pub type Tuning = [i32; STRINGS];
 pub const POSITION_FRETS: [i32; 6] = [0, 3, 5, 7, 9, 12];
 
 const MAX_OPTIONS: usize = 9;
@@ -118,8 +126,8 @@ impl Search {
 }
 
 /// The tab for `root` (pitch class) and `voicing` (interval mask, lowest bit the bass) near `position`.
-pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
-    let open = TUNINGS[tuning.min(TUNINGS.len() - 1)];
+pub fn tab(root: i32, voicing: i32, open: &Tuning, position: usize) -> Tab {
+    let open = *open;
     let position = position.min(POSITION_FRETS.len() - 1);
     let mut tones: i32 = 0;
     for interval in 0..31 {
@@ -146,10 +154,10 @@ pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
         for candidate in order {
             let low = POSITION_FRETS[candidate];
             let mut search = Search {
-                open, low, options: [[MUTED; MAX_OPTIONS]; STRINGS], counts: [0; STRINGS], bass, required, tones,
+                open, low, options: [[MUTED; MAX_OPTIONS]; STRINGS], counts: [1; STRINGS], bass, required, tones,
                 tab: [MUTED; STRINGS], best: [MUTED; STRINGS], best_score: 0, found: false
             };
-            for string in 0..STRINGS {
+            for string in (0..STRINGS).filter(|string| open[*string] != OFF) {
                 let mut count = 1;
                 for fret in (low - 1).max(0)..=low + 4 {
                     if tones & (1 << (open[string] + fret).rem_euclid(12)) != 0 && count < MAX_OPTIONS {
@@ -172,9 +180,9 @@ pub fn tab(root: i32, voicing: i32, tuning: usize, position: usize) -> Tab {
     [MUTED; STRINGS]
 }
 
-/// The pitch a string sounds at `fret` in `tuning`.
-pub fn pitch(tuning: usize, string: usize, fret: i8) -> i32 {
-    TUNINGS[tuning.min(TUNINGS.len() - 1)][string] + fret as i32
+/// The pitch `string` sounds at `fret`.
+pub fn pitch(open: &Tuning, string: usize, fret: i8) -> i32 {
+    open[string] + fret as i32
 }
 
 #[cfg(test)]
@@ -194,16 +202,16 @@ mod tests {
             (4, MINOR, "0 2 2 0 0 0"), (2, MAJOR, "x x 0 2 3 2"), (5, MAJOR, "1 3 3 2 1 1"),
             (2, MINOR, "x x 0 2 3 1"), (4, MAJOR, "0 2 2 1 0 0"), (9, MAJOR, "x 0 2 2 2 0")];
         for (root, voicing, expected) in cases {
-            assert_eq!(text(tab(root, voicing, 0, 0)), expected, "root {root}");
+            assert_eq!(text(tab(root, voicing, &TUNINGS[0], 0)), expected, "root {root}");
         }
     }
 
     #[test]
     fn the_bass_of_an_inversion_is_the_lowest_string() {
         let first_inversion = (1 << 4) | (1 << 7) | (1 << 12);
-        let shape = tab(0, first_inversion, 0, 0);
+        let shape = tab(0, first_inversion, &TUNINGS[0], 0);
         let first = shape.iter().position(|fret| *fret >= 0).unwrap();
-        assert_eq!(pitch(0, first, shape[first]).rem_euclid(12), 4);
+        assert_eq!(pitch(&TUNINGS[0], first, shape[first]).rem_euclid(12), 4);
     }
 
     #[test]
@@ -212,11 +220,11 @@ mod tests {
             for position in 0..POSITION_FRETS.len() {
                 for root in 0..12 {
                     for voicing in [MAJOR, MINOR, MAJOR | (1 << 10), MINOR | (1 << 10), 0b1_0010_0001] {
-                        let shape = tab(root, voicing, tuning, position);
+                        let shape = tab(root, voicing, &TUNINGS[tuning], position);
                         let mut classes = 0;
                         for (string, fret) in shape.iter().enumerate() {
                             if *fret >= 0 {
-                                classes |= 1 << pitch(tuning, string, *fret).rem_euclid(12);
+                                classes |= 1 << pitch(&TUNINGS[tuning], string, *fret).rem_euclid(12);
                             }
                         }
                         assert!(classes & (1 << root) != 0, "root {root} {voicing:b} tuning {tuning} position {position}");
@@ -234,10 +242,21 @@ mod tests {
         for line in fixture.lines() {
             let values: Vec<i32> = line.split(' ').map(|value| value.parse().unwrap()).collect();
             let expected: Tab = core::array::from_fn(|string| values[4 + string] as i8);
-            assert_eq!(tab(values[0], values[1], values[2] as usize, values[3] as usize), expected, "{line}");
+            assert_eq!(tab(values[0], values[1], &TUNINGS[values[2] as usize], values[3] as usize), expected, "{line}");
             rows += 1;
         }
-        assert_eq!(rows, 3744);
+        assert_eq!(rows, 4680);
+    }
+
+    #[test]
+    fn a_string_that_is_off_never_sounds() {
+        for root in 0..12 {
+            for voicing in [MAJOR, MINOR, MAJOR | (1 << 10)] {
+                let shape = tab(root, voicing, &TUNINGS[4], 0);
+                assert!(shape[4] < 0 && shape[5] < 0, "root {root}");
+                assert!(shape.iter().any(|fret| *fret >= 0), "root {root} plays");
+            }
+        }
     }
 
     #[test]
@@ -252,7 +271,7 @@ mod tests {
         let thirteenth = 1 | 1 << 4 | 1 << 7 | 1 << 10 | 1 << 14 | 1 << 17 | 1 << 21;
         let started = std::time::Instant::now();
         for position in 0..POSITION_FRETS.len() {
-            tab(0, thirteenth, 0, position);
+            tab(0, thirteenth, &TUNINGS[0], position);
         }
         let elapsed = started.elapsed().as_millis();
         assert!(elapsed < 200, "{elapsed} ms");

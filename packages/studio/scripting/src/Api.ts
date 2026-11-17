@@ -2397,9 +2397,9 @@ export interface Guitar extends Instrument {
     tilt: bipolar
     /** Neck position: 0 = Open, 1 = 3rd, 2 = 5th, 3 = 7th, 4 = 9th, 5 = 12th fret (default 0) */
     position: int
-    /** Tuning: 0 = Standard, 1 = Drop D, 2 = Open G, 3 = DADGAD (default 0) */
+    /** Tuning: 0 = Standard, 1 = Drop D, 2 = Open G, 3 = DADGAD, 4 = Bass, 5 = Custom, which plays {@link Guitar.notes} (default 0) */
     tuning: int
-    /** Body: 0 = Off, 1 = Dreadnought, 2 = Classical, 3 = Parlor, 4 = Jumbo, 5 = Archtop, 6 = Electric Neck, 7 = Electric Bridge (default 1) */
+    /** Body: 0 = Off, 1 = Dreadnought, 2 = Classical, 3 = Parlor, 4 = Jumbo, 5 = Archtop, 6 = Electric Neck, 7 = Electric Bridge, 8 = Acoustic Bass, 9 = Electric Bass (default 1) */
     body: int
     /** String damping, higher rings shorter and darker (0.0 to 1.0, default 0.33) */
     damping: unitValue
@@ -2427,6 +2427,10 @@ export interface Guitar extends Instrument {
     readonly shapes: ReadonlyArray<ReadonlyArray<int>>
     /** Sets a custom shape (0 to 15) from six frets, low E first: -1 mutes a string, 0 is open, up to 24, out of range frets are clamped */
     setShape(index: int, frets: ReadonlyArray<int>): void
+    /** The six open notes of the Custom tuning, low string first: a MIDI note from 24 to 88 or -1 for a string that is off. All off plays Standard */
+    readonly notes: ReadonlyArray<int>
+    /** Sets the six open notes of the Custom tuning, low string first: a MIDI note from 24 to 88 or -1 for a string that is off, out of range notes are clamped */
+    setNotes(notes: ReadonlyArray<int>): void
     /** The groove the pattern plays through, null for none. Set a groove of the project or null. */
     groove: Nullable<AnyGroove>
     /** The 16 pattern slots, a new Guitar fills them with built in patterns */

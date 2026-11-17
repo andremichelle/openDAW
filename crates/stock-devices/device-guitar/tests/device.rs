@@ -536,6 +536,35 @@ fn a_played_note_keeps_the_ringing_strum_lit() {
 }
 
 #[test]
+fn the_bass_never_plucks_its_two_high_strings() {
+    let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
+    let mut state = state();
+    device::apply_parameter(&mut state, param::TUNING, ParamValue::Int(4));
+    pattern(&mut state, &[strum::DOWN]);
+    let events = strokes(&mut state, 0.0, 240.0);
+    device::handle(&mut state, &events[0]);
+    render(&mut state, 9600);
+    assert_ne!(state.lit(), 0);
+    assert_eq!(state.lit() & 0b110000, 0);
+    assert_eq!(state.display()[4], -1);
+    assert_eq!(state.display()[5], -1);
+}
+
+#[test]
+fn a_custom_tuning_plays_its_own_notes_and_an_empty_one_plays_standard() {
+    let mut state = state();
+    device::apply_parameter(&mut state, param::TUNING, ParamValue::Int(5));
+    assert_eq!(state.open(), [40, 45, 50, 55, 59, 64]);
+    state.set_notes(&[36, 43, 48, -1, -1, -1]);
+    assert_eq!(state.open(), [36, 43, 48, -1, -1, -1]);
+    device::apply_parameter(&mut state, param::MODE, ParamValue::Int(1));
+    device::handle(&mut state, &EventRecord {kind: EVENT_NOTE_ON, id: 1, pitch: 62, velocity: 0.8, ..BLANK});
+    render(&mut state, 480);
+    assert_eq!(state.lit() & 0b111000, 0, "a played note never lands on a string that is off");
+}
+
+#[test]
 fn the_chord_track_plays_when_no_shape_or_an_empty_shape_is_chosen() {
     let _turn = HARMONY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     abi::set_native_harmony(Harmony {root: 0, bits: 0b1010_1011_0101, chord: Some((0, MAJOR))});
