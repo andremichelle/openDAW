@@ -1,2 +1,6 @@
-export * from "./defaults"
+export * from "./schema"
+export * from "./legacy"
+export * from "./AudioAlgorithm"
+export * from "./ClapPreset"
+export * from "./DawCodecs"
 export * from "./utils"
