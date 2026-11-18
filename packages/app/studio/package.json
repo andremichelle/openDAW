@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/app-studio",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -22,8 +22,8 @@
     "@opendaw/lib-std": "^0.0.89",
     "@opendaw/studio-adapters": "^0.4.1",
     "@opendaw/studio-boxes": "^0.0.123",
-    "@opendaw/studio-core": "^0.3.1",
-    "@opendaw/studio-core-wasm": "^0.1.1",
+    "@opendaw/studio-core": "^0.3.2",
+    "@opendaw/studio-core-wasm": "^0.1.2",
     "@opendaw/studio-enums": "^0.1.14",
     "@opendaw/studio-icons": "^0.0.13",
     "@opendaw/studio-markdown": "^0.0.13",

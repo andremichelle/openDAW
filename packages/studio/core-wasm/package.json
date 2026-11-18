@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core-wasm",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -41,7 +41,7 @@
     "@opendaw/nam-wasm": "^1.2.0",
     "@opendaw/studio-adapters": "^0.4.1",
     "@opendaw/studio-boxes": "^0.0.123",
-    "@opendaw/studio-core": "^0.3.1",
+    "@opendaw/studio-core": "^0.3.2",
     "soundfont2": "^0.5.0"
   },
   "devDependencies": {
