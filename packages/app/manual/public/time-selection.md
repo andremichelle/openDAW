@@ -13,11 +13,12 @@ The timeline has two tools in its header, between the plus button and Follow Cur
 2. Drag anywhere on the tracks, over regions or empty space
 
 The range snaps to the grid and covers the tracks you drag across. Hold **Shift** while dragging to cover all tracks
-and the global tracks (markers, tempo, signature, key and chords).
+and the global tracks (markers, tempo, signature, key and chords). A drag in the global tracks always covers
+everything.
 
 - Drag inside the range to move it, also up and down to other tracks
 - Drag an edge to resize it
-- **Escape** or a click outside removes it
+- **Escape**, a click outside or switching to the Pointer tool removes it
 
 A folded group bus in the range takes the tracks inside it along. Hidden automation lanes of a covered track are part
 of the range too.
@@ -45,7 +46,7 @@ start is cut there. Nothing is deleted.
 
 ## 4. Frozen Tracks
 
-If a [frozen track](/manuals/freeze-audiounit) is part of the range, openDAW asks first. Confirm to unfreeze it, edit
-it and render it again, or cancel to leave everything as it is.
+If a [frozen track](/manuals/freeze-audiounit) is part of the range, openDAW asks first. Confirm to unfreeze and edit
+it, then freeze it again when you are done, or cancel to leave everything as it is.
 
 Each Delete Time and Insert Time is one undo step.

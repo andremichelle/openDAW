@@ -224,9 +224,8 @@ export class TracksManager implements Terminable {
 
     numTracks(): int {return this.tracks().length}
 
-    timeTracks({rows, global}: TimeSelection): ReadonlyArray<TrackBoxAdapter> {
+    timeTracks({rows}: TimeSelection): ReadonlyArray<TrackBoxAdapter> {
         const all = this.#tracks.values()
-        if (global) {return all.map(({trackBoxAdapter}) => trackBoxAdapter)}
         const visible = new Set<TrackContext>(this.tracks())
         const timeRows = this.timeRows()
         const first = timeRows.findIndex(({key}) => rows.hasKey(key))

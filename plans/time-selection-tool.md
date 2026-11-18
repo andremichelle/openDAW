@@ -20,7 +20,7 @@ Delete or insert a section of time on one track, several tracks or the whole son
 3. Without Shift the range covers the tracks the drag crosses. With Shift it covers all tracks plus the global tracks (markers, tempo, signature, key, chord).
 4. The range is drawn as an overlay. Dragging its body moves it, dragging an edge resizes it, both snapped.
 5. Right click inside the range opens its menu: Delete Time, Insert Time.
-6. Escape or a click outside the range removes it. Switching back to Pointer keeps the range visible but inert, switching to Time Selection again makes it active.
+6. Escape, a click outside the range or switching to the Pointer tool removes it.
 
 ## Actions
 
@@ -43,4 +43,4 @@ Delete or insert a section of time on one track, several tracks or the whole son
 ## Rules
 
 1. A range over a folded track group covers the tracks inside it.
-2. A frozen audio unit in the range asks to re-render it. Declining cancels the action.
+2. A frozen audio unit in the range asks to unfreeze it and stays unfrozen after the edit. Declining cancels the action.

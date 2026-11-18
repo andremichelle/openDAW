@@ -19,11 +19,7 @@ type Construct = {
 
 export const PrimaryTracks = ({lifecycle, service}: Construct) => {
     const {timeline: {primaryVisibility: {markers, tempo, signature, key, chords}}} = service
-    const overlay: HTMLElement = (
-        <div className="time-selection">
-            <PrimaryTimeSelectionOverlay lifecycle={lifecycle} range={service.timeline.range} selection={service.timeline.timeSelection}/>
-        </div>
-    )
+    const overlay: HTMLElement = <PrimaryTimeSelectionOverlay lifecycle={lifecycle} service={service}/>
     const element: HTMLElement = (<div className={className}/>)
     const trackTerminator = lifecycle.own(new Terminator())
     const {request} = lifecycle.own(deferNextFrame(() => {

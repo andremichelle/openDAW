@@ -115,6 +115,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         }, {passive: false}),
         tool.catchupAndSubscribe(owner => {
             toolLifecycle.terminate()
+            if (owner.getValue() !== "time-selection") {timeSelection.clear()}
             toolLifecycle.own(owner.getValue() === "time-selection" ? TimeSelectionTool.install(context) : RegionPointerTool.install(context))
         })
     )
