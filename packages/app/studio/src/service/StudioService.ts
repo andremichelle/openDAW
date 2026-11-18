@@ -49,6 +49,7 @@ import {FooterLabel} from "@/service/FooterLabel"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
+import {DawProjectClaps} from "./DawProjectClaps"
 import {ExportConfiguration, InstrumentFactories, SampleLoader} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
@@ -300,7 +301,7 @@ export class StudioService implements ProjectEnv {
     }
 
     async importDawproject() {
-        (await DawProjectService.importDawproject(this.sampleService))
+        (await DawProjectService.importDawproject(this.sampleService, {resolveClap: DawProjectClaps.resolve}))
             .ifSome(skeleton => this.#projectProfileService
                 .setProject(Project.fromSkeleton(this, skeleton), "Dawproject"))
     }
