@@ -8,13 +8,17 @@
 //! render loop allocation-free. Time-stretch first (mode default playback_rate=1); the pitch path
 //! (freq map + peak locking) layers on after time-stretch matches the oracle.
 //!
-//! Design deltas from the C++, all output-neutral: splitComputation dropped (full spectrum per hop),
-//! radix-2 pow2 block on our FFT (native uses 5760) so parity is epsilon not bit-exact.
+//! Design deltas from the C++, all output-neutral: the streaming path splits each frame like `splitComputation`
+//! but reads one interval ahead instead of adding its latency, radix-2 pow2 block on our FFT (native uses 5760)
+//! so parity is epsilon not bit-exact.
 
 use alloc::vec;
 use alloc::vec::Vec;
 use crate::fft::Fft;
 use crate::approx;
+
+// the analysis and the phase locking each run in this many band ranges
+const BAND_STEPS: usize = 4;
 
 #[derive(Clone, Copy, Default)]
 struct Cplx { re: f32, im: f32 }
@@ -72,12 +76,18 @@ pub struct SignalsmithStretch {
     ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
     s2_synth: f64, s2_emit: usize, s2_src: f64, s2_started: bool,
     cycle_id: f64,           // engine bookkeeping: the loop cycle's raw_start; NaN = uninitialised
-    // Per-voice synthesis-frame phase, in output samples [0, interval). Each voice runs one heavy FFT frame
-    // every `interval` samples; phase-locked voices burst in the SAME render quantum (peak = N frames).
-    // Seeding the synth accumulator with a distinct offset per voice spreads the bursts across quanta at the
-    // cost of a fixed `phase_offset`-sample output latency on that voice (a few ms; inaudible for independent
-    // material). Applied at `reset_stream`, so it is stable across loop-wraps.
-    phase_offset: usize,
+    split: bool, // the original's splitComputation, started one interval early instead of delaying the output
+    job_active: bool,
+    job_step: usize,
+    job_start: usize,
+    job_due: usize,
+    job_hop: f64,
+    job_pitch: f32,
+    job_resample: f64,
+    lock_gate: f32,
+    lock_has_peaks: bool,
+    lock_peak: usize,
+    step_ends: Vec<f32>, // cumulative relative cost of the frame steps before the overlap-add
     // Loop-wrap fast path: a snapshot of the primed state (see `PrimedCache`) plus a flag armed at reset that
     // tells `process_stream_stereo` to capture the snapshot once, right after the emit==0 priming.
     cache: PrimedCache,
@@ -119,7 +129,10 @@ impl SignalsmithStretch {
             prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], sphase_r: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
             ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
             s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false, cycle_id: f64::NAN,
-            phase_offset: 0,
+            split: true,
+            job_active: false, job_step: 0, job_start: 0, job_due: 0, job_hop: 0.0, job_pitch: 1.0, job_resample: 1.0,
+            lock_gate: 0.0, lock_has_peaks: false, lock_peak: 0,
+            step_ends: step_ends(block.trailing_zeros() as usize),
             cache: PrimedCache {
                 valid: false,
                 ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
@@ -135,11 +148,9 @@ impl SignalsmithStretch {
         }
     }
 
-    /// Stagger this voice's synthesis-frame phase by `samples` output samples ([0, interval)). Voices with
-    /// distinct offsets run their FFT bursts in different render quanta instead of colliding. Costs a fixed
-    /// `samples`-sample output latency on this voice; takes effect at the next `reset_stream`.
-    pub fn set_phase_offset(&mut self, samples: usize) {
-        self.phase_offset = samples % self.interval.max(1);
+    /// On by default. Off runs every frame whole when it is due, the same samples while tempo and pitch hold.
+    pub fn set_split_computation(&mut self, split: bool) {
+        self.split = split;
     }
 
     /// Independent pitch shift in semitones (spectral remap, no resampling). 0 = time-stretch only.
@@ -270,11 +281,12 @@ impl SignalsmithStretch {
         for v in self.out_ring.iter_mut() { *v = 0.0; }
         for v in self.norm_ring.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
-        self.stream_synth = self.phase_offset as f64; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
+        self.stream_synth = 0.0; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
         for v in self.ring_l.iter_mut() { *v = 0.0; } for v in self.ring_r.iter_mut() { *v = 0.0; } for v in self.ring_n.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; self.sphase_r[b]=0.0; }
-        self.s2_synth = self.phase_offset as f64; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
+        self.s2_synth = 0.0; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
         self.capture_pending = false;
+        self.job_active = false;
     }
 
     /// Arm a one-shot capture of the primed state after the next `emit == 0` prime, tagging it with the params
@@ -314,6 +326,7 @@ impl SignalsmithStretch {
         self.s2_synth = self.cache.s2_synth; self.s2_src = self.cache.s2_src;
         self.s2_emit = self.cache.s2_emit; self.s2_started = self.cache.s2_started;
         self.capture_pending = false;
+        self.job_active = false;
         self.cache_restores += 1;
         self.consume_crossfade();
         true
@@ -415,82 +428,43 @@ impl SignalsmithStretch {
                                  time_factor: f64, pitch: f32, resample: f64) {
         let block = self.block; let interval = self.interval as f64;
         let half = (block / 2) as f64;
-        let two_pi = 2.0*core::f32::consts::PI;
+        let steps = self.frame_steps();
         for out_i in 0..out_l.len() {
             let emit = self.s2_emit;
-            while self.s2_synth <= emit as f64 + half {
-                let analysis_hop = interval / time_factor.max(1e-6);
-                let center = libm::round(self.s2_src) as isize;
-                // ONE complex FFT for BOTH channels: pack left into the real part and right into the imaginary
-                // part of the windowed frame, transform once, then unpack the two real-input spectra (the
-                // classic two-reals-for-one-FFT trick) — halves the analysis FFT cost.
-                // PITCH is done here, in the TIME domain: the window CENTRE advances at the native rate (so
-                // duration/tempo is unchanged) but each window sample steps by `resample * pitch` — a wider read
-                // compresses the content, raising pitch. No spectral bin interpolation (which smears complex
-                // phases), so a 1-cent shift barely widens the window and stays clean. pitch 1.0 == native read.
-                let half_b = block as f64 / 2.0;
-                let center_src = center as f64 * resample;
-                let step = resample * pitch as f64;
-                for i in 0..block {
-                    let pos = center_src + (i as f64 - half_b) * step;
-                    self.re[i] = resample_read(left, pos) * self.window[i];
-                    self.im[i] = resample_read(right, pos) * self.window[i];
-                }
-                self.fft.forward(&mut self.re, &mut self.im);
-                for b in 0..self.bands {
-                    let nb = if b == 0 { 0 } else { block - b };
-                    self.in_l[b] = Cplx { re: (self.re[b] + self.re[nb]) * 0.5, im: (self.im[b] - self.im[nb]) * 0.5 };
-                }
-                for b in 0..self.bands {
-                    let nb = if b == 0 { 0 } else { block - b };
-                    self.in_r[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
-                }
-                for b in 0..self.bands {
-                    let al = self.in_l[b]; let ar = self.in_r[b];
-                    let ml = approx::sqrt(al.norm()); let mr = approx::sqrt(ar.norm());
-                    let pl = approx::atan2(al.im, al.re); let pr = approx::atan2(ar.im, ar.re);
-                    self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
-                    if !self.s2_started {
-                        self.sphase[b] = pl; self.sphase_r[b] = pr;
-                    } else {
-                        // The time-domain window read raises pitch by `pitch`, so window bin b carries the
-                        // content of source bin b/pitch: its frame-to-frame phase evolves at the SOURCE rate
-                        // (hence expected uses b/pitch), and the output must advance `pitch` faster. sphase is
-                        // wrapped to [-pi,pi] so the phase polynomials never see a large (imprecise) argument.
-                        let src = b as f32 / pitch;
-                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
-                        let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * approx::round_f32(dl/two_pi);
-                        self.sphase[b] = approx::wrap_pi(self.sphase[b] + (expected + dl) / analysis_hop as f32 * pitch * interval as f32);
-                        let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * approx::round_f32(dr/two_pi);
-                        self.sphase_r[b] = approx::wrap_pi(self.sphase_r[b] + (expected + dr) / analysis_hop as f32 * pitch * interval as f32);
+            loop {
+                if self.job_active {
+                    // the overlap-add waits for this, earlier its last sample lands in the slot about to be emitted
+                    let deadline = self.s2_synth - half;
+                    if emit as f64 >= deadline {
+                        while self.job_step < steps {
+                            self.frame_step(self.job_step, left, right);
+                            self.job_step += 1;
+                        }
+                        self.job_active = false;
+                        continue;
                     }
-                    self.prev_l[b]=pl; self.prev_r[b]=pr;
-                }
-                self.s2_started = true;
-                self.build_locked_output_stereo();
-                let start = self.s2_synth - half;
-                // ONE inverse FFT for BOTH channels: pack the output spectra as Z = left + j*right; the IFFT of
-                // the full hermitian Z yields Re = left time-signal, Im = right (the inverse of the trick above).
-                for b in 0..self.bands {
-                    self.re[b] = self.in_l[b].re - self.in_r[b].im;
-                    self.im[b] = self.in_l[b].im + self.in_r[b].re;
-                }
-                for b in 1..self.bands - 1 {
-                    self.re[block - b] = self.in_l[b].re + self.in_r[b].im;
-                    self.im[block - b] = self.in_r[b].re - self.in_l[b].im;
-                }
-                self.fft.inverse(&mut self.re, &mut self.im);
-                for i in 0..block {
-                    let pos = start + i as f64;
-                    if pos >= 0.0 {
-                        let idx = (pos as usize) % block;
-                        self.ring_l[idx] += self.re[i] * self.window[i];
-                        self.ring_r[idx] += self.im[i] * self.window[i];
-                        self.ring_n[idx] += self.window[i] * self.window[i];
+                    if emit < self.job_due { break; }
+                    let span = (deadline - self.job_start as f64).max(1.0);
+                    let total = self.step_ends[steps - 2];
+                    let target = if self.split {
+                        let budget = ((emit - self.job_start + 1) as f64 / span) as f32 * total;
+                        self.step_ends.partition_point(|end| *end <= budget).min(steps - 1)
+                    } else { steps - 1 };
+                    while self.job_step < target {
+                        self.frame_step(self.job_step, left, right);
+                        self.job_step += 1;
                     }
+                    self.job_due = if self.split && self.job_step < steps - 1 {
+                        let due = self.job_start as f64 - 1.0 + libm::ceil((self.step_ends[self.job_step] / total) as f64 * span);
+                        (due.max(0.0) as usize).max(emit + 1)
+                    } else { deadline as usize };
+                    break;
                 }
-                self.s2_synth += interval;
-                self.s2_src += analysis_hop;
+                // the priming at emit 0 runs whole, so a captured primed state never holds a frame half done
+                let lead = if self.split && emit > 0 { interval } else { 0.0 };
+                if self.s2_synth > emit as f64 + half + lead { break; }
+                self.job_active = true; self.job_step = 0; self.job_start = emit; self.job_due = emit;
+                self.job_hop = interval / time_factor.max(1e-6); self.job_pitch = pitch; self.job_resample = resample;
             }
             // The priming frames for this reset have all run; snapshot the primed state so future loop wraps to
             // the same position restore it instead of re-priming. Only at emit==0 (the block right after a reset).
@@ -513,19 +487,111 @@ impl SignalsmithStretch {
         }
     }
 
+    // read, reverse, stages, analyse, peaks, lock, pack, reverse, stages, overlap-add
+    fn frame_steps(&self) -> usize { 6 + 2 * BAND_STEPS + 2 * self.fft.stages() }
+
+    fn band_range(&self, chunk: usize) -> core::ops::Range<usize> {
+        chunk * self.bands / BAND_STEPS..(chunk + 1) * self.bands / BAND_STEPS
+    }
+
+    fn frame_step(&mut self, step: usize, left: &[f32], right: &[f32]) {
+        let stages = self.fft.stages();
+        let block = self.block; let interval = self.interval as f64;
+        let two_pi = 2.0*core::f32::consts::PI;
+        let (analysis_hop, pitch, resample) = (self.job_hop, self.job_pitch, self.job_resample);
+        if step == 0 {
+            // pitch in the time domain (the window reads at resample * pitch), left as real and right as imaginary
+            let center = libm::round(self.s2_src) as isize;
+            let half_b = block as f64 / 2.0;
+            let center_src = center as f64 * resample;
+            let step = resample * pitch as f64;
+            for i in 0..block {
+                let pos = center_src + (i as f64 - half_b) * step;
+                self.re[i] = resample_read(left, pos) * self.window[i];
+                self.im[i] = resample_read(right, pos) * self.window[i];
+            }
+        } else if step == 1 {
+            self.fft.bit_reverse(&mut self.re, &mut self.im);
+        } else if step < 2 + stages {
+            self.fft.stage(&mut self.re, &mut self.im, step - 2, false);
+        } else if step < 2 + stages + BAND_STEPS {
+            let bands = self.band_range(step - 2 - stages);
+            for b in bands.clone() {
+                let nb = if b == 0 { 0 } else { block - b };
+                self.in_l[b] = Cplx { re: (self.re[b] + self.re[nb]) * 0.5, im: (self.im[b] - self.im[nb]) * 0.5 };
+                self.in_r[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
+            }
+            for b in bands.clone() {
+                let al = self.in_l[b]; let ar = self.in_r[b];
+                let ml = approx::sqrt(al.norm()); let mr = approx::sqrt(ar.norm());
+                let pl = approx::atan2(al.im, al.re); let pr = approx::atan2(ar.im, ar.re);
+                self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
+                if !self.s2_started {
+                    self.sphase[b] = pl; self.sphase_r[b] = pr;
+                } else {
+                    // The time-domain window read raises pitch by `pitch`, so window bin b carries the
+                    // content of source bin b/pitch: its frame-to-frame phase evolves at the SOURCE rate
+                    // (hence expected uses b/pitch), and the output must advance `pitch` faster. sphase is
+                    // wrapped to [-pi,pi] so the phase polynomials never see a large (imprecise) argument.
+                    let src = b as f32 / pitch;
+                    let expected = two_pi * src * analysis_hop as f32 / block as f32;
+                    let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * approx::round_f32(dl/two_pi);
+                    self.sphase[b] = approx::wrap_pi(self.sphase[b] + (expected + dl) / analysis_hop as f32 * pitch * interval as f32);
+                    let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * approx::round_f32(dr/two_pi);
+                    self.sphase_r[b] = approx::wrap_pi(self.sphase_r[b] + (expected + dr) / analysis_hop as f32 * pitch * interval as f32);
+                }
+                self.prev_l[b]=pl; self.prev_r[b]=pr;
+            }
+            if bands.end == self.bands { self.s2_started = true; }
+        } else if step == 2 + stages + BAND_STEPS {
+            self.find_peaks_stereo();
+        } else if step < 3 + stages + 2 * BAND_STEPS {
+            self.lock_bands_stereo(self.band_range(step - 3 - stages - BAND_STEPS));
+        } else if step == 3 + stages + 2 * BAND_STEPS {
+            // ONE inverse FFT for BOTH channels: pack the output spectra as Z = left + j*right; the IFFT of
+            // the full hermitian Z yields Re = left time-signal, Im = right (the inverse of the trick above).
+            for b in 0..self.bands {
+                self.re[b] = self.in_l[b].re - self.in_r[b].im;
+                self.im[b] = self.in_l[b].im + self.in_r[b].re;
+            }
+            for b in 1..self.bands - 1 {
+                self.re[block - b] = self.in_l[b].re + self.in_r[b].im;
+                self.im[block - b] = self.in_r[b].re - self.in_l[b].im;
+            }
+        } else if step == 4 + stages + 2 * BAND_STEPS {
+            self.fft.bit_reverse(&mut self.re, &mut self.im);
+        } else if step < 5 + 2 * stages + 2 * BAND_STEPS {
+            self.fft.stage(&mut self.re, &mut self.im, step - 5 - stages - 2 * BAND_STEPS, true);
+        } else {
+            self.fft.scale(&mut self.re, &mut self.im);
+            let start = self.s2_synth - (block / 2) as f64;
+            for i in 0..block {
+                let pos = start + i as f64;
+                if pos >= 0.0 {
+                    let idx = (pos as usize) % block;
+                    self.ring_l[idx] += self.re[i] * self.window[i];
+                    self.ring_r[idx] += self.im[i] * self.window[i];
+                    self.ring_n[idx] += self.window[i] * self.window[i];
+                }
+            }
+            self.s2_synth += interval;
+            self.s2_src += analysis_hop;
+        }
+    }
+
     /// Vertical rigid locking on the COMBINED (L+R) magnitude. Each bin is voiced from its DOMINANT channel's
     /// own accumulated phase (locked to the nearest peak); the other channel is offset by the analysis-time
     /// inter-channel phase difference. This preserves the stereo image AND — because each channel's accumulator
     /// tracks its own analysis phase — reconstructs the input exactly at unity (no phase scrambling on
     /// transients). Writes each channel's final output bins back into `in_l`/`in_r`.
-    fn build_locked_output_stereo(&mut self) {
+    fn find_peaks_stereo(&mut self) {
         let bands = self.bands;
         self.peaks_s.clear();
         let alpha = 0.15f32; let mut sm = 0.0f32; let mut max_cm = 0.0f32;
         for b in 0..bands { let cm=self.mag_l[b]+self.mag_r[b]; if cm > max_cm { max_cm = cm; } sm += alpha*(cm-sm); self.frame[b]=sm; }
         // Below this the bin is inaudible, so its output is ~0 regardless of phase — skip the cos/sin (the hot
         // transcendentals). Relative + tiny, so it only ever drops true silence (most bins in typical spectra).
-        let gate = max_cm * 1e-4;
+        self.lock_gate = max_cm * 1e-4;
         sm = 0.0;
         for b in (0..bands).rev() { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=0.5*(self.frame[b]+sm); }
         let w=3usize;
@@ -535,12 +601,18 @@ impl SignalsmithStretch {
             let lo=b.saturating_sub(w); let hi=(b+w+1).min(bands);
             if (lo..hi).all(|other| self.mag_l[other]+self.mag_r[other] <= cm) { self.peaks_s.push(b); }
         }
-        let has_peaks = !self.peaks_s.is_empty();
-        let mut pi=0usize;
-        for b in 0..bands {
+        self.lock_has_peaks = !self.peaks_s.is_empty();
+        self.lock_peak = 0;
+    }
+
+    fn lock_bands_stereo(&mut self, bands: core::ops::Range<usize>) {
+        let gate = self.lock_gate;
+        for b in bands {
             // p = the peak this bin locks to (itself when there are no peaks -> free-run, i.e. identity).
-            let p = if has_peaks {
+            let p = if self.lock_has_peaks {
+                let mut pi = self.lock_peak;
                 while pi+1 < self.peaks_s.len() && (self.peaks_s[pi+1] as isize - b as isize).abs() < (self.peaks_s[pi] as isize - b as isize).abs() { pi+=1; }
+                self.lock_peak = pi;
                 self.peaks_s[pi]
             } else { b };
             if self.mag_l[b] + self.mag_r[b] <= gate {
@@ -603,6 +675,25 @@ impl SignalsmithStretch {
             }
         }
     }
+}
+
+// measured relative costs on broadband noise, starting with the previous frame's overlap-add (7.4)
+fn step_ends(stages: usize) -> Vec<f32> {
+    let mut weights = Vec::new();
+    weights.push(5.6);
+    weights.push(1.8);
+    for _ in 0..stages { weights.push(1.5); }
+    for _ in 0..BAND_STEPS { weights.push(21.0 / BAND_STEPS as f32); }
+    weights.push(9.6);
+    for _ in 0..BAND_STEPS { weights.push(12.5 / BAND_STEPS as f32); }
+    weights.push(4.3);
+    weights.push(2.0);
+    for _ in 0..stages { weights.push(1.5); }
+    let mut total = 7.4f32;
+    weights.iter().map(|weight| {
+        total += weight;
+        total
+    }).collect()
 }
 
 /// Linearly-interpolated read of `input` at fractional sample `pos` (out of range -> 0). `pos = engine_index *
