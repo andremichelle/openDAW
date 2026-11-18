@@ -18,6 +18,8 @@ Press Shift+Enter or ⌘+F to open the [Spotlight](/manuals/spotlight), the quic
 * Hold Shift and scroll wheel to zoom horizontally
 * Hold ⌥ and click to cut a region
 * Hold ⌥+Shift and click to cut a region without consolidating
+* Press V for the Pointer tool, T for the [Time Selection](/manuals/time-selection) tool
+* Hold Shift while drawing a time selection to cover all tracks and the global tracks
 
 ### Notes
 

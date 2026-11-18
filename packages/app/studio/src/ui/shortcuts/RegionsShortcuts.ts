@@ -15,6 +15,14 @@ export const RegionsShortcutsFactory = ShortcutValidator.validate({
     "loop-selection": {
         shortcut: Shortcut.of(Key.KeyL, {ctrl: true, shift: true}),
         description: "Loop selected regions"
+    },
+    "delete-time": {
+        shortcut: Shortcut.of(Key.DeleteAction, {ctrl: true, shift: true}),
+        description: "Delete the time selection and pull later material"
+    },
+    "insert-time": {
+        shortcut: Shortcut.of(Key.KeyI, {ctrl: true}),
+        description: "Insert time at the time selection and push later material"
     }
 })
 

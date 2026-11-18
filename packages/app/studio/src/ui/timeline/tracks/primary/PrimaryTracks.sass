@@ -5,3 +5,10 @@ component
   grid-column: 1 / -1
   row-gap: 1px
   align-content: start
+  position: relative
+
+  > div.time-selection
+    grid-column: calc(2 + var(--clips-count))
+    position: absolute
+    inset: 0
+    pointer-events: none

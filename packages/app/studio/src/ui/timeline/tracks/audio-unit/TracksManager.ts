@@ -17,6 +17,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
+import {TimeSelection} from "@/ui/timeline/TimeSelection"
 import {Dragging} from "@opendaw/lib-dom"
 import {
     AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioRegionBoxAdapter, AudioUnitBoxAdapter,
@@ -222,6 +223,39 @@ export class TracksManager implements Terminable {
     }
 
     numTracks(): int {return this.tracks().length}
+
+    timeTracks({rows, global}: TimeSelection): ReadonlyArray<TrackBoxAdapter> {
+        const all = this.#tracks.values()
+        if (global) {return all.map(({trackBoxAdapter}) => trackBoxAdapter)}
+        const visible = new Set<TrackContext>(this.tracks())
+        const timeRows = this.timeRows()
+        const first = timeRows.findIndex(({key}) => rows.hasKey(key))
+        const last = timeRows.findLastIndex(({key}) => rows.hasKey(key))
+        const span = first === -1 ? Arrays.empty<TimeSelection.Row>() : timeRows.slice(first, last + 1)
+        const spanKeys = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        span.forEach(({key}) => spanKeys.add(key))
+        const coveredUnits = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        span.forEach(({key}) => this.#tracks.opt(key).match({
+            none: () => coveredUnits.add(key),
+            some: track => track.audioUnitBoxAdapter.ifSome(({uuid}) => coveredUnits.add(uuid))
+        }))
+        const {rows: unitRows} = this.#service.project.audioUnitLayout.snapshot
+        const isCoveredUnit = (unit: AudioUnitBoxAdapter): boolean => coveredUnits.hasKey(unit.uuid)
+            || (unitRows.find(row => row.unit === unit.box)?.ancestors
+                .some(ancestor => coveredUnits.hasKey(ancestor.address.uuid)) ?? false)
+        return all.filter(track => spanKeys.hasKey(track.trackBoxAdapter.uuid)
+            || (!visible.has(track) && track.audioUnitBoxAdapter.mapOr(isCoveredUnit, false)))
+            .map(({trackBoxAdapter}) => trackBoxAdapter)
+    }
+
+    timeRows(): ReadonlyArray<TimeSelection.Row> {
+        return this.#flatLayout().rows.flatMap(({content}): ReadonlyArray<TimeSelection.Row> => {
+            if (content.kind === "track") {return [{key: content.track.trackBoxAdapter.uuid, element: content.track.element}]}
+            if (content.kind === "modulator-header") {return Arrays.empty()}
+            const owner = this.#audioUnits.values().find(entry => entry.synthetic.contains(content.element))
+            return isDefined(owner) ? [{key: owner.uuid, element: content.element}] : Arrays.empty()
+        })
+    }
 
     terminate(): void {
         this.#terminated = true

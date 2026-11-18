@@ -25,7 +25,7 @@ Delete or insert a section of time on one track, several tracks or the whole son
 ## Actions
 
 1. **Delete Time** (`Cmd+Shift+Delete`): on every track of the range, split regions at both range edges, delete what lies inside, move every later region left by the range length. With global tracks, events inside are removed and later events move left.
-2. **Insert Time** (`Cmd+Shift+I`): clears the range by pushing. On every track of the range, split regions crossing the range start and move everything from the range start right by the range length. Nothing is deleted. Same for global tracks.
+2. **Insert Time** (`Cmd+I`, like Insert Silence in Ableton): clears the range by pushing. On every track of the range, split regions crossing the range start and move everything from the range start right by the range length. Nothing is deleted. Same for global tracks.
 3. Each action is one undo step. The range stays at its position after the action.
 4. Automation lives in value regions on their own tracks, so it follows the tracks the range covers.
 
@@ -33,12 +33,12 @@ Delete or insert a section of time on one track, several tracks or the whole son
 
 1. ~~Research~~ (other DAWs: tools are the common core, click zones rejected).
 2. ~~Tool state + shortcuts + header buttons.~~
-3. Range model (position, duration, track indices, global flag) + overlay rendering.
-4. Range gestures: create, move, resize, Escape, click outside.
-5. Delete Time + Insert Time on regions (reuse `RegionEditing.cut`), tests for empty gaps, regions crossing both edges, looped and audio regions.
-6. Global tracks for both actions, tests.
-7. Range context menu + action shortcuts.
-8. Manual + changelog.
+3. ~~Range model (position, duration, track indices, global flag) + overlay rendering.~~
+4. ~~Range gestures: create, move, resize, Escape, click outside.~~
+5. ~~Delete Time + Insert Time on regions (reuse `RegionEditing.cut`), tests for empty gaps, regions crossing both edges, looped and audio regions.~~
+6. ~~Global tracks for both actions, tests.~~
+7. ~~Range context menu + action shortcuts.~~
+8. ~~Manual + changelog.~~
 
 ## Rules
 

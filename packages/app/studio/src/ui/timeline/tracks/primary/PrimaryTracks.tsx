@@ -8,6 +8,7 @@ import {TempoTrack} from "@/ui/timeline/tracks/primary/tempo/TempoTrack"
 import {SignatureTrack} from "@/ui/timeline/tracks/primary/signature/SignatureTrack"
 import {KeyTrack} from "@/ui/timeline/tracks/primary/key/KeyTrack"
 import {ChordTrack} from "@/ui/timeline/tracks/primary/chord/ChordTrack"
+import {PrimaryTimeSelectionOverlay} from "@/ui/timeline/tracks/primary/PrimaryTimeSelectionOverlay"
 
 const className = Html.adoptStyleSheet(css, "primary-tracks")
 
@@ -18,6 +19,11 @@ type Construct = {
 
 export const PrimaryTracks = ({lifecycle, service}: Construct) => {
     const {timeline: {primaryVisibility: {markers, tempo, signature, key, chords}}} = service
+    const overlay: HTMLElement = (
+        <div className="time-selection">
+            <PrimaryTimeSelectionOverlay lifecycle={lifecycle} range={service.timeline.range} selection={service.timeline.timeSelection}/>
+        </div>
+    )
     const element: HTMLElement = (<div className={className}/>)
     const trackTerminator = lifecycle.own(new Terminator())
     const {request} = lifecycle.own(deferNextFrame(() => {
@@ -38,6 +44,7 @@ export const PrimaryTracks = ({lifecycle, service}: Construct) => {
                     {isTempoTrackVisible && <TempoTrack lifecycle={trackTerminator} service={service}/>}
                     {isKeyTrackVisible && <KeyTrack lifecycle={trackTerminator} service={service}/>}
                     {isChordTrackVisible && <ChordTrack lifecycle={trackTerminator} service={service}/>}
+                    {overlay}
                 </Frag>
             )
         }
