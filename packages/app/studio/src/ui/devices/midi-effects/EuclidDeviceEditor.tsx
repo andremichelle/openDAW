@@ -49,6 +49,10 @@ const PatternFormat: PatternClipboard.Format<CopiedPattern> = {
         && PatternClipboard.isGroove(value.groove) && Array.isArray(value.rhythms)
         && value.rhythms.every((row: unknown) => PatternClipboard.sameShape(RhythmTemplate, row))
 }
+const LaneFormat: PatternClipboard.Format<ReadonlyArray<number>> = {
+    type: "euclid-lane",
+    valid: (value: unknown): value is ReadonlyArray<number> => PatternClipboard.sameShape(RhythmKeys.map(() => 0), value)
+}
 type Tracked = {
     readonly lane: EuclidLaneBox
     readonly dot: HTMLElement
@@ -179,6 +183,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     const list: HTMLElement = <div className="lanes"/>
     const rows = lifecycle.own(new Terminator())
     let rowElements: ReadonlyArray<HTMLElement> = []
+    let reveal = false
     let rowDots: ReadonlyArray<HTMLElement> = []
     let rendering: string = ""
     let tracked: ReadonlyArray<Tracked> = []
@@ -223,7 +228,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             const note = each.note.getValue()
             const {mute, solo} = Euclid.rhythmOf(each, edited)
             const row: HTMLElement = (
-                <div className={Html.buildClassList("lane", !audible(each) && "silent")}>
+                <div className={Html.buildClassList("lane", !audible(each) && "silent")} tabIndex={-1}>
                     <span className="note">{MidiKeys.toFullString(note)}</span>
                     {dot}
                     <span className="name">{noteName(note).unwrapOrElse("")}</span>
@@ -234,6 +239,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
             rows.ownAll(
                 Events.subscribe(row, "pointerdown", (event: PointerEvent) => {
                     selected = index
+                    row.focus()
                     if (event.button === 0) {
                         dragging = Option.wrap(index)
                         list.setPointerCapture(event.pointerId)
@@ -241,7 +247,10 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     changed.notify()
                 }),
                 ContextMenu.subscribe(row, collector => collector.addItems(
-                    MenuItem.default({label: "Remove lane", selectable: all.length > 1})
+                    MenuItem.default({label: "Copy lane"}).setTriggerProcedure(() => ClipboardManager.write(copyLane(each))),
+                    MenuItem.default({label: "Paste lane", selectable: PatternClipboard.pastable(LaneFormat)})
+                        .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(LaneFormat, each, values => applyLane(each, values))),
+                    MenuItem.default({label: "Remove lane", selectable: all.length > 1, separatorBefore: true})
                         .setTriggerProcedure(() => editing.modify(() => Euclid.removeLane(box, each)))))
             )
             return [row, dot] as const
@@ -250,6 +259,10 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         rowDots = rendered.map(([, dot]) => dot)
         rowElements.forEach((row, index) => row.classList.toggle("selected", index === current))
         list.replaceChildren(...rowElements)
+        if (reveal) {
+            reveal = false
+            rowElements[current]?.scrollIntoView({block: "nearest"})
+        }
     }
     const endDrag = (): void => {
         dragging = Option.None
@@ -298,7 +311,32 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         const note = Arrays.create(index => (start + index) % 128, 128).find(candidate => !used.has(candidate)) ?? start
         Euclid.createLane(boxGraph, box, note)
         selected = lanes().length - 1
+        reveal = true
     })}
+    const copyLane = (lane: EuclidLaneBox): ClipboardEntry => {
+        const rhythm = Euclid.rhythmOf(lane, edited)
+        return PatternClipboard.encode(LaneFormat, RhythmKeys.map(key => rhythm[key].getValue()))
+    }
+    const applyLane = (lane: EuclidLaneBox, values: ReadonlyArray<number>): void => {
+        editing.mark()
+        editing.modify(() => {
+            const rhythm = Euclid.rhythmOf(lane, edited)
+            RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
+        })
+    }
+    const focusedLane = (): Option<EuclidLaneBox> => {
+        const index = rowElements.findIndex(row => row === document.activeElement)
+        return index >= 0 ? Option.wrap(lanes()[index]) : Option.None
+    }
+    lifecycle.own(ClipboardManager.install(list, {
+        canCopy: () => focusedLane().nonEmpty(),
+        canCut: () => false,
+        canPaste: (entry: ClipboardEntry) => focusedLane().nonEmpty() && PatternClipboard.decode(LaneFormat, entry).nonEmpty(),
+        copy: () => focusedLane().map(copyLane),
+        cut: () => Option.None,
+        paste: (entry: ClipboardEntry) => focusedLane()
+            .ifSome(each => PatternClipboard.decode(LaneFormat, entry).ifSome(values => applyLane(each, values)))
+    }))
     const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode(PatternFormat, {
         rhythms: lanes().map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)
@@ -308,16 +346,19 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
     })
     const pastePattern = (pattern: int, entry: ClipboardEntry): void =>
         PatternClipboard.decode(PatternFormat, entry).ifSome(copied => applyPattern(pattern, copied))
-    const applyPattern = (pattern: int, copied: CopiedPattern): void => {editing.modify(() => {
-        lanes().forEach((each, index) => {
-            const values = copied.rhythms[index]
-            if (!isDefined(values)) {return}
-            const rhythm = Euclid.rhythmOf(each, pattern)
-            RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
-            FlagKeys.forEach((key, at) => rhythm[key].setValue(values[RhythmKeys.length + at] !== 0))
+    const applyPattern = (pattern: int, copied: CopiedPattern): void => {
+        editing.mark()
+        editing.modify(() => {
+            lanes().forEach((each, index) => {
+                const values = copied.rhythms[index]
+                if (!isDefined(values)) {return}
+                const rhythm = Euclid.rhythmOf(each, pattern)
+                RhythmKeys.forEach((key, at) => rhythm[key].setValue(values[at]))
+                FlagKeys.forEach((key, at) => rhythm[key].setValue(values[RhythmKeys.length + at] !== 0))
+            })
+            PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
         })
-        PatternClipboard.referGroove(box.patterns.fields()[pattern].groove, copied.groove)
-    })}
+    }
     const exportPattern = (pattern: int): void => {
         const {api} = project
         const track = deviceHost.audioUnitBoxAdapter().tracks.collection.adapters().find(each => each.type === TrackType.Notes)

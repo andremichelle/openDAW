@@ -46,17 +46,20 @@ export namespace ClipboardManager {
             case "audio-units": return {one: "AudioUnit", many: "AudioUnits"}
             case "surgeon-pattern":
             case "euclid-pattern": return {one: "Pattern", many: "Patterns"}
+            case "euclid-lane": return {one: "Lane", many: "Lanes"}
             default: return {one: "Selection", many: "Selection"}
         }
     }
 
-    const notify = (entry: AnyEntry, verb: string, icon: IconSymbol): void => {
+    const notify = (entry: AnyEntry, verb: string, icon: IconSymbol, preposition: string = "to"): void => {
         const {one, many} = labelForType(entry.type)
         const label = !isDefined(entry.count)
             ? `${one}(s)`
             : entry.count === 1 ? one : `${entry.count} ${many}`
-        RuntimeNotifier.notify({message: `${label} ${verb} to clipboard`, icon: IconSymbol.toName(icon)})
+        RuntimeNotifier.notify({message: `${label} ${verb} ${preposition} clipboard`, icon: IconSymbol.toName(icon)})
     }
+
+    export const notifyPasted = (entry: AnyEntry): void => notify(entry, "pasted", IconSymbol.Paste, "from")
 
     export const peek = (): Option<AnyEntry> => fallbackEntry
 
@@ -87,6 +90,10 @@ export namespace ClipboardManager {
             fallbackEntry = Option.wrap(entry)
             Clipboard.writeText(encode(entry))
         }
+        const pasteEntry = (entry: AnyEntry): void => {
+            handler.paste(entry)
+            notifyPasted(entry)
+        }
         const performCopy = (): boolean => {
             if (!handler.canCopy(noClient)) {return false}
             const entry = handler.copy()
@@ -106,17 +113,17 @@ export namespace ClipboardManager {
                 const entry = text.flatMap(decode)
                 if (entry.nonEmpty()) {
                     if (!handler.canPaste(entry.unwrap(), noClient)) {return}
-                    handler.paste(entry.unwrap())
+                    pasteEntry(entry.unwrap())
                 } else {
                     fallbackEntry.ifSome(entry => {
                         if (!handler.canPaste(entry, noClient)) {return}
-                        handler.paste(entry)
+                        pasteEntry(entry)
                     })
                 }
             } catch (_error) {
                 fallbackEntry.ifSome(entry => {
                     if (!handler.canPaste(entry, noClient)) {return}
-                    handler.paste(entry)
+                    pasteEntry(entry)
                 })
             }
         }
@@ -154,13 +161,13 @@ export namespace ClipboardManager {
                     if (!handler.canPaste(entry.unwrap(), noClient)) {return}
                     event.preventDefault()
                     event.stopImmediatePropagation()
-                    handler.paste(entry.unwrap())
+                    pasteEntry(entry.unwrap())
                 } else {
                     fallbackEntry.ifSome(entry => {
                         if (!handler.canPaste(entry, noClient)) {return}
                         event.preventDefault()
                         event.stopImmediatePropagation()
-                        handler.paste(entry)
+                        pasteEntry(entry)
                     })
                 }
             }),

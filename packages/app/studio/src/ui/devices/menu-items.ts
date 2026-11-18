@@ -64,7 +64,7 @@ export namespace MenuItems {
                         return
                     }
                     editing.modify(() => api.pasteAudioUnitAsPad(playfield.box, key, entry.unwrap().data)
-                        .match({ok: () => {}, err: reason => RuntimeNotifier.notify({message: reason, icon: "Warning"})}))
+                        .match({ok: () => ClipboardManager.notifyPasted(entry.unwrap()), err: reason => RuntimeNotifier.notify({message: reason, icon: "Warning"})}))
                 })
         ]
     }
@@ -162,6 +162,7 @@ export namespace MenuItems {
                 RuntimeNotifier.notify({message: attempt.failureReason(), icon: "Warning"})
             } else {
                 userEditingManager.audioUnit.edit(attempt.result().cellBox)
+                ClipboardManager.notifyPasted(entry.unwrap())
             }
         })
 

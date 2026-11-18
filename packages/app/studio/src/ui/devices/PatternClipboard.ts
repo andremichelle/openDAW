@@ -27,7 +27,10 @@ export namespace PatternClipboard {
         const entry = system.nonEmpty() ? system : ClipboardManager.peek()
         entry.flatMap(each => decode(format, each)).match({
             none: () => RuntimeNotifier.notify({message: "The clipboard holds no pattern", icon: "Warning"}),
-            some: apply
+            some: value => {
+                apply(value)
+                entry.ifSome(ClipboardManager.notifyPasted)
+            }
         })
     }
 
