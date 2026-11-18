@@ -39,7 +39,8 @@ Eight patterns, each holds the rhythm, the mute and the solo of every lane. The 
 the same in every pattern. Automating the pattern also mutes and solos lanes.
 
 1. **1 to 8**: plays that pattern from the next bar. A tile flashes until its bar. **Off** stops the lanes at the next
-   bar, notes from the track still pass. The pattern can be automated.
+   bar, notes from the track still pass. The pattern can be automated. While recording automation, every click on a
+   tile is recorded on the bar where it takes over.
 2. Click a tile and press Cmd+C or Cmd+V to copy or paste its pattern, the context menu has **Copy pattern**,
    **Paste pattern** and **Export to Note Region**, which writes the pattern into a region at the playhead.
 3. **Length**: restarts every lane after this many steps of 1/16. **Off** lets every lane cycle on its own.

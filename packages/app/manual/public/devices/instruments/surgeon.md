@@ -42,7 +42,8 @@ ignored.
 3. The editor always shows the pattern you selected. Every edit is heard at once and is kept in that pattern.
 4. Right click a pattern to copy or paste it, its groove comes along.
 5. The pattern is an automatable parameter. Right click a pattern or **Off** and choose **Create Automation** to
-   draw pattern changes on the timeline.
+   draw pattern changes on the timeline. While recording automation, every click on a pattern is recorded on the bar
+   where it takes over.
 
 Below the circles:
 
