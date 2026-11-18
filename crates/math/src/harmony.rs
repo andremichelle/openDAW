@@ -55,7 +55,25 @@ pub fn chord_scale(bits: i32) -> i32 {
     }
 }
 
-/// The chord on `degree` (1..=7) of a key: `(root pitch class, voicing mask)`. `shape` 0 stacks `notes` (3..=5)
+/// A shape's intervals in root position, ascending: with a third the 2nd and 4th sound as 9th and 11th, with a
+/// third and a 7th the 6th as 13th, with a 7th above a 4th the 2nd as 9th. Mirrors `Harmony.shapeStack`.
+pub fn shape_stack(shape: i32, stack: &mut [i32; 12]) -> usize {
+    let has = |interval: i32| shape & (1 << interval) != 0;
+    let third = has(3) || has(4);
+    let seventh = has(10) || has(11);
+    let mut size = 0;
+    for interval in 0..12 {
+        if !has(interval) {continue;}
+        let lifted = third && (interval == 2 || interval == 5) || seventh && has(5) && interval == 2
+            || seventh && third && interval == 9;
+        stack[size] = if lifted {interval + 12} else {interval};
+        size += 1;
+    }
+    stack[..size].sort_unstable();
+    size
+}
+
+/// The chord on `degree` (1..=7) of a key: `(root pitch class, voicing mask)`. `shape` 0 stacks `notes` (3..=7)
 /// notes of the chord scale in thirds, skipping repeated pitch classes, any other value replaces them. Blues
 /// plays steps 1, 4 and 5 as dominant 7ths. `inversion` moves that many of the lowest notes up an octave.
 pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i32, inversion: i32) -> Option<(i32, i32)> {
@@ -77,16 +95,11 @@ pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i
     let at = |step: usize| steps[step % count] + (step / count) as i32 * 12;
     let index = (degree - 1) as usize;
     let base = at(index);
-    let wanted = notes.clamp(3, 5) as usize;
+    let wanted = notes.clamp(3, 7) as usize;
     let mut stack = [0i32; 12];
     let mut size = 0;
     if shape != 0 {
-        for interval in 0..12 {
-            if shape & (1 << interval) != 0 {
-                stack[size] = interval;
-                size += 1;
-            }
-        }
+        size = shape_stack(shape, &mut stack);
     } else if bits == BLUES_BITS && shift == 0 && matches!(degree, 1 | 4 | 5) {
         size = wanted.max(4);
         stack[..size].copy_from_slice(&BLUES_DOMINANT[..size]);
@@ -97,6 +110,18 @@ pub fn chord(root: i32, bits: i32, degree: i32, shift: i32, shape: i32, notes: i
                 stack[size] = interval;
                 size += 1;
             }
+        }
+        // 11ths and 13ths drop the perfect fifth, and the natural 11 above a major third
+        if wanted >= 6 {
+            let major = stack[..size].contains(&4);
+            let mut kept = 0;
+            for position in 0..size {
+                let interval = stack[position];
+                if interval == 7 || major && interval == 17 {continue;}
+                stack[kept] = interval;
+                kept += 1;
+            }
+            size = kept;
         }
     }
     let rotate = inversion.clamp(0, size as i32 - 1) as usize;
@@ -174,7 +199,7 @@ mod tests {
         assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 3, 1).map(|(_, mask)| intervals(mask)), Some(vec![4, 7, 12]));
         assert_eq!(chord(0, MAJOR_BITS, 5, 0, 0, 4, 3).map(|(_, mask)| intervals(mask)), Some(vec![10, 12, 16, 19]));
         assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 3, 9).map(|(_, mask)| intervals(mask)), Some(vec![7, 12, 16]), "capped by the note count");
-        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 9, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 4, 7, 11, 14]), "notes capped at 5");
+        assert_eq!(chord(0, MAJOR_BITS, 1, 0, 0, 9, 0).map(|(_, mask)| intervals(mask)), Some(vec![0, 4, 11, 14, 21]), "notes capped at 7, no fifth, no natural 11 over the major third");
     }
 
     fn chords(root: i32, bits: i32, notes: i32) -> Vec<(i32, Vec<i32>)> {
@@ -182,6 +207,30 @@ mod tests {
     }
 
     // mirrors the lib-dsp Harmony tables
+    #[test]
+    fn shapes_voice_their_extensions_above_the_octave() {
+        let mask = |intervals: &[i32]| intervals.iter().fold(0, |bits, interval| bits | (1 << (interval % 12)));
+        let stack = |intervals: &[i32]| {
+            let mut stack = [0i32; 12];
+            let size = shape_stack(mask(intervals), &mut stack);
+            stack[..size].to_vec()
+        };
+        assert_eq!(stack(&[0, 2, 7]), vec![0, 2, 7]);
+        assert_eq!(stack(&[0, 3, 6, 9]), vec![0, 3, 6, 9]);
+        assert_eq!(stack(&[0, 4, 7, 9, 14]), vec![0, 4, 7, 9, 14]);
+        assert_eq!(stack(&[0, 3, 7, 10, 14]), vec![0, 3, 7, 10, 14]);
+        assert_eq!(stack(&[0, 4, 7, 10, 14, 17]), vec![0, 4, 7, 10, 14, 17]);
+        assert_eq!(stack(&[0, 4, 7, 11, 14, 21]), vec![0, 4, 7, 11, 14, 21]);
+        assert_eq!(stack(&[0, 5, 7, 10, 14]), vec![0, 5, 7, 10, 14]);
+        assert_eq!(stack(&[0, 5, 7, 10]), vec![0, 5, 7, 10]);
+        let (_, voicing) = chord(0, MAJOR_BITS, 2, 0, mask(&[0, 3, 7, 10, 14]), 3, 0).unwrap();
+        assert_eq!(intervals(voicing), vec![0, 3, 7, 10, 14]);
+        let (_, dorian) = chord(0, MAJOR_BITS, 2, 0, 0, 6, 0).unwrap();
+        assert_eq!(intervals(dorian), vec![0, 3, 10, 14, 17]);
+        let (_, locrian) = chord(0, MAJOR_BITS, 7, 0, 0, 6, 0).unwrap();
+        assert_eq!(intervals(locrian), vec![0, 3, 6, 10, 13, 17], "a diminished fifth stays");
+    }
+
     #[test]
     fn pentatonic_chords_come_from_the_parent_scale() {
         assert_eq!(chords(0, PENTATONIC_MAJOR, 3), chords(0, MAJOR_BITS, 3));

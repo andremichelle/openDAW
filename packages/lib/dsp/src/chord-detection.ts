@@ -16,7 +16,8 @@ export namespace ChordDetection {
     // simpler chords first, so they win a tie
     const Templates: ReadonlyArray<int> = [
         mask(0, 4, 7), mask(0, 3, 7), mask(0, 3, 6), mask(0, 4, 8), mask(0, 2, 7), mask(0, 5, 7),
-        mask(0, 4, 7, 10), mask(0, 4, 7, 11), mask(0, 3, 7, 10), mask(0, 3, 6, 10), mask(0, 3, 6, 9)
+        mask(0, 4, 7, 10), mask(0, 4, 7, 11), mask(0, 3, 7, 10), mask(0, 3, 6, 10), mask(0, 3, 6, 9),
+        ...Harmony.ChordShapes.slice(11).map(({bits}) => bits)
     ]
     const PresentThreshold = 0.25
     // Krumhansl-Kessler key profiles
@@ -28,6 +29,11 @@ export namespace ChordDetection {
         for (let index = 0; index < 12; index++) {if ((bits & (1 << index)) !== 0) {count++}}
         return count
     }
+
+    // a chord of four or more notes may leave out its fifth, a 13th also its 9th
+    const omittable = (bits: int, interval: int): boolean => countBits(bits) >= 4 && (interval === 7
+        || interval === 2 && (bits & mask(3, 4)) !== 0 && (bits & mask(10, 11)) !== 0 && (bits & mask(9)) !== 0
+        && (bits & mask(5)) === 0)
 
     export const detectChord = (weights: ArrayLike<number>, bass: int): Option<Detected> => {
         let max = 0
@@ -43,7 +49,7 @@ export namespace ChordDetection {
         let bestScore = Number.NEGATIVE_INFINITY
         for (let root = 0; root < 12; root++) {
             for (const bits of Templates) {
-                let matched = 0, extra = 0, omittedFifth = false, rejected = false
+                let matched = 0, extra = 0, omitted = 0, rejected = false
                 for (let interval = 0; interval < 12 && !rejected; interval++) {
                     const pitchClass = (root + interval) % 12
                     const inTemplate = (bits & (1 << interval)) !== 0
@@ -51,13 +57,13 @@ export namespace ChordDetection {
                     if (inTemplate && inSet) {
                         matched += weights[pitchClass]
                     } else if (inTemplate) {
-                        if (interval === 7 && countBits(bits) === 4) {omittedFifth = true} else {rejected = true}
+                        if (omittable(bits, interval)) {omitted++} else {rejected = true}
                     } else if (inSet) {
                         extra += weights[pitchClass]
                     }
                 }
                 if (rejected) {continue}
-                const score = matched - extra - (omittedFifth ? max * 0.1 : 0) + (root === bassClass ? max * 0.05 : 0)
+                const score = matched - extra - omitted * max * 0.1 + (root === bassClass ? max * 0.05 : 0)
                 if (score > bestScore) {
                     best = {root, bits}
                     bestScore = score
@@ -111,16 +117,14 @@ export namespace ChordDetection {
                 const triad = Harmony.chord(key, degree, shift, 0, 3)
                 if (triad.isEmpty() || triad.unwrap().root !== root) {continue}
                 if (shift === 0) {
-                    for (let notes = 3; notes <= 5; notes++) {
+                    for (let notes = 3; notes <= 7; notes++) {
                         const {stack} = Harmony.chord(key, degree, 0, 0, notes).unwrap()
-                        if (octaveMask(stack) === bits) {
+                        if (octaveMask(stack) === bits || notes >= 6 && octaveMask(stack) === (bits & ~(1 << 7))) {
                             return Option.wrap({degree, shift, shape: 0, notes, inversion: inversionOf(stack, root, bass)})
                         }
                     }
                 }
-                const stack: Array<int> = []
-                for (let interval = 0; interval < 12; interval++) {if ((bits & (1 << interval)) !== 0) {stack.push(interval)}}
-                return Option.wrap({degree, shift, shape: bits, notes: 3, inversion: inversionOf(stack, root, bass)})
+                return Option.wrap({degree, shift, shape: bits, notes: 3, inversion: inversionOf(Harmony.shapeStack(bits), root, bass)})
             }
         }
         return Option.None

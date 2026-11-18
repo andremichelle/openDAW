@@ -36,6 +36,8 @@ playing an A minor chord sets A min. Every new key is one undo step. Click the k
 - **Detect Key** sets the project key from the notes the regions play.
 - **Detect Chords** writes their chords to the chord track, each starting where its notes start and lasting until
   the next chord, as steps of the key at each position.
+  It knows triads, suspended, 6th, 7th, 9th, 11th and 13th chords. A chord of four or more notes may leave out
+  its fifth, a 13th also its 9th.
   Run Detect Key first for the right steps. The new chords replace the chords they cover.
 
 Scale abbreviations: maj (Major), min (Natural Minor), hmin (Harmonic Minor), mmin (Melodic Minor), dor (Dorian),
@@ -79,11 +81,13 @@ Each chord block shows its step and the chord it plays in the key at its start, 
 Right click a chord for more:
 
 - **Degree**: the step, 1 to 7.
-- **Notes**: Triad, 7th or 9th. The extra notes come from the scale, so step 1 in C Major becomes Cmaj7 and
-  step 5 becomes G7.
+- **Notes**: Triad, 7th, 9th, 11th or 13th. The extra notes come from the scale, so step 1 in C Major becomes Cmaj7 and
+  step 5 becomes G7. 11th and 13th leave out the fifth, and the 11th where it clashes with a major third, as
+  players voice them, so step 5 as 13th plays G13 without the 11th.
 - **Inversion**: which chord note is the lowest. The name then shows the bass note, for example **C/E**.
 - **Shift**: lowers or raises the root by a semitone for chords outside the key, for example ♭7 in C Major is B♭.
-- **Shape**: replaces the chord with a fixed chord type, such as Sus4 or Major 7th, on the step's root.
+- **Shape**: replaces the chord with a fixed chord type on the step's root, grouped into triads, suspended, 6th, 7th,
+  9th, 11th and 13th chords. The 9th, 11th and 13th sound above the octave.
 
 A chord takes the key at its start. Moving a chord into a section with another key renames it and changes its
 notes.

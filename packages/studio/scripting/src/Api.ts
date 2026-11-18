@@ -3728,9 +3728,9 @@ export interface ChordEvent {
     shift: int
     /** Fixed chord type as a 12-bit mask above the root, 0 stacks the notes from the scale (default 0) */
     shape: int
-    /** Notes stacked from the scale: 3 triad, 4 7th, 5 9th (default 3) */
+    /** Notes stacked from the scale: 3 triad, 4 7th, 5 9th, 6 11th, 7 13th (default 3) */
     notes: int
-    /** How many of the lowest notes move an octave up (0 to 4, default 0) */
+    /** How many of the lowest notes move an octave up (0 to notes - 1, default 0) */
     inversion: int
     /** Remove the event */
     remove(): void

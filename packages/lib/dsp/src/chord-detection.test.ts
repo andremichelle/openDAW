@@ -35,6 +35,37 @@ describe("ChordDetection", () => {
         expect(name([60, 64])).toBe("none")
         expect(name([60, 72, 84])).toBe("none")
     })
+    it("names 6th, 9th, 11th and 13th chords (#551)", () => {
+        expect(name([62, 65, 69, 72, 76])).toBe("Dm9")
+        expect(name([62, 66, 69, 72, 76])).toBe("D9")
+        expect(name([60, 64, 67, 71, 74])).toBe("Cmaj9")
+        expect(name([60, 64, 67, 74])).toBe("Cadd9")
+        expect(name([60, 63, 67, 74])).toBe("Cm(add9)")
+        expect(name([60, 64, 67, 69])).toBe("C6")
+        expect(name([57, 60, 64, 67])).toBe("Am7", "the bass decides between C6 and Am7")
+        expect(name([60, 63, 67, 69])).toBe("Cm6")
+        expect(name([60, 64, 67, 69, 74])).toBe("C6/9")
+        expect(name([60, 63, 67, 70, 74, 77])).toBe("Cm11")
+        expect(name([48, 55, 58, 62, 65])).toBe("C9sus4", "a dominant 11 as played, without its third")
+        expect(name([48, 53, 55, 58])).toBe("C7sus4")
+        expect(name([60, 64, 67, 70, 74, 81])).toBe("C13")
+        expect(name([60, 64, 70, 81])).toBe("C13", "a 13th without its fifth and 9th")
+        expect(name([60, 64, 67, 71, 74, 81])).toBe("Cmaj13")
+        expect(name([60, 63, 67, 70, 74, 81])).toBe("Cm13")
+        expect(name([62, 65, 72, 76])).toBe("Dm9", "a 9th without its fifth")
+    })
+    it("maps in-key 11th and 13th chords onto scale steps", () => {
+        const step = (pitches: ReadonlyArray<number>) => ChordDetection
+            .toStep(Harmony.DefaultKey, ChordDetection.detectChord(weightsOf(...pitches), Math.min(...pitches)).unwrap()).unwrap()
+        expect(step([62, 65, 72, 76, 79])).toEqual({degree: 2, shift: 0, shape: 0, notes: 6, inversion: 0})
+        expect(step([55, 59, 62, 65, 69, 76])).toEqual({degree: 5, shift: 0, shape: 0, notes: 7, inversion: 0})
+    })
+    it("keeps out-of-key 9th chords as shapes", () => {
+        const detected = ChordDetection.detectChord(weightsOf(62, 66, 69, 72, 76), 62).unwrap()
+        const step = ChordDetection.toStep(Harmony.DefaultKey, detected).unwrap()
+        expect(step.shape).toBe(Harmony.ChordShapes.find(({suffix}) => suffix === "9")!.bits)
+        expect(Harmony.chordName(Harmony.chord(Harmony.DefaultKey, step.degree, step.shift, step.shape).unwrap())).toBe("D9")
+    })
     it("ignores quiet passing notes", () => {
         const weights = weightsOf(60, 64, 67)
         weights[2] = 0.1

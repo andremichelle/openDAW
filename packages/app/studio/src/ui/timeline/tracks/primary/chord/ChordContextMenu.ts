@@ -19,8 +19,8 @@ export namespace ChordContextMenu {
                 onChange(adapter)
             }
             const shifts: ReadonlyArray<[string, int]> = [["♭ Lowered", -1], ["Natural", 0], ["♯ Raised", 1]]
-            const notes: ReadonlyArray<[string, int]> = [["Triad", 3], ["7th", 4], ["9th", 5]]
-            const inversions: ReadonlyArray<string> = ["Root Position", "1st Inversion", "2nd Inversion", "3rd Inversion", "4th Inversion"]
+            const notes: ReadonlyArray<[string, int]> = [["Triad", 3], ["7th", 4], ["9th", 5], ["11th", 6], ["13th", 7]]
+            const inversions: ReadonlyArray<string> = ["Root Position", "1st Inversion", "2nd Inversion", "3rd Inversion", "4th Inversion", "5th Inversion", "6th Inversion"]
             const source = adapter.trackAdapter
                 .flatMap(({keyTrack}) => Harmony.chordSource(keyTrack.keyAt(adapter.position)))
             source.ifSome(source => addItems(MenuItem.default({label: `Chords from ${source}`, selectable: false})))
@@ -47,11 +47,15 @@ export namespace ChordContextMenu {
                 MenuItem.default({label: "Shape"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.default({label: "From Scale", checked: adapter.shape === 0})
                         .setTriggerProcedure(() => modify(({box}) => box.shape.setValue(0))),
-                    ...Harmony.ChordShapes.map((shape, index) => MenuItem.default({
-                        label: shape.name,
-                        checked: shape.bits === adapter.shape,
+                    ...Harmony.ChordShapeGroups.map((group, index) => MenuItem.default({
+                        label: group,
+                        checked: Harmony.ChordShapes.some(shape => shape.group === group && shape.bits === adapter.shape),
                         separatorBefore: index === 0
-                    }).setTriggerProcedure(() => modify(({box}) => box.shape.setValue(shape.bits)))))),
+                    }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                        ...Harmony.ChordShapes.filter(shape => shape.group === group).map(shape => MenuItem.default({
+                            label: shape.name,
+                            checked: shape.bits === adapter.shape
+                        }).setTriggerProcedure(() => modify(({box}) => box.shape.setValue(shape.bits))))))))),
                 MenuItem.default({label: "Delete"})
                     .setTriggerProcedure(() => editing.modify(() => targets.forEach(({box}) => box.delete()))),
                 DebugMenus.debugBox(adapter.box))
