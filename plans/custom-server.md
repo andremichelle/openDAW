@@ -83,7 +83,7 @@ A chunk is idempotent (same session and index overwrite), so the client can retr
 
 ## openDAW side
 
-1. `CustomServerHandler` in `packages/studio/core/src/cloud/`, implements `CloudHandler`. Chunk size 5 MB. PHP does not apply `post_max_size` to raw bodies (tested), so the limit that matters is the web server or proxy in front of PHP, and 5 MB stays below the usual ones. Files at or below one chunk use `upload`, larger ones `chunk` plus `commit`.
+1. `CustomServerHandler` in `packages/studio/core/src/cloud/`, implements `CloudHandler`. Chunk size 1 MB, four chunks in flight at once. Strato's Apache throttles every HTTP/2 upload stream (measured 0.5 to 0.7 MB/s per request, 2.4 MB/s with four in parallel, 3.5 MB/s over HTTP/1.1, which browsers do not use when HTTP/2 is offered). PHP does not apply `post_max_size` to raw bodies (tested). Files at or below one chunk use `upload`, larger ones `chunk` plus `commit`.
 2. `CloudService` gains `"CustomServer"` (additive for SDK users). `CloudAuthManager.getHandler` opens the connect dialog instead of OAuth.
 3. `CloudBackup.backup` gets a per service approval text. The Dropbox text stays as it is.
 4. **Connect dialog** (app): server URL and token in a form (password manager friendly), "Create server file" button, "Forget server" button. URL and token are stored in `localStorage` for this origin, so the dialog appears only once per origin.

@@ -133,6 +133,13 @@ return false;`)
         expect(sessions()).toEqual([])
     }, 60_000)
 
+    it("uploads more chunks than run in parallel", async () => {
+        const data = bytes(CustomServerHandler.ChunkSize * (CustomServerHandler.ParallelChunks * 2 + 1) + 777, 11)
+        await handler().upload("samples/many.wav", data.slice().buffer)
+        expect(same(await handler().download("samples/many.wav"), data)).toBe(true)
+        expect(sessions()).toEqual([])
+    }, 60_000)
+
     it("uploads one byte over the chunk size in two chunks", async () => {
         const data = bytes(CustomServerHandler.ChunkSize + 1, 7)
         await handler().upload("edge/over.wav", data.slice().buffer)

@@ -1,4 +1,4 @@
-import {Errors, isDefined, Optional, panic, Progress, tryCatch, unitValue} from "@opendaw/lib-std"
+import {Arrays, Errors, isDefined, Optional, panic, Progress, tryCatch, unitValue} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 
@@ -9,7 +9,9 @@ export type CustomServerCredentials = {
 
 export class CustomServerHandler implements CloudHandler {
     static readonly Version = 1
-    static readonly ChunkSize = 5 * 1024 * 1024
+    static readonly ChunkSize = 1024 * 1024
+    // hosts throttle each HTTP/2 upload stream, parallel chunks multiply the throughput
+    static readonly ParallelChunks = 4
     static readonly MaxAttempts = 4
 
     static #isTransient(status: number): boolean {return status === 502 || status === 503 || status === 504}
@@ -51,13 +53,18 @@ export class CustomServerHandler implements CloudHandler {
         }
         const session = crypto.randomUUID()
         const chunkCount = Math.ceil(total / CustomServerHandler.ChunkSize)
-        for (let index = 0; index < chunkCount; index++) {
+        const sent = new Float64Array(chunkCount)
+        const report = (index: number, bytes: number) => {
+            sent[index] = bytes
+            progress?.(sent.reduce((sum, value) => sum + value, 0) / total)
+        }
+        await Promises.allWithLimit(Arrays.create(index => async () => {
             const start = index * CustomServerHandler.ChunkSize
             const end = Math.min(start + CustomServerHandler.ChunkSize, total)
             await this.#post({action: "chunk", session, index: String(index)}, data.slice(start, end),
-                (fraction: unitValue) => progress?.((start + fraction * (end - start)) / total))
-            progress?.(end / total)
-        }
+                (fraction: unitValue) => report(index, fraction * (end - start)))
+            report(index, end - start)
+        }, chunkCount), CustomServerHandler.ParallelChunks)
         await this.#post({action: "commit", session, path, count: String(chunkCount), size: String(total)},
             new ArrayBuffer(0))
         progress?.(1.0)
