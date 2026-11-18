@@ -24,6 +24,7 @@ describe("DawProject tempo automation", () => {
     }
     const projectXml = (points: string) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <Project version="1.0">
+        <Application name="test" version="1.0"/>
         <Transport>
             <Tempo max="666.0" min="20.0" unit="bpm" value="120.0" id="tempo"/>
             <TimeSignature denominator="4" numerator="4" id="signature"/>
@@ -48,7 +49,7 @@ describe("DawProject tempo automation", () => {
         const events = skeleton.boxGraph.boxes()
             .filter((box): box is ValueEventBox => box instanceof ValueEventBox)
             .map(box => ({position: box.position.getValue(), value: box.value.getValue()}))
-            .sort((a, b) => a.position - b.position)
+            .sort((left, right) => left.position - right.position)
         return {skeleton, events}
     }
     const threePoints = `

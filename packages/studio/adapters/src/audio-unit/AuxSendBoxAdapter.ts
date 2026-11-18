@@ -49,13 +49,13 @@ export class AuxSendBoxAdapter implements BoxAdapter {
 
         this.#sendPan = this.#terminator.own(new AutomatableParameterFieldAdapter<float>(this.#context, this.#box.sendPan,
             ValueMapping.bipolar(),
-            StringMapping.percent({unit: "%", fractionDigits: 0}), "panning"))
+            StringMapping.percent({unit: "%", fractionDigits: 0}), "Panning"))
 
         this.#sendGain = this.#terminator.own(new AutomatableParameterFieldAdapter<float>(this.#context, this.#box.sendGain, ValueMapping.DefaultDecibel,
             StringMapping.numeric({
                 unit: "dB",
                 fractionDigits: 1
-            }), "gain"))
+            }), "Gain"))
     }
 
     catchupAndSubscribeBusChanges(observer: Observer<Option<AudioBusBoxAdapter>>): Subscription {

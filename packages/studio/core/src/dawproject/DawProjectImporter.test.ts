@@ -46,6 +46,7 @@ describe("DawProjectImport loop window", () => {
 
     const projectXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <Project version="1.0">
+        <Application name="test" version="1.0"/>
         <Transport>
             <Tempo max="666.0" min="20.0" unit="bpm" value="120.0" id="tempo"/>
             <TimeSignature denominator="4" numerator="4" id="signature"/>
@@ -82,7 +83,7 @@ describe("DawProjectImport loop window", () => {
             duration: box.duration.getValue(),
             loopOffset: box.loopOffset.getValue(),
             loopDuration: box.loopDuration.getValue()
-        })).sort((a, b) => a.position - b.position)
+        })).sort((left, right) => left.position - right.position)
     }
 
     it("playStart beyond the clip duration keeps the loop window positive", async () => {

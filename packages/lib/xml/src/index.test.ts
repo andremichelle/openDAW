@@ -47,7 +47,7 @@ describe("Xml.parse() – LibrarySchema", () => {
         expect(shelf1.id).toBe("shelf1")
         expect(shelf1.books).toHaveLength(2)
 
-        const [novel, comic] = shelf1.books
+        const [novel, comic] = shelf1.books ?? []
         expect(novel).toBeInstanceOf(NovelSchema)
         assertInstanceOf(novel, NovelSchema)
         expect(novel.title).toBe("1984")

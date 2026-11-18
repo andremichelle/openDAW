@@ -112,7 +112,7 @@ export namespace WclapParameters {
 
     // every client derives the same uuid, so engines reporting at once in a live room create one box. The last
     // byte is always flipped, else clap id 0 would hand out the device's own uuid.
-    const parameterUuid = (deviceUuid: UUID.Bytes, clapId: number): UUID.Bytes => {
+    export const parameterUuid = (deviceUuid: UUID.Bytes, clapId: number): UUID.Bytes => {
         const bytes = new Uint8Array(deviceUuid)
         new DataView(bytes.buffer).setUint32(0, new DataView(bytes.buffer).getUint32(0) ^ clapId)
         bytes[15] ^= 0xA5

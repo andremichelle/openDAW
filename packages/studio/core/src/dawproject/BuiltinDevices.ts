@@ -1,8 +1,10 @@
-import {ifDefined, int, UUID} from "@opendaw/lib-std"
+import {ifDefined, int, isDefined, UUID} from "@opendaw/lib-std"
+import {Xml} from "@opendaw/lib-xml"
 import {BoxGraph, Field} from "@opendaw/lib-box"
-import {BandSchema, EqBandType, EqualizerSchema, ParameterDecoder} from "@opendaw/lib-dawproject"
+import {BoolParameterSchema, EqBandSchema, EqBandType, EqualizerSchema, ParameterDecoder, RealParameterSchema, Unit} from "@opendaw/lib-dawproject"
 import {Pointers} from "@opendaw/studio-enums"
-import {RevampDeviceBox, RevampPass, RevampShelf} from "@opendaw/studio-boxes"
+import {RevampBell, RevampDeviceBox, RevampPass, RevampShelf} from "@opendaw/studio-boxes"
+import {DawProjectIds} from "./DawProjectIds"
 import {EffectParameterDefaults} from "../EffectParameterDefaults"
 
 export namespace BuiltinDevices {
@@ -25,16 +27,16 @@ export namespace BuiltinDevices {
                     return 3
             }
         }
-        const readPass = (schema: BandSchema, pass: RevampPass) => {
+        const readPass = (schema: EqBandSchema, pass: RevampPass) => {
             const {order, frequency, q, enabled} = pass
             order.setValue(mapOrder(schema.order))
-            frequency.setValue(ParameterDecoder.readValue(schema.freq))
-            ifDefined(schema.Q?.value, value => q.setValue(value))
+            if (isDefined(schema.freq?.value)) {frequency.setValue(ParameterDecoder.readValue(schema.freq))}
+            ifDefined(schema.q?.value, value => q.setValue(value))
             ifDefined(schema.enabled?.value, value => enabled.setValue(value))
         }
-        const readShelf = (schema: BandSchema, pass: RevampShelf) => {
+        const readShelf = (schema: EqBandSchema, pass: RevampShelf) => {
             const {frequency, gain, enabled} = pass
-            frequency.setValue(ParameterDecoder.readValue(schema.freq))
+            if (isDefined(schema.freq?.value)) {frequency.setValue(ParameterDecoder.readValue(schema.freq))}
             ifDefined(schema.gain?.value, value => gain.setValue(value))
             ifDefined(schema.enabled?.value, value => enabled.setValue(value))
         }
@@ -58,8 +60,8 @@ export namespace BuiltinDevices {
                         if (bellIndex === 3) {return}
                         const bell = [box.lowBell, box.midBell, box.highBell][bellIndex++]
                         const {frequency, gain, q, enabled} = bell
-                        frequency.setValue(ParameterDecoder.readValue(band.freq))
-                        ifDefined(band.Q?.value, value => q.setValue(value))
+                        if (isDefined(band.freq?.value)) {frequency.setValue(ParameterDecoder.readValue(band.freq))}
+                        ifDefined(band.q?.value, value => q.setValue(value))
                         ifDefined(band.gain?.value, value => gain.setValue(value))
                         ifDefined(band.enabled?.value, value => enabled.setValue(value))
                         return
@@ -70,5 +72,39 @@ export namespace BuiltinDevices {
                 }
             })
         })
+    }
+
+    export const revampBands = (box: RevampDeviceBox, ids: DawProjectIds): ReadonlyArray<EqBandSchema> => {
+        const frequency = (pass: RevampPass | RevampShelf | RevampBell) => Xml.element({
+            id: ids.of(pass.frequency.address), name: "Frequency", unit: Unit.HERTZ, min: 20.0, max: 20_000.0,
+            value: pass.frequency.getValue()
+        }, RealParameterSchema)
+        const enabled = (pass: RevampPass | RevampShelf | RevampBell) => Xml.element({
+            id: ids.of(pass.enabled.address), name: "Enabled", value: pass.enabled.getValue()
+        }, BoolParameterSchema)
+        const gain = (pass: RevampShelf | RevampBell) => Xml.element({
+            id: ids.of(pass.gain.address), name: "Gain", unit: Unit.DECIBEL, min: -24.0, max: 24.0, value: pass.gain.getValue()
+        }, RealParameterSchema)
+        const q = (pass: RevampPass | RevampBell) => Xml.element({
+            id: ids.of(pass.q.address), name: "Q", unit: Unit.LINEAR, min: 0.01, max: 10.0, value: pass.q.getValue()
+        }, RealParameterSchema)
+        const pass = (type: EqBandType, pass: RevampPass) => Xml.element({
+            type, order: (pass.order.getValue() + 1) * 2, freq: frequency(pass), q: q(pass), enabled: enabled(pass)
+        }, EqBandSchema)
+        const shelf = (type: EqBandType, shelf: RevampShelf) => Xml.element({
+            type, freq: frequency(shelf), gain: gain(shelf), enabled: enabled(shelf)
+        }, EqBandSchema)
+        const bell = (bell: RevampBell) => Xml.element({
+            type: EqBandType.BELL, freq: frequency(bell), gain: gain(bell), q: q(bell), enabled: enabled(bell)
+        }, EqBandSchema)
+        return [
+            pass(EqBandType.HIGH_PASS, box.highPass),
+            shelf(EqBandType.LOW_SHELF, box.lowShelf),
+            bell(box.lowBell),
+            bell(box.midBell),
+            bell(box.highBell),
+            shelf(EqBandType.HIGH_SHELF, box.highShelf),
+            pass(EqBandType.LOW_PASS, box.lowPass)
+        ]
     }
 }

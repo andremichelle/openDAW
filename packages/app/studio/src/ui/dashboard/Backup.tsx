@@ -22,6 +22,13 @@ const HelpLink = ({path, title}: { path: string, title: string }) => (
 export const Backup = ({service}: Construct) => (
     <RailSection title="Backup & Sync" vertical={true}>
         <div className="entry">
+            <button className="link" title="Back up to your own server"
+                    onclick={() => CloudBackup.backup(service.cloudAuthManager, "CustomServer").catch(EmptyExec)}>
+                <Icon symbol={IconSymbol.Server}/><span>Custom Server</span>
+            </button>
+            <HelpLink path="/manuals/custom-server" title="Read about the custom server backup"/>
+        </div>
+        <div className="entry">
             <button className="link" title="Back up to Dropbox"
                     onclick={() => CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)}>
                 <Icon symbol={IconSymbol.Dropbox}/><span>Dropbox</span>

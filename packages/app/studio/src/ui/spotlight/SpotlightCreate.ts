@@ -162,7 +162,7 @@ export namespace SpotlightCreate {
         return [...cloud, ...local]
     }
 
-    export const storeWclap = async ({id, name}: Wclap): Promise<string> => {
+    export const storeWclap = async ({id, name}: Pick<Wclap, "id" | "name">): Promise<string> => {
         if (await WclapStorage.exists(id)) {return WclapStorage.urlOf(id)}
         const progress = new DefaultObservableValue(0.0)
         const controller = new AbortController()

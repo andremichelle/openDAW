@@ -1,12 +1,12 @@
-import {BooleanParameterSchema, Interpolation, RealParameterSchema, Unit} from "./defaults"
+import {BoolParameterSchema, Interpolation, RealParameterSchema, Unit} from "./schema"
 import {Xml} from "@opendaw/lib-xml"
-import {asDefined} from "@opendaw/lib-std"
+import {asDefined, isDefined} from "@opendaw/lib-std"
 import {Interpolation as OpenDAWInterpolation, semitoneToHz} from "@opendaw/lib-dsp"
 
 export namespace ParameterEncoder {
     export const bool = (id: string, value: boolean, name?: string) => Xml.element({
         id, name, value
-    }, BooleanParameterSchema)
+    }, BoolParameterSchema)
 
     export const linear = (id: string, value: number, min?: number, max?: number, name?: string) => Xml.element({
         id, name, min, max, value, unit: Unit.LINEAR
@@ -19,16 +19,13 @@ export namespace ParameterEncoder {
 
 export namespace ParameterDecoder {
     export const readValue = (schema: RealParameterSchema): number => {
-        if (schema.unit === Unit.LINEAR) {
-            return schema.value
-        } else if (schema.unit === Unit.NORMALIZED) {
-            const min = asDefined(schema.min)
-            const max = asDefined(schema.max)
-            return (schema.value - min) / (max - min)
+        const value = asDefined(schema.value, "RealParameter has no value")
+        if (schema.unit === Unit.NORMALIZED && isDefined(schema.min) && isDefined(schema.max)) {
+            return schema.min + value * (schema.max - schema.min)
         } else if (schema.unit === Unit.SEMITONES) {
-            return semitoneToHz(schema.value)
+            return semitoneToHz(value)
         }
-        return schema.value
+        return value
     }
 }
 

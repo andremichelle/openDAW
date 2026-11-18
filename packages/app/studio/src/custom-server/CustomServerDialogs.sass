@@ -1,0 +1,48 @@
+component
+  padding: 1em 0
+  display: grid
+  row-gap: 16px
+  width: 28em
+  color: var(--color-shadow)
+
+  > p
+    margin: 0
+
+  > .fields
+    display: grid
+    grid-template-columns: auto 1fr
+    column-gap: 1em
+    row-gap: 0.5em
+    align-items: center
+
+    > input
+      margin: 0
+      top: 0
+      height: 1.5em
+      box-sizing: border-box
+      min-width: 0
+
+    > .row
+      display: grid
+      grid-template-columns: 1fr auto
+      column-gap: 0.5em
+      align-items: center
+      justify-items: start
+
+      > input
+        margin: 0
+        top: 0
+        height: 1.5em
+        box-sizing: border-box
+        min-width: 0
+        width: 100%
+
+  > .status
+    height: 1.5em
+    line-height: 1.5em
+    white-space: nowrap
+    overflow: hidden
+    text-overflow: ellipsis
+
+    &.error
+      color: var(--color-red)

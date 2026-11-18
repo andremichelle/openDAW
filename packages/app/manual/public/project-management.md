@@ -25,6 +25,14 @@ Your friend opens it with **Open Bundle** on the dashboard or via **openDAW menu
 
 To exchange a project with another DAW instead, use **Export > DAWproject...**, the open [DAWproject](https://github.com/bitwig/dawproject) format supported by several DAWs.
 
+### What a DAWproject carries
+
+A DAWproject exported by openDAW comes back into openDAW with its tracks, regions, clips, automation, sends, groups, markers, tempo and signature changes, and every device with its settings. Another DAW sees the arrangement and the mixer, and openDAW's own devices by name only. WebCLAP plugins travel as CLAP plugins, so a DAW with the same plugin installed loads it with its sound.
+
+The format has no place for grooves, key and chord tracks, note chance and repeats, region gain, curve shapes of automation and fades, or the loop area. These are left out. When a file holds something openDAW cannot read, the import lists what was skipped or replaced.
+
+Importing a DAWproject from another DAW replaces plugins openDAW does not have with a placeholder that keeps their place, and a CLAP plugin that exists as a WebCLAP is loaded with its settings.
+
 ## Working together instead
 
 If you want to make music with someone rather than hand over a file, open a [Live Room](/manuals/live-rooms) and share the link. Everyone edits the same session in real time.

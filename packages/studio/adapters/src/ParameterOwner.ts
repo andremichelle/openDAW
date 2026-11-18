@@ -1,9 +1,11 @@
 import {Box, StringField, Vertex} from "@opendaw/lib-box"
 import {Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox, ModulationBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, ModulationBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
+import {AuxSendBoxAdapter} from "./audio-unit/AuxSendBoxAdapter"
+import {AudioBusBoxAdapter} from "./audio-unit/AudioBusBoxAdapter"
 import {ModulationBoxAdapter} from "./modulation/ModulationBoxAdapter"
 import {Devices} from "./DeviceAdapter"
 
@@ -14,6 +16,9 @@ export namespace ParameterOwner {
         const box = vertex.box
         if (box instanceof AudioUnitBox) {
             return context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter).input.label
+        }
+        if (box instanceof AuxSendBox) {
+            return Option.wrap(sendName(context.boxAdapters.adapterFor(box, AuxSendBoxAdapter).optTargetBus))
         }
         if (box instanceof ModulationBox) {
             const adapter = context.boxAdapters.adapterFor(box, ModulationBoxAdapter)
@@ -36,6 +41,10 @@ export namespace ParameterOwner {
             return context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter).input
                 .catchupAndSubscribeLabelChange(label => observer(label.unwrapOrElse("")))
         }
+        if (box instanceof AuxSendBox) {
+            return context.boxAdapters.adapterFor(box, AuxSendBoxAdapter)
+                .catchupAndSubscribeBusChanges(bus => observer(sendName(bus)))
+        }
         const own = labelFieldOf(context, box)
         const field = own.nonEmpty()
             ? own
@@ -56,10 +65,16 @@ export namespace ParameterOwner {
         if (box instanceof ModulationBox) {
             return box.target.targetVertex.flatMap(target => audioUnitOf(context, target))
         }
+        if (box instanceof AuxSendBox) {
+            return box.audioUnit.targetVertex.flatMap(target => audioUnitOf(context, target))
+        }
         const own = unitOf(context, box)
         if (own.nonEmpty()) {return own}
         return resolveOwnerDeviceBox(box).flatMap(owner => unitOf(context, owner))
     }
+
+    const sendName = (bus: Option<AudioBusBoxAdapter>): string =>
+        bus.mapOr(bus => `Send ${bus.labelField.getValue()}`, "Send")
 
     const unitOf = (context: BoxAdaptersContext, box: Box): Option<AudioUnitBoxAdapter> =>
         context.boxAdapters.optAdapter(box)

@@ -1,0 +1,843 @@
+<?xml version="1.0" standalone="yes"?>
+<xs:schema version="1.0" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <xs:element name="Arrangement" type="arrangement"/>
+
+  <xs:element name="AuPlugin" type="auPlugin"/>
+
+  <xs:element name="Audio" type="audio"/>
+
+  <xs:element name="BoolParameter" type="boolParameter"/>
+
+  <xs:element name="BoolPoint" type="boolPoint"/>
+
+  <xs:element name="BuiltinDevice" type="builtinDevice"/>
+
+  <xs:element name="Channel" type="channel"/>
+
+  <xs:element name="ClapPlugin" type="clapPlugin"/>
+
+  <xs:element name="Clip" type="clip"/>
+
+  <xs:element name="ClipSlot" type="clipSlot"/>
+
+  <xs:element name="Clips" type="clips"/>
+
+  <xs:element name="Compressor" type="compressor"/>
+
+  <xs:element name="Device" type="device"/>
+
+  <xs:element name="EnumParameter" type="enumParameter"/>
+
+  <xs:element name="EnumPoint" type="enumPoint"/>
+
+  <xs:element name="Equalizer" type="equalizer"/>
+
+  <xs:element name="IntegerParameter" type="integerParameter"/>
+
+  <xs:element name="IntegerPoint" type="integerPoint"/>
+
+  <xs:element name="Lanes" type="lanes"/>
+
+  <xs:element name="Limiter" type="limiter"/>
+
+  <xs:element name="Marker" type="marker"/>
+
+  <xs:element name="NoiseGate" type="noiseGate"/>
+
+  <xs:element name="Note" type="note"/>
+
+  <xs:element name="Notes" type="notes"/>
+
+  <xs:element name="Point" type="point"/>
+
+  <xs:element name="Points" type="points"/>
+
+  <xs:element name="Project" type="project"/>
+
+  <xs:element name="RealParameter" type="realParameter"/>
+
+  <xs:element name="RealPoint" type="realPoint"/>
+
+  <xs:element name="Scene" type="scene"/>
+
+  <xs:element name="TimeSignatureParameter" type="timeSignatureParameter"/>
+
+  <xs:element name="TimeSignaturePoint" type="timeSignaturePoint"/>
+
+  <xs:element name="Timeline" type="timeline"/>
+
+  <xs:element name="Track" type="track"/>
+
+  <xs:element name="Video" type="video"/>
+
+  <xs:element name="Vst2Plugin" type="vst2Plugin"/>
+
+  <xs:element name="Vst3Plugin" type="vst3Plugin"/>
+
+  <xs:element name="Warp" type="warp"/>
+
+  <xs:element name="Warps" type="warps"/>
+
+  <xs:element name="markers" type="markers"/>
+
+  <xs:element name="parameter" type="parameter"/>
+
+  <xs:complexType name="project">
+    <xs:sequence>
+      <xs:element name="Application" type="application"/>
+      <xs:element name="Transport" type="transport" minOccurs="0"/>
+      <xs:element name="Structure" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:choice minOccurs="0" maxOccurs="unbounded">
+              <xs:element ref="Track"/>
+              <xs:element ref="Channel"/>
+            </xs:choice>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element ref="Arrangement" minOccurs="0"/>
+      <xs:element name="Scenes" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element ref="Scene" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="application">
+    <xs:sequence/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="transport">
+    <xs:sequence>
+      <xs:element name="Tempo" type="realParameter" minOccurs="0"/>
+      <xs:element name="TimeSignature" type="timeSignatureParameter" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="realParameter">
+    <xs:complexContent>
+      <xs:extension base="parameter">
+        <xs:sequence/>
+        <xs:attribute name="max" type="xs:string"/>
+        <xs:attribute name="min" type="xs:string"/>
+        <xs:attribute name="unit" type="unit" use="required"/>
+        <xs:attribute name="value" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="parameter" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence/>
+        <xs:attribute name="parameterID" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="referenceable" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="nameable">
+        <xs:sequence/>
+        <xs:attribute name="id" type="xs:ID"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="nameable" abstract="true">
+    <xs:sequence/>
+    <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="color" type="xs:string"/>
+    <xs:attribute name="comment" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="boolParameter">
+    <xs:complexContent>
+      <xs:extension base="parameter">
+        <xs:sequence/>
+        <xs:attribute name="value" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="integerParameter">
+    <xs:complexContent>
+      <xs:extension base="parameter">
+        <xs:sequence/>
+        <xs:attribute name="max" type="xs:int"/>
+        <xs:attribute name="min" type="xs:int"/>
+        <xs:attribute name="value" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="enumParameter">
+    <xs:complexContent>
+      <xs:extension base="parameter">
+        <xs:sequence/>
+        <xs:attribute name="count" type="xs:int" use="required"/>
+        <xs:attribute name="labels">
+          <xs:simpleType>
+            <xs:list itemType="xs:string"/>
+          </xs:simpleType>
+        </xs:attribute>
+        <xs:attribute name="value" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="timeSignatureParameter">
+    <xs:complexContent>
+      <xs:extension base="parameter">
+        <xs:sequence/>
+        <xs:attribute name="denominator" type="xs:int" use="required"/>
+        <xs:attribute name="numerator" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="lane" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="arrangement">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence>
+          <xs:element ref="Lanes" minOccurs="0"/>
+          <xs:element name="Markers" type="markers" minOccurs="0"/>
+          <xs:element name="TempoAutomation" type="points" minOccurs="0"/>
+          <xs:element name="TimeSignatureAutomation" type="points" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="lanes">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element ref="Timeline"/>
+            <xs:element ref="Lanes"/>
+            <xs:element ref="Notes"/>
+            <xs:element ref="Clips"/>
+            <xs:element ref="ClipSlot"/>
+            <xs:element ref="markers"/>
+            <xs:element ref="Warps"/>
+            <xs:element ref="Audio"/>
+            <xs:element ref="Video"/>
+            <xs:element ref="Points"/>
+          </xs:choice>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="timeline" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence/>
+        <xs:attribute name="timeUnit" type="timeUnit"/>
+        <xs:attribute name="track" type="xs:IDREF"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="track">
+    <xs:complexContent>
+      <xs:extension base="lane">
+        <xs:sequence>
+          <xs:element ref="Channel" minOccurs="0"/>
+          <xs:element ref="Track" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="contentType">
+          <xs:simpleType>
+            <xs:list itemType="contentType"/>
+          </xs:simpleType>
+        </xs:attribute>
+        <xs:attribute name="loaded" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="channel">
+    <xs:complexContent>
+      <xs:extension base="lane">
+        <xs:sequence>
+          <xs:element name="Devices" minOccurs="0">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element ref="Device"/>
+                  <xs:element ref="Vst2Plugin"/>
+                  <xs:element ref="Vst3Plugin"/>
+                  <xs:element ref="ClapPlugin"/>
+                  <xs:element ref="BuiltinDevice"/>
+                  <xs:element ref="Equalizer"/>
+                  <xs:element ref="Compressor"/>
+                  <xs:element ref="NoiseGate"/>
+                  <xs:element ref="Limiter"/>
+                  <xs:element ref="AuPlugin"/>
+                </xs:choice>
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="Mute" type="boolParameter" minOccurs="0"/>
+          <xs:element name="Pan" type="realParameter" minOccurs="0"/>
+          <xs:element name="Sends" minOccurs="0">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="Send" type="send" minOccurs="0" maxOccurs="unbounded"/>
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="Volume" type="realParameter" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="audioChannels" type="xs:int"/>
+        <xs:attribute name="destination" type="xs:IDREF"/>
+        <xs:attribute name="role" type="mixerRole"/>
+        <xs:attribute name="solo" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="device">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence>
+          <xs:element name="Parameters" minOccurs="0">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element ref="parameter"/>
+                  <xs:element ref="RealParameter"/>
+                  <xs:element ref="BoolParameter"/>
+                  <xs:element ref="IntegerParameter"/>
+                  <xs:element ref="EnumParameter"/>
+                  <xs:element ref="TimeSignatureParameter"/>
+                </xs:choice>
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="Enabled" type="boolParameter" minOccurs="0"/>
+          <xs:element name="State" type="fileReference" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="deviceID" type="xs:string"/>
+        <xs:attribute name="deviceName" type="xs:string" use="required"/>
+        <xs:attribute name="deviceRole" type="deviceRole" use="required"/>
+        <xs:attribute name="deviceVendor" type="xs:string"/>
+        <xs:attribute name="loaded" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="fileReference">
+    <xs:sequence/>
+    <xs:attribute name="path" type="xs:string" use="required"/>
+    <xs:attribute name="external" type="xs:boolean"/>
+  </xs:complexType>
+
+  <xs:complexType name="vst2Plugin">
+    <xs:complexContent>
+      <xs:extension base="plugin">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="plugin" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="device">
+        <xs:sequence/>
+        <xs:attribute name="pluginVersion" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="vst3Plugin">
+    <xs:complexContent>
+      <xs:extension base="plugin">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="clapPlugin">
+    <xs:complexContent>
+      <xs:extension base="plugin">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="builtinDevice">
+    <xs:complexContent>
+      <xs:extension base="device">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="equalizer">
+    <xs:complexContent>
+      <xs:extension base="builtinDevice">
+        <xs:sequence>
+          <xs:element name="Band" type="eqBand" minOccurs="0" maxOccurs="unbounded"/>
+          <xs:element name="InputGain" type="realParameter" minOccurs="0"/>
+          <xs:element name="OutputGain" type="realParameter" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="eqBand">
+    <xs:sequence>
+      <xs:element name="Freq" type="realParameter"/>
+      <xs:element name="Gain" type="realParameter" minOccurs="0"/>
+      <xs:element name="Q" type="realParameter" minOccurs="0"/>
+      <xs:element name="Enabled" type="boolParameter" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="type" type="eqBandType" use="required"/>
+    <xs:attribute name="order" type="xs:int"/>
+  </xs:complexType>
+
+  <xs:complexType name="compressor">
+    <xs:complexContent>
+      <xs:extension base="builtinDevice">
+        <xs:sequence>
+          <xs:element name="Attack" type="realParameter" minOccurs="0"/>
+          <xs:element name="AutoMakeup" type="boolParameter" minOccurs="0"/>
+          <xs:element name="InputGain" type="realParameter" minOccurs="0"/>
+          <xs:element name="OutputGain" type="realParameter" minOccurs="0"/>
+          <xs:element name="Ratio" type="realParameter" minOccurs="0"/>
+          <xs:element name="Release" type="realParameter" minOccurs="0"/>
+          <xs:element name="Threshold" type="realParameter" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="noiseGate">
+    <xs:complexContent>
+      <xs:extension base="builtinDevice">
+        <xs:sequence>
+          <xs:element name="Attack" type="realParameter" minOccurs="0"/>
+          <xs:element name="Range" type="realParameter" minOccurs="0"/>
+          <xs:element name="Ratio" type="realParameter" minOccurs="0"/>
+          <xs:element name="Release" type="realParameter" minOccurs="0"/>
+          <xs:element name="Threshold" type="realParameter" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="limiter">
+    <xs:complexContent>
+      <xs:extension base="builtinDevice">
+        <xs:sequence>
+          <xs:element name="Attack" type="realParameter" minOccurs="0"/>
+          <xs:element name="InputGain" type="realParameter" minOccurs="0"/>
+          <xs:element name="OutputGain" type="realParameter" minOccurs="0"/>
+          <xs:element name="Release" type="realParameter" minOccurs="0"/>
+          <xs:element name="Threshold" type="realParameter" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="auPlugin">
+    <xs:complexContent>
+      <xs:extension base="plugin">
+        <xs:sequence/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="send">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:sequence>
+          <xs:element name="Enable" type="boolParameter" minOccurs="0"/>
+          <xs:element name="Pan" type="realParameter" minOccurs="0"/>
+          <xs:element name="Volume" type="realParameter"/>
+        </xs:sequence>
+        <xs:attribute name="destination" type="xs:IDREF"/>
+        <xs:attribute name="type" type="sendType"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="note" final="extension restriction">
+    <xs:sequence>
+      <xs:choice minOccurs="0">
+        <xs:element ref="Timeline"/>
+        <xs:element ref="Lanes"/>
+        <xs:element ref="Notes"/>
+        <xs:element ref="Clips"/>
+        <xs:element ref="ClipSlot"/>
+        <xs:element ref="markers"/>
+        <xs:element ref="Warps"/>
+        <xs:element ref="Audio"/>
+        <xs:element ref="Video"/>
+        <xs:element ref="Points"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="time" type="xs:string" use="required"/>
+    <xs:attribute name="duration" type="xs:string" use="required"/>
+    <xs:attribute name="channel" type="xs:int" use="required"/>
+    <xs:attribute name="key" type="xs:int" use="required"/>
+    <xs:attribute name="vel" type="xs:string"/>
+    <xs:attribute name="rel" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="notes">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element ref="Note" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="clip">
+    <xs:complexContent>
+      <xs:extension base="nameable">
+        <xs:sequence>
+          <xs:choice minOccurs="0">
+            <xs:element ref="Timeline"/>
+            <xs:element ref="Lanes"/>
+            <xs:element ref="Notes"/>
+            <xs:element ref="Clips"/>
+            <xs:element ref="ClipSlot"/>
+            <xs:element ref="markers"/>
+            <xs:element ref="Warps"/>
+            <xs:element ref="Audio"/>
+            <xs:element ref="Video"/>
+            <xs:element ref="Points"/>
+          </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="time" type="xs:double" use="required"/>
+        <xs:attribute name="duration" type="xs:double"/>
+        <xs:attribute name="contentTimeUnit" type="timeUnit"/>
+        <xs:attribute name="playStart" type="xs:double"/>
+        <xs:attribute name="playStop" type="xs:double"/>
+        <xs:attribute name="loopStart" type="xs:double"/>
+        <xs:attribute name="loopEnd" type="xs:double"/>
+        <xs:attribute name="fadeTimeUnit" type="timeUnit"/>
+        <xs:attribute name="fadeInTime" type="xs:double"/>
+        <xs:attribute name="fadeOutTime" type="xs:double"/>
+        <xs:attribute name="enable" type="xs:boolean"/>
+        <xs:attribute name="reference" type="xs:IDREF"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="clips">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element ref="Clip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="clipSlot">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element ref="Clip" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="hasStop" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="marker">
+    <xs:complexContent>
+      <xs:extension base="nameable">
+        <xs:sequence/>
+        <xs:attribute name="time" type="xs:double" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="markers">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element ref="Marker" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="warps">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:choice>
+            <xs:element ref="Timeline"/>
+            <xs:element ref="Lanes"/>
+            <xs:element ref="Notes"/>
+            <xs:element ref="Clips"/>
+            <xs:element ref="ClipSlot"/>
+            <xs:element ref="markers"/>
+            <xs:element ref="Warps"/>
+            <xs:element ref="Audio"/>
+            <xs:element ref="Video"/>
+            <xs:element ref="Points"/>
+          </xs:choice>
+          <xs:element ref="Warp" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="contentTimeUnit" type="timeUnit" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="warp">
+    <xs:sequence/>
+    <xs:attribute name="time" type="xs:double" use="required"/>
+    <xs:attribute name="contentTime" type="xs:double" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="audio">
+    <xs:complexContent>
+      <xs:extension base="mediaFile">
+        <xs:sequence/>
+        <xs:attribute name="algorithm" type="xs:string"/>
+        <xs:attribute name="channels" type="xs:int" use="required"/>
+        <xs:attribute name="sampleRate" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="mediaFile">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element name="File" type="fileReference"/>
+        </xs:sequence>
+        <xs:attribute name="duration" type="xs:double" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="video">
+    <xs:complexContent>
+      <xs:extension base="mediaFile">
+        <xs:sequence/>
+        <xs:attribute name="algorithm" type="xs:string"/>
+        <xs:attribute name="channels" type="xs:int" use="required"/>
+        <xs:attribute name="sampleRate" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="point" abstract="true">
+    <xs:sequence/>
+    <xs:attribute name="time" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="realPoint">
+    <xs:complexContent>
+      <xs:extension base="point">
+        <xs:sequence/>
+        <xs:attribute name="value" type="xs:string" use="required"/>
+        <xs:attribute name="interpolation" type="interpolation"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="enumPoint">
+    <xs:complexContent>
+      <xs:extension base="point">
+        <xs:sequence/>
+        <xs:attribute name="value" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="boolPoint">
+    <xs:complexContent>
+      <xs:extension base="point">
+        <xs:sequence/>
+        <xs:attribute name="value" type="xs:boolean" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="integerPoint">
+    <xs:complexContent>
+      <xs:extension base="point">
+        <xs:sequence/>
+        <xs:attribute name="value" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="timeSignaturePoint">
+    <xs:complexContent>
+      <xs:extension base="point">
+        <xs:sequence/>
+        <xs:attribute name="numerator" type="xs:int" use="required"/>
+        <xs:attribute name="denominator" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="points">
+    <xs:complexContent>
+      <xs:extension base="timeline">
+        <xs:sequence>
+          <xs:element name="Target" type="automationTarget"/>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element ref="Point"/>
+            <xs:element ref="RealPoint"/>
+            <xs:element ref="EnumPoint"/>
+            <xs:element ref="BoolPoint"/>
+            <xs:element ref="IntegerPoint"/>
+            <xs:element ref="TimeSignaturePoint"/>
+          </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="unit" type="unit"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="automationTarget">
+    <xs:sequence/>
+    <xs:attribute name="parameter" type="xs:IDREF"/>
+    <xs:attribute name="expression" type="expressionType"/>
+    <xs:attribute name="channel" type="xs:int"/>
+    <xs:attribute name="key" type="xs:int"/>
+    <xs:attribute name="controller" type="xs:int"/>
+  </xs:complexType>
+
+  <xs:complexType name="scene">
+    <xs:complexContent>
+      <xs:extension base="referenceable">
+        <xs:choice>
+          <xs:element ref="Timeline"/>
+          <xs:element ref="Lanes"/>
+          <xs:element ref="Notes"/>
+          <xs:element ref="Clips"/>
+          <xs:element ref="ClipSlot"/>
+          <xs:element ref="markers"/>
+          <xs:element ref="Warps"/>
+          <xs:element ref="Audio"/>
+          <xs:element ref="Video"/>
+          <xs:element ref="Points"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:simpleType name="unit">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="linear"/>
+      <xs:enumeration value="normalized"/>
+      <xs:enumeration value="percent"/>
+      <xs:enumeration value="decibel"/>
+      <xs:enumeration value="hertz"/>
+      <xs:enumeration value="semitones"/>
+      <xs:enumeration value="seconds"/>
+      <xs:enumeration value="beats"/>
+      <xs:enumeration value="bpm"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="timeUnit">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="beats"/>
+      <xs:enumeration value="seconds"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="deviceRole">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="instrument"/>
+      <xs:enumeration value="noteFX"/>
+      <xs:enumeration value="audioFX"/>
+      <xs:enumeration value="analyzer"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="eqBandType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="highPass"/>
+      <xs:enumeration value="lowPass"/>
+      <xs:enumeration value="bandPass"/>
+      <xs:enumeration value="highShelf"/>
+      <xs:enumeration value="lowShelf"/>
+      <xs:enumeration value="bell"/>
+      <xs:enumeration value="notch"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="mixerRole">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="regular"/>
+      <xs:enumeration value="master"/>
+      <xs:enumeration value="effect"/>
+      <xs:enumeration value="submix"/>
+      <xs:enumeration value="vca"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="sendType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="pre"/>
+      <xs:enumeration value="post"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="contentType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="audio"/>
+      <xs:enumeration value="automation"/>
+      <xs:enumeration value="notes"/>
+      <xs:enumeration value="video"/>
+      <xs:enumeration value="markers"/>
+      <xs:enumeration value="tracks"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="interpolation">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="hold"/>
+      <xs:enumeration value="linear"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="expressionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="gain"/>
+      <xs:enumeration value="pan"/>
+      <xs:enumeration value="transpose"/>
+      <xs:enumeration value="timbre"/>
+      <xs:enumeration value="formant"/>
+      <xs:enumeration value="pressure"/>
+      <xs:enumeration value="channelController"/>
+      <xs:enumeration value="channelPressure"/>
+      <xs:enumeration value="polyPressure"/>
+      <xs:enumeration value="pitchBend"/>
+      <xs:enumeration value="programChange"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
+

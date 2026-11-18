@@ -3,6 +3,7 @@
   "compilerOptions": {
     "target": "ESNext",
     "downlevelIteration": true,
+    "emitDecoratorMetadata": false,
     "lib": [
       "ESNext",
       "DOM",
@@ -12,6 +13,9 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
+  "include": [
+    "src"
+  ],
   "exclude": [
     "dist",
     "node_modules",

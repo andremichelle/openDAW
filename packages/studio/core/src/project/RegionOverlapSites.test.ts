@@ -165,7 +165,7 @@ describe("finding room on another track", () => {
 })
 
 describe("dawproject export", () => {
-    it("writes a seconds region's length in beats", async () => {
+    it("writes a seconds region's length in beats and its loop in seconds", async () => {
         const {project, skeleton} = await setup([[seconds(0, SECONDS)]])
         const schema = DawProjectExporter.write(skeleton, sampleManager as never, {
             write: (path: string): FileReferenceSchema => Xml.element({path, external: false}, FileReferenceSchema)
@@ -173,7 +173,8 @@ describe("dawproject export", () => {
         const xml = Xml.pretty(Xml.toElement("Project", schema))
         const beats = SECONDS_PPQN / PPQN.Quarter
         expect(xml).toContain(`duration="${beats}"`)
-        expect(xml).toContain(`loopEnd="${beats}"`)
+        expect(xml).toContain(`contentTimeUnit="seconds"`)
+        expect(xml).toContain(`loopEnd="${SECONDS}"`)
         project.terminate()
     })
 })

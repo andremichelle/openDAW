@@ -204,6 +204,7 @@ export enum IconSymbol {
     RecordStudio,
     PencilStep,
     TimeSelection,
+    Server,
 }
 
 export namespace IconSymbol {

@@ -24,7 +24,7 @@ import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
 import {ValueRegionBoxAdapter} from "./region/ValueRegionBoxAdapter"
-import {AudioUnitBox, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 
 export class TrackBoxAdapter implements BoxAdapter {
@@ -116,6 +116,10 @@ export class TrackBoxAdapter implements BoxAdapter {
             if (isInstanceOf(box, AudioUnitBox)) {
                 const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
                 return adapter.input.catchupAndSubscribeLabelChange(option => observer(option))
+            }
+            if (isInstanceOf(box, AuxSendBox)) {
+                return ParameterOwner.catchupAndSubscribeName(this.#context, targetVertex.unwrap(),
+                    name => observer(Option.wrap(name)))
             }
             const optAdapter = this.#context.boxAdapters.optAdapter(box)
             if (optAdapter.nonEmpty()) {
