@@ -27,8 +27,7 @@ of the range too.
 
 ## 2. Delete Time
 
-Right-click inside the range and choose **Delete Time**, or press **Cmd+Shift+Delete** (Ctrl+Shift+Delete on Windows
-and Linux).
+Right-click inside the range and choose **Delete Time**, or press **Delete**.
 
 Everything inside the range is removed and everything after it moves earlier, closing the gap. Regions crossing an edge
 are cut there. Use it to remove a bar from one track, or with Shift from the whole song.

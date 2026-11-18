@@ -28,6 +28,7 @@ import {ChordTrackShortcuts, ChordTrackShortcutsFactory} from "@/ui/shortcuts/Ch
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 import {ShortcutStorage} from "@/service/ShortcutStorage"
+import {TimeSelectionShortcuts, TimeSelectionShortcutsFactory} from "@/ui/shortcuts/TimeSelectionShortcuts"
 
 export namespace StudioShortcutManager {
     export type ShortcutsMap = Record<string, ShortcutDefinitions>
@@ -35,6 +36,7 @@ export namespace StudioShortcutManager {
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, workingDefinition: GlobalShortcuts},
         "regions": {factory: RegionsShortcutsFactory, workingDefinition: RegionsShortcuts},
+        "time-selection": {factory: TimeSelectionShortcutsFactory, workingDefinition: TimeSelectionShortcuts},
         "chord-track": {factory: ChordTrackShortcutsFactory, workingDefinition: ChordTrackShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, workingDefinition: NoteEditorShortcuts},
         "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},

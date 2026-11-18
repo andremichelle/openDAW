@@ -36,7 +36,7 @@ export namespace TimeSelectionTool {
                 return rowKeys(first + delta, last + delta)
             },
             apply: (selection, action) => TimeSelectionActions.apply(service, selection,
-                selection.global ? TimeSelectionActions.allTracks(project) : manager.timeTracks(selection), action).then()
+                selection.global ? TimeSelectionActions.allTracks(project) : manager.timeTracks(selection), action)
         })
     }
 }

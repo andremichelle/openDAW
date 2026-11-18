@@ -20,7 +20,7 @@ Press Shift+Enter or ⌘+F to open the [Spotlight](/manuals/spotlight), the quic
 * Hold ⌥+Shift and click to cut a region without consolidating
 * Press V for the Pointer tool, T for the [Time Selection](/manuals/time-selection) tool
 * Hold Shift while drawing a time selection to cover all tracks and the global tracks
-* Press ⌘+Shift+Delete to delete the time selection, ⌘+I to insert time
+* Press Delete to delete the time selection, ⌘+I to insert time
 
 ### Notes
 

@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from "vitest"
 import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, NoteRegionBoxAdapter, ProjectSkeleton, TrackBoxAdapter} from "@opendaw/studio-adapters"
-import {ChordEventBox, KeyEventBox, MarkerBox, NoteEventCollectionBox, NoteRegionBox} from "@opendaw/studio-boxes"
+import {ChordEventBox, KeyEventBox, MarkerBox, NoteEventCollectionBox, NoteRegionBox, ValueEventBox} from "@opendaw/studio-boxes"
 import type {Project} from "@opendaw/studio-core"
 import {TimeEditing} from "./TimeEditing"
 
@@ -143,6 +143,68 @@ describe("TimeEditing.deleteTime", () => {
         project.editing.modify(() => TimeEditing.deleteTime([], global(project), 3840, 6720))
         const events = Array.from(signatureTrack.iterateAll()).slice(1)
         expect(events.map(event => [event.accumulatedPpqn, event.nominator])).toEqual([[3840, 4]])
+        project.terminate()
+    })
+})
+
+describe("TimeEditing tempo", () => {
+    const createTempo = (project: Project, points: ReadonlyArray<[number, number]>): void => {
+        const {boxGraph} = project
+        const collection = project.timelineBoxAdapter.tempoTrackEvents.unwrap("tempo track").box
+        project.editing.modify(() => {
+            collection.events.pointerHub.incoming().forEach(pointer => pointer.box.delete())
+            points.forEach(([position, value]) => ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                box.events.refer(collection.events)
+                box.position.setValue(position)
+                box.value.setValue(value)
+            }))
+        })
+    }
+    const tempo = (project: Project): ReadonlyArray<[number, number]> => project.timelineBoxAdapter.tempoTrackEvents
+        .mapOr(({events}) => events.asArray().map(event => [event.position, event.value]), [])
+    it("deletes from the first tempo event to a later one without clashing", async () => {
+        const project = await createProject()
+        createTempo(project, [[0, 70], [1000, 90], [2000, 110], [3840, 130], [5000, 150]])
+        project.editing.modify(() => TimeEditing.deleteTime([], global(project), 0, 3840))
+        expect(tempo(project)).toEqual([[0, 130], [1160, 150]])
+        project.editing.undo()
+        expect(tempo(project)).toEqual([[0, 70], [1000, 90], [2000, 110], [3840, 130], [5000, 150]])
+        project.terminate()
+    })
+    it("cuts a ramp with one node on the tempo curve", async () => {
+        const project = await createProject()
+        createTempo(project, [[0, 70], [1000, 90], [2000, 110]])
+        project.editing.modify(() => TimeEditing.deleteTime([], global(project), 500, 1500))
+        const result = tempo(project)
+        expect(result.map(([position]) => position)).toEqual([0, 500, 1000])
+        expect(result[1][1]).toBeCloseTo(70 * Math.sqrt(90 / 70))
+        expect(result[2][1]).toBe(110)
+        project.terminate()
+    })
+    it("leaves a single node at the cut when deleting to the end", async () => {
+        const project = await createProject()
+        createTempo(project, [[0, 120], [3840 * 3, 140]])
+        project.editing.modify(() => TimeEditing.deleteTime([], global(project), 3840, 3840 * 8))
+        const result = tempo(project)
+        expect(result.map(([position]) => position)).toEqual([0, 3840])
+        expect(result[1][1]).toBeCloseTo(120 * Math.pow(140 / 120, 1 / 3))
+        project.terminate()
+    })
+    it("holds the tempo at the insert point during inserted time", async () => {
+        const project = await createProject()
+        createTempo(project, [[0, 100], [2000, 120]])
+        project.editing.modify(() => TimeEditing.insertTime([], global(project), 1000, 960))
+        const result = tempo(project)
+        expect(result.map(([position]) => position)).toEqual([0, 1000, 1960, 2960])
+        expect(result[1][1]).toBeCloseTo(Math.sqrt(100 * 120))
+        expect(result[2][1]).toBeCloseTo(Math.sqrt(100 * 120))
+        project.terminate()
+    })
+    it("pushes tempo events on insert", async () => {
+        const project = await createProject()
+        createTempo(project, [[0, 70], [1000, 90]])
+        project.editing.modify(() => TimeEditing.insertTime([], global(project), 0, 960))
+        expect(tempo(project)).toEqual([[960, 70], [1960, 90]])
         project.terminate()
     })
 })

@@ -5,7 +5,7 @@ import {ContextMenu, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping"
 import {TimeSelection} from "@/ui/timeline/TimeSelection"
 import {TimeSelectionActions} from "@/ui/timeline/TimeSelectionActions"
-import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {TimeSelectionShortcuts} from "@/ui/shortcuts/TimeSelectionShortcuts"
 
 export namespace TimeSelectionGestures {
     export type Hit = "outside" | "inside" | "start" | "complete"
@@ -128,8 +128,8 @@ export namespace TimeSelectionGestures {
                 if (hitTest(client.clientX, client.clientY) === "outside") {return}
                 addItems(...TimeSelectionActions.menuItems(action => run(action)))
             }),
-            shortcuts.register(RegionsShortcuts["delete-time"].shortcut, () => run("delete")),
-            shortcuts.register(RegionsShortcuts["insert-time"].shortcut, () => run("insert")),
+            shortcuts.register(TimeSelectionShortcuts["delete-time"].shortcut, () => run("delete")),
+            shortcuts.register(TimeSelectionShortcuts["insert-time"].shortcut, () => run("insert")),
             Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
                 if (event.code === Key.Escape) {timeSelection.clear()}
             }),

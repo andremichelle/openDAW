@@ -8,15 +8,15 @@ import {
     RegionEditing,
     SignatureTrackAdapter,
     TimelineBoxAdapter,
-    TrackBoxAdapter,
-    ValueEventBoxAdapter
+    TrackBoxAdapter
 } from "@opendaw/studio-adapters"
 import {ChordEventBox} from "@opendaw/studio-boxes"
+import {TempoTimeEditing} from "@/ui/timeline/TempoTimeEditing"
 
 export namespace TimeEditing {
     export type Global = Readonly<{timeline: TimelineBoxAdapter, boxGraph: BoxGraph}>
 
-    type PointEvent = MarkerBoxAdapter | KeyEventBoxAdapter | ValueEventBoxAdapter
+    type PointEvent = MarkerBoxAdapter | KeyEventBoxAdapter
 
     const cutAll = (regions: Array<AnyRegionBoxAdapter>, position: ppqn): void => regions.slice()
         .filter(region => region.position < position && position < region.complete)
@@ -78,10 +78,7 @@ export namespace TimeEditing {
             const markers = timeline.markerTrack.events.asArray().slice()
             applyPoints(markers, markers.map(({position: at}) =>
                 at < position ? Option.wrap(at) : at < complete ? Option.None : Option.wrap(at - length)))
-            timeline.tempoTrackEvents.ifSome(({events}) => {
-                const points = events.asArray().slice()
-                applyPoints(points, mapStates(points.map(point => point.position), position, complete))
-            })
+            timeline.tempoTrackEvents.ifSome(collection => TempoTimeEditing.deleteTime(collection, TempoTimeEditing.mappingOf(timeline), position, complete))
             const keys = timeline.keyTrack.events.asArray().slice()
             applyPoints(keys, mapStates(keys.map(key => key.position), position, complete))
             const map = (value: ppqn): ppqn => value < position ? value : value < complete ? position : value - length
@@ -112,10 +109,7 @@ export namespace TimeEditing {
         global.forEach(({timeline, boxGraph}) => {
             const markers = timeline.markerTrack.events.asArray().slice()
             applyPoints(markers, markers.map(({position: at}) => push(at)))
-            timeline.tempoTrackEvents.ifSome(({events}) => {
-                const points = events.asArray().slice()
-                applyPoints(points, points.map(({position: at}) => push(at)))
-            })
+            timeline.tempoTrackEvents.ifSome(collection => TempoTimeEditing.insertTime(collection, TempoTimeEditing.mappingOf(timeline), position, length))
             const keys = timeline.keyTrack.events.asArray().slice()
             applyPoints(keys, keys.map(({position: at}) => push(at)))
             timeline.chordTrack.events.asArray().slice().forEach(chord => {
