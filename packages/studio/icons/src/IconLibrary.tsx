@@ -903,6 +903,13 @@ export const IconLibrary = () => (
                 <path
                     d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.TimeSelection)} viewBox="12 12 232 232" fill="currentColor">
+                <path
+                    d="M104 40a8 8 0 0 1 8-8h32a8 8 0 0 1 0 16h-32a8 8 0 0 1-8-8m40 168h-32a8 8 0 0 0 0 16h32a8 8 0 0 0 0-16m64-176h-24a8 8 0 0 0 0 16h24v24a8 8 0 0 0 16 0V48a16 16 0 0 0-16-16m8 72a8 8 0 0 0-8 8v32a8 8 0 0 0 16 0v-32a8 8 0 0 0-8-8m0 72a8 8 0 0 0-8 8v24h-24a8 8 0 0 0 0 16h24a16 16 0 0 0 16-16v-24a8 8 0 0 0-8-8M40 152a8 8 0 0 0 8-8v-32a8 8 0 0 0-16 0v32a8 8 0 0 0 8 8m32 56H48v-24a8 8 0 0 0-16 0v24a16 16 0 0 0 16 16h24a8 8 0 0 0 0-16M40 80a8 8 0 0 0 8-8V48h24a8 8 0 0 0 0-16H48a16 16 0 0 0-16 16v24a8 8 0 0 0 8 8"/>
+                <rect x="72" y="72" width="112" height="32" rx="8"/>
+                <rect x="72" y="112" width="112" height="32" rx="8"/>
+                <rect x="72" y="152" width="112" height="32" rx="8"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.CallMic)} viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2a3.5 3.5 0 0 1 3.5 3.5v5.5a3.5 3.5 0 0 1-7 0V5.5A3.5 3.5 0 0 1 12 2Z"/><path d="M5 10h2v1a5 5 0 0 0 10 0v-1h2v1a7 7 0 0 1-6 6.93V21h3v2H8v-2h3v-3.07A7 7 0 0 1 5 11Z"/>
             </symbol>

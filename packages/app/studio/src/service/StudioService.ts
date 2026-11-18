@@ -29,6 +29,7 @@ import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
+import {TimelineTool} from "@/ui/timeline/TimelineTool"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
@@ -124,6 +125,7 @@ export class StudioService implements ProjectEnv {
             visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
+        tool: new DefaultObservableValue<TimelineTool>("pointer"),
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
             tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),

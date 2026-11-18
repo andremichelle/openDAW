@@ -13,6 +13,7 @@ import {MenuItem} from "@opendaw/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
+import {RadioGroup} from "@/ui/components/RadioGroup"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -22,7 +23,7 @@ type Construct = {
 }
 
 export const TimelineHeader = ({lifecycle, service}: Construct) => {
-    const {snapping, followCursor, primaryVisibility: {markers, tempo, signature, key, chords}, clips} = service.timeline
+    const {snapping, followCursor, tool, primaryVisibility: {markers, tempo, signature, key, chords}, clips} = service.timeline
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
@@ -41,6 +42,20 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                 ))}>
                 <Icon symbol={IconSymbol.Add} style={{fontSize: "1.25em"}}/>
             </MenuButton>
+            <FlexSpacer/>
+            <RadioGroup lifecycle={lifecycle}
+                        model={tool}
+                        elements={[
+                            {
+                                value: "pointer", element: <Icon symbol={IconSymbol.Pointer} style={{fontSize: "1.25em"}}/>,
+                                tooltip: ShortcutTooltip.create("Pointer", GlobalShortcuts["tool-pointer"].shortcut)
+                            },
+                            {
+                                value: "time-selection", element: <Icon symbol={IconSymbol.TimeSelection} style={{fontSize: "1.25em"}}/>,
+                                tooltip: ShortcutTooltip.create("Time Selection", GlobalShortcuts["tool-time-selection"].shortcut)
+                            }
+                        ]}
+                        appearance={{color: Colors.shadow, activeColor: Colors.green}}/>
             <FlexSpacer/>
             <Checkbox lifecycle={lifecycle}
                       model={followCursor}

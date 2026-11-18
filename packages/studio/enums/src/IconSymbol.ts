@@ -203,6 +203,7 @@ export enum IconSymbol {
     Surgeon,
     RecordStudio,
     PencilStep,
+    TimeSelection,
 }
 
 export namespace IconSymbol {

@@ -99,6 +99,14 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyG, {shift}),
         description: "Show or hide clips"
     },
+    "tool-pointer": {
+        shortcut: Shortcut.of(Key.KeyV),
+        description: "Timeline pointer tool"
+    },
+    "tool-time-selection": {
+        shortcut: Shortcut.of(Key.KeyT),
+        description: "Timeline time selection tool"
+    },
     "toggle-follow-cursor": {
         shortcut: Shortcut.of(Key.KeyF, {shift}),
         description: "Toggle follow playhead"

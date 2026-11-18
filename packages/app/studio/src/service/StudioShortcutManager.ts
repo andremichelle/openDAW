@@ -70,7 +70,7 @@ export namespace StudioShortcutManager {
             panelLayout,
             timeline: {
                 clips: {visible: clipsVisibility},
-                followCursor,
+                followCursor, tool,
                 primaryVisibility: {markers, tempo, signature, key: keyTrack, chords: chordTrack},
                 snapping
             }
@@ -145,7 +145,9 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-key-track"].shortcut, () => keyTrack.setValue(!keyTrack.getValue())),
             gc.register(gs["toggle-chord-track"].shortcut, () => chordTrack.setValue(!chordTrack.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
-            gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
+            gc.register(gs["tool-pointer"].shortcut, () => tool.setValue("pointer")),
+            gc.register(gs["tool-time-selection"].shortcut, () => tool.setValue("time-selection")),
+            gc.register(gs["toggle-follow-cursor"].shortcut,() => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].shortcut, () => metronome.enabled = !metronome.enabled),
             gc.register(gs["toggle-loop"].shortcut, () =>
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
