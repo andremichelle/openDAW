@@ -20,10 +20,13 @@ bursts. While the transport runs, the step that plays is lit.
 1. The lane list shows each lane's note and, on a Playfield, the name of its pad. The dot lights while the lane's note
    sounds. Drag a lane up or down to reorder the list, right click a lane to remove it. **M** mutes a lane, **S**
    plays only the soloed lanes, both in the shown pattern.
-2. **+ Lane** adds a lane on the next note without one, up to 127 lanes.
+2. **+ Lane** adds a lane on the next note without one, up to 127 lanes, and scrolls the list to it.
 3. **Roll Lane** and **Roll All** throw a new rhythm for the selected lane or for every lane of the pattern. The rate and
    the bursts stay as they are.
-4. Two lanes on the same note that hit at the same moment play one note, the louder one.
+4. Click a lane and press Cmd+C to copy its rhythm, or choose **Copy lane** in its context menu. Click a lane in any
+   pattern and press Cmd+V or choose **Paste lane** to give it that rhythm: steps, pulses, rotation, rate, accents
+   and bursts. Note, velocity, gate, chance, mute and solo stay, so a rhythm moves to a lane with another sound.
+5. Two lanes on the same note that hit at the same moment play one note, the louder one.
 
 Example uses:
 
