@@ -29,7 +29,7 @@ export const WarpMarkerEditor = ({
                                      lifecycle, project, range, snapping, reader, hoverTransient, cursorModel
                                  }: Construct) => {
     const {audioContent} = reader
-    const {file, observableOptPlayMode} = audioContent
+    const {observableOptPlayMode} = audioContent
     const markerRadius = 7
     return (
         <div className={className} onInit={element =>
@@ -70,7 +70,7 @@ export const WarpMarkerEditor = ({
                                     if (audioPlayMode instanceof AudioTimeStretchBoxAdapter) {
                                         const warpMarkers = audioPlayMode.warpMarkers
                                         const transientCapturing = TransientMarkerUtils.createCapturing(
-                                            canvas, range, reader, warpMarkers, file.transients)
+                                            canvas, range, reader, warpMarkers)
                                         const updatePreview = (noSnapping: boolean) => {
                                             const point = Surface.get(canvas).pointer
                                             const target = transientCapturing.captureEvent({

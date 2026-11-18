@@ -32,7 +32,8 @@ export const AudioEditorCanvas = ({
                                       snapping,
                                       reader
                                   }: Construct) => {
-    const {audioContent: {file, observableOptPlayMode, waveformOffset, gain}} = reader
+    const {audioContent} = reader
+    const {observableOptPlayMode, waveformOffset, gain} = audioContent
     return (
         <div className={className}>
             <canvas tabIndex={-1} onInit={canvas => {
@@ -56,9 +57,9 @@ export const AudioEditorCanvas = ({
                     const pass = LoopableRegion.locateLoop(reader, range.unitMin - range.unitPadding, range.unitMax)
                     if (pass.isEmpty()) {return}
                     const tempoMap = reader.trackBoxAdapter.unwrap("trackBoxAdapter").context.tempoMap
-                    AudioRenderer.render(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
-                        gain.getValue(), {top: 0, bottom: painter.height},
-                        `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
+                    audioContent.optFile.ifSome(file => AudioRenderer.render(context, range, file, tempoMap,
+                        observableOptPlayMode, waveformOffset.getValue(), gain.getValue(),
+                        {top: 0, bottom: painter.height}, `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false))
 
                     const cursor = cursorModel.getValue()
                     if (isDefined(cursor)) {
@@ -125,6 +126,8 @@ export const AudioEditorCanvas = ({
                         })
                     }, {permanentUpdates: true}),
                     Dragging.attach(canvas, startEvent => {
+                        if (audioContent.optFile.isEmpty()) {return Option.None}
+                        const file = audioContent.file
                         const rect = canvas.getBoundingClientRect()
                         const startX = startEvent.clientX - rect.left
                         const startOffset = waveformOffset.getValue()

@@ -19,7 +19,7 @@ export namespace TransientMarkerEditing {
                             warpMarkers: EventCollection<WarpMarkerBoxAdapter>,
                             transientMarkers: EventCollection<TransientMarkerBoxAdapter>): Terminable => {
         const terminator = new Terminator()
-        const capturing = TransientMarkerUtils.createCapturing(canvas, range, reader, warpMarkers, transientMarkers)
+        const capturing = TransientMarkerUtils.createCapturing(canvas, range, reader, warpMarkers)
         const {audioContent} = reader
         const {waveformOffset} = audioContent
         const transientMarkersField = Option.wrap(audioContent.file.box.transientMarkers)

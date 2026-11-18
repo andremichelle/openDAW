@@ -12,6 +12,7 @@ import {SampleEditorService} from "@/service/SampleEditorService"
 import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 import {HarmonyDetection} from "@/service/HarmonyDetection"
 import {StudioService} from "@/service/StudioService"
+import {AudioReversals} from "@/service/AudioReversals"
 
 type Creation = {
     element: HTMLElement
@@ -67,6 +68,9 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                 MenuItem.default({label: "Detect Key", hidden: clip.type !== "note-clip"})
                     .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
                         HarmonyDetection.fromClips(selection.selected(), 0))),
+                MenuItem.default({label: "Reverse Audio", hidden: clip.type !== "audio-clip"})
+                    .setTriggerProcedure(() => AudioReversals.reverse(service, selection.selected()
+                        .filter((item): item is AudioClipBoxAdapter => item.type === "audio-clip"))),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: clip.type !== "audio-clip"})
                     .setTriggerProcedure(() => {
                         if (clip.type === "audio-clip") {sampleEditor.openFile(clip.file).then(EmptyExec, console.warn)}

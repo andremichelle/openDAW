@@ -55,7 +55,8 @@ pub(crate) struct AudioRegionBinding {
     // AudioTimeStretchBox), which none of them re-resolve — so edits on the new box (transient-play-mode, transpose,
     // rate, its warp/transient markers) went unseen until a save+reload rebuilt from scratch. This monitor watches
     // the pointer itself and queues a full region rebuild on repoint, exactly like the hub observers above.
-    pub(crate) playmode_pointer_sub: SubscriptionId
+    pub(crate) playmode_pointer_sub: SubscriptionId,
+    pub(crate) file_pointer_sub: SubscriptionId
 }
 
 /// An AUDIO track binding: its sorted `AudioRegion` collection (shared with the player), its `regions`
@@ -428,6 +429,7 @@ pub(crate) fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTra
 pub(crate) fn unsubscribe_audio_region(graph: &mut BoxGraph, region: AudioRegionBinding) {
     graph.unsubscribe(region.edit_sub);
     graph.unsubscribe(region.playmode_pointer_sub);
+    graph.unsubscribe(region.file_pointer_sub);
     if let Some(sub) = region.playmode_sub { graph.unsubscribe(sub); }
     if let Some(sub) = region.warp_hub_sub { graph.unsubscribe(sub); }
     for sub in region.marker_subs { graph.unsubscribe(sub); }
@@ -508,17 +510,20 @@ pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrac
     // rebuild on repoint, so playmode_sub + warp + transient subs all re-resolve against the new box. `This` fires
     // only on the pointer edit, not on the region's other field edits, so a gain/fade tweak never forces a rebuild;
     // `subscribe_vertex` never catch-up fires, so the rebuild's fresh monitor cannot self-trigger a loop.
-    let rebuild_changes = region_changes.clone();
-    let rebuild_mark = mark.clone();
-    let playmode_pointer_sub = graph.subscribe_vertex(Propagation::This,
-        Address::of(region_uuid, vec![AUDIO_REGION_PLAYMODE_KEY]), Box::new(move |_graph, _update| {
-            let mut members = rebuild_changes.borrow_mut();
+    let mut subscribe_rebuild = |key| {
+        let changes = region_changes.clone();
+        let mark = mark.clone();
+        graph.subscribe_vertex(Propagation::This, Address::of(region_uuid, vec![key]), Box::new(move |_graph, _update| {
+            let mut members = changes.borrow_mut();
             members.removed.push(region_uuid);
             members.added.push(region_uuid);
-            rebuild_mark.mark();
-        }));
+            mark.mark();
+        }))
+    };
+    let playmode_pointer_sub = subscribe_rebuild(AUDIO_REGION_PLAYMODE_KEY);
+    let file_pointer_sub = subscribe_rebuild(AUDIO_REGION_FILE_KEY);
     Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub, marker_subs, warp_hub_sub,
-        transient_subs, transient_hub_sub, playmode_pointer_sub})
+        transient_subs, transient_hub_sub, playmode_pointer_sub, file_pointer_sub})
 }
 
 /// Re-read every SECONDS time-base region and clip of `sets` against the (just refreshed) `tempo_map`: their

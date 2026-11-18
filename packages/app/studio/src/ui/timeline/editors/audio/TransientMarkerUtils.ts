@@ -51,11 +51,12 @@ export namespace TransientMarkerUtils {
     export const createCapturing = (element: Element,
                                     range: TimelineRange,
                                     reader: AudioEventOwnerReader,
-                                    warpMarkers: EventCollection<WarpMarkerBoxAdapter>,
-                                    transientMarkers: EventCollection<TransientMarkerBoxAdapter>) =>
+                                    warpMarkers: EventCollection<WarpMarkerBoxAdapter>) =>
         new ElementCapturing<TransientMarkerBoxAdapter>(element, {
             capture: (x: number, _y: number): Nullable<TransientMarkerBoxAdapter> => {
                 const {audioContent} = reader
+                if (audioContent.optFile.isEmpty()) {return null}
+                const transientMarkers = audioContent.file.transients
                 const waveformOffset = audioContent.waveformOffset.getValue()
                 const markers = warpMarkers.asArray()
                 if (markers.length < 2) {return null}
