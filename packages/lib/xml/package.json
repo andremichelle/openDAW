@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint \"**/*.ts\"",
-    "test": "echo \"No tests to run\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@opendaw/lib-std": "^0.0.90-beta.0"

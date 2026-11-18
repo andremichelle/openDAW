@@ -2,159 +2,77 @@ _This package is part of the openDAW SDK_
 
 # @opendaw/lib-xml
 
-Library to parse and serialize XML with validator in a typed schema.
+Typed XML binding: classes declare their attributes and child elements with decorators, `Xml.read` turns a document into
+frozen instances of them and `Xml.write` turns instances back into a document. It has its own reader and writer and needs
+no DOM, so it runs in the browser, in workers and in node.
 
 ### Schema
+
+Elements are written in declaration order, inherited fields first. A child is either a fixed element name with one class
+(`name`), or a choice of classes picked by their `@Xml.Class` tag. Lists can sit inside a wrapper element (`wrapper`).
 
 ```typescript
 import {Xml} from "@opendaw/lib-xml"
 
-export enum Unit {
-    LINEAR = "linear",
-    NORMALIZED = "normalized",
-    PERCENT = "percent",
-    DECIBEL = "decibel",
-    HERTZ = "hertz",
-    SEMITONES = "semitones",
-    SECONDS = "seconds",
-    BEATS = "beats",
-    BPM = "bpm"
-}
+export enum Unit {LINEAR = "linear", BPM = "bpm"}
 
-@Xml.Class("Application")
-export class ApplicationSchema {
-    @Xml.Attribute("name", Xml.StringRequired)
-    readonly name!: string
-
-    @Xml.Attribute("version", Xml.StringRequired)
-    readonly version!: string
+export abstract class NameableSchema {
+    @Xml.Attribute("name", Xml.StringOptional) declare readonly name?: string
 }
 
 @Xml.Class("RealParameter")
-export class RealParameterSchema {
-    @Xml.Attribute("value", Xml.NumberOptional)
-    readonly value?: number
-
-    @Xml.Attribute("unit")
-    readonly unit!: Unit
-
-    @Xml.Attribute("min", Xml.NumberOptional)
-    readonly min?: number
-
-    @Xml.Attribute("max", Xml.NumberOptional)
-    readonly max?: number
+export class RealParameterSchema extends NameableSchema {
+    @Xml.Attribute("unit", Xml.Enum(Unit, true)) declare readonly unit: Unit
+    @Xml.Attribute("value", Xml.NumberOptional) declare readonly value?: number
 }
 
-@Xml.Class("TimeSignature")
-export class TimeSignatureParameterSchema {
-    @Xml.Attribute("nominator", Xml.NumberOptional)
-    readonly nominator?: number
-
-    @Xml.Attribute("denominator", Xml.NumberOptional)
-    readonly denominator?: number
-}
-
-@Xml.Class("Transport")
-export class TransportSchema {
-    @Xml.Element("Tempo", RealParameterSchema)
-    readonly tempo?: RealParameterSchema
-
-    @Xml.Element("TimeSignature", TimeSignatureParameterSchema)
-    readonly timeSignature?: TimeSignatureParameterSchema
+@Xml.Class("Note")
+export class NoteSchema {
+    @Xml.Attribute("time", Xml.NumberRequired) declare readonly time: number
+    @Xml.Attribute("key", Xml.IntRequired) declare readonly key: number
 }
 
 @Xml.Class("Project")
 export class ProjectSchema {
-    @Xml.Attribute("version", Xml.StringRequired)
-    readonly version!: "1.0"
-
-    @Xml.Element("Application", ApplicationSchema)
-    readonly application!: ApplicationSchema
-
-    @Xml.Element("Transport", TransportSchema)
-    readonly transport?: TransportSchema
-
-    @Xml.Element("Structure", Array)
-    readonly structure!: ReadonlyArray<LaneSchema>
-
-    @Xml.Element("Arrangement", ArrangementSchema)
-    readonly arrangement?: ArrangementSchema
-
-    @Xml.Element("Scenes", Array)
-    readonly scenes?: ReadonlyArray<SceneSchema>
+    @Xml.Attribute("version", Xml.StringRequired) declare readonly version: string
+    @Xml.Text("Title") declare readonly title?: string
+    @Xml.Child(() => RealParameterSchema, {name: "Tempo", required: true}) declare readonly tempo: RealParameterSchema
+    @Xml.Children(() => NoteSchema, {wrapper: "Notes"}) declare readonly notes: ReadonlyArray<NoteSchema>
 }
-
-// ...
 ```
 
-### Example
+### Writing and reading
 
 ```typescript
 const project = Xml.element({
     version: "1.0",
-    application: Xml.element({
-        name: "openDAW",
-        version: "0.1"
-    }, ApplicationSchema),
-    transport: Xml.element({
-        tempo: Xml.element({
-            unit: Unit.BPM,
-            value: 120
-        }, RealParameterSchema),
-        timeSignature: Xml.element({
-            nominator: 4,
-            denominator: 4
-        }, TimeSignatureParameterSchema)
-    }, TransportSchema),
-    structure: [
-        Xml.element({
-            id: "0",
-            contentType: "notes",
-            channel: Xml.element({
-                audioChannels: 2,
-                mute: Xml.element({value: true}, BooleanParameterSchema)
-            }, ChannelSchema),
-            tracks: [
-                Xml.element({
-                    id: "01",
-                    contentType: "audio"
-                }, TrackSchema),
-                Xml.element({
-                    id: "02",
-                    contentType: "audio"
-                }, TrackSchema)
-            ]
-        }, TrackSchema),
-        Xml.element({
-            id: "1",
-            contentType: "audio"
-        }, TrackSchema)
-    ]
+    title: "Demo",
+    tempo: Xml.element({name: "Tempo", unit: Unit.BPM, value: 120}, RealParameterSchema),
+    notes: [Xml.element({time: 0, key: 60}, NoteSchema)]
 }, ProjectSchema)
 
-console.debug(Xml.pretty(Xml.toElement("Project", project)))
+const xml = Xml.write(project)
+const {value, issues} = Xml.read(xml, ProjectSchema)
 ```
-
-### Result
 
 ```xml
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Project version="1.0">
-    <Application name="openDAW" version="0.1"/>
-    <Transport>
-        <Tempo unit="bpm" value="120"/>
-        <TimeSignature nominator="4" denominator="4"/>
-    </Transport>
-    <Structure>
-        <Track id="0" contentType="notes">
-            <Channel audioChannels="2">
-                <Mute value="true"/>
-            </Channel>
-            <Track>
-                <Track id="01" contentType="audio"/>
-                <Track id="02" contentType="audio"/>
-            </Track>
-        </Track>
-        <Track id="1" contentType="audio"/>
-    </Structure>
+  <Title>Demo</Title>
+  <Tempo name="Tempo" unit="bpm" value="120"/>
+  <Notes>
+    <Note time="0" key="60"/>
+  </Notes>
 </Project>
 ```
+
+`Xml.read` returns the elements and attributes it did not know in `issues`. Malformed XML, a missing required
+attribute or element and a value its codec rejects (`Xml.IntRequired` and `"1.5"`) fail with the location.
+
+### Codecs
+
+`String`, `Number` (xs:double, `INF` and `NaN` included), `Int` (xs:int), `Bool` (`true`, `false`, `1`, `0`), each as
+`Required` and `Optional`, plus `Xml.Enum(values, required)`, `Xml.List(codec, required)` and `Xml.codec(required, parse, format)`
+for any other text form.
+
+`Xml.Element`, `Xml.ElementRef`, `Xml.toElement` and `Xml.pretty` are kept for existing schemas and are deprecated.
