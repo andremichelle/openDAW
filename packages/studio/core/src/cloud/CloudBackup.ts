@@ -23,15 +23,24 @@ import {CloudBackupScripts} from "./CloudBackupScripts"
 import {ProjectSignals} from "../project"
 
 export namespace CloudBackup {
-    export const backup = async (cloudAuthManager: CloudAuthManager, service: CloudService) => {
-        const DialogMessage = `openDAW will never store or share your personal account details!
+    export const labelOf = (service: CloudService): string => service === "CustomServer" ? "Custom Server" : service
+
+    const messageOf = (service: CloudService): string => service === "CustomServer"
+        ? `Keep a backup of your projects, samples, presets and more on your own webspace, the same way as with Dropbox or Google Drive.
+
+            All you need is a hosting package with PHP and HTTPS, which most providers include. openDAW creates a small server file for you, you upload it once and you are ready.
+
+            Your files go to your server and nowhere else. You run it, so its security, limits and costs are in your hands.`
+        : `openDAW will never store or share your personal account details!
                                         
                                         Dropbox requires permission to read “basic account info” such as your name and email, but openDAW does not use or retain this information. We only access the files you choose to synchronize. 
                                         
                                         Clicking 'Sync' may open a new tab to authorize your dropbox.`
 
+    export const backup = async (cloudAuthManager: CloudAuthManager, service: CloudService) => {
+        const DialogMessage = messageOf(service)
         const approved = await RuntimeNotifier.approve({
-            headline: "openDAW and your data",
+            headline: service === "CustomServer" ? "Back up to your own server" : "openDAW and your data",
             message: DialogMessage,
             approveText: "Sync",
             cancelText: "Cancel"
@@ -63,7 +72,7 @@ export namespace CloudBackup {
             console.warn(reason)
             await RuntimeNotifier.info({
                 headline: "Cloud sync failed",
-                message: `Could not connect to ${service}.
+                message: `Could not connect to ${labelOf(service)}.
                     
                     ${String(reason)}`
             })
@@ -74,7 +83,7 @@ export namespace CloudBackup {
 
     export const backupWithHandler = async (cloudHandler: CloudHandler, service: CloudService) => {
         const progressValue = new DefaultObservableValue<unitValue>(0.0)
-        const notification = RuntimeNotifier.progress({headline: `Backup with ${service}`, progress: progressValue})
+        const notification = RuntimeNotifier.progress({headline: `Backup with ${labelOf(service)}`, progress: progressValue})
         const log = (text: string) => notification.message = text
         const [progressSamples, progressProjects, progressTemplates, progressSoundfonts, progressPresets, progressScripts, progressWclaps] =
             Progress.split(progress => progressValue.setValue(progress), 7)

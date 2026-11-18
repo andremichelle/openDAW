@@ -266,9 +266,6 @@ export namespace NextcloudDialogs {
         dialog.onkeydown = event => {if (event.code === "Enter") {if (approve()) {dialog.close()}}}
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()
-        const focusTarget = inputUrl.value.length === 0 ? inputUrl
-            : inputUser.value.length === 0 ? inputUser : inputPassword
-        focusTarget.focus()
         return promise
     }
 }

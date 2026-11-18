@@ -1,4 +1,4 @@
-import {asDefined, Errors, isDefined, isNull, Maps, panic, Provider, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {asDefined, Errors, isDefined, isNull, Maps, Optional, panic, Provider, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {CloudService} from "./CloudService"
 import {CloudHandler} from "./CloudHandler"
@@ -13,7 +13,9 @@ type ClientIds = {
 }
 
 export class CloudAuthManager {
-    static create(clientIds: ClientIds): CloudAuthManager {return new CloudAuthManager(clientIds)}
+    static create(clientIds: ClientIds, customServer?: Provider<Promise<CloudHandler>>): CloudAuthManager {
+        return new CloudAuthManager(clientIds, customServer)
+    }
 
     static async #createCodes(): Promise<{ codeVerifier: string; codeChallenge: string }> {
         const array = new Uint8Array(32)
@@ -33,15 +35,19 @@ export class CloudAuthManager {
     }
 
     readonly #clientIds: ClientIds
+    readonly #customServer: Optional<Provider<Promise<CloudHandler>>>
 
     readonly #memoizedHandlers = new Map<CloudService, () => Promise<CloudHandler>>()
 
     #memoizedSoundCloud: Provider<Promise<SoundCloudApi>>
 
-    private constructor(clientIds: ClientIds) {
+    private constructor(clientIds: ClientIds, customServer: Optional<Provider<Promise<CloudHandler>>>) {
         this.#clientIds = clientIds
+        this.#customServer = customServer
         this.#memoizedSoundCloud = this.#createSoundCloudMemo()
     }
+
+    forget(service: CloudService): void {this.#memoizedHandlers.delete(service)}
 
     soundCloud(): Promise<SoundCloudApi> {return this.#memoizedSoundCloud()}
 
@@ -64,6 +70,9 @@ export class CloudAuthManager {
                 }
                 case "GoogleDrive": {
                     return Promises.memoizeAsync(this.#oauthGoogle.bind(this), TimeSpan.hours(1))
+                }
+                case "CustomServer": {
+                    return Promises.memoizeAsync(asDefined(this.#customServer, "No custom server connector"), TimeSpan.hours(1))
                 }
                 default:
                     return panic(`Unsupported service: ${service}`)

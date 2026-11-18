@@ -118,6 +118,11 @@ export const populateStudioMenu = (service: StudioService) => {
                     }).setRuntimeChildrenProcedure(parent => {
                         parent.addMenuItem(
                             MenuItem.default({
+                                label: "Custom Server",
+                                icon: IconSymbol.Server
+                            }).setTriggerProcedure(() =>
+                                CloudBackup.backup(service.cloudAuthManager, "CustomServer").catch(EmptyExec)),
+                            MenuItem.default({
                                 label: "Dropbox",
                                 icon: IconSymbol.Dropbox
                             }).setTriggerProcedure(() =>

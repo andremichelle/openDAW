@@ -48,6 +48,7 @@ import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {MasteringDeviceBoxType, MasteringDeviceUrl} from "@opendaw/studio-matchering/device-url"
+import {CustomServerDialogs} from "@/custom-server/CustomServerDialogs"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
@@ -138,7 +139,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         Dropbox: "jtehjzxaxf3bf1l",
         GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com",
         SoundCloud: "t2NZPSxHxTi38C9g6gCMfMr7V1zjdEPa"
-    })
+    }, () => CustomServerDialogs.connect())
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider, chainedWclapProvider,
         cloudAuthManager, buildInfo)
