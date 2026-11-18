@@ -1,6 +1,6 @@
 import {AudioSplice, TempoMap, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {clamp, EmptyProcedure, isDefined, Option, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {clamp, EmptyProcedure, Option, Provider, RuntimeNotifier, SortedSet, tryCatch, UUID} from "@opendaw/lib-std"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter, AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, SampleGarbage, Workers} from "@opendaw/studio-core"
 import {AudioFileBox} from "@opendaw/studio-boxes"
@@ -9,10 +9,18 @@ import {TransientMarkerUtils} from "@/ui/timeline/editors/audio/TransientMarkerU
 
 type AudioItem = AudioClipBoxAdapter | AudioRegionBoxAdapter
 type SourceRange = {from: number, to: number}
+type ReverseKey = {uuid: UUID.Bytes, from: number, to: number}
+type ReversedSource = {key: ReverseKey, create: Provider<AudioFileBox>}
 
 export namespace AudioReversals {
-    export const revertSelection = (service: StudioService,
-                                    items: ReadonlyArray<AnyClipBoxAdapter | AnyRegionBoxAdapter>): boolean => {
+    export type Context = {
+        project: StudioService["project"]
+        optProject: StudioService["optProject"]
+        sampleService: Pick<StudioService["sampleService"], "importFile">
+    }
+
+    export const reverseSelection = (service: Context,
+                                     items: ReadonlyArray<AnyClipBoxAdapter | AnyRegionBoxAdapter>): boolean => {
         const audioItems = items.filter(item => item.type === "audio-clip" || item.type === "audio-region")
         if (audioItems.length === 0) {return false}
         reverse(service, audioItems).catch(console.warn)
@@ -32,7 +40,7 @@ export namespace AudioReversals {
         return {from: secondsAt(start), to: secondsAt(end)}
     }
 
-    export const reverse = async (service: StudioService, audioItems: ReadonlyArray<AudioItem>): Promise<void> => {
+    export const reverse = async (service: Context, audioItems: ReadonlyArray<AudioItem>): Promise<void> => {
         const project = service.project
         const {boxGraph, editing, tempoMap} = project
         const targets = audioItems.flatMap(item => item.optFile.mapOr(file =>
@@ -41,7 +49,8 @@ export namespace AudioReversals {
         const progress = RuntimeNotifier.progress({headline: "Reversing Audio..."})
         const imported: Array<UUID.Bytes> = []
         const result = await Promises.tryCatch((async () => {
-            const reversed = new Map<string, Provider<AudioFileBox>>()
+            const reversed = new SortedSet<ReverseKey, ReversedSource>(entry => entry.key, (left, right) =>
+                UUID.Comparator(left.uuid, right.uuid) || left.from - right.from || left.to - right.to)
             const edits = []
             for (const {item, file, range} of targets) {
                 const audio = await file.audioData
@@ -50,10 +59,10 @@ export namespace AudioReversals {
                 const from = frameAt(range.from)
                 const to = frameAt(range.to)
                 if (!(to - from > 1)) {continue}
-                const key = `${UUID.toString(file.uuid)}/${from}/${to}`
-                const existing = reversed.get(key)
-                if (isDefined(existing)) {
-                    edits.push({item, file, range, create: existing})
+                const key: ReverseKey = {uuid: file.uuid, from, to}
+                const existing = reversed.opt(key)
+                if (existing.nonEmpty()) {
+                    edits.push({item, file, range, create: existing.unwrap().create})
                     continue
                 }
                 const segment = AudioSplice.slice(audio, from, to)
@@ -65,13 +74,13 @@ export namespace AudioReversals {
                 const create = await AudioFileBoxFactory.createModifier(Workers.Transients, boxGraph, output, uuid, name)
                 await service.sampleService.importFile({uuid, name, bpm, arrayBuffer: WavFile.encodeFloats(output)})
                 imported.push(uuid)
-                reversed.set(key, create)
+                reversed.add({key, create})
                 edits.push({item, file, range, create})
             }
             return edits
         })())
         progress.terminate()
-        try {
+        const applied = tryCatch(() => {
             if (result.status === "rejected") {
                 console.warn(result.error)
                 RuntimeNotifier.notify({message: "Could not reverse audio.", icon: "Warning"})
@@ -88,10 +97,10 @@ export namespace AudioReversals {
                 project.trackUserCreatedSample(reversed.address.uuid)
                 box.file.refer(reversed)
             }))
-        } finally {
-            for (const uuid of imported) {
-                if (boxGraph.findBox(uuid).isEmpty()) {SampleGarbage.mark(uuid).catch(console.warn)}
-            }
+        })
+        for (const uuid of imported) {
+            if (boxGraph.findBox(uuid).isEmpty()) {SampleGarbage.mark(uuid).catch(console.warn)}
         }
+        if (applied.status === "failure") {throw applied.error}
     }
 }

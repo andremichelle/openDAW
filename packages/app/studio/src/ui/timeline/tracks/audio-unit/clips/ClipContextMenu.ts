@@ -13,7 +13,7 @@ import {GrooveMenus} from "@/ui/grooves/GrooveMenus"
 import {HarmonyDetection} from "@/service/HarmonyDetection"
 import {StudioService} from "@/service/StudioService"
 import {AudioReversals} from "@/service/AudioReversals"
-import {TimelineAudioShortcuts} from "@/ui/shortcuts/TimelineAudioShortcuts"
+import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 type Creation = {
     element: HTMLElement
@@ -70,10 +70,10 @@ export const installClipContextMenu = ({element, project, selection, capturing, 
                     .setTriggerProcedure(() => HarmonyDetection.detectKey(service,
                         HarmonyDetection.fromClips(selection.selected(), 0))),
                 MenuItem.default({
-                    label: "Revert",
+                    label: "Reverse",
                     hidden: clip.type !== "audio-clip",
-                    shortcut: TimelineAudioShortcuts["revert-audio"].shortcut.format()
-                }).setTriggerProcedure(() => AudioReversals.revertSelection(service, selection.selected())),
+                    shortcut: RegionsShortcuts["reverse-audio"].shortcut.format()
+                }).setTriggerProcedure(() => AudioReversals.reverseSelection(service, selection.selected())),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: clip.type !== "audio-clip"})
                     .setTriggerProcedure(() => {
                         if (clip.type === "audio-clip") {sampleEditor.openFile(clip.file).then(EmptyExec, console.warn)}

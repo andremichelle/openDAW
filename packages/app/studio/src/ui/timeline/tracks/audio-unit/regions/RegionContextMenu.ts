@@ -23,9 +23,8 @@ import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Browser} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {AudioReversals} from "@/service/AudioReversals"
-import {TimelineAudioShortcuts} from "@/ui/shortcuts/TimelineAudioShortcuts"
-import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {Promises} from "@opendaw/lib-runtime"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
@@ -172,10 +171,10 @@ export const installRegionContextMenu =
                     }
                 }),
                 MenuItem.default({
-                    label: "Revert",
+                    label: "Reverse",
                     hidden: region.type !== "audio-region",
-                    shortcut: TimelineAudioShortcuts["revert-audio"].shortcut.format()
-                }).setTriggerProcedure(() => AudioReversals.revertSelection(service, selection.selected())),
+                    shortcut: RegionsShortcuts["reverse-audio"].shortcut.format()
+                }).setTriggerProcedure(() => AudioReversals.reverseSelection(service, selection.selected())),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: region.type !== "audio-region"})
                     .setTriggerProcedure(() => {
                         if (isInstanceOf(region, AudioRegionBoxAdapter)) {

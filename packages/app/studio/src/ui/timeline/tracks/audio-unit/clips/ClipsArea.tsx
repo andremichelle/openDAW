@@ -36,7 +36,7 @@ import {Dialogs} from "@/ui/components/dialogs"
 import {ElementCapturing} from "@opendaw/studio-core"
 import {clipScrollPosition, installClipScroll} from "./ClipScroll"
 import {AudioReversals} from "@/service/AudioReversals"
-import {TimelineAudioShortcuts} from "@/ui/shortcuts/TimelineAudioShortcuts"
+import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ClipsArea")
 
@@ -62,8 +62,8 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         }))
 
     const shortcuts = lifecycle.own(ShortcutManager.get().createContext(element, "Launcher Clips"))
-    lifecycle.own(shortcuts.register(TimelineAudioShortcuts["revert-audio"].shortcut,
-        () => AudioReversals.revertSelection(service, clipSelection.selected())))
+    lifecycle.own(shortcuts.register(RegionsShortcuts["reverse-audio"].shortcut,
+        () => AudioReversals.reverseSelection(service, clipSelection.selected())))
     installClipScroll(lifecycle, service, element)
     const capturing: ElementCapturing<ClipCaptureTarget> = ClipCapturing.create(element, manager)
     const locator: TimelineSelectableLocator<AnyClipBoxAdapter> = createClipSelectableLocator(capturing, manager)
