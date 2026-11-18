@@ -36,6 +36,8 @@ export interface Sample {
     readonly bpm: number
     /** Sample rate in Hz */
     readonly sample_rate: number
+    /** Where the sample came from, a recording keeps its exact length when placed */
+    readonly origin?: "openDAW" | "recording" | "import"
 }
 
 /**

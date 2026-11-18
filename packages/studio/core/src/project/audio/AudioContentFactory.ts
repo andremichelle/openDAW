@@ -1,6 +1,6 @@
 import {ppqn, PPQN, TempoMap, TimeBase} from "@opendaw/lib-dsp"
-import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
-import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
+import {ColorCodes, Sample, SampleLength, TrackType} from "@opendaw/studio-adapters"
+import {int, isDefined, panic, UUID} from "@opendaw/lib-std"
 import {
     AudioClipBox,
     AudioFileBox,
@@ -59,11 +59,9 @@ export namespace AudioContentFactory {
             const startSeconds = tempoMap.ppqnToSeconds(position)
             return tempoMap.intervalToPPQN(startSeconds, startSeconds + durationInSeconds)
         }
-        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        if (disableQuantize || pulses < PPQN.SemiQuaver) {
-            return pulses
-        }
-        return quantizeRound(pulses, PPQN.SemiQuaver)
+        return disableQuantize
+            ? SampleLength.wholePulses(durationInSeconds, bpm)
+            : SampleLength.musicalPulses(durationInSeconds, bpm, sample.origin)
     }
 
     // --- Region Creation --- //
@@ -151,10 +149,10 @@ export namespace AudioContentFactory {
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")
         }
-        const {name, duration: durationInSeconds, bpm} = sample
-        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        const quantize = !props.disableQuantize && pulses >= PPQN.SemiQuaver
-        const durationInPPQN = props.duration ?? (quantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
+        const {name, duration: durationInSeconds, bpm, origin} = sample
+        const durationInPPQN = props.duration ?? (props.disableQuantize === true
+            ? SampleLength.wholePulses(durationInSeconds, bpm)
+            : SampleLength.musicalPulses(durationInSeconds, bpm, origin))
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
@@ -183,10 +181,10 @@ export namespace AudioContentFactory {
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")
         }
-        const {name, duration: durationInSeconds, bpm} = sample
-        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        const quantize = !props.disableQuantize && pulses >= PPQN.SemiQuaver
-        const durationInPPQN = props.duration ?? (quantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
+        const {name, duration: durationInSeconds, bpm, origin} = sample
+        const durationInPPQN = props.duration ?? (props.disableQuantize === true
+            ? SampleLength.wholePulses(durationInSeconds, bpm)
+            : SampleLength.musicalPulses(durationInSeconds, bpm, origin))
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
