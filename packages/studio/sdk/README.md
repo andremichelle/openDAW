@@ -74,6 +74,10 @@ switch (result.verdict) {
 // the stored round trip of the output and input device in use
 capture.roundTrip.ifSome(({seconds, measuredAt}) => console.log(`${seconds * 1000} ms`))
 
+// measure without storing, then keep the result only if your app accepts it (refused when not "ok")
+const checked = await capture.measureRoundTrip({store: false})
+if (checked.verdict === "ok" && checked.seconds < 0.5) {capture.storeRoundTrip(checked)}
+
 // drop it, takes fall back to the latency the browser reports
 capture.forgetRoundTrip()
 
@@ -87,6 +91,9 @@ const subscription = capture.subscribeRoundTrip(() => updateLabel(capture.roundT
 3. A track's own input latency (`CaptureAudioBox.inputLatency`) takes priority over a measurement. Leave it on
    inherit to use the measurement.
 4. MIDI recording is not affected.
+5. One measurement runs at a time. A second call on the same capture gets the running measurement, a call on
+   another capture rejects until it is done.
+6. A silent input, such as a disabled track, gives "no-signal" and stores nothing.
 
 The end-user explanation is the manual page
 [Latency Calibration](https://opendaw.studio/manuals/latency-calibration).

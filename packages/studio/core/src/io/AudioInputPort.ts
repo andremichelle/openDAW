@@ -42,7 +42,9 @@ export interface AudioInputPort extends Terminable {
     // with `calibrated`, a measured round trip of the current devices replaces both reported figures
     readLatency(resolveInput: (outputLatency: number) => number, calibrated: boolean): Provider<RecordingLatency>
     // plays noise bursts out, finds them in the input and keeps the result for these devices when it is steady
-    measureRoundTrip(): Promise<RoundTrip.Result>
+    measureRoundTrip(options?: RoundTrip.MeasureOptions): Promise<RoundTrip.Result>
+    // keeps the last measured result for the devices it was measured with, refuses any other or unsteady one
+    storeRoundTrip?(result: RoundTrip.Result): boolean
     // the measured round trip of the devices in use, read when the input opened or a recording was prepared
     get roundTrip(): Option<RoundTrip.Entry>
     // drops the measured round trip of the devices in use, recordings fall back to the reported latency

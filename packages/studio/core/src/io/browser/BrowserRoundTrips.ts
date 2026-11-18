@@ -1,4 +1,5 @@
-import {Exec, Notifier, Option, Subscription, tryCatch} from "@opendaw/lib-std"
+import {Exec, Func, isDefined, Notifier, Nullable, Option, Subscription, TimeSpan, tryCatch} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {RoundTrip} from "../RoundTrip"
 
 // measured round trips per output and input device, kept in this browser like the device names they are keyed by
@@ -34,9 +35,43 @@ export namespace BrowserRoundTrips {
         store([...others(entry.output, entry.input, entry.sampleRate), entry])
 
     export const remove = (output: string, input: string, sampleRate: number): void => {
+        lastStored = null
         if (find(output, input, sampleRate).isEmpty()) {return}
         store(others(output, input, sampleRate))
     }
 
     export const subscribe = (observer: Exec): Subscription => notifier.subscribe(observer)
+
+    let running: Nullable<{ readonly owner: object, readonly measurement: Promise<RoundTrip.Measured> }> = null
+    let lastMeasured: Nullable<RoundTrip.Measured> = null
+    let lastStored: Nullable<RoundTrip.Result> = null
+
+    // one measurement at a time: the same input shares the running one, another input is refused
+    export const measure = (owner: object, run: Func<AbortSignal, Promise<RoundTrip.Measured>>): Promise<RoundTrip.Measured> => {
+        if (isDefined(running)) {
+            return running.owner === owner
+                ? running.measurement
+                : Promise.reject("Another latency measurement is running.")
+        }
+        const controller = new AbortController()
+        const measurement = Promises.timeout(run(controller.signal), TimeSpan.seconds(30), "The latency measurement did not finish.")
+            .catch(error => {
+                controller.abort()
+                return Promise.reject(error)
+            })
+            .then(measured => {
+                lastMeasured = measured
+                return measured
+            })
+            .finally(() => running = null)
+        running = {owner, measurement}
+        return measurement
+    }
+
+    export const accept = (result: RoundTrip.Result): boolean => {
+        if (!isDefined(lastMeasured) || lastMeasured.result !== result || result.verdict !== "ok") {return false}
+        if (lastStored !== result) {save(lastMeasured.entry)}
+        lastStored = result
+        return true
+    }
 }

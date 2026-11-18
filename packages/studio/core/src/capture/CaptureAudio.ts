@@ -127,15 +127,17 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     forgetRoundTrip(): void {this.#input.forgetRoundTrip()}
     subscribeRoundTrip(observer: Exec): Subscription {return this.#input.subscribeRoundTrip(observer)}
 
-    async measureRoundTrip(): Promise<RoundTrip.Result> {
+    async measureRoundTrip(options?: RoundTrip.MeasureOptions): Promise<RoundTrip.Result> {
         const {engine} = this.manager.project
         if (engine.isPlaying.getValue() || engine.isRecording.getValue()) {
             return Promise.reject("Stop the transport to measure the latency.")
         }
         this.armed.setValue(true)
         await this.#streamGenerator()
-        return this.#input.measureRoundTrip()
+        return this.#input.measureRoundTrip(options)
     }
+
+    storeRoundTrip(result: RoundTrip.Result): boolean {return this.#input.storeRoundTrip?.(result) ?? false}
 
     startRecording(): Terminable {
         const {project} = this.manager

@@ -14,6 +14,16 @@ export namespace RoundTrip {
         readonly bursts: int
     }
 
+    export type MeasureOptions = {
+        // false leaves storing to `storeRoundTrip`
+        readonly store?: boolean
+    }
+
+    export type Measured = {
+        readonly result: Result
+        readonly entry: Entry
+    }
+
     export type Entry = {
         readonly output: string
         readonly input: string
@@ -23,6 +33,8 @@ export namespace RoundTrip {
     }
 
     export const MaxSeconds = 0.6
+    // no output reaches an input faster, a shorter trip is the input hearing nothing but its own echo of zero
+    export const MinSeconds = 0.001
     export const BurstGapSeconds = 0.8
     export const HeardRatioDb = 15.0
     export const SteadySpreadSeconds = 0.0015
@@ -76,7 +88,8 @@ export namespace RoundTrip {
             }
         }
         const mean = (energy - peakValue * peakValue) / Math.max(1, lags - 1)
-        const ratioDb = mean > 0.0 ? 10.0 * Math.log10(peakValue * peakValue / mean) : Number.POSITIVE_INFINITY
+        const ratioDb = peakValue === 0.0 ? Number.NEGATIVE_INFINITY
+            : mean > 0.0 ? 10.0 * Math.log10(peakValue * peakValue / mean) : Number.POSITIVE_INFINITY
         if (peakIndex === 0 || peakIndex === lags - 1) {return {lag: peakIndex, ratioDb}}
         const left = Math.abs(windowReal[peakIndex - 1])
         const right = Math.abs(windowReal[peakIndex + 1])
@@ -94,8 +107,9 @@ export namespace RoundTrip {
             const start = Math.round((emission - firstFrameTime) * sampleRate)
             if (start < 0 || start + windowLength > captured.length) {continue}
             const {lag, ratioDb} = locate(captured.subarray(start, start + windowLength), probeValues)
-            if (ratioDb < HeardRatioDb) {continue}
-            trips.push((start + lag) / sampleRate + firstFrameTime - emission)
+            const trip = (start + lag) / sampleRate + firstFrameTime - emission
+            if (ratioDb < HeardRatioDb || trip < MinSeconds) {continue}
+            trips.push(trip)
         }
         if (trips.length === 0) {
             return {verdict: "no-signal", seconds: Number.NaN, spreadSeconds: Number.NaN, heard: 0, bursts: emissions.length}
