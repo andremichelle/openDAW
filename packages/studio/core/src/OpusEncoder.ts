@@ -90,7 +90,7 @@ export namespace OpusEncoder {
                         failure: Promise<never>): Promise<void> => {
         const {numberOfFrames, numberOfChannels, frames} = audio
         for (let position = 0; position < numberOfFrames; position += BlockSize) {
-            while (encoder.encodeQueueSize > MaxQueuedBlocks) {await Promise.race([dequeued(encoder), failure])}
+            while (encoder.encodeQueueSize >= MaxQueuedBlocks) {await Promise.race([dequeued(encoder), failure])}
             const length = Math.min(BlockSize, numberOfFrames - position)
             const planar = new Float32Array(length * numberOfChannels)
             for (let channel = 0; channel < numberOfChannels; channel++) {

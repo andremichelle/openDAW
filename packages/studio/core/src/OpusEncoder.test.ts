@@ -98,13 +98,13 @@ describe("OpusEncoder", () => {
     it("keeps at most four blocks waiting in the encoder", async () => {
         await OpusEncoder.encode(render(12), settings)
         // Without the cap all twelve blocks are queued at once.
-        expect(FakeEncoder.instances[0].maxQueued).toBeLessThanOrEqual(5)
+        expect(FakeEncoder.instances[0].maxQueued).toBeLessThanOrEqual(4)
         expect(muxer.packets).toBe(12)
     })
     it("keeps feeding an encoder that never fires dequeue", async () => {
         FakeEncoder.firesDequeue = false
         await OpusEncoder.encode(render(8), settings)
-        expect(FakeEncoder.instances[0].maxQueued).toBeLessThanOrEqual(5)
+        expect(FakeEncoder.instances[0].maxQueued).toBeLessThanOrEqual(4)
         expect(muxer.packets).toBe(8)
     })
     it("stops a pending flush on abort and closes the encoder", async () => {
@@ -122,7 +122,7 @@ describe("OpusEncoder", () => {
         const controller = new AbortController()
         const encoding = OpusEncoder.encode(render(8), settings, undefined, controller.signal)
         await settle(5)
-        expect(FakeEncoder.instances[0].encodeQueueSize).toBe(5)
+        expect(FakeEncoder.instances[0].encodeQueueSize).toBe(4)
         controller.abort()
         await expect(encoding).rejects.toBe(Errors.AbortError)
         expect(FakeEncoder.instances[0].state).toBe("closed")
