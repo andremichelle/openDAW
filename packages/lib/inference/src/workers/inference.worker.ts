@@ -2,6 +2,7 @@
 import {asDefined, isDefined, panic} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {InferenceSession, Tensor as OrtTensor, env as ortEnv} from "onnxruntime-web"
+import {ExecutionProvider} from "../Task"
 import {Tensor, TensorElementType, TensorMap} from "../Tensor"
 import {MainToWorker, WorkerToMain} from "./protocol"
 
@@ -59,12 +60,22 @@ const fromOrtResults = (output: InferenceSession.OnnxValueMapType): TensorMap =>
     return result
 }
 
+const toOrtProvider = (provider: ExecutionProvider): InferenceSession.ExecutionProviderConfig => {
+    switch (provider) {
+        case "webnn-npu": return {name: "webnn", deviceType: "npu"}
+        case "webnn-gpu": return {name: "webnn", deviceType: "gpu"}
+        default:          return provider
+    }
+}
+
 const handleLoad = async (msg: Extract<MainToWorker, {kind: "load"}>): Promise<void> => {
     let session = sessions.get(msg.taskKey)
     if (!isDefined(session)) {
+        const start = performance.now()
         session = await InferenceSession.create(msg.modelBytes, {
-            executionProviders: [...msg.executionProviders, "wasm"]
+            executionProviders: [...msg.executionProviders.map(toOrtProvider), "wasm"]
         })
+        console.debug(`[inference] session created for "${msg.taskKey}" in ${(performance.now() - start).toFixed(0)}ms`)
         sessions.set(msg.taskKey, session)
     }
     post({kind: "loaded", id: msg.id, inputs: session.inputNames, outputs: session.outputNames})

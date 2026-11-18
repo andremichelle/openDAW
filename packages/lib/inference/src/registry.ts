@@ -1,11 +1,13 @@
+import {Procedure} from "@opendaw/lib-std"
 import {StemSeparationAltTask, StemSeparationTask} from "./tasks/StemSeparationTask"
-import {BasicPitchTask, TempoDetectionTask} from "./tasks"
+import {BasicPitchTask, HtdemucsFwdTask, TempoDetectionTask} from "./tasks"
 
 export const TaskRegistry = {
-    "stem-separation":     StemSeparationTask,
-    "stem-separation-alt": StemSeparationAltTask,
-    "audio-to-midi":       BasicPitchTask,
-    "tempo-detection":     TempoDetectionTask
+    "stem-separation":        StemSeparationTask,
+    "stem-separation-alt":    StemSeparationAltTask,
+    "stem-separation-webnn":  HtdemucsFwdTask,
+    "audio-to-midi":          BasicPitchTask,
+    "tempo-detection":        TempoDetectionTask
 } as const
 
 export type TaskKey = keyof typeof TaskRegistry
@@ -23,3 +25,11 @@ export type TaskInput<K extends TaskKey> =
 
 export type TaskOutput<K extends TaskKey> =
     Awaited<ReturnType<typeof TaskRegistry[K]["run"]>>
+
+// Same reasoning as above, for a task's optional streaming-partial-result type: read it off the
+// concrete `run` function's env parameter rather than inferring against the generic
+// `TaskDefinition<I, O, P>` shape. Tasks that don't stream partials default to `never` here.
+export type TaskEnvOf<K extends TaskKey> = Parameters<typeof TaskRegistry[K]["run"]>[1]
+
+export type TaskPartial<K extends TaskKey> =
+    TaskEnvOf<K> extends {onPartial?: Procedure<infer P>} ? P : never

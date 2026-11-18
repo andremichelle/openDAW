@@ -10,13 +10,13 @@ import {
     unitValue
 } from "@opendaw/lib-std"
 import {ExecutionProvider, ModelDescriptor, TaskDefinition} from "./Task"
-import {TaskInput, TaskKey, TaskOutput, TaskRegistry} from "./registry"
+import {TaskInput, TaskKey, TaskOutput, TaskPartial, TaskRegistry} from "./registry"
 import {InferenceConfig, installInferenceConfig, requireInferenceConfig} from "./InferenceConfig"
 import {EngineHost, runTask} from "./EngineHost"
 import {InferenceEngineError} from "./Errors"
 import {ModelStore} from "./ModelStore"
 
-export interface RunOptions {
+export interface RunOptions<K extends TaskKey = TaskKey> {
     readonly progress?: Procedure<unitValue>
     readonly signal?: AbortSignal
     readonly executionProvider?: ExecutionProvider | "auto"
@@ -26,6 +26,14 @@ export interface RunOptions {
      * so the progress callback receives only the inference portion.
      */
     readonly downloadShare?: number
+    /**
+     * Receives a task's intermediate results as it produces them, for tasks
+     * that support streaming partial output (e.g. stem separation emitting
+     * finished segments before the whole track is done). Tasks that don't
+     * support this resolve `TaskPartial<K>` to `never`, so the option is
+     * effectively unusable/no-op for them.
+     */
+    readonly onPartial?: Procedure<TaskPartial<K>>
 }
 
 export interface PreloadOptions {
@@ -35,7 +43,7 @@ export interface PreloadOptions {
 }
 
 export interface TaskHandle<K extends TaskKey> extends Terminable {
-    run(input: TaskInput<K>, options?: RunOptions): Promise<TaskOutput<K>>
+    run(input: TaskInput<K>, options?: RunOptions<K>): Promise<TaskOutput<K>>
 }
 
 export interface InstallOptions extends InferenceConfig {
@@ -62,11 +70,11 @@ const resolveProviders = (
     return [requested]
 }
 
-const lookupTask = <K extends TaskKey>(key: K): TaskDefinition<TaskInput<K>, TaskOutput<K>> => {
+const lookupTask = <K extends TaskKey>(key: K): TaskDefinition<TaskInput<K>, TaskOutput<K>, TaskPartial<K>> => {
     const task = asDefined(
-        (TaskRegistry as Readonly<Record<string, TaskDefinition<unknown, unknown>>>)[key as string],
+        (TaskRegistry as Readonly<Record<string, TaskDefinition<unknown, unknown, unknown>>>)[key as string],
         `Unknown inference task: ${String(key)}`)
-    return task as TaskDefinition<TaskInput<K>, TaskOutput<K>>
+    return task as TaskDefinition<TaskInput<K>, TaskOutput<K>, TaskPartial<K>>
 }
 
 const NO_PROGRESS: Procedure<unitValue> = () => {}
@@ -85,19 +93,20 @@ export namespace Inference {
 
     export const run = <K extends TaskKey>(key: K,
                                            input: TaskInput<K>,
-                                           options?: RunOptions): Promise<TaskOutput<K>> => {
+                                           options?: RunOptions<K>): Promise<TaskOutput<K>> => {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
         const progress = options?.progress ?? NO_PROGRESS
         const signal = isDefined(options?.signal) ? Option.wrap(options.signal) : Option.None
-        return engineHost.enqueue(() => runTask<TaskInput<K>, TaskOutput<K>>(engineHost, {
+        return engineHost.enqueue(() => runTask<TaskInput<K>, TaskOutput<K>, TaskPartial<K>>(engineHost, {
             task,
             input,
             progress,
             signal,
             executionProviders: resolveProviders(task.executionProviders, options?.executionProvider),
-            downloadShare: options?.downloadShare
+            downloadShare: options?.downloadShare,
+            onPartial: options?.onPartial
         }))
     }
 
@@ -119,6 +128,16 @@ export namespace Inference {
      */
     export const modelDescriptor = <K extends TaskKey>(key: K): ModelDescriptor =>
         lookupTask(key).model
+
+    /**
+     * The execution providers a task's export actually supports, in
+     * preference order. Useful for restricting a provider picker to the
+     * choices that are valid for the selected model, since not every ONNX
+     * export partitions correctly on every provider (e.g. a model with STFT
+     * baked into the graph may load on WebNN but produce wrong results).
+     */
+    export const executionProviders = <K extends TaskKey>(key: K): ReadonlyArray<ExecutionProvider> =>
+        lookupTask(key).executionProviders
 
     /**
      * Ensure the model is downloaded (cache hit or fresh fetch with progress)
@@ -157,18 +176,19 @@ export namespace Inference {
             .ensureLoaded(task.key, task.model, task.executionProviders)
             .then(() => new class implements TaskHandle<K> {
                 #released: boolean = false
-                run(input: TaskInput<K>, options?: RunOptions): Promise<TaskOutput<K>> {
+                run(input: TaskInput<K>, options?: RunOptions<K>): Promise<TaskOutput<K>> {
                     if (this.#released) {
                         return Promise.reject(new InferenceEngineError("TaskHandle has been released"))
                     }
                     const progress = options?.progress ?? NO_PROGRESS
                     const signal = isDefined(options?.signal) ? Option.wrap(options.signal) : Option.None
-                    return engineHost.enqueue(() => runTask<TaskInput<K>, TaskOutput<K>>(engineHost, {
+                    return engineHost.enqueue(() => runTask<TaskInput<K>, TaskOutput<K>, TaskPartial<K>>(engineHost, {
                         task,
                         input,
                         progress,
                         signal,
-                        executionProviders: resolveProviders(task.executionProviders, options?.executionProvider)
+                        executionProviders: resolveProviders(task.executionProviders, options?.executionProvider),
+                        onPartial: options?.onPartial
                     }))
                 }
 
