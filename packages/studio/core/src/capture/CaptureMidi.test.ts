@@ -56,14 +56,14 @@ const createFakeInput = () => {
     return {input, messages}
 }
 
-const setup = async () => {
+const setup = async (storeArmed: boolean = true) => {
     const {Project} = await import("../project/Project")
     const {CaptureMidi} = await import("./CaptureMidi")
     const audioContext = {currentTime: 0, sampleRate: 48_000, outputLatency: 0}
     const clock = {now: 0}
     vi.spyOn(performance, "now").mockImplementation(() => clock.now)
     const contextClock: ContextClock = {audibleTimeAt: (performanceTime: number) => performanceTime / 1000.0}
-    const env = {audioContext} as unknown as ProjectEnv
+    const env = {audioContext, storeArmed} as unknown as ProjectEnv
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const project = Project.fromSkeleton(env, skeleton)
     const worklet = createFakeWorklet()
@@ -170,5 +170,15 @@ describe("CaptureMidi", () => {
         capture.armed.setValue(true)
         project.editing.undo()
         expect(captureBox.isAttached(), "the only undo step is creating the capture").toBe(false)
+    })
+    it("leaves its box untouched when the project env does not opt into storing arming", async () => {
+        const {project, capture, captureBox} = await setup(false)
+        const transactions = vi.fn()
+        project.boxGraph.subscribeToAllUpdates({onUpdate: transactions})
+        expect(captureBox.armed.getValue()).toBe(false)
+        capture.armed.setValue(false)
+        capture.armed.setValue(true)
+        expect(captureBox.armed.getValue()).toBe(false)
+        expect(transactions).not.toHaveBeenCalled()
     })
 })

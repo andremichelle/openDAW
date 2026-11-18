@@ -1,4 +1,5 @@
 export * from "./audio"
+export * from "./AudioUnitCapture"
 export * from "./AudioUnitAsLayer"
 export * from "./AudioWavExport"
 export * from "./NestedHostExit"

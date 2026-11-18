@@ -636,7 +636,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             soundfontManager: env?.soundfontManager ?? this.#env.soundfontManager,
             sampleService: env?.sampleService ?? this.#env.sampleService,
             soundfontService: env?.soundfontService ?? this.#env.soundfontService,
-            createEditing: env?.createEditing ?? this.#env.createEditing
+            createEditing: env?.createEditing ?? this.#env.createEditing,
+            storeArmed: env?.storeArmed ?? this.#env.storeArmed
         }
     }
 

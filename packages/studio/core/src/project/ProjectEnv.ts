@@ -13,4 +13,5 @@ export interface ProjectEnv {
     sampleService: SampleService
     soundfontService: SoundfontService
     createEditing?: Func<BoxGraph, Editing>
+    storeArmed?: boolean
 }
