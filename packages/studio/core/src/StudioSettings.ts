@@ -33,7 +33,7 @@ export const StudioSettingsSchema = z.object({
         "chords": z.boolean().catch(false),
         "clips": z.boolean(),
         "follow-cursor": z.boolean(),
-        "click-to-seek": z.boolean().catch(true)
+        "click-to-seek": z.boolean().catch(false)
     }).default({
         "markers": true,
         "tempo": false,
@@ -42,7 +42,7 @@ export const StudioSettingsSchema = z.object({
         "chords": false,
         "clips": true,
         "follow-cursor": false,
-        "click-to-seek": true
+        "click-to-seek": false
     }),
     "appearance": z.object({
         "color-scheme": z.enum(ColorSchemes).catch(DefaultColorScheme),

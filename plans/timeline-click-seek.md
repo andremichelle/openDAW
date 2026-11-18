@@ -1,6 +1,6 @@
 # Seek by clicking the arrangement or editor
 
-Click the arrangement, Markers lane, or content editor to move the playhead to the snapped position. This works while the transport is stopped and can be turned off in Preferences. Dragging, modifier clicks, and ruler behavior keep their existing actions.
+Click the arrangement, Markers lane, or content editor to move the playhead to the snapped position. This works while the transport is stopped. It is off by default and can be turned on in Preferences. Dragging, modifier clicks, and ruler behavior keep their existing actions.
 
 ## AI-assisted work
 
