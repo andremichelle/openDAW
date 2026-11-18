@@ -14,6 +14,10 @@ Changes that take many clicks by hand, or the same edit over and over:
 
 The agent sees what you work on: the device you edit, the region open in the editor, the selection, the playhead and the loop. So you can say "these notes" or "this device" and it knows what you mean. It asks you before it adds samples to your library.
 
+## Making Music with an Agent
+
+An agent can write notes, build sounds and arrange a song. What it cannot bring is what you hear in your head, the odd idea from somewhere else, the rule you break on purpose. Start from your own idea, take what comes back as a draft, and change it until it sounds like you. Play a part in yourself, tweak a sound, move a section. The more you shape it, the more it is your music.
+
 ## Connecting
 
 Open the openDAW menu and choose **Connect Agent...**. Pick how the agent reaches your studio:
