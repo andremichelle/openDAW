@@ -1,7 +1,7 @@
 import {AudioSplice, TempoMap, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {clamp, EmptyProcedure, isDefined, Option, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {AnyClipBoxAdapter, AnyRegionBoxAdapter, AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, SampleGarbage, Workers} from "@opendaw/studio-core"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import type {StudioService} from "@/service/StudioService"
@@ -11,6 +11,14 @@ type AudioItem = AudioClipBoxAdapter | AudioRegionBoxAdapter
 type SourceRange = {from: number, to: number}
 
 export namespace AudioReversals {
+    export const revertSelection = (service: StudioService,
+                                    items: ReadonlyArray<AnyClipBoxAdapter | AnyRegionBoxAdapter>): boolean => {
+        const audioItems = items.filter(item => item.type === "audio-clip" || item.type === "audio-region")
+        if (audioItems.length === 0) {return false}
+        reverse(service, audioItems).catch(console.warn)
+        return true
+    }
+
     const sourceRange = (item: AudioItem, tempoMap: TempoMap): SourceRange => {
         const wraps = item.type === "audio-region" && item.loopOffset + item.duration > item.loopDuration
         const start = item.type === "audio-region" && !wraps ? item.loopOffset : 0

@@ -27,6 +27,8 @@ import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {moveByWheelPixels} from "@/ui/timeline/editors/WheelScroll"
+import {AudioReversals} from "@/service/AudioReversals"
+import {TimelineAudioShortcuts} from "@/ui/shortcuts/TimelineAudioShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -65,6 +67,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()
         }),
         shortcuts,
+        shortcuts.register(TimelineAudioShortcuts["revert-audio"].shortcut,
+            () => AudioReversals.revertSelection(service, regionSelection.selected())),
         shortcuts.register(RegionsShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
         shortcuts.register(RegionsShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true}),
         installAutoScroll(element, (deltaX, deltaY) => {
