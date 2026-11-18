@@ -27,6 +27,7 @@ export namespace RuntimeNotification {
         progress?: ObservableValue<unitValue>
         cancel?: Exec
         origin?: Element
+        delayed?: boolean
     }
 
     export interface ProgressUpdater extends Terminable {

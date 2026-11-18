@@ -17,6 +17,10 @@ component
   &.error::backdrop
     background: rgba(255, 0, 0, 0.04)
 
+  &.delayed, &.delayed::backdrop
+    visibility: hidden
+    animation: dialog-reveal 0s 500ms forwards
+
   > h1
     flex-shrink: 0
     display: flex
@@ -51,3 +55,7 @@ component
 
     > [data-class='button'] label
       min-width: 4em
+
+@keyframes dialog-reveal
+  to
+    visibility: visible

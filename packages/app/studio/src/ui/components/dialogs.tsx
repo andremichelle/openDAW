@@ -223,8 +223,15 @@ export namespace Dialogs {
         return promise
     }
 
+    const delay = (dialog: HTMLDialogElement): void => {
+        let visible = false
+        dialog.classList.add("delayed")
+        dialog.addEventListener("animationstart", event => {if (event.target === dialog) {visible = true}})
+        dialog.addEventListener("cancel", event => {if (!visible) {event.preventDefault()}})
+    }
+
     export const progress = ({
-                                 headline, message, progress, cancel, origin
+                                 headline, message, progress, cancel, origin, delayed
                              }: RuntimeNotification.ProgressRequest): RuntimeNotification.ProgressUpdater => {
         const lifecycle = new Terminator()
         const buttons: ReadonlyArray<Button> = isDefined(cancel)
@@ -249,6 +256,7 @@ export namespace Dialogs {
                 )}
             </Dialog>
         )
+        if (delayed === true) {delay(dialog)}
         Surface.get(origin).flyout.appendChild(dialog)
         dialog.addEventListener("close", () => lifecycle.terminate(), {once: true})
         dialog.showModal()
@@ -262,7 +270,8 @@ export namespace Dialogs {
     export const processMonolog = (headline: string,
                                    content?: HTMLElement,
                                    cancel?: Exec,
-                                   origin?: Element): DialogHandler => {
+                                   origin?: Element,
+                                   delayed?: boolean): DialogHandler => {
         const lifecycle = new Terminator()
         const buttons: ReadonlyArray<Button> = isDefined(cancel)
             ? [{
@@ -281,6 +290,7 @@ export namespace Dialogs {
                 {content}
             </Dialog>
         )
+        if (delayed === true) {delay(dialog)}
         Surface.get(origin).flyout.appendChild(dialog)
         dialog.addEventListener("close", () => lifecycle.terminate(), {once: true})
         dialog.showModal()
