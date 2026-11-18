@@ -1,6 +1,6 @@
 import {AudioSplice, TempoMap, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {clamp, EmptyProcedure, Option, Provider, RuntimeNotifier, SortedSet, tryCatch, UUID} from "@opendaw/lib-std"
+import {clamp, EmptyProcedure, Option, Provider, RuntimeNotifier, SortedSet, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter, AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, SampleGarbage, Workers} from "@opendaw/studio-core"
 import {AudioFileBox} from "@opendaw/studio-boxes"
@@ -46,7 +46,10 @@ export namespace AudioReversals {
         const targets = audioItems.flatMap(item => item.optFile.mapOr(file =>
             [{item, file, range: sourceRange(item, tempoMap)}], []))
         if (targets.length === 0) {return}
-        const progress = RuntimeNotifier.progress({headline: "Reversing Audio..."})
+        const progress = new Terminator()
+        const progressTimer = setTimeout(() =>
+            progress.own(RuntimeNotifier.progress({headline: "Reversing Audio..."})), 500)
+        progress.own({terminate: () => clearTimeout(progressTimer)})
         const imported: Array<UUID.Bytes> = []
         const result = await Promises.tryCatch((async () => {
             const reversed = new SortedSet<ReverseKey, ReversedSource>(entry => entry.key, (left, right) =>

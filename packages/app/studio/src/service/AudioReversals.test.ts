@@ -1,6 +1,6 @@
-import {describe, expect, it, vi} from "vitest"
+import {afterEach, describe, expect, it, vi} from "vitest"
 import {AudioData, PPQN, SampleEffects, WavFile} from "@opendaw/lib-dsp"
-import {EmptyExec, isDefined, Option, panic, Terminable, UUID} from "@opendaw/lib-std"
+import {EmptyExec, isDefined, Option, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioClipBoxAdapter, AudioRegionBoxAdapter, ProjectSkeleton, SampleLoaderManager, TrackType} from "@opendaw/studio-adapters"
 import {AudioClipBox, AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "@opendaw/studio-core"
@@ -41,8 +41,18 @@ const environment = (audio: AudioData): ProjectEnv => {
     }
 }
 
+afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+})
+
 describe("Reverse Audio", () => {
     it("reverses only the trimmed range, leaves a shared source intact and supports undo and redo", async () => {
+        vi.useFakeTimers()
+        const closeProgress = vi.fn()
+        const showProgress = vi.spyOn(RuntimeNotifier, "progress").mockReturnValue({
+            message: "", terminate: closeProgress
+        })
         const audio = AudioData.create(48000, 8, 2)
         audio.frames[0].set([1, 2, 3, 4, 5, 6, 7, 8])
         audio.frames[1].set([-1, -2, -3, -4, -5, -6, -7, -8])
@@ -94,6 +104,8 @@ describe("Reverse Audio", () => {
         }
         await AudioReversals.reverse(service, [item, launcher])
         expect(importFile).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(500)
+        expect(showProgress).not.toHaveBeenCalled()
         const output = outputs[0]
         expect(Array.from(output.frames[0])).toEqual([1, 2, 6, 5, 4, 3, 7, 8])
         expect(Array.from(output.frames[1])).toEqual([-1, -2, -6, -5, -4, -3, -7, -8])
@@ -110,14 +122,30 @@ describe("Reverse Audio", () => {
         expect(sourceOf(selected).address.equals(reversed.address)).toBe(true)
         expect(sourceOf(clip).address.equals(reversed.address)).toBe(true)
         expect(sourceOf(sibling)).toBe(source)
+        const slowImport = Promise.withResolvers<void>()
+        importFile.mockImplementationOnce(async args => {
+            await slowImport.promise
+            return {
+                uuid: UUID.toString(args.uuid ?? UUID.generate()), name: args.name ?? "Sample", bpm: args.bpm ?? 0,
+                duration: audio.numberOfFrames / audio.sampleRate, sample_rate: audio.sampleRate, origin: "import"
+            }
+        })
+        const slowReverse = AudioReversals.reverse(service, [item])
+        await vi.advanceTimersByTimeAsync(499)
+        expect(showProgress).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(showProgress).toHaveBeenCalledTimes(1)
+        slowImport.resolve()
+        await slowReverse
+        expect(closeProgress).toHaveBeenCalledTimes(1)
+        const beforeFailure = sourceOf(selected)
         vi.mocked(SampleGarbage.mark).mockClear()
         const failure = new Error("Cannot apply reverse edit")
         vi.spyOn(editing, "modify").mockImplementationOnce(() => {throw failure})
         await expect(AudioReversals.reverse(service, [item])).rejects.toBe(failure)
         expect(SampleGarbage.mark).toHaveBeenCalledTimes(1)
-        expect(SampleGarbage.mark).toHaveBeenCalledWith(importFile.mock.calls[1][0].uuid)
-        expect(sourceOf(selected).address.equals(reversed.address)).toBe(true)
+        expect(SampleGarbage.mark).toHaveBeenCalledWith(importFile.mock.calls[2][0].uuid)
+        expect(sourceOf(selected)).toBe(beforeFailure)
         project.terminate()
-        vi.restoreAllMocks()
     })
 })
