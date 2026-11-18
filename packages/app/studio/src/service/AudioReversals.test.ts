@@ -2,8 +2,11 @@ import {afterEach, describe, expect, it, vi} from "vitest"
 import {AudioData, PPQN, SampleEffects, WavFile} from "@opendaw/lib-dsp"
 import {EmptyExec, isDefined, Option, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioClipBoxAdapter, AudioRegionBoxAdapter, ProjectSkeleton, SampleLoaderManager, TrackType} from "@opendaw/studio-adapters"
-import {AudioClipBox, AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import type {ProjectEnv} from "@opendaw/studio-core"
+import {
+    AudioClipBox, AudioFileBox, AudioRegionBox, AudioTimeStretchBox, TrackBox, ValueEventCollectionBox, WarpMarkerBox
+} from "@opendaw/studio-boxes"
+import type {Project as ProjectType, ProjectEnv, SampleService} from "@opendaw/studio-core"
+import type {StudioService} from "@/service/StudioService"
 
 vi.mock("@opendaw/studio-core", async importOriginal => ({
     ...await importOriginal<typeof import("@opendaw/studio-core")>(),
@@ -41,14 +44,27 @@ const environment = (audio: AudioData): ProjectEnv => {
     }
 }
 
-afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
+// Stand-in for the three StudioService members reverse() reads.
+const studioService = (project: ProjectType, importFile: SampleService["importFile"]): StudioService =>
+    Object.create(null, {
+        project: {value: project},
+        optProject: {value: Option.wrap(project)},
+        sampleService: {value: {importFile}}
+    })
+
+const importInto = (outputs: Array<AudioData>) => vi.fn<SampleService["importFile"]>(async args => {
+    const output = WavFile.decodeFloats(args.arrayBuffer)
+    outputs.push(output)
+    return {
+        uuid: UUID.toString(args.uuid ?? UUID.generate()), name: args.name ?? "Sample", bpm: args.bpm ?? 0,
+        duration: output.numberOfFrames / output.sampleRate, sample_rate: output.sampleRate, origin: "import"
+    }
 })
+
+afterEach(() => vi.restoreAllMocks())
 
 describe("Reverse Audio", () => {
     it("reverses only the trimmed range, leaves a shared source intact and supports undo and redo", async () => {
-        vi.useFakeTimers()
         const closeProgress = vi.fn()
         const showProgress = vi.spyOn(RuntimeNotifier, "progress").mockReturnValue({
             message: "", terminate: closeProgress
@@ -91,21 +107,13 @@ describe("Reverse Audio", () => {
         const item = project.boxAdapters.adapterFor(selected, AudioRegionBoxAdapter)
         const launcher = project.boxAdapters.adapterFor(clip, AudioClipBoxAdapter)
         const outputs: Array<AudioData> = []
-        const importFile = vi.fn<import("@opendaw/studio-core").SampleService["importFile"]>(async args => {
-            const output = WavFile.decodeFloats(args.arrayBuffer)
-            outputs.push(output)
-            return {
-                uuid: UUID.toString(args.uuid ?? UUID.generate()), name: args.name ?? "Sample", bpm: args.bpm ?? 0,
-                duration: output.numberOfFrames / output.sampleRate, sample_rate: output.sampleRate, origin: "import"
-            }
-        })
-        const service: import("./AudioReversals").AudioReversals.Context = {
-            project, optProject: Option.wrap(project), sampleService: {importFile}
-        }
+        const importFile = importInto(outputs)
+        const service = studioService(project, importFile)
         await AudioReversals.reverse(service, [item, launcher])
         expect(importFile).toHaveBeenCalledTimes(1)
-        await vi.advanceTimersByTimeAsync(500)
-        expect(showProgress).not.toHaveBeenCalled()
+        expect(showProgress).toHaveBeenCalledTimes(1)
+        expect(showProgress).toHaveBeenCalledWith({headline: "Reversing Audio...", delayed: true})
+        expect(closeProgress).toHaveBeenCalledTimes(1)
         const output = outputs[0]
         expect(Array.from(output.frames[0])).toEqual([1, 2, 6, 5, 4, 3, 7, 8])
         expect(Array.from(output.frames[1])).toEqual([-1, -2, -6, -5, -4, -3, -7, -8])
@@ -122,22 +130,8 @@ describe("Reverse Audio", () => {
         expect(sourceOf(selected).address.equals(reversed.address)).toBe(true)
         expect(sourceOf(clip).address.equals(reversed.address)).toBe(true)
         expect(sourceOf(sibling)).toBe(source)
-        const slowImport = Promise.withResolvers<void>()
-        importFile.mockImplementationOnce(async args => {
-            await slowImport.promise
-            return {
-                uuid: UUID.toString(args.uuid ?? UUID.generate()), name: args.name ?? "Sample", bpm: args.bpm ?? 0,
-                duration: audio.numberOfFrames / audio.sampleRate, sample_rate: audio.sampleRate, origin: "import"
-            }
-        })
-        const slowReverse = AudioReversals.reverse(service, [item])
-        await vi.advanceTimersByTimeAsync(499)
-        expect(showProgress).not.toHaveBeenCalled()
-        await vi.advanceTimersByTimeAsync(1)
-        expect(showProgress).toHaveBeenCalledTimes(1)
-        slowImport.resolve()
-        await slowReverse
-        expect(closeProgress).toHaveBeenCalledTimes(1)
+        await AudioReversals.reverse(service, [item])
+        expect(closeProgress).toHaveBeenCalledTimes(2)
         const beforeFailure = sourceOf(selected)
         vi.mocked(SampleGarbage.mark).mockClear()
         const failure = new Error("Cannot apply reverse edit")
@@ -146,6 +140,53 @@ describe("Reverse Audio", () => {
         expect(SampleGarbage.mark).toHaveBeenCalledTimes(1)
         expect(SampleGarbage.mark).toHaveBeenCalledWith(importFile.mock.calls[2][0].uuid)
         expect(sourceOf(selected)).toBe(beforeFailure)
+        project.terminate()
+    })
+
+    it("mirrors warp markers inside the reversed range so each segment keeps its stretch", async () => {
+        vi.spyOn(RuntimeNotifier, "progress").mockReturnValue({message: "", terminate: EmptyExec})
+        vi.spyOn(SampleGarbage, "mark").mockResolvedValue()
+        vi.spyOn(SampleGarbage, "unmark").mockResolvedValue()
+        const audio = AudioData.create(48000, 8, 1)
+        audio.frames[0].set([1, 2, 3, 4, 5, 6, 7, 8])
+        const frame = 1 / audio.sampleRate
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const project = Project.fromSkeleton(environment(audio), skeleton)
+        const {boxGraph, editing, primaryAudioUnitBox} = project
+        const region = editing.modify(() => {
+            const track = TrackBox.create(boxGraph, UUID.generate(), box => {
+                box.type.setValue(TrackType.Audio)
+                box.tracks.refer(primaryAudioUnitBox.tracks)
+                box.target.refer(primaryAudioUnitBox)
+            })
+            const stretch = AudioTimeStretchBox.create(boxGraph, UUID.generate())
+            const markers: ReadonlyArray<[number, number]> = [[0, 0], [100, 6 * frame], [400, 8 * frame]]
+            markers.forEach(([position, seconds]) => WarpMarkerBox.create(boxGraph, UUID.generate(), box => {
+                box.owner.refer(stretch.warpMarkers)
+                box.position.setValue(position)
+                box.seconds.setValue(seconds)
+            }))
+            const source = AudioFileBox.create(boxGraph, UUID.generate(), box => box.fileName.setValue("Source"))
+            const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+            return AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+                box.file.refer(source)
+                box.regions.refer(track.regions)
+                box.events.refer(events.owners)
+                box.playMode.refer(stretch)
+                box.duration.setValue(400)
+                box.loopDuration.setValue(400)
+            })
+        }).unwrap("test region")
+        const item = project.boxAdapters.adapterFor(region, AudioRegionBoxAdapter)
+        const warpMarkers = () => item.optWarpMarkers.unwrap("warp markers").asArray()
+            .map(({position, seconds}) => [position, Math.round(seconds / frame)])
+        const outputs: Array<AudioData> = []
+        await AudioReversals.reverse(studioService(project, importInto(outputs)), [item])
+        expect(Array.from(outputs[0].frames[0])).toEqual([8, 7, 6, 5, 4, 3, 2, 1])
+        expect(warpMarkers()).toEqual([[0, 0], [300, 2], [400, 8]])
+        expect(editing.undo()).toBe(true)
+        expect(warpMarkers()).toEqual([[0, 0], [100, 6], [400, 8]])
+        expect(region.file.targetVertex.map(vertex => vertex.box.name).unwrap("file")).toBe("AudioFileBox")
         project.terminate()
     })
 })

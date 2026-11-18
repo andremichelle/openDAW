@@ -1,25 +1,21 @@
-import {AudioSplice, TempoMap, WavFile} from "@opendaw/lib-dsp"
+import {AudioSplice, ppqn, TempoMap, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {clamp, EmptyProcedure, Option, Provider, RuntimeNotifier, SortedSet, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AnyClipBoxAdapter, AnyRegionBoxAdapter, AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {clamp, EmptyProcedure, Option, Provider, RuntimeNotifier, SortedSet, tryCatch, UUID} from "@opendaw/lib-std"
+import {AnyClipBoxAdapter, AnyRegionBoxAdapter, AudioClipBoxAdapter, AudioFileBoxAdapter, AudioPlayMode,
+    AudioRegionBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, SampleGarbage, Workers} from "@opendaw/studio-core"
-import {AudioFileBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import type {StudioService} from "@/service/StudioService"
 import {TransientMarkerUtils} from "@/ui/timeline/editors/audio/TransientMarkerUtils"
 
 type AudioItem = AudioClipBoxAdapter | AudioRegionBoxAdapter
-type SourceRange = {from: number, to: number}
+type SourceRange = {start: ppqn, end: ppqn, from: number, to: number}
 type ReverseKey = {uuid: UUID.Bytes, from: number, to: number}
 type ReversedSource = {key: ReverseKey, create: Provider<AudioFileBox>}
+type ReverseEdit = {item: AudioItem, file: AudioFileBoxAdapter, range: SourceRange, create: Provider<AudioFileBox>}
 
 export namespace AudioReversals {
-    export type Context = {
-        project: StudioService["project"]
-        optProject: StudioService["optProject"]
-        sampleService: Pick<StudioService["sampleService"], "importFile">
-    }
-
-    export const reverseSelection = (service: Context,
+    export const reverseSelection = (service: StudioService,
                                      items: ReadonlyArray<AnyClipBoxAdapter | AnyRegionBoxAdapter>): boolean => {
         const audioItems = items.filter(item => item.type === "audio-clip" || item.type === "audio-region")
         if (audioItems.length === 0) {return false}
@@ -37,31 +33,47 @@ export namespace AudioReversals {
         const secondsAt = (position: number): number => offset + warp.mapOr(
             markers => TransientMarkerUtils.unitsToSeconds(position, markers),
             tempoMap.intervalToSeconds(origin, origin + position))
-        return {from: secondsAt(start), to: secondsAt(end)}
+        return {start, end, from: secondsAt(start), to: secondsAt(end)}
     }
 
-    export const reverse = async (service: Context, audioItems: ReadonlyArray<AudioItem>): Promise<void> => {
+    const mirrorWarpMarkers = (mode: AudioPlayMode, {start, end}: SourceRange): void => {
+        const {box: {graph, warpMarkers: owner}, warpMarkers} = mode
+        const markers: ReadonlyArray<WarpMarkerBoxAdapter> = warpMarkers.asArray().slice()
+        if (markers.length < 2) {return}
+        const from = TransientMarkerUtils.unitsToSeconds(start, warpMarkers)
+        const to = TransientMarkerUtils.unitsToSeconds(end, warpMarkers)
+        const inner = markers.filter(({position}) => position > start && position < end)
+        const mirrored = inner.map(({position, seconds}) => ({position: start + end - position, seconds: from + to - seconds}))
+        const createMarker = (position: ppqn, seconds: number) => WarpMarkerBox.create(graph, UUID.generate(), box => {
+            box.owner.refer(owner)
+            box.position.setValue(position)
+            box.seconds.setValue(seconds)
+        })
+        if (!markers.some(({position}) => position === start)) {createMarker(start, from)}
+        if (!markers.some(({position}) => position === end)) {createMarker(end, to)}
+        inner.forEach(marker => marker.box.delete())
+        mirrored.forEach(({position, seconds}) => createMarker(position, seconds))
+    }
+
+    export const reverse = async (service: StudioService, audioItems: ReadonlyArray<AudioItem>): Promise<void> => {
         const project = service.project
         const {boxGraph, editing, tempoMap} = project
         const targets = audioItems.flatMap(item => item.optFile.mapOr(file =>
             [{item, file, range: sourceRange(item, tempoMap)}], []))
         if (targets.length === 0) {return}
-        const progress = new Terminator()
-        const progressTimer = setTimeout(() =>
-            progress.own(RuntimeNotifier.progress({headline: "Reversing Audio..."})), 500)
-        progress.own({terminate: () => clearTimeout(progressTimer)})
+        const progress = RuntimeNotifier.progress({headline: "Reversing Audio...", delayed: true})
         const imported: Array<UUID.Bytes> = []
         const result = await Promises.tryCatch((async () => {
             const reversed = new SortedSet<ReverseKey, ReversedSource>(entry => entry.key, (left, right) =>
                 UUID.Comparator(left.uuid, right.uuid) || left.from - right.from || left.to - right.to)
-            const edits = []
+            const edits: Array<ReverseEdit> = []
             for (const {item, file, range} of targets) {
                 const audio = await file.audioData
                 const frameAt = (seconds: number): number =>
                     clamp(Math.round(seconds * audio.sampleRate), 0, audio.numberOfFrames)
                 const from = frameAt(range.from)
                 const to = frameAt(range.to)
-                if (!(to - from > 1)) {continue}
+                if (to - from <= 1) {continue}
                 const key: ReverseKey = {uuid: file.uuid, from, to}
                 const existing = reversed.opt(key)
                 if (existing.nonEmpty()) {
@@ -90,6 +102,7 @@ export namespace AudioReversals {
                 return
             }
             if (!service.optProject.contains(project)) {return}
+            const mirroredPlayModes = new Set<AudioPlayMode>()
             editing.modify(() => result.value.forEach(({item, file, range, create}) => {
                 const {box} = item
                 if (!boxGraph.findBox(box.address.uuid).contains(box)
@@ -99,6 +112,12 @@ export namespace AudioReversals {
                 const reversed = create()
                 project.trackUserCreatedSample(reversed.address.uuid)
                 box.file.refer(reversed)
+                if (file.box.pointerHub.incoming().length === 0) {file.box.delete()}
+                item.observableOptPlayMode.ifSome(mode => {
+                    if (mirroredPlayModes.has(mode)) {return}
+                    mirroredPlayModes.add(mode)
+                    mirrorWarpMarkers(mode, range)
+                })
             }))
         })
         for (const uuid of imported) {
