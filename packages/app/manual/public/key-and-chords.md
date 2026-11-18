@@ -86,8 +86,22 @@ Right click a chord for more:
   players voice them, so step 5 as 13th plays G13 without the 11th.
 - **Inversion**: which chord note is the lowest. The name then shows the bass note, for example **C/E**.
 - **Shift**: lowers or raises the root by a semitone for chords outside the key, for example ♭7 in C Major is B♭.
-- **Shape**: replaces the chord with a fixed chord type on the step's root, grouped into triads, suspended, 6th, 7th,
-  9th, 11th and 13th chords. The 9th, 11th and 13th sound above the octave.
+- **Shape**: replaces the chord with a fixed chord type on the step's root. **From Scale** goes back to the notes
+  of the key. The 9th, 11th and 13th sound above the octave.
+
+The chord types of **Shape**, shown on C:
+
+| Group     | Chord types                                                                      |
+|-----------|----------------------------------------------------------------------------------|
+| Triads    | Major **C**, Minor **Cm**, Diminished **Cdim**, Augmented **Caug**              |
+| Suspended | **Csus2**, **Csus4**, **C7sus4**, **C9sus4**                                     |
+| 6th       | Major 6th **C6**, Minor 6th **Cm6**, **C6/9**                                    |
+| 7th       | Dominant **C7**, Major **Cmaj7**, Minor **Cm7**, Half Diminished **Cm7♭5**, Diminished **Cdim7** |
+| 9th       | **Cadd9**, **Cm(add9)**, Dominant **C9**, Major **Cmaj9**, Minor **Cm9**         |
+| 11th      | Minor 11th **Cm11**                                                              |
+| 13th      | Dominant **C13**, Major **Cmaj13**, Minor **Cm13**                               |
+
+A dominant 11th is usually played without its third, which is **C9sus4**.
 
 A chord takes the key at its start. Moving a chord into a section with another key renames it and changes its
 notes.
