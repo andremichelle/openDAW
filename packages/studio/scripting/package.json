@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-scripting",
-  "version": "0.0.99",
+  "version": "0.0.100",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -35,7 +35,7 @@
     "@opendaw/lib-dsp": "^0.0.102",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
-    "@opendaw/studio-adapters": "^0.4.1",
+    "@opendaw/studio-adapters": "^0.4.2",
     "@opendaw/studio-boxes": "^0.0.123",
     "@opendaw/studio-enums": "^0.1.14"
   },

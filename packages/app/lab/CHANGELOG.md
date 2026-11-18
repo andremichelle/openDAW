@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.185](/compare/@opendaw/lab@0.0.184...@opendaw/lab@0.0.185) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/lab
+
 ## [0.0.184](/compare/@opendaw/lab@0.0.183...@opendaw/lab@0.0.184) (2026-11-18)
 
 **Note:** Version bump only for package @opendaw/lab

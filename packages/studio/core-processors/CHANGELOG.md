@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.153](/compare/@opendaw/studio-core-processors@0.0.152...@opendaw/studio-core-processors@0.0.153) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
 ## [0.0.152](/compare/@opendaw/studio-core-processors@0.0.151...@opendaw/studio-core-processors@0.0.152) (2026-11-17)
 
 **Note:** Version bump only for package @opendaw/studio-core-processors
