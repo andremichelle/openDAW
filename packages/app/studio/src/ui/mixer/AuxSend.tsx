@@ -11,6 +11,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {SnapCenter} from "@/ui/configs.ts"
 import {Html} from "@opendaw/lib-dom"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 
 const className = Html.adoptStyleSheet(css, "AuxSend")
 
@@ -36,7 +37,8 @@ export const sendTargets = (project: Project, audioUnitAdapter: AudioUnitBoxAdap
 }
 
 export const AuxSend = ({lifecycle, project, audioUnitAdapter, adapter}: Construct) => {
-    const {editing, userEditingManager} = project
+    const {editing, midiLearning, userEditingManager} = project
+    const {tracks} = audioUnitAdapter
     const symbol = lifecycle.own(new DefaultObservableValue(IconSymbol.Rectangle))
     const target: HTMLElement = (
         <div className="target">
@@ -57,15 +59,21 @@ export const AuxSend = ({lifecycle, project, audioUnitAdapter, adapter}: Constru
     }))
     return (
         <div className={className}>
-            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={adapter.sendPan}
-                                       options={SnapCenter}>
-                <Knob lifecycle={lifecycle} value={adapter.sendPan} anchor={0.5} color={Colors.green}
-                      design={TinyDesign}/>
-            </RelativeUnitValueDragging>
-            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={adapter.sendGain}>
-                <Knob lifecycle={lifecycle} value={adapter.sendGain} anchor={0.0} color={Colors.yellow}
-                      design={TinyDesign}/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                               tracks={tracks} parameter={adapter.sendPan}>
+                <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={adapter.sendPan}
+                                           options={SnapCenter}>
+                    <Knob lifecycle={lifecycle} value={adapter.sendPan} anchor={0.5} color={Colors.green}
+                          design={TinyDesign}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
+            <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                               tracks={tracks} parameter={adapter.sendGain}>
+                <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={adapter.sendGain}>
+                    <Knob lifecycle={lifecycle} value={adapter.sendGain} anchor={0.0} color={Colors.yellow}
+                          design={TinyDesign}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
             <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
                 .addMenuItem(adapter.optTargetBus.match({
                     none: () => MenuItem.header({label: "No Target", icon: IconSymbol.NoAudio, color: Colors.red}),
