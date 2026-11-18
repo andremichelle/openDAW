@@ -1,8 +1,7 @@
 import {DefaultObservableValue, int, isDefined, Option, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {OfflineEngineRenderer, Project, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
-import {AudioFormats} from "@/audio/AudioFormats"
+import {OfflineEngineRenderer, OpusEncoder, Project, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
 
 export namespace Contest {
     export type Prize = Readonly<{ place: string, label: string, detail: string, url?: string }>
@@ -51,7 +50,7 @@ export namespace Contest {
 
     const Api = "https://api.opendaw.studio/contests"
 
-    const BestOpus: AudioFormats.OpusSettings = {
+    const BestOpus: OpusEncoder.Settings = {
         numberOfChannels: 2, bitrate: 510, complexity: 10, frameDuration: 20_000, variable: true, application: "audio"
     }
 
@@ -99,11 +98,11 @@ export namespace Contest {
         const renderValue = new DefaultObservableValue(0.0)
         const renderSubscription = renderValue.subscribe(owner => renderProgress(owner.getValue()))
         const audio = await OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderValue, undefined,
-            AudioFormats.OpusSampleRate).finally(() => renderSubscription.terminate())
+            OpusEncoder.SampleRate).finally(() => renderSubscription.terminate())
         onStep("Encoding Opus")
-        const webCodecs = await AudioFormats.isOpusSupported(BestOpus)
+        const webCodecs = await OpusEncoder.isSupported(BestOpus)
         const mixdown = webCodecs
-            ? await AudioFormats.encodeOpus(audio, BestOpus, encodeProgress)
+            ? await OpusEncoder.encode(audio, BestOpus, encodeProgress)
             : await encodeWithFFmpeg(audio, encodeProgress)
         const total = mixdown.byteLength + bundle.byteLength
         if (total > contest.maxBytes) {

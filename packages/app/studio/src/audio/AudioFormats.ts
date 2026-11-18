@@ -1,18 +1,16 @@
 import {
-    asDefined,
     assert,
     DefaultObservableValue,
     Func,
     int,
     MutableObservableValue,
     ObservableValue,
-    Optional,
     Progress,
     RuntimeNotifier
 } from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import type {FFmpegWorker} from "@opendaw/studio-core"
+import {type FFmpegWorker, OpusEncoder} from "@opendaw/studio-core"
 
 export namespace AudioFormats {
     export type Choice<V> = Readonly<{ value: V, label: string }>
@@ -231,93 +229,6 @@ export namespace AudioFormats {
         }
     }
 
-    export type OpusApplication = "audio" | "voip" | "lowdelay"
-
-    type OpusSignal = "auto" | "music" | "voice"
-
-    type OpusConfig = OpusEncoderConfig & { application?: OpusApplication, signal?: OpusSignal }
-
-    export type OpusSettings = Readonly<{
-        numberOfChannels: int
-        bitrate: int
-        complexity: int
-        frameDuration: int
-        variable: boolean
-        application: OpusApplication
-    }>
-
-    export const OpusSampleRate = 48_000
-
-    const OpusBlockSize = 48_000
-
-    const opusConfig = (settings: OpusSettings, numberOfChannels: int): AudioEncoderConfig => {
-        const {application, complexity, frameDuration, bitrate, variable} = settings
-        const opus: OpusConfig = {
-            format: "opus", complexity, frameDuration, application,
-            signal: application === "audio" ? "music" : application === "voip" ? "voice" : "auto"
-        }
-        return {
-            codec: "opus",
-            sampleRate: OpusSampleRate,
-            numberOfChannels,
-            bitrate: bitrate * 1000,
-            bitrateMode: variable ? "variable" : "constant",
-            opus
-        }
-    }
-
-    export const isOpusSupported = async (settings: OpusSettings): Promise<boolean> => {
-        if (typeof AudioEncoder === "undefined") {return false}
-        const {status, value} = await Promises.tryCatch(AudioEncoder.isConfigSupported(opusConfig(settings, 2)))
-        return status === "resolved" && value.supported === true
-    }
-
-    export const encodeOpus = async (audio: AudioData, settings: OpusSettings,
-                                     progress: Progress.Handler): Promise<ArrayBuffer> => {
-        const mapped = toChannels(audio, settings.numberOfChannels)
-        const {Output, OggOutputFormat, BufferTarget, EncodedAudioPacketSource, EncodedPacket} =
-            await Promises.guardedRetry(() => import("mediabunny"), (_, count) => count < 60)
-        const chunks: Array<[EncodedAudioChunk, Optional<EncodedAudioChunkMetadata>]> = []
-        const {promise: failure, reject} = Promise.withResolvers<never>()
-        const encoder = new AudioEncoder({
-            output: (chunk, meta) => chunks.push([chunk, meta]),
-            error: error => reject(error)
-        })
-        encoder.configure(opusConfig(settings, mapped.numberOfChannels))
-        const {numberOfFrames, numberOfChannels, frames} = mapped
-        for (let position = 0; position < numberOfFrames; position += OpusBlockSize) {
-            const length = Math.min(OpusBlockSize, numberOfFrames - position)
-            const planar = new Float32Array(length * numberOfChannels)
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                planar.set(frames[channel].subarray(position, position + length), channel * length)
-            }
-            const block = new globalThis.AudioData({
-                format: "f32-planar",
-                sampleRate: OpusSampleRate,
-                numberOfFrames: length,
-                numberOfChannels,
-                timestamp: Math.round(position / OpusSampleRate * 1_000_000),
-                data: planar
-            })
-            encoder.encode(block)
-            block.close()
-            progress(0.9 * (position + length) / numberOfFrames)
-        }
-        await Promise.race([encoder.flush(), failure])
-        encoder.close()
-        const target = new BufferTarget()
-        const output = new Output({format: new OggOutputFormat(), target})
-        const source = new EncodedAudioPacketSource("opus")
-        output.addAudioTrack(source)
-        await output.start()
-        for (const [chunk, meta] of chunks) {
-            await source.add(EncodedPacket.fromEncodedChunk(chunk), meta)
-        }
-        await output.finalize()
-        progress(1.0)
-        return asDefined(target.buffer, "Ogg output buffer")
-    }
-
     class OpusFormat implements Format {
         readonly label = "Opus"
         readonly extension = "opus"
@@ -330,7 +241,7 @@ export namespace AudioFormats {
         readonly #complexity: DefaultObservableValue<int>
         readonly #frameDuration: DefaultObservableValue<int>
         readonly #variable: DefaultObservableValue<boolean>
-        readonly #application: DefaultObservableValue<OpusApplication>
+        readonly #application: DefaultObservableValue<OpusEncoder.Application>
 
         constructor() {
             this.#channels = new DefaultObservableValue<int>(2)
@@ -338,7 +249,7 @@ export namespace AudioFormats {
             this.#complexity = new DefaultObservableValue<int>(10)
             this.#frameDuration = new DefaultObservableValue<int>(20_000)
             this.#variable = new DefaultObservableValue(true)
-            this.#application = new DefaultObservableValue<OpusApplication>("audio")
+            this.#application = new DefaultObservableValue<OpusEncoder.Application>("audio")
             this.fields = [
                 channelsField(this.#channels),
                 {
@@ -369,15 +280,15 @@ export namespace AudioFormats {
             ]
         }
 
-        get sampleRate(): int {return OpusSampleRate}
+        get sampleRate(): int {return OpusEncoder.SampleRate}
 
-        async isSupported(): Promise<boolean> {return isOpusSupported(this.#settings())}
+        async isSupported(): Promise<boolean> {return OpusEncoder.isSupported(this.#settings())}
 
         async encode(audio: AudioData): Promise<ArrayBuffer> {
-            return withProgress("Encoding Opus...", progress => encodeOpus(audio, this.#settings(), progress))
+            return withProgress("Encoding Opus...", progress => OpusEncoder.encode(audio, this.#settings(), progress))
         }
 
-        #settings(): OpusSettings {
+        #settings(): OpusEncoder.Settings {
             return {
                 numberOfChannels: this.#channels.getValue(),
                 bitrate: this.#bitrate.getValue(),
