@@ -1,10 +1,11 @@
-import {isInstanceOf, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {Arrays, isInstanceOf, UUID} from "@opendaw/lib-std"
+import {AnyRegionBoxAdapter, AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {MenuItem, Project} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {TimeSelection} from "@/ui/timeline/TimeSelection"
 import {TimeEditing} from "@/ui/timeline/TimeEditing"
+import {InaudibleContent} from "@/ui/timeline/InaudibleContent"
 import {TimeSelectionShortcuts} from "@/ui/shortcuts/TimeSelectionShortcuts"
 import {Dialogs} from "@/ui/components/dialogs"
 
@@ -23,10 +24,30 @@ export namespace TimeSelectionActions {
         const frozen = units.values().filter(unit => audioUnitFreeze.isFrozen(unit))
         const {position, complete, global} = selection
         const globals: ReadonlyArray<TimeEditing.Global> = global ? [{timeline: timelineBoxAdapter, boxGraph}] : []
+        const edit = (mark: boolean): ReadonlyArray<AnyRegionBoxAdapter> => editing.modify(() => action === "delete"
+            ? TimeEditing.deleteTime(tracks, globals, position, complete)
+            : TimeEditing.insertTime(tracks, globals, position, complete - position), mark).unwrapOrElse(Arrays.empty())
         const run = (): void => {
-            editing.modify(() => action === "delete"
-                ? TimeEditing.deleteTime(tracks, globals, position, complete)
-                : TimeEditing.insertTime(tracks, globals, position, complete - position))
+            const inaudible = InaudibleContent.count(tracks.flatMap(track => track.regions.collection.asArray()),
+                action === "delete" ? [position, complete] : [position],
+                (start, end) => action === "delete" && start >= position && end <= complete)
+            if (inaudible === 0) {
+                edit(true)
+                return
+            }
+            Dialogs.approve({
+                headline: "Cleanup Inaudible Content",
+                message: `The cut leaves ${inaudible === 1 ? "a note or point" : `${inaudible} notes and points`} in the regions that can no longer be heard. Remove ${inaudible === 1 ? "it" : "them"} as well?`,
+                approveText: "Remove",
+                cancelText: "Ignore"
+            }).then(remove => {
+                if (!remove) {
+                    edit(true)
+                    return
+                }
+                const touched = edit(false)
+                editing.modify(() => InaudibleContent.collect(touched).forEach(event => event.box.delete()))
+            })
         }
         if (frozen.length === 0) {
             run()

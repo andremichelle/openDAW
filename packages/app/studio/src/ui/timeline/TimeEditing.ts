@@ -18,9 +18,13 @@ export namespace TimeEditing {
 
     type PointEvent = MarkerBoxAdapter | KeyEventBoxAdapter
 
-    const cutAll = (regions: Array<AnyRegionBoxAdapter>, position: ppqn): void => regions.slice()
-        .filter(region => region.position < position && position < region.complete)
-        .forEach(region => RegionEditing.cut(region, position, true).ifSome(right => regions.push(right)))
+    const cutAll = (regions: Array<AnyRegionBoxAdapter>, position: ppqn, touched: Array<AnyRegionBoxAdapter>): void =>
+        regions.slice()
+            .filter(region => region.position < position && position < region.complete)
+            .forEach(region => RegionEditing.cut(region, position, true).ifSome(right => {
+                regions.push(right)
+                touched.push(region, right)
+            }))
 
     const mapStates = (positions: ReadonlyArray<ppqn>, position: ppqn, complete: ppqn): ReadonlyArray<Option<ppqn>> => {
         const length = complete - position
@@ -59,13 +63,14 @@ export namespace TimeEditing {
     }
 
     export const deleteTime = (tracks: ReadonlyArray<TrackBoxAdapter>, global: ReadonlyArray<Global>,
-                               position: ppqn, complete: ppqn): void => {
-        if (complete <= position) {return}
+                               position: ppqn, complete: ppqn): ReadonlyArray<AnyRegionBoxAdapter> => {
+        const touched: Array<AnyRegionBoxAdapter> = []
+        if (complete <= position) {return touched}
         const length = complete - position
         tracks.forEach(track => {
             const regions = track.regions.collection.asArray().slice()
-            cutAll(regions, position)
-            cutAll(regions, complete)
+            cutAll(regions, position, touched)
+            cutAll(regions, complete, touched)
             regions.forEach(region => {
                 if (region.position >= complete) {
                     region.position = region.position - length
@@ -94,15 +99,17 @@ export namespace TimeEditing {
             })
             rebuildSignature(timeline.signatureTrack, events => mapStates(events, position, complete))
         })
+        return touched
     }
 
     export const insertTime = (tracks: ReadonlyArray<TrackBoxAdapter>, global: ReadonlyArray<Global>,
-                               position: ppqn, length: ppqn): void => {
-        if (length <= 0) {return}
+                               position: ppqn, length: ppqn): ReadonlyArray<AnyRegionBoxAdapter> => {
+        const touched: Array<AnyRegionBoxAdapter> = []
+        if (length <= 0) {return touched}
         const push = (at: ppqn): Option<ppqn> => Option.wrap(at >= position ? at + length : at)
         tracks.forEach(track => {
             const regions = track.regions.collection.asArray().slice()
-            cutAll(regions, position)
+            cutAll(regions, position, touched)
             regions.filter(region => region.position >= position)
                 .forEach(region => region.position = region.position + length)
         })
@@ -132,5 +139,6 @@ export namespace TimeEditing {
             })
             rebuildSignature(timeline.signatureTrack, events => events.map(push))
         })
+        return touched
     }
 }

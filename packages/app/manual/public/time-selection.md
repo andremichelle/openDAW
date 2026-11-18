@@ -43,7 +43,15 @@ start is cut there. Nothing is deleted.
 
 ---
 
-## 4. Frozen Tracks
+## 4. Cleanup Inaudible Content
+
+A cut region keeps all its notes and automation points, even those it can no longer play. When Delete Time or Insert
+Time would leave such content behind, openDAW asks first. **Remove** deletes it together with the edit, **Ignore** keeps
+it. Content shared with mirrored regions is never touched.
+
+---
+
+## 5. Frozen Tracks
 
 If a [frozen track](/manuals/freeze-audiounit) is part of the range, openDAW asks first. Confirm to unfreeze and edit
 it, then freeze it again when you are done, or cancel to leave everything as it is.
