@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {int, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {EffectFactories} from "../EffectFactories"
 
@@ -14,6 +14,14 @@ type PresetCommon = {
     license?: string
     credits?: string
     folder?: string
+    download?: PresetDownload
+}
+
+// the cloud files a stock preset loads, size in bytes is 0 if unknown
+export type PresetDownload = {
+    samples: ReadonlyArray<UUID.String>
+    soundfonts: ReadonlyArray<UUID.String>
+    size: int
 }
 
 export const CATEGORIES = [

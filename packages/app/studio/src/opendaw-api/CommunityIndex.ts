@@ -50,6 +50,9 @@ export type CommunityPreset = {
     readonly device: string
     readonly folder: string
     readonly hasTimeline?: boolean
+    readonly samples: ReadonlyArray<string>
+    readonly soundfonts: ReadonlyArray<string>
+    readonly downloadSize: number
     readonly url: string
     readonly size: number
     readonly created: number
@@ -110,6 +113,9 @@ export namespace CommunityIndex {
         device: z.string(),
         folder: z.string(),
         hasTimeline: z.boolean().optional(),
+        samples: z.array(z.string()).default([]),
+        soundfonts: z.array(z.string()).default([]),
+        downloadSize: z.number().default(0),
         url: z.string().regex(/^[A-Za-z0-9.-]+$/),
         size: z.number(),
         created: z.number(),
@@ -141,11 +147,17 @@ export namespace CommunityIndex {
     // a device this Studio does not know yet hides the preset
     export const toPresetMeta = (entry: CommunityPreset,
                                  {isInstrument, isAudioEffect, isMidiEffect}: PresetDevices): Option<PresetMeta> => {
-        const {uuid, name, description, created, modified, hasTimeline, tags, author, license, credits, folder, device} = entry
+        const {uuid, name, description, created, modified, hasTimeline, tags, author, license, credits, folder, device,
+            samples, soundfonts, downloadSize} = entry
         if (!UUID.validateString(uuid)) {return Option.None}
+        const sampleIds = samples.filter(UUID.validateString)
+        const soundfontIds = soundfonts.filter(UUID.validateString)
+        if (sampleIds.length !== samples.length || soundfontIds.length !== soundfonts.length) {return Option.None}
         const common = {
             uuid, name, description, created, modified, hasTimeline, tags, author: author.name, license,
-            credits: credits.length > 0 ? credits : undefined, folder: folder.length > 0 ? folder : undefined
+            credits: credits.length > 0 ? credits : undefined, folder: folder.length > 0 ? folder : undefined,
+            download: sampleIds.length + soundfontIds.length > 0
+                ? {samples: sampleIds, soundfonts: soundfontIds, size: downloadSize} : undefined
         }
         switch (entry.kind) {
             case "device":

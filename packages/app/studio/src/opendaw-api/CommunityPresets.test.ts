@@ -74,6 +74,13 @@ describe("CommunityIndex.toPresetMeta", () => {
         expect(meta({kind: "audio-effect-chain", device: ""}).unwrap().category).toBe("audio-effect-chain")
         expect(meta({kind: "midi-effect-chain", device: ""}).unwrap().category).toBe("midi-effect-chain")
     })
+    it("carries the cloud files and their size as a download", () => {
+        const sample = "0f0e0d0c-0b0a-4908-8706-050403020100"
+        const preset = meta({samples: [sample], soundfonts: [], downloadSize: 30000000}).unwrap()
+        expect(preset.download).toEqual({samples: [sample], soundfonts: [], size: 30000000})
+        expect(meta().unwrap().download).toBeUndefined()
+        expect(meta({samples: ["../escape"]}).isEmpty()).toBe(true)
+    })
     it("hides a preset for a device this Studio does not know", () => {
         expect(meta({device: "FutureDevice"}).isEmpty()).toBe(true)
         expect(meta({kind: "rack", device: "Delay"}).isEmpty()).toBe(true)

@@ -1,9 +1,9 @@
-import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator} from "@opendaw/lib-std"
+import {Arrays, asInstanceOf, Bytes, int, isDefined, Option, Optional, StringComparator, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {SamplerDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler, Soundfont} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapBoxes, WclapStates,
+import {EffectFactories, EffectFactory, PresetEntry, Project, SampleStorage, SoundfontStorage, WclapBoxes, WclapStates,
     WclapStorage} from "@opendaw/studio-core"
 import {OpenSoundfontAPI} from "@/opendaw-api"
 import type {StudioService} from "@/service/StudioService"
@@ -160,8 +160,8 @@ export namespace DeviceCatalog {
             key: `preset:${entry.source}:${entry.uuid}`, kind: user ? "user-preset" : "stock-preset", local: user,
             name: entry.name, brief: entry.description, caption: `${user ? "User" : "Stock"} ${look.caption}`,
             description: entry.description, icon: look.icon, iconUrl: look.iconUrl, deviceKey: look.deviceKey,
-            facts: [...look.facts, ...creditFacts(entry)], tags: [...(entry.tags ?? []), ...look.tags], preset: Option.wrap(entry),
-            bundle: look.bundle, download: Option.None,
+            facts: [...look.facts, ...creditFacts(entry), ...downloadFacts(entry)], tags: [...(entry.tags ?? []), ...look.tags],
+            preset: Option.wrap(entry), bundle: look.bundle, download: presetDownload(entry),
             prepare: async () => {
                 const bytes = await PresetApplication.fetchBytes(entry.uuid, entry.source)
                 return {
@@ -179,6 +179,22 @@ export namespace DeviceCatalog {
         ...(isDefined(license) ? [{label: "License", value: license}] : []),
         ...(isDefined(credits) ? [{label: "Credits", value: credits}] : [])
     ]
+
+    const downloadFacts = ({download}: PresetEntry): ReadonlyArray<DeviceFact> =>
+        isDefined(download) ? [{label: "Size", value: download.size > 0 ? Bytes.toString(download.size) : "-"}] : []
+
+    // stored once every file it plays is in the local storage
+    const presetDownload = ({download}: PresetEntry): Option<DeviceDownload> =>
+        Option.wrap(download).map(({samples, soundfonts, size}) => ({
+            size,
+            stored: async () => {
+                const sampleStored = await Promise.all(samples.map(uuid => SampleStorage.get().exists(UUID.parse(uuid))))
+                if (sampleStored.includes(false)) {return false}
+                if (soundfonts.length === 0) {return true}
+                const stored = await SoundfontStorage.get().list()
+                return soundfonts.every(uuid => stored.some(soundfont => soundfont.uuid === uuid))
+            }
+        }))
 
     const timelineFact = (entry: PresetEntry): DeviceFact =>
         ({label: "Timeline", value: entry.hasTimeline === true ? "Included" : "None"})

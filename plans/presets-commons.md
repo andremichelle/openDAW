@@ -74,6 +74,20 @@ The admin is not used for presets since the copy in phase 1.
 2. `api.opendaw.studio/presets/upload.php` goes.
 3. `presets/index.json` and the `<uuid>.odp` files stay on the server, frozen. Nothing writes to them any more.
 
+### 6. Download size
+
+A preset with big samples (a multi-sampled instrument) loads tens of MB. The Device Browser shows the size and asks
+before loading, like it does for soundfonts and WebCLAPs.
+
+1. The commons build lists the cloud samples and soundfonts of every preset, `presets/` and `dev/presets/`. It reads
+   the box names and uuids from the file without decoding the boxes, so this also works for boxes the SDK does not
+   know yet.
+2. The build asks the cloud for each file's size (HEAD) and writes `samples`, `soundfonts` and `downloadSize` (the
+   total in bytes, 0 if a size is unknown) into the index entry. Nothing in `meta.json`.
+3. The Studio gives such a preset a download: size, and stored once every sample and soundfont is in the local
+   storage. From 500 KB it is large and needs **Load** like a soundfont. An unknown size counts as large.
+4. The info card shows the size.
+
 ## Related plans
 
 1. `plans/sampler-library.md`: VCSL and mridangam Sampler presets, generated into commons after phase 1.
