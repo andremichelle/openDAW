@@ -9,7 +9,9 @@ opendaw-commons next to scripts and WebCLAPs, so users can contribute presets by
    older recordings replaced by newer ones and are skipped. That leaves 3,822 files, 5.76 GB, 93 instruments.
 2. Mridangam ([yaxu/mrid](https://github.com/yaxu/mrid)), CC-BY-SA 4.0. 131 strokes, about 37 MB. Credit to Arthur
    Carabott and performer Harishankar V Menon.
-3. Formats are mixed (Claves are 44.1 kHz 16 bit stereo). Files are uploaded unchanged unless decided otherwise.
+3. Formats are mixed (Claves are 44.1 kHz 16 bit stereo). Format and channels stay as they are.
+4. Tails are cut 100 ms after the sample falls below -60 dB of its own peak, with a 100 ms fade. On Vibraphone
+   Hard Mallets this saves 28% (40 MB to 29 MB). Mono is no option: the recordings are real stereo.
 
 ## Why it does not wait for PROD
 
@@ -25,17 +27,11 @@ The sample index entries (`Multi Samples`) are the only part that must wait for 
 
 ```
 openDAW/Multi Samples/
-  Keys/        Grand Piano, Steinway B · Grand Piano, Kawai · Upright Piano, Knight · Upright Piano, Yamaha
-               Harpsichord, English|Flemish|French|Italian|Unk · Pipe Organ · Renaissance Organ
-  Mallets/     Vibraphone · Marimba · Xylophone · Glockenspiel · Tubular Bells 1|2 · Tubular Glockenspiel · Balafon
-  Plucked/     Concert Harp · Folk Harp · Strumstick · Dan Tranh · Psaltery · Kalimba, Mbira, Nyunga Nyunga
-  Winds/       Recorders · Ocarinas · Harmonicas · Tenor Saxophone · Saxello · Didgeridoo · Whistles · Siren
-  Drums/       Bass Drum 1|2 · Snares · Toms · Timpani 1|2 · Bongos · Conga · Darbuka · Cajon · Frame Drum · Mridangam
-  Percussion/  Cymbals · Gongs · Hi-Hat · Shakers · Tambourines · Triangles · Claves · Cowbells · Woodblock
-  Synth/       TX81Z Clavisynth · TX81Z FM Piano · TX81Z Piano 1
+  VCSL/        Vibraphone/Hard Mallets · Vibraphone/Soft Mallets · Marimba · Glockenspiel · ...
+  Mridangam/   the 131 strokes of the mrid set
 ```
 
-1. Instrument folders keep their VCSL names.
+1. One folder per source. VCSL instruments sit directly under `VCSL` with their VCSL names.
 2. A playing style (Staccato, SusVib, Hit, Soft Mallets) becomes a sub-folder only when an instrument has several.
 3. A sample keeps its file name without `.wav` (`AltRecorder_Stac_A#3_rr1_Main`). Map by Name reads note, layer,
    dynamic and round robin from it, so a dropped cloud folder plays too.
@@ -87,8 +83,7 @@ the SDK) and its phase 2 (the Studio reads them).
 
 ## Open questions
 
-1. Categories (`Multi Samples/Keys/...`) or a source level (`Multi Samples/VCSL/...`)?
-2. 24 bit to 16 bit before upload, against `plans/sample-bits.md`?
-3. Steinway B: Sus and NoSus as two presets, or one?
-4. Xylophone, Harpsichord Flemish and Renaissance Organ have two microphone positions. One preset each, or one per
+1. 24 bit to 16 bit before upload, against `plans/sample-bits.md`?
+2. Steinway B: Sus and NoSus as two presets, or one?
+3. Xylophone, Harpsichord Flemish and Renaissance Organ have two microphone positions. One preset each, or one per
    position?
