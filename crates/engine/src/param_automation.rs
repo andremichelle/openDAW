@@ -138,6 +138,7 @@ impl ParamHandle {
 /// A MUTED region is skipped by the lookup (TS `lowerEqual(position, region => !region.mute)`), so the
 /// previous unmuted region's value (or the first region's incoming value) applies instead.
 pub(crate) struct ValueBoundRegion {
+    pub(crate) region: Uuid,
     pub(crate) position: f64,
     pub(crate) duration: f64,
     pub(crate) loop_offset: f64,
@@ -263,6 +264,17 @@ impl ParamCurve {
     pub(crate) fn new(track: Uuid, regions: RegionCollection<ValueBoundRegion>,
                       clips: Vec<BoundValueClip>, sequencer: Rc<RefCell<ClipSequencer>>) -> Self {
         Self(Rc::new(RefCell::new(CurveState {track, regions, clips, sequencer})))
+    }
+
+    /// Edit one bound region in place, false when the region is not bound here.
+    pub(crate) fn edit_region(&self, region: Uuid, edit: impl FnOnce(&mut ValueBoundRegion)) -> bool {
+        let mut state = self.0.borrow_mut();
+        match state.regions.iter_mut().find(|bound| bound.region == region) {
+            Some(bound) => edit(bound),
+            None => return false
+        }
+        state.regions.resort();
+        true
     }
 
     /// Whether this lane is under manual control right now (issue #347).

@@ -1,5 +1,6 @@
 use super::*;
-use super::tracks::{TRACK_TARGET_KEY, TRACK_REGIONS_KEY, TRACK_CLIPS_KEY, TRACK_ENABLED_KEY, track_enabled, value_regions_of_track, value_clips_of_track};
+use super::tracks::{TRACK_TARGET_KEY, TRACK_REGIONS_KEY, TRACK_CLIPS_KEY, TRACK_ENABLED_KEY, track_enabled, value_regions_of_track, value_clips_of_track,
+    VALUE_REGION_POSITION_KEY, VALUE_REGION_DURATION_KEY, VALUE_REGION_LOOP_OFFSET_KEY, VALUE_REGION_LOOP_DURATION_KEY, VALUE_REGION_MUTE_KEY};
 
 // The LIGHT per-unit signal a plain FIELD edit raises while `reconcile_one` runs (set around the unit's
 // work, the `CURRENT_DEVICE_UUID` pattern): a knob drag then only marks `params_dirty` (one value push at
@@ -193,6 +194,7 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
     for spec in value_regions_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
         regions.add(ValueBoundRegion {
+            region: spec.region,
             position: spec.position, duration: spec.duration,
             loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
             mute: spec.mute,
@@ -213,6 +215,20 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
         rebind_uuids.push(spec.clip);
     }
     (Some(ParamCurve::new(track_uuid, regions, clips, clip_sequencer.clone())), Some(track_uuid), collections, rebind_uuids)
+}
+
+/// A bound region's timing or mute edit applied to the curve in place, so it does not re-bind the whole unit (#567)
+fn edit_bound_region(curve: &ParamCurve, region: Uuid, update: &Update) -> bool {
+    let Update::Primitive {address, new, ..} = update else {return false};
+    if address.uuid != region || address.field_keys.len() != 1 {return false}
+    match (address.field_keys[0], new) {
+        (VALUE_REGION_POSITION_KEY, FieldValue::Int32(pulses)) => curve.edit_region(region, |bound| bound.position = *pulses as f64),
+        (VALUE_REGION_DURATION_KEY, FieldValue::Int32(pulses)) => curve.edit_region(region, |bound| bound.duration = *pulses as f64),
+        (VALUE_REGION_LOOP_OFFSET_KEY, FieldValue::Int32(pulses)) => curve.edit_region(region, |bound| bound.loop_offset = *pulses as f64),
+        (VALUE_REGION_LOOP_DURATION_KEY, FieldValue::Int32(pulses)) => curve.edit_region(region, |bound| bound.loop_duration = *pulses as f64),
+        (VALUE_REGION_MUTE_KEY, FieldValue::Boolean(mute)) => curve.edit_region(region, |bound| bound.mute = *mute),
+        _ => false
+    }
 }
 
 /// A LIVE note signal the studio injects (TS `NoteSignal`): the on-screen keys / pads / MIDI input.
@@ -642,10 +658,19 @@ impl Engine {
                 Box::new(move |_graph, _update| enabled_invalidate())));
             // A bound region's / clip's own field edit — a move, a duration change, a MUTE toggle — re-binds
             // the snapshot (the event CURVES stay live via ValueCollection).
+            let edit_signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
             for rebind_uuid in rebind_uuids {
                 let rebind_invalidate = invalidate.clone();
+                let edited_signal = edit_signal.clone();
+                let curve = track.clone();
                 subs.push(self.graph.subscribe_vertex(Propagation::Parent, Address::box_of(rebind_uuid),
-                    Box::new(move |_graph, _update| rebind_invalidate())));
+                    Box::new(move |_graph, update| {
+                        if curve.as_ref().is_some_and(|curve| edit_bound_region(curve, rebind_uuid, update)) {
+                            edited_signal();
+                        } else {
+                            rebind_invalidate();
+                        }
+                    })));
             }
         }
         collections.append(&mut track_collections);

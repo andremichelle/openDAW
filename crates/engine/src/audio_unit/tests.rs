@@ -2641,6 +2641,85 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
     assert_eq!(live, handle_ptr, "the live broadcast matches the current handle's slot, not a stale dead one");
 }
 
+// #567: recording automation grows its region on every frame. Each duration edit re-bound the whole unit (every
+// parameter of every device re-observed), with a large WebCLAP plugin about 4 ms per edit on the audio thread.
+// A region's timing or mute edit must update the curve in place and only push the values (the light signal).
+#[test]
+fn a_region_timing_or_mute_edit_updates_the_curve_without_a_rebind() {
+    const DEV: Uuid = [90u8; 16];
+    const TRACK: Uuid = [91u8; 16];
+    const REGION: Uuid = [92u8; 16];
+    const COL: Uuid = [93u8; 16];
+    const EVENT_A: Uuid = [94u8; 16];
+    const EVENT_B: Uuid = [95u8; 16];
+    const OTHER_COL: Uuid = [96u8; 16];
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "TestEffect", &[(PATH, FieldValue::Float32(0.0))]),
+        graph_box(TRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Hook)
+        ]),
+        graph_box(REGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),
+            (2, FieldValue::Pointer(Some(Address::of(COL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840)),
+            (14, FieldValue::Boolean(false))
+        ]),
+        graph_box(COL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(EVENT_A, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ]),
+        graph_box(EVENT_B, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(0.75))
+        ]),
+        graph_box(OTHER_COL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)])
+    ]);
+    let rebinds = Rc::new(Cell::new(0));
+    let pushes = Rc::new(Cell::new(0));
+    let rebind_count = rebinds.clone();
+    let push_count = pushes.clone();
+    let invalidate: Rc<dyn Fn()> = Rc::new(move || rebind_count.set(rebind_count.get() + 1));
+    super::params::set_params_signal(Some(Rc::new(move || push_count.set(push_count.get() + 1))));
+    let (handles, _subs, _collections, _armed) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    super::params::set_params_signal(None);
+    let curve = handles[0].track.clone().expect("the parameter is automated");
+    let edit = |engine: &mut Engine, key: u16, old: FieldValue, new: FieldValue| {
+        engine.graph.transaction(&[Update::Primitive {address: Address::of(REGION, vec![key]), old, new}], &engine.registry)
+            .expect("edit the region");
+    };
+    let matches_a_fresh_bind = |engine: &mut Engine, step: &str| {
+        let fresh = build_param_track(&mut engine.graph, DEV, &[PATH], &engine.clip_sequencer).0.expect("a fresh curve");
+        for position in [0.0, 500.0, 1200.0, 1600.0, 2500.0, 2900.0, 4000.0, 8000.0] {
+            assert_eq!(curve.value_at(position), fresh.value_at(position), "{step}: in place equals a fresh bind at {position}");
+        }
+    };
+    let (bound_rebinds, bound_pushes) = (rebinds.get(), pushes.get());
+    assert_eq!(curve.value_at(2500.0), Some(0.75), "inside the region, after the second event");
+    edit(&mut engine, 10, FieldValue::Int32(0), FieldValue::Int32(1000));
+    assert!(curve.value_at(2500.0).expect("inside the moved region") < 0.75, "the move reached the curve: local 1500");
+    matches_a_fresh_bind(&mut engine, "move");
+    edit(&mut engine, 11, FieldValue::Int32(3840), FieldValue::Int32(1500));
+    matches_a_fresh_bind(&mut engine, "duration");
+    edit(&mut engine, 12, FieldValue::Int32(0), FieldValue::Int32(480));
+    matches_a_fresh_bind(&mut engine, "loop offset");
+    edit(&mut engine, 13, FieldValue::Int32(3840), FieldValue::Int32(960));
+    matches_a_fresh_bind(&mut engine, "loop duration");
+    edit(&mut engine, 14, FieldValue::Boolean(false), FieldValue::Boolean(true));
+    matches_a_fresh_bind(&mut engine, "mute");
+    assert_eq!(rebinds.get(), bound_rebinds, "no timing or mute edit re-binds the unit");
+    assert_eq!(pushes.get(), bound_pushes + 5, "each edit pushes the values once");
+    engine.graph.transaction(&[Update::Pointer {
+        address: Address::of(REGION, vec![2]),
+        old: Some(Address::of(COL, vec![2])), new: Some(Address::of(OTHER_COL, vec![2]))
+    }], &engine.registry).expect("re-target the events");
+    assert_eq!(rebinds.get(), bound_rebinds + 1, "a structural edit (another event collection) still re-binds");
+}
+
 #[test]
 fn a_launched_value_clip_replaces_the_region_automation() {
     const VCLIP: Uuid = [40u8; 16];

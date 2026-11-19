@@ -394,6 +394,25 @@ describe("RecordAutomation", () => {
             expect(regions()[0].duration).toBe(PPQN.Bar)
         })
 
+        // #567: the position ticks with every frame, each transaction reached the audio thread
+        it("opens no transaction while the quantized duration stands still", async () => {
+            const {project, record, seek, write, regions} = await setup()
+            record(true)
+            write(0.25)
+            let transactions = 0
+            const subscription = project.boxGraph.subscribeTransaction({
+                onBeginTransaction: () => transactions++, onEndTransaction: () => {}
+            })
+            seek(PPQN.SemiQuaver * 0.25)
+            seek(PPQN.SemiQuaver * 0.5)
+            seek(PPQN.SemiQuaver)
+            expect(transactions).toBe(0)
+            seek(PPQN.SemiQuaver + 1)
+            expect(transactions).toBe(1)
+            expect(regions()[0].duration).toBe(PPQN.SemiQuaver * 2)
+            subscription.terminate()
+        })
+
         it("closes the take on transport stop with a quantized duration and a held tail event", async () => {
             const {record, seek, write, stop, regions, events} = await setup()
             record(true)

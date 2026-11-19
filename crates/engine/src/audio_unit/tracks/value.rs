@@ -41,6 +41,10 @@ pub(crate) fn value_clips_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<Va
 }
 
 pub(crate) const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
+pub(crate) const VALUE_REGION_POSITION_KEY: u16 = 10;
+pub(crate) const VALUE_REGION_DURATION_KEY: u16 = 11;
+pub(crate) const VALUE_REGION_LOOP_OFFSET_KEY: u16 = 12;
+pub(crate) const VALUE_REGION_LOOP_DURATION_KEY: u16 = 13;
 
 /// One value region of an automation track: its `events` collection and loopable span.
 pub(crate) struct RegionSpec {
@@ -74,10 +78,10 @@ pub(crate) fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<
             specs.push(RegionSpec {
                 region: region_uuid,
                 collection,
-                position: region_pulses(graph, region_uuid, 10),
-                duration: region_pulses(graph, region_uuid, 11),
-                loop_offset: region_pulses(graph, region_uuid, 12),
-                loop_duration: region_pulses(graph, region_uuid, 13),
+                position: region_pulses(graph, region_uuid, VALUE_REGION_POSITION_KEY),
+                duration: region_pulses(graph, region_uuid, VALUE_REGION_DURATION_KEY),
+                loop_offset: region_pulses(graph, region_uuid, VALUE_REGION_LOOP_OFFSET_KEY),
+                loop_duration: region_pulses(graph, region_uuid, VALUE_REGION_LOOP_DURATION_KEY),
                 mute: graph.field_value(&Address::of(region_uuid, vec![VALUE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
                 groove: groove_of(graph, region_uuid, VALUE_REGION_GROOVE_KEY)
             });

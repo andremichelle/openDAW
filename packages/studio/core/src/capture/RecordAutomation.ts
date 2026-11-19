@@ -216,17 +216,16 @@ export namespace RecordAutomation {
         loopTo: ppqn
     ): void => {
         const editing = project.recordingSession.editing
+        const durationOf = (state: RecordingState): ppqn => Math.max(PPQN.SemiQuaver,
+            quantizeCeil(Math.min(loopEnabled ? loopTo - state.startPosition : Infinity,
+                currentPosition - state.startPosition), PPQN.SemiQuaver))
+        const changed = activeRecordings.values().filter(state =>
+            state.regionBox.isAttached() && durationOf(state) !== state.regionBox.duration.getValue())
+        if (changed.length === 0) {return}
         editing.modify(() => {
-            for (const state of activeRecordings.values()) {
-                if (!state.regionBox.isAttached()) {continue}
+            for (const state of changed) {
                 const oldDuration = state.regionBox.duration.getValue()
-                const maxDuration = loopEnabled
-                    ? loopTo - state.startPosition
-                    : Infinity
-                const newDuration = Math.max(PPQN.SemiQuaver,
-                    quantizeCeil(
-                        Math.min(maxDuration, currentPosition - state.startPosition),
-                        PPQN.SemiQuaver))
+                const newDuration = durationOf(state)
                 if (newDuration > oldDuration) {
                     RegionClipResolver.fromRange(
                         state.trackBoxAdapter,
