@@ -2,40 +2,71 @@ import {
     asDefined, DefaultObservableValue, isDefined, Lazy, panic, Procedure, RuntimeNotifier, tryCatch, unitValue, UUID
 } from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
+import {Browser} from "@opendaw/lib-dom"
+import {InstrumentFactories} from "@opendaw/studio-adapters"
+import {EffectFactories, PresetMeta} from "@opendaw/studio-core"
 import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
-import {PresetMeta} from "@opendaw/studio-core"
+import {CommunityIndex, PresetDevices} from "./CommunityIndex"
+
+const Devices: PresetDevices = {
+    isInstrument: (key: string): key is InstrumentFactories.Keys => Object.hasOwn(InstrumentFactories.Named, key),
+    isAudioEffect: (key: string): key is EffectFactories.AudioEffectKeys => Object.hasOwn(EffectFactories.AudioNamed, key),
+    isMidiEffect: (key: string): key is EffectFactories.MidiEffectKeys => Object.hasOwn(EffectFactories.MidiNamed, key)
+}
 
 export class OpenPresetAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/presets"
-    static readonly FileRoot = "https://assets.opendaw.studio/presets"
+    static readonly FileRoot = "https://assets.opendaw.studio/community"
 
     @Lazy
     static get(): OpenPresetAPI {return new OpenPresetAPI()}
 
-    private constructor() {}
+    // presets for the next release are only listed on dev.opendaw.studio and localhost
+    static readsDevPresets(): boolean {return Browser.isLocalHost() || location.origin.includes("dev.opendaw.studio")}
+
+    readonly #files: Map<string, string>
+
+    private constructor() {this.#files = new Map()}
 
     @Lazy
     async list(): Promise<ReadonlyArray<PresetMeta>> {
-        const url = `${OpenPresetAPI.FileRoot}/index.json?t=${Date.now()}`
+        const groups = OpenPresetAPI.readsDevPresets() ? ["presets", "dev/presets"] : ["presets"]
+        const lists = await Promise.all(groups.map(group => this.#listGroup(group)))
+        const presets = lists.flat()
+        console.info(`OpenPresetAPI.list loaded ${presets.length} stock preset(s)`)
+        return presets
+    }
+
+    async #listGroup(group: string): Promise<ReadonlyArray<PresetMeta>> {
+        const url = `${OpenPresetAPI.FileRoot}/${group}/index.json?t=${Date.now()}`
         const result = await Promises.tryCatch(Promises.retry(() =>
             network.defaultFetch(url, OpenDAWHeaders).then(response => response.json())))
         if (result.status === "rejected") {
             console.warn("OpenPresetAPI.list fetch failed", url, result.error)
             return []
         }
-        if (!Array.isArray(result.value)) {
-            console.warn("OpenPresetAPI.list unexpected payload", result.value)
+        const parsed = tryCatch(() => CommunityIndex.parsePresets(result.value))
+        if (parsed.status === "failure") {
+            console.warn("OpenPresetAPI.list unexpected payload", url, parsed.error)
             return []
         }
-        console.info(`OpenPresetAPI.list loaded ${result.value.length} cloud preset(s)`)
-        return result.value as ReadonlyArray<PresetMeta>
+        return parsed.value.flatMap(entry => CommunityIndex.toPresetMeta(entry, Devices).match({
+            none: () => [],
+            some: meta => {
+                this.#files.set(entry.uuid, `${group}/${entry.url}`)
+                return [meta]
+            }
+        }))
     }
 
     async load(uuid: UUID.Bytes,
                progress?: Procedure<unitValue>,
                signal?: AbortSignal): Promise<ArrayBuffer> {
-        const url = `${OpenPresetAPI.FileRoot}/${UUID.toString(uuid)}.odp`
+        await this.list()
+        const file = this.#files.get(UUID.toString(uuid))
+        if (!isDefined(file)) {return panic(`Unknown stock preset ${UUID.toString(uuid)}`)}
+        const url = `${OpenPresetAPI.FileRoot}/${file}`
         // Cancellable fetches skip the auto-retry: a user-cancelled download
         // must not silently retry after the dialog has already closed.
         const response = isDefined(signal)
