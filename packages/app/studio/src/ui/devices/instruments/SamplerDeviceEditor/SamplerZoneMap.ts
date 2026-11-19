@@ -28,6 +28,7 @@ export namespace SamplerZoneMap {
         readonly rect: Optional<Range>
         // whether a key sounds right now, played here or coming in
         readonly isNoteOn: Func<int, boolean>
+        readonly sounding: ReadonlySet<SamplerZoneBoxAdapter>
     }
 
     const GroupColors: ReadonlyArray<Color> = [Colors.blue, Colors.green, Colors.yellow, Colors.purple, Colors.orange, Colors.cream]
@@ -58,7 +59,7 @@ export namespace SamplerZoneMap {
 
     export const paint = (context: CanvasRenderingContext2D, width: number, height: number, scale: number,
                           state: State): void => {
-        const {entries, selection, pressed, rect} = state
+        const {entries, selection, pressed, rect, sounding} = state
         const keyWidth = width / NumKeys
         const yOf = (velocity: number): number => height * (1.0 - velocity / MaxVelocity)
         context.clearRect(0, 0, width, height)
@@ -134,6 +135,21 @@ export namespace SamplerZoneMap {
         const chosen = new Set(entries.filter(entry => selection.has(entry.zone)).map(rangeOf))
         entries.filter(entry => !chosen.has(rangeOf(entry))).forEach(entry => paintEntry(entry, false))
         entries.filter(entry => chosen.has(rangeOf(entry))).forEach(entry => paintEntry(entry, true))
+        const lit = new Set<string>()
+        entries.filter(entry => sounding.has(entry.zone)).forEach(entry => {
+            const range = rangeOf(entry)
+            if (lit.has(range)) {return}
+            lit.add(range)
+            const x0 = Math.round(entry.keyLow * keyWidth) + scale
+            const x1 = Math.round((entry.keyHigh + 1) * keyWidth)
+            const y0 = Math.round(yOf(entry.velocityHigh)) + scale
+            const y1 = Math.round(yOf(entry.velocityLow - 1))
+            context.fillStyle = Colors.orange.opacity(0.35).toString()
+            context.fillRect(x0, y0, x1 - x0, y1 - y0)
+            context.strokeStyle = Colors.orange.toString()
+            context.lineWidth = scale
+            context.strokeRect(x0 + scale * 0.5, y0 + scale * 0.5, x1 - x0 - scale, y1 - y0 - scale)
+        })
         if (pressed >= 0) {
             context.fillStyle = Colors.orange.opacity(0.35).toString()
             context.fillRect(Math.round(pressed * keyWidth), 0, Math.round(keyWidth), height)

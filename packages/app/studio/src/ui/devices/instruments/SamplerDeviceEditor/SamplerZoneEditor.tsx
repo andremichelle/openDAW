@@ -116,7 +116,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     let sampleRows: ReadonlyArray<[ReadonlyArray<Zone>, HTMLElement]> = []
     const state = (): SamplerZoneMap.State => ({
         entries, selection: new Set(selection), group: shownGroup?.indexField.getValue() ?? -1, pressed, rect,
-        isNoteOn: key => notes.isNoteOn(key)
+        isNoteOn: key => notes.isNoteOn(key), sounding
     })
     const shownZones = (): ReadonlyArray<Zone> => adapter.zones.adapters()
         .filter(zone => !isDefined(shownGroup) || zone.group().contains(shownGroup))
@@ -146,6 +146,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const playheads: HTMLCanvasElement = <canvas className="playheads"/>
     // the zones in the order of the device's table rows
     let rows: ReadonlyArray<Zone> = []
+    let sounding: ReadonlySet<Zone> = new Set()
     const mapDisplay: HTMLElement = <div className="display map">{map}</div>
     const sampleLabel: HTMLElement = <span className="file-name"/>
     const presetName: HTMLElement = (
@@ -513,6 +514,15 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         refresh.subscribe(update),
         notes.subscribe(() => painters[1].requestUpdate()),
         liveStreamReceiver.subscribeFloats(adapter.positionsAddress, positions => {
+            const playing = new Set<Zone>()
+            for (let index = 0; index + 1 < positions.length && positions[index] >= 0; index += 2) {
+                const zone = rows[positions[index]]
+                if (isDefined(zone)) {playing.add(zone)}
+            }
+            if (playing.size !== sounding.size || [...playing].some(zone => !sounding.has(zone))) {
+                sounding = playing
+                painters[0].requestUpdate()
+            }
             const context = playheads.getContext("2d")
             if (!isDefined(context)) {return}
             const scale = devicePixelRatio
