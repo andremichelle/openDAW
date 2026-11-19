@@ -89,9 +89,9 @@ export const StudioSettingsSchema = z.object({
         "default-zoom": 75
     }),
     "device-browser": z.object({
-        "auto-load-external": z.boolean().catch(true)
+        "auto-load-limit": z.number().int().min(0).catch(10)
     }).default({
-        "auto-load-external": true
+        "auto-load-limit": 10
     }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),

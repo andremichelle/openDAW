@@ -20,6 +20,7 @@ import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
 import {Dialog} from "@/ui/components/Dialog"
 import {Checkbox} from "@/ui/components/Checkbox"
+import {NumberInput} from "@/ui/components/NumberInput"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
 import {SearchInput} from "@/ui/components/SearchInput"
@@ -188,7 +189,7 @@ export namespace DeviceDialog {
         const approved = {value: false}
         const cancelledKeys = new Set<string>()
         const currentKey = DeviceSlot.currentDeviceKey(slot)
-        const autoLoad = lifecycle.own(StudioPreferences.createMutableObservableValue("device-browser", "auto-load-external"))
+        const autoLoadLimit = lifecycle.own(StudioPreferences.createMutableObservableValue("device-browser", "auto-load-limit"))
         const storedKeys = new Set<string>()
         const requestedKeys = new Set<string>()
         const loadingKeys = new Set<string>()
@@ -287,14 +288,13 @@ export namespace DeviceDialog {
             return element
         }
         const needsLoad = (entry: DeviceEntry): boolean =>
-            DeviceCatalog.isLarge(entry) && !storedKeys.has(entry.key) && !requestedKeys.has(entry.key)
-        const isGated = (entry: DeviceEntry): boolean => !autoLoad.getValue() && needsLoad(entry)
+            DeviceCatalog.exceedsLimit(entry, autoLoadLimit.getValue()) && !storedKeys.has(entry.key) && !requestedKeys.has(entry.key)
         const isSelected = (entry: DeviceEntry): boolean => selected.mapOr(({key}) => key === entry.key, false)
         const renderBrief = (entry: DeviceEntry): void => {
             const brief = briefs.get(entry.key)
             if (!isDefined(brief)) {return}
             const loading = loadingKeys.has(entry.key)
-            const offersLoad = !loading && isSelected(entry) && isGated(entry)
+            const offersLoad = !loading && isSelected(entry) && needsLoad(entry)
             brief.classList.toggle("missing", !loading && !offersLoad && entry.brief.length === 0)
             brief.classList.toggle("offers-load", offersLoad)
             brief.replaceChildren(loading ? "Loading..." : offersLoad
@@ -356,7 +356,7 @@ export namespace DeviceDialog {
             })
         }
         const choose = (entry: DeviceEntry): void => {
-            if (isGated(entry)) {
+            if (needsLoad(entry)) {
                 pendingPick.terminate()
                 select(entry)
             } else {
@@ -375,7 +375,7 @@ export namespace DeviceDialog {
         }
         const approve = async (): Promise<void> => {
             selected.ifSome(entry => {
-                if (pendingPick.nonEmpty() || (isGated(entry) && !audition.applied.mapOr(({key}) => key === entry.key, false))) {
+                if (pendingPick.nonEmpty() || (needsLoad(entry) && !audition.applied.mapOr(({key}) => key === entry.key, false))) {
                     pick(entry)
                 }
             })
@@ -438,14 +438,11 @@ export namespace DeviceDialog {
                 {piano}
             </div>
         )
-        const autoLoadToggle: HTMLElement = (
-            <div style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
-                <Checkbox lifecycle={lifecycle} model={autoLoad} appearance={{framed: true, color: Colors.black}}>
-                    <Icon symbol={IconSymbol.Checkbox}/>
-                </Checkbox>
-                <span style={{cursor: "pointer"}} onclick={() => autoLoad.setValue(!autoLoad.getValue())}>
-                    Auto load entries over 500 KB
-                </span>
+        const autoLoadField: HTMLElement = (
+            <div style={{display: "flex", alignItems: "center", columnGap: "0.5em", color: Colors.shadow.toString()}}>
+                <span>Auto load up to</span>
+                <NumberInput lifecycle={lifecycle} model={autoLoadLimit} maxChars={4} guard={{guard: value => Math.max(0, Math.round(value))}}/>
+                <span>MB</span>
             </div>
         )
         const dialog: HTMLDialogElement = (
@@ -456,7 +453,7 @@ export namespace DeviceDialog {
                     leading={
                         <div style={{display: "flex", alignItems: "center", columnGap: "1em"}}>
                             {isDefined(piano) && <MidiAccessButton lifecycle={lifecycle} style={{fontSize: "16px"}}/>}
-                            {autoLoadToggle}
+                            {autoLoadField}
                         </div>
                     }
                     style={{width: "min(56em, 90vw)", height: "min(30em, 70vh)"}}
@@ -486,8 +483,11 @@ export namespace DeviceDialog {
             }),
             audition.applied.subscribe(() => {if (isDefined(piano)) {armEditing()}}),
             audition.loading.subscribe(renderCard),
-            autoLoad.subscribe(owner => {
-                if (owner.getValue()) {selected.ifSome(entry => {if (needsLoad(entry)) {pick(entry)}})}
+            autoLoadLimit.subscribe(() => {
+                selected.ifSome(entry => {
+                    if (DeviceCatalog.isLarge(entry) && !needsLoad(entry) && !storedKeys.has(entry.key)
+                        && !requestedKeys.has(entry.key)) {pick(entry)}
+                })
                 visible.forEach(renderBrief)
             }),
             service.projectProfileService.subscribe(() => dialog.close()),

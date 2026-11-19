@@ -59,6 +59,10 @@ export namespace DeviceCatalog {
     export const isLarge = (entry: DeviceEntry): boolean =>
         entry.download.mapOr(({size}) => size === 0 || size >= DownloadThreshold, false)
 
+    // above the auto load limit in MB a download waits for Load, 0 loads everything at once
+    export const exceedsLimit = (entry: DeviceEntry, limitMegabytes: number): boolean =>
+        limitMegabytes > 0 && entry.download.mapOr(({size}) => size === 0 || size > limitMegabytes * 1024 * 1024, false)
+
     export type Sources = {
         readonly presets: ReadonlyArray<PresetEntry>
         readonly scripts: ReadonlyArray<CommunityScript>
