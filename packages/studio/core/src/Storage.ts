@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {Errors, UUID} from "@opendaw/lib-std"
 import {Workers} from "./Workers"
 import {Promises} from "@opendaw/lib-runtime"
 import {StructureFile} from "./StructureFile"
@@ -44,6 +44,7 @@ export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, N
                             const array = await Workers.Opfs.read(`${this.folder}/${name}/meta.json`)
                             return {uuid: name as UUID.String, ...JSON.parse(new TextDecoder().decode(array))}
                         } catch (e) {
+                            if (Errors.isTimeout(e)) {throw e}
                             console.warn(`Skipping corrupted entry: ${this.folder}/${name}`, e)
                             return null
                         }

@@ -20,7 +20,10 @@ export namespace Errors {
     export const isNotReadable = (error: unknown): error is { name: string, message: string } =>
         isDOMException(error) && error.name === "NotReadableError"
 
-    export const CatchAbort = (error: unknown) =>
+    export const isTimeout = (error: unknown): error is { name: string, message: string } =>
+        isDOMException(error) && error.name === "TimeoutError"
+
+    export const CatchAbort =(error: unknown) =>
         error === AbortError ? undefined : panic(error)
 
     // https://developer.mozilla.org/en-US/docs/Web/API/OverconstrainedError is not available in Firefox and Gecko

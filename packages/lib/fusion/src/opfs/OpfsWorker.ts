@@ -1,4 +1,4 @@
-import {Arrays, asDefined, EmptyProcedure, isNotUndefined, panic, Procedure, tryCatch} from "@opendaw/lib-std"
+import {Arrays, asDefined, EmptyProcedure, Errors, isNotUndefined, panic, Procedure, tryCatch} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {OpfsProtocol} from "./OpfsProtocol"
 
@@ -6,6 +6,8 @@ export namespace OpfsWorker {
     const DEBUG = false
     const LockWarnMillis = 2000
     const HoldWarnMillis = 5000
+    const OpenTimeoutMillis = 10_000
+    const OpenRetries = 3
 
     type LockHolder = { readonly operation: string, readonly since: number, step: string }
 
@@ -146,8 +148,13 @@ export namespace OpfsWorker {
                 const folder = await this.#resolveFolder(segments.slice(0, -1), step, options)
                 step("get file handle")
                 const fileHandle = await folder.getFileHandle(asDefined(segments.at(-1)), options)
-                step("create sync access handle")
-                return await fileHandle.createSyncAccessHandle()
+                for (let attempt = 0; ; attempt++) {
+                    step(attempt === 0 ? "create sync access handle" : `create sync access handle (retry ${attempt})`)
+                    const result = await Promises.tryCatch(openSyncAccessHandle(fileHandle, path))
+                    if (result.status === "resolved") {return result.value}
+                    if (!Errors.isTimeout(result.error) || attempt === OpenRetries) {throw result.error}
+                    console.warn(`[OPFS] '${path}' did not open within ${OpenTimeoutMillis / 1000}s, retry ${attempt + 1} of ${OpenRetries}`)
+                }
             }
 
             async #resolveFolder(segments: ReadonlyArray<string>, step: Procedure<string>,
@@ -161,6 +168,22 @@ export namespace OpfsWorker {
                 return folder
             }
         })
+
+    // Chrome sometimes never settles createSyncAccessHandle under heavy load, a new request succeeds
+    const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle,
+                                        path: string): Promise<FileSystemSyncAccessHandle> => {
+        const opening = fileHandle.createSyncAccessHandle()
+        const {promise: timeout, reject} = Promise.withResolvers<never>()
+        const timer = setTimeout(() => reject(new DOMException(
+            `OPFS could not open '${path}' within ${OpenTimeoutMillis / 1000}s`, "TimeoutError")), OpenTimeoutMillis)
+        const result = await Promises.tryCatch(Promise.race([opening, timeout]))
+        clearTimeout(timer)
+        if (result.status === "rejected") {
+            opening.then(handle => handle.close(), EmptyProcedure)
+            throw result.error
+        }
+        return result.value
+    }
 
     const getOpfsRoot = async (): Promise<FileSystemDirectoryHandle> => {
         const result = await Promises.tryCatch(navigator.storage.getDirectory())

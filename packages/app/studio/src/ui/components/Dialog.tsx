@@ -59,8 +59,13 @@ export const Dialog = (
         </dialog>
     )
     Layers.install(dialog)
+    let forcedClose = false
     if (cancelable === false) {
-        dialog.oncancel = (event) => event.preventDefault()
+        dialog.oncancel = (event) => {
+            event.preventDefault()
+            // Chrome closes anyway when there was no user activation since the last close request
+            forcedClose = !event.cancelable
+        }
     }
     dialog.onkeydown = (event) => {
         if (!(cancelable !== false && event.key === "Escape") && !Events.isTextInput(event.target)) {
@@ -70,7 +75,13 @@ export const Dialog = (
             event.stopPropagation()
         }
     }
-    dialog.onclose = () => {
+    dialog.onclose = (event) => {
+        if (forcedClose) {
+            forcedClose = false
+            event.stopImmediatePropagation()
+            dialog.showModal()
+            return
+        }
         lifecycle.terminate()
         if (dialog.returnValue === "") {
             safeExecute(onCancel)

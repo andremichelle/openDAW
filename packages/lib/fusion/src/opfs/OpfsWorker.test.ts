@@ -428,14 +428,125 @@ describe("OpfsWorker", () => {
             // no second caller, so no waiter warning can fire
             const hangingRoot = {getFileHandle: async () => ({createSyncAccessHandle: () => new Promise(() => {})})}
             vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
-            void protocol.read("alone.json")
+            const reading = protocol.read("alone.json")
+            const settled = expect(reading).rejects.toMatchObject({name: "TimeoutError"})
             await vi.advanceTimersByTimeAsync(4900)
             expect(warn).not.toHaveBeenCalled()
             await vi.advanceTimersByTimeAsync(200)
             expect(warn).toHaveBeenCalledTimes(1)
             expect(warn.mock.calls[0][0]).toMatch(/^\[OPFS] read 'alone\.json' runs for \d+\.\ds at 'create sync access handle'$/)
-            await vi.advanceTimersByTimeAsync(20000)
-            expect(warn).toHaveBeenCalledTimes(1)
+            await vi.advanceTimersByTimeAsync(40000)
+            expect(warn.mock.calls.slice(1).map(([text]) => text)).toEqual([
+                "[OPFS] 'alone.json' did not open within 10s, retry 1 of 3",
+                "[OPFS] 'alone.json' did not open within 10s, retry 2 of 3",
+                "[OPFS] 'alone.json' did not open within 10s, retry 3 of 3"
+            ])
+            await settled
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a sync access handle that never opens rejects with a TimeoutError after 3 retries", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            let calls = 0
+            const hangingRoot = {
+                getFileHandle: async () => ({
+                    createSyncAccessHandle: () => {
+                        calls++
+                        return new Promise(() => {})
+                    }
+                })
+            }
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
+            let outcome = "pending"
+            const reading = protocol.read("never.json").then(() => outcome = "resolved", error => outcome = error.name)
+            await vi.advanceTimersByTimeAsync(39900)
+            expect(outcome).toBe("pending")
+            expect(calls).toBe(4)
+            await vi.advanceTimersByTimeAsync(200)
+            await reading
+            expect(outcome).toBe("TimeoutError")
+            expect(calls).toBe(4)
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a stalled open succeeds on retry", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            let calls = 0
+            const handle = {getSize: () => 1, read: (buffer: Uint8Array) => {buffer[0] = 7}, close: () => {}}
+            const root = {
+                getFileHandle: async () => ({
+                    createSyncAccessHandle: () => calls++ === 0 ? new Promise(() => {}) : Promise.resolve(handle)
+                })
+            }
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => root}})
+            const reading = protocol.read("retry.json")
+            await vi.advanceTimersByTimeAsync(10100)
+            expect(Array.from(await reading)).toEqual([7])
+            expect(calls).toBe(2)
+            expect(warn).toHaveBeenCalledWith("[OPFS] 'retry.json' did not open within 10s, retry 1 of 3")
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("other open errors are not retried", async () => {
+            let calls = 0
+            const root = {
+                getFileHandle: async () => ({
+                    createSyncAccessHandle: () => {
+                        calls++
+                        return Promise.reject(new DOMException("Busy", "NoModificationAllowedError"))
+                    }
+                })
+            }
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => root}})
+            await expect(protocol.read("busy.json")).rejects.toMatchObject({name: "NoModificationAllowedError"})
+            expect(calls).toBe(1)
+        })
+        it("a final timeout releases the path lock for the next caller", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            let calls = 0
+            const handle = {getSize: () => 1, read: (buffer: Uint8Array) => {buffer[0] = 7}, close: () => {}}
+            const root = {
+                getFileHandle: async () => ({
+                    createSyncAccessHandle: () => calls++ < 4 ? new Promise(() => {}) : Promise.resolve(handle)
+                })
+            }
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => root}})
+            const first = protocol.read("locked.json").catch(error => error.name)
+            const second = protocol.read("locked.json")
+            await vi.advanceTimersByTimeAsync(40100)
+            expect(await first).toBe("TimeoutError")
+            expect(Array.from(await second)).toEqual([7])
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a handle that opens after the timeout is closed at once", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            const openings: Array<PromiseWithResolvers<{ close: () => void }>> = []
+            const root = {
+                getFileHandle: async () => ({
+                    createSyncAccessHandle: () => {
+                        const opening = Promise.withResolvers<{ close: () => void }>()
+                        openings.push(opening)
+                        return opening.promise
+                    }
+                })
+            }
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => root}})
+            const reading = protocol.read("late.json").catch(error => error.name)
+            await vi.advanceTimersByTimeAsync(40100)
+            expect(await reading).toBe("TimeoutError")
+            const closes = openings.map(opening => {
+                const close = vi.fn()
+                opening.resolve({close})
+                return close
+            })
+            await vi.advanceTimersByTimeAsync(0)
+            expect(closes.length).toBe(4)
+            closes.forEach(close => expect(close).toHaveBeenCalledTimes(1))
             warn.mockRestore()
             vi.useRealTimers()
         })

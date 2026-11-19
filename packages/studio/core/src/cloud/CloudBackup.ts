@@ -1,5 +1,6 @@
 import {
     DefaultObservableValue,
+    EmptyExec,
     Errors,
     isInstanceOf,
     Progress,
@@ -83,8 +84,19 @@ export namespace CloudBackup {
 
     export const backupWithHandler = async (cloudHandler: CloudHandler, service: CloudService) => {
         const progressValue = new DefaultObservableValue<unitValue>(0.0)
-        const notification = RuntimeNotifier.progress({headline: `Backup with ${labelOf(service)}`, progress: progressValue})
-        const log = (text: string) => notification.message = text
+        const abortController = new AbortController()
+        const {signal} = abortController
+        const aborted = new Promise<never>((_, reject) =>
+            signal.addEventListener("abort", () => reject(Errors.AbortError), {once: true}))
+        aborted.catch(EmptyExec)
+        const untilAborted = <T>(promise: Promise<T>): Promise<T> => Promise.race([promise, aborted])
+        const notification = RuntimeNotifier.progress({
+            headline: `Backup with ${labelOf(service)}`, progress: progressValue, cancel: () => abortController.abort()
+        })
+        const log = (text: string) => {
+            if (signal.aborted) {throw Errors.AbortError}
+            notification.message = text
+        }
         const [progressSamples, progressProjects, progressTemplates, progressSoundfonts, progressPresets, progressScripts, progressWclaps] =
             Progress.split(progress => progressValue.setValue(progress), 7)
         const lockPath = "lock.json"
@@ -120,13 +132,13 @@ export namespace CloudBackup {
             canReleaseLock = true
             const json: Lock = {id: Browser.id(), created: new Date().toISOString()}
             await cloudHandler.upload(lockPath, new TextEncoder().encode(JSON.stringify(json)).buffer)
-            await CloudBackupSamples.start(cloudHandler, progressSamples, log)
-            await CloudBackupProjects.start(cloudHandler, progressProjects, log)
-            await CloudBackupTemplates.start(cloudHandler, progressTemplates, log)
-            await CloudBackupSoundfonts.start(cloudHandler, progressSoundfonts, log)
-            await CloudBackupPresets.start(cloudHandler, progressPresets, log)
-            await CloudBackupScripts.start(cloudHandler, progressScripts, log)
-            await CloudBackupWclaps.start(cloudHandler, progressWclaps, log)
+            await untilAborted(CloudBackupSamples.start(cloudHandler, progressSamples, log))
+            await untilAborted(CloudBackupProjects.start(cloudHandler, progressProjects, log))
+            await untilAborted(CloudBackupTemplates.start(cloudHandler, progressTemplates, log))
+            await untilAborted(CloudBackupSoundfonts.start(cloudHandler, progressSoundfonts, log))
+            await untilAborted(CloudBackupPresets.start(cloudHandler, progressPresets, log))
+            await untilAborted(CloudBackupScripts.start(cloudHandler, progressScripts, log))
+            await untilAborted(CloudBackupWclaps.start(cloudHandler, progressWclaps, log))
         } finally {
             if (canReleaseLock) {
                 await cloudHandler.delete(lockPath)
