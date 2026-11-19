@@ -46,7 +46,7 @@ openDAW/Multi Samples/
    single shots keep their exact keys.
 5. Zones come from the same code a drop uses (`SamplerZones`):
    1. 42 instruments carry a note in every file name and map on their own.
-   2. 44 instruments carry no note. All are drums and percussion and become kits, one key per sound from C1, with
+   2. 44 instruments carry no note. All are drums and percussion and become kits, one key per sound from key 60, with
       velocity layers and round robins.
    3. 7 are partly named (Pipe Organ, Dan Tranh, Upright Piano Knight, Bell Tree, Clash Cymbals 2, Suspended
       Cymbals 1 and 2). They and Timpani (`Timpani1C_hit`, no octave) get a small override table.
@@ -82,6 +82,9 @@ One preset at a time, André checks every one before anything reaches the cloud 
 A playing style that sounds too close to one already published is skipped, near duplicates only add noise to the
 list.
 
+Pitch is measured, not taken from the names: many VCSL folders name their notes one octave low. The measurement reads
+the sample rate from each file (some folders are 48 kHz), and the zones get the sample rate of their file.
+
 Mapping rules for melodic presets: every note in the file names becomes a root key, each zone reaches halfway to its
 neighbours, the outer zones reach key 0 and 127. Dynamics become velocity layers that share 1 to 127 evenly.
 Release 0.8 s for struck instruments.
@@ -105,6 +108,24 @@ Release 0.8 s for struck instruments.
 | Didgeridoo | dropped after audition |
 | Upright Piano, Yamaha | live on DEV, 16 bit, 132 MB |
 | Harpsichord, Italian | dropped after audition, the other harpsichords skipped with it |
+| Grand Piano Kawai, Steinway B, Upright Knight | skipped, enough pianos |
+| Renaissance Organ, Pipe Organ Pedal | publishing |
+| Tenor Saxophone, Saxello | dropped after audition (the first sax audition was mistuned by my 44.1 kHz assumption on 48 kHz files) |
+| Ocarina | publishing |
+| Baroque Recorders | skipped, very uneven levels (-8 to -34 dB) |
+| Pipe Organ Pedal | live on DEV, 22.9 MB |
+| Dan Tranh | dropped after audition, the other Dan Tranh styles skipped with it |
+| Snare Drum, Ocarina | live on DEV |
+| Cajon, Darbuka, Bongos | publishing |
+| Bass Drum 2 | dropped after audition |
+| Hi-Hat, Toms, Suspended Cymbal, Clash Cymbals, Gong | publishing |
+| Timpani 1 (hits and rolls) | dropped after audition, Timpani 2 skipped with it |
+| Conga, Frame Drum, Cowbells | publishing |
+| Percussion Kit (Woodblock, Claps, Shaker Large, Slapstick, Anvil, Brake Drum) | publishing, Brake Drum 2 bowed dropped |
+| Mbira | dropped after audition, Nyunga Nyunga skipped with it |
+| Bass Drum 1 | dropped after audition |
+| Concert Harp | publishing, 68 MB |
+| Snare Drum Modern 2 and 3, Rope Tension, Suspended Cymbal 2, Tubular Bells 2, Ocarina SusVib | skipped, second takes |
 
 The survey (`plans/sampler-library-survey.md`) drops every folder whose loudest file stays below -12 dB: 92 presets
 remain, 54 are dropped.
