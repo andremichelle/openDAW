@@ -75,8 +75,12 @@ One preset at a time, André checks every one before anything reaches the cloud 
    of the uploaded uuids.
 6. **Meta OK.** André sees the composed `meta.json` before the PR: name, description with the recorded range,
    author Versilian Studios, CC0, credits to VCSL, device Sampler, folder.
-7. **Commons.** Pull request into `dev/presets/sampler/<slug>/`, merge, the deploy lists it on dev.opendaw.studio
-   with its download size.
+7. **Commons.** Pull request into `dev/presets/sampler/<slug>/`, merged once the check passes, the deploy lists it
+   on dev.opendaw.studio with its download size. This runs in the background while the next preset is staged and
+   auditioned. A push that only touches presets deploys in about a minute.
+
+A playing style that sounds too close to one already published is skipped, near duplicates only add noise to the
+list.
 
 Mapping rules for melodic presets: every note in the file names becomes a root key, each zone reaches halfway to its
 neighbours, the outer zones reach key 0 and 127. Dynamics become velocity layers that share 1 to 127 evenly.
@@ -91,6 +95,16 @@ Release 0.8 s for struck instruments.
 | Vibraphone Bowed | dropped, recorded too quiet, and enough vibraphones |
 | Marimba | dropped, recorded too quiet (loudest -14.8 dB, soft layer down to -68 dB) |
 | Glockenspiel | dropped, recorded too quiet (loudest -23.4 dB) |
+| Xylophone Medium, Hard, Soft Mallets | live or publishing |
+| Tubular Bells, Tubular Glockenspiel, Balafon Hard Mallet | publishing |
+| Balafon Traditional Mallet | skipped, too close to Balafon Hard Mallet |
+| Kalimba, Tanzania | dropped after audition, Kalimba Kenya skipped with it |
+| Folk Harp | publishing |
+| Strumstick | dropped after audition |
+| Harmonica Super64 | dropped after audition, the other harmonicas skipped with it |
+| Didgeridoo | dropped after audition |
+| Upright Piano, Yamaha | live on DEV, 16 bit, 132 MB |
+| Harpsichord, Italian | dropped after audition, the other harpsichords skipped with it |
 
 The survey (`plans/sampler-library-survey.md`) drops every folder whose loudest file stays below -12 dB: 92 presets
 remain, 54 are dropped.
