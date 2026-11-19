@@ -87,7 +87,7 @@ describe("Sampler vs Soundfont device", () => {
     const folder = process.env.OPENDAW_SOUNDFONT_DIR
     const files = folder !== undefined && existsSync(folder)
         ? readdirSync(folder).filter(name => name.toLowerCase().endsWith(".sf2")) : []
-    it.skipIf(files.length === 0).each(files)("%s", async name => {
+    it.skipIf(files.length === 0).each(files.length === 0 ? ["OPENDAW_SOUNDFONT_DIR not set"] : files)("%s", async name => {
         const bytes = readFileSync(`${folder}/${name}`)
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
         const bank = SoundfontBank.from(SoundBankLoader.fromArrayBuffer(buffer), buffer)
