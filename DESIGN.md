@@ -135,7 +135,14 @@ first draft to a design ready for production. Every rule below came from a concr
 16. A change with several rows selected sets the same value on all of them. It is never relative.
 17. Actions go into one menu. A row of buttons costs height and every further action costs width.
 
-## 12. Maps and keyboards
+## 12. Styles
+
+1. Never invent new styles. Take colours, states and effects from existing components. No hover effect, transition
+   or colour change that was not asked for.
+2. A control placed inside dimmed text (a list row's description at half opacity) lifts that opacity, otherwise its
+   colours are not the real ones.
+
+## 13. Maps and keyboards
 
 1. A map over the key range has the piano below it over its full width, one column per semitone.
 2. The black keys sit on their semitone column. The lines between the white keys sit under the centres of the black

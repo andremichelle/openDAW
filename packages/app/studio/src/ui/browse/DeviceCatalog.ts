@@ -3,7 +3,8 @@ import {Box} from "@opendaw/lib-box"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {SamplerDeviceBox, WclapDeviceBox, WclapInstrumentBox, WclapMidiEffectBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, InstrumentFactory, PresetDecoder, ScriptCompiler, Soundfont} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapBoxes, WclapStates} from "@opendaw/studio-core"
+import {EffectFactories, EffectFactory, PresetEntry, Project, SoundfontStorage, WclapBoxes, WclapStates,
+    WclapStorage} from "@opendaw/studio-core"
 import {OpenSoundfontAPI} from "@/opendaw-api"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
@@ -30,6 +31,8 @@ export type DeviceFact = { readonly label: string, readonly value: string }
 
 export type DeviceBundle = "rack" | "chain"
 
+export type DeviceDownload = { readonly size: number, readonly stored: () => Promise<boolean> }
+
 export type DeviceEntry = {
     readonly key: string
     readonly kind: DeviceEntryKind
@@ -45,10 +48,17 @@ export type DeviceEntry = {
     readonly tags: ReadonlyArray<string>
     readonly preset: Option<PresetEntry>
     readonly bundle: Option<DeviceBundle>
+    readonly download: Option<DeviceDownload>
     readonly prepare: () => Promise<DeviceCandidate>
 }
 
 export namespace DeviceCatalog {
+    export const DownloadThreshold = 500 * 1024
+
+    // an unknown size (0) counts as large
+    export const isLarge = (entry: DeviceEntry): boolean =>
+        entry.download.mapOr(({size}) => size === 0 || size >= DownloadThreshold, false)
+
     export type Sources = {
         readonly presets: ReadonlyArray<PresetEntry>
         readonly scripts: ReadonlyArray<CommunityScript>
@@ -56,7 +66,7 @@ export namespace DeviceCatalog {
         readonly soundfonts: ReadonlyArray<SoundfontSource>
     }
 
-    export type SoundfontSource = { readonly soundfont: Soundfont, readonly local: boolean }
+    export type SoundfontSource = { readonly soundfont: Soundfont, readonly local: boolean, readonly stored: boolean }
 
     // the openDAW library plus what was imported on this device
     export const loadSoundfonts = async (): Promise<ReadonlyArray<SoundfontSource>> => {
@@ -68,8 +78,8 @@ export namespace DeviceCatalog {
             SoundfontStorage.get().list()
         ])
         return [
-            ...cloud.map(soundfont => ({soundfont, local: false})),
-            ...Arrays.subtract(stored, cloud, ({uuid: a}, {uuid: b}) => a === b).map(soundfont => ({soundfont, local: true}))
+            ...cloud.map(soundfont => ({soundfont, local: false, stored: stored.some(({uuid}) => uuid === soundfont.uuid)})),
+            ...Arrays.subtract(stored, cloud, ({uuid: a}, {uuid: b}) => a === b).map(soundfont => ({soundfont, local: true, stored: true}))
         ]
     }
 
@@ -129,6 +139,7 @@ export namespace DeviceCatalog {
         key: `device:${stock.key}`, kind: "device", local: false, name: stock.name, brief: stock.brief,
         caption: stock.kindLabel, description: stock.description, icon: stock.icon, iconUrl: stock.iconUrl,
         deviceKey: stock.key, facts: [], tags: DeviceTags.of(stock.key), preset: Option.None, bundle: Option.None,
+        download: Option.None,
         prepare: () => Promise.resolve(plainCandidate((project, slot) => stock.apply(project, slot).nonEmpty()))
     })
 
@@ -150,7 +161,7 @@ export namespace DeviceCatalog {
             name: entry.name, brief: entry.description, caption: `${user ? "User" : "Stock"} ${look.caption}`,
             description: entry.description, icon: look.icon, iconUrl: look.iconUrl, deviceKey: look.deviceKey,
             facts: look.facts, tags: [...(entry.tags ?? []), ...look.tags], preset: Option.wrap(entry),
-            bundle: look.bundle,
+            bundle: look.bundle, download: Option.None,
             prepare: async () => {
                 const bytes = await PresetApplication.fetchBytes(entry.uuid, entry.source)
                 return {
@@ -192,7 +203,7 @@ export namespace DeviceCatalog {
         caption: `Community script for ${host.name}`, description: script.description, icon: host.icon,
         iconUrl: host.iconUrl, deviceKey: host.key,
         facts: [{label: "Author", value: script.author.name}, {label: "License", value: script.license}],
-        tags: script.tags, preset: Option.None, bundle: Option.None,
+        tags: script.tags, preset: Option.None, bundle: Option.None, download: Option.None,
         prepare: async () => {
             const source = await CommunityAPI.get().loadSource(script)
             const compiler = ScriptCompiler.create(ScriptCompilers[SpotlightCreate.scriptConfigs[target]])
@@ -229,6 +240,7 @@ export namespace DeviceCatalog {
         ],
         // openDAW's own features (the device panel, its width) are for the studio, not tags
         tags: wclap.info.features.filter(feature => !feature.startsWith("opendaw:")), preset: Option.None, bundle: Option.None,
+        download: wclap.local ? Option.None : Option.wrap({size: wclap.size, stored: () => WclapStorage.exists(wclap.id)}),
         prepare: async () => {
             const url = await SpotlightCreate.storeWclap(wclap)
             const {clapId, name} = wclap.info
@@ -253,7 +265,7 @@ export namespace DeviceCatalog {
         }
     })
 
-    const soundfontEntry = ({soundfont, local}: SoundfontSource, player: Stock): DeviceEntry => ({
+    const soundfontEntry = ({soundfont, local, stored}: SoundfontSource, player: Stock): DeviceEntry => ({
         key: `soundfont:${soundfont.uuid}`, kind: "soundfont", local, name: soundfont.name,
         brief: local ? "Imported soundfont" : "Soundfont from openDAW", caption: `Soundfont for ${player.name}`,
         description: "", icon: player.icon, iconUrl: Option.None, deviceKey: player.key,
@@ -263,6 +275,7 @@ export namespace DeviceCatalog {
             {label: "Stored", value: local ? "On this device" : "openDAW cloud"}
         ],
         tags: ["soundfont"], preset: Option.None, bundle: Option.None,
+        download: stored ? Option.None : Option.wrap({size: soundfont.size, stored: () => Promise.resolve(false)}),
         // the preset is chosen and its samples stored once, every pick of the entry then only applies them
         prepare: async () => {
             const created: { box: Option<SamplerDeviceBox> } = {box: Option.None}

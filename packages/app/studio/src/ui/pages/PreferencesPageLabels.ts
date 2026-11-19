@@ -75,6 +75,12 @@ export namespace PreferencesPageLabels {
                 "default-zoom": "Default plugin window zoom"
             }
         },
+        "device-browser": {
+            label: "Device Browser",
+            fields: {
+                "auto-load-external": "Auto load external plugins"
+            }
+        },
         "debug": {
             label: "Debug",
             fields: {

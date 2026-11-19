@@ -14,7 +14,7 @@ import {
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {ContextMenu, MenuItem, PresetEntry} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, PresetEntry, StudioPreferences} from "@opendaw/studio-core"
 import {Devices, NoteStreamReceiver} from "@opendaw/studio-adapters"
 import type {StudioService} from "@/service/StudioService"
 import {CommunityAPI} from "@/opendaw-api/CommunityAPI"
@@ -189,6 +189,11 @@ export namespace DeviceDialog {
         const approved = {value: false}
         const cancelledKeys = new Set<string>()
         const currentKey = DeviceSlot.currentDeviceKey(slot)
+        const autoLoad = lifecycle.own(StudioPreferences.createMutableObservableValue("device-browser", "auto-load-external"))
+        const storedKeys = new Set<string>()
+        const requestedKeys = new Set<string>()
+        const loadingKeys = new Set<string>()
+        const briefs = new Map<string, HTMLElement>()
         const rows: HTMLElement = <div className="rows"/>
         const list: HTMLElement = (
             <div className="list" onConnect={element => lifecycle.own(installScrollbars(element))}>{rows}</div>
@@ -259,16 +264,16 @@ export namespace DeviceDialog {
                 <span className="bundle">{entry.bundle.mapOr(bundle => <Icon symbol={bundleOf[bundle].icon}/>, null)}</span>
             )
             entry.bundle.ifSome(kind => lifecycle.own(TextTooltip.default(bundle, () => bundleOf[kind].text)))
+            const brief: HTMLElement = <span className="brief"/>
+            briefs.set(entry.key, brief)
             const element: HTMLElement = (
-                <div className="entry" onclick={() => pick(entry)} ondblclick={() => approve().catch(console.warn)}>
+                <div className="entry" onclick={() => choose(entry)} ondblclick={() => approve().catch(console.warn)}>
                     {entry.iconUrl.match({
                         none: () => <div className="icon"><Icon symbol={entry.icon}/></div>,
                         some: url => <div className="icon external"><img src={url} alt=""/></div>
                     })}
                     <span className="name">{entry.name}</span>
-                    {entry.brief.length > 0
-                        ? <span className="brief">{entry.brief}</span>
-                        : <span className="brief missing">No description</span>}
+                    {brief}
                     {bundle}
                     <span className="badge">{isDefined(badge) ? <Icon symbol={badge}/> : null}</span>
                 </div>
@@ -279,10 +284,32 @@ export namespace DeviceDialog {
                     .map(({label, run}) => MenuItem.default({label}).setTriggerProcedure(() => run().catch(console.warn))))))
             })
             elements.set(entry.key, element)
+            renderBrief(entry)
             return element
         }
-        const markSelection = (): void => elements.forEach((element, key) =>
-            element.classList.toggle("selected", selected.mapOr(entry => entry.key === key, false)))
+        const needsLoad = (entry: DeviceEntry): boolean =>
+            DeviceCatalog.isLarge(entry) && !storedKeys.has(entry.key) && !requestedKeys.has(entry.key)
+        const isGated = (entry: DeviceEntry): boolean => !autoLoad.getValue() && needsLoad(entry)
+        const isSelected = (entry: DeviceEntry): boolean => selected.mapOr(({key}) => key === entry.key, false)
+        const renderBrief = (entry: DeviceEntry): void => {
+            const brief = briefs.get(entry.key)
+            if (!isDefined(brief)) {return}
+            const loading = loadingKeys.has(entry.key)
+            const offersLoad = !loading && isSelected(entry) && isGated(entry)
+            brief.classList.toggle("missing", !loading && !offersLoad && entry.brief.length === 0)
+            brief.classList.toggle("offers-load", offersLoad)
+            brief.replaceChildren(loading ? "Loading..." : offersLoad
+                ? <button className="load" onclick={(event: MouseEvent) => {
+                    event.stopPropagation()
+                    pick(entry)
+                }}>Load</button>
+                : entry.brief.length > 0 ? entry.brief : "No description")
+        }
+        const markSelection = (): void => {
+            elements.forEach((element, key) =>
+                element.classList.toggle("selected", selected.mapOr(entry => entry.key === key, false)))
+            visible.forEach(renderBrief)
+        }
         const ready = {value: false}
         const render = (): void => {
             if (!ready.value) {
@@ -301,7 +328,7 @@ export namespace DeviceDialog {
             if (!selected.mapOr(entry => visible.some(({key}) => key === entry.key), false)) {pendingPick.terminate()}
             if (query.length > 0 && visible.length === 1 && !cancelledKeys.has(visible[0].key)
                 && !selected.mapOr(entry => entry.key === visible[0].key, false)) {
-                pick(visible[0])
+                choose(visible[0])
             }
         }
         const select = (entry: DeviceEntry): void => {
@@ -312,11 +339,30 @@ export namespace DeviceDialog {
         const pick = (entry: DeviceEntry): void => {
             pendingPick.terminate()
             select(entry)
+            const large = DeviceCatalog.isLarge(entry)
+            if (large) {
+                requestedKeys.add(entry.key)
+                loadingKeys.add(entry.key)
+                renderBrief(entry)
+            }
             audition.pick(entry).then(cancelled => {
+                if (large) {
+                    loadingKeys.delete(entry.key)
+                    if (!audition.applied.mapOr(({key}) => key === entry.key, false)) {requestedKeys.delete(entry.key)}
+                    renderBrief(entry)
+                }
                 if (!cancelled) {return}
                 cancelledKeys.add(entry.key)
                 audition.applied.match({none: () => selected.clear(), some: select})
             })
+        }
+        const choose = (entry: DeviceEntry): void => {
+            if (isGated(entry)) {
+                pendingPick.terminate()
+                select(entry)
+            } else {
+                pick(entry)
+            }
         }
         const step = (delta: number): void => {
             if (visible.length === 0) {return}
@@ -326,10 +372,14 @@ export namespace DeviceDialog {
             const entry = visible[next]
             select(entry)
             pendingPick.terminate()
-            pendingPick.own(Runtime.scheduleTimeout(() => pick(entry), PickDelayMs))
+            pendingPick.own(Runtime.scheduleTimeout(() => choose(entry), PickDelayMs))
         }
         const approve = async (): Promise<void> => {
-            if (pendingPick.nonEmpty()) {selected.ifSome(pick)}
+            selected.ifSome(entry => {
+                if (pendingPick.nonEmpty() || (isGated(entry) && !audition.applied.mapOr(({key}) => key === entry.key, false))) {
+                    pick(entry)
+                }
+            })
             await audition.approve()
             approved.value = true
             dialog.close("approve")
@@ -389,12 +439,27 @@ export namespace DeviceDialog {
                 {piano}
             </div>
         )
+        const autoLoadToggle: HTMLElement = (
+            <div style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                <Checkbox lifecycle={lifecycle} model={autoLoad} appearance={{framed: true, color: Colors.black}}>
+                    <Icon symbol={IconSymbol.Checkbox}/>
+                </Checkbox>
+                <span style={{cursor: "pointer"}} onclick={() => autoLoad.setValue(!autoLoad.getValue())}>
+                    Auto load external plugin
+                </span>
+            </div>
+        )
         const dialog: HTMLDialogElement = (
             <Dialog headline={headlineOf(slot)}
                     icon={IconSymbol.Add}
                     cancelable={true}
                     growWidth={true}
-                    leading={isDefined(piano) ? <MidiAccessButton lifecycle={lifecycle} style={{fontSize: "16px"}}/> : undefined}
+                    leading={
+                        <div style={{display: "flex", alignItems: "center", columnGap: "1em"}}>
+                            {isDefined(piano) && <MidiAccessButton lifecycle={lifecycle} style={{fontSize: "16px"}}/>}
+                            {autoLoadToggle}
+                        </div>
+                    }
                     style={{width: "min(56em, 90vw)", height: "min(30em, 70vh)"}}
                     buttons={[
                         {text: "Cancel", onClick: () => dialog.close()},
@@ -422,6 +487,10 @@ export namespace DeviceDialog {
             }),
             audition.applied.subscribe(() => {if (isDefined(piano)) {armEditing()}}),
             audition.loading.subscribe(renderCard),
+            autoLoad.subscribe(owner => {
+                if (owner.getValue()) {selected.ifSome(entry => {if (needsLoad(entry)) {pick(entry)}})}
+                visible.forEach(renderBrief)
+            }),
             service.projectProfileService.subscribe(() => dialog.close()),
             audition.subscribeInvalidated(() => {
                 RuntimeNotifier.notify({message: "Another participant changed what you were previewing.", icon: "Info"})
@@ -442,6 +511,11 @@ export namespace DeviceDialog {
             if (!dialog.open) {return}
             ready.value = true
             sources.setValue({presets: service.presets.presets(), scripts, wclaps, soundfonts})
+            Promise.all(DeviceCatalog.entriesFor(slot, sources.getValue())
+                .filter(DeviceCatalog.isLarge)
+                .map(entry => entry.download.unwrap().stored()
+                    .then(stored => {if (stored) {storedKeys.add(entry.key)}}, (reason: unknown) => console.warn(reason))))
+                .then(() => {if (dialog.open) {visible.forEach(renderBrief)}})
             currentKey.ifSome(key => Option.wrap(visible.find(entry => entry.kind === "device" && entry.deviceKey === key))
                 .ifSome(select))
         })
