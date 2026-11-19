@@ -40,8 +40,9 @@ export namespace LatencyMeasurement {
             cancelable: false,
             abortSignal: listening.signal
         }).catch(EmptyExec)
-        const measured = await Promises.tryCatch(capture.measureRoundTrip())
+        const measured = await Promises.tryCatch(capture.measureRoundTrip({store: false}))
         listening.abort()
+        if (measured.status === "resolved") {capture.storeRoundTrip(measured.value)}
         await Dialogs.info({
             headline: "Measure Latency",
             message: measured.status === "resolved" ? outcome(measured.value) : `Could not measure: ${String(measured.error)}`

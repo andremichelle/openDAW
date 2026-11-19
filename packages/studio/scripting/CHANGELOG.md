@@ -3,7 +3,11 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
-## [0.0.99-beta.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-scripting@0.0.98...@opendaw/studio-scripting@0.0.99-beta.0) (2026-11-14)
+## [0.0.100](/compare/@opendaw/studio-scripting@0.0.99...@opendaw/studio-scripting@0.0.100) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-scripting
+
+## [0.0.99](/compare/@opendaw/studio-scripting@0.0.98...@opendaw/studio-scripting@0.0.99) (2026-11-17)
 
 **Note:** Version bump only for package @opendaw/studio-scripting
 

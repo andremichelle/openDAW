@@ -8,9 +8,10 @@ import {
     WarpMarkerBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
-import {PPQN, ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
 import {TransientPlayMode} from "@opendaw/studio-enums"
-import {asInstanceOf, Class, float, isDefined, isInstanceOf, Nullable, panic, quantizeRound, UUID} from "@opendaw/lib-std"
+import {SampleLength} from "@opendaw/studio-adapters"
+import {asInstanceOf, Class, float, isDefined, isInstanceOf, Nullable, panic, UUID} from "@opendaw/lib-std"
 import {AudioPlayback, Sample} from "../../Api"
 import {Context} from "../Context"
 import {Guard} from "../Guard"
@@ -41,8 +42,7 @@ export namespace AudioContents {
 
     export const defaultDuration = (sample: Sample, playback: AudioPlayback, projectBpm: number): number => {
         if (playback === "no-sync") {return sample.duration}
-        const pulses = PPQN.secondsToPulses(sample.duration, sample.bpm > 0 ? sample.bpm : projectBpm)
-        return pulses < PPQN.SemiQuaver ? pulses : quantizeRound(pulses, PPQN.SemiQuaver)
+        return SampleLength.musicalPulses(sample.duration, sample.bpm > 0 ? sample.bpm : projectBpm, sample.origin ?? "import")
     }
 
     export const validatePlayback = (value: unknown): AudioPlayback => Guard.oneOf(value, Playbacks, "playback")

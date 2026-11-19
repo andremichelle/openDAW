@@ -43,6 +43,49 @@ impl Fft {
     /// In-place inverse DFT, scaled by 1/N so `inverse(forward(x)) == x`.
     pub fn inverse(&self, re: &mut [f32], im: &mut [f32]) {
         self.transform(re, im, true);
+        self.scale(re, im);
+    }
+
+    /// `bit_reverse`, `stage(0..stages())` and `scale` (inverse only) in order equal `forward`/`inverse`.
+    pub fn stages(&self) -> usize {
+        self.size.trailing_zeros() as usize
+    }
+
+    pub fn bit_reverse(&self, re: &mut [f32], im: &mut [f32]) {
+        let size = self.size;
+        assert!(re.len() == size && im.len() == size, "buffer length must equal fft size");
+        for index in 0..size {
+            let swap = self.bit_rev[index] as usize;
+            if swap > index {
+                re.swap(index, swap);
+                im.swap(index, swap);
+            }
+        }
+    }
+
+    pub fn stage(&self, re: &mut [f32], im: &mut [f32], level: usize, inverse: bool) {
+        let size = self.size;
+        let half_block = 1usize << level;
+        let block = half_block * 2;
+        let stride = size / block;
+        for start in (0..size).step_by(block) {
+            let mut twiddle = 0;
+            for even in start..start + half_block {
+                let odd = even + half_block;
+                let cos = self.cos_table[twiddle];
+                let sin = if inverse { -self.sin_table[twiddle] } else { self.sin_table[twiddle] };
+                let odd_re = re[odd] * cos - im[odd] * sin;
+                let odd_im = re[odd] * sin + im[odd] * cos;
+                re[odd] = re[even] - odd_re;
+                im[odd] = im[even] - odd_im;
+                re[even] += odd_re;
+                im[even] += odd_im;
+                twiddle += stride;
+            }
+        }
+    }
+
+    pub fn scale(&self, re: &mut [f32], im: &mut [f32]) {
         let scale = 1.0 / self.size as f32;
         for value in re.iter_mut() {
             *value *= scale;
@@ -53,35 +96,9 @@ impl Fft {
     }
 
     fn transform(&self, re: &mut [f32], im: &mut [f32], inverse: bool) {
-        let size = self.size;
-        assert!(re.len() == size && im.len() == size, "buffer length must equal fft size");
-        for index in 0..size {
-            let swap = self.bit_rev[index] as usize;
-            if swap > index {
-                re.swap(index, swap);
-                im.swap(index, swap);
-            }
-        }
-        let mut half_block = 1;
-        while half_block < size {
-            let block = half_block * 2;
-            let stride = size / block;
-            for start in (0..size).step_by(block) {
-                let mut twiddle = 0;
-                for even in start..start + half_block {
-                    let odd = even + half_block;
-                    let cos = self.cos_table[twiddle];
-                    let sin = if inverse { -self.sin_table[twiddle] } else { self.sin_table[twiddle] };
-                    let odd_re = re[odd] * cos - im[odd] * sin;
-                    let odd_im = re[odd] * sin + im[odd] * cos;
-                    re[odd] = re[even] - odd_re;
-                    im[odd] = im[even] - odd_im;
-                    re[even] += odd_re;
-                    im[even] += odd_im;
-                    twiddle += stride;
-                }
-            }
-            half_block = block;
+        self.bit_reverse(re, im);
+        for level in 0..self.stages() {
+            self.stage(re, im, level, inverse);
         }
     }
 }

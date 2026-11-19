@@ -1,4 +1,5 @@
 import {
+    Errors,
     Exec,
     Func,
     isDefined,
@@ -248,15 +249,27 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         return read
     }
 
-    async measureRoundTrip(): Promise<RoundTrip.Result> {
+    async measureRoundTrip({store = true}: RoundTrip.MeasureOptions = {}): Promise<RoundTrip.Result> {
+        const {result} = await BrowserRoundTrips.measure(this, signal => this.#measureRoundTrip(signal))
+        if (store) {BrowserRoundTrips.accept(result)}
+        return result
+    }
+
+    storeRoundTrip(result: RoundTrip.Result): boolean {return BrowserRoundTrips.accept(result)}
+
+    async #measureRoundTrip(signal: AbortSignal): Promise<RoundTrip.Measured> {
         const {env: {audioContext, audioWorklets}} = this.#project
         if (this.#stream.isEmpty()) {return Promise.reject("The input is not open.")}
         await AudioContexts.resume(audioContext)
         await this.#resolveOutputName()
+        if (signal.aborted) {return Promise.reject(Errors.AbortError)}
         const audioChain = this.#audioChain
         if (!isDefined(audioChain)) {return Promise.reject("The input is not open.")}
         const {recordGainNode, channelCount} = audioChain
         const {sampleRate} = audioContext
+        const entry: RoundTrip.Entry = {
+            output: this.#outputName, input: this.label.unwrapOrElse(""), sampleRate, seconds: Number.NaN, measuredAt: Date.now()
+        }
         const capture = audioWorklets.createRecording(UUID.generate(), channelCount, RecordingRingChunks)
         recordGainNode.connect(capture)
         const probe = RoundTrip.probe()
@@ -281,19 +294,13 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         const firstFrameTime = capture.firstQuantumTime
         capture.terminate()
         if (planes.length === 0 || firstFrameTime.isEmpty()) {
-            return {verdict: "no-signal", seconds: Number.NaN, spreadSeconds: Number.NaN, heard: 0, bursts: ProbeBursts}
+            return {result: {verdict: "no-signal", seconds: Number.NaN, spreadSeconds: Number.NaN, heard: 0, bursts: ProbeBursts}, entry}
         }
         const mono = new Float32Array(planes[0].length)
         planes.forEach(plane => plane.forEach((value, index) => mono[index] += value / planes.length))
         const result = RoundTrip.analyse(mono, firstFrameTime.unwrap(), sampleRate, emissions, probe)
         console.debug("[CaptureAudio] round trip", {...result, output: this.#outputName, input: this.label.unwrapOrElse("")})
-        if (result.verdict === "ok") {
-            BrowserRoundTrips.save({
-                output: this.#outputName, input: this.label.unwrapOrElse(""), sampleRate,
-                seconds: result.seconds, measuredAt: Date.now()
-            })
-        }
-        return result
+        return {result, entry: {...entry, seconds: result.seconds}}
     }
 
     terminate(): void {

@@ -6,6 +6,7 @@ import {asInstanceOf, Notifier, Option, RuntimeNotifier, UUID} from "@opendaw/li
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentFactories, NoteSignal} from "@opendaw/studio-adapters"
+import {AudioUnitCapture} from "../project/AudioUnitCapture"
 import type {Capture} from "../capture/Capture"
 import type {RecordingSink} from "../io"
 import {createSoloProject, LiveRoom, RoomPeer} from "./testing/LiveRoom"
@@ -539,7 +540,7 @@ describe("LiveRoom repairs", () => {
     })
 
     // concurrent undo, redo and delete can leave a unit in the document whose capture is gone
-    it("a batch that takes an instrument's capture away removes the instrument everywhere", async () => {
+    it("a batch that takes an instrument's capture away gives every peer the same capture back", async () => {
         const unit = addInstrument(A)
         room.flush()
         const capture = UUID.toString(unit.capture.targetAddress.unwrap().uuid)
@@ -551,7 +552,9 @@ describe("LiveRoom repairs", () => {
         room.peers.forEach(peer => peer.inbox.push(update))
         room.flush()
         expect(room.violations()).toEqual([])
-        expect(A.graph.findBox(unit.address.uuid).isEmpty()).toBe(true)
+        const restored = UUID.toString(AudioUnitCapture.deriveUUID(unit.address.uuid))
+        room.peers.forEach(peer => expect(UUID.toString(peer.graph.findBox<AudioUnitBox>(unit.address.uuid).unwrap()
+            .capture.targetAddress.unwrap().uuid)).toBe(restored))
         expect(await room.lateJoinerDiffers()).toBe(false)
     })
 

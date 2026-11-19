@@ -3,7 +3,11 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
-## [0.0.48-beta.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.47...@opendaw/studio-p2p@0.0.48-beta.0) (2026-11-14)
+## [0.0.49](/compare/@opendaw/studio-p2p@0.0.48...@opendaw/studio-p2p@0.0.49) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.48](/compare/@opendaw/studio-p2p@0.0.47...@opendaw/studio-p2p@0.0.48) (2026-11-17)
 
 **Note:** Version bump only for package @opendaw/studio-p2p
 

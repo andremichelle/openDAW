@@ -69,6 +69,27 @@ describe("RoundTrip", () => {
         expect(result.heard).toBe(0)
     })
 
+    it("hears nothing in a silent input", () => {
+        const probe = RoundTrip.probe()
+        const spacing = probe.length / SAMPLE_RATE + RoundTrip.BurstGapSeconds
+        const emissions = [0, 1, 2].map(index => 2.2 + index * spacing)
+        const captured = new Float32Array(Math.round((0.6 + 3 * spacing + 1.0) * SAMPLE_RATE))
+        const result = RoundTrip.analyse(captured, 2.0, SAMPLE_RATE, emissions, probe)
+        expect(result.verdict).toBe("no-signal")
+        expect(result.heard).toBe(0)
+    })
+
+    it("refuses a round trip of zero, no output reaches an input that fast", () => {
+        const result = capture([0.0, 0.0, 0.0])
+        expect(result.verdict).toBe("no-signal")
+        expect(result.heard).toBe(0)
+    })
+
+    it("refuses a round trip just above zero between samples", () => {
+        const result = capture([0.4 / SAMPLE_RATE, 0.0003, 0.0009])
+        expect(result.heard).toBe(0)
+    })
+
     it("calls bursts that disagree unsteady and reports the median", () => {
         const result = capture([0.018, 0.0205, 0.042])
         expect(result.verdict).toBe("unsteady")

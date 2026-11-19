@@ -3,7 +3,11 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
-## [0.0.5-beta.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-matchering@0.0.4...@opendaw/studio-matchering@0.0.5-beta.0) (2026-11-14)
+## [0.0.6](/compare/@opendaw/studio-matchering@0.0.5...@opendaw/studio-matchering@0.0.6) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-matchering
+
+## [0.0.5](/compare/@opendaw/studio-matchering@0.0.4...@opendaw/studio-matchering@0.0.5) (2026-11-17)
 
 **Note:** Version bump only for package @opendaw/studio-matchering
 

@@ -61,6 +61,10 @@ const createFakeInput = (request: Provider<Option<AudioInputRequest>>) => {
             calls.push("measure")
             return {verdict: "ok", seconds: 0.0186, spreadSeconds: 0.0, heard: 3, bursts: 3}
         },
+        storeRoundTrip: () => {
+            calls.push("store")
+            return true
+        },
         roundTrip: Option.None,
         forgetRoundTrip: () => {calls.push("forget")},
         subscribeRoundTrip: () => Terminable.Empty,

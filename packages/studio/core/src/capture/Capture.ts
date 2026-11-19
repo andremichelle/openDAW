@@ -59,9 +59,9 @@ export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Te
     terminate(): void {this.#terminator.terminate()}
 
     #storeArmed(armed: boolean): void {
-        const {boxGraph, liveSync} = this.#manager.project
+        const {boxGraph, liveSync, env} = this.#manager.project
         const field = this.#captureBox.armed
-        if (liveSync.nonEmpty() || !this.#captureBox.isAttached() || field.getValue() === armed) {return}
+        if (env.storeArmed !== true || liveSync.nonEmpty() || !this.#captureBox.isAttached() || field.getValue() === armed) {return}
         if (boxGraph.inTransaction()) {
             field.setValue(armed)
         } else {

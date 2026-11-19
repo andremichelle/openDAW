@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
-## [0.0.104-beta.0](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box@0.0.103...@opendaw/lib-box@0.0.104-beta.0) (2026-11-14)
+## [0.0.104](/compare/@opendaw/lib-box@0.0.103...@opendaw/lib-box@0.0.104) (2026-11-17)
 
 **Note:** Version bump only for package @opendaw/lib-box
 

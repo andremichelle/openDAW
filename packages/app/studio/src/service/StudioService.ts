@@ -113,6 +113,7 @@ const snapping = new Snapping(range)
 const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`
 
 export class StudioService implements ProjectEnv {
+    readonly storeArmed = true
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
         browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Samples)
