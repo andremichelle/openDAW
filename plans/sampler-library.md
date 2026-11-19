@@ -42,38 +42,70 @@ openDAW/Multi Samples/
 2. Release recordings (Releases, Rel) are no preset of their own. They join the matching sustain preset as a group
    with trigger Release.
 3. Hi-hats get a choke group.
-4. Zones come from the same code a drop uses (`SamplerZones`):
+4. Melodic presets extend the lowest zone down to key 0 and the highest up to 127, so no key is silent. Kits and
+   single shots keep their exact keys.
+5. Zones come from the same code a drop uses (`SamplerZones`):
    1. 42 instruments carry a note in every file name and map on their own.
    2. 44 instruments carry no note. All are drums and percussion and become kits, one key per sound from C1, with
       velocity layers and round robins.
    3. 7 are partly named (Pipe Organ, Dan Tranh, Upright Piano Knight, Bell Tree, Clash Cymbals 2, Suspended
       Cymbals 1 and 2). They and Timpani (`Timpani1C_hit`, no octave) get a small override table.
-5. Name, tags, folder and a description with the source. VCSL presets are CC0, the mridangam preset is CC-BY-SA
+6. Name, tags, folder and a description with the source. VCSL presets are CC0, the mridangam preset is CC-BY-SA
    with credits (`plans/presets-commons.md`).
+
+## Workflow per preset
+
+One preset at a time, André checks every one before anything reaches the cloud or commons. This runs over days.
+
+1. **Stage.** `node scripts/sampler-library/stage.mjs --folder "<VCSL folder>" --slug <slug> --out <stage dir>`
+   downloads the folder, cuts the tails and writes the files with a `manifest.json` into `<stage dir>/<slug>/`. It
+   prints every file's length before and after the cut and its peak. A folder recorded far below full scale
+   (Vibraphone Bowed peaks at -26 to -44 dB) is raised before it goes further, or dropped.
+2. **Audition.** `node scripts/sampler-library/serve.mjs <stage dir>` serves the stage dir to the Studio (CORS and
+   private network headers). A script run through the agent connection fetches the files, adds them to the local
+   library with `openDAW.addSample` and builds the Sampler in a new project "<Name> Audition". Nothing is in the
+   cloud yet.
+3. **Sound OK.** André listens. Changes are made in the audition until he approves.
+4. **Upload.** André runs `scripts/sampler-library/upload.sh <stage dir> <slug>` (it reads the access code from the
+   `api.opendaw.studio` checkout), which calls `scripts/upload-samples.mjs --bpm 0 --origin openDAW --results
+   <stage dir>/<slug>/results.json`. Names already in the cloud are skipped, the uuids are looked up by name through
+   `list.php` (all VCSL file names are unique) and written into `results.json`.
+5. **Build.** The same script builds the Sampler again from the cloud samples, `encodePreset()` returns the
+   `preset.odp`, which comes out of the agent result as base64. A scan checks that every sample in the file is one
+   of the uploaded uuids.
+6. **Meta OK.** André sees the composed `meta.json` before the PR: name, description with the recorded range,
+   author Versilian Studios, CC0, credits to VCSL, device Sampler, folder.
+7. **Commons.** Pull request into `dev/presets/sampler/<slug>/`, merge, the deploy lists it on dev.opendaw.studio
+   with its download size.
+
+Mapping rules for melodic presets: every note in the file names becomes a root key, each zone reaches halfway to its
+neighbours, the outer zones reach key 0 and 127. Dynamics become velocity layers that share 1 to 127 evenly.
+Release 0.8 s for struck instruments.
+
+## Status
+
+| Preset | State |
+|---|---|
+| Vibraphone Hard Mallets | live on DEV, 22 samples, 30.4 MB |
+| Vibraphone Soft Mallets | live on DEV, 22 samples, 35.3 MB |
+| Vibraphone Bowed | dropped, recorded too quiet, and enough vibraphones |
+| Marimba | dropped, recorded too quiet (loudest -14.8 dB, soft layer down to -68 dB) |
 
 ## Phases
 
-### 1. Samples
+### 1. Samples and presets, one by one
 
-1. Clone VCSL and mrid into the scratchpad.
-2. A staging script builds the target tree and a manifest (source path, folder, name). Reviewed before upload.
-3. `scripts/upload-samples.mjs` writes a results file (path to uuid) and skips what it already holds, so a run of
-   about 4,000 uploads resumes after a failure. `--bpm 0 --origin openDAW`.
-4. No index entries yet.
+The workflow above, preset by preset. No index entries yet.
 
 ### 2. Presets in opendaw-commons
 
-Own plan, `plans/presets-commons.md`. Phase 3 below needs its phase 1 (commons presets with the Sampler boxes in
-the SDK) and its phase 2 (the Studio reads them).
+Own plan, `plans/presets-commons.md`. Done: commons presets, the Studio reads them, download size.
 
-### 3. VCSL presets
+### 3. Later, if the one by one work shows a pattern
 
-1. A generator in node builds every Sampler with `SamplerZones` from the manifest of phase 1 plus the override
-   table, encodes it with `PresetEncoder` and writes the commons files.
+1. A generator in node builds the Samplers headless from the manifests.
 2. Headless check in core-wasm: every key of every preset is played, silent keys, clipping and broken layers are
    listed.
-3. André listens to a short list in the Studio on DEV.
-4. Pull request to commons.
 
 ### 4. With the PROD release
 

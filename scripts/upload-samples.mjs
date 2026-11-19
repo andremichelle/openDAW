@@ -1,7 +1,8 @@
-import {readFileSync, readdirSync, statSync} from "node:fs"
+import {readFileSync, readdirSync, statSync, writeFileSync} from "node:fs"
 import {basename, extname, join, relative, resolve} from "node:path"
 
 const API_URL = "https://api.opendaw.studio/samples/upload.php"
+const LIST_URL = "https://api.opendaw.studio/samples/list.php"
 const USERNAME = "openDAW"
 const PASSWORD = "prototype"
 
@@ -88,9 +89,11 @@ const namesPath = args.names
 const bpm = args.bpm !== undefined ? Number(args.bpm) : 120
 const origin = args.origin ?? "openDAW"
 const dryRun = Boolean(args["dry-run"])
+const resultsPath = args.results
 
 if (!dir) {
-    console.error("Usage: node scripts/upload-samples.mjs --dir <path> [--names <map.json>] [--bpm <n>] [--origin <openDAW|recording|import>] [--access-code <code>] [--dry-run]")
+    console.error("Usage: node scripts/upload-samples.mjs --dir <path> [--names <map.json>] [--bpm <n>] [--origin <openDAW|recording|import>] [--access-code <code>] [--results <file.json>] [--dry-run]")
+    console.error("  --results skips names already in the cloud and writes name -> uuid of every file into the file.")
     console.error("  If --access-code is omitted, OPENDAW_ACCESS_CODE env var is used.")
     process.exit(1)
 }
@@ -133,13 +136,30 @@ if (files.length === 0) {
     process.exit(1)
 }
 
+// the server picks the uuid and does not return it, the list finds it by name
+const cloudNames = async () => {
+    const response = await fetch(LIST_URL, {headers: {Origin: "https://opendaw.studio"}})
+    if (!response.ok) throw new Error(`list.php: HTTP ${response.status}`)
+    const byName = new Map()
+    for (const sample of await response.json()) {
+        byName.set(sample.name, [...(byName.get(sample.name) ?? []), sample.uuid])
+    }
+    return byName
+}
+const nameOf = filePath => nameMap[relative(dirAbs, filePath)] ?? nameMap[basename(filePath)] ?? basename(filePath, extname(filePath))
+const known = resultsPath ? await cloudNames() : new Map()
+
 console.log(`Uploading ${files.length} sample(s) from ${dirAbs}  bpm=${bpm}  origin=${origin}${dryRun ? "  [DRY RUN]" : ""}`)
 
 let uploaded = 0
 let failed = 0
 for (const filePath of files) {
     const rel = relative(dirAbs, filePath)
-    const name = nameMap[rel] ?? nameMap[basename(filePath)] ?? basename(filePath, extname(filePath))
+    const name = nameOf(filePath)
+    if (known.has(name)) {
+        console.log(`  = ${rel}: already in the cloud`)
+        continue
+    }
     try {
         const result = await uploadSample({filePath, name, bpm, origin, accessCode, dryRun})
         if (result.ok) {
@@ -153,4 +173,18 @@ for (const filePath of files) {
 }
 
 console.log(`\nDone. uploaded=${uploaded} failed=${failed} total=${files.length}`)
+if (resultsPath && !dryRun) {
+    const after = await cloudNames()
+    const results = {}
+    const problems = []
+    for (const filePath of files) {
+        const uuids = after.get(nameOf(filePath)) ?? []
+        if (uuids.length === 1) results[nameOf(filePath)] = uuids[0]
+        else problems.push(`${nameOf(filePath)}: ${uuids.length} cloud samples`)
+    }
+    writeFileSync(resolve(resultsPath), JSON.stringify(results, null, 2) + "\n")
+    console.log(`results: ${Object.keys(results).length} uuids in ${resolve(resultsPath)}`)
+    problems.forEach(problem => console.error(`  ✗ ${problem}`))
+    if (problems.length > 0) process.exit(1)
+}
 if (failed > 0) process.exit(1)
