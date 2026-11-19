@@ -3046,6 +3046,26 @@ export interface InstrumentAudioUnit<K extends keyof Instruments = keyof Instrum
      * ```
      */
     setInstrument<N extends keyof Instruments>(key: N, props?: DeepPartial<Instruments[N]>): Instruments[N]
+    /**
+     * Encode the unit as an openDAW preset file (.odp), like Save as Preset in the studio. Without options it holds the
+     * instrument only, `effects: true` keeps the effects (a rack preset), `timeline: true` the tracks and regions
+     * @example
+     * ```ts
+     * await openDAW.saveFile(synth.encodePreset(), "preset.odp")
+     * ```
+     */
+    encodePreset(options?: PresetOptions): ArrayBuffer
+}
+
+/**
+ * Options for {@link InstrumentAudioUnit.encodePreset}
+ * @group Audio Units
+ */
+export interface PresetOptions {
+    /** Keep the audio and MIDI effects (default false) */
+    effects?: boolean
+    /** Keep the tracks and regions (default false) */
+    timeline?: boolean
 }
 
 /**

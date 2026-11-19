@@ -1,7 +1,7 @@
 import {AudioBusBox, AudioUnitBox, AuxSendBox, TrackBox} from "@opendaw/studio-boxes"
 import {Box, Field, IndexedBox} from "@opendaw/lib-box"
 import {AudioSendRouting, AudioUnitType, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {AudioUnitFactory, InstrumentFactories, ProjectQueries, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitFactory, DeviceBoxUtils, InstrumentFactories, PresetEncoder, ProjectQueries, TrackType} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, float, int, isDefined, isInstanceOf, isNull, Nullable, Option, Optional, panic, Strings, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
@@ -22,6 +22,7 @@ import {
     NoteTrack,
     OutputAudioUnit,
     ParameterPath,
+    PresetOptions,
     Send,
     Track,
     ValueTrack
@@ -217,6 +218,14 @@ export class InstrumentAudioUnitImpl extends SendableAudioUnitFacade implements 
             const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, key, this.box.input, label)
             return Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props) as unknown as Instruments[N]
         })
+    }
+
+    encodePreset(options?: PresetOptions): ArrayBuffer {
+        const effects = Guard.boolean(options?.effects ?? false, "effects")
+        const includeTimeline = Guard.boolean(options?.timeline ?? false, "timeline")
+        const bytes = PresetEncoder.encode(this.box, effects ? {includeTimeline}
+            : {includeTimeline, excludeEffect: (box: Box) => DeviceBoxUtils.isChainEffectOf(box, this.box)})
+        return new Uint8Array(bytes).slice().buffer
     }
 }
 
