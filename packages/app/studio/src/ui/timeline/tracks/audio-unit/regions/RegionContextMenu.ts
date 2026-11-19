@@ -22,8 +22,9 @@ import {DebugMenus} from "@/ui/menu/debug"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Browser} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {Promises} from "@opendaw/lib-runtime"
+import {AudioReversals} from "@/service/AudioReversals"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {Promises} from "@opendaw/lib-runtime"
 import {TempoDetection} from "@/service/TempoDetection"
 import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 import {Bounces} from "@/service/Bounces"
@@ -169,6 +170,11 @@ export const installRegionContextMenu =
                         MonoConversions.convertRegion(service, region).then(EmptyExec, console.warn)
                     }
                 }),
+                MenuItem.default({
+                    label: "Reverse",
+                    hidden: region.type !== "audio-region",
+                    shortcut: RegionsShortcuts["reverse-audio"].shortcut.format()
+                }).setTriggerProcedure(() => AudioReversals.reverseSelection(service, selection.selected())),
                 MenuItem.default({label: "Edit in Sample Editor", hidden: region.type !== "audio-region"})
                     .setTriggerProcedure(() => {
                         if (isInstanceOf(region, AudioRegionBoxAdapter)) {

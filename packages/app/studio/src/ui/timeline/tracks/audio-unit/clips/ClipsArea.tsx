@@ -29,12 +29,14 @@ import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {installClipContextMenu} from "@/ui/timeline/tracks/audio-unit/clips/ClipContextMenu.ts"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {ClipDragAndDrop} from "./ClipDragAndDrop.ts"
-import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ElementCapturing} from "@opendaw/studio-core"
 import {clipScrollPosition, installClipScroll} from "./ClipScroll"
+import {AudioReversals} from "@/service/AudioReversals"
+import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ClipsArea")
 
@@ -59,6 +61,9 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             fy: vertex => ClipAdapters.for(boxAdapters, vertex.box)
         }))
 
+    const shortcuts = lifecycle.own(ShortcutManager.get().createContext(element, "Launcher Clips"))
+    lifecycle.own(shortcuts.register(RegionsShortcuts["reverse-audio"].shortcut,
+        () => AudioReversals.reverseSelection(service, clipSelection.selected())))
     installClipScroll(lifecycle, service, element)
     const capturing: ElementCapturing<ClipCaptureTarget> = ClipCapturing.create(element, manager)
     const locator: TimelineSelectableLocator<AnyClipBoxAdapter> = createClipSelectableLocator(capturing, manager)

@@ -94,26 +94,26 @@ export const TransientMarkerEditor = ({lifecycle, project, range, reader, hoverT
                     }
                 }))
                 const playModeTerminator = lifecycle.own(new Terminator())
+                const bindMarkers = () => {
+                    playModeTerminator.terminate()
+                    audioContent.observableOptPlayMode.ifSome(playMode => {
+                        playModeTerminator.ownAll(
+                            playMode.subscribe(requestUpdate),
+                            hoverTransient.subscribe(requestUpdate)
+                        )
+                        if (!audioContent.asPlayModeTimeStretch.isEmpty() && !audioContent.optFile.isEmpty()) {
+                            playModeTerminator.own(TransientMarkerEditing.install(project, canvas, range, reader,
+                                playMode.warpMarkers, audioContent.file.transients))
+                        }
+                    })
+                }
                 lifecycle.ownAll(
                     WheelScaling.install(canvas, range),
                     range.subscribe(requestUpdate),
                     reader.subscribeChange(requestUpdate),
                     project.editing.subscribe(requestUpdate),
-                    audioContent.observableOptPlayMode.catchupAndSubscribe((optPlayMode) => {
-                        playModeTerminator.terminate()
-                        optPlayMode.ifSome(playMode => {
-                            playModeTerminator.ownAll(
-                                playMode.subscribe(requestUpdate),
-                                hoverTransient.subscribe(requestUpdate)
-                            )
-                            const optWarpMarkers = audioContent.optWarpMarkers
-                            if (!audioContent.asPlayModeTimeStretch.isEmpty()
-                                && !optWarpMarkers.isEmpty() && !audioContent.optFile.isEmpty()) {
-                                playModeTerminator.own(TransientMarkerEditing.install(project, canvas, range, reader,
-                                    optWarpMarkers.unwrap(), audioContent.file.transients))
-                            }
-                        })
-                    })
+                    audioContent.observableOptPlayMode.catchupAndSubscribe(bindMarkers),
+                    audioContent.box.file.subscribe(bindMarkers)
                 )
             }}/>
         </div>
