@@ -218,7 +218,10 @@ export class AgentConnection {
                 const title = argumentOf(args, "title")
                 const text = typeof title === "string" ? title : AgentConnection.ChangingTitle
                 this.#task.match({
-                    none: () => this.#beginTask(text),
+                    none: () => {
+                        this.#beginTask(text)
+                        this.#countCall()
+                    },
                     some: ({task}) => {
                         task.rename(text)
                         this.#touch()
