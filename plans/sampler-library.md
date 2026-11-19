@@ -90,6 +90,10 @@ Release 0.8 s for struck instruments.
 | Vibraphone Soft Mallets | live on DEV, 22 samples, 35.3 MB |
 | Vibraphone Bowed | dropped, recorded too quiet, and enough vibraphones |
 | Marimba | dropped, recorded too quiet (loudest -14.8 dB, soft layer down to -68 dB) |
+| Glockenspiel | dropped, recorded too quiet (loudest -23.4 dB) |
+
+The survey (`plans/sampler-library-survey.md`) drops every folder whose loudest file stays below -12 dB: 92 presets
+remain, 54 are dropped.
 
 ## Phases
 
