@@ -19,7 +19,7 @@ Delete or insert a section of time on one track, several tracks or the whole son
 2. The range always snaps to the current snapping.
 3. Without Shift the range covers the tracks the drag crosses. With Shift it covers all tracks plus the global tracks (markers, tempo, signature, key, chord).
 4. The range is drawn as an overlay. Dragging its body moves it, dragging an edge resizes it, both snapped.
-5. Right click inside the range opens its menu: Delete Time, Insert Time.
+5. Right click inside the range opens its menu: Delete Time, Insert Time, Insert Region, Bounce...
 6. Escape, a click outside the range or switching to the Pointer tool removes it.
 
 ## Actions
@@ -28,6 +28,14 @@ Delete or insert a section of time on one track, several tracks or the whole son
 2. **Insert Time** (`Cmd+I`, like Insert Silence in Ableton): clears the range by pushing. On every track of the range, split regions crossing the range start and move everything from the range start right by the range length. Nothing is deleted. Same for global tracks.
 3. Each action is one undo step. The range stays at its position after the action.
 4. Automation lives in value regions on their own tracks, so it follows the tracks the range covers.
+5. **Insert Region** (`Alt+I`): Insert Time, then one new empty region per track filling the inserted range. Note tracks get a note region, value tracks a value region, audio tracks only get the inserted time. Disabled when the range holds only audio tracks. One undo step.
+6. **Bounce...**: renders the exact range of all tracks in it into one sample.
+   1. Offline render on a project copy of every instrument in the range (by one of its tracks or by its own lane when it has no note or audio track), taken after its channel strip (post-fader stem, sends and master excluded), summed into one sample. The other tracks of these units are disabled, solo is cleared.
+   2. A dialog offers one option, Pre-roll in quarter notes (0 is off): rendering starts earlier so held notes and tails reaching into the range sound, only the range is kept.
+   3. Progress dialog, shown delayed.
+   4. Result: a new Tape unit below the last track of the range, one region at the range start holding the sample. The originals stay untouched.
+   5. The sample goes into the Bounces folder like region bounces.
+   6. The timeline scrolls to the new Tape when it is out of sight.
 
 ## Steps
 
@@ -39,6 +47,9 @@ Delete or insert a section of time on one track, several tracks or the whole son
 6. ~~Global tracks for both actions, tests.~~
 7. ~~Range context menu + action shortcuts.~~
 8. ~~Manual + changelog.~~
+9. ~~Insert Region: action, menu item, shortcut, tests per track type.~~
+10. ~~Bounce: render job for a range over several units (reuse `AudioBounce` render and apply), pre-roll dialog, menu item, tests (range edges sample exact, muted units silent, pre-roll tail present).~~
+11. ~~Manual + changelog for both.~~
 
 ## Rules
 

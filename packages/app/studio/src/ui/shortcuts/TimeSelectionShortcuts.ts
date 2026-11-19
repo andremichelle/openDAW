@@ -8,6 +8,10 @@ export const TimeSelectionShortcutsFactory = ShortcutValidator.validate({
     "insert-time": {
         shortcut: Shortcut.of(Key.KeyI, {ctrl: true}),
         description: "Insert time at the time selection and push later material"
+    },
+    "insert-region": {
+        shortcut: Shortcut.of(Key.KeyI, {alt: true}),
+        description: "Insert time at the time selection and fill it with new regions"
     }
 })
 

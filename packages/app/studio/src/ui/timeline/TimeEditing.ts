@@ -8,9 +8,11 @@ import {
     RegionEditing,
     SignatureTrackAdapter,
     TimelineBoxAdapter,
-    TrackBoxAdapter
+    TrackBoxAdapter,
+    TrackType
 } from "@opendaw/studio-adapters"
 import {ChordEventBox} from "@opendaw/studio-boxes"
+import type {ProjectApi} from "@opendaw/studio-core"
 import {TempoTimeEditing} from "@/ui/timeline/TempoTimeEditing"
 
 export namespace TimeEditing {
@@ -139,6 +141,16 @@ export namespace TimeEditing {
             })
             rebuildSignature(timeline.signatureTrack, events => events.map(push))
         })
+        return touched
+    }
+
+    export const canInsertRegion = (tracks: ReadonlyArray<TrackBoxAdapter>): boolean =>
+        tracks.some(track => track.type === TrackType.Notes || track.type === TrackType.Value)
+
+    export const insertRegion = (api: ProjectApi, tracks: ReadonlyArray<TrackBoxAdapter>, global: ReadonlyArray<Global>,
+                                 position: ppqn, length: ppqn): ReadonlyArray<AnyRegionBoxAdapter> => {
+        const touched = insertTime(tracks, global, position, length)
+        if (length > 0) {tracks.forEach(track => api.createTrackRegion(track.box, position, length))}
         return touched
     }
 }

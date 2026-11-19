@@ -7,6 +7,7 @@ import {
     InstrumentFactories,
     ProjectSkeleton,
     Sample,
+    TrackBoxAdapter,
     TrackType,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
@@ -844,5 +845,69 @@ describe("AudioBounce.renderFrames skip", () => {
         expect(audio.numberOfFrames).toBe(500)
         expect(audio.frames[0][0]).toBeCloseTo(1000 / 1_000_000, 9)
         expect(audio.frames[1][499]).toBeCloseTo(1499 / 1_000_000, 9)
+    })
+})
+
+describe("AudioBounce range", () => {
+    it("takes each instrument once, in timeline order, and skips the output", async () => {
+        const project = await createProject()
+        const lead = unitAdapter(project, createSynth(project, "Lead").audioUnitBox)
+        const bass = unitAdapter(project, createSynth(project, "Bass").audioUnitBox)
+        const output = project.rootBoxAdapter.audioUnits.adapters().find(unit => unit.isOutput)
+        const units = AudioBounce.rangeUnits([bass, lead, bass, ...(isDefined(output) ? [output] : [])])
+        expect(units.map(unit => unit.label)).toEqual(["Lead", "Bass"])
+    })
+
+    it("can only bounce a range holding an instrument", async () => {
+        const project = await createProject()
+        const lead = unitAdapter(project, createSynth(project, "Lead").audioUnitBox)
+        const output = project.rootBoxAdapter.audioUnits.adapters().filter(unit => unit.isOutput)
+        expect(AudioBounce.canBounceRange([])).toBe(false)
+        expect(AudioBounce.canBounceRange(output)).toBe(false)
+        expect(AudioBounce.canBounceRange([lead])).toBe(true)
+    })
+
+    it("keys one post-fader stem per instrument", async () => {
+        const project = await createProject()
+        const units = AudioBounce.rangeUnits([createSynth(project, "Lead"), createSynth(project, "Bass")]
+            .map(({audioUnitBox}) => unitAdapter(project, audioUnitBox)))
+        const {stems} = AudioBounce.rangeConfiguration(units)
+        expect(Object.keys(stems ?? {})).toHaveLength(2)
+        Object.values(stems ?? {}).forEach(stem => expect(stem).toEqual(AudioBounce.stemConfiguration("post-fader", stem.fileName)))
+    })
+
+    it("disables the other tracks of a bounced unit on the copy, keeps the source, clears solo", async () => {
+        const project = await createProject()
+        const lead = createSynth(project, "Lead")
+        const second = project.editing.modify(() => {
+            lead.audioUnitBox.solo.setValue(true)
+            lead.audioUnitBox.mute.setValue(true)
+            return project.api.createNoteTrack(lead.audioUnitBox)
+        }).unwrap("track")
+        const copy = project.copy()
+        AudioBounce.prepareRangeCopy(copy, [lead.audioUnitBox.address.uuid], [lead.trackBox.address.uuid])
+        const find = (box: TrackBox | AudioUnitBox) => copy.boxGraph.findBox(box.address.uuid).unwrap("copied box")
+        expect(asInstanceOf(find(second), TrackBox).enabled.getValue()).toBe(false)
+        expect(asInstanceOf(find(lead.trackBox), TrackBox).enabled.getValue()).toBe(true)
+        expect(asInstanceOf(find(lead.audioUnitBox), AudioUnitBox).solo.getValue()).toBe(false)
+        expect(asInstanceOf(find(lead.audioUnitBox), AudioUnitBox).mute.getValue()).toBe(false)
+        expect(second.enabled.getValue()).toBe(true)
+    })
+
+    it("skips the pre-roll frames and clamps it at the song start", async () => {
+        const project = await createProject()
+        const tracks: ReadonlyArray<TrackBoxAdapter> = []
+        expect(AudioBounce.rangeSpan(project, {units: [], tracks, start: Bar, end: Bar * 2, preRoll: PPQN.Quarter}, 48000))
+            .toEqual({skipFrames: 24000, numFrames: 96000, tail: false})
+        expect(AudioBounce.rangeSpan(project, {units: [], tracks, start: 0, end: Bar, preRoll: PPQN.Quarter}, 48000))
+            .toEqual({skipFrames: 0, numFrames: 96000, tail: false})
+    })
+
+    it("sums stem pairs into one stereo pair", () => {
+        const sum = AudioBounce.sumStems([
+            Float32Array.of(0.1), Float32Array.of(0.2), Float32Array.of(0.3), Float32Array.of(0.4)])
+        expect(sum).toHaveLength(2)
+        expect(sum[0][0]).toBeCloseTo(0.4)
+        expect(sum[1][0]).toBeCloseTo(0.6)
     })
 })

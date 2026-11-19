@@ -3,7 +3,7 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioData, dbToGain, PPQN, ppqn} from "@opendaw/lib-dsp"
-import {InstrumentFactories, ProjectSkeleton, ScriptCompiler, UnionAdapterTypes} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, ScriptCompiler, TrackBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
 import {
     ApparatDeviceBox,
     AudioUnitBox,
@@ -68,10 +68,8 @@ const createEnv = (): ProjectEnv => ({
 
 type Scene = { project: ProjectType, unit: AudioUnitBox, track: TrackBox, delay: DelayDeviceBox }
 
-const createScene = (): Scene => {
-    const project = Project.fromSkeleton(createEnv(),
-        ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
-    const {unit, track, delay} = project.editing.modify(() => {
+const addUnit = (project: ProjectType): Omit<Scene, "project"> =>
+    project.editing.modify(() => {
         const {audioUnitBox, instrumentBox, trackBox} = project.api.createInstrument(InstrumentFactories.Apparat)
         const apparat = asInstanceOf(instrumentBox, ApparatDeviceBox)
         apparat.code.setValue("// @apparat js 1 1\n" + Synth)
@@ -81,8 +79,12 @@ const createScene = (): Scene => {
         const delayBox = asInstanceOf(project.api.insertEffect(audioUnitBox.audioEffects,
             EffectFactories.AudioNamed.Delay), DelayDeviceBox)
         return {unit: audioUnitBox, track: trackBox, delay: delayBox}
-    }).unwrap("scene")
-    return {project, unit, track, delay}
+    }).unwrap("unit")
+
+const createScene = (): Scene => {
+    const project = Project.fromSkeleton(createEnv(),
+        ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+    return {project, ...addUnit(project)}
 }
 
 type Note = { position: ppqn, duration: ppqn }
@@ -343,4 +345,142 @@ describe("AudioBounce render", () => {
         const span = {skipFrames: 0, numFrames: BarFrames, tail: false}
         await expect(AudioBounce.renderFrames(step, span, SampleRate, () => {}, controller.signal)).rejects.toThrow()
     })
+})
+
+// The offline worker's multi stem render, in node: one post-fader stem per unit, summed like AudioBounce.renderRange.
+const bounceRange = async (project: ProjectType, range: Bounce.Range): Promise<AudioData> => {
+    const units = AudioBounce.rangeUnits(range.units)
+    const copy = project.copy()
+    AudioBounce.prepareRangeCopy(copy, units.map(unit => unit.uuid), range.tracks.map(track => track.uuid))
+    const {engine, memory, drainSamples} = await loadFullEngine(SampleRate)
+    const sync = connectSyncToEngine(engine, memory, copy.boxGraph)
+    await sync.settle()
+    const pointer = engine.input_reserve(units.length * 20)
+    units.forEach((unit, index) => {
+        new Uint8Array(memory.buffer, pointer + index * 20, 16).set(unit.uuid)
+        new DataView(memory.buffer, pointer, units.length * 20).setUint32(index * 20 + 16, flagsOf("post-fader"), true)
+    })
+    engine.set_stem_export(units.length, 0)
+    engine.bind()
+    await sync.settle()
+    drainSamples()
+    await sync.settle()
+    engine.set_metronome_enabled(0)
+    engine.stop()
+    engine.set_position(Math.max(0, range.start - range.preRoll))
+    engine.play()
+    const numChannels = units.length * 2
+    const step: Bounce.Step = async count => {
+        const channels = Array.from({length: numChannels}, () => new Float32Array(count))
+        for (let offset = 0; offset < count; offset += Quantum) {
+            engine.render()
+            const planar = new Float32Array(memory.buffer, engine.stem_output_ptr(), numChannels * Quantum)
+            channels.forEach((channel, index) => channel.set(planar.subarray(index * Quantum, (index + 1) * Quantum), offset))
+        }
+        return AudioBounce.sumStems(channels)
+    }
+    return AudioBounce.renderFrames(step, AudioBounce.rangeSpan(project, range, SampleRate), SampleRate)
+}
+
+const trackAdapter = (project: ProjectType, track: TrackBox) =>
+    project.boxAdapters.adapterFor(track, TrackBoxAdapter)
+
+const unitsOf = (project: ProjectType, tracks: ReadonlyArray<TrackBox>) =>
+    tracks.map(track => trackAdapter(project, track).audioUnit).map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
+
+const rangeOf = (project: ProjectType, tracks: ReadonlyArray<TrackBox>, start: ppqn, end: ppqn, preRoll: ppqn = 0): Bounce.Range =>
+    ({units: unitsOf(project, tracks), tracks: tracks.map(track => trackAdapter(project, track)), start, end, preRoll})
+
+const muteDelay = (project: ProjectType, delay: DelayDeviceBox): void => {
+    project.editing.modify(() => delay.enabled.setValue(false))
+}
+
+describe("AudioBounce range render", () => {
+    it("renders exactly the range, starting in the middle of a region", async () => {
+        const scene = createScene()
+        muteDelay(scene.project, scene.delay)
+        addRegion(scene, scene.track, 0, Bar * 4, [{position: Bar * 2, duration: Bar / 4}])
+        const audio = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], Bar * 2, Bar * 3))
+        expect(audio.numberOfFrames).toBe(BarFrames)
+        expect(allFinite(audio)).toBe(true)
+        expect(peak(audio, 0, BarFrames / 8)).toBeGreaterThan(0.05)
+        expect(peak(audio, BarFrames / 4 + Quantum, BarFrames)).toBe(0)
+    }, 60_000)
+
+    it("sums every instrument in the range into one stereo sample", async () => {
+        const scene = createScene()
+        const other = addUnit(scene.project)
+        muteDelay(scene.project, scene.delay)
+        muteDelay(scene.project, other.delay)
+        addRegion(scene, scene.track, 0, Bar, [{position: 0, duration: Bar / 4}])
+        addRegion(scene, other.track, 0, Bar, [{position: Bar / 2, duration: Bar / 4}])
+        const audio = await bounceRange(scene.project, rangeOf(scene.project, [scene.track, other.track], 0, Bar))
+        expect(audio.numberOfChannels).toBe(2)
+        expect(peak(audio, 0, BarFrames / 8)).toBeGreaterThan(0.05)
+        expect(peak(audio, BarFrames / 2, BarFrames / 2 + BarFrames / 8)).toBeGreaterThan(0.05)
+    }, 60_000)
+
+    it("leaves out instruments without a track in the range", async () => {
+        const scene = createScene()
+        const other = addUnit(scene.project)
+        muteDelay(scene.project, scene.delay)
+        muteDelay(scene.project, other.delay)
+        addRegion(scene, scene.track, 0, Bar, [{position: 0, duration: Bar / 4}])
+        addRegion(scene, other.track, 0, Bar, [{position: Bar / 2, duration: Bar / 4}])
+        const audio = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], 0, Bar))
+        expect(peak(audio, 0, BarFrames / 8)).toBeGreaterThan(0.05)
+        expect(peak(audio, BarFrames / 4 + Quantum, BarFrames)).toBe(0)
+    }, 60_000)
+
+    it("silences tracks of a bounced instrument outside the range", async () => {
+        const scene = createScene()
+        muteDelay(scene.project, scene.delay)
+        const second = scene.project.editing.modify(() => scene.project.api.createNoteTrack(scene.unit)).unwrap("track")
+        addRegion(scene, scene.track, 0, Bar, [{position: 0, duration: Bar / 4}])
+        addRegion(scene, second, 0, Bar, [{position: Bar / 2, duration: Bar / 4}])
+        const audio = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], 0, Bar))
+        expect(peak(audio, 0, BarFrames / 8)).toBeGreaterThan(0.05)
+        expect(peak(audio, BarFrames / 4 + Quantum, BarFrames)).toBe(0)
+    }, 60_000)
+
+    it("takes the signal after the channel strip", async () => {
+        const scene = createScene()
+        muteDelay(scene.project, scene.delay)
+        addRegion(scene, scene.track, 0, Bar)
+        const range = rangeOf(scene.project, [scene.track], 0, Bar)
+        const loud = await bounceRange(scene.project, range)
+        scene.project.editing.modify(() => scene.unit.volume.setValue(-6.0))
+        const quiet = await bounceRange(scene.project, range)
+        expect(rms(quiet) / rms(loud)).toBeCloseTo(dbToGain(-6.0), 1)
+    }, 60_000)
+
+    it("pre-roll lets echoes from before the range ring into it", async () => {
+        const scene = createScene()
+        addRegion(scene, scene.track, 0, Bar * 2, [{position: Bar - Bar / 4, duration: Bar / 8}])
+        const dry = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], Bar, Bar * 2))
+        const wet = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], Bar, Bar * 2, PPQN.Quarter * 2))
+        expect(dry.numberOfFrames).toBe(BarFrames)
+        expect(wet.numberOfFrames).toBe(BarFrames)
+        expect(peak(dry)).toBe(0)
+        expect(peak(wet)).toBeGreaterThan(0.01)
+    }, 60_000)
+
+    it("an instrument picked by its own row keeps its tracks outside the range silent", async () => {
+        const scene = createScene()
+        muteDelay(scene.project, scene.delay)
+        addRegion(scene, scene.track, 0, Bar, [{position: 0, duration: Bar / 4}])
+        const range: Bounce.Range = {units: unitsOf(scene.project, [scene.track]), tracks: [], start: 0, end: Bar, preRoll: 0}
+        const audio = await bounceRange(scene.project, range)
+        expect(audio.numberOfFrames).toBe(BarFrames)
+        expect(peak(audio)).toBe(0)
+    }, 60_000)
+
+    it("pre-roll is clamped at the song start", async () => {
+        const scene = createScene()
+        muteDelay(scene.project, scene.delay)
+        addRegion(scene, scene.track, 0, Bar, [{position: 0, duration: Bar / 4}])
+        const audio = await bounceRange(scene.project, rangeOf(scene.project, [scene.track], 0, Bar, Bar))
+        expect(audio.numberOfFrames).toBe(BarFrames)
+        expect(peak(audio, 0, BarFrames / 8)).toBeGreaterThan(0.05)
+    }, 60_000)
 })

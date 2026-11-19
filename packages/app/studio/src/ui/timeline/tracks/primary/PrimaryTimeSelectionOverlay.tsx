@@ -59,8 +59,8 @@ export const PrimaryTimeSelectionOverlay = ({lifecycle, service}: Construct) => 
                     originAt: () => 0,
                     scopeAt: () => ({rows: UUID.newSet<UUID.Bytes>(uuid => uuid), global: true}),
                     moveRows: selection => selection.rows,
-                    apply: (selection, action) => TimeSelectionActions.apply(service, selection,
-                        TimeSelectionActions.allTracks(project), action)
+                    scope: () => TimeSelectionActions.allScope(project),
+                    apply: (selection, scope, action) => TimeSelectionActions.apply(service, selection, scope, action)
                 }),
                 attachWheelScroll(element, range),
                 installAutoScroll(element, deltaX => {

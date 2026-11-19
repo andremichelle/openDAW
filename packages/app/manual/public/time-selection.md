@@ -3,7 +3,7 @@
 The timeline has two tools in its header, between the plus button and Follow Cursor.
 
 - **Pointer** (V) selects, moves, copies and cuts regions, as always
-- **Time Selection** (T) selects a stretch of time to delete or insert, empty or not
+- **Time Selection** (T) selects a stretch of time to delete, insert or bounce, empty or not
 
 ---
 
@@ -43,17 +43,43 @@ start is cut there. Nothing is deleted.
 
 ---
 
-## 4. Cleanup Inaudible Content
+## 4. Insert Region
 
-A cut region keeps all its notes and automation points, even those it can no longer play. When Delete Time or Insert
-Time would leave such content behind, openDAW asks first. **Remove** deletes it together with the edit, **Ignore** keeps
-it. Content shared with mirrored regions is never touched.
+Right-click inside the range and choose **Insert Region**, or press **Alt+I**.
+
+Works like Insert Time, then fills the new empty space with a new region on every note and automation track in the
+range. A new automation region starts at the value that played before it. Audio tracks only get the inserted time, so
+the item is disabled when the range holds nothing but audio tracks.
 
 ---
 
-## 5. Frozen Tracks
+## 5. Bounce
+
+Right-click inside the range and choose **Bounce...** to render the range into one sample.
+
+All instruments in the range play together, each after its own volume and panning, without sends and without the
+master. An instrument without note or audio tracks, driven by a sequencer for example, counts when its lane is in the
+range. Tracks of these instruments outside the range stay silent, automation included.
+
+**Pre-roll** starts playback that many quarter notes earlier, so held notes and echoes from before the range reach
+into it. The sample still covers exactly the range.
+
+The sample goes into the Bounces folder of your library and plays on a new Tape track below the last instrument of the
+range, starting at the range. The original tracks stay as they are, so mute one of them to avoid hearing it twice.
+
+---
+
+## 6. Cleanup Inaudible Content
+
+A cut region keeps all its notes and automation points, even those it can no longer play. When Delete Time, Insert
+Time or Insert Region would leave such content behind, openDAW asks first. **Remove** deletes it together with the
+edit, **Ignore** keeps it. Content shared with mirrored regions is never touched.
+
+---
+
+## 7. Frozen Tracks
 
 If a [frozen track](/manuals/freeze-audiounit) is part of the range, openDAW asks first. Confirm to unfreeze and edit
 it, then freeze it again when you are done, or cancel to leave everything as it is.
 
-Each Delete Time and Insert Time is one undo step.
+Each Delete Time, Insert Time and Insert Region is one undo step.

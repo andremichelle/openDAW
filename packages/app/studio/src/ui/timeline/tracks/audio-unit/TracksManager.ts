@@ -12,6 +12,7 @@ import {
     NumberComparator,
     ObservableOption,
     Option,
+    Predicate,
     SortedSet,
     Terminable,
     Terminator,
@@ -224,9 +225,22 @@ export class TracksManager implements Terminable {
 
     numTracks(): int {return this.tracks().length}
 
-    timeTracks({rows}: TimeSelection): ReadonlyArray<TrackBoxAdapter> {
-        const all = this.#tracks.values()
+    timeTracks(selection: TimeSelection): ReadonlyArray<TrackBoxAdapter> {
         const visible = new Set<TrackContext>(this.tracks())
+        const {spanKeys, isCoveredUnit} = this.#covered(selection)
+        return this.#tracks.values().filter(track => spanKeys.hasKey(track.trackBoxAdapter.uuid)
+            || (!visible.has(track) && track.audioUnitBoxAdapter.mapOr(isCoveredUnit, false)))
+            .map(({trackBoxAdapter}) => trackBoxAdapter)
+    }
+
+    timeUnits(selection: TimeSelection): ReadonlyArray<AudioUnitBoxAdapter> {
+        const {isCoveredUnit} = this.#covered(selection)
+        return this.#audioUnits.values().map(({adapter}) => adapter).filter(isCoveredUnit)
+    }
+
+    #covered({rows}: TimeSelection): Readonly<{
+        spanKeys: SortedSet<UUID.Bytes, UUID.Bytes>, isCoveredUnit: Predicate<AudioUnitBoxAdapter>
+    }> {
         const timeRows = this.timeRows()
         const first = timeRows.findIndex(({key}) => rows.hasKey(key))
         const last = timeRows.findLastIndex(({key}) => rows.hasKey(key))
@@ -242,9 +256,7 @@ export class TracksManager implements Terminable {
         const isCoveredUnit = (unit: AudioUnitBoxAdapter): boolean => coveredUnits.hasKey(unit.uuid)
             || (unitRows.find(row => row.unit === unit.box)?.ancestors
                 .some(ancestor => coveredUnits.hasKey(ancestor.address.uuid)) ?? false)
-        return all.filter(track => spanKeys.hasKey(track.trackBoxAdapter.uuid)
-            || (!visible.has(track) && track.audioUnitBoxAdapter.mapOr(isCoveredUnit, false)))
-            .map(({trackBoxAdapter}) => trackBoxAdapter)
+        return {spanKeys, isCoveredUnit}
     }
 
     timeRows(): ReadonlyArray<TimeSelection.Row> {
@@ -270,6 +282,7 @@ export class TracksManager implements Terminable {
         const {rootBoxAdapter} = project
         return Terminable.many(
             project.audioUnitLayout.value.subscribe(() => this.#invalidateOrder()),
+            this.#service.timeline.revealAudioUnit.subscribe(uuid => requestAnimationFrame(() => this.#reveal(uuid))),
             project.audioUnitSelection.subscribe({
                 onSelected: () => this.#refreshSelectionRows(),
                 onDeselected: () => this.#refreshSelectionRows()
@@ -476,6 +489,19 @@ export class TracksManager implements Terminable {
             })
             this.#invalidateOrder()
         }))
+    }
+
+    #reveal(uuid: UUID.Bytes): void {
+        if (this.#terminated) {return}
+        this.#audioUnits.opt(uuid).ifSome(({unitTracks}) => {
+            const view = this.#scrollContainer.getBoundingClientRect()
+            const {top, bottom} = unitTracks.getBoundingClientRect()
+            if (top < view.top) {
+                this.#scrollModel.position += top - view.top
+            } else if (bottom > view.bottom) {
+                this.#scrollModel.position += Math.min(bottom - view.bottom, top - view.top)
+            }
+        })
     }
 
     #invalidateOrder(): void {

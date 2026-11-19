@@ -130,6 +130,7 @@ export class StudioService implements ProjectEnv {
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
         tool: new DefaultObservableValue<TimelineTool>("pointer"),
         timeSelection: new MutableObservableOption<TimeSelection>(),
+        revealAudioUnit: new Notifier<UUID.Bytes>(),
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
             tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),

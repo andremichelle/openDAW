@@ -23,13 +23,14 @@ export namespace TimeSelectionGestures {
         originAt: (clientY: number) => number
         scopeAt: (origin: number, clientY: number, shiftKey: boolean) => Scope
         moveRows: (selection: TimeSelection, origin: number, clientY: number) => TimeSelection["rows"]
-        apply: (selection: TimeSelection, action: TimeSelectionActions.Action) => void
+        scope: (selection: TimeSelection) => TimeSelectionActions.Scope
+        apply: (selection: TimeSelection, scope: TimeSelectionActions.Scope, action: TimeSelectionActions.Action) => void
     }>
 
     const EdgeRadius = 4
 
     export const install = ({
-                                element, range, snapping, shortcuts, timeSelection, owns, covers, originAt, scopeAt, moveRows, apply
+                                element, range, snapping, shortcuts, timeSelection, owns, covers, originAt, scopeAt, moveRows, scope, apply
                             }: Construct): Terminable => {
         const lifecycle = new Terminator()
         const localX = (clientX: number): number => clientX - element.getBoundingClientRect().left
@@ -60,7 +61,7 @@ export namespace TimeSelectionGestures {
             none: () => false,
             some: selection => {
                 if (!owns(selection)) {return false}
-                apply(selection, action)
+                apply(selection, scope(selection), action)
                 return true
             }
         })
@@ -126,10 +127,12 @@ export namespace TimeSelectionGestures {
             }),
             ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
                 if (hitTest(client.clientX, client.clientY) === "outside") {return}
-                addItems(...TimeSelectionActions.menuItems(action => run(action)))
+                timeSelection.ifSome(selection =>
+                    addItems(...TimeSelectionActions.menuItems(scope(selection), action => run(action))))
             }),
             shortcuts.register(TimeSelectionShortcuts["delete-time"].shortcut, () => run("delete")),
             shortcuts.register(TimeSelectionShortcuts["insert-time"].shortcut, () => run("insert")),
+            shortcuts.register(TimeSelectionShortcuts["insert-region"].shortcut, () => run("insert-region")),
             Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
                 if (event.code === Key.Escape) {timeSelection.clear()}
             }),

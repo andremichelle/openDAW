@@ -22,9 +22,11 @@ import {
     ExportStemConfiguration,
     InstrumentFactories,
     NoteRegionBoxAdapter,
-    Sample
+    Sample,
+    TrackBoxAdapter
 } from "@opendaw/studio-adapters"
 import {AudioFileBox, AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioContentFactory, AudioFileBoxFactory, Project} from "./project"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
 import {SampleService, SampleStorage} from "./samples"
@@ -332,6 +334,138 @@ export namespace AudioBounce {
                     project.trackUserCreatedSample(UUID.parse(sample.uuid))
                 })
             })
+        })
+    }
+
+    export type Range = {
+        units: ReadonlyArray<AudioUnitBoxAdapter>
+        tracks: ReadonlyArray<TrackBoxAdapter>
+        start: ppqn
+        end: ppqn
+        preRoll: ppqn
+    }
+    export type RangeRendered = { sample: Sample, modifier: () => AudioFileBox }
+
+    export const rangeUnits = (units: ReadonlyArray<AudioUnitBoxAdapter>): ReadonlyArray<AudioUnitBoxAdapter> => {
+        const instruments = UUID.newSet<AudioUnitBoxAdapter>(unit => unit.uuid)
+        units.filter(unit => unit.type === AudioUnitType.Instrument).forEach(unit => instruments.add(unit))
+        return instruments.values().toSorted((a, b) => a.indexField.getValue() - b.indexField.getValue())
+    }
+
+    export const canBounceRange = (units: ReadonlyArray<AudioUnitBoxAdapter>): boolean =>
+        units.some(unit => unit.type === AudioUnitType.Instrument)
+
+    export const rangeConfiguration = (units: ReadonlyArray<AudioUnitBoxAdapter>): ExportConfiguration => ({
+        stems: Object.fromEntries(units.map(unit =>
+            [UUID.toString(unit.uuid), stemConfiguration("post-fader", unit.label)]))
+    })
+
+    // Runs on a copy: tracks of the bounced units outside the range fall silent.
+    export const prepareRangeCopy = (copy: Project, units: ReadonlyArray<UUID.Bytes>,
+                                     tracks: ReadonlyArray<UUID.Bytes>): void => {
+        const inRange = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        tracks.forEach(uuid => inRange.add(uuid))
+        const {boxGraph, boxAdapters, rootBoxAdapter} = copy
+        boxGraph.beginTransaction()
+        rootBoxAdapter.audioUnits.adapters().forEach(unit => unit.box.solo.setValue(false))
+        units.forEach(uuid => boxGraph.findBox(uuid).ifSome(box => {
+            const unit = boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
+            unit.box.mute.setValue(false)
+            unit.tracks.values().forEach(track => {
+                if (!inRange.hasKey(track.uuid)) {track.box.enabled.setValue(false)}
+            })
+        }))
+        boxGraph.endTransaction()
+    }
+
+    export const rangeSpan = (project: Project, {start, end, preRoll}: Range, sampleRate: int): Span => {
+        const from = Math.max(0, start - preRoll)
+        return {
+            skipFrames: from < start ? frameCount(project, from, start, sampleRate) : 0,
+            numFrames: frameCount(project, start, end, sampleRate),
+            tail: false
+        }
+    }
+
+    export const sumStems = (channels: ReadonlyArray<Float32Array>): ReadonlyArray<Float32Array> => {
+        if (channels.length === 2) {return channels}
+        const sum = Arrays.create(() => new Float32Array(channels[0].length), 2)
+        channels.forEach((channel, index) => {
+            const target = sum[index % 2]
+            for (let frame = 0; frame < channel.length; frame++) {target[frame] += channel[frame]}
+        })
+        return sum
+    }
+
+    export const renderRange = async (project: Project, range: Range, sampleRate: int,
+                                      onProgress: Procedure<unitValue> = EmptyProcedure,
+                                      abortSignal?: AbortSignal): Promise<AudioData> => {
+        const units = rangeUnits(range.units)
+        const copy = project.copy()
+        prepareRangeCopy(copy, units.map(unit => unit.uuid), range.tracks.map(track => track.uuid))
+        const renderer = await OfflineEngineRenderer.create(copy, Option.wrap(rangeConfiguration(units)), sampleRate)
+        const result = await Promises.tryCatch((async () => {
+            await renderer.waitForLoading()
+            renderer.setPosition(Math.max(0, range.start - range.preRoll))
+            await renderer.play()
+            await renderer.waitForLoading()
+            return renderFrames(count => renderer.step(count).then(sumStems),
+                rangeSpan(project, range, sampleRate), sampleRate, onProgress, abortSignal)
+        })())
+        renderer.terminate()
+        if (result.status === "rejected") {return Promise.reject(result.error)}
+        return result.value
+    }
+
+    export const bounceRange = async (project: Project, sampleService: SampleService, range: Range,
+                                      abortSignal?: AbortSignal): Promise<Option<AudioUnitBox>> => {
+        const units = rangeUnits(range.units)
+        if (units.length === 0 || range.end <= range.start) {return Option.None}
+        const abortController = new AbortController()
+        if (isDefined(abortSignal)) {abortSignal.addEventListener("abort", () => abortController.abort())}
+        const progress = new DefaultObservableValue(0.0)
+        const dialog = RuntimeNotifier.progress({
+            headline: "Bouncing...",
+            progress,
+            delayed: true,
+            cancel: () => abortController.abort()
+        })
+        const name = units.map(unit => unit.label).join(" + ")
+        const result = await Promises.tryCatch((async (): Promise<RangeRendered> => {
+            const audioData = await renderRange(project, range, sampleService.audioContext.sampleRate,
+                value => progress.setValue(value), abortController.signal)
+            const sample = await sampleService.importFile({
+                name,
+                bpm: project.timelineBox.bpm.getValue(),
+                arrayBuffer: WavFile.encodeFloats(audioData)
+            })
+            const modifier = await AudioFileBoxFactory.createModifier(
+                Workers.Transients, project.boxGraph, audioData, UUID.parse(sample.uuid), sample.name)
+            return {sample, modifier}
+        })())
+        dialog.terminate()
+        if (result.status === "rejected") {
+            if (!Errors.isAbort(result.error)) {
+                console.warn(result.error)
+                RuntimeNotifier.notify({message: "Bounce failed.", icon: "Warning"})
+            }
+            return Option.None
+        }
+        await fileSamples([result.value.sample.uuid])
+        return applyRangeEdit(project, Arrays.getLast(units, "range units"), range.start, name, result.value)
+    }
+
+    export const applyRangeEdit = (project: Project, below: AudioUnitBoxAdapter, position: ppqn, name: string,
+                                   {sample, modifier}: RangeRendered): Option<AudioUnitBox> => {
+        const {api, boxGraph, editing} = project
+        return editing.modify(() => {
+            const {audioUnitBox, trackBox} = api.createInstrument(InstrumentFactories.Tape, {name: `${name} Bounce`})
+            api.placeAudioUnit(audioUnitBox, below.indexField.getValue() + 1)
+            AudioContentFactory.createNotStretchedRegion({
+                boxGraph, targetTrack: trackBox, audioFileBox: modifier(), sample, position, name
+            })
+            project.trackUserCreatedSample(UUID.parse(sample.uuid))
+            return audioUnitBox
         })
     }
 }

@@ -35,8 +35,9 @@ export namespace TimeSelectionTool {
                 const delta = clamp(rowAt(clientY) - origin, -first, manager.timeRows().length - 1 - last)
                 return rowKeys(first + delta, last + delta)
             },
-            apply: (selection, action) => TimeSelectionActions.apply(service, selection,
-                selection.global ? TimeSelectionActions.allTracks(project) : manager.timeTracks(selection), action)
+            scope: selection => selection.global ? TimeSelectionActions.allScope(project)
+                : {tracks: manager.timeTracks(selection), units: manager.timeUnits(selection)},
+            apply: (selection, scope, action) => TimeSelectionActions.apply(service, selection, scope, action)
         })
     }
 }

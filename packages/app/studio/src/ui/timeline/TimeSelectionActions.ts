@@ -1,32 +1,50 @@
-import {Arrays, isInstanceOf, UUID} from "@opendaw/lib-std"
+import {Arrays, EmptyExec, isInstanceOf, UUID} from "@opendaw/lib-std"
 import {AnyRegionBoxAdapter, AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
-import {MenuItem, Project} from "@opendaw/studio-core"
+import {AudioBounce, MenuItem, Project} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {TimeSelection} from "@/ui/timeline/TimeSelection"
 import {TimeEditing} from "@/ui/timeline/TimeEditing"
 import {InaudibleContent} from "@/ui/timeline/InaudibleContent"
 import {TimeSelectionShortcuts} from "@/ui/shortcuts/TimeSelectionShortcuts"
 import {Dialogs} from "@/ui/components/dialogs"
+import {Bounces} from "@/service/Bounces"
 
 export namespace TimeSelectionActions {
-    export type Action = "delete" | "insert"
+    export type Action = "delete" | "insert" | "insert-region" | "bounce"
+    export type Scope = Readonly<{tracks: ReadonlyArray<TrackBoxAdapter>, units: ReadonlyArray<AudioUnitBoxAdapter>}>
 
     export const allTracks = ({boxGraph, boxAdapters}: Project): ReadonlyArray<TrackBoxAdapter> => boxGraph.boxes()
         .filter(box => isInstanceOf(box, TrackBox))
         .map(box => boxAdapters.adapterFor(box, TrackBoxAdapter))
 
-    export const apply = ({project}: StudioService, selection: TimeSelection,
-                          tracks: ReadonlyArray<TrackBoxAdapter>, action: Action): void => {
-        const {editing, audioUnitFreeze, boxGraph, boxAdapters, timelineBoxAdapter} = project
+    export const allScope = (project: Project): Scope =>
+        ({tracks: allTracks(project), units: project.rootBoxAdapter.audioUnits.adapters()})
+
+    export const apply = (service: StudioService, selection: TimeSelection, scope: Scope, action: Action): void => {
+        if (action === "bounce") {
+            Bounces.bounceRange(service, selection, scope).then(EmptyExec, console.warn)
+            return
+        }
+        const {tracks} = scope
+        const {project} = service
+        if (action === "insert-region" && !TimeEditing.canInsertRegion(tracks)) {return}
+        const {api, editing, audioUnitFreeze, boxGraph, boxAdapters, timelineBoxAdapter} = project
         const units = UUID.newSet<AudioUnitBoxAdapter>(unit => unit.uuid)
         tracks.forEach(track => track.optAudioUnit.ifSome(box => units.add(boxAdapters.adapterFor(box, AudioUnitBoxAdapter))))
         const frozen = units.values().filter(unit => audioUnitFreeze.isFrozen(unit))
         const {position, complete, global} = selection
         const globals: ReadonlyArray<TimeEditing.Global> = global ? [{timeline: timelineBoxAdapter, boxGraph}] : []
-        const edit = (mark: boolean): ReadonlyArray<AnyRegionBoxAdapter> => editing.modify(() => action === "delete"
-            ? TimeEditing.deleteTime(tracks, globals, position, complete)
-            : TimeEditing.insertTime(tracks, globals, position, complete - position), mark).unwrapOrElse(Arrays.empty())
+        const edit = (mark: boolean): ReadonlyArray<AnyRegionBoxAdapter> => editing.modify(() => {
+            switch (action) {
+                case "delete":
+                    return TimeEditing.deleteTime(tracks, globals, position, complete)
+                case "insert":
+                    return TimeEditing.insertTime(tracks, globals, position, complete - position)
+                case "insert-region":
+                    return TimeEditing.insertRegion(api, tracks, globals, position, complete - position)
+            }
+        }, mark).unwrapOrElse(Arrays.empty())
         const run = (): void => {
             const inaudible = InaudibleContent.count(tracks.flatMap(track => track.regions.collection.asArray()),
                 action === "delete" ? [position, complete] : [position],
@@ -64,10 +82,16 @@ export namespace TimeSelectionActions {
         })
     }
 
-    export const menuItems = (run: (action: Action) => void): ReadonlyArray<MenuItem> => [
+    export const menuItems = ({tracks, units}: Scope, run: (action: Action) => void): ReadonlyArray<MenuItem> => [
         MenuItem.default({label: "Delete Time", shortcut: TimeSelectionShortcuts["delete-time"].shortcut.format()})
             .setTriggerProcedure(() => run("delete")),
         MenuItem.default({label: "Insert Time", shortcut: TimeSelectionShortcuts["insert-time"].shortcut.format()})
-            .setTriggerProcedure(() => run("insert"))
+            .setTriggerProcedure(() => run("insert")),
+        MenuItem.default({
+            label: "Insert Region", selectable: TimeEditing.canInsertRegion(tracks),
+            shortcut: TimeSelectionShortcuts["insert-region"].shortcut.format()
+        }).setTriggerProcedure(() => run("insert-region")),
+        MenuItem.default({label: "Bounce...", selectable: AudioBounce.canBounceRange(units)})
+            .setTriggerProcedure(() => run("bounce"))
     ]
 }

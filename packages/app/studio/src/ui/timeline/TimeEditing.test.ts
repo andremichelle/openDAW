@@ -280,6 +280,56 @@ describe("TimeEditing.insertTime", () => {
     })
 })
 
+describe("TimeEditing.insertRegion", () => {
+    it("pushes and fills the inserted time with an empty note region", async () => {
+        const project = await createProject()
+        const [track] = createTracks(project, 1)
+        createRegion(project, track, 0, 1920)
+        project.editing.modify(() => TimeEditing.insertRegion(project.api, [track], [], 960, 480))
+        expect(spans(track)).toEqual([[0, 960], [960, 1440], [1440, 2400]])
+        const inserted = track.regions.collection.asArray()[1]
+        expect(inserted.type).toBe("note-region")
+        expect(inserted.isNoteRegion() && inserted.optCollection.unwrap().events.asArray().length).toBe(0)
+        project.terminate()
+    })
+    it("creates one region per track", async () => {
+        const project = await createProject()
+        const tracks = createTracks(project, 2)
+        project.editing.modify(() => TimeEditing.insertRegion(project.api, tracks, [], 0, 960))
+        tracks.forEach(track => expect(spans(track)).toEqual([[0, 960]]))
+        project.terminate()
+    })
+    it("is undone in one step", async () => {
+        const project = await createProject()
+        const [track] = createTracks(project, 1)
+        createRegion(project, track, 0, 960)
+        project.editing.modify(() => TimeEditing.insertRegion(project.api, [track], [], 0, 960))
+        expect(spans(track)).toEqual([[0, 960], [960, 1920]])
+        project.editing.undo()
+        expect(spans(track)).toEqual([[0, 960]])
+        project.terminate()
+    })
+    it("creates nothing for an empty range", async () => {
+        const project = await createProject()
+        const [track] = createTracks(project, 1)
+        project.editing.modify(() => TimeEditing.insertRegion(project.api, [track], [], 0, 0))
+        expect(spans(track)).toEqual([])
+        project.terminate()
+    })
+    it("is only available with a note or value track", async () => {
+        const project = await createProject()
+        const [track] = createTracks(project, 1)
+        const audioTrackBox = project.editing.modify(() =>
+            project.api.createAudioTrack(track.audioUnit)).unwrap()
+        const audio = project.boxAdapters.adapterFor(audioTrackBox, TrackBoxAdapter)
+        expect(TimeEditing.canInsertRegion([track])).toBe(true)
+        expect(TimeEditing.canInsertRegion([audio])).toBe(false)
+        expect(TimeEditing.canInsertRegion([audio, track])).toBe(true)
+        expect(TimeEditing.canInsertRegion([])).toBe(false)
+        project.terminate()
+    })
+})
+
 describe("InaudibleContent", () => {
     it("finds the notes the cut pieces can no longer play", async () => {
         const {InaudibleContent} = await import("./InaudibleContent")
