@@ -575,17 +575,6 @@ export class PresetService {
             {name: dialog.value.name, description: dialog.value.description, tags: dialog.value.tags})
     }
 
-    async uploadPreset(entry: PresetEntry): Promise<void> {
-        if (entry.source !== "user") {return}
-        const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
-        if (loaded.status === "rejected") {
-            console.warn(loaded.error)
-            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
-            return
-        }
-        await OpenPresetAPI.get().upload(loaded.value, entry)
-    }
-
     async deletePreset(entry: PresetEntry): Promise<void> {
         if (entry.source !== "user") {return}
         const approved = await RuntimeNotifier.approve({

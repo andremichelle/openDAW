@@ -13,8 +13,6 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs"
 import {DialogHandler} from "@/ui/components/Dialog"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {AccessKey} from "@/opendaw-api/AccessKey"
-import {OpenPresetAPI} from "@/opendaw-api/OpenPresetAPI"
 import {TubularCartridge} from "./TubularCartridges"
 
 const className = Html.adoptStyleSheet(css, "TubularAudition")
@@ -28,8 +26,7 @@ type Construct = {
 }
 
 // Cursor over every voice of the bundled banks and any .syx loaded here: a bank menu, arrows step, space
-// plays a phrase, K keeps. Keepers persist in localStorage and become openDAW presets (local, optionally
-// uploaded as stock) on request.
+// plays a phrase, K keeps. Keepers persist in localStorage and become local openDAW presets on request.
 export namespace TubularAudition {
     const STORAGE_KEY = "tubular-audition-keepers"
     const PHRASE: ReadonlyArray<byte> = [48, 55, 60, 64]
@@ -155,7 +152,7 @@ export namespace TubularAudition {
                 .filter(({cartridge, index}) => keepers.has(keeperKey(cartridge, index))))
         // Every keeper becomes an instrument preset: the voice is written into THIS device, the unit is encoded
         // without its effect chain, and the current voice is restored afterwards.
-        const savePresets = async (upload: boolean): Promise<void> => {
+        const savePresets = async (): Promise<void> => {
             const entries = keeperEntries()
             if (entries.length === 0) {
                 RuntimeNotifier.notify({message: "No keepers marked.", icon: "Warning"})
@@ -164,7 +161,7 @@ export namespace TubularAudition {
             const restore = TubularPreset.read(adapter.box)
             const restoreLoad = adapter.box.voiceLoad.getValue()
             const progressValue = new DefaultObservableValue<unitValue>(0.0)
-            const progress = RuntimeNotifier.progress({headline: upload ? "Uploading presets" : "Saving presets", progress: progressValue})
+            const progress = RuntimeNotifier.progress({headline: "Saving presets", progress: progressValue})
             let count = 0
             for (const {cartridge, index} of entries) {
                 const voice = cartridge.voices[index]
@@ -182,9 +179,7 @@ export namespace TubularAudition {
                     created: now,
                     modified: now
                 }
-                const result = await Promises.tryCatch(upload
-                    ? OpenPresetAPI.get().upload(bytes as ArrayBuffer, meta)
-                    : PresetStorage.save(meta, bytes))
+                const result = await Promises.tryCatch(PresetStorage.save(meta, bytes))
                 if (result.status === "rejected") {
                     console.warn(result.error)
                     RuntimeNotifier.notify({message: `Failed at ${voice.name}: ${result.error}`, icon: "Warning"})
@@ -201,7 +196,7 @@ export namespace TubularAudition {
             }, false)
             progress.terminate()
             render()
-            RuntimeNotifier.notify({message: `${count} preset(s) ${upload ? "uploaded" : "saved"}.`, icon: "Checkbox"})
+            RuntimeNotifier.notify({message: `${count} preset(s) saved.`, icon: "Checkbox"})
         }
         const exportList = async (): Promise<void> => {
             const json = JSON.stringify(keeperEntries().map(({cartridge, index}) =>
@@ -225,10 +220,7 @@ export namespace TubularAudition {
             growWidth: true,
             buttons: [
                 {text: "Export list", onClick: guard(() => {exportList().catch(console.warn)})},
-                {text: "Save keepers as presets", onClick: guard(() => {savePresets(false).catch(console.warn)})},
-                ...(AccessKey.get().nonEmpty()
-                    ? [{text: "Upload keepers as stock", onClick: guard(() => {savePresets(true).catch(console.warn)})}]
-                    : [])
+                {text: "Save keepers as presets", onClick: guard(() => {savePresets().catch(console.warn)})}
             ]
         }))
         if (result.status === "rejected" && !Errors.isAbort(result.error)) {console.warn(result.error)}

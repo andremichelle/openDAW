@@ -34,7 +34,6 @@ import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 import {DevicePiano} from "@/ui/browse/DevicePiano"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
-import {AccessKey} from "@/opendaw-api/AccessKey"
 import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "DeviceDialog")
@@ -240,7 +239,6 @@ export namespace DeviceDialog {
             return [
                 {label: "Edit…", run: () => presets.editPreset(preset)},
                 {label: "Duplicate", run: () => presets.duplicatePreset(preset)},
-                ...(AccessKey.get().nonEmpty() ? [{label: "Upload", run: () => presets.uploadPreset(preset)}] : []),
                 {label: "Delete", run: () => presets.deletePreset(preset)},
                 {label: "Save to Disk…", run: () => presets.savePresetToDisk(preset)}
             ]

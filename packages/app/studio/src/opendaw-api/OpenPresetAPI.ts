@@ -1,12 +1,11 @@
 import {
-    asDefined, DefaultObservableValue, isDefined, Lazy, panic, Procedure, RuntimeNotifier, tryCatch, unitValue, UUID
+    asDefined, isDefined, Lazy, panic, Procedure, tryCatch, unitValue, UUID
 } from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {Browser} from "@opendaw/lib-dom"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {EffectFactories, PresetMeta} from "@opendaw/studio-core"
-import {AccessKey} from "./AccessKey"
-import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
+import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {CommunityIndex, PresetDevices} from "./CommunityIndex"
 
 const Devices: PresetDevices = {
@@ -16,7 +15,6 @@ const Devices: PresetDevices = {
 }
 
 export class OpenPresetAPI {
-    static readonly ApiRoot = "https://api.opendaw.studio/presets"
     static readonly FileRoot = "https://assets.opendaw.studio/community"
 
     @Lazy
@@ -99,37 +97,5 @@ export class OpenPresetAPI {
             }
             reader.read().then(nextChunk, reason => {cleanup(); reject(reason)})
         })
-    }
-
-    async upload(arrayBuffer: ArrayBuffer, meta: PresetMeta): Promise<void> {
-        const progress = new DefaultObservableValue(0.0)
-        const dialog = RuntimeNotifier.progress({headline: "Uploading", progress})
-        const formData = new FormData()
-        Object.entries(meta).forEach(([key, value]) => formData.set(key, String(value)))
-        const accessKey = AccessKey.get().unwrap("Cannot upload without access-key.")
-        formData.set("key", accessKey)
-        formData.append("file", new Blob([arrayBuffer]))
-        const xhr = new XMLHttpRequest()
-        xhr.upload.addEventListener("progress", (event: ProgressEvent) => {
-            if (event.lengthComputable) {
-                progress.setValue(event.loaded / event.total)
-            }
-        })
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState === 4) {
-                dialog.terminate()
-                if (xhr.status === 200) {
-                    RuntimeNotifier.notify({message: "Upload complete.", icon: "Checkbox"})
-                } else {
-                    const {status, value} =
-                        tryCatch(() => JSON.parse(xhr.responseText).message ?? "Unknown error message")
-                    console.warn(status === "success" ? value : xhr.responseText)
-                    RuntimeNotifier.notify({message: "Upload failed.", icon: "Warning"})
-                }
-            }
-        }
-        xhr.open("POST", `${OpenPresetAPI.ApiRoot}/upload.php`, true)
-        xhr.setRequestHeader("Authorization", `Basic ${base64Credentials}`)
-        xhr.send(formData)
     }
 }
