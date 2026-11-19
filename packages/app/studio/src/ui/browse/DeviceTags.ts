@@ -1,4 +1,4 @@
-import {Arrays} from "@opendaw/lib-std"
+import {Arrays, isDefined} from "@opendaw/lib-std"
 
 export namespace DeviceTags {
     const Stock: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -28,6 +28,7 @@ export namespace DeviceTags {
         Vaporisateur: ["synth", "subtractive"],
         Wclap: ["plugin"],
         Arpeggio: ["arpeggiator", "pattern"],
+        Euclid: ["generative", "rhythm"],
         Pitch: ["pitch", "transpose"],
         Spielwerk: ["script"],
         Velocity: ["velocity", "dynamics"],
@@ -57,4 +58,48 @@ export namespace DeviceTags {
     }
 
     export const of = (deviceKey: string): ReadonlyArray<string> => Stock[deviceKey] ?? Arrays.empty()
+
+    export type Tag = { readonly name: string, readonly variants: ReadonlyArray<string> }
+
+    export const List: ReadonlyArray<Tag> = [
+        {name: "Synth", variants: ["synth", "synthesizer", "analog", "virtual analog", "fm", "subtractive", "additive", "wavetable", "phase-distortion"]},
+        {name: "Drums", variants: ["drum", "drums", "kit", "percussion", "drum-machine", "snare", "cajon", "darbuka"]},
+        {name: "Sampler", variants: ["sampler", "sample", "soundfont", "general-midi"]},
+        {name: "Keys", variants: ["keys", "piano", "upright", "organ", "pipe-organ"]},
+        {name: "Mallets", variants: ["mallets", "xylophone", "vibraphone", "glockenspiel", "balafon", "bells", "chimes"]},
+        {name: "Strings", variants: ["strings", "harp", "plucked", "guitar", "strum"]},
+        {name: "Wind", variants: ["wind", "flute", "ocarina"]},
+        {name: "Bass", variants: ["bass", "acid"]},
+        {name: "Physical Modeling", variants: ["physical-modeling", "physical modeling", "physical modelling"]},
+        {name: "Granular", variants: ["granular"]},
+        {name: "Dynamics", variants: ["dynamics", "compressor", "limiter", "gate", "expander"]},
+        {name: "EQ", variants: ["eq", "equalizer", "filter"]},
+        {name: "Reverb", variants: ["reverb", "space", "spatial"]},
+        {name: "Delay", variants: ["delay", "echo"]},
+        {name: "Distortion", variants: ["distortion", "saturation", "wavefolder", "amp", "lo-fi", "lofi", "glitch", "tape"]},
+        {name: "Modulation", variants: ["modulation", "chorus", "tremolo", "frequency-shifter"]},
+        {name: "Pitch", variants: ["pitch", "transpose", "phase-vocoder"]},
+        {name: "Vocal", variants: ["vocal"]},
+        {name: "Stereo", variants: ["panning"]},
+        {name: "Mastering", variants: ["mastering", "maximizer", "loudness"]},
+        {name: "Analyzer", variants: ["analyzer"]},
+        {name: "Arpeggiator", variants: ["arpeggiator"]},
+        {name: "Chords", variants: ["chords", "harmony"]},
+        {name: "Groove", variants: ["groove", "shuffle", "timing", "humanize"]},
+        {name: "Generative", variants: ["generative", "random", "sequencer"]},
+        {name: "Velocity", variants: ["velocity"]},
+        {name: "Utility", variants: ["utility", "routing", "parallel", "multiband", "layer"]}
+    ]
+
+    export const Untagged = "Untagged"
+
+    export const matches = ({variants}: Tag, tags: ReadonlyArray<string>): boolean =>
+        tags.some(tag => variants.includes(tag.toLowerCase()))
+
+    // an empty name is All
+    export const accepts = (name: string, tags: ReadonlyArray<string>): boolean => {
+        if (name === Untagged) {return !List.some(tag => matches(tag, tags))}
+        const tag = List.find(entry => entry.name === name)
+        return isDefined(tag) ? matches(tag, tags) : true
+    }
 }

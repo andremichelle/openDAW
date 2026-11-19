@@ -33,6 +33,7 @@ import {DeviceBundle, DeviceCatalog, DeviceEntry, DeviceEntryKind} from "@/ui/br
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {DeviceAudition} from "@/ui/browse/DeviceAudition"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
+import {DeviceTags} from "@/ui/browse/DeviceTags"
 import {PresetCategoryKey} from "@/ui/browse/PresetService"
 import {DevicePiano} from "@/ui/browse/DevicePiano"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
@@ -48,6 +49,13 @@ const ListPadding = 24
 const PickDelayMs = 250
 
 const searchOf: Record<PresetCategoryKey, DefaultObservableValue<string>> = {
+    "instrument": new DefaultObservableValue(""),
+    "audio-effect": new DefaultObservableValue(""),
+    "midi-effect": new DefaultObservableValue("")
+}
+
+// the name of the chosen tag, empty for All
+const tagOf: Record<PresetCategoryKey, DefaultObservableValue<string>> = {
     "instrument": new DefaultObservableValue(""),
     "audio-effect": new DefaultObservableValue(""),
     "midi-effect": new DefaultObservableValue("")
@@ -183,6 +191,7 @@ export namespace DeviceDialog {
         const category = DeviceSlot.categoryOf(slot)
         const color = colorOf[category]
         const searchText = searchOf[category]
+        const tagName = tagOf[category]
         const sources = new DefaultObservableValue<DeviceCatalog.Sources>({presets: [], scripts: [], wclaps: [], soundfonts: []})
         const selected = new MutableObservableOption<DeviceEntry>()
         const elements = new Map<string, HTMLElement>()
@@ -199,6 +208,28 @@ export namespace DeviceDialog {
         const list: HTMLElement = (
             <div className="list" onConnect={element => lifecycle.own(installScrollbars(element))}>{rows}</div>
         )
+        const tagList: HTMLElement = (
+            <div className="tag-list" onConnect={element => lifecycle.own(installScrollbars(element))}/>
+        )
+        const renderTags = (): void => {
+            const entries = DeviceCatalog.entriesFor(slot, sources.getValue())
+            const shown = entries.filter(isVisible)
+            const totalOf = (name: string): int => entries.filter(entry => DeviceTags.accepts(name, entry.tags)).length
+            const names = [
+                ...DeviceTags.List.map(({name}) => ({name, total: totalOf(name)}))
+                    .filter(({total}) => total > 0)
+                    .toSorted((left, right) => right.total - left.total)
+                    .map(({name}) => name),
+                ...(totalOf(DeviceTags.Untagged) > 0 ? [DeviceTags.Untagged] : [])
+            ]
+            const tags = names.map(name => ({name, count: shown.filter(entry => DeviceTags.accepts(name, entry.tags)).length}))
+            tagList.replaceChildren(...[{name: "", count: shown.length}, ...tags].map(({name, count}) => (
+                <button className={name === tagName.getValue() ? "selected" : ""} onclick={() => tagName.setValue(name)}>
+                    <span>{name.length > 0 ? name : "All"}</span>
+                    <span className="count">{count}</span>
+                </button>
+            )))
+        }
         const card: HTMLElement = (
             <div className="card" onConnect={element => lifecycle.own(installScrollbars(element))}/>
         )
@@ -319,7 +350,7 @@ export namespace DeviceDialog {
             const query = searchText.getValue().trim()
             const entries = DeviceCatalog.entriesFor(slot, sources.getValue())
             visible.splice(0, visible.length, ...entries
-                .filter(entry => isVisible(entry) && matches(entry, query))
+                .filter(entry => isVisible(entry) && matches(entry, query) && DeviceTags.accepts(tagName.getValue(), entry.tags))
                 .toSorted(query.length > 0 ? byRelevance(query) : () => 0))
             count.textContent = `${visible.length} / ${entries.length}`
             rows.replaceChildren(...visible.map(elementOf))
@@ -434,6 +465,7 @@ export namespace DeviceDialog {
                     {search}
                     {count}
                 </div>
+                {tagList}
                 {list}
                 {card}
                 {piano}
@@ -457,7 +489,7 @@ export namespace DeviceDialog {
                             {autoLoadField}
                         </div>
                     }
-                    style={{width: "min(56em, 90vw)", height: "min(30em, 70vh)"}}
+                    style={{width: "min(72em, 90vw)", minWidth: "min-content", height: "min(30em, 70vh)"}}
                     buttons={[
                         {text: "Cancel", onClick: () => dialog.close()},
                         {text: "Ok", primary: true, onClick: () => {approve().catch(console.warn)}}
@@ -469,12 +501,16 @@ export namespace DeviceDialog {
         lifecycle.ownAll(
             Events.subscribe(dialog, "keydown", onKeyDown),
             searchText.subscribe(render),
+            tagName.subscribe(render),
+            tagName.subscribe(renderTags),
+            sources.subscribe(renderTags),
             filter.showStock.subscribe(render),
             filter.showUser.subscribe(render),
             filter.showPresets.subscribe(render),
             filter.showScripts.subscribe(render),
             filter.showWclaps.subscribe(render),
             filter.showSoundfonts.subscribe(render),
+            ...Object.values(filter).map(model => model.subscribe(renderTags)),
             sources.subscribe(render),
             service.presets.userIndex.subscribe(() => sources.setValue({...sources.getValue(), presets: service.presets.presets()})),
             service.presets.cloudIndex.subscribe(() => sources.setValue({...sources.getValue(), presets: service.presets.presets()})),
@@ -498,6 +534,7 @@ export namespace DeviceDialog {
             })
         )
         render()
+        renderTags()
         renderCard()
         Promise.all([
             service.presets.cloudReady,

@@ -3,7 +3,7 @@
 component
   flex: 1 1 0
   display: grid
-  grid-template-columns: minmax(22em, 4fr) minmax(22em, 2fr)
+  grid-template-columns: auto minmax(22em, 5fr) minmax(22em, 2fr)
   grid-template-rows: auto 1fr auto
   column-gap: 24px
   row-gap: 12px
@@ -41,9 +41,52 @@ component
   > svg
     grid-column: 1 / -1
 
-  > div.list
+  > div.tag-list
     grid-row: 2
     grid-column: 1
+    display: flex
+    flex-direction: column
+    min-height: 0
+    min-width: 8em
+    overflow: hidden scroll
+    padding: 12px 12px 12px 0
+    mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent)
+
+    > button
+      flex: 0 0 auto
+      display: flex
+      align-items: center
+      justify-content: space-between
+      column-gap: 12px
+      box-sizing: border-box
+      height: 18px
+      margin-bottom: 1px
+      padding: 0 4px
+      border: none
+      border-radius: 3px
+      font: inherit
+      text-align: left
+      white-space: nowrap
+      color: var(--color-shadow)
+      background: none
+
+      > span.count
+        font-variant-numeric: tabular-nums
+        color: var(--color-shadow)
+
+      &:hover
+        color: var(--color-blue)
+
+      &.selected
+        color: rgba(black, 0.9)
+        background-color: var(--color-blue)
+
+        > span.count
+          color: inherit
+
+  > div.list
+    grid-row: 2
+    grid-column: 2
     min-height: 0
     overflow: hidden scroll
     padding: 12px 12px 12px 0
@@ -113,7 +156,7 @@ component
 
   > div.card
     grid-row: 2
-    grid-column: 2
+    grid-column: 3
     display: flex
     flex-direction: column
     row-gap: 16px
