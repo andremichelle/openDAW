@@ -1,5 +1,6 @@
 import css from "./DeviceDialog.sass?inline"
 import {
+    Bytes,
     Color,
     DefaultObservableValue,
     int,
@@ -301,7 +302,7 @@ export namespace DeviceDialog {
                 ? <button className="load" onclick={(event: MouseEvent) => {
                     event.stopPropagation()
                     pick(entry)
-                }}>Load</button>
+                }}>{entry.download.mapOr(({size}) => size > 0 ? `Load ${Bytes.toString(size)}` : "Load", "Load")}</button>
                 : entry.brief.length > 0 ? entry.brief : "No description")
         }
         const markSelection = (): void => {

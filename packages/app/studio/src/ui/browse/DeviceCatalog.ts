@@ -164,7 +164,7 @@ export namespace DeviceCatalog {
             key: `preset:${entry.source}:${entry.uuid}`, kind: user ? "user-preset" : "stock-preset", local: user,
             name: entry.name, brief: entry.description, caption: `${user ? "User" : "Stock"} ${look.caption}`,
             description: entry.description, icon: look.icon, iconUrl: look.iconUrl, deviceKey: look.deviceKey,
-            facts: [...look.facts, ...creditFacts(entry), ...downloadFacts(entry)], tags: [...(entry.tags ?? []), ...look.tags],
+            facts: [...downloadFacts(entry), ...creditFacts(entry), ...look.facts, ...folderFacts(entry)], tags: [...(entry.tags ?? []), ...look.tags],
             preset: Option.wrap(entry), bundle: look.bundle, download: presetDownload(entry),
             prepare: async () => {
                 const bytes = await PresetApplication.fetchBytes(entry.uuid, entry.source)
@@ -177,12 +177,14 @@ export namespace DeviceCatalog {
         }
     }
 
-    const creditFacts = ({author, license, credits, folder}: PresetEntry): ReadonlyArray<DeviceFact> => [
-        ...(isDefined(folder) ? [{label: "Folder", value: folder}] : []),
+    const creditFacts = ({author, license, credits}: PresetEntry): ReadonlyArray<DeviceFact> => [
         ...(isDefined(author) ? [{label: "Author", value: author}] : []),
         ...(isDefined(license) ? [{label: "License", value: license}] : []),
         ...(isDefined(credits) ? [{label: "Credits", value: credits}] : [])
     ]
+
+    const folderFacts = ({folder}: PresetEntry): ReadonlyArray<DeviceFact> =>
+        isDefined(folder) ? [{label: "Folder", value: folder}] : []
 
     const downloadFacts = ({download}: PresetEntry): ReadonlyArray<DeviceFact> =>
         isDefined(download) ? [{label: "Size", value: download.size > 0 ? Bytes.toString(download.size) : "-"}] : []
