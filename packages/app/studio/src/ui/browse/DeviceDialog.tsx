@@ -444,7 +444,7 @@ export namespace DeviceDialog {
                     <Icon symbol={IconSymbol.Checkbox}/>
                 </Checkbox>
                 <span style={{cursor: "pointer"}} onclick={() => autoLoad.setValue(!autoLoad.getValue())}>
-                    Auto load external plugin
+                    Auto load entries over 500 KB
                 </span>
             </div>
         )

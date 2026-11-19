@@ -78,7 +78,7 @@ export namespace PreferencesPageLabels {
         "device-browser": {
             label: "Device Browser",
             fields: {
-                "auto-load-external": "Auto load external plugins"
+                "auto-load-external": "Auto load entries over 500 KB"
             }
         },
         "debug": {
