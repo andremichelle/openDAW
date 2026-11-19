@@ -14,8 +14,8 @@ before PROD can read it. No `minApi` gate for presets.
 2. `dev/presets/` collects presets for the next release. Only `meta.json` is checked before the merge, the binary
    is tested on DEV.
 3. The deploy writes one index per folder. DEV builds read both, PROD reads only `presets/`.
-4. Launch day: publish the SDK, move `dev/presets/*` into `presets/` with a script, validate, merge, deploy. The
-   steps are in `UPDATE.md`.
+4. Launch day, after the Studio deploy: move `dev/presets/*` into `presets/` with a script, validate, merge,
+   deploy. The steps are in `UPDATE.md`.
 
 ## History
 
@@ -43,20 +43,22 @@ unchanged.
 7. README and CONTRIBUTING.md: presets are CC0 or CC-BY-SA, everything else stays as it is.
 8. First content: the 72 presets in `assets.opendaw.studio/presets` move into commons with their uuids, author
    `openDAW`, license `CC-BY-SA-4.0`. They test the validator and the deploy and stay invisible until phase 2.
+   From the day of the copy the admin and the Studio upload are no longer used for presets, so the old index stays
+   as copied.
    Presets needing boxes that are not on `latest` yet (VCSL if the Sampler is not released) go to `dev/presets/`.
 
 ### 2. Studio reads commons presets
 
 1. `CommunityIndex.parsePresets` reads `presets/`, DEV builds also `dev/presets/`.
-2. `PresetService` takes commons presets as stock presets. The old cloud index stays as fallback until phase 3.
+2. `PresetService` takes commons presets as its stock presets and stops reading the old index. The old index stays
+   frozen on the server for older builds.
 3. Folders shown in the preset browser.
 4. The info card shows Author and License for presets (`DeviceCatalog.presetEntry` shows only Device and Timeline
    today). A preset playing CC-BY-SA samples says that songs using it fall under CC-BY-SA.
 
-### 3. Studio stops reading the old index
+### 3. Upload route
 
-1. The Studio reads commons only. The old index stays frozen on the server for older builds.
-2. The access key upload (`PresetService`, `TubularAudition`) is replaced by the pull request route.
+1. The access key upload (`PresetService`, `TubularAudition`) is replaced by the pull request route.
 
 ### 4. User contributions
 
@@ -65,7 +67,7 @@ unchanged.
 
 ### 5. Admin teardown, after the release that reads commons on PROD
 
-Until that release PROD reads `assets.opendaw.studio/presets/index.json` and the admin is the only way to fix it.
+The admin is not used for presets since the copy in phase 1.
 
 1. admin.opendaw.studio drops the preset catalogue and `upload-preset.php`, `update-preset.php`,
    `delete-preset.php`.
