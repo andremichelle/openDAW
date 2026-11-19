@@ -208,7 +208,7 @@ export namespace DeviceCatalog {
     const presetEntry = (slot: DeviceSlot, entry: PresetEntry, stock: Stock): DeviceEntry =>
         presetEntryWith(slot, entry, {
             caption: `preset for ${stock.name}`, icon: stock.icon, iconUrl: stock.iconUrl, deviceKey: stock.key,
-            facts: [{label: "Device", value: stock.name}], tags: DeviceTags.of(stock.key), bundle: Option.None,
+            facts: [{label: "Device", value: stock.name}], tags: Arrays.empty(), bundle: Option.None,
             apply: (project, slot, bytes, keepTimeline) =>
                 DeviceSlot.placePreset(project, slot, bytes, deviceKeyOf(entry), keepTimeline)
         })
