@@ -216,7 +216,8 @@ export namespace DeviceDialog {
             const shown = entries.filter(isVisible)
             const totalOf = (name: string): int => entries.filter(entry => DeviceTags.accepts(name, entry.tags)).length
             const names = [
-                ...DeviceTags.List.map(({name}) => ({name, total: totalOf(name)}))
+                ...DeviceTags.List.filter(({name}) => DeviceTags.isListedIn(category, name))
+                    .map(({name}) => ({name, total: totalOf(name)}))
                     .filter(({total}) => total > 0)
                     .toSorted((left, right) => right.total - left.total)
                     .map(({name}) => name),

@@ -1,4 +1,5 @@
 import {Arrays, isDefined} from "@opendaw/lib-std"
+import {PresetCategoryKey} from "@/ui/browse/PresetService"
 
 export namespace DeviceTags {
     const Stock: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -94,6 +95,14 @@ export namespace DeviceTags {
     ]
 
     export const Untagged = "Untagged"
+
+    const Hidden: Readonly<Record<PresetCategoryKey, ReadonlyArray<string>>> = {
+        "instrument": Arrays.empty(),
+        "audio-effect": Arrays.empty(),
+        "midi-effect": ["Bass"]
+    }
+
+    export const isListedIn = (category: PresetCategoryKey, name: string): boolean => !Hidden[category].includes(name)
 
     export const matches = ({variants}: Tag, tags: ReadonlyArray<string>): boolean =>
         tags.some(tag => variants.includes(tag.toLowerCase()))

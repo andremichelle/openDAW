@@ -371,7 +371,7 @@ Community scripts with views: Step Arp (a 16-step velocity and gate pattern with
 
 ## 9. Community Scripts
 
-Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Random Humanizer, Probability Gate, Echo / Note Delay and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
+Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Probability Gate, Echo / Note Delay and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
 
 ---
 
