@@ -72,10 +72,16 @@ export class RegionClipResolver {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
         let prev = array[0]
-        if (prev.duration <= 0) {return panic(`duration(${prev.duration}) must be positive`)}
+        if (prev.duration <= 0) {
+            RegionClipResolver.#reportInvalidDuration(track, array, 0)
+            return panic(`duration(${prev.duration}) must be positive`)
+        }
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
-            if (next.duration <= 0) {return panic(`duration(${next.duration}) must be positive`)}
+            if (next.duration <= 0) {
+                RegionClipResolver.#reportInvalidDuration(track, array, i)
+                return panic(`duration(${next.duration}) must be positive`)
+            }
             const overlaps = !RegionOverlap.endsAtSuccessor(prev.box)
                 && prev.complete > next.position + boundaryTolerance(next.position)
             if (overlaps) {
@@ -90,19 +96,7 @@ export class RegionClipResolver {
     // the failure path dump the full track layout into the shipped log buffer to reveal the accumulated
     // arrangement that produced the overlap. Fires once, immediately before the panic; no behaviour change.
     static #reportOverlap(track: TrackBoxAdapter, regions: ReadonlyArray<AnyRegionBoxAdapter>, index: int): void {
-        const dump = (region: AnyRegionBoxAdapter, i: int) => ({
-            i,
-            uuid: UUID.toString(region.uuid),
-            type: region.isAudioRegion() ? "audio" : region.isNoteRegion() ? "note" : "value",
-            timeBase: region.isAudioRegion() ? region.box.timeBase.getValue() : undefined,
-            position: region.position,
-            duration: region.duration,
-            complete: region.complete,
-            loopOffset: region.loopOffset,
-            loopDuration: region.loopDuration,
-            mute: region.mute,
-            mirrored: region.isMirrowed
-        })
+        const dump = RegionClipResolver.#dumpRegion
         console.debug("regions-overlap", {
             track: UUID.toString(track.uuid),
             trackType: track.type,
@@ -113,6 +107,37 @@ export class RegionClipResolver {
         })
     }
 
+    static #reportInvalidDuration(track: TrackBoxAdapter, regions: ReadonlyArray<AnyRegionBoxAdapter>, index: int): void {
+        const dump = RegionClipResolver.#dumpRegion
+        console.debug("region-invalid-duration", {
+            track: UUID.toString(track.uuid),
+            trackType: track.type,
+            count: regions.length,
+            invalid: dump(regions[index], index),
+            regions: regions.map(dump)
+        })
+    }
+
+    static #dumpRegion(region: AnyRegionBoxAdapter, i: int) {
+        return {
+            i,
+            uuid: UUID.toString(region.uuid),
+            type: region.isAudioRegion() ? "audio" : region.isNoteRegion() ? "note" : "value",
+            timeBase: region.isAudioRegion() ? region.box.timeBase.getValue() : undefined,
+            position: region.position,
+            duration: region.duration,
+            rawDuration: region.box.duration.getValue(),
+            complete: region.complete,
+            loopOffset: region.loopOffset,
+            loopDuration: region.loopDuration,
+            rawLoopDuration: region.box.loopDuration.getValue(),
+            playMode: region.isAudioRegion() ? region.observableOptPlayMode.mapOr(mode => mode.box.name, "none") : undefined,
+            warpMarkers: region.isAudioRegion() ? region.optWarpMarkers.mapOr(markers => markers.length(), -1) : undefined,
+            mute: region.mute,
+            mirrored: region.isMirrowed
+        }
+    }
+
     static createTasksFromMasks(regionIterator: Iterable<AnyRegionBoxAdapter>,
                                 maxComplete: ppqn,
                                 masks: ReadonlyArray<Mask>,
@@ -121,7 +146,11 @@ export class RegionClipResolver {
         for (const region of regionIterator) {
             if (region.position >= maxComplete) {break}
             if (region.isSelected && !showOrigin) {continue}
-            if (region.duration <= 0) {return panic(`Invalid duration(${region.duration})`)}
+            if (region.duration <= 0) {
+                region.trackBoxAdapter.ifSome(track => RegionClipResolver.#reportInvalidDuration(track,
+                    track.regions.collection.asArray(), track.regions.collection.asArray().indexOf(region)))
+                return panic(`Invalid duration(${region.duration})`)
+            }
             const overlapping = masks.filter(mask => region.position < mask.complete && region.complete > mask.position)
             if (overlapping.length === 0) {continue}
             for (let i = overlapping.length - 1; i >= 0; i--) {
