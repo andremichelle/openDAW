@@ -38,6 +38,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
             {type: "page", label: "Capture MIDI", path: "/manuals/capture-midi"},
             {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
+            {type: "page", label: "Community Presets", path: "/manuals/community-presets"},
             {type: "page", label: "Community Scripts", path: "/manuals/community-scripts"},
             {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
             {type: "page", label: "Connect AI Agent", path: "/manuals/connect-ai-agent"},

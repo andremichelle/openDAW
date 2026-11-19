@@ -33,9 +33,9 @@ export type CommunityScript = {
     readonly screenshot?: string
 }
 
-export const CommunityPresetCategories = ["instrument", "audio-effect", "midi-effect", "audio-unit"] as const
+export const CommunityPresetKinds = ["device", "rack", "audio-effect-chain", "midi-effect-chain"] as const
 
-export type CommunityPresetCategory = typeof CommunityPresetCategories[number]
+export type CommunityPresetKind = typeof CommunityPresetKinds[number]
 
 export type CommunityPreset = {
     readonly uuid: string
@@ -46,7 +46,7 @@ export type CommunityPreset = {
     readonly tags: ReadonlyArray<string>
     readonly license: string
     readonly credits: string
-    readonly category: CommunityPresetCategory
+    readonly kind: CommunityPresetKind
     readonly device: string
     readonly folder: string
     readonly hasTimeline?: boolean
@@ -106,7 +106,7 @@ export namespace CommunityIndex {
         tags: z.array(z.string()),
         license: z.string(),
         credits: z.string(),
-        category: z.enum(CommunityPresetCategories),
+        kind: z.enum(CommunityPresetKinds),
         device: z.string(),
         folder: z.string(),
         hasTimeline: z.boolean().optional(),
@@ -147,15 +147,18 @@ export namespace CommunityIndex {
             uuid, name, description, created, modified, hasTimeline, tags, author: author.name, license,
             credits: credits.length > 0 ? credits : undefined, folder: folder.length > 0 ? folder : undefined
         }
-        switch (entry.category) {
-            case "instrument":
-                return isInstrument(device) ? Option.wrap({...common, category: "instrument", device}) : Option.None
-            case "audio-effect":
-                return isAudioEffect(device) ? Option.wrap({...common, category: "audio-effect", device}) : Option.None
-            case "midi-effect":
-                return isMidiEffect(device) ? Option.wrap({...common, category: "midi-effect", device}) : Option.None
-            case "audio-unit":
+        switch (entry.kind) {
+            case "device":
+                if (isInstrument(device)) {return Option.wrap({...common, category: "instrument", device})}
+                if (isAudioEffect(device)) {return Option.wrap({...common, category: "audio-effect", device})}
+                if (isMidiEffect(device)) {return Option.wrap({...common, category: "midi-effect", device})}
+                return Option.None
+            case "rack":
                 return isInstrument(device) ? Option.wrap({...common, category: "audio-unit", instrument: device}) : Option.None
+            case "audio-effect-chain":
+                return Option.wrap({...common, category: "audio-effect-chain"})
+            case "midi-effect-chain":
+                return Option.wrap({...common, category: "midi-effect-chain"})
         }
     }
 }

@@ -16,7 +16,7 @@ const entry = (overrides: Record<string, unknown> = {}) => ({
     tags: [],
     license: "CC-BY-SA-4.0",
     credits: "openDAW, https://opendaw.studio",
-    category: "audio-effect",
+    kind: "device",
     device: "Delay",
     folder: "",
     hasTimeline: false,
@@ -35,7 +35,7 @@ describe("CommunityIndex.parsePresets", () => {
     })
     it("skips an entry it does not understand, never the whole index", () => {
         const presets = CommunityIndex.parsePresets({
-            version: 1, presets: [entry({category: "audio-effect-chain"}), entry({url: "../escape"}), entry({uuid: "x"}), entry()]
+            version: 1, presets: [entry({kind: "plugin"}), entry({url: "../escape"}), entry({uuid: "x"}), entry()]
         })
         expect(presets.length).toBe(1)
     })
@@ -62,18 +62,21 @@ describe("CommunityIndex.toPresetMeta", () => {
         expect(preset.folder).toBe("Modulation")
         expect(preset.credits).toBeUndefined()
     })
-    it("maps instruments, MIDI effects and racks", () => {
-        const instrument = meta({category: "instrument", device: "Vaporisateur"}).unwrap()
+    it("takes the category of a device preset from its device", () => {
+        const instrument = meta({device: "Vaporisateur"}).unwrap()
         expect(instrument.category === "instrument" && instrument.device).toBe("Vaporisateur")
-        const midi = meta({category: "midi-effect", device: "Arpeggio"}).unwrap()
+        const midi = meta({device: "Arpeggio"}).unwrap()
         expect(midi.category === "midi-effect" && midi.device).toBe("Arpeggio")
-        const rack = meta({category: "audio-unit", device: "Apparat"}).unwrap()
+    })
+    it("maps racks and chains", () => {
+        const rack = meta({kind: "rack", device: "Apparat"}).unwrap()
         expect(rack.category === "audio-unit" && rack.instrument).toBe("Apparat")
+        expect(meta({kind: "audio-effect-chain", device: ""}).unwrap().category).toBe("audio-effect-chain")
+        expect(meta({kind: "midi-effect-chain", device: ""}).unwrap().category).toBe("midi-effect-chain")
     })
     it("hides a preset for a device this Studio does not know", () => {
         expect(meta({device: "FutureDevice"}).isEmpty()).toBe(true)
-        expect(meta({category: "instrument", device: "Delay"}).isEmpty()).toBe(true)
-        expect(meta({category: "audio-effect", device: "Vaporisateur"}).isEmpty()).toBe(true)
-        expect(meta({category: "midi-effect", device: "Delay"}).isEmpty()).toBe(true)
+        expect(meta({kind: "rack", device: "Delay"}).isEmpty()).toBe(true)
+        expect(meta({kind: "rack", device: "FutureSynth"}).isEmpty()).toBe(true)
     })
 })

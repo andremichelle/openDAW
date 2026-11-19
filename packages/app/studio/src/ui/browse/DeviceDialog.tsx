@@ -240,7 +240,8 @@ export namespace DeviceDialog {
                 {label: "Edit…", run: () => presets.editPreset(preset)},
                 {label: "Duplicate", run: () => presets.duplicatePreset(preset)},
                 {label: "Delete", run: () => presets.deletePreset(preset)},
-                {label: "Save to Disk…", run: () => presets.savePresetToDisk(preset)}
+                {label: "Save to Disk…", run: () => presets.savePresetToDisk(preset)},
+                {label: "Save for Community…", run: () => presets.savePresetForCommunity(preset)}
             ]
         }
         const presetActions = (preset: PresetEntry): HTMLElement => {

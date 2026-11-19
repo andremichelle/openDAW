@@ -28,14 +28,14 @@ unchanged.
 
 ### 1. Presets in opendaw-commons
 
-1. Layout `presets/<device>/<slug>/meta.json + preset.odp`, staging `dev/presets/<device>/<slug>/`.
-2. `schemas/preset.meta.json`: uuid, name, description, author, tags, license, credits, category, device, folder.
-   The uuid is written into `meta.json` when the preset is added and never changes, so a move out of `dev/` keeps
-   it. Stock presets keep their existing uuid. License is `CC0-1.0` or `CC-BY-SA-4.0`. CC-BY-SA requires `credits`,
-   like WebCLAPs.
+1. Layout `presets/<folder>/<name>/meta.json + preset.odp`, staging `dev/presets/<folder>/<name>/`. `<folder>` is
+   the device in lowercase with hyphens (`dattorro-reverb`), `racks`, `audio-effect-chains` or `midi-effect-chains`.
+2. `schemas/preset.meta.json`: name, description, author, tags, license, credits, device, folder. The uuid comes from
+   the path like for scripts, without the `dev/` prefix, so the move keeps it. The category comes from the folder
+   and the device. License is `CC0-1.0` or `CC-BY-SA-4.0`. CC-BY-SA requires `credits`, like WebCLAPs.
 3. Validator for `presets/`: decodes the preset with the SDK on `latest`, the device must exist, size limit, and
    every `AudioFileBox` must be a cloud sample (index or `get.php`). Local samples are rejected with a message that
-   says so. Uuids are unique across both folders. `dev/presets/` checks `meta.json` only.
+   says so. A dev preset must not exist in `presets/` already. `dev/presets/` checks `meta.json` only.
 4. Build and deploy write `community/presets/index.json`, `community/dev/presets/index.json` and the payloads.
 5. Launch script: moves `dev/presets/*` into `presets/` and runs the full validation.
 6. Before the first deploy with presets: build the indices with and without presets and compare. PROD reads the
@@ -62,7 +62,7 @@ unchanged.
 
 ### 4. User contributions
 
-1. A preset exports as `meta.json + preset.odp` ready for a pull request.
+1. **Save for Community…** on a user preset saves its `preset.odp`, the user writes `meta.json` on GitHub.
 2. Manual page like `/manuals/community-scripts`, step by step.
 
 ### 5. Admin teardown, after the release that reads commons on PROD
@@ -88,7 +88,8 @@ The admin is not used for presets since the copy in phase 1.
 ## Decided
 
 1. Presets never bring samples of their own. They play cloud samples only.
-2. Layout by device, `presets/<device>/<slug>/`. The browser folder lives in `meta.json`.
+2. Layout like scripts, `presets/<folder>/<name>/`, lowercase device folders plus `racks` and the two chain folders.
+   The uuid comes from the path. The browser folder lives in `meta.json`.
 3. License per preset. The existing stock presets are `CC-BY-SA-4.0` by `openDAW`. New presets bring their own:
    VCSL presets are CC0, the mridangam preset is CC-BY-SA with credits for its samples.
 4. Share-alike of CC-BY-SA samples reaches the songs made with them, the preset license does not change that. Such

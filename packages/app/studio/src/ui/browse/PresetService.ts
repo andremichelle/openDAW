@@ -604,6 +604,22 @@ export class PresetService {
         })
     }
 
+    // the preset.odp of a commons pull request, its meta.json is written on GitHub
+    async savePresetForCommunity(entry: PresetEntry): Promise<void> {
+        if (entry.source !== "user") {return}
+        const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
+        if (loaded.status === "rejected") {
+            console.warn(loaded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
+            return
+        }
+        const saved = await Promises.tryCatch(Files.save(loaded.value, {
+            suggestedName: "preset.odp",
+            types: [FilePickerAcceptTypes.PresetFileType]
+        }))
+        if (saved.status === "rejected" && !Errors.isAbort(saved.error)) {console.warn(saved.error)}
+    }
+
     async duplicatePreset(entry: PresetEntry): Promise<void> {
         if (entry.source !== "user") {return}
         const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))

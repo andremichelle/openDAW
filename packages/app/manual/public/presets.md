@@ -86,12 +86,15 @@ Select one of your presets in the Device Browser. The info card on the right off
 - **Duplicate**, stores a copy.
 - **Delete**, removes the preset from local storage. A confirmation prompt is shown first.
 - **Save to Disk…**, writes the preset to a file you can share or import again.
+- **Save for Community…**, writes the `preset.odp` to share the preset with everyone, see
+  [Community Presets](/manuals/community-presets).
 
 Stock presets are read-only and show no actions.
 
 ## Stock and user sources
 
-- **Stock** presets are shipped with openDAW and cannot be edited or deleted. They are marked with
+- **Stock** presets come from [opendaw-commons](https://github.com/andremichelle/opendaw-commons), where anyone can
+  add one, see [Community Presets](/manuals/community-presets). They cannot be edited or deleted. They are marked with
   the cloud-folder icon, loaded once per session, and cached.
 - **User** presets live in your private OPFS storage and are included in **Cloud Backup** runs the
   same way projects and samples are.
