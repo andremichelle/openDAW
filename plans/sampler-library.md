@@ -17,9 +17,7 @@ Cloud assets have no DEV or PROD scope. Two facts make that unnecessary here.
 
 1. A cloud sample loads by its uuid even without an entry in `samples/index.json` (`OpenSampleAPI.get` falls back
    to `get.php`). The samples can be uploaded now and stay invisible in the sample browser.
-2. PROD reads presets only from `assets.opendaw.studio/presets`. Presets in opendaw-commons are read only by builds
-   that have the new reader, which is DEV until the next release. Commons entries carry `minApi` (as scripts already
-   do, `CommunityIndex.ApiLevel`), so later features can go to DEV first and stay hidden from an older PROD.
+2. Presets in opendaw-commons are read only by DEV builds until the next release (`plans/presets-commons.md`).
 
 The sample index entries (`Multi Samples`) are the only part that must wait for the PROD release.
 
@@ -54,7 +52,8 @@ openDAW/Multi Samples/
       velocity layers and round robins.
    3. 7 are partly named (Pipe Organ, Dan Tranh, Upright Piano Knight, Bell Tree, Clash Cymbals 2, Suspended
       Cymbals 1 and 2). They and Timpani (`Timpani1C_hit`, no octave) get a small override table.
-5. Name, tags, folder, and a description with source and license.
+5. Name, tags, folder and a description with the source. VCSL presets are CC0, the mridangam preset is CC-BY-SA
+   with credits (`plans/presets-commons.md`).
 
 ## Phases
 
@@ -68,36 +67,10 @@ openDAW/Multi Samples/
 
 ### 2. Presets in opendaw-commons
 
-Presets were dropped from commons on 2026-10-22 because the tools would need studio-core and studio-boxes. They
-come back on the published SDK.
+Own plan, `plans/presets-commons.md`. Phase 3 below needs its phase 1 (commons presets with the Sampler boxes in
+the SDK) and its phase 2 (the Studio reads them).
 
-1. Layout `presets/<device>/<folder>/<slug>/meta.json + preset.odp`.
-2. `schemas/preset.meta.json`: name, description, author, tags, license (CC0), category, device, folder, minApi.
-   Stock presets keep their uuid in meta.json, so projects and preset cursors stay valid. New presets get the
-   path derived uuid like scripts.
-3. Validator: decodes the preset with the SDK, the device must exist, size limit, and every `AudioFileBox` must be a
-   cloud sample (index or `get.php`). Local samples are rejected with a message that says so.
-4. Build and deploy write `community/presets/index.json` and the payloads.
-5. Needs an SDK publish that contains the Sampler boxes.
-
-### 3. Studio reads commons presets
-
-1. `CommunityIndex.parsePresets` with the `minApi` gate, `ApiLevel` raised.
-2. `PresetService` takes commons presets as stock presets. The old cloud index stays as fallback until phase 4.
-3. Folders shown in the preset browser.
-
-### 4. Stock presets move
-
-1. The 72 presets in `assets.opendaw.studio/presets` move into commons with their uuids.
-2. The Studio stops reading the old index. The old index stays frozen on the server for older builds.
-3. The access key upload (`PresetService`, `TubularAudition`) is replaced by the pull request route.
-
-### 5. User contributions
-
-1. A preset exports as `meta.json + preset.odp` ready for a pull request.
-2. Manual page like `/manuals/community-scripts`, step by step.
-
-### 6. VCSL presets
+### 3. VCSL presets
 
 1. A generator in node builds every Sampler with `SamplerZones` from the manifest of phase 1 plus the override
    table, encodes it with `PresetEncoder` and writes the commons files.
@@ -106,7 +79,7 @@ come back on the published SDK.
 3. André listens to a short list in the Studio on DEV.
 4. Pull request to commons.
 
-### 7. With the PROD release
+### 4. With the PROD release
 
 1. `Multi Samples` entries in `samples/index.json` from the results file.
 2. Credits for VCSL and the mridangam set in the manual.
@@ -119,6 +92,3 @@ come back on the published SDK.
 3. Steinway B: Sus and NoSus as two presets, or one?
 4. Xylophone, Harpsichord Flemish and Renaissance Organ have two microphone positions. One preset each, or one per
    position?
-5. Commons is CC0 only. The mridangam preset is CC0 but plays CC-BY-SA samples. Allowed with a credit in its
-   description, or does mridangam stay out of commons?
-6. Do user presets need samples of their own one day (community samples), or do cloud samples suffice for now?
