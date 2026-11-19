@@ -41,7 +41,7 @@ unchanged.
 6. Before the first deploy with presets: build the indices with and without presets and compare. PROD reads the
    scripts and WebCLAP indices, they must stay byte identical.
 7. README and CONTRIBUTING.md: presets are CC0 or CC-BY-SA, everything else stays as it is.
-8. First content: the 72 presets in `assets.opendaw.studio/presets` move into commons with their uuids, author
+8. First content: 71 of the 72 presets in `assets.opendaw.studio/presets` (all but TB-303 Bassline) move into commons with their uuids, author
    `openDAW`, license `CC-BY-SA-4.0`. They test the validator and the deploy and stay invisible until phase 2.
    From the day of the copy the admin and the Studio upload are no longer used for presets, so the old index stays
    as copied.
