@@ -570,6 +570,17 @@ export class StudioService implements ProjectEnv {
                         if (!this.#projectProfileService.getValue().contains(profile)) {return}
                         this.engine.setWorklet(engine)
                         this.switchScreen(screen)
+                    },
+                    failedToStart: (event: unknown) => {
+                        if (event instanceof Event) {this.engineErrors.notify(event)}
+                        this.switchScreen(null)
+                        this.engine.releaseWorklet()
+                        Dialogs.show({
+                            headline: "Audio-Engine Error",
+                            content: "This machine cannot run the audio engine.",
+                            excludeOk: true,
+                            cancelable: false
+                        }).catch(EmptyExec)
                     }
                 }
                 this.engine.releaseWorklet()

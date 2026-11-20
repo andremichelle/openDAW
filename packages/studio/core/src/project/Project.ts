@@ -99,7 +99,11 @@ import {SampleGarbage} from "../samples"
 import {AudioUnitFreeze} from "../AudioUnitFreeze"
 import {AutomationSuspension} from "./AutomationSuspension"
 
-export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
+export type RestartWorklet = {
+    unload: Func<unknown, Promise<unknown>>
+    load: Procedure<EngineWorklet>
+    failedToStart?: Procedure<unknown>
+}
 
 export type ProjectCreateOptions = {
     noDefaultUser?: boolean
@@ -349,14 +353,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.loadScriptDevices()
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
+        let ready = false
         const handler = async (event: unknown) => {
             console.warn(event)
             // we will only accept the first error
             worklet.removeEventListener("error", handler)
             worklet.removeEventListener("processorerror", handler)
-            const cause = await this.#awaitErrorCause(worklet, event)
             lifecycle.terminate()
-            await safeExecute(restart?.unload, cause)
+            if (!ready && isDefined(restart?.failedToStart)) {return restart.failedToStart(event)}
+            await safeExecute(restart?.unload, event)
             if (this.#terminated) {return}
             safeExecute(restart?.load, this.startAudioWorklet(restart))
         }
@@ -364,19 +369,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         worklet.addEventListener("processorerror", handler)
         worklet.connect(worklet.context.destination, 0)
         this.engine.setWorklet(worklet)
-        worklet.isReady().then(() => this.audioUnitFreeze.replay(worklet))
+        worklet.isReady().then(() => {
+            ready = true
+            this.audioUnitFreeze.replay(worklet)
+        })
         return worklet
-    }
-
-    // The browser's own event for a failed processor carries no cause, the processor sends it right before or after
-    #awaitErrorCause(worklet: EngineWorklet, event: unknown): Promise<unknown> {
-        const hasCause = (candidate: unknown): boolean => candidate instanceof ErrorEvent && isDefined(candidate.error)
-        if (!(event instanceof Event) || hasCause(event)) {return Promise.resolve(event)}
-        const {promise, resolve} = Promise.withResolvers<unknown>()
-        const onError = (candidate: Event) => {if (hasCause(candidate)) {resolve(candidate)}}
-        worklet.addEventListener("error", onError)
-        setTimeout(() => resolve(event), 250)
-        return promise.finally(() => worklet.removeEventListener("error", onError))
     }
 
     handleCpuOverload(): void {
