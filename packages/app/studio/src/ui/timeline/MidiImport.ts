@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "@opendaw/studio-core"
 import {
     Arrays,
     byte,
@@ -112,6 +113,7 @@ export namespace MidiImport {
                         trackBox = project.api.createNoteTrack(audioUnitBoxAdapter.box, trackIndex++)
                     } else {
                         trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+                            box.height.setValue(TrackHeightDefaults.get())
                             box.type.setValue(TrackType.Notes)
                             box.tracks.refer(audioUnitBoxAdapter.box.tracks)
                             box.index.setValue(trackIndex++)

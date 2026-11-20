@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "@opendaw/studio-core"
 import css from "./AddParameterButton.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {asInstanceOf, UUID} from "@opendaw/lib-std"
@@ -35,6 +36,7 @@ export const AddParameterButton = ({project: {boxGraph, editing}, adapter}: Cons
                  TrackBox.create(boxGraph, UUID.generate(), box => {
                      box.index.setValue(index)
                      box.target.refer(parameter.value)
+                     box.height.setValue(TrackHeightDefaults.get())
                      box.type.setValue(TrackType.Value)
                      box.tracks.refer(tracks)
                  })
