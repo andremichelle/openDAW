@@ -1,4 +1,5 @@
-import {ByteArrayInput, EmptyExec, Lazy, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Lazy, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
@@ -22,7 +23,7 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
 
     private constructor() {super(SampleStorage.Folder)}
 
-    async save({uuid, audio, peaks, meta}: SampleStorage.NewSample): Promise<void> {
+    async save({uuid, audio, peaks, meta}: SampleStorage.NewSample, cached: boolean = false): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const data = new Uint8Array(WavFile.encodeFloats({
             frames: audio.frames.slice(),
@@ -31,11 +32,7 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
             sampleRate: audio.sampleRate
         }))
         console.debug(`save sample '${path}'`)
-        return Promise.all([
-            Workers.Opfs.write(`${path}/audio.wav`, data),
-            Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(peaks)),
-            Workers.Opfs.write(`${path}/meta.json`, new TextEncoder().encode(JSON.stringify(meta)))
-        ]).then(EmptyExec)
+        return this.saveEntry(uuid, [["audio.wav", data], ["peaks.bin", new Uint8Array(peaks)]], meta, cached)
     }
 
     async exists(uuid: UUID.Bytes): Promise<boolean> {
@@ -95,7 +92,8 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         const shifts = SamplePeaks.findBestFit(audio.numberOfFrames)
         const regenerated = await Workers.Peak.generateAsync(
             Progress.Empty, shifts, audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
-        await Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(regenerated))
+        const rewritten = await Promises.tryCatch(Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(regenerated)))
+        if (rewritten.status === "rejected") {console.warn(`could not store the regenerated peaks of '${path}'`, rewritten.error)}
         return SamplePeaks.from(new ByteArrayInput(regenerated))
     }
 }

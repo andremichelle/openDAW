@@ -13,7 +13,7 @@ const directory = (name: string, tree: Tree): FileSystemDirectoryHandle => ({
                     kind: "file", name: child,
                     getFile: async () => entry === "locked"
                         ? Promise.reject(new DOMException("locked", "NoModificationAllowedError"))
-                        : new File([entry.slice()], child)
+                        : new File([entry.slice()], child, {lastModified: entry.length * 10})
                 }
                 : directory(child, entry)
         }
@@ -29,6 +29,12 @@ describe("StorageWalk", () => {
         ".backup": {"project.od": "locked"},
         "loose.bin": bytes(7)
     }
+
+    it("passes on the time each file was last written", async () => {
+        const {files} = await StorageWalk.walk(directory("", tree), () => {})
+        expect(files.find(({path}) => path === "samples/v2/s/audio.wav")?.lastModified).toBe(10000)
+        expect(files.find(({path}) => path === "loose.bin")?.lastModified).toBe(70)
+    })
 
     it("collects every file with its path and size", async () => {
         const {files, failures} = await StorageWalk.walk(directory("", tree), () => {})

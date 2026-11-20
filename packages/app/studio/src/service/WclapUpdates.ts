@@ -8,7 +8,7 @@ import {WclapCatalog} from "@/opendaw-api/WclapCatalog"
 import {WclapIndexEntry} from "@/opendaw-api/WclapIndex"
 import {StorageInspector} from "@/storage/StorageInspector"
 import {StorageReport} from "@/storage/StorageReport"
-import {StorageScan} from "@/storage/StorageScan"
+import {StorageScan} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 
 // Stored WebCLAP builds the catalogue has replaced: the projects using them move to the newer build (the same plugin,

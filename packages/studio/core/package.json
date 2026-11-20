@@ -12,6 +12,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./StorageScan": {
+      "types": "./dist/opfs/StorageScan.d.ts",
+      "default": "./dist/opfs/StorageScan.js"
+    },
     "./FFmpegWorker": {
       "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
       "default": "./dist/ffmpeg/FFmpegWorker.js"

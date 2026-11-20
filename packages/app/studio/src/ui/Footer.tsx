@@ -1,5 +1,5 @@
 import css from "./Footer.sass?inline"
-import {createElement, Frag, LocalLink, replaceChildren} from "@opendaw/lib-jsx"
+import {createElement, Frag, LocalLink, replaceChildren, RouteLocation} from "@opendaw/lib-jsx"
 import {isDefined, isNotNull, Lifecycle, Nullable, Terminator, TimeSpan} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
@@ -12,6 +12,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {FooterItem} from "@/ui/FooterItem"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {LatencyWarning} from "@/ui/LatencyWarning"
+import {StorageUsage} from "@/storage/StorageUsage"
 
 const className = Html.adoptStyleSheet(css, "footer")
 
@@ -141,6 +142,26 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                         value.textContent =
                                             `${megabytes(values[0])}/${megabytes(values[2])}M`))
                             }))
+                        }}>N/A</FooterItem>
+            <FooterItem title="Storage" minWidth="6ch"
+                        onInit={({component, value}) => {
+                            lifecycle.ownAll(
+                                StorageUsage.observable().catchupAndSubscribe(option => option.match({
+                                    none: () => {
+                                        value.textContent = "N/A"
+                                        value.style.color = ""
+                                    },
+                                    some: bytes => {
+                                        value.textContent = StorageUsage.format(bytes)
+                                        value.style.color = bytes > StorageUsage.WarnBytes ? Colors.red.toString() : ""
+                                    }
+                                })),
+                                Runtime.scheduleInterval(() => {
+                                    if (document.visibilityState === "visible") {StorageUsage.refresh().finally()}
+                                }, 60_000),
+                                Events.subscribe(component, "click", () => RouteLocation.get().navigateTo("/storage")))
+                            component.title = "Browser storage used by openDAW, click to clean up"
+                            StorageUsage.refresh().finally()
                         }}>N/A</FooterItem>
             <FooterItem title="FPS"
                         onInit={({component, value}) => {

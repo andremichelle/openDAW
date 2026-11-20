@@ -49,6 +49,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
+    AssetCache,
     AudioContentFactory,
     AudioContexts,
     AudioMaterialAnalyzer,
@@ -91,6 +92,7 @@ import {ArmedCaptures} from "@/service/ArmedCaptures"
 import {ChatService} from "@/chat/ChatService"
 import {CallService} from "@/call/CallService"
 import {FollowService} from "@/follow/FollowService"
+import {StudioAssetCache} from "@/storage/StudioAssetCache"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -135,6 +137,7 @@ export class StudioService implements ProjectEnv {
     readonly panelLayout = new PanelContents(createPanelFactory(this))
     readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
+    readonly assetCache: AssetCache
     readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
@@ -181,6 +184,7 @@ export class StudioService implements ProjectEnv {
             soundfont
         }))
         this.samplePlayback = new SamplePlayback()
+        this.assetCache = StudioAssetCache.create(sampleManager, soundfontManager)
         this.sampleEditor = new SampleEditorService(this)
         ModulatorReveal.requested.subscribe(option => option.ifSome(() => {
             if (!this.hasProfile) {return}

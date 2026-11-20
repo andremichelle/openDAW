@@ -5,6 +5,7 @@ import {OpfsProtocol} from "./OpfsProtocol"
 export namespace OpfsWorker {
     const DEBUG = false
     const LockWarnMillis = 2000
+    const SnapshotLimit = 256 << 20
     const HoldWarnMillis = 5000
 
     type LockHolder = { readonly operation: string, readonly since: number, step: string }
@@ -19,17 +20,30 @@ export namespace OpfsWorker {
                     if (DEBUG) {console.debug(`write ${data.length}b to ${path}`)}
                     const handle = await this.#resolveFile(path, step, {create: true})
                     step("write")
-                    try {
-                        handle.truncate(data.length)
-                        handle.write(data.buffer as ArrayBuffer, {at: 0})
+                    const previous = tryCatch(() => {
+                        const size = handle.getSize()
+                        if (size > SnapshotLimit) {throw new Error(`'${path}' is too large to keep a copy`)}
+                        const bytes = new Uint8Array(size)
+                        const count = handle.read(bytes, {at: 0})
+                        if (count < bytes.byteLength) {throw new Error(`Read ${count} of ${bytes.byteLength} bytes of '${path}'`)}
+                        return bytes
+                    })
+                    const sized = tryCatch(() => handle.truncate(data.byteLength))
+                    const written = sized.status === "success" ? tryCatch(() => {
+                        writeWhole(handle, data, path)
                         handle.flush()
-                    } catch (reason: any) {
-                        console.error("OPFS write failed:",
-                            reason?.name, reason?.message, reason?.stack ?? "(no stack trace)")
-                        throw reason
-                    } finally {
+                    }) : sized
+                    if (written.status === "failure") {
+                        if (sized.status === "success") {
+                            restoreOrEmpty(handle, previous.status === "success" ? previous.value : new Uint8Array(0), path)
+                        }
                         handle.close()
+                        const {error} = written
+                        console.error("OPFS write failed:", error instanceof Error
+                            ? `${error.name}: ${error.message}` : String(error))
+                        throw error
                     }
+                    handle.close()
                 })
             }
 
@@ -167,7 +181,7 @@ export namespace OpfsWorker {
         if (result.status === "rejected") {
             const {error} = result
             const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-            throw new Error(`Storage not available (${reason})`)
+            throw new Error(`Storage not available (${reason})`, {cause: error})
         }
         return result.value
     }
@@ -194,13 +208,44 @@ export namespace OpfsWorker {
         if (result.status === "failure") {console.warn(`[OPFS] could not empty '${handle.name}' before removal`, result.error)}
     }
 
+    // with some room left Chrome writes what fits and returns the count instead of throwing
+    const writeWhole = (access: FileSystemSyncAccessHandle, data: Uint8Array, path: string): void => {
+        const count = access.write(data as Uint8Array<ArrayBuffer>, {at: 0})
+        if (count < data.byteLength) {
+            throw new DOMException(`Wrote ${count} of ${data.byteLength} bytes to '${path}'`, "QuotaExceededError")
+        }
+    }
+
+    const restoreOrEmpty = (access: FileSystemSyncAccessHandle, previous: Uint8Array, path: string): void => {
+        if (previous.byteLength > 0) {
+            const restored = tryCatch(() => {
+                access.truncate(previous.byteLength)
+                writeWhole(access, previous, path)
+                access.flush()
+            })
+            if (restored.status === "success") {return}
+            console.warn(`[OPFS] could not restore '${path}' after a failed write`, restored.error)
+        }
+        const emptied = tryCatch(() => {
+            access.truncate(0)
+            access.flush()
+        })
+        if (emptied.status === "failure") {console.warn(`[OPFS] could not empty '${path}' after a failed write`, emptied.error)}
+    }
+
+    const MetaFileName = "meta.json"
+
     const removeHandle = async (folder: FileSystemDirectoryHandle, handle: FileSystemHandle): Promise<void> => {
         if (handle.kind === "file") {
             await emptyFile(handle as FileSystemFileHandle)
             return folder.removeEntry(handle.name)
         }
         const directory = handle as FileSystemDirectoryHandle
-        for (const child of await listHandles(directory)) {
+        const children = await listHandles(directory)
+        const ordered = [
+            ...children.filter(child => child.kind === "file" && child.name === MetaFileName),
+            ...children.filter(child => !(child.kind === "file" && child.name === MetaFileName))]
+        for (const child of ordered) {
             await Promises.tryCatch(removeHandle(directory, child))
         }
         return folder.removeEntry(handle.name, {recursive: true})

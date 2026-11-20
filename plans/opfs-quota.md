@@ -124,15 +124,24 @@ The host's tool to free space. Never part of the request chain.
 
 ## 8. Order
 
-1. OpfsWorker (section 1)
-2. Storage saves and callers (sections 3, 4.1)
-3. Distinguishable errors (section 5)
-4. OpfsQuota (section 2)
-5. AssetCache (section 6)
-6. Storage Full dialog (section 7.1, 4.2)
-7. `/storage` page (section 7.2)
-8. Footer (section 7.3)
-9. Tests with every step. Riffle tests a build on their full-disk rig.
+1. ~~OpfsWorker (section 1)~~
+2. ~~Storage saves and callers (sections 3, 4.1)~~
+3. ~~Distinguishable errors (section 5)~~
+4. ~~OpfsQuota (section 2)~~
+5. ~~AssetCache (section 6)~~
+6. ~~Storage Full dialog (section 7.1, 4.2)~~
+7. ~~`/storage` page (section 7.2)~~
+8. ~~Footer (section 7.3)~~
+9. ~~Tests with every step. Riffle tests a build on their full-disk rig.~~
+
+Changed while building:
+
+1. The studio's Storage Full dialog is the OpfsQuota handler. It never asks for cache saves (they stay in memory), only for imports, recordings, projects and presets.
+2. One retry, as Riffle asked. Plan 7.1's "the dialog comes back" is dropped, a loop could run forever with a handler that always answers true.
+3. Only sample and soundfont saves share the queue, one write at a time, released after 5 minutes if a write hangs.
+4. A failed overwrite restores the old bytes (files up to 256 MB), a new file that fails is emptied.
+5. Trash lists: deleting still works on a full disk (record, delete, record again), one helper TrashList for every storage.
+6. A recording that cannot be stored is removed from the project, and a dialog offers it as a WAV download first (Download WAV, Discard). `RecordingSink.onFailed` receives the error and the recorded audio, so a host can download or upload it itself.
 
 ## Open
 

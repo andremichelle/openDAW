@@ -4,6 +4,8 @@ import {Box, BoxGraph} from "@opendaw/lib-box"
 import {AudioFileBox, BoxIO, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {PresetHeader} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
+import {OpfsQuota} from "../OpfsQuota"
+import {TrashList} from "../TrashList"
 import {PresetMeta} from "./PresetMeta"
 import {PresetInspector} from "./PresetInspector"
 
@@ -57,11 +59,17 @@ export namespace PresetStorage {
     }
 
     export const save = async (meta: PresetMeta, data: ArrayBufferLike): Promise<void> => {
-        await Workers.Opfs.write(fileFor(UUID.parse(meta.uuid)), new Uint8Array(data))
-        const current = await readIndex()
-        const next = current.filter(entry => entry.uuid !== meta.uuid)
-        next.push({...meta, modified: Date.now()})
-        await writeAndCache(next)
+        const path = fileFor(UUID.parse(meta.uuid))
+        const bytes = new Uint8Array(data)
+        let began = false
+        await OpfsQuota.retry(path, async () => {
+            began = !await Workers.Opfs.exists(path)
+            await Workers.Opfs.write(path, bytes)
+            const current = await readIndex()
+            const next = current.filter(entry => entry.uuid !== meta.uuid)
+            next.push({...meta, modified: Date.now()})
+            await writeAndCache(next)
+        }, async () => {if (began) {await Workers.Opfs.delete(path)}})
         const trashed = await loadTrashedIds()
         if (trashed.includes(meta.uuid)) {
             await saveTrashedIds(trashed.filter(id => id !== meta.uuid))
@@ -83,21 +91,18 @@ export namespace PresetStorage {
     }
 
     export const remove = async (uuid: UUID.Bytes): Promise<void> => {
-        await Promises.tryCatch(Workers.Opfs.delete(fileFor(uuid)))
         const uuidStr = UUID.toString(uuid)
-        const current = await readIndex()
-        const next = current.filter(entry => entry.uuid !== uuidStr)
-        await writeAndCache(next)
-        const trashed = await loadTrashedIds()
-        if (!trashed.includes(uuidStr)) {
-            trashed.push(uuidStr)
-            await saveTrashedIds(trashed)
+        const deleted = await Promises.tryCatch(TrashList.deleteRecorded(Workers.Opfs, TRASH_PATH, uuidStr, fileFor(uuid)))
+        if (deleted.status === "rejected") {await Promises.tryCatch(Workers.Opfs.delete(fileFor(uuid)))}
+        if (!await Workers.Opfs.exists(fileFor(uuid))) {
+            const current = await readIndex()
+            await writeAndCache(current.filter(entry => entry.uuid !== uuidStr))
         }
+        if (deleted.status === "rejected") {throw deleted.error}
     }
 
     export const loadTrashedIds = async (): Promise<Array<UUID.String>> => {
-        const read = await Promises.tryCatch(Workers.Opfs.read(TRASH_PATH))
-        return read.status === "rejected" ? [] : JSON.parse(DEC.decode(read.value))
+        return TrashList.read(Workers.Opfs, TRASH_PATH)
     }
 
     export const saveTrashedIds = async (ids: ReadonlyArray<UUID.String>): Promise<void> => {

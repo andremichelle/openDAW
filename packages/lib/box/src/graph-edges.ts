@@ -3,6 +3,7 @@ import {Address} from "./address"
 import {PointerField} from "./pointer"
 import {Vertex} from "./vertex"
 import {Box} from "./box"
+import {GraphValidationError} from "./graph-validation-error"
 
 export class GraphEdges {
     readonly #requiresTarget: SortedSet<Address, PointerField>
@@ -126,7 +127,7 @@ export class GraphEdges {
                 if (pointer.isEmpty()) {
                     this.#affected.clear()
                     if (pointer.mandatory) {
-                        return Option.wrap(new Error(`Pointer ${pointer.toString()} requires an edge.`))
+                        return Option.wrap(new GraphValidationError(`Pointer ${pointer.toString()} requires an edge.`))
                     } else {
                         return Option.wrap(new Error(`Illegal state: ${pointer} has no edge requirements.`))
                     }
@@ -137,7 +138,7 @@ export class GraphEdges {
                 if (target.pointerHub.isEmpty()) {
                     this.#affected.clear()
                     if (target.pointerRules.mandatory) {
-                        return Option.wrap(new Error(`Target ${target.toString()} requires an edge.`))
+                        return Option.wrap(new GraphValidationError(`Target ${target.toString()} requires an edge.`))
                     } else {
                         return Option.wrap(new Error(`Illegal state: ${target} has no edge requirements.`))
                     }
@@ -148,7 +149,7 @@ export class GraphEdges {
                 const count = target.pointerHub.size()
                 if (count > 1) {
                     this.#affected.clear()
-                    return Option.wrap(new Error(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`))
+                    return Option.wrap(new GraphValidationError(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`))
                 }
             }
         }
@@ -167,7 +168,7 @@ export class GraphEdges {
             if (pointer.isEmpty()) {
                 if (pointer.mandatory) {
                     console.warn(`[GraphEdges] Validation failed: Pointer ${pointer.toString()} requires an edge.`)
-                    return panic(`Pointer ${pointer.toString()} requires an edge.`)
+                    return panic(new GraphValidationError(`Pointer ${pointer.toString()} requires an edge.`))
                 } else {
                     return panic(`Illegal state: ${pointer} has no edge requirements.`)
                 }
@@ -179,7 +180,7 @@ export class GraphEdges {
                 if (target.pointerRules.mandatory) {
                     console.warn(target)
                     console.warn(`[GraphEdges] Validation failed: Target ${target.toString()} requires an edge.`)
-                    return panic(`Target ${target.toString()} requires an edge.`)
+                    return panic(new GraphValidationError(`Target ${target.toString()} requires an edge.`))
                 } else {
                     return panic(`Illegal state: ${target} has no edge requirements.`)
                 }
@@ -189,7 +190,7 @@ export class GraphEdges {
             const count = target.pointerHub.size()
             if (count > 1) {
                 console.warn(`[GraphEdges] Validation failed: Target ${target.toString()} is exclusive but has ${count} incoming pointers.`)
-                return panic(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`)
+                return panic(new GraphValidationError(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`))
             }
         })
         // console.debug(`GraphEdges validation took ${performance.now() - now} ms.`)

@@ -11,7 +11,7 @@ export namespace StorageScan {
     export type ItemRef = { kind: ItemKind, id: string }
     export type Asset = AssetRef & {
         name: string, size: int, path: string, origin: Nullable<string>, clapIds: ReadonlyArray<string>,
-        usedBy: ReadonlyArray<ItemRef>
+        usedBy: ReadonlyArray<ItemRef>, storedAt: number
     }
     export type Item = ItemRef & {
         name: string, size: int, path: string, uses: ReadonlyArray<AssetRef>, notStored: ReadonlyArray<AssetRef>
@@ -41,7 +41,8 @@ export namespace StorageScan {
     ]
     const PresetFolder = "presets/user/"
 
-    type Entry = { kind: AssetKind | ItemKind, id: string, path: string, size: int }
+    type Entry = { kind: AssetKind | ItemKind, id: string, path: string, size: int, storedAt: number }
+    const SideFiles: ReadonlySet<string> = new Set(["meta.json", "peaks.bin"])
 
     const isAssetKind = (kind: AssetKind | ItemKind): kind is AssetKind =>
         kind === "sample" || kind === "soundfont" || kind === "wclap"
@@ -60,16 +61,18 @@ export namespace StorageScan {
             const entry = optEntry.unwrap()
             const key = `${entry.kind}:${entry.id}`
             const existing = entries.get(key)
+            const written = SideFiles.has(file.path.substring(file.path.lastIndexOf("/") + 1)) ? 0 : file.lastModified ?? 0
             if (isDefined(existing)) {
                 existing.size += file.size
+                existing.storedAt = Math.max(existing.storedAt, written)
             } else {
-                entries.set(key, {...entry, size: file.size})
+                entries.set(key, {...entry, size: file.size, storedAt: written})
             }
         }
         return {entries: Array.from(entries.values()), other, bookkeeping}
     }
 
-    const entryOf = (path: string): Option<Omit<Entry, "size">> => {
+    const entryOf = (path: string): Option<Omit<Entry, "size" | "storedAt">> => {
         if (path.startsWith(PresetFolder) && path.endsWith(".odp") && path.indexOf("/", PresetFolder.length) === -1) {
             return Option.wrap({kind: "preset", id: path.substring(PresetFolder.length, path.length - 4), path})
         }
@@ -87,7 +90,7 @@ export namespace StorageScan {
         const bytes = await read(path).then(Option.wrap, () => Option.None)
         if (bytes.isEmpty()) {return Option.None}
         const parsed = tryCatch(() => JSON.parse(new TextDecoder().decode(bytes.unwrap())) as unknown)
-        return parsed.status === "success" && typeof parsed.value === "object" && parsed.value !== null
+        return parsed.status === "success" && typeof parsed.value === "object" && isDefined(parsed.value)
             ? Option.wrap(parsed.value as Record<string, unknown>) : Option.None
     }
 
@@ -186,7 +189,8 @@ export namespace StorageScan {
                 assets.push({
                     kind: entry.kind, id: entry.id, path: entry.path, size: entry.size,
                     name: stringOf(meta, "name").unwrapOrElse(ids.at(0) ?? entry.id),
-                    origin: stringOf(meta, "origin").unwrapOrNull(), clapIds: ids, usedBy: usedBy.get(key) ?? []
+                    origin: stringOf(meta, "origin").unwrapOrNull(), clapIds: ids, usedBy: usedBy.get(key) ?? [],
+                    storedAt: entry.storedAt
                 })
             } else {
                 const uses = references.get(key) ?? []

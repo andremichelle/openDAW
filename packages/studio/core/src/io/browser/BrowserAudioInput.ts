@@ -11,6 +11,7 @@ import {
     Option,
     int,
     Optional,
+    Procedure,
     Provider,
     Subscription,
     Terminable,
@@ -206,6 +207,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
             limit: count => recordingWorklet.limit(count),
             setFillLength: value => recordingWorklet.setFillLength(value),
             set onSaved(callback: Exec) {recordingWorklet.onSaved = callback},
+            set onFailed(callback: Procedure<RecordingSink.Failure>) {recordingWorklet.onFailed = callback},
             disconnect: () => {
                 if (!connected) {return}
                 connected = false

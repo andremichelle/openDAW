@@ -2,7 +2,7 @@ import {EmptyProcedure, int, Procedure, unitValue} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {StorageWalk} from "@opendaw/lib-fusion"
 import {StorageInspectorProtocol} from "./StorageInspectorProtocol"
-import {StorageScan} from "./StorageScan"
+import {StorageScan} from "@opendaw/studio-core"
 
 // the scan decodes projects with every box class, so it runs in its own worker that exists only while it runs
 export namespace StorageInspector {
