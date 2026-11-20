@@ -3,6 +3,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {OpusEncoder, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
 import {OpusMixdown} from "@/audio/OpusMixdown"
 import {StageClient} from "@/stage/StageClient"
+import {encodeCover} from "@/ui/info-panel/CoverImage"
 
 export namespace StagePublish {
     export type Options = Readonly<{
@@ -17,6 +18,7 @@ export namespace StagePublish {
     }
 
     const PeakPairs = 2048
+    const StageCoverSize = 1000
     const MaxTags = 16
 
     export const trackId = (profile: ProjectProfile): string => UUID.toString(profile.uuid)
@@ -69,7 +71,7 @@ export namespace StagePublish {
         }
         const files: Array<[StageClient.FileName, ArrayBuffer]> = [
             ["meta.json", new TextEncoder().encode(JSON.stringify(meta)).buffer],
-            ["cover", cover.unwrap()],
+            ["cover", await encodeCover(cover.unwrap(), StageCoverSize)],
             ["peaks.bin", peaks(audio)],
             ["mixdown.opus", mixdown]
         ]
