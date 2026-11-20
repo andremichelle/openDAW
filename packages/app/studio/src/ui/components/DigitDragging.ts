@@ -33,7 +33,7 @@ export namespace DigitDragging {
                 },
                 cancel: () => write(startValue),
                 finally: () => {
-                    if (moved) {target.blur()}
+                    if (moved) {target.blur()} else {target.focus()}
                     hooks.end()
                 }
             })

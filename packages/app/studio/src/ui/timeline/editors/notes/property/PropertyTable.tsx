@@ -1,5 +1,6 @@
 import css from "./PropertyTable.sass?inline"
-import {Arrays, Editing, Lifecycle, Nullable, Option, Selection} from "@opendaw/lib-std"
+import {Arrays, Editing, Lifecycle, Nullable, Option, Selection, Subscription, Terminable} from "@opendaw/lib-std"
+import {Propagation} from "@opendaw/lib-box"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"
@@ -154,6 +155,7 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Co
     }))
 
     let ignore = false
+    const noteSubscriptions = new Map<NoteEventBoxAdapter, Subscription>()
     lifecycle.ownAll(...Object.values(PropertyParameters)
             .map(({parameter, fieldName}) => parameter.subscribe(owner => {
                 if (ignore) {return}
@@ -163,16 +165,23 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Co
             })),
         selection.catchupAndSubscribe({
             onSelected: (adapter: NoteEventBoxAdapter) => {
+                noteSubscriptions.set(adapter, adapter.box.subscribe(Propagation.Children, updateState.request))
                 focus = adapter
                 updateState.request()
             },
             onDeselected: (adapter: NoteEventBoxAdapter) => {
+                noteSubscriptions.get(adapter)?.terminate()
+                noteSubscriptions.delete(adapter)
                 if (focus === adapter) {focus = null}
                 updateState.request()
             }
         }),
         pitch.parameter.subscribe(owner => pitchString.value = MidiKeys.toFullString(owner.getValue())),
-        modifyContext.subscribeUpdate(updateState.request)
+        modifyContext.subscribeUpdate(updateState.request),
+        Terminable.create(() => {
+            noteSubscriptions.forEach(subscription => subscription.terminate())
+            noteSubscriptions.clear()
+        })
     )
     updateState.immediate()
     return element
