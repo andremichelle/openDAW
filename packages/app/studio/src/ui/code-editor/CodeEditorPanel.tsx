@@ -14,6 +14,8 @@ import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Surface} from "@/ui/surface/Surface"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {CodeEditorHandler} from "./CodeEditorHandler"
+import {ScriptEditorState} from "./ScriptEditorState"
+import {EditorHeader} from "./EditorHeader"
 import {EntryPointMarkers} from "./EntryPointMarkers"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
 import {CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
@@ -40,7 +42,8 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                          .toast("Error message copied to clipboard", IconSymbol.Copy))
              }}>Idle</div>
     )
-    const state = service.activeCodeEditor.unwrapOrNull()
+    const active = service.activeCodeEditor.unwrapOrNull()
+    const state: Nullable<ScriptEditorState> = isDefined(active) && active.type === "script" ? active : null
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
     const initialCode = isDefined(state) ? state.initialCode : defaultCode
     const communityTarget: Optional<CommunityScriptTarget> = isDefined(state) ? state.communityTarget : undefined
@@ -116,17 +119,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                     const close = () => service.closeCodeEditor()
                     return (
                         <div className="content">
-                            <header>
-                                <Button lifecycle={lifecycle}
-                                        onClick={close}
-                                        appearance={{
-                                            tooltip: "Close editor",
-                                            color: Colors.red,
-                                            framed: true,
-                                            cursor: "pointer"
-                                        }}>
-                                    <Icon symbol={IconSymbol.Close}/>
-                                </Button>
+                            <EditorHeader lifecycle={lifecycle} onClose={close} closeTooltip="Close editor">
                                 {nameSpan}
                                 <Button lifecycle={lifecycle}
                                         onClick={compileCode}
@@ -182,7 +175,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                         <span>Community Scripts</span>
                                     </Button>
                                 )}
-                            </header>
+                            </EditorHeader>
                             {container}
                             {statusLabel}
                         </div>

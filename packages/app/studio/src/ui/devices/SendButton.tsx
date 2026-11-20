@@ -59,7 +59,7 @@ export const SendButton = ({lifecycle, editing, parameter}: Construct) => {
         <Checkbox lifecycle={lifecycle} model={model} onInit={install}
                   appearance={{
                       activeColor: Colors.blue, framed: true,
-                      tooltip: "Send audio into the entry (click toggles, hold sends momentarily)"
+                      tooltip: "Send audio into the layer (click toggles, hold sends momentarily)"
                   }}>
             <Icon symbol={IconSymbol.Play}/>
         </Checkbox>

@@ -42,7 +42,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
             {indexLabel}
             {iconsElement}
             <EntryPeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver} address={entry.address}/>
-            <CompositeCellStrip lifecycle={lifecycle} project={project} cell={entry} noun="entry"
+            <CompositeCellStrip lifecycle={lifecycle} project={project} cell={entry} noun="layer"
                                 send={composite instanceof AudioEffectCompositeBoxAdapter ? entry.namedParameter.send : undefined}/>
             {remove}
         </div>
@@ -58,7 +58,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     )
     if (!fixed) {
         lifecycle.ownAll(
-            TextTooltip.default(remove, () => "Delete entry"),
+            TextTooltip.default(remove, () => "Delete layer"),
             Events.subscribe(remove, "click", () => {
                 const survivors = composite.entries.adapters().filter(other => other !== entry)
                 editing.modify(() => {

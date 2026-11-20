@@ -209,6 +209,8 @@ export enum IconSymbol {
     DoubleClick,
     Drag,
     MidSideSplit,
+    CompositeOverview,
+    CompositeOverviewClose,
 }
 
 export namespace IconSymbol {

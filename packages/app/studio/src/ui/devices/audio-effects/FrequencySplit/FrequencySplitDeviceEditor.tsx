@@ -13,6 +13,7 @@ import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {CompositeEntryList} from "@/ui/devices/CompositeEntryList"
 import {AudioCompositeEntry} from "@/ui/devices/AudioCompositeEntry"
 import {StudioService} from "@/service/StudioService"
+import {CompositeOverviewButton} from "@/ui/composite-overview/CompositeOverviewButton"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {FrequencySplitGraph, GAP} from "./FrequencySplitGraph"
 
@@ -116,6 +117,10 @@ export const FrequencySplitDeviceEditor = ({lifecycle, service, adapter, deviceH
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
+                      )}
+                      populateHeader={() => (
+                          <CompositeOverviewButton lifecycle={lifecycle} service={service} composite={adapter}
+                                                   cells={adapter.entries}/>
                       )}
                       icon={IconSymbol.Charts}/>
     )

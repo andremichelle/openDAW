@@ -1,0 +1,47 @@
+@use "@/mixins"
+
+component
+  flex: 0 0 auto
+  height: 232px
+  display: flex
+  column-gap: 0.125em
+
+  > .head
+    flex: 0 0 auto
+    width: 7rem
+    display: flex
+    flex-direction: column
+    align-items: center
+    row-gap: 1em
+    box-sizing: border-box
+    padding: 0 0.5rem
+    border-radius: 0 0 3px 3px
+    border-top: 1px var(--color-cream) solid
+    background-color: rgba(white, 0.03)
+
+    > h1
+      align-self: stretch
+      margin: 0
+      height: 2rem
+      line-height: 2rem
+      font-size: 11px
+      letter-spacing: 0.03em
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      color: var(--color-blue)
+      cursor: pointer
+
+  > .chain
+    flex: 1 0 0
+    min-width: 0
+    display: flex
+    overflow: auto hidden
+    scrollbar-width: thin
+    mask-image: linear-gradient(to right, transparent, black 4px, black calc(100% - 4px), transparent)
+
+    > .containers
+      @include mixins.device-chain-containers
+
+      > div.audio-container
+        min-width: 4rem

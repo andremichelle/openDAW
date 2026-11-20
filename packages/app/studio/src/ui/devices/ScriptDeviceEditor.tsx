@@ -28,6 +28,7 @@ import {
     Observable,
     ObservableValue,
     Observer,
+    Option,
     Subscription,
     Terminable,
     Terminator,
@@ -96,6 +97,7 @@ export type ScriptDeviceEditorConfig = {
 
 // an example replaces the device: the replaced device keeps the code editor open, the new one takes it over
 const codeEditorHandover = {replaced: new Set<string>(), opening: new Set<string>()}
+const initialCompiles = new Set<string>()
 
 type Construct = {
     lifecycle: Lifecycle
@@ -135,30 +137,43 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     }
     if (storedCode.length > 0) {
         compiler.load(service.audioContext, box).finally(EmptyExec)
-    } else {
-        compiler.compile(service.audioContext, editing, box, userCode, true).finally(EmptyExec)
+    } else if (!initialCompiles.has(UUID.toString(adapter.uuid))) {
+        const key = UUID.toString(adapter.uuid)
+        initialCompiles.add(key)
+        compiler.compile(service.audioContext, editing, box, userCode, true).finally(() => initialCompiles.delete(key))
     }
     const isEditorActive = (): boolean => service.activeCodeEditor
-        .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
-    const openEditor = () => service.openCodeEditor({
-        handler: {
-            uuid: adapter.uuid,
-            name: adapter.labelField,
-            compile,
-            loadExample,
-            subscribeErrors: observer =>
-                service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer),
-            subscribeCode: observer =>
-                box.code.subscribe(owner => observer(compiler.stripHeader(owner.getValue())))
-        },
-        initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
-        previousScreen: service.layout.screen.getValue(),
-        communityTarget: config.communityTarget,
-        starterPrompt: config.starterPrompt,
-        entryPoints: config.entryPoints
-    })
+        .map(state => state.type === "script" && UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+    const isEditorVisible = (): boolean => service.visibleCodeEditor
+        .map(state => state.type === "script" && UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+    const enterBranchFromOverview = (): void => {
+        const overviewVisible = service.visibleCodeEditor.map(state => state.type === "composite").unwrapOrElse(false)
+        if (overviewVisible) {deviceHost.asCompositeCell().ifSome(cell => project.userEditingManager.audioUnit.edit(cell.box))}
+    }
+    const openEditor = () => {
+        enterBranchFromOverview()
+        service.openCodeEditor({
+            type: "script",
+            returnTo: Option.None,
+            handler: {
+                uuid: adapter.uuid,
+                name: adapter.labelField,
+                compile,
+                loadExample,
+                subscribeErrors: observer =>
+                    service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer),
+                subscribeCode: observer =>
+                    box.code.subscribe(owner => observer(compiler.stripHeader(owner.getValue())))
+            },
+            initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
+            previousScreen: service.layout.screen.getValue(),
+            communityTarget: config.communityTarget,
+            starterPrompt: config.starterPrompt,
+            entryPoints: config.entryPoints
+        })
+    }
     const toggleEditor = () => {
-        if (isEditorActive()) {
+        if (isEditorVisible()) {
             service.closeCodeEditor()
         } else {
             openEditor()
@@ -178,6 +193,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         return suffix
     }
     const editorIcon = new DefaultObservableValue(IconSymbol.Code)
+    const updateEditorIcon = (): void => editorIcon.setValue(isEditorVisible()
+        ? IconSymbol.CodeClose : IconSymbol.Code)
     const toggleEditorButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 onClick={toggleEditor}
@@ -425,10 +442,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         adapter.codeChanged.subscribe(() => {
             compiler.load(service.audioContext, box).finally(EmptyExec)
         }),
-        service.activeCodeEditor.catchupAndSubscribe(option => {
-            const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
-            editorIcon.setValue(isActive ? IconSymbol.CodeClose : IconSymbol.Code)
-        }),
+        service.activeCodeEditor.catchupAndSubscribe(updateEditorIcon),
+        service.layout.screen.subscribe(updateEditorIcon),
         box.parameters.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
         box.samples.pointerHub.subscribe({onAdded: scheduleRebuild, onRemoved: scheduleRebuild}),
         box.code.subscribe(scheduleRebuild),

@@ -11,6 +11,7 @@ import {InstrumentCompositeLayer} from "@/ui/devices/InstrumentCompositeLayer"
 import {AddLayerButton} from "@/ui/devices/AddLayerButton"
 import {InstrumentCompositeLayerDnD} from "@/ui/devices/InstrumentCompositeLayerDnD"
 import {StudioService} from "@/service/StudioService"
+import {CompositeOverviewButton} from "@/ui/composite-overview/CompositeOverviewButton"
 import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 
@@ -52,6 +53,10 @@ export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, de
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
+                      )}
+                      populateHeader={() => (
+                          <CompositeOverviewButton lifecycle={lifecycle} service={service} composite={adapter}
+                                                   cells={adapter.cells}/>
                       )}
                       icon={IconSymbol.Stack}/>
     )

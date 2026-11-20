@@ -13,6 +13,7 @@ import {CompositeEntryList} from "@/ui/devices/CompositeEntryList"
 import {AudioCompositeEntry} from "@/ui/devices/AudioCompositeEntry"
 import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
 import {StudioService} from "@/service/StudioService"
+import {CompositeOverviewButton} from "@/ui/composite-overview/CompositeOverviewButton"
 import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 
@@ -77,6 +78,10 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
+                      )}
+                      populateHeader={() => (
+                          <CompositeOverviewButton lifecycle={lifecycle} service={service} composite={adapter}
+                                                   cells={adapter.entries}/>
                       )}
                       icon={icon}/>
     )

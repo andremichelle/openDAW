@@ -1,14 +1,4 @@
-import {Nullable} from "@opendaw/lib-std"
-import {ScriptEntryPoints} from "@opendaw/studio-adapters"
-import {CodeEditorHandler} from "./CodeEditorHandler"
-import {Workspace} from "@/ui/workspace/Workspace"
-import {CommunityScriptTarget} from "@/opendaw-api/CommunityIndex"
+import {ScriptEditorState} from "./ScriptEditorState"
+import {CompositeOverviewState} from "@/ui/composite-overview/CompositeOverviewState"
 
-export type CodeEditorState = Readonly<{
-    handler: CodeEditorHandler
-    initialCode: string
-    previousScreen: Nullable<Workspace.ScreenKeys>
-    communityTarget: CommunityScriptTarget
-    starterPrompt: string
-    entryPoints: ScriptEntryPoints.Api
-}>
+export type CodeEditorState = ScriptEditorState | CompositeOverviewState

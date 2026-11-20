@@ -18,6 +18,7 @@ import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
 import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
+import {CompositeOverviewPanel} from "@/ui/composite-overview/CompositeOverviewPanel"
 import {TapTempo} from "@/ui/pages/TapTempo"
 import {AnalysisPanel} from "@/ui/analysis/AnalysisPanel"
 
@@ -52,6 +53,13 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<ShadertoyEditor lifecycle={lifecycle} service={service}/>)
             case PanelType.CodeEditor:
                 return (<CodeEditorPanel lifecycle={lifecycle} service={service}/>)
+            case PanelType.CompositeOverview:
+                return service.activeCodeEditor.match({
+                    none: () => (<FlexSpace/>),
+                    some: state => state.type === "composite"
+                        ? (<CompositeOverviewPanel lifecycle={lifecycle} service={service} state={state}/>)
+                        : (<FlexSpace/>)
+                })
             case PanelType.TapTempo:
                 return (<TapTempo lifecycle={lifecycle} service={service}/>)
             case PanelType.Analysis:

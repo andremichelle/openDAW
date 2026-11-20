@@ -51,6 +51,36 @@ const AnalysisPanel: PanelState = PanelState.create({
     notMinimizable: true,
     constrains: {type: "flex", minSize: 20, flex: 1}
 })*/
+const editorScreen = (screenName: string, panelName: string, icon: IconSymbol, panelType: PanelType): Workspace.Screen => ({
+    name: screenName,
+    icon,
+    hidden: true,
+    content: {
+        type: "layout",
+        orientation: "horizontal",
+        contents: [
+            BrowserPanel,
+            {
+                type: "layout",
+                orientation: "vertical",
+                contents: [
+                    PanelState.create({
+                        type: "panel",
+                        name: panelName,
+                        icon,
+                        panelType,
+                        notMinimizable: true,
+                        constrains: {type: "flex", minSize: 0, flex: 1}
+                    }),
+                    DevicesPanel
+                ],
+                constrains: {type: "flex", minSize: 0, flex: 1}
+            }
+        ],
+        constrains: {type: "flex", minSize: 20, flex: 1}
+    }
+})
+
 export const DefaultWorkspace = Object.freeze({
     "dashboard": {
         name: "Dashboard",
@@ -245,35 +275,8 @@ export const DefaultWorkspace = Object.freeze({
             constrains: {type: "flex", minSize: 0, flex: 1}
         }
     },
-    "code": {
-        name: "Code",
-        icon: IconSymbol.Code,
-        hidden: true,
-        content: {
-            type: "layout",
-            orientation: "horizontal",
-            contents: [
-                BrowserPanel,
-                {
-                    type: "layout",
-                    orientation: "vertical",
-                    contents: [
-                        PanelState.create({
-                            type: "panel",
-                            name: "Code Editor",
-                            icon: IconSymbol.Code,
-                            panelType: PanelType.CodeEditor,
-                            notMinimizable: true,
-                            constrains: {type: "flex", minSize: 0, flex: 1}
-                        }),
-                        DevicesPanel
-                    ],
-                    constrains: {type: "flex", minSize: 0, flex: 1}
-                }
-            ],
-            constrains: {type: "flex", minSize: 20, flex: 1}
-        }
-    },
+    "code": editorScreen("Code", "Code Editor", IconSymbol.Code, PanelType.CodeEditor),
+    "layers": editorScreen("Layers", "All Layers", IconSymbol.CompositeOverview, PanelType.CompositeOverview),
     "tap": {
         name: "Match Tempo",
         icon: IconSymbol.Time,

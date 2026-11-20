@@ -42,6 +42,7 @@ const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof GlobalShortc
     "project": "workspace-screen-project",
     "shadertoy": "workspace-screen-shadertoy",
     "code": "workspace-screen-default",
+    "layers": "workspace-screen-default",
     "tap": "workspace-screen-tap"
 }
 

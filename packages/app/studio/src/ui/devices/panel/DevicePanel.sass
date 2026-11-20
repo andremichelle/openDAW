@@ -1,4 +1,5 @@
 @use "@/colors"
+@use "@/mixins"
 
 component
   width: 100%
@@ -23,45 +24,16 @@ component
       mask-image: linear-gradient(to right, transparent, black 4px, black calc(100% - 4px), transparent)
 
       > div.containers
-        display: flex
-        pointer-events: none
-        width: max-content
-        column-gap: 0.125em
+        @include mixins.device-chain-containers
 
         &:has(> div:not(:empty))
           padding-right: 25%
-
-        > div
-          display: flex
-          pointer-events: auto
-
-        &.frozen
-          filter: saturate(0) opacity(0.3)
-
-          *
-            pointer-events: none !important
 
         > div.cell-container
           border-top: 1px var(--color-green) solid
 
           &:empty
             display: none
-
-        > div.midi-container
-          border-top: 1px var(--color-orange) solid
-          background: linear-gradient(to bottom, var(--color-orange) -500%, transparent 20%)
-
-        > div.source-container
-          border-top: 1px var(--color-green) solid
-          background: linear-gradient(to bottom, var(--color-green) -500%, transparent 20%)
-
-          &.as-audio
-            border-top-color: var(--color-blue)
-            background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
-
-        > div.audio-container
-          border-top: 1px var(--color-blue) solid
-          background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
 
   > div.channel-strip-container
     overflow: hidden

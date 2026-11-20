@@ -15,5 +15,6 @@ export enum PanelType {
     CodeEditor,
     EmptyFlexSpace,
     TapTempo,
-    Analysis
+    Analysis,
+    CompositeOverview
 }

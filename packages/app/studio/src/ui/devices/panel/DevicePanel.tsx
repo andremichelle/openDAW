@@ -41,6 +41,7 @@ import {CompositeCellEditor} from "@/ui/devices/CompositeCellEditor"
 import {MenuItems} from "@/ui/devices/menu-items"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
+import {ChildReconciler} from "@/ui/devices/panel/ChildReconciler"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {DevicesClipboard, Project, ProjectProfile} from "@opendaw/studio-core"
@@ -52,29 +53,6 @@ import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {DeviceSlot} from "@/ui/browse/DeviceSlot"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
-
-type MovableParent = Element & { moveBefore(node: Node, child: Nullable<Node>): void }
-
-const canMoveBefore = (element: Element): element is MovableParent => typeof Reflect.get(element, "moveBefore") === "function"
-
-const flattenElements = (values: ReadonlyArray<JsxValue>): ReadonlyArray<Element> =>
-    values.flatMap(value => Array.isArray(value) ? flattenElements(value) : isInstanceOf(value, Element) ? [value] : [])
-
-// Detaching an editor reloads its iframes (script views), so surviving editors stay attached and only move if needed.
-const reconcileChildren = (container: Element, ...values: ReadonlyArray<JsxValue>): void => {
-    const children = flattenElements(values)
-    const keep = new Set<Element>(children)
-    Array.from(container.children).forEach(child => {if (!keep.has(child)) {child.remove()}})
-    children.forEach((child, index) => {
-        const current = container.children.item(index)
-        if (current === child) {return}
-        if (child.isConnected && container.isConnected && canMoveBefore(container)) {
-            container.moveBefore(child, current)
-        } else {
-            container.insertBefore(child, current)
-        }
-    })
-}
 
 type Construct = {
     lifecycle: Lifecycle
@@ -221,12 +199,12 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
         const midiAdapters = deviceHost.midiEffects.mapOr(chain => chain.adapters(), [])
         const editorOf = (uuid: UUID.Bytes): JsxValue => mounts.get(uuid).editor()
-        reconcileChildren(midiEffectsContainer, midiLead, DeviceHost.takesEffect(deviceHost, "midi")
+        ChildReconciler.reconcile(midiEffectsContainer, midiLead, DeviceHost.takesEffect(deviceHost, "midi")
             ? insertButtons(deviceHost, "midi", midiAdapters, editorOf)
             : midiAdapters.map(adapter => editorOf(adapter.uuid)))
         // A composite entry's back editor is AUDIO, so its slot line reads blue, not the instrument green.
         instrumentContainer.classList.toggle("as-audio", instrument.isEmpty() && !deviceHost.hostsInstrument)
-        reconcileChildren(instrumentContainer, instrument.match({
+        ChildReconciler.reconcile(instrumentContainer, instrument.match({
             // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
             none: () => deviceHost.hostsInstrument
                 ? DeviceSlot.canReplaceInstrument(deviceHost)
@@ -236,7 +214,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))
         const audioAdapters = deviceHost.audioEffects.mapOr(chain => chain.adapters(), [])
-        reconcileChildren(audioEffectsContainer, deviceHost.audioEffects.nonEmpty()
+        ChildReconciler.reconcile(audioEffectsContainer, deviceHost.audioEffects.nonEmpty()
             ? insertButtons(deviceHost, "audio", audioAdapters, editorOf)
             : audioAdapters.map(adapter => editorOf(adapter.uuid)))
         appendChildren(channelStripContainer, (

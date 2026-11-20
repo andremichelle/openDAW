@@ -8,7 +8,6 @@ import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {
-    AudioEffectCompositeBoxAdapter,
     AudioEffectCompositeCellBoxAdapter,
     CompositeCell,
     DeviceHost,
@@ -17,7 +16,7 @@ import {
 } from "@opendaw/studio-adapters"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {Icon} from "@/ui/components/Icon"
-import {CompositeCellStrip} from "@/ui/devices/CompositeCellStrip"
+import {CompositeCellControls} from "@/ui/devices/CompositeCellControls"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {ClipboardManager, DevicesClipboard, MenuItem} from "@opendaw/studio-core"
@@ -39,7 +38,6 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const backTarget: Vertex<Pointers> = MenuItems.backTargetOfCell(host)
     const cell: Option<CompositeCell> = host.asCompositeCell()
     const isLayer = cell.mapOr(entry => entry.cellKind === "instrument", false)
-    const noun = isLayer ? "layer" : "entry"
     const name: HTMLElement = (
         <h1 onInit={element => {
             lifecycle.ownAll(
@@ -78,14 +76,7 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     )
     const controls: HTMLElement = cell.match({
         none: () => <div/>,
-        some: entry => (
-            <div className="controls">
-                <CompositeCellStrip lifecycle={lifecycle} project={service.project} cell={entry} noun={noun}
-                                    send={entry instanceof AudioEffectCompositeCellBoxAdapter
-                                    && entry.compositeDevice() instanceof AudioEffectCompositeBoxAdapter
-                                        ? entry.namedParameter.send : undefined}/>
-            </div>
-        )
+        some: entry => <CompositeCellControls lifecycle={lifecycle} project={service.project} cell={entry} className="controls"/>
     })
     const isPad = cell.mapOr(entry => entry instanceof InstrumentCompositeCellBoxAdapter && entry.isPad, false)
     const numbers: HTMLElement = <div className="entry-numbers"/>

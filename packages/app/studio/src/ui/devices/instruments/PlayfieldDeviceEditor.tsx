@@ -9,6 +9,7 @@ import {SlotGrid} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotGrid"
 import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {StudioService} from "@/service/StudioService"
+import {CompositeOverviewButton} from "@/ui/composite-overview/CompositeOverviewButton"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -25,6 +26,10 @@ export const PlayfieldDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
+                      populateHeader={() => (
+                          <CompositeOverviewButton lifecycle={lifecycle} service={service} composite={adapter}
+                                                   cells={adapter.cells}/>
+                      )}
                       populateMenu={parent => {
                           parent.addMenuItem(MenuItem.default({label: "Reset All"})
                               .setTriggerProcedure(() => project.editing.modify(() => adapter.reset())))

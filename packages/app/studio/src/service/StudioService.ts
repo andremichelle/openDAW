@@ -6,6 +6,7 @@ import {
     Func,
     int,
     isAbsent,
+    isDefined,
     MutableObservableOption,
     Notifier,
     Nullable,
@@ -89,6 +90,7 @@ import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
+import {CompositeOverviewState} from "@/ui/composite-overview/CompositeOverviewState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 import {MidiAccessOnLoad} from "@/service/MidiAccessOnLoad"
 import {ArmedCaptures} from "@/service/ArmedCaptures"
@@ -433,25 +435,47 @@ export class StudioService implements ProjectEnv {
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}
 
+    get visibleCodeEditor(): Option<CodeEditorState> {
+        const state = this.#activeCodeEditor.unwrapOrNull()
+        return isDefined(state) && this.layout.screen.getValue() === this.#screenOf(state) ? Option.wrap(state) : Option.None
+    }
+
     openCodeEditor(state: CodeEditorState): void {
-        const previousScreen = this.layout.screen.getValue() === "code"
-            ? this.#activeCodeEditor.map(existing => existing.previousScreen).unwrapOrNull() ?? state.previousScreen
-            : state.previousScreen
+        const existing = this.visibleCodeEditor.unwrapOrNull()
+        const previousScreen = isDefined(existing) ? existing.previousScreen ?? state.previousScreen : state.previousScreen
         this.layout.screen.setValue(null)
-        this.#activeCodeEditor.wrap({...state, previousScreen})
-        this.switchScreen("code")
+        if (state.type === "script") {
+            const returnTo: Option<CompositeOverviewState> = !isDefined(existing) ? state.returnTo
+                : existing.type === "composite" ? Option.wrap(existing) : existing.returnTo
+            this.#activeCodeEditor.wrap({...state, previousScreen, returnTo})
+        } else {
+            this.#activeCodeEditor.wrap({...state, previousScreen})
+        }
+        this.switchScreen(this.#screenOf(state))
     }
 
     closeCodeEditor(): void {
-        const previousScreen = this.#activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
+        const visible = this.visibleCodeEditor.nonEmpty()
+        const current = this.#activeCodeEditor.unwrapOrNull()
+        const previousScreen = isDefined(current) ? current.previousScreen : null
+        const returnTo: Option<CompositeOverviewState> =
+            isDefined(current) && current.type === "script" ? current.returnTo : Option.None
         this.#activeCodeEditor.clear()
-        if (this.layout.screen.getValue() === "code") {
+        if (visible) {
             // Defer the screen switch to avoid cascading UI updates during synchronous
             // box deletion. Switching the screen triggers DevicePanel re-evaluation which
             // clears mounts before remaining pointerHub onRemoved events have finished.
-            queueMicrotask(() => this.layout.screen.setValue(previousScreen ?? "default"))
+            queueMicrotask(() => {
+                if (returnTo.nonEmpty() && returnTo.unwrap().composite.box.isAttached()) {
+                    this.openCodeEditor(returnTo.unwrap())
+                } else {
+                    this.layout.screen.setValue(previousScreen ?? "default")
+                }
+            })
         }
     }
+
+    #screenOf(state: CodeEditorState): Workspace.ScreenKeys {return state.type === "script" ? "code" : "layers"}
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
 
@@ -483,6 +507,7 @@ export class StudioService implements ProjectEnv {
         const lifeTime = new Terminator()
         const observer = (optProfile: Option<ProjectProfile>) => {
             this.layout.screen.setValue(null)
+            this.#activeCodeEditor.clear()
             this.panelLayout.releasePopouts()
             lifeTime.terminate()
             document.body.classList.toggle("no-project", optProfile.isEmpty())
