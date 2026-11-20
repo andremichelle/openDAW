@@ -1,7 +1,9 @@
 import {
     assert,
     DefaultObservableValue,
+    int,
     MutableObservableOption,
+    ObservableOption,
     ObservableValue,
     Observer,
     Option,
@@ -22,25 +24,38 @@ import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 export class ParameterValueEditing implements ValueContext, Terminable {
     static readonly FallbackStringMapping = StringMapping.percent()
 
+    static snapToSteps(value: unitValue, steps: int): unitValue {
+        return steps < 2 ? value : Math.round(value * (steps - 1)) / (steps - 1)
+    }
+
     readonly #terminator = new Terminator()
 
     readonly #anchorValue: DefaultObservableValue<unitValue>
     readonly #assignmentLifecycle = new Terminator()
     readonly #assignment: MutableObservableOption<ValueAssignment>
+    readonly #track: MutableObservableOption<TrackBoxAdapter>
+    readonly #steps: DefaultObservableValue<int>
 
     constructor(project: Project, collection: PointerField<Pointers.RegionCollection | Pointers.ClipCollection>) {
         this.#anchorValue = new DefaultObservableValue<unitValue>(0.0)
         this.#assignmentLifecycle = this.#terminator.own(new Terminator())
         this.#assignment = this.#terminator.own(new MutableObservableOption<ValueAssignment>())
+        this.#track = this.#terminator.own(new MutableObservableOption<TrackBoxAdapter>())
+        this.#steps = this.#terminator.own(new DefaultObservableValue<int>(0))
         this.#terminator.own(collection.catchupAndSubscribe(({targetVertex}) => {
             this.#assignmentLifecycle.terminate()
             if (targetVertex.isEmpty()) {
                 this.#assignment.clear()
+                this.#track.clear()
+                this.#steps.setValue(0)
                 return // No track assigned
             }
             const boxAdapters = project.boxAdapters
             const trackBoxAdapter = boxAdapters.adapterFor(targetVertex.unwrap().box, TrackBoxAdapter)
             assert(trackBoxAdapter.type === TrackType.Value, "ValueEditorHeader only accepts value tracks")
+            this.#track.wrap(trackBoxAdapter)
+            this.#assignmentLifecycle.own(trackBoxAdapter.box.valueSteps
+                .catchupAndSubscribe(field => this.#steps.setValue(field.getValue())))
             this.#assignmentLifecycle.own(trackBoxAdapter.target.catchupAndSubscribe((pointer) =>
                 this.#assignment.wrapOption(pointer.targetVertex.map(target => {
                     const address = target.address
@@ -54,6 +69,9 @@ export class ParameterValueEditing implements ValueContext, Terminable {
     catchupAndSubscribeValueAssignment(observer: Observer<Option<ValueAssignment>>): Subscription {
         return this.#assignment.catchupAndSubscribe(observer)
     }
+
+    get track(): ObservableOption<TrackBoxAdapter> {return this.#track}
+    get stepsModel(): ObservableValue<int> {return this.#steps}
 
     get anchorModel(): ObservableValue<unitValue> {
         const scope = this
@@ -86,6 +104,7 @@ export class ParameterValueEditing implements ValueContext, Terminable {
     }
 
     get floating(): boolean {
+        if (this.#steps.getValue() >= 2) {return false}
         return this.#assignment.mapOr(assignment => assignment.adapter.valueMapping.floating(), false)
     }
 
@@ -94,7 +113,7 @@ export class ParameterValueEditing implements ValueContext, Terminable {
             none: () => value,
             some: assignment => {
                 const mapping = assignment.adapter.valueMapping
-                return mapping.x(mapping.y(value))
+                return mapping.x(mapping.y(ParameterValueEditing.snapToSteps(value, this.#steps.getValue())))
             }
         })
     }

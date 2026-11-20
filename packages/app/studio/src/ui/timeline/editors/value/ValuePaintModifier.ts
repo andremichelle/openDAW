@@ -1,6 +1,7 @@
 import {
     Arrays,
     BinarySearch,
+    Func,
     Editing,
     int,
     Notifier,
@@ -20,6 +21,7 @@ import {ValueEventDraft} from "@/ui/timeline/editors/value/ValueEventDraft.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
+import {ValuePaintCleanup} from "@/ui/timeline/editors/value/ValuePaintCleanup.ts"
 
 type Construct = Readonly<{
     editing: Editing
@@ -29,9 +31,10 @@ type Construct = Readonly<{
     snapping: Snapping
     valueAxis: ValueAxis
     interpolation: Interpolation
+    quantize: Func<number, number>
 }>
 
-type Stroke = { position: ppqn, value: unitValue }
+type Stroke = ValuePaintCleanup.Stroke
 
 export class ValuePaintModifier implements ValueModifier {
     static create(construct: Construct): ValuePaintModifier {return new ValuePaintModifier(construct)}
@@ -43,6 +46,7 @@ export class ValuePaintModifier implements ValueModifier {
     readonly #snapping: Snapping
     readonly #valueAxis: ValueAxis
     readonly #interpolation: Interpolation
+    readonly #quantize: Func<number, number>
 
     readonly #notifier: Notifier<void>
     readonly #strokes: Array<Stroke>
@@ -51,7 +55,7 @@ export class ValuePaintModifier implements ValueModifier {
     #lastValue: unitValue = NaN
     #lastIndex: int = 0
 
-    private constructor({editing, element, reader, selection, snapping, valueAxis, interpolation}: Construct) {
+    private constructor({editing, element, reader, selection, snapping, valueAxis, interpolation, quantize}: Construct) {
         this.#editing = editing
         this.#element = element
         this.#reader = reader
@@ -60,6 +64,7 @@ export class ValuePaintModifier implements ValueModifier {
         this.#snapping = snapping
         this.#valueAxis = valueAxis
         this.#interpolation = interpolation
+        this.#quantize = quantize
 
         this.#notifier = new Notifier<void>()
         this.#strokes = []
@@ -120,7 +125,7 @@ export class ValuePaintModifier implements ValueModifier {
     update({clientX, clientY}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const position: ppqn = this.#snapping.xToUnitFloor(clientX - clientRect.left)
-        const value: unitValue = this.#valueAxis.axisToValue(clientY - clientRect.top)
+        const value: unitValue = this.#quantize(this.#valueAxis.axisToValue(clientY - clientRect.top))
         if (this.#lastPosition === position && this.#lastValue === value) {return}
         if (this.#strokes.length === 0) {
             this.#strokes.push({position, value})
@@ -151,9 +156,11 @@ export class ValuePaintModifier implements ValueModifier {
         const max = Arrays.getLast(this.#strokes, "Internal Error").position - offset
         const content = this.#reader.content
         const deletion = Array.from(content.events.iterateRange(min, max + 1))
+        const strokes = ValuePaintCleanup.reduce(this.#strokes, this.#interpolation,
+            content.events.lowerEqual(min - 1), content.events.greaterEqual(max + 1))
         this.#editing.modify(() => {
             deletion.forEach(event => event.box.delete())
-            this.#selection.select(...this.#strokes.map(stroke => content.createEvent({
+            this.#selection.select(...strokes.map(stroke => content.createEvent({
                 position: stroke.position - offset,
                 value: stroke.value,
                 interpolation: this.#interpolation,

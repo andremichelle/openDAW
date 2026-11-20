@@ -86,6 +86,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             (1.0 - eventMapping.x(value)) * (canvas.clientHeight - 2.0 * RangePadding - 1.0) + RangePadding + 0.5
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
+    const quantizeSteps = (value: number): number => context.stepsModel.getValue() >= 2 ? context.quantize(value) : value
     const modifyContext = new ObservableModifyContext<ValueModifier>()
     const segment = lifecycle.own(new MutableObservableOption<ValueEventBoxAdapter>())
     const paintValues = createValuePainter({
@@ -187,7 +188,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             selection,
                             snapping,
                             valueAxis,
-                            interpolation: step ? Interpolation.None : Interpolation.Linear
+                            interpolation: step || context.stepsModel.getValue() >= 2 ? Interpolation.None : Interpolation.Linear,
+                            quantize: quantizeSteps
                         }))
                     }
                 } else if (target.type === "midpoint" || target.type === "curve") {
@@ -311,13 +313,14 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         })),
         segment.subscribe(painter.requestUpdate),
         context.anchorModel.subscribe(painter.requestUpdate),
+        context.stepsModel.subscribe(painter.requestUpdate),
         modifyContext.subscribeUpdate(painter.requestUpdate),
         installCursor(canvas, capturing, {
             get: (target, event) => {
                 const onCurve = target?.type === "curve" || target?.type === "midpoint"
                 const controlKey = event.altKey && event.buttons === 0
                 if (target === null) {
-                    if (event.buttons === 0 && Keyboard.isControlKey(event)) {return Cursor.PencilStep}
+                    if (controlKey && Keyboard.isControlKey(event)) {return Cursor.PencilStep}
                     if (controlKey) {return Cursor.Pencil}
                 } else if (target.type === "event") {
                     return "move"
@@ -363,7 +366,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 const result = context.stringMapping.y(StringMapping.withDisplayUnit(text, unit))
                 let value
                 if (result.type === "explicit") {
-                    value = eventMapping.y(context.valueMapping.x(result.value))
+                    value = quantizeSteps(eventMapping.y(context.valueMapping.x(result.value)))
                 } else {return}
                 editing.modify(() => selection.selected().forEach(adapter => adapter.box.value.setValue(value)))
             }

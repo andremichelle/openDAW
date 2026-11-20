@@ -1,6 +1,7 @@
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {
     clamp,
+    int,
     MutableObservableValue,
     ObservableValue,
     StringMapping,
@@ -20,6 +21,7 @@ export class TempoValueContext implements ValueContext, Terminable {
     readonly stringMapping: StringMapping<number> = StringMapping.numeric({unit: "bpm", fractionDigits: 1})
     readonly valueMapping: ValueMapping<number>
     readonly floating: boolean = true
+    readonly stepsModel: ObservableValue<int> = ObservableValue.seal(0)
 
     readonly #min: MutableObservableValue<bpm>
     readonly #max: MutableObservableValue<bpm>

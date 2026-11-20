@@ -1,4 +1,4 @@
-import {ObservableValue, StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {int, ObservableValue, StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {PrimitiveValues} from "@opendaw/lib-box"
 
 export interface ValueContext {
@@ -7,5 +7,6 @@ export interface ValueContext {
     readonly stringMapping: StringMapping<PrimitiveValues>
     readonly currentValue: unitValue
     readonly floating: boolean
-    quantize(value: unitValue): unitValue
+    readonly stepsModel: ObservableValue<int>
+    quantize(value: number): number
 }

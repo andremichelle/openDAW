@@ -205,6 +205,9 @@ export enum IconSymbol {
     PencilStep,
     TimeSelection,
     Server,
+    Click,
+    DoubleClick,
+    Drag,
 }
 
 export namespace IconSymbol {

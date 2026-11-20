@@ -81,6 +81,13 @@ export const createValuePainter =
         context.lineTo(width, y1)
         context.stroke()
         context.setLineDash(Arrays.empty())
+        const steps = valueEditing.stepsModel.getValue()
+        if (steps > 2 && Math.abs(y1 - y0) / (steps - 1) >= 4 * devicePixelRatio) {
+            context.fillStyle = "rgba(255, 255, 255, 0.06)"
+            for (let index = 1; index < steps - 1; index++) {
+                context.fillRect(0, Math.floor(valueToPixel(eventMapping.y(index / (steps - 1)))), width, devicePixelRatio)
+            }
+        }
         context.lineWidth = devicePixelRatio
         const contentColor = `hsl(${reader.hue}, ${reader.mute ? 0 : 60}%, 45%)`
         if (!reader.hasContent) {return}

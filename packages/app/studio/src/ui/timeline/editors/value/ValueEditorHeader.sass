@@ -2,11 +2,44 @@
 
 component
   height: 100%
-  display: flex
-  flex-direction: column
-  column-gap: 1px
+  display: grid
+  grid-template-columns: 1fr auto
+  align-items: start
+  column-gap: 1em
   overflow: auto
   font-size: 0.625em
-  padding: 1em
+  padding: 1em 1em 1em 0
+  row-gap: 1em
   color: var(--color-shadow)
   @include colors.panel-background
+
+  > .steps
+    display: flex
+    align-items: center
+    justify-content: flex-end
+    column-gap: 0.5em
+    align-self: end
+
+    > .input
+      font-size: 1em
+
+  > .help-section
+    display: grid
+    grid-template-columns: auto 1fr
+    column-gap: 1em
+    row-gap: 0.25em
+    align-items: center
+
+    > span:nth-child(odd)
+      display: flex
+      align-items: center
+      justify-content: flex-end
+      column-gap: 0.25em
+      white-space: nowrap
+
+    > span:nth-child(even)
+      color: rgba(255, 255, 255, 0.3)
+
+    > span > svg
+      width: 1.5em
+      height: 1.5em

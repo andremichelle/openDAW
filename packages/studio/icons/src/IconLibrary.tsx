@@ -1037,6 +1037,21 @@ export const IconLibrary = () => (
                 <path
                     d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Click)} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round">
+                <path fill="currentColor" stroke="none" d="M10 10L21 14.5L16.2 15.9L20.5 20.2L19.2 21.5L14.9 17.2L13.5 22Z"/>
+                <path d="M10 2.5V6M2.5 10H6M4.7 4.7L7 7M15.3 4.7L13 7M4.7 15.3L7 13"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.DoubleClick)} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round">
+                <path fill="currentColor" stroke="none" d="M10 10L21 14.5L16.2 15.9L20.5 20.2L19.2 21.5L14.9 17.2L13.5 22Z"/>
+                <path d="M6 10A4 4 0 0 1 10 6M2.5 10A7.5 7.5 0 0 1 10 2.5"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Drag)} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path fill="currentColor" stroke="none" d="M10 10L21 14.5L16.2 15.9L20.5 20.2L19.2 21.5L14.9 17.2L13.5 22Z"/>
+                <path d="M5.5 1.5V9.5M1.5 5.5H9.5M4 3L5.5 1.5L7 3M4 8L5.5 9.5L7 8M3 4L1.5 5.5L3 7M8 4L9.5 5.5L8 7"/>
+            </symbol>
         </defs>
     </symbol>
 )
