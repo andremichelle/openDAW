@@ -36,8 +36,9 @@ const syncIndicator = (indicator: HTMLElement, target: Element, offset: number):
         indicator.style.top = `${bounds.top}px`
     } else {
         const parentRect = offsetParent.getBoundingClientRect()
-        indicator.style.left = `${bounds.left - parentRect.left}px`
-        indicator.style.top = `${bounds.top - parentRect.top}px`
+        const {clientLeft, clientTop, scrollLeft, scrollTop} = offsetParent
+        indicator.style.left = `${bounds.left - parentRect.left - clientLeft + scrollLeft}px`
+        indicator.style.top = `${bounds.top - parentRect.top - clientTop + scrollTop}px`
     }
     indicator.style.width = `${bounds.width}px`
     indicator.style.height = `${bounds.height}px`
