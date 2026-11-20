@@ -146,6 +146,7 @@ describe("OpfsQuota", () => {
             install(handler)
             let active = 0
             let maxActive = 0
+            let failed = 0
             const save = () => {
                 let calls = 0
                 return OpfsQuota.retry("s", async () => {
@@ -153,12 +154,17 @@ describe("OpfsQuota", () => {
                     maxActive = Math.max(maxActive, active)
                     await new Promise(resolve => setTimeout(resolve, 1))
                     active--
-                    if (++calls === 1) {throw quotaError()}
+                    if (++calls === 1) {
+                        failed++
+                        throw quotaError()
+                    }
                     return calls
                 }, async () => {}, {serial: true})
             }
             const saves = Array.from({length: 8}, save)
-            await new Promise(resolve => setTimeout(resolve, 30))
+            // the handler must still be busy when the last save fails, however slow the machine is
+            await vi.waitFor(() => expect(failed).toBe(8))
+            await new Promise(resolve => setTimeout(resolve, 1))
             made(true)
             expect(await Promise.all(saves)).toEqual(Array.from({length: 8}, () => 2))
             expect(maxActive).toBe(1)

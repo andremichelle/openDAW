@@ -22,10 +22,14 @@ vi.mock("./Workers", () => ({
     Workers: {
         Opfs: {
             write: async (path: string, bytes: Uint8Array) => {
-                disk.active++
-                disk.maxActive = Math.max(disk.maxActive, disk.active)
+                // trash.json is housekeeping outside the save queue, only saves must never overlap
+                const counted = !path.endsWith("trash.json")
+                if (counted) {
+                    disk.active++
+                    disk.maxActive = Math.max(disk.maxActive, disk.active)
+                }
                 await new Promise(resolve => setTimeout(resolve, 1))
-                disk.active--
+                if (counted) {disk.active--}
                 disk.writes.push(path)
                 const previous = disk.files.get(path)?.length ?? 0
                 if (bytes.length - previous > disk.free) {
