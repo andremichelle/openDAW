@@ -3456,6 +3456,8 @@ export interface ValueTrack extends Track {
     readonly target: Automatable
     /** The automated parameter path */
     readonly parameter: string
+    /** Snaps the automation to equal steps: 0 is continuous, 2 is on and off, N gives N steps */
+    steps: int
     /** All regions sorted by position */
     readonly regions: ReadonlyArray<ValueRegion>
     /** All clips sorted by slot index */

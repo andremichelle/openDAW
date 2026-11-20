@@ -102,8 +102,12 @@ export class AudioTrackImpl extends TrackFacade implements AudioTrack {
 
 export class ValueTrackImpl extends TrackFacade implements ValueTrack {
     readonly type = "value" as const
+    declare steps: int
 
-    constructor(context: Context, box: TrackBox) {super(context, box)}
+    constructor(context: Context, box: TrackBox) {
+        super(context, box)
+        this.bind({steps: box.valueSteps})
+    }
 
     get targetField(): PrimitiveField {
         const vertex = this.box.target.targetVertex.unwrap("automation track has no target")
