@@ -56,6 +56,7 @@ import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {QuantumStepper} from "./quantum-stepper"
 import {SilenceTail} from "./silence-tail"
+import {FadeOut} from "./fade-out"
 import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
@@ -412,13 +413,17 @@ Communicator.executor<OfflineEngineProtocol>(
             engine.running = true
             await Wait.timeSpan(TimeSpan.seconds(0))
             settle(engine)
+            let endedInSilence = false
             while (engine.running && engine.totalFrames < maxFrames) {
                 const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
                 renderQuantum(engine, outputChannels)
                 const start = trimStart(engine)
                 if (start === RenderQuantum) {continue}
                 const kept = start === 0 ? outputChannels : outputChannels.map(channel => channel.subarray(start))
-                if (!tail.accept(kept)) {break}
+                if (!tail.accept(kept)) {
+                    endedInSilence = true
+                    break
+                }
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     chunks[channel].push(kept[channel].slice())
                 }
@@ -430,7 +435,8 @@ Communicator.executor<OfflineEngineProtocol>(
                 }
             }
             const framesToKeep = tail.framesToKeep
-            return Arrays.create(channelIndex => {
+            const reachedLimit = engine.running && !endedInSilence && engine.totalFrames >= maxFrames
+            const output = Arrays.create(channelIndex => {
                 const total = new Float32Array(framesToKeep)
                 let offset = 0
                 for (const chunk of chunks[channelIndex]) {
@@ -441,6 +447,8 @@ Communicator.executor<OfflineEngineProtocol>(
                 }
                 return total
             }, numberOfChannels)
+            if (reachedLimit) {FadeOut.apply(output, engine.sampleRate)}
+            return output
         },
         stop() { state.unwrap("state.stop").running = false }
     }
