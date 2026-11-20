@@ -102,22 +102,23 @@ export namespace ProjectBundle {
         }
         console.debug("loading samples...")
         const promises: Array<Promise<void>> = []
+        const writeMissing = (root: string, path: string, file: JSZip.JSZipObject): Promise<void> =>
+            Workers.Opfs.exists(`${root}/${path}`).then(async present => {
+                if (present) {return}
+                await Workers.Opfs.write(`${root}/${path}`, new Uint8Array(await file.async("arraybuffer")))
+            })
         const samples = zip.folder("samples")
         if (isDefined(samples)) {
             samples.forEach((path, file) => {
                 if (file.dir) {return}
-                promises.push(file.async("arraybuffer")
-                    .then(arrayBuffer => Workers.Opfs
-                        .write(`${SampleStorage.Folder}/${path}`, new Uint8Array(arrayBuffer))))
+                promises.push(writeMissing(SampleStorage.Folder, path, file))
             })
         }
         const soundfonts = zip.folder("soundfonts")
         if (isDefined(soundfonts)) {
             soundfonts.forEach((path, file) => {
                 if (file.dir) {return}
-                promises.push(file.async("arraybuffer")
-                    .then(arrayBuffer => Workers.Opfs
-                        .write(`${SoundfontStorage.Folder}/${path}`, new Uint8Array(arrayBuffer))))
+                promises.push(writeMissing(SoundfontStorage.Folder, path, file))
             })
         }
         const wclaps = zip.folder(WclapStorage.Folder)

@@ -8,6 +8,8 @@ import {ProjectBundle} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "OpenBundlePage")
 
+const MaxBundleBytes = 1 << 30
+
 const stageSource = async (): Promise<Option<string>> => {
     const result = tryCatch(() => new URL(new URLSearchParams(location.search).get("url") ?? ""))
     if (result.status === "failure") {return Option.None}
@@ -16,7 +18,7 @@ const stageSource = async (): Promise<Option<string>> => {
     if (protocol !== "https:" && !(protocol === "http:" && local)) {return Option.None}
     const approved = await RuntimeNotifier.approve({
         headline: "Open Project",
-        message: `Open the project from ${host} in openDAW?`,
+        message: `This project comes from ${host}, not from openDAW. It may contain scripts that run in openDAW. Only open projects from sites you trust.`,
         approveText: "Open"
     })
     return approved ? Option.wrap(result.value.toString()) : Option.None
@@ -33,6 +35,8 @@ export const OpenBundlePage: PageFactory<StudioService> = ({service, path}: Page
             const dialog = RuntimeNotifier.progress({headline: "Loading bundle file..."})
             const {status, value: arrayBuffer, error} = await Promises.tryCatch(
                 fetch(source.unwrap())
+                    .then(response => Number(response.headers.get("Content-Length") ?? 0) > MaxBundleBytes
+                        ? Promise.reject(new Error("The project is larger than 1 GB.")) : response)
                     .then(network.progress(progress => message.textContent = `Downloading Bundle... (${(progress * 100).toFixed(1)}%)`))
                     .then(x => x.arrayBuffer()))
             dialog.terminate()

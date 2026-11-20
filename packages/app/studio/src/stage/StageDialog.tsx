@@ -1,5 +1,5 @@
 import css from "./StageDialog.sass?inline"
-import {DefaultObservableValue, Lifecycle, MutableObservableValue, Option, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, MutableObservableValue, Option, RuntimeNotifier, Terminator, tryCatch} from "@opendaw/lib-std"
 import {Clipboard, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
@@ -50,7 +50,10 @@ export namespace StageDialog {
             approveText: "Open",
             cancelText: "Close"
         })
-        if (open) {window.open(value.url, "_blank", "noopener")}
+        const link = tryCatch(() => new URL(value.url))
+        if (open && link.status === "success" && link.value.origin === new URL(credentials.url).origin) {
+            window.open(link.value.href, "_blank", "noopener")
+        }
     }
 
     export const open = (profile: ProjectProfile): void => {
