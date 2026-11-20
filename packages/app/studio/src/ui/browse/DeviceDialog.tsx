@@ -456,15 +456,19 @@ export namespace DeviceDialog {
         const content: HTMLElement = (
             <div className={className} style={{"--color": color.toString()}}>
                 <div className="filter-bar">
-                    {toggle(filter.showStock, "Show what comes from the openDAW cloud", IconSymbol.CloudFolder)}
-                    {toggle(filter.showUser, "Show what is stored on this device", IconSymbol.UserFolder)}
-                    <div className="separator"/>
-                    {toggle(filter.showPresets, "Show presets", IconSymbol.Folder)}
-                    {toggle(filter.showScripts, "Show community scripts", IconSymbol.Code)}
-                    {toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
-                    {category === "instrument" && toggle(filter.showSoundfonts, "Show soundfonts", IconSymbol.SoundFont)}
-                    {search}
-                    {count}
+                    <div className="toggles">
+                        {toggle(filter.showStock, "Show what comes from the openDAW cloud", IconSymbol.CloudFolder)}
+                        {toggle(filter.showUser, "Show what is stored on this device", IconSymbol.UserFolder)}
+                        <div className="separator"/>
+                        {toggle(filter.showPresets, "Show presets", IconSymbol.Folder)}
+                        {toggle(filter.showScripts, "Show community scripts", IconSymbol.Code)}
+                        {toggle(filter.showWclaps, "Show WebCLAP plugins", IconSymbol.WebClap)}
+                        {category === "instrument" && toggle(filter.showSoundfonts, "Show soundfonts", IconSymbol.SoundFont)}
+                    </div>
+                    <div className="query">
+                        {search}
+                        {count}
+                    </div>
                 </div>
                 {tagList}
                 {list}
@@ -490,7 +494,7 @@ export namespace DeviceDialog {
                             {autoLoadField}
                         </div>
                     }
-                    style={{width: "min(72em, 90vw)", minWidth: "min-content", height: "min(30em, 70vh)"}}
+                    style={{width: "min(78em, 90vw)", minWidth: "min-content", height: "min(30em, 70vh)"}}
                     buttons={[
                         {text: "Cancel", onClick: () => dialog.close()},
                         {text: "Ok", primary: true, onClick: () => {approve().catch(console.warn)}}

@@ -1,5 +1,7 @@
 @use "@/mixins"
 
+$count-color: rgba(white, 0.3)
+
 component
   flex: 1 1 0
   display: grid
@@ -11,32 +13,43 @@ component
 
   > div.filter-bar
     grid-column: 1 / -1
-    display: flex
+    display: grid
+    grid-template-columns: subgrid
     align-items: center
-    column-gap: 4px
     font-size: 13px
 
-    > div.separator
-      width: 12px
+    > div.toggles
+      grid-column: 1
+      display: flex
+      align-items: center
+      column-gap: 4px
 
-    > span.count
-      flex: 0 0 5.5em
-      margin-left: 8px
-      text-align: right
-      font-variant-numeric: tabular-nums
-      color: var(--color-shadow)
-      white-space: nowrap
+      > div.separator
+        width: 12px
 
-    > :has(> input:not([type="checkbox"]))
-      flex: 1 1 auto
-      margin-left: 12px
-      min-height: 22px
+    > div.query
+      grid-column: 2
+      display: flex
+      align-items: center
 
-      > svg
-        font-size: 14px
+      > span.count
+        flex: 0 0 5.5em
+        margin-left: 8px
+        text-align: right
+        font-variant-numeric: tabular-nums
+        color: $count-color
+        white-space: nowrap
 
-      > input
-        font-size: 12px
+      > :has(> input:not([type="checkbox"]))
+        flex: 1 1 auto
+        margin-left: -4px
+        min-height: 22px
+
+        > svg
+          font-size: 14px
+
+        > input
+          font-size: 12px
 
   > svg
     grid-column: 1 / -1
@@ -72,7 +85,7 @@ component
 
       > span.count
         font-variant-numeric: tabular-nums
-        color: var(--color-shadow)
+        color: $count-color
 
       &:hover
         color: var(--color-blue)
