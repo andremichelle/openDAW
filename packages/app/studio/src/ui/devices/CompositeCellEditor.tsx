@@ -2,7 +2,7 @@ import css from "./CompositeCellEditor.sass?inline"
 import {Errors, Lifecycle, Option, panic, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Box, Vertex} from "@opendaw/lib-box"
-import {Events, Html, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, Events, Html, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
@@ -131,14 +131,31 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     cell.match({
         none: () => {name.textContent = host.label},
         some: entry => {
+            const named = entry instanceof AudioEffectCompositeCellBoxAdapter && entry.compositeDevice().entriesFixed
+            const labelOf = (sibling: CompositeCell): string => named && sibling instanceof AudioEffectCompositeCellBoxAdapter
+                ? sibling.label : String(sibling.indexField.getValue() + 1)
+            const fitLabels = (pills: ReadonlyArray<[HTMLElement, HTMLElement]>) => {
+                const scale = pills.reduce((min, [pill, label]) =>
+                    label.offsetWidth > 0 ? Math.min(min, (pill.clientWidth - 12) / label.offsetWidth) : min, 1.0)
+                if (scale <= 0.0) {return}
+                pills.forEach(([, label]) => label.style.fontSize = `${scale}em`)
+            }
             const rebuildNumbers = (siblings: ReadonlyArray<CompositeCell>) => {
                 Html.empty(numbers)
-                siblings.forEach(sibling => numbers.appendChild((
-                    <div className={Html.buildClassList("entry-number", sibling === entry && "current")}
-                         onclick={() => {
-                             if (sibling !== entry) {userEditingManager.audioUnit.edit(sibling.box)}
-                         }}>{String(sibling.indexField.getValue() + 1)}</div>
-                )))
+                const capsules = siblings.some(sibling => labelOf(sibling).length > 1) && named
+                numbers.classList.toggle("named", capsules)
+                const pills = siblings.map((sibling): [HTMLElement, HTMLElement] => {
+                    const label: HTMLElement = <span>{labelOf(sibling)}</span>
+                    const pill: HTMLElement = (
+                        <div className={Html.buildClassList("entry-number", sibling === entry && "current")}
+                             onclick={() => {
+                                 if (sibling !== entry) {userEditingManager.audioUnit.edit(sibling.box)}
+                             }}>{label}</div>
+                    )
+                    numbers.appendChild(pill)
+                    return [pill, label]
+                })
+                if (capsules) {AnimationFrame.once(() => fitLabels(pills))}
             }
             const neighbour = (siblings: ReadonlyArray<CompositeCell>, direction: -1 | 1): Option<CompositeCell> => {
                 const key = entry.indexField.getValue()

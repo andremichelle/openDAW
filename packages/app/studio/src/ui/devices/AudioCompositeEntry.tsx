@@ -48,7 +48,8 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         </div>
     )
     lifecycle.ownAll(
-        entry.indexField.catchupAndSubscribe(field => indexLabel.textContent = String(field.getValue() + 1)),
+        entry.indexField.catchupAndSubscribe(field =>
+            indexLabel.textContent = fixed ? entry.label : String(field.getValue() + 1)),
         entry.audioEffects.mapOr(collection => collection.subscribe({
             onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
         }), Terminable.Empty),
