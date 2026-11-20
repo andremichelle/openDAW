@@ -114,58 +114,46 @@ describe("Worklet restart chain on a terminated project (live error 1083)", () =
     })
 })
 
-// Live errors 1240 to 1264: the browser reports a failed processor constructor without a cause (Chrome: a trusted
-// ErrorEvent of type "error" with a message and no error). The processor sends the cause as an error event of its
-// own, before or after, so the handler waits briefly for it before the restart dialog.
-describe("Worklet error cause (live errors 1240 to 1264)", () => {
-    const start = async () => {
+describe("Engine that cannot start (live errors 1240 to 1264, 1310 to 1315)", () => {
+    const start = async (ready: boolean) => {
         const {Project} = await import("./Project")
         const worklets: Array<FakeWorklet> = []
-        const project = Project.fromSkeleton(createEnv(worklets),
-            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const env = createEnv(worklets)
+        const createEngine = env.audioWorklets.createEngine
+        Reflect.set(env.audioWorklets, "createEngine", (...args: Parameters<typeof createEngine>) => {
+            const worklet = createEngine(...args)
+            if (ready) {Reflect.set(worklet, "isReady", () => Promise.resolve())}
+            return worklet
+        })
+        const project = Project.fromSkeleton(env, ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const failed: Array<unknown> = []
         const unloaded: Array<unknown> = []
-        project.startAudioWorklet({unload: async event => {unloaded.push(event)}, load: () => {}}, {})
-        return {project, worklets, unloaded}
+        const restart: RestartWorklet = {
+            unload: async event => {unloaded.push(event)},
+            load: () => {},
+            failedToStart: event => {failed.push(event)}
+        }
+        project.startAudioWorklet(restart, {})
+        await flushRestartChain()
+        return {project, worklets, failed, unloaded}
     }
-    const wait = (millis: number) => new Promise(resolve => setTimeout(resolve, millis))
-    const causeless = () => new ErrorEvent("error", {message: "invoking user-supplied constructor failed"})
-    const withCause = () => new ErrorEvent("error", {error: new Error("the real cause")})
-    it("hands the cause to unload when it arrives after the causeless event", async () => {
-        const {project, worklets, unloaded} = await start()
-        const cause = withCause()
-        worklets[0].dispatch("error", causeless())
-        await wait(20)
-        expect(unloaded.length, "still waiting for the cause").toBe(0)
-        worklets[0].dispatch("error", causeless())
-        worklets[0].dispatch("error", cause)
-        await wait(20)
-        expect(unloaded).toEqual([cause])
+    it("an error before the processor is ready calls failedToStart and does not restart", async () => {
+        const {project, worklets, failed, unloaded} = await start(false)
+        const event = {type: "processorerror"}
+        worklets[0].dispatch("processorerror", event)
+        await flushRestartChain()
+        expect(failed).toEqual([event])
+        expect(unloaded.length).toBe(0)
+        expect(worklets.length, "no restart").toBe(1)
         project.terminate()
     })
-    it("hands the cause to unload when it arrives first, the causeless event is ignored", async () => {
-        const {project, worklets, unloaded} = await start()
-        const cause = withCause()
-        worklets[0].dispatch("error", cause)
-        worklets[0].dispatch("error", causeless())
-        await wait(20)
-        expect(unloaded).toEqual([cause])
-        project.terminate()
-    })
-    it("waits for the cause after a processorerror too", async () => {
-        const {project, worklets, unloaded} = await start()
-        const cause = withCause()
-        worklets[0].dispatch("processorerror", new Event("processorerror"))
-        worklets[0].dispatch("error", cause)
-        await wait(20)
-        expect(unloaded).toEqual([cause])
-        project.terminate()
-    })
-    it("falls back to the causeless event when no cause arrives", async () => {
-        const {project, worklets, unloaded} = await start()
-        const event = causeless()
-        worklets[0].dispatch("error", event)
-        await wait(350)
-        expect(unloaded).toEqual([event])
+    it("an error after the processor is ready still restarts", async () => {
+        const {project, worklets, failed, unloaded} = await start(true)
+        worklets[0].dispatch("processorerror", {type: "processorerror"})
+        await flushRestartChain()
+        expect(failed.length).toBe(0)
+        expect(unloaded.length).toBe(1)
+        expect(worklets.length).toBe(2)
         project.terminate()
     })
 })
