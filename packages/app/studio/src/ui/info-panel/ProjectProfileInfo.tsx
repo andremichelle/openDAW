@@ -180,7 +180,7 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                             const saved = await saveBeforeUpload()
                             if (saved.nonEmpty()) {StageDialog.open(saved.unwrap())}
                         }}
-                        appearance={{framed: true, color: Colors.green, tooltip: "Publish to your own openDAW Stage website"}}>
+                        appearance={{framed: true, color: Colors.green, tooltip: "Publish to your own Stage Website"}}>
                     Stage
                 </Button>
             </div>

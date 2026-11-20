@@ -10,6 +10,7 @@ import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {Surface} from "@/ui/surface/Surface"
+import {openManual} from "@/ui/manuals"
 import {CustomServerFile} from "@/custom-server/CustomServerFile"
 import {StageClient} from "@/stage/StageClient"
 import {StagePublish} from "@/stage/StagePublish"
@@ -140,6 +141,12 @@ export namespace StageDialog {
             <Dialog headline="Publish to Your Stage"
                     icon={IconSymbol.Share}
                     cancelable={true}
+                    leading={
+                        <Button lifecycle={lifecycle} onClick={() => openManual("/manuals/stage-website")}
+                                appearance={{color: Colors.gray, tooltip: "Open the manual"}}>
+                            <Icon symbol={IconSymbol.Help}/><span>Manual</span>
+                        </Button>
+                    }
                     buttons={[
                         ...(stored.nonEmpty() ? [{
                             text: "Forget", onClick: (handler: { close: () => void }) => {
