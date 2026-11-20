@@ -211,6 +211,7 @@ export enum IconSymbol {
     MidSideSplit,
     CompositeOverview,
     CompositeOverviewClose,
+    OpenDrum,
 }
 
 export namespace IconSymbol {

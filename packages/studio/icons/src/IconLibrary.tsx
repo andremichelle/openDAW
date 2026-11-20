@@ -366,6 +366,17 @@ export const IconLibrary = () => (
                 <path
                     d="M23,17L23,21C23,22.104 22.104,23 21,23L12,23C10.896,23 10,22.104 10,21L10,17C10,15.896 10.896,15 12,15L21,15C22.104,15 23,15.896 23,17Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.OpenDrum)} viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="4.5" cy="4.5" r="1"/>
+                <circle cx="12" cy="4.5" r="1.56"/>
+                <circle cx="19.5" cy="4.5" r="2.13"/>
+                <circle cx="4.5" cy="12" r="2.69"/>
+                <circle cx="12" cy="12" r="3.25"/>
+                <circle cx="19.5" cy="12" r="2.69"/>
+                <circle cx="4.5" cy="19.5" r="2.13"/>
+                <circle cx="12" cy="19.5" r="1.56"/>
+                <circle cx="19.5" cy="19.5" r="1"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Automation)} viewBox="0 0 48 48" fill="currentColor"
                     stroke="none">
                 <path fill-rule="evenodd" clip-rule="evenodd"

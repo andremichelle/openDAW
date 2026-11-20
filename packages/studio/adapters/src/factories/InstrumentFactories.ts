@@ -427,7 +427,7 @@ export namespace InstrumentFactories {
         name: string, briefDescription: string, description: string,
         manualPage: string): InstrumentFactory<void, B> => ({
         defaultName: `openDrum ${name}`,
-        defaultIcon: IconSymbol.DrumSet,
+        defaultIcon: IconSymbol.OpenDrum,
         briefDescription,
         description,
         manualPage,
