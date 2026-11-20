@@ -6,7 +6,7 @@ import {ProjectProfileService} from "@/service/ProjectProfileService"
 
 // Deep links that open a project are consumed: the back button must not land on them again and re-open it.
 // Every other page (script editor, graph, ...) stays reachable with the back button.
-const ConsumedRoutes: ReadonlyArray<string> = ["/open-bundle", "/open-project", "/join"]
+const ConsumedRoutes: ReadonlyArray<string> = ["/open-bundle", "/open-stage", "/open-project", "/join"]
 
 export const DevicePreviewRoute = "/device-preview"
 export const DemoModeRoute = "/demo-mode"

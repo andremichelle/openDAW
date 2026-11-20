@@ -1,7 +1,7 @@
-import {DefaultObservableValue, int, isDefined, Option, Procedure, Progress} from "@opendaw/lib-std"
+import {int, isDefined, Option, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {OfflineEngineRenderer, OpusEncoder, Project, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
+import {OpusEncoder, Project, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
+import {OpusMixdown} from "@/audio/OpusMixdown"
 
 export namespace Contest {
     export type Prize = Readonly<{ place: string, label: string, detail: string, url?: string }>
@@ -95,15 +95,9 @@ export namespace Contest {
         onStep("Bundling project")
         const bundle = await ProjectBundle.encode(profile.copyForUpload(), bundleProgress)
         onStep("Rendering mixdown")
-        const renderValue = new DefaultObservableValue(0.0)
-        const renderSubscription = renderValue.subscribe(owner => renderProgress(owner.getValue()))
-        const audio = await OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderValue, undefined,
-            OpusEncoder.SampleRate).finally(() => renderSubscription.terminate())
+        const audio = await OpusMixdown.render(profile.project, renderProgress)
         onStep("Encoding Opus")
-        const webCodecs = await OpusEncoder.isSupported(BestOpus)
-        const mixdown = webCodecs
-            ? await OpusEncoder.encode(audio, BestOpus, encodeProgress)
-            : await encodeWithFFmpeg(audio, encodeProgress)
+        const {bytes: mixdown, encoder} = await OpusMixdown.encode(audio, BestOpus, encodeProgress)
         const total = mixdown.byteLength + bundle.byteLength
         if (total > contest.maxBytes) {
             throw new Failure(`Your submission is ${megabytes(total)}, the limit is ${megabytes(contest.maxBytes)}. Remove unused samples and try again.`,
@@ -115,7 +109,7 @@ export namespace Contest {
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
                 contest: contest.name, name: entrant.name, email: entrant.email, projectName: profile.meta.name,
-                termsVersion: contest.terms.version, encoder: webCodecs ? "webcodecs" : "ffmpeg",
+                termsVersion: contest.terms.version, encoder,
                 consents: Object.fromEntries(contest.consents.map(({id}) => [id, true])),
                 mixdownBytes: mixdown.byteLength, bundleBytes: bundle.byteLength
             })
@@ -148,15 +142,6 @@ export namespace Contest {
         // a retry after a lost answer finds the chunk already stored
         if (status === 200 || (status === 409 && reply.received === offset + chunk.byteLength)) {return}
         throw failureOf(status, reply)
-    }
-
-    const encodeWithFFmpeg = async (audio: AudioData, progress: Progress.Handler): Promise<ArrayBuffer> => {
-        const [loadProgress, convertProgress] = Progress.split(progress, 2)
-        const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 10)
-        const worker = await FFmpegWorker.load(loadProgress)
-        return worker.opusConverter().convert(new Blob([WavFile.encodeFloats(audio)]), convertProgress,
-            {bitrate: BestOpus.bitrate, complexity: BestOpus.complexity})
     }
 
     const megabytes = (bytes: int): string => `${Math.ceil(bytes / 1048576)} MB`

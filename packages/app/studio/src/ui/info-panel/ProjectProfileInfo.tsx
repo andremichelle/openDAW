@@ -5,16 +5,19 @@ import {
     isUndefined,
     Lifecycle,
     MutableObservableOption,
+    Option,
     RuntimeNotifier
 } from "@opendaw/lib-std"
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
+import {ProjectProfile} from "@opendaw/studio-core"
 import {Cover} from "./Cover"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Button} from "@/ui/components/Button"
 import {Colors} from "@opendaw/studio-enums"
 import {PublishMusic} from "@/ui/info-panel/PublishMusic"
 import {UploadSoundCloud} from "@/ui/info-panel/UploadSoundCloud"
+import {StageDialog} from "@/stage/StageDialog"
 import {Promises} from "@opendaw/lib-runtime"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 
@@ -55,6 +58,12 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
         profile.updateMetaData("artist", inputArtist.value)
         profile.updateMetaData("tags", inputTags.value.split(",").map(tag => tag.trim()))
         profile.updateMetaData("description", inputDescription.value)
+    }
+    const saveBeforeUpload = async (): Promise<Option<ProjectProfile>> => {
+        storeInputs()
+        await service.projectProfileService.save()
+        return service.projectProfileService.getValue()
+            .flatMap(current => current.saved() && !current.hasUnsavedChanges() ? Option.wrap(current) : Option.None)
     }
     const coverModel = new MutableObservableOption<ArrayBuffer>(cover.unwrapOrUndefined())
     const buttonPublishText = Inject.value(isDefined(meta.radioToken) ? "Republish" : "Publish")
@@ -157,14 +166,22 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                 </div>
             </div>
             <div className="label">Upload</div>
-            <div style={{display: "flex"}}>
+            <div style={{display: "flex", columnGap: "1em"}}>
                 <Button lifecycle={lifecycle}
                         onClick={async () => {
-                            storeInputs()
-                            await UploadSoundCloud.upload(service, profile)
+                            const saved = await saveBeforeUpload()
+                            if (saved.nonEmpty()) {await UploadSoundCloud.upload(service, saved.unwrap())}
                         }}
                         appearance={{framed: true, color: Colors.orange}}>
                     SoundCloud
+                </Button>
+                <Button lifecycle={lifecycle}
+                        onClick={async () => {
+                            const saved = await saveBeforeUpload()
+                            if (saved.nonEmpty()) {StageDialog.open(saved.unwrap())}
+                        }}
+                        appearance={{framed: true, color: Colors.green, tooltip: "Publish to your own openDAW Stage website"}}>
+                    Stage
                 </Button>
             </div>
         </div>

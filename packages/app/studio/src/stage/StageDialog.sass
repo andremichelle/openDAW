@@ -1,0 +1,12 @@
+@use "@/mixins"
+
+component
+  @include mixins.server-dialog-form(1fr auto auto)
+
+  > .fields > .toggle
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > span
+      cursor: pointer

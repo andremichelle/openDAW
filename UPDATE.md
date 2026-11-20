@@ -22,3 +22,5 @@ Each entry names the plan it comes from.
 3. Presets: tear down the preset section of admin.opendaw.studio and `api.opendaw.studio/presets/upload.php`
    (`plans/presets-commons.md` phase 5). `presets/index.json` and the `.odp` files stay on the server for older
    builds.
+4. openDAW Stage (`opendaw-stage/PLAN.md`): on every stage already running, admin page, Tracks, press
+   "Open in PROD now", so tracks published from DEV open PROD.

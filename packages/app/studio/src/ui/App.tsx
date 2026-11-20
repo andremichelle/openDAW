@@ -94,6 +94,7 @@ export const App = (service: StudioService) => {
                         }
                     },
                     {path: "/open-bundle/*", factory: OpenBundlePage},
+                    {path: "/open-stage", factory: OpenBundlePage},
                     {path: "/open-project", factory: OpenProjectPage},
                     {path: "/test", factory: TestPage},
                     {path: "/testing", factory: TestingPage},
