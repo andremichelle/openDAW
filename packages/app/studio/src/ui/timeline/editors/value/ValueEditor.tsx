@@ -188,7 +188,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             selection,
                             snapping,
                             valueAxis,
-                            interpolation: step || context.stepsModel.getValue() >= 2 ? Interpolation.None : Interpolation.Linear,
+                            interpolation: step ? Interpolation.None : Interpolation.Linear,
                             quantize: quantizeSteps
                         }))
                     }

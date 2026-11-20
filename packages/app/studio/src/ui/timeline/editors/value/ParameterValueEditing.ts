@@ -104,7 +104,6 @@ export class ParameterValueEditing implements ValueContext, Terminable {
     }
 
     get floating(): boolean {
-        if (this.#steps.getValue() >= 2) {return false}
         return this.#assignment.mapOr(assignment => assignment.adapter.valueMapping.floating(), false)
     }
 
