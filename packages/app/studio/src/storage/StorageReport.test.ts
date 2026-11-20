@@ -1,9 +1,9 @@
 import {describe, expect, it} from "vitest"
-import {StorageScan} from "./StorageScan"
+import {StorageScan} from "@opendaw/studio-core"
 import {StorageReport} from "./StorageReport"
 
 const asset = (id: string, usedBy: ReadonlyArray<StorageScan.ItemRef>): StorageScan.Asset => ({
-    kind: "sample", id, name: id, size: 10, path: `samples/v2/${id}`, origin: null, clapIds: [], usedBy
+    kind: "sample", id, name: id, size: 10, path: `samples/v2/${id}`, origin: null, clapIds: [], usedBy, storedAt: 0
 })
 
 const item = (kind: StorageScan.ItemKind, id: string, size: number): StorageScan.Item => ({
@@ -14,7 +14,7 @@ const report: StorageScan.Report = {
     total: 0, bookkeeping: 0, failures: [],
     assets: [asset("a", [{kind: "project", id: "p1"}]), asset("b", [])],
     items: [item("project", "p1", 5), item("project", "p2", 50), item("model", "m", 1), item("nam-pack", "n", 2)],
-    other: [{path: ".backup/project.od", size: 3}]
+    other: [{path: ".backup/project.od", size: 3, lastModified: 0}]
 }
 
 describe("StorageReport", () => {

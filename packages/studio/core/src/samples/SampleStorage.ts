@@ -35,10 +35,12 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
 
     private constructor() {super(SampleStorage.Folder)}
 
-    async save(sample: SampleStorage.NewSample): Promise<void> {return this.store(sample).then(EmptyExec)}
+    async save(sample: SampleStorage.NewSample, cached: boolean = false): Promise<void> {
+        return this.store(sample, cached).then(EmptyExec)
+    }
 
     // answers with the frames as they were written
-    async store({uuid, audio, peaks, meta}: SampleStorage.NewSample): Promise<PcmData> {
+    async store({uuid, audio, peaks, meta}: SampleStorage.NewSample, cached: boolean = false): Promise<PcmData> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const floats: AudioData = {
             frames: audio.frames.slice(),
@@ -48,12 +50,9 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         }
         const pcm: PcmData = this.format === "smallest" ? PcmData.smallest(floats) : {format: "float32", ...floats}
         const data = new Uint8Array(pcm.format === "int16" ? WavFile.encodePcm(pcm) : WavFile.encodeFloats(floats))
-        console.debug(`${await Workers.Opfs.exists(`${path}/audio.wav`) ? "override" : "save"} sample '${path}'`)
-        return Promise.all([
-            Workers.Opfs.write(`${path}/audio.wav`, data),
-            Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(peaks)),
-            Workers.Opfs.write(`${path}/meta.json`, new TextEncoder().encode(JSON.stringify(meta)))
-        ]).then(() => pcm)
+        console.debug(`save sample '${path}'`)
+        await this.saveEntry(uuid, [["audio.wav", data], ["peaks.bin", new Uint8Array(peaks)]], meta, cached)
+        return pcm
     }
 
     async exists(uuid: UUID.Bytes): Promise<boolean> {
@@ -206,7 +205,8 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         const shifts = SamplePeaks.findBestFit(audio.numberOfFrames)
         const regenerated = await Workers.Peak.generateAsync(
             Progress.Empty, shifts, audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
-        await Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(regenerated))
+        const rewritten = await Promises.tryCatch(Workers.Opfs.write(`${path}/peaks.bin`, new Uint8Array(regenerated)))
+        if (rewritten.status === "rejected") {console.warn(`could not store the regenerated peaks of '${path}'`, rewritten.error)}
         return SamplePeaks.from(new ByteArrayInput(regenerated))
     }
 }

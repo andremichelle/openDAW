@@ -4,6 +4,7 @@ import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
 import {ProjectMeta} from "./ProjectMeta"
 import {Workers} from "../Workers"
+import {TrashList} from "../TrashList"
 import {ProjectPaths} from "./ProjectPaths"
 
 export namespace ProjectStorage {
@@ -83,16 +84,9 @@ export namespace ProjectStorage {
         return result
     }
 
-    export const deleteProject = async (uuid: UUID.Bytes) => {
-        const array = await loadTrashedIds()
-        array.push(UUID.toString(uuid))
-        const trash = new TextEncoder().encode(JSON.stringify(array))
-        await Workers.Opfs.write(`${ProjectPaths.Folder}/trash.json`, trash)
-        await Workers.Opfs.delete(ProjectPaths.projectFolder(uuid))
-    }
+    export const deleteProject = async (uuid: UUID.Bytes) => TrashList.deleteRecorded(Workers.Opfs,
+        `${ProjectPaths.Folder}/trash.json`, UUID.toString(uuid), ProjectPaths.projectFolder(uuid))
 
-    export const loadTrashedIds = async (): Promise<Array<UUID.String>> => {
-        const {status, value} = await Promises.tryCatch(Workers.Opfs.read(`${ProjectPaths.Folder}/trash.json`))
-        return status === "rejected" ? [] : JSON.parse(new TextDecoder().decode(value))
-    }
+    export const loadTrashedIds = async (): Promise<Array<UUID.String>> =>
+        TrashList.read(Workers.Opfs, `${ProjectPaths.Folder}/trash.json`)
 }

@@ -49,6 +49,8 @@ import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {MasteringDeviceBoxType, MasteringDeviceUrl} from "@opendaw/studio-matchering/device-url"
 import {CustomServerDialogs} from "@/custom-server/CustomServerDialogs"
+import {StorageFull} from "@/storage/StorageFull"
+import {StorageUsage} from "@/storage/StorageUsage"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
@@ -180,6 +182,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
+    StorageFull.install(service.assetCache, () => StorageUsage.refresh().finally())
     replaceChildren(surface.ground, App(service))
     Tour.install(service)
     AnimationFrame.start(window)

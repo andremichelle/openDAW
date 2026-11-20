@@ -93,6 +93,8 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         }
     }
 
+    isInUse(uuid: UUID.Bytes): boolean {return this.#refCounts.hasKey(uuid) || this.#pending.hasKey(uuid)}
+
     record(loader: SampleLoader): void {
         this.#loaders.add(loader)
     }
@@ -136,22 +138,29 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
             }, fetch)
         const promise = stored.catch((error: unknown) => {
             console.warn("Unexpected error loading sample:", error)
-            loader.setError(error instanceof Error ? error.message : String(error))
-        }).finally(() => this.#pending.removeByKey(uuid))
+            loader.setError(error instanceof Error ? error.message : String(error), error)
+        }).finally(() => this.#pending.opt(uuid).ifSome(entry => {
+            if (entry.promise === promise) {this.#pending.removeByKey(uuid)}
+        }))
         this.#pending.add({uuid, promise})
     }
 
     #restore(uuid: UUID.Bytes): Promise<PcmData> {
-        return this.#fetchAndStore(uuid, Progress.Empty, Progress.Empty).then(({pcm}) => pcm)
+        return this.#fetchAndStore(uuid, Progress.Empty, Progress.Empty)
+            .then(({audio, pcm}) => pcm.unwrapOrElse(() => ({format: "float32", ...audio})))
     }
 
-    // provider to storage: the one way a sample that is not stored gets there
+    // provider to storage: the one way a sample that is not stored gets there, a full storage keeps it in memory
     async #fetchAndStore(uuid: UUID.Bytes, fetchProgress: Progress.Handler, peakProgress: Progress.Handler)
-        : Promise<{ audio: AudioData, pcm: PcmData, peaks: Peaks, meta: SampleMetaData }> {
+        : Promise<{ audio: AudioData, pcm: Option<PcmData>, peaks: Peaks, meta: SampleMetaData }> {
         const [audio, meta] = await this.#provider.fetch(uuid, fetchProgress)
         const peaksBuffer = await Workers.Peak.generateAsync(peakProgress, SamplePeaks.findBestFit(audio.numberOfFrames),
             audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
-        const pcm = await SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta})
+        const stored = await Promises.tryCatch(SampleStorage.get().store({uuid, audio, peaks: peaksBuffer, meta}, true))
+        if (stored.status === "rejected") {
+            console.warn(`Sample ${UUID.toString(uuid)} plays from memory, it could not be stored`, stored.error)
+        }
+        const pcm: Option<PcmData> = stored.status === "resolved" ? Option.wrap(stored.value) : Option.None
         return {audio, pcm, peaks: SamplePeaks.from(new ByteArrayInput(peaksBuffer)), meta}
     }
 
@@ -171,17 +180,17 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         if (result.status === "rejected") {
             const error = result.error
             console.warn(error)
-            loader.setError(error instanceof Error ? error.message : String(error))
+            loader.setError(error instanceof Error ? error.message : String(error), error)
             return
         }
         const {audio, pcm, peaks, meta} = result.value
         const info = AudioInfo.of(audio)
-        if (this.#retain === "always") {
+        if (this.#retain === "always" || pcm.isEmpty()) {
             this.#cache.add({uuid, data: Option.wrap(audio), info, peaks, meta})
             loader.setLoaded(audio, peaks, meta)
         } else {
             this.#cache.add({uuid, data: Option.None, info, peaks, meta})
-            loader.setStored(info, peaks, meta, Option.wrap(pcm))
+            loader.setStored(info, peaks, meta, pcm)
         }
     }
 }

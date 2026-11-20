@@ -5,9 +5,8 @@ import {
 import {createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {StorageScan} from "@/storage/StorageScan"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {WclapStorage} from "@opendaw/studio-core"
+import {AssetCache, StorageScan, WclapStorage} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
 import {BackButton} from "@/ui/pages/BackButton"
 import {Button} from "@/ui/components/Button"
@@ -18,6 +17,9 @@ import {StorageReport} from "@/storage/StorageReport"
 import {StorageDeletion} from "@/storage/StorageDeletion"
 import {DeleteUnusedDialog} from "@/ui/pages/DeleteUnusedDialog"
 import {WclapDescriber} from "@/service/WclapDescriber"
+import {StudioAssetCache} from "@/storage/StudioAssetCache"
+import {StorageFull} from "@/storage/StorageFull"
+import {StorageUsage} from "@/storage/StorageUsage"
 
 const className = Html.adoptStyleSheet(css, "StoragePage")
 
@@ -41,7 +43,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
     const reportTerminator = lifecycle.own(new Terminator())
     const listTerminator = lifecycle.own(new Terminator())
     const playback = service.samplePlayback
-    lifecycle.own({terminate: () => playback.eject()})
+    lifecycle.ownAll({terminate: () => playback.eject()}, {terminate: () => StorageUsage.refresh().finally()})
     const summary: HTMLElement = <div className="summary"/>
     const tabs: HTMLElement = <div className="tabs"/>
     const list: HTMLElement = <div className="list"/>
@@ -126,6 +128,31 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             })
         }
     }
+    const freeCache = async (preview: AssetCache.Scan): Promise<void> => {
+        if (!await confirm("Free Cache", `${StorageFull.describe(preview)}`, "Delete")) {return}
+        playback.eject()
+        const dialog = RuntimeNotifier.progress({headline: "Freeing Cache", message: "Checking again what can be deleted"})
+        const result = await Promises.tryCatch(service.assetCache.clear(preview.freeable))
+        dialog.terminate()
+        StorageUsage.refresh().finally()
+        if (result.status === "rejected") {
+            return RuntimeNotifier.info({headline: "Could not free the cache", message: String(result.error)})
+        }
+        const {removed, skipped, failed, size} = result.value
+        if (removed.length === 0) {
+            await RuntimeNotifier.info({
+                headline: "Nothing Deleted",
+                message: "The storage changed since this page read it, none of these files can be deleted now."
+            })
+        } else if (skipped.length > 0 || failed.length > 0) {
+            await RuntimeNotifier.info({
+                headline: "Cache Freed",
+                message: `${removed.length} deleted (${Bytes.toString(size)}). ${skipped.length + failed.length} were kept, `
+                    + "they are in use again or could not be deleted."
+            })
+        }
+        return scan()
+    }
     const deleteButton = (procedure: () => Promise<void>): HTMLElement => {
         const element: HTMLElement = <div className="delete" title="Delete"><Icon symbol={IconSymbol.Delete}/></div>
         listTerminator.own(Events.subscribe(element, "click", () => procedure().then(EmptyExec)))
@@ -188,6 +215,27 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
     const renderReport = (report: StorageScan.Report): void => {
         reportTerminator.terminate()
         Html.empty(summary)
+        const freeCacheLabel: HTMLElement = <span>Free cache (...)</span>
+        const preview = new MutableObservableOption<AssetCache.Scan>()
+        const noPreview = new DefaultObservableValue(true)
+        reportTerminator.own(preview.subscribe(option => noPreview.setValue(option.mapOr(({freeable}) => freeable.length === 0, true))))
+        const freeCacheSlot: HTMLElement = (
+            <Button lifecycle={reportTerminator} disabled={noPreview}
+                    onClick={() => preview.ifSome(scan => freeCache(scan).then(EmptyExec))}
+                    appearance={{color: Colors.orange, framed: true}}>
+                <span title="Library samples and soundfonts that nothing stored uses, they download again when needed">
+                    {freeCacheLabel}
+                </span>
+            </Button>
+        )
+        StudioAssetCache.create(service.sampleManager, service.soundfontManager, async () => report).scan().then(scan => {
+            if (!freeCacheLabel.isConnected) {return}
+            freeCacheLabel.textContent = `Free cache (${scan.freeable.length}, ${Bytes.toString(scan.freeableSize)})...`
+            preview.wrap(scan)
+        }, reason => {
+            console.warn("[StoragePage] cache preview failed", reason)
+            freeCacheLabel.textContent = "Free cache (unknown)"
+        })
         const unused = StorageReport.unusedOf(report)
         summary.append(
             <span>{`openDAW files: ${Bytes.toString(report.total)}`}</span>,
@@ -199,7 +247,8 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             <Button lifecycle={reportTerminator} onClick={() => RouteLocation.get().navigateTo("/storage/samples")}
                     appearance={{color: Colors.blue, framed: true}}>
                 <span>Optimise Samples...</span>
-            </Button>)
+            </Button>,
+            freeCacheSlot)
         if (unused.length > 0) {
             summary.append(
                 <Button lifecycle={reportTerminator} onClick={() => removeUnused().then(EmptyExec)}

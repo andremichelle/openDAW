@@ -5,8 +5,8 @@ import {
     Observer,
     Option,
     panic,
+    Procedure,
     Exec,
-    RuntimeNotifier,
     Subscription,
     Terminable,
     Terminator,
@@ -28,6 +28,8 @@ import {
 import {RenderQuantum} from "./RenderQuantum"
 import {PeaksWriter} from "./PeaksWriter"
 import {SampleService, SampleStorage} from "./samples"
+import type {RecordingSink} from "./io/RecordingSink"
+import {UnstoredRecording} from "./UnstoredRecording"
 
 // the ring delivers whole chunks, so the capture overshoots the limit: keep the head, drop the tail
 export const recordedFrames = (chunks: ReadonlyArray<ReadonlyArray<Float32Array>>,
@@ -52,6 +54,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     #limitSamples: int = Number.POSITIVE_INFINITY
     #state: SampleLoaderState = {type: "record"}
     #onSaved: Option<Exec> = Option.None
+    #onFailed: Option<Procedure<RecordingSink.Failure>> = Option.None
     #sampleService: Option<SampleService> = Option.None
     #bpm: Option<number> = Option.None
 
@@ -94,6 +97,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     }
 
     set onSaved(callback: Exec) {this.#onSaved = Option.wrap(callback)}
+    set onFailed(callback: Procedure<RecordingSink.Failure>) {this.#onFailed = Option.wrap(callback)}
     set bpm(value: number) {this.#bpm = Option.wrap(value)}
     set sampleService(service: SampleService) {this.#sampleService = Option.wrap(service)}
 
@@ -145,19 +149,22 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         const imported = await Promises.tryCatch(this.#sampleService
             .unwrap("SampleService not set")
             .importRecording(this.uuid, audioData, bpm))
-        if (imported.status === "resolved") {
-            this.#peaks = Option.wrap(await SampleStorage.get().loadPeaks(this.uuid, audioData))
-            this.#meta = Option.wrap(imported.value)
-        } else {
-            const {sampleRate} = this.context
-            this.#meta = Option.wrap({
-                name: "Recording", bpm, duration: totalSamples / sampleRate, sample_rate: sampleRate, origin: "recording"
-            })
-            RuntimeNotifier.info({
-                headline: "Storage Unavailable",
-                message: `The recording could not be saved to local storage (${String(imported.error)}). It stays playable until you close the tab.`
-            }).finally()
+        if (imported.status === "rejected") {
+            const {error} = imported
+            console.warn("The recording could not be stored", error)
+            this.#data = Option.None
+            this.#output.length = 0
+            this.#setState({type: "error", reason: error instanceof Error ? error.message : String(error), cause: error})
+            if (this.#onFailed.nonEmpty()) {
+                this.#onFailed.unwrap()({error, audio: audioData})
+            } else {
+                UnstoredRecording.offerDownload(audioData, "Recording", error).finally()
+            }
+            this.terminate()
+            return
         }
+        this.#peaks = Option.wrap(await SampleStorage.get().loadPeaks(this.uuid, audioData))
+        this.#meta = Option.wrap(imported.value)
         this.#output.length = 0
         this.#onSaved.ifSome(callback => callback())
         this.#setState({type: "loaded"})

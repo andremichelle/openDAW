@@ -22,5 +22,7 @@ export class GlobalSoundfontLoaderManager implements SoundfontLoaderManager, Sou
         return this.#loaders.getOrCreate(uuid, uuid => new DefaultSoundfontLoader(this, uuid))
     }
 
+    isInUse(uuid: UUID.Bytes): boolean {return this.#loaders.hasKey(uuid)}
+
     invalidate(uuid: UUID.Bytes) {this.#loaders.opt(uuid).ifSome(loader => loader.invalidate())}
 }

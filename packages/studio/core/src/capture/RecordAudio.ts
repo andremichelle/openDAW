@@ -18,6 +18,7 @@ import {RecordingLatency, RecordingSink} from "../io"
 import {Capture} from "./Capture"
 import {RecordTrack} from "./RecordTrack"
 import {TakePolicy} from "./TakePolicy"
+import {UnstoredRecording} from "../UnstoredRecording"
 
 export namespace RecordAudio {
     export type Latency = RecordingLatency
@@ -202,6 +203,19 @@ export namespace RecordAudio {
             project.trackUserCreatedSample(fileUuid)
             editing.mark()
             releasePublish()
+        }
+        sink.onFailed = ({error, audio}: RecordingSink.Failure) => {
+            console.warn("[RecordAudio] the recording could not be stored and is removed", error)
+            isSaved = true
+            sink.disconnect()
+            sampleManager.remove(fileUuid)
+            const name = fileBox.mapOr(box => box.fileName.getValue(), "Recording")
+            fileBox.ifSome(box => {
+                if (box.isAttached()) {editing.modify(() => box.delete(), false)}
+            })
+            editing.mark()
+            releasePublish()
+            UnstoredRecording.offerDownload(audio, name, error).finally()
         }
         terminator.ownAll(
             Terminable.create(() => {

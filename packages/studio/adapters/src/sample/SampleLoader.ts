@@ -36,7 +36,7 @@ export namespace SampleLoader {
                 resolve()
             } else if (state.type === "error") {
                 queueMicrotask(() => subscription.terminate())
-                reject(new Error(state.reason))
+                reject(new Error(state.reason, {cause: state.cause}))
             }
         })
         return promise

@@ -1,38 +1,45 @@
 import {Errors, UUID} from "@opendaw/lib-std"
 import {Workers} from "./Workers"
-import {Promises} from "@opendaw/lib-runtime"
 import {StructureFile} from "./StructureFile"
+import {OpfsQuota} from "./OpfsQuota"
+import {TrashList} from "./TrashList"
 
 export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, NEW, PARTS> {
     readonly structure: StructureFile
 
     protected constructor(readonly folder: string) {this.structure = new StructureFile(folder)}
 
-    abstract save(item: NEW): Promise<void>
+    abstract save(item: NEW, cached?: boolean): Promise<void>
     abstract load(uuid: UUID.Bytes): Promise<PARTS>
 
     async updateMeta(uuid: UUID.Bytes, meta: META): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}/meta.json`
-        return Workers.Opfs.write(path, new TextEncoder().encode(JSON.stringify(meta)))
+        const bytes = new TextEncoder().encode(JSON.stringify(meta))
+        return OpfsQuota.retry(path, () => Workers.Opfs.write(path, bytes), async () => {})
+    }
+
+    protected saveEntry(uuid: UUID.Bytes, files: ReadonlyArray<[string, Uint8Array]>, meta: META,
+                        cached: boolean): Promise<void> {
+        const path = `${this.folder}/${UUID.toString(uuid)}`
+        const metaBytes = new TextEncoder().encode(JSON.stringify(meta))
+        let began = false
+        return OpfsQuota.retry(path, async () => {
+            began = !await Workers.Opfs.exists(path)
+            for (const [name, bytes] of files) {await Workers.Opfs.write(`${path}/${name}`, bytes)}
+            await Workers.Opfs.write(`${path}/meta.json`, metaBytes)
+        }, async () => {if (began) {await Workers.Opfs.delete(path)}}, {cached, serial: true})
     }
 
     async deleteItem(uuid: UUID.Bytes): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         console.debug(`deleteItem '${path}'`)
-        const uuids = await this.loadTrashedIds()
-        uuids.push(UUID.toString(uuid))
-        await this.saveTrashedIds(uuids)
-        await Workers.Opfs.delete(path)
+        return TrashList.deleteRecorded(Workers.Opfs, `${this.folder}/trash.json`, UUID.toString(uuid), path)
     }
 
-    async loadTrashedIds(): Promise<Array<UUID.String>> {
-        const {status, value} = await Promises.tryCatch(Workers.Opfs.read(`${this.folder}/trash.json`))
-        return status === "rejected" ? [] : JSON.parse(new TextDecoder().decode(value))
-    }
+    async loadTrashedIds(): Promise<Array<UUID.String>> {return TrashList.read(Workers.Opfs, `${this.folder}/trash.json`)}
 
     async saveTrashedIds(ids: ReadonlyArray<UUID.String>): Promise<void> {
-        const trash = new TextEncoder().encode(JSON.stringify(ids))
-        await Workers.Opfs.write(`${this.folder}/trash.json`, trash)
+        return TrashList.write(Workers.Opfs, `${this.folder}/trash.json`, ids)
     }
 
     async list(): Promise<ReadonlyArray<ITEM>> {

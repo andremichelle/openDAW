@@ -2,7 +2,7 @@ import {int, Procedure} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace StorageWalk {
-    export type File = { path: string, size: int }
+    export type File = { path: string, size: int, lastModified?: number }
     export type Result = { files: ReadonlyArray<File>, failures: ReadonlyArray<string> }
 
     const ProgressInterval = 64
@@ -22,7 +22,7 @@ export namespace StorageWalk {
                     failures.push(path)
                     continue
                 }
-                files.push({path, size: value.size})
+                files.push({path, size: value.size, lastModified: value.lastModified})
                 if (files.length % ProgressInterval === 0) {progress(files.length)}
             }
         }

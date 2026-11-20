@@ -1,6 +1,5 @@
 import {UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {StorageScan} from "./StorageScan"
 import {
     PresetStorage,
     ProjectMeta,
@@ -8,6 +7,7 @@ import {
     SampleStorage,
     ScriptStorage,
     SoundfontStorage,
+    StorageScan,
     WclapStorage,
     Workers
 } from "@opendaw/studio-core"

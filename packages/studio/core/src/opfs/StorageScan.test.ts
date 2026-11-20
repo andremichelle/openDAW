@@ -116,9 +116,11 @@ const createStorage = (): Map<string, Uint8Array> => new Map<string, Uint8Array>
     ["samples/v1/old/audio.wav", bytes(90)]
 ])
 
-const run = async (storage: Map<string, Uint8Array>) => {
+// every file is written at 1000, except where a test says otherwise
+const run = async (storage: Map<string, Uint8Array>, written: ReadonlyMap<string, number> = new Map()) => {
     const walk: StorageWalk.Result = {
-        files: Array.from(storage, ([path, data]) => ({path, size: data.byteLength})), failures: ["locked/file"]
+        files: Array.from(storage, ([path, data]) => ({path, size: data.byteLength, lastModified: written.get(path) ?? 1000})),
+        failures: ["locked/file"]
     }
     const read: StorageScan.Reader = path => {
         const data = storage.get(path)
@@ -144,6 +146,14 @@ describe("StorageScan", () => {
         expect(asset("sample", SampleShared)?.origin).toBe("import")
         expect(asset("sample", SampleUnused)?.usedBy).toEqual([{kind: "template", id: Template}])
         expect(asset("sample", SamplePreset)?.usedBy).toEqual([{kind: "preset", id: PresetId}])
+    })
+
+    it("dates an asset by the write of its data file, not of its meta or peaks", async () => {
+        const folder = `samples/v2/${SampleShared}`
+        const {asset} = await run(createStorage(), new Map([
+            [`${folder}/audio.wav`, 5000], [`${folder}/meta.json`, 9000], [`${folder}/peaks.bin`, 8000]]))
+        expect(asset("sample", SampleShared)?.storedAt).toBe(5000)
+        expect(asset("soundfont", Font)?.storedAt).toBe(1000)
     })
 
     it("lists soundfonts and local WebCLAP bundles, named by the clap id that uses them", async () => {

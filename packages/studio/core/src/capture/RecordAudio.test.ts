@@ -7,10 +7,11 @@ import {
     Notifier,
     Observer,
     Option,
+    RuntimeNotifier,
     Terminable,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {AudioData, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {AudioFileBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton, TrackType, TransportAnchor} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
@@ -68,6 +69,8 @@ const createFakeRecordingWorklet = () => ({
     setFillLength(): void {},
     saved: Option.None as Option<() => void>,
     set onSaved(callback: () => void) {this.saved = Option.wrap(callback)},
+    failed: Option.None as Option<(failure: RecordingSink.Failure) => void>,
+    set onFailed(callback: (failure: RecordingSink.Failure) => void) {this.failed = Option.wrap(callback)},
     get data() {return Option.None}
 })
 
@@ -576,6 +579,34 @@ describe("RecordAudio", () => {
             expect(recordingWorklet.limits).toEqual([Math.round(4.56 * SAMPLE_RATE)])
             expect(regions()[0].box.duration.getValue()).toBeCloseTo(4.56 - 0.53, 5)
             expect(sourceNode.disconnects).toBe(0)
+        })
+
+        it("removes the recording, its takes and its file when it could not be stored, and offers the take as a download", async () => {
+            vi.useFakeTimers()
+            const approve = vi.spyOn(RuntimeNotifier, "approve").mockResolvedValue(false)
+            vi.spyOn(console, "warn").mockImplementation(() => {})
+            const {project, regions, recordingWorklet, sourceNode, tick, record, startAt, firstQuantumAt, deliver, stop} =
+                await setup()
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(4.5)
+            stop(4.5)
+            expect(regions().length).toBe(1)
+            const error = new DOMException("No space available for this operation", "QuotaExceededError")
+            const fileName = project.boxGraph.findBox<AudioFileBox>(recordingWorklet.uuid).unwrap().fileName.getValue()
+            recordingWorklet.failed.unwrap("onFailed")({error, audio: AudioData.create(48000, 128, 1)})
+            expect(regions().length).toBe(0)
+            expect(project.boxGraph.findBox(recordingWorklet.uuid).isEmpty()).toBe(true)
+            expect(sourceNode.disconnects).toBe(1)
+            expect(approve).toHaveBeenCalledOnce()
+            expect(approve.mock.calls[0][0]).toMatchObject({headline: "Recording Not Saved", approveText: "Download WAV"})
+            expect(approve.mock.calls[0][0].message).toContain(`'${fileName}'`)
+            expect(fileName.startsWith("Recording-")).toBe(true)
+            vi.advanceTimersByTime(2000)
+            approve.mockRestore()
         })
 
         it("aborts a recording whose only take never grew past zero and removes its file box", async () => {

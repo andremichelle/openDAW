@@ -2,7 +2,7 @@ import {EmptyProcedure, int, Procedure, unitValue} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {StorageWalk} from "@opendaw/lib-fusion"
 import {StorageInspectorProtocol} from "./StorageInspectorProtocol"
-import {StorageScan} from "./StorageScan"
+import {StorageScan} from "@opendaw/studio-core/StorageScan"
 import {SampleFormats} from "./SampleFormats"
 
 const fileOf = async (root: FileSystemDirectoryHandle, path: string): Promise<File> => {

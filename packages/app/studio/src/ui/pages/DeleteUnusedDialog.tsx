@@ -7,7 +7,7 @@ import {Dialog} from "@/ui/components/Dialog"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {Surface} from "@/ui/surface/Surface"
-import {StorageScan} from "@/storage/StorageScan"
+import {StorageScan} from "@opendaw/studio-core"
 import {StorageReport} from "@/storage/StorageReport"
 
 const className = Html.adoptStyleSheet(css, "DeleteUnusedDialog")

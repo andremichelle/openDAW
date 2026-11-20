@@ -71,8 +71,8 @@ export class DefaultSampleLoader implements SampleLoader {
         this.#notifier.notify(this.#state)
     }
 
-    setError(reason: string): void {
-        this.#state = {type: "error", reason}
+    setError(reason: string, cause?: unknown): void {
+        this.#state = {type: "error", reason, cause}
         this.#notifier.notify(this.#state)
     }
 
