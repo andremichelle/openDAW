@@ -8,7 +8,7 @@ import {SampleStorage} from "../samples/SampleStorage"
 import {SoundfontStorage} from "../soundfont/SoundfontStorage"
 import {StorageScan} from "./StorageScan"
 
-const isItemFile = (path: string): boolean => path.endsWith("/project.od") || path.endsWith(".odp")
+const isProjectOrPresetFile = (path: string): boolean => path.endsWith("/project.od") || path.endsWith(".odp")
 
 export class AssetCache {
     readonly #options: AssetCache.Options
@@ -18,7 +18,7 @@ export class AssetCache {
     async scan(): Promise<AssetCache.Scan> {
         const {sampleManager, soundfontManager, isCached, report} = this.#options
         const {assets, failures} = await (report ?? AssetCache.scanOnMainThread)()
-        const unreadable = failures.filter(isItemFile)
+        const unreadable = failures.filter(isProjectOrPresetFile)
         const results: Array<AssetCache.Asset> = []
         for (const asset of assets) {
             if (asset.kind !== "sample" && asset.kind !== "soundfont") {continue}
