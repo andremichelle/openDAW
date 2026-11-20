@@ -6,11 +6,13 @@ import {
     isInstanceOf,
     Lifecycle,
     MutableObservableValue,
+    Optional,
     StringMapping,
     ValueGuard
 } from "@opendaw/lib-std"
 import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
+import {DigitDragging} from "./DigitDragging"
 
 const defaultClassName = Html.adoptStyleSheet(css, "NumberInput")
 
@@ -24,10 +26,11 @@ type Construct = {
     step?: number
     guard?: ValueGuard<number>
     decimal?: boolean
+    drag?: Optional<DigitDragging.Hooks>
 }
 
 export const NumberInput = ({
-                                lifecycle, model, negativeWarning, className, maxChars, mapper, step, guard, decimal
+                                lifecycle, model, negativeWarning, className, maxChars, mapper, step, guard, decimal, drag
                             }: Construct) => {
     step ??= 1.0
     maxChars ??= 3
@@ -127,6 +130,10 @@ export const NumberInput = ({
             }
         })
     )
+    if (isDefined(drag)) {
+        lifecycle.own(DigitDragging.install(input, step, () => model.getValue(),
+            value => model.setValue(isDefined(guard) ? guard.guard(value) : value), drag))
+    }
     updateDigits()
     return element
 }

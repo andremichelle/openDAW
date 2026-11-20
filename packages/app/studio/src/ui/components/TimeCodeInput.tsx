@@ -2,15 +2,19 @@ import css from "./TimeCodeInput.sass?inline"
 import {
     checkIndex,
     int,
+    isDefined,
     isInstanceOf,
     Lifecycle,
     MutableObservableValue,
+    Optional
 } from "@opendaw/lib-std"
 import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
+import {DigitDragging} from "./DigitDragging"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
 import {StudioPreferences} from "@opendaw/studio-core"
+import {TextTooltip} from "@/ui/surface/TextTooltip.tsx"
 
 const defaultClassName = Html.adoptStyleSheet(css, "TimeCodeInput")
 
@@ -21,16 +25,17 @@ type Construct = {
     negativeWarning?: boolean
     signature?: [int, int]
     oneBased?: boolean
+    drag?: Optional<DigitDragging.Hooks>
 }
 
-export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, signature, oneBased}: Construct) => {
+export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, signature, oneBased, drag}: Construct) => {
     const upper = signature?.at(0) ?? 4
     const lower = signature?.at(1) ?? 4
     const units = [
-        {amount: PPQN.Bar, maxChars: 3},
-        {amount: PPQN.Quarter, maxChars: 1},
-        {amount: PPQN.SemiQuaver, maxChars: 1},
-        {amount: 1, maxChars: 3}
+        {amount: PPQN.Bar, maxChars: 3, name: "Bar"},
+        {amount: PPQN.Quarter, maxChars: 1, name: "Quarter"},
+        {amount: PPQN.SemiQuaver, maxChars: 1, name: "Semiquaver"},
+        {amount: 1, maxChars: 3, name: "Ticks"}
     ]
     const subOffset = oneBased === true ? 1 : 0
     const barOffset = () => oneBased === true
@@ -136,6 +141,11 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
             }
         })
     )
+    lifecycle.ownAll(...inputs.map((input, index) => TextTooltip.default(input, () => units[index].name)))
+    if (isDefined(drag)) {
+        lifecycle.ownAll(...inputs.map((input, index) => DigitDragging.install(input, units[index].amount,
+            () => model.getValue(), value => model.setValue(value), drag)))
+    }
     updateDigits()
     return element
 }

@@ -12,6 +12,7 @@ import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteModifyStrategies} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
+import {DigitDragging} from "@/ui/components/DigitDragging.ts"
 
 const className = Html.adoptStyleSheet(css, "PropertyTable")
 
@@ -24,30 +25,49 @@ type Construct = {
 
 export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Construct) => {
     const {position, duration, pitch, velocity, cent, chance, playCount, playCurve} = PropertyParameters
+    let dragging = false
+    const drag: DigitDragging.Hooks = {
+        begin: () => {
+            editing.mark()
+            dragging = true
+        },
+        end: () => {
+            dragging = false
+            editing.mark()
+        }
+    }
     const positionInput: Element = <TimeCodeInput lifecycle={lifecycle}
                                                   model={position.parameter}
                                                   negativeWarning
-                                                  oneBased/>
+                                                  oneBased
+                                                  drag={drag}/>
     const durationInput: Element = <TimeCodeInput lifecycle={lifecycle}
                                                   model={duration.parameter}
-                                                  negativeWarning/>
+                                                  negativeWarning
+                                                  drag={drag}/>
     const pitchString = Inject.value(MidiKeys.toFullString(pitch.parameter.getValue()))
     const pitchInput: Element = <NumberInput lifecycle={lifecycle}
-                                             model={pitch.parameter}/>
+                                             model={pitch.parameter}
+                                             drag={drag}/>
     const velocityInput: Element = <NumberInput lifecycle={lifecycle}
                                                 model={velocity.parameter}
                                                 mapper={velocity.parameter.stringMapping}
-                                                step={0.01}/>
+                                                step={0.01}
+                                                drag={drag}/>
     const centInput: Element = <NumberInput lifecycle={lifecycle}
-                                            model={cent.parameter}/>
+                                            model={cent.parameter}
+                                            drag={drag}/>
     const chanceInput: Element = <NumberInput lifecycle={lifecycle}
-                                              model={chance.parameter}/>
+                                              model={chance.parameter}
+                                              drag={drag}/>
     const playCountInput: Element = <NumberInput lifecycle={lifecycle}
-                                                 model={playCount.parameter}/>
+                                                 model={playCount.parameter}
+                                                 drag={drag}/>
     const playCurveInput: Element = <NumberInput lifecycle={lifecycle}
                                                  model={playCurve.parameter}
                                                  mapper={playCurve.parameter.stringMapping}
-                                                 step={0.01}/>
+                                                 step={0.01}
+                                                 drag={drag}/>
     const element: HTMLElement = (
         <div className={className}>
             <Icon symbol={IconSymbol.Start}/>
@@ -139,7 +159,7 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Co
                 if (ignore) {return}
                 editing.modify(() =>
                     selection.selected()
-                        .forEach(adapter => adapter.box[fieldName].setValue(owner.getValue())))
+                        .forEach(adapter => adapter.box[fieldName].setValue(owner.getValue())), !dragging)
             })),
         selection.catchupAndSubscribe({
             onSelected: (adapter: NoteEventBoxAdapter) => {
