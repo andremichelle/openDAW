@@ -12,8 +12,10 @@ const FILTER_SECTIONS: usize = 4;
 pub struct LowBandAnalyser {
     analyser: AudioAnalyser,
     ring: [f32; FFT_SIZE],
+    side_ring: [f32; FFT_SIZE],
     coeff: BiquadCoeff,
     filter: BiquadStack,
+    side_filter: BiquadStack,
     decimation: usize,
     hop: usize,
     phase: usize,
@@ -25,10 +27,12 @@ impl LowBandAnalyser {
     pub fn init(&mut self, sample_rate: f32, decay_factor: f32) {
         self.analyser.init(decay_factor);
         self.ring.fill(0.0);
+        self.side_ring.fill(0.0);
         self.decimation = 1usize << libm::round(libm::log2(sample_rate as f64 / TARGET_RATE)) as u32;
         self.hop = HOP / self.decimation;
         self.coeff.set_lowpass_params(0.25 / self.decimation as f64, core::f64::consts::FRAC_1_SQRT_2);
         self.filter = BiquadStack::new(FILTER_SECTIONS);
+        self.side_filter = BiquadStack::new(FILTER_SECTIONS);
         self.phase = 0;
         self.write_index = 0;
         self.since_update = 0;
@@ -45,17 +49,19 @@ impl LowBandAnalyser {
     pub fn process(&mut self, left: &[f32], right: &[f32]) {
         for index in 0..left.len().min(right.len()) {
             let filtered = self.filter.process_frame(&self.coeff, (left[index] + right[index]) as f64);
+            let side_filtered = self.side_filter.process_frame(&self.coeff, (left[index] - right[index]) as f64);
             self.phase += 1;
             if self.phase < self.decimation {
                 continue;
             }
             self.phase = 0;
             self.ring[self.write_index] = filtered as f32;
+            self.side_ring[self.write_index] = side_filtered as f32;
             self.write_index = (self.write_index + 1) & (FFT_SIZE - 1);
             self.since_update += 1;
             if self.since_update == self.hop {
                 self.since_update = 0;
-                self.analyser.analyse_ring(&self.ring, self.write_index);
+                self.analyser.analyse_ring(&self.ring, &self.side_ring, self.write_index);
             }
         }
     }
@@ -155,5 +161,25 @@ mod tests {
         analyser.arm_decay();
         feed(&mut analyser, 1 << 11, 0, RATE, 60.0, 0.0);
         assert!(analyser.bins()[bin] < held);
+    }
+
+    #[test]
+    fn an_anti_phase_60_hz_sine_reads_like_mono() {
+        let mut mono = low_band(48000.0);
+        let mut anti = low_band(48000.0);
+        let mut left = [0.0f32; 128];
+        let mut right = [0.0f32; 128];
+        for round in 0..512usize {
+            for offset in 0..128 {
+                left[offset] = sine(60.0, 0.25, round * 128 + offset, RATE);
+                right[offset] = -left[offset];
+            }
+            mono.process(&left, &left);
+            anti.process(&left, &right);
+        }
+        let bin = peak(mono.bins());
+        assert_eq!(peak(anti.bins()), bin);
+        let difference = 20.0 * libm::log10((anti.bins()[bin] / mono.bins()[bin]) as f64);
+        assert!(difference.abs() < 0.01, "difference {difference} dB");
     }
 }

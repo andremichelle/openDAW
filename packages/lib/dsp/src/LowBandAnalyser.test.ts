@@ -91,3 +91,47 @@ describe("LowBandAnalyser", () => {
         expect(analyser.bins().every(value => value === 0.0)).toBe(true)
     })
 })
+
+describe("anti-phase content", () => {
+    const feedStereo = (analyser: { process(left: Float32Array, right: Float32Array, from: number, to: number): void },
+                        sampleRate: number, frames: number, signal: (seconds: number) => number, rightSign: number): void => {
+        const left = new Float32Array(BLOCK)
+        const right = new Float32Array(BLOCK)
+        for (let offset = 0; offset < frames; offset += BLOCK) {
+            for (let index = 0; index < BLOCK; index++) {
+                left[index] = signal((offset + index) / sampleRate)
+                right[index] = left[index] * rightSign
+            }
+            analyser.process(left, right, 0, BLOCK)
+        }
+    }
+
+    test("AudioAnalyser reads an anti-phase sine exactly like mono", () => {
+        const mono = new AudioAnalyser()
+        const anti = new AudioAnalyser()
+        feedStereo(mono, 48000, 1024, sine(1500), 1.0)
+        feedStereo(anti, 48000, 1024, sine(1500), -1.0)
+        const bin = peakBin(mono.bins())
+        expect(anti.bins()[bin]).toBeGreaterThan(0.01)
+        mono.bins().forEach((value, index) => expect(anti.bins()[index]).toBeCloseTo(value, 6))
+    })
+
+    test("AudioAnalyser reads a hard left sine like mono of equal power", () => {
+        const left = new AudioAnalyser()
+        const mono = new AudioAnalyser()
+        feedStereo(left, 48000, 1024, sine(1500, 0.5), 0.0)
+        feedStereo(mono, 48000, 1024, sine(1500, 0.5 * Math.SQRT1_2), 1.0)
+        const bin = peakBin(mono.bins())
+        expect(Math.abs(gainToDb(left.bins()[bin] / mono.bins()[bin]))).toBeLessThan(0.01)
+    })
+
+    test("LowBandAnalyser reads an anti-phase 60 Hz sine like mono", () => {
+        const mono = new LowBandAnalyser(48000)
+        const anti = new LowBandAnalyser(48000)
+        feedStereo(mono, 48000, settle(48000), sine(60), 1.0)
+        feedStereo(anti, 48000, settle(48000), sine(60), -1.0)
+        const bin = peakBin(mono.bins())
+        expect(peakBin(anti.bins())).toBe(bin)
+        expect(Math.abs(gainToDb(anti.bins()[bin] / mono.bins()[bin]))).toBeLessThan(0.01)
+    })
+})

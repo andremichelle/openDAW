@@ -1,7 +1,8 @@
 //! A spectrum analyser (the port of lib-dsp `FFT` + `AudioAnalyser`): sums L+R into a 1024-sample frame,
 //! applies a Blackman window, runs a radix-2 FFT, and holds 512 magnitude bins with a max-or-decay envelope
 //! (the decay is armed by the CONSUMER after each read, mirroring TS `analyser.decay = true` in the
-//! broadcast callbacks). ALLOCATION-FREE (device crates have no allocator): the struct embeds fixed
+//! broadcast callbacks). The L-R difference adds its power through a second FFT, so anti-phase content shows
+//! up and mono reads as before. ALLOCATION-FREE (device crates have no allocator): the struct embeds fixed
 //! buffers and is built IN PLACE inside the engine-allocated state block via `init`.
 
 pub const NUM_BINS: usize = 512; // TS AudioAnalyser.DEFAULT_SIZE
@@ -22,6 +23,9 @@ pub struct AudioAnalyser {
     window: [f32; FFT_SIZE],
     real: [f32; FFT_SIZE],
     imag: [f32; FFT_SIZE],
+    side_real: [f32; FFT_SIZE],
+    side_imag: [f32; FFT_SIZE],
+    has_side: bool,
     bins: [f32; NUM_BINS],
     index: usize,
     decay_factor: f32,
@@ -35,8 +39,8 @@ impl AudioAnalyser {
     pub fn new(decay_factor: f32) -> Self {
         let mut analyser = Self {
             cos_table: [0.0; NUM_BINS], sin_table: [0.0; NUM_BINS], window: [0.0; FFT_SIZE],
-            real: [0.0; FFT_SIZE], imag: [0.0; FFT_SIZE], bins: [0.0; NUM_BINS],
-            index: 0, decay_factor: 0.0, decay: false
+            real: [0.0; FFT_SIZE], imag: [0.0; FFT_SIZE], side_real: [0.0; FFT_SIZE], side_imag: [0.0; FFT_SIZE],
+            has_side: false, bins: [0.0; NUM_BINS], index: 0, decay_factor: 0.0, decay: false
         };
         analyser.init(decay_factor);
         analyser
@@ -57,6 +61,9 @@ impl AudioAnalyser {
         }
         self.real.fill(0.0);
         self.imag.fill(0.0);
+        self.side_real.fill(0.0);
+        self.side_imag.fill(0.0);
+        self.has_side = false;
         self.bins.fill(0.0);
         self.index = 0;
         self.decay_factor = if decay_factor > 0.0 { decay_factor } else { DEFAULT_DECAY };
@@ -70,14 +77,19 @@ impl AudioAnalyser {
     pub fn clear(&mut self) {
         self.bins.fill(0.0);
         self.real.fill(0.0);
+        self.side_real.fill(0.0);
+        self.has_side = false;
         self.index = 0;
     }
 
-    /// Feed one block (L+R summed, TS `AudioAnalyser.process`); a filled 1024-frame accumulator updates
+    /// Feed one block (L+R and L-R, TS `AudioAnalyser.process`); a filled 1024-frame accumulator updates
     /// the bins and restarts.
     pub fn process(&mut self, left: &[f32], right: &[f32]) {
         for index in 0..left.len().min(right.len()) {
+            let side = left[index] - right[index];
             self.real[self.index] = left[index] + right[index];
+            self.side_real[self.index] = side;
+            self.has_side |= side != 0.0;
             self.index += 1;
             if self.index == FFT_SIZE {
                 self.update();
@@ -85,9 +97,12 @@ impl AudioAnalyser {
         }
     }
 
-    pub(crate) fn analyse_ring(&mut self, ring: &[f32; FFT_SIZE], write_index: usize) {
+    pub(crate) fn analyse_ring(&mut self, ring: &[f32; FFT_SIZE], side_ring: &[f32; FFT_SIZE], write_index: usize) {
         for index in 0..FFT_SIZE {
-            self.real[index] = ring[(write_index + index) & (FFT_SIZE - 1)];
+            let position = (write_index + index) & (FFT_SIZE - 1);
+            self.real[index] = ring[position];
+            self.side_real[index] = side_ring[position];
+            self.has_side |= side_ring[position] != 0.0;
         }
         self.update();
     }
@@ -96,12 +111,25 @@ impl AudioAnalyser {
         for index in 0..FFT_SIZE {
             self.real[index] *= self.window[index];
         }
-        self.fft();
+        fft(&mut self.real, &mut self.imag, &self.cos_table, &self.sin_table);
+        if self.has_side {
+            for index in 0..FFT_SIZE {
+                self.side_real[index] *= self.window[index];
+            }
+            fft(&mut self.side_real, &mut self.side_imag, &self.cos_table, &self.sin_table);
+        }
         let scale = 1.0 / NUM_BINS as f32;
         for index in 0..NUM_BINS {
             let re = self.real[index];
             let im = self.imag[index];
-            let energy = math::sqrt((re * re + im * im) as f64) as f32 * scale;
+            let power = if self.has_side {
+                let side_re = self.side_real[index];
+                let side_im = self.side_imag[index];
+                re * re + im * im + side_re * side_re + side_im * side_im
+            } else {
+                re * re + im * im
+            };
+            let energy = math::sqrt(power as f64) as f32 * scale;
             if self.bins[index] < energy {
                 self.bins[index] = energy;
             } else if self.decay {
@@ -110,50 +138,54 @@ impl AudioAnalyser {
         }
         self.index = 0;
         self.imag.fill(0.0);
+        if self.has_side {
+            self.side_imag.fill(0.0);
+            self.has_side = false;
+        }
         self.decay = false;
     }
+}
 
-    /// The radix-2 in-place FFT (lib-dsp `FFT.process`): bit-reversal permutation, then butterflies over
-    /// the precomputed twiddle tables.
-    fn fft(&mut self) {
-        for i in 0..FFT_SIZE {
-            let j = (reverse(i as u32) >> LEVELS) as usize;
-            if j > i {
-                self.real.swap(i, j);
-                self.imag.swap(i, j);
-            }
+/// The radix-2 in-place FFT (lib-dsp `FFT.process`): bit-reversal permutation, then butterflies over the
+/// precomputed twiddle tables.
+fn fft(real: &mut [f32; FFT_SIZE], imag: &mut [f32; FFT_SIZE], cos_table: &[f32; NUM_BINS], sin_table: &[f32; NUM_BINS]) {
+    for i in 0..FFT_SIZE {
+        let j = (reverse(i as u32) >> LEVELS) as usize;
+        if j > i {
+            real.swap(i, j);
+            imag.swap(i, j);
         }
-        let mut size = 2usize;
-        loop {
-            let half_size = size >> 1;
-            let table_step = FFT_SIZE / size;
-            let mut i = 0usize;
-            while i < FFT_SIZE {
-                let m = i + half_size;
-                let mut k = 0usize;
-                for j in i..m {
-                    let index = j + half_size;
-                    let cos = self.cos_table[k];
-                    let sin = self.sin_table[k];
-                    let real_i = self.real[index];
-                    let imag_i = self.imag[index];
-                    let p_re = real_i * cos + imag_i * sin;
-                    let p_im = imag_i * cos - real_i * sin;
-                    let real_j = self.real[j];
-                    let imag_j = self.imag[j];
-                    self.real[index] = real_j - p_re;
-                    self.imag[index] = imag_j - p_im;
-                    self.real[j] = real_j + p_re;
-                    self.imag[j] = imag_j + p_im;
-                    k += table_step;
-                }
-                i += size;
+    }
+    let mut size = 2usize;
+    loop {
+        let half_size = size >> 1;
+        let table_step = FFT_SIZE / size;
+        let mut i = 0usize;
+        while i < FFT_SIZE {
+            let m = i + half_size;
+            let mut k = 0usize;
+            for j in i..m {
+                let index = j + half_size;
+                let cos = cos_table[k];
+                let sin = sin_table[k];
+                let real_i = real[index];
+                let imag_i = imag[index];
+                let p_re = real_i * cos + imag_i * sin;
+                let p_im = imag_i * cos - real_i * sin;
+                let real_j = real[j];
+                let imag_j = imag[j];
+                real[index] = real_j - p_re;
+                imag[index] = imag_j - p_im;
+                real[j] = real_j + p_re;
+                imag[j] = imag_j + p_im;
+                k += table_step;
             }
-            if size == FFT_SIZE {
-                break;
-            }
-            size <<= 1;
+            i += size;
         }
+        if size == FFT_SIZE {
+            break;
+        }
+        size <<= 1;
     }
 }
 
@@ -191,5 +223,64 @@ mod tests {
             analyser.process(&silence, &silence);
         }
         assert!(analyser.bins()[32] < held, "an armed decay fades an un-refreshed bin");
+    }
+
+    fn sine_block(round: usize, bin: f64, gain: f64) -> [f32; 128] {
+        let mut block = [0.0f32; 128];
+        for (offset, value) in block.iter_mut().enumerate() {
+            let phase = (round * 128 + offset) as f64 * bin / 1024.0;
+            *value = (libm::sin(phase * 2.0 * core::f64::consts::PI) * gain) as f32;
+        }
+        block
+    }
+
+    fn feed(analyser: &mut AudioAnalyser, left: impl Fn(usize) -> [f32; 128], right: impl Fn(usize) -> [f32; 128]) {
+        for round in 0..8usize {
+            analyser.process(&left(round), &right(round));
+        }
+    }
+
+    #[test]
+    fn anti_phase_reads_exactly_like_mono() {
+        let mut mono = analyser();
+        let mut anti = analyser();
+        feed(&mut mono, |round| sine_block(round, 32.0, 0.5), |round| sine_block(round, 32.0, 0.5));
+        feed(&mut anti, |round| sine_block(round, 32.0, 0.5), |round| sine_block(round, 32.0, -0.5));
+        assert!(anti.bins()[32] > 0.1, "an anti-phase sine is visible");
+        for (index, (a, b)) in mono.bins().iter().zip(anti.bins()).enumerate() {
+            assert!((a - b).abs() <= a.abs() * 1e-6 + 1e-9, "bin {index}: mono {a} anti-phase {b}");
+        }
+    }
+
+    #[test]
+    fn a_hard_left_sine_reads_like_mono_of_equal_power() {
+        let mut left = analyser();
+        let mut mono = analyser();
+        feed(&mut left, |round| sine_block(round, 32.0, 0.5), |_| [0.0; 128]);
+        let gain = 0.5 * core::f64::consts::FRAC_1_SQRT_2;
+        feed(&mut mono, |round| sine_block(round, 32.0, gain), |round| sine_block(round, 32.0, gain));
+        let difference = 20.0 * libm::log10((left.bins()[32] / mono.bins()[32]) as f64);
+        assert!(difference.abs() < 0.01, "difference {difference} dB");
+    }
+
+    #[test]
+    fn different_tones_left_and_right_both_show() {
+        let mut stereo = analyser();
+        feed(&mut stereo, |round| sine_block(round, 32.0, 0.5), |round| sine_block(round, 64.0, 0.5));
+        let bins = stereo.bins();
+        assert!(bins[32] > 0.1 && bins[64] > 0.1, "left {} right {}", bins[32], bins[64]);
+        let difference = 20.0 * libm::log10((bins[32] / bins[64]) as f64);
+        assert!(difference.abs() < 0.01, "both tones read the same level, difference {difference} dB");
+    }
+
+    #[test]
+    fn silence_on_the_side_after_side_content_falls_back_to_the_mono_path() {
+        let mut analyser = analyser();
+        feed(&mut analyser, |round| sine_block(round, 32.0, 0.5), |round| sine_block(round, 32.0, -0.5));
+        analyser.clear();
+        let mut reference = super::AudioAnalyser::new(DEFAULT_DECAY);
+        feed(&mut analyser, |round| sine_block(round, 16.0, 0.5), |round| sine_block(round, 16.0, 0.5));
+        feed(&mut reference, |round| sine_block(round, 16.0, 0.5), |round| sine_block(round, 16.0, 0.5));
+        assert_eq!(analyser.bins(), reference.bins());
     }
 }
