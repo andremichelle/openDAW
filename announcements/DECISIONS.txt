@@ -239,3 +239,12 @@ Feature framing (Key and Chords)
 • Headline: "Learn and Use Scales and Harmony in openDAW" (Discord with "Update: " in front). Say harmony, not harmonics
   (harmonics are overtones).
 • Manual: https://opendaw.studio/manuals/key-and-chords
+
+Feature framing (Stage Website)
+• Your own music website on your own webspace (PHP), openDAW publishes tracks to it. "Your own tiny
+  SoundCloud" is allowed as the one-line description.
+• Link the example stage: https://www.andremichelle.io/openDAW/music/
+• Say plainly that setting up the Google login is tedious, and that it gets you likes, comments and
+  followers.
+• Files: https://github.com/andremichelle/opendaw-stage/releases/latest
+• Manual (DEV while the feature is DEV only): https://dev.opendaw.studio/manuals/stage-website
