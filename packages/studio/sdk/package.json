@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-sdk",
-  "version": "0.0.188",
+  "version": "0.0.189",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -42,20 +42,20 @@
     "@opendaw/typescript-config": "^0.0.32"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.104",
+    "@opendaw/lib-box": "^0.0.105",
     "@opendaw/lib-dawproject": "^0.0.87",
     "@opendaw/lib-dom": "^0.0.96",
     "@opendaw/lib-dsp": "^0.0.102",
-    "@opendaw/lib-fusion": "^0.0.114",
+    "@opendaw/lib-fusion": "^0.0.115",
     "@opendaw/lib-jsx": "^0.0.98",
     "@opendaw/lib-midi": "^0.0.83",
     "@opendaw/lib-runtime": "^0.0.90",
     "@opendaw/lib-std": "^0.0.89",
     "@opendaw/lib-xml": "^0.0.75",
-    "@opendaw/studio-adapters": "^0.4.2",
-    "@opendaw/studio-boxes": "^0.0.123",
-    "@opendaw/studio-core": "^0.3.4",
-    "@opendaw/studio-core-wasm": "^0.1.4",
+    "@opendaw/studio-adapters": "^0.4.3",
+    "@opendaw/studio-boxes": "^0.0.124",
+    "@opendaw/studio-core": "^0.3.5",
+    "@opendaw/studio-core-wasm": "^0.1.5",
     "@opendaw/studio-enums": "^0.1.14"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"
