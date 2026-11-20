@@ -37,6 +37,7 @@ export namespace DeviceManualUrls {
     export const Werkstatt = "manuals/devices/audio/werkstatt"
     export const AudioEffectComposite = "manuals/devices/audio/effect-composite"
     export const StereoComposite = "manuals/devices/audio/stereo-composite"
+    export const MidSideComposite = "manuals/devices/audio/mid-side-composite"
 
     // Instruments
     export const Apparat = "manuals/devices/instruments/apparat"

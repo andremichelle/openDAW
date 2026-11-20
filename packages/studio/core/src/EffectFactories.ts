@@ -15,6 +15,7 @@ import {
     DelayDeviceBox,
     FoldDeviceBox,
     FrequencySplitBox,
+    MidSideCompositeBox,
     GateDeviceBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
@@ -50,6 +51,7 @@ import {EffectParameterDefaults} from "./EffectParameterDefaults"
 export namespace EffectFactories {
     // the engine's distributor maps the fixed entries by index
     const STEREO_ENTRY_COUNT = 2
+    const MID_SIDE_ENTRY_COUNT = 2
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const Arpeggio: EffectFactory = {
@@ -704,6 +706,30 @@ export namespace EffectFactories {
         }
     }
 
+    export const MidSideComposite: EffectFactory = {
+        defaultName: "Mid/Side Split",
+        defaultIcon: IconSymbol.MidSideSplit,
+        briefDescription: "Mid/side split",
+        description: "Processes the mid and the side of the signal through their own effect chains",
+        manualPage: DeviceManualUrls.MidSideComposite,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        boxName: "MidSideCompositeBox",
+        create: ({boxGraph}, hostField, index) => {
+            const composite = MidSideCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Mid/Side Split")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            Arrays.create(entryIndex => AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(entryIndex)
+            }), MID_SIDE_ENTRY_COUNT)
+            return composite
+        }
+    }
+
     export const FrequencySplit: EffectFactory = {
         defaultName: "Frequency Split",
         defaultIcon: IconSymbol.Charts,
@@ -744,6 +770,7 @@ export namespace EffectFactories {
     export const AudioNamed = {
         AudioEffectComposite, // FX Composite
         StereoComposite,      // Stereo Split
+        MidSideComposite,     // Mid/Side Split
         FrequencySplit,       // Frequency Split
         Autotune,
         Compressor,

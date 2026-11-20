@@ -92,6 +92,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "FX Composite", path: "/manuals/devices/audio/effect-composite", icon: IconSymbol.Stack},
                     {type: "page", label: "Gate", path: "/manuals/devices/audio/gate", icon: IconSymbol.Gate},
                     {type: "page", label: "Maximizer", path: "/manuals/devices/audio/maximizer", icon: IconSymbol.Volume},
+                    {type: "page", label: "Mid/Side Split", path: "/manuals/devices/audio/mid-side-composite", icon: IconSymbol.MidSideSplit},
                     {type: "page", label: "Revamp", path: "/manuals/devices/audio/revamp", icon: IconSymbol.EQ},
                     {type: "page", label: "Stereo Split", path: "/manuals/devices/audio/stereo-composite", icon: IconSymbol.StereoSplit},
                     {type: "page", label: "Stereo Tool", path: "/manuals/devices/audio/stereotool", icon: IconSymbol.Stereo},

@@ -297,7 +297,8 @@ impl Engine {
         let mode = match spec.distributor {
             Distributor::Broadcast => DistributorMode::Broadcast,
             Distributor::Stereo => DistributorMode::Stereo,
-            Distributor::Frequency => DistributorMode::Frequency
+            Distributor::Frequency => DistributorMode::Frequency,
+            Distributor::MidSide => DistributorMode::MidSide
         };
         let distributor = Rc::new(RefCell::new(DistributorProcessor::new(mode, self.sample_rate)));
         let tap = distributor.borrow().tap();

@@ -10,7 +10,9 @@ import {
     AuxSendBox,
     CompressorDeviceBox,
     DelayDeviceBox,
+    MidSideCompositeBox,
     ReverbDeviceBox,
+    StereoToolDeviceBox,
     WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {ScriptCompiler} from "@opendaw/studio-adapters"
@@ -78,6 +80,33 @@ describe("plugin delay compensation", () => {
                 box.index.setValue(0)
             })
             neutralCompressor(skeleton.boxGraph, entry.audioEffects, true)
+        })
+        const {play} = await start(source)
+        const result = peaks(play(8))
+        expect(result.length).toBe(1)
+        expect(result[0][0]).toBe(240)
+    }, 30000)
+
+    it("aligns the mid entry of a mid/side split with a latent side entry (hard left impulse feeds both)", async () => {
+        const source = build((skeleton, scripts) => {
+            const unit = impulseUnit(skeleton, 1, scripts)
+            StereoToolDeviceBox.create(skeleton.boxGraph, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.volume.setValue(0.0)
+                box.panning.setValue(-1.0)
+                box.stereo.setValue(0.0)
+            })
+            const composite = MidSideCompositeBox.create(skeleton.boxGraph, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(1)
+            })
+            const [, side] = [0, 1].map(index => AudioEffectCompositeCellBox.create(skeleton.boxGraph, UUID.generate(),
+                box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(index)
+                }))
+            neutralCompressor(skeleton.boxGraph, side.audioEffects, true)
         })
         const {play} = await start(source)
         const result = peaks(play(8))

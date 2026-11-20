@@ -118,6 +118,113 @@ fn a_stereo_entry_beyond_the_branch_count_reads_silence() {
     assert_eq!(distributor.branch(0).borrow().left[0], 0.75, "branch 0 still carries the left channel");
 }
 
+// A buffer holding a per-sample (left, right) pair.
+fn signal(pair: impl Fn(usize) -> (f32, f32)) -> SharedAudioBuffer {
+    let buffer = shared_audio_buffer();
+    {
+        let mut inner = buffer.borrow_mut();
+        for index in 0..RENDER_QUANTUM {
+            let (left, right) = pair(index);
+            inner.left[index] = left;
+            inner.right[index] = right;
+        }
+    }
+    buffer
+}
+
+fn mid_side_of(source: SharedAudioBuffer) -> (SharedAudioBuffer, SharedAudioBuffer, DistributorProcessor) {
+    let mut distributor = DistributorProcessor::new(DistributorMode::MidSide, SR);
+    distributor.set_audio_source(source);
+    distributor.process(&ProcessInfo {blocks: &[]});
+    (distributor.branch(0), distributor.branch(1), distributor)
+}
+
+// Deterministic noise in [-1, 1] (xorshift), so the reconstruction is checked on uncorrelated channels.
+fn noise(seed: u32) -> impl Fn(usize) -> f32 {
+    move |index| {
+        let mut state = seed ^ (index as u32).wrapping_mul(0x9E37_79B9).wrapping_add(1);
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        (state as f32 / u32::MAX as f32) * 2.0 - 1.0
+    }
+}
+
+#[test]
+fn mid_side_untouched_branches_recombine_the_input() {
+    let (left_noise, right_noise) = (noise(0x1234_5678), noise(0x8765_4321));
+    let cases: [(&str, SharedAudioBuffer); 6] = [
+        ("noise", signal(|index| (left_noise(index), right_noise(index)))),
+        ("mono", signal(|index| (left_noise(index), left_noise(index)))),
+        ("hard left", signal(|index| (left_noise(index), 0.0))),
+        ("hard right", signal(|index| (0.0, right_noise(index)))),
+        ("anti phase", signal(|index| (left_noise(index), -left_noise(index)))),
+        ("full scale", signal(|index| if index % 2 == 0 {(1.0, -1.0)} else {(-1.0, 1.0)}))
+    ];
+    for (name, source) in cases {
+        let (mid, side, _distributor) = mid_side_of(source.clone());
+        let (mid, side, source) = (mid.borrow(), side.borrow(), source.borrow());
+        for index in 0..RENDER_QUANTUM {
+            let left = mid.left[index] + side.left[index];
+            let right = mid.right[index] + side.right[index];
+            assert!((left - source.left[index]).abs() <= 1e-7, "{name}: left at {index} ({left} vs {})",
+                source.left[index]);
+            assert!((right - source.right[index]).abs() <= 1e-7, "{name}: right at {index} ({right} vs {})",
+                source.right[index]);
+        }
+    }
+}
+
+#[test]
+fn mid_side_branches_carry_mid_on_both_channels_and_side_in_anti_phase() {
+    let (mid, side, _distributor) = mid_side_of(filled(0.8, -0.3));
+    let (mid, side) = (mid.borrow(), side.borrow());
+    for index in 0..RENDER_QUANTUM {
+        assert_eq!(mid.left[index], 0.25, "mid = (L + R) / 2");
+        assert_eq!(mid.right[index], 0.25, "mid on both channels");
+        assert_eq!(side.left[index], 0.55, "side = (L - R) / 2");
+        assert_eq!(side.right[index], -0.55, "side in anti phase on the right");
+    }
+}
+
+#[test]
+fn a_mono_signal_reaches_only_the_mid_branch() {
+    let source = noise(42);
+    let (mid, side, _distributor) = mid_side_of(signal(|index| (source(index), source(index))));
+    let (mid, side) = (mid.borrow(), side.borrow());
+    for index in 0..RENDER_QUANTUM {
+        assert_eq!(mid.left[index], source(index), "mid is the mono signal");
+        assert_eq!(mid.right[index], source(index), "on both channels");
+        assert_eq!(side.left[index], 0.0, "side is silent");
+        assert_eq!(side.right[index], 0.0, "side is silent");
+    }
+}
+
+#[test]
+fn an_anti_phase_signal_reaches_only_the_side_branch() {
+    let source = noise(7);
+    let (mid, side, _distributor) = mid_side_of(signal(|index| (source(index), -source(index))));
+    let (mid, side) = (mid.borrow(), side.borrow());
+    for index in 0..RENDER_QUANTUM {
+        assert_eq!(mid.left[index], 0.0, "mid is silent");
+        assert_eq!(mid.right[index], 0.0, "mid is silent");
+        assert_eq!(side.left[index], source(index), "side is the signal on the left");
+        assert_eq!(side.right[index], -source(index), "and inverted on the right");
+    }
+}
+
+#[test]
+fn a_mid_side_entry_beyond_the_branch_count_reads_silence() {
+    let (mid, _side, distributor) = mid_side_of(filled(0.8, -0.3));
+    let extra = distributor.branch(2);
+    assert!(!Rc::ptr_eq(&extra, &mid), "an extra entry does not alias the mid branch");
+    let buffer = extra.borrow();
+    for index in 0..RENDER_QUANTUM {
+        assert_eq!(buffer.left[index], 0.0, "the out-of-range branch is silent (left)");
+        assert_eq!(buffer.right[index], 0.0, "the out-of-range branch is silent (right)");
+    }
+}
+
 #[test]
 fn the_spectrum_fft_runs_only_while_the_editor_subscribes() {
     let mut distributor = distributor_with(DistributorMode::Frequency, 0.5, 0.5);

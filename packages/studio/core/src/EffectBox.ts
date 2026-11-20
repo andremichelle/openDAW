@@ -5,6 +5,7 @@ import {
     AutotuneDeviceBox,
     MaximizerDeviceBox,
     StereoCompositeBox,
+    MidSideCompositeBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
     CrusherDeviceBox,
@@ -42,4 +43,4 @@ export type EffectBox =
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
     | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | VocoderDeviceBox
     | AudioSinkDeviceBox
-    | WaveshaperDeviceBox | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox
+    | WaveshaperDeviceBox | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | MidSideCompositeBox

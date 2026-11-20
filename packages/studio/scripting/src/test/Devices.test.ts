@@ -53,7 +53,7 @@ describe("Devices", () => {
         const keys: ReadonlyArray<keyof AudioEffects> = [
             "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
-            "Composite", "StereoSplit", "FrequencySplit", "Sink"
+            "Composite", "StereoSplit", "MidSideSplit", "FrequencySplit", "Sink"
         ]
         keys.forEach((key, index) => {
             const effect = unit.addAudioEffect(key)
@@ -241,6 +241,12 @@ describe("Devices", () => {
         const stereo = unit.addAudioEffect("StereoSplit")
         expect(stereo.entries.map(entry => entry.index)).toEqual([0, 1])
         expect(() => stereo.entries[0].remove()).toThrow()
+        const midSide = unit.addAudioEffect("MidSideSplit", {dry: -6})
+        expect(midSide.entries.map(entry => entry.index)).toEqual([0, 1])
+        expect(midSide.dry).toBe(-6)
+        expect(() => midSide.entries[1].remove()).toThrow()
+        midSide.entries[1].addAudioEffect("Revamp")
+        expect(midSide.entries[1].audioEffects[0].key).toBe("Revamp")
         const split = unit.addAudioEffect("FrequencySplit", {crossover1: 100})
         expect(split.entries.map(entry => entry.index)).toEqual([0, 1, 2, 3])
         expect(split.crossover1).toBe(100)

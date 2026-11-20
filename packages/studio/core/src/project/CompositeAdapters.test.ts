@@ -5,6 +5,7 @@ import {
     Devices,
     AudioEffectCompositeBoxAdapter,
     FrequencySplitBoxAdapter,
+    MidSideCompositeBoxAdapter,
     StereoCompositeBoxAdapter,
     AudioEffectCompositeCellBoxAdapter,
     InstrumentFactories,
@@ -15,6 +16,7 @@ import {
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     FrequencySplitBox,
+    MidSideCompositeBox,
     PitchDeviceBox,
     StereoCompositeBox,
     StereoToolDeviceBox
@@ -259,6 +261,26 @@ describe("Stereo split factory", () => {
         expect(entries.map(entry => entry.indexField.getValue()), "index 0 is the LEFT branch, 1 the right")
             .toStrictEqual([0, 1])
         // Both start empty: two untouched branches sum back to the input, so a fresh split is a bypass.
+        for (const entry of entries) {
+            expect(entry.audioEffects.unwrap("audioEffects").isEmpty()).toBe(true)
+        }
+        project.terminate()
+    })
+
+    it("a mid/side split creates two fixed entries, Mid then Side", async () => {
+        const {Project} = await import("./Project")
+        const {EffectFactories} = await import("../EffectFactories")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const box = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            return EffectFactories.MidSideComposite.create(project, product.audioUnitBox.audioEffects, 0)
+        }).unwrap()
+        const adapter = project.boxAdapters.adapterFor(box as MidSideCompositeBox, MidSideCompositeBoxAdapter)
+        expect(adapter.entriesFixed).toBe(true)
+        const entries = adapter.entries.adapters()
+        expect(entries.map(entry => entry.label)).toStrictEqual(["Mid", "Side"])
+        expect(entries.map(entry => entry.indexField.getValue())).toStrictEqual([0, 1])
         for (const entry of entries) {
             expect(entry.audioEffects.unwrap("audioEffects").isEmpty()).toBe(true)
         }

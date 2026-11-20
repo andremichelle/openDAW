@@ -145,7 +145,8 @@ impl CompositeSpec {
 pub(crate) enum Distributor {
     Broadcast = 0,
     Stereo = 1,
-    Frequency = 2
+    Frequency = 2,
+    MidSide = 3
 }
 
 impl Distributor {
@@ -153,6 +154,7 @@ impl Distributor {
         match value {
             1 => Self::Stereo,
             2 => Self::Frequency,
+            3 => Self::MidSide,
             _ => Self::Broadcast
         }
     }

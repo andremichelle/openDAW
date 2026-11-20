@@ -53,7 +53,7 @@ export type EffectCompositeSpec = {
 export enum EffectCompositeKind {AudioEffect = 1, MidiEffect = 2}
 
 // WASM CONTRACT: mirrors `Distributor` in crates/engine/src/lib.rs.
-export enum EffectCompositeDistributor {Broadcast = 0, Stereo = 1, Frequency = 2}
+export enum EffectCompositeDistributor {Broadcast = 0, Stereo = 1, Frequency = 2, MidSide = 3}
 
 export type EngineModules = {
     engineModule: WebAssembly.Module
@@ -172,6 +172,14 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, sendKey: 0, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [14, 15, 16]
+    },
+    // The mid/side SPLIT: entry 0 gets the mid on both channels, entry 1 the side in anti phase.
+    {
+        boxType: "MidSideCompositeBox", kind: EffectCompositeKind.AudioEffect,
+        distributor: EffectCompositeDistributor.MidSide,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, sendKey: 0, dryKey: 12, wetKey: 13, inputTapField: 11,
+        crossoverKeys: [0, 0, 0]
     }
 ]
 

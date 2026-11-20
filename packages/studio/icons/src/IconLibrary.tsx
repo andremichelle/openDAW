@@ -1052,6 +1052,11 @@ export const IconLibrary = () => (
                 <path fill="currentColor" stroke="none" d="M10 10L21 14.5L16.2 15.9L20.5 20.2L19.2 21.5L14.9 17.2L13.5 22Z"/>
                 <path d="M5.5 1.5V9.5M1.5 5.5H9.5M4 3L5.5 1.5L7 3M4 8L5.5 9.5L7 8M3 4L1.5 5.5L3 7M8 4L9.5 5.5L8 7"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.MidSideSplit)} viewBox="0 0 16 16" fill="none"
+                    stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="3"/>
+                <path d="M4 2.5a6.5 6.5 0 0 0 0 11M12 2.5a6.5 6.5 0 0 1 0 11"/>
+            </symbol>
         </defs>
     </symbol>
 )

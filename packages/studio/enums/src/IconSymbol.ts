@@ -208,6 +208,7 @@ export enum IconSymbol {
     Click,
     DoubleClick,
     Drag,
+    MidSideSplit,
 }
 
 export namespace IconSymbol {

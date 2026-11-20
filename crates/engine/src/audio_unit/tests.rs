@@ -4246,6 +4246,94 @@ fn a_frequency_composite_routes_dc_to_the_low_band_only() {
     assert!((right - 1.0).abs() < 0.02, "and the same on the right (got {right})");
 }
 
+fn engine_with_mid_side_composite() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
+        crate::Distributor::MidSide, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, 0, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        [0, 0, 0]);
+    engine
+}
+
+fn mid_side_render_graph() -> BoxGraph {
+    BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0))
+        ]),
+        entry_box_gain(ENTRY_A, 0, "Mid", 0.0),
+        entry_box_gain(ENTRY_B, 1, "Side", 0.0)
+    ])
+}
+
+fn render_mix_stereo(engine: &mut Engine, unit: &AudioUnitBinding, left: f32, right: f32) -> (f32, f32) {
+    let source = shared_audio_buffer();
+    {
+        let mut buffer = source.borrow_mut();
+        for index in 0..engine_env::RENDER_QUANTUM {
+            buffer.left[index] = left;
+            buffer.right[index] = right;
+        }
+    }
+    composite_of(unit).set_audio_source(source);
+    let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+    for _ in 0..16 {
+        engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
+    }
+    let out = composite_of(unit).mix_output.borrow();
+    (out.left[0], out.right[0])
+}
+
+#[test]
+fn an_untouched_mid_side_composite_passes_the_input() {
+    let mut engine = engine_with_mid_side_composite();
+    engine.graph = mid_side_render_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let (left, right) = render_mix_stereo(&mut engine, &unit, 0.8, -0.3);
+    assert!((left - 0.8).abs() < 1e-6, "mid + side give back the left channel (got {left})");
+    assert!((right + 0.3).abs() < 1e-6, "mid - side give back the right channel (got {right})");
+}
+
+#[test]
+fn muting_the_side_entry_leaves_the_mid_on_both_channels() {
+    let mut engine = engine_with_mid_side_composite();
+    engine.graph = mid_side_render_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    set_bool(&mut engine, ENTRY_B, ENTRY_MUTE_KEY, false, true);
+    engine.reconcile_one(&mut unit);
+    let (left, right) = render_mix_stereo(&mut engine, &unit, 0.8, -0.3);
+    assert!((left - 0.25).abs() < 1e-6, "only the mid (0.25) remains on the left (got {left})");
+    assert!((right - 0.25).abs() < 1e-6, "and on the right (got {right})");
+}
+
+#[test]
+fn soloing_the_side_entry_plays_the_side_in_anti_phase() {
+    let mut engine = engine_with_mid_side_composite();
+    engine.graph = mid_side_render_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    set_bool(&mut engine, ENTRY_B, ENTRY_SOLO_KEY, false, true);
+    engine.reconcile_one(&mut unit);
+    let (left, right) = render_mix_stereo(&mut engine, &unit, 0.8, -0.3);
+    assert!((left - 0.55).abs() < 1e-6, "only the side (0.55) remains on the left (got {left})");
+    assert!((right + 0.55).abs() < 1e-6, "and inverted on the right (got {right})");
+}
+
 #[test]
 fn muting_an_entry_removes_it_from_the_rendered_mix() {
     let mut engine = engine_with_composite();

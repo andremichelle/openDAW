@@ -13,6 +13,7 @@ import {
     DelayDeviceBox,
     FoldDeviceBox,
     FrequencySplitBox,
+    MidSideCompositeBox,
     GateDeviceBox,
     MaximizerDeviceBox,
     NeuralAmpDeviceBox,
@@ -63,6 +64,7 @@ import {
     SideChainSource,
     SinkEffect,
     StereoSplitEffect,
+    MidSideSplitEffect,
     StereoToolEffect,
     TidalEffect,
     VocoderEffect,
@@ -115,7 +117,7 @@ export type AnyAudioEffectImpl =
     | AutotuneEffectImpl | CompressorEffectImpl | ConvolverEffectImpl | CrusherEffectImpl | DattorroReverbEffectImpl
     | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
     | ReverbEffectImpl | StereoToolEffectImpl | SinkEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
-    | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | FrequencySplitEffectImpl
+    | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | MidSideSplitEffectImpl | FrequencySplitEffectImpl
     | UnsupportedAudioEffectImpl
 
 type UnsupportedAudioEffectBox = WclapDeviceBox | ModularDeviceBox | UnknownAudioEffectDeviceBox
@@ -491,7 +493,7 @@ export class WerkstattEffectImpl extends AudioEffectFacade<WerkstattDeviceBox> i
 
 // ---- Composites
 
-export type CompositeBox = AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox
+export type CompositeBox = AudioEffectCompositeBox | StereoCompositeBox | MidSideCompositeBox | FrequencySplitBox
 
 export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCellBox> implements AudioEffectCompositeEntry {
     static wrap(context: Context, box: AudioEffectCompositeCellBox): AudioEffectCompositeEntryImpl {
@@ -512,9 +514,10 @@ export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCe
     }
 
     get index(): int {return this.box.index.getValue()}
-    get composite(): AudioEffectCompositeEffect | StereoSplitEffect | FrequencySplitEffect {
+    get composite(): AudioEffectCompositeEffect | StereoSplitEffect | MidSideSplitEffect | FrequencySplitEffect {
         const compositeBox = this.box.composite.targetVertex.unwrap("entry has no composite").box
-        return AudioEffectImpls.wrap(this.context, compositeBox) as AudioEffectCompositeImpl | StereoSplitEffectImpl | FrequencySplitEffectImpl
+        return AudioEffectImpls.wrap(this.context, compositeBox) as AudioEffectCompositeImpl | StereoSplitEffectImpl | MidSideSplitEffectImpl
+            | FrequencySplitEffectImpl
     }
     get audioEffects(): ReadonlyArray<AnyAudioEffect> {return this.#chain.list()}
 
@@ -575,6 +578,19 @@ export class StereoSplitEffectImpl extends AudioEffectFacade<StereoCompositeBox>
     get entries(): ReadonlyArray<AudioEffectCompositeEntry> {return listEntries(this.context, this.box.entries)}
 }
 
+export class MidSideSplitEffectImpl extends AudioEffectFacade<MidSideCompositeBox> implements MidSideSplitEffect {
+    readonly key = "MidSideSplit" as const
+    declare dry: float
+    declare wet: float
+
+    constructor(context: Context, box: MidSideCompositeBox) {
+        super(context, box)
+        this.bind({dry: box.dry, wet: box.wet})
+    }
+
+    get entries(): ReadonlyArray<AudioEffectCompositeEntry> {return listEntries(this.context, this.box.entries)}
+}
+
 export class FrequencySplitEffectImpl extends AudioEffectFacade<FrequencySplitBox> implements FrequencySplitEffect {
     readonly key = "FrequencySplit" as const
     declare dry: float
@@ -613,6 +629,7 @@ export namespace AudioEffectImpls {
         if (box instanceof WerkstattDeviceBox) {return new WerkstattEffectImpl(context, box)}
         if (box instanceof AudioEffectCompositeBox) {return new AudioEffectCompositeImpl(context, box)}
         if (box instanceof StereoCompositeBox) {return new StereoSplitEffectImpl(context, box)}
+        if (box instanceof MidSideCompositeBox) {return new MidSideSplitEffectImpl(context, box)}
         if (box instanceof FrequencySplitBox) {return new FrequencySplitEffectImpl(context, box)}
         if (AudioEffectImpls.isUnsupportedBox(box)) {return new UnsupportedAudioEffectImpl(context, box)}
         return panic(`${box.name} is not a supported audio-effect`)
@@ -624,5 +641,6 @@ export namespace AudioEffectImpls {
         box instanceof WclapDeviceBox || box instanceof ModularDeviceBox || box instanceof UnknownAudioEffectDeviceBox
 
     export const isCompositeBox = (box: Box): box is CompositeBox =>
-        box instanceof AudioEffectCompositeBox || box instanceof StereoCompositeBox || box instanceof FrequencySplitBox
+        box instanceof AudioEffectCompositeBox || box instanceof StereoCompositeBox || box instanceof MidSideCompositeBox
+        || box instanceof FrequencySplitBox
 }

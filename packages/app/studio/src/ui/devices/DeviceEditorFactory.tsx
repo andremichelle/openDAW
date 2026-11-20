@@ -8,6 +8,7 @@ import {
     AutotuneDeviceBox,
     FrequencySplitBox,
     StereoCompositeBox,
+    MidSideCompositeBox,
     BoxVisitor,
     CompressorDeviceBox,
     CrusherDeviceBox,
@@ -78,6 +79,7 @@ import {
     AutotuneDeviceBoxAdapter,
     FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
+    MidSideCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     ConvolverDeviceBoxAdapter,
@@ -465,6 +467,14 @@ export namespace DeviceEditorFactory {
                                                       .adapterFor(box, StereoCompositeBoxAdapter)}
                                                   deviceHost={deviceHost}
                                                   icon={CoreEffectFactories.AudioNamed.StereoComposite.defaultIcon}/>
+            ),
+            visitMidSideCompositeBox: (box: MidSideCompositeBox) => (
+                <AudioEffectCompositeDeviceEditor lifecycle={lifecycle}
+                                                  service={service}
+                                                  adapter={service.project.boxAdapters
+                                                      .adapterFor(box, MidSideCompositeBoxAdapter)}
+                                                  deviceHost={deviceHost}
+                                                  icon={CoreEffectFactories.AudioNamed.MidSideComposite.defaultIcon}/>
             ),
             visitFrequencySplitBox: (box: FrequencySplitBox) => (
                 <FrequencySplitDeviceEditor lifecycle={lifecycle}

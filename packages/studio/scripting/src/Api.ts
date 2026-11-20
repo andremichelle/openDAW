@@ -961,7 +961,7 @@ export interface AudioEffectCompositeEntry extends AudioEffectHost {
     /** Unique id */
     readonly uuid: string
     /** The composite this entry belongs to */
-    readonly composite: AudioEffectCompositeEffect | StereoSplitEffect | FrequencySplitEffect
+    readonly composite: AudioEffectCompositeEffect | StereoSplitEffect | MidSideSplitEffect | FrequencySplitEffect
     /** Position in the composite */
     readonly index: int
     /** Entry gain in dB (default 0) */
@@ -1007,6 +1007,21 @@ export interface StereoSplitEffect extends AudioEffect {
     /** Wet level in dB (default 0) */
     wet: float
     /** Fixed entries: [left, right] */
+    readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
+}
+
+/**
+ * Processes the mid and the side through their own chains (entries are fixed: 0 = mid, 1 = side)
+ * @group Audio Effects
+ */
+export interface MidSideSplitEffect extends AudioEffect {
+    /** Always "MidSideSplit" */
+    readonly key: "MidSideSplit"
+    /** Dry level in dB (default -inf) */
+    dry: float
+    /** Wet level in dB (default 0) */
+    wet: float
+    /** Fixed entries: [mid, side] */
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
 }
 
@@ -1076,6 +1091,8 @@ export interface AudioEffects {
     "Composite": AudioEffectCompositeEffect
     /** {@link StereoSplitEffect} */
     "StereoSplit": StereoSplitEffect
+    /** {@link MidSideSplitEffect} */
+    "MidSideSplit": MidSideSplitEffect
     /** {@link FrequencySplitEffect} */
     "FrequencySplit": FrequencySplitEffect
 }

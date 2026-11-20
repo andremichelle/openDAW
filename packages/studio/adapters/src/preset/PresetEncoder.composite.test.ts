@@ -6,6 +6,7 @@ import {
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
+    MidSideCompositeBox,
     StereoToolDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
@@ -156,6 +157,39 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const stereoTool = targetGraph.boxes().find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
         expect((stereoTool.host.targetVertex.unwrap("stereoTool.host").box as AudioEffectCompositeCellBox)
             .index.getValue(), "the nested effect stays hosted by the LEFT branch (index 0)").toBe(0)
+    })
+
+    it("round-trips a MID/SIDE SPLIT with its two fixed entries and a nested effect", () => {
+        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
+        const {boxGraph} = source
+        boxGraph.beginTransaction()
+        const capture = CaptureAudioBox.create(boxGraph, UUID.generate())
+        const unit = AudioUnitFactory.create(source, AudioUnitType.Instrument, Option.wrap(capture))
+        const split = MidSideCompositeBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        })
+        AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(split.entries)
+            box.index.setValue(0)
+        })
+        const side = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(split.entries)
+            box.index.setValue(1)
+        })
+        StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(side.audioEffects))
+        boxGraph.endTransaction()
+        const bytes = PresetEncoder.encodeEffects([split], PresetHeader.ChainKind.Audio) as ArrayBuffer
+        const {boxGraph: targetGraph, targetUnit} = decodeChain(bytes)
+        const splits = targetGraph.boxes().filter(box => box instanceof MidSideCompositeBox) as MidSideCompositeBox[]
+        expect(splits.length).toBe(1)
+        expect(splits[0].host.targetVertex.unwrap("split.host").address.toString()).toStrictEqual(targetUnit.audioEffects.address.toString())
+        const entries = (targetGraph.boxes().filter(box => box instanceof AudioEffectCompositeCellBox) as AudioEffectCompositeCellBox[])
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        expect(entries.map(entry => entry.index.getValue())).toStrictEqual([0, 1])
+        const stereoTool = targetGraph.boxes().find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
+        expect((stereoTool.host.targetVertex.unwrap("stereoTool.host").box as AudioEffectCompositeCellBox)
+            .index.getValue(), "the nested effect stays hosted by the SIDE branch (index 1)").toBe(1)
     })
 
     it("round-trips a composite NESTED inside another composite's entry", () => {

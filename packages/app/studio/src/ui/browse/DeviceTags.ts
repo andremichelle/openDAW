@@ -39,6 +39,7 @@ export namespace DeviceTags {
         Zeitgeist: ["groove", "shuffle", "timing"],
         AudioEffectComposite: ["parallel", "routing"],
         StereoComposite: ["stereo", "routing"],
+        MidSideComposite: ["stereo", "routing"],
         FrequencySplit: ["multiband", "routing"],
         Autotune: ["pitch", "vocal"],
         Compressor: ["dynamics", "mixing"],

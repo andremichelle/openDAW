@@ -18,6 +18,7 @@ describe("EffectFactories.keyOfBox", () => {
     it("resolves composite <Key>Box effects to their factory key", () => {
         expect(EffectFactories.keyOfBox(make("AudioEffectCompositeBox"))).toBe("AudioEffectComposite")
         expect(EffectFactories.keyOfBox(make("StereoCompositeBox"))).toBe("StereoComposite")
+        expect(EffectFactories.keyOfBox(make("MidSideCompositeBox"))).toBe("MidSideComposite")
     })
     it("returns undefined for a box that is not a registered effect", () => {
         expect(EffectFactories.keyOfBox(make("AudioBusBox"))).toBeUndefined()

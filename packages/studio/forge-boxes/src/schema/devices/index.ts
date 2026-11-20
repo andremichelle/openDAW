@@ -76,6 +76,7 @@ import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
 import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
 import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
 import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
+import {MidSideCompositeBox} from "./audio-effects/MidSideCompositeBox"
 import {ConvolverDeviceBox} from "./audio-effects/ConvolverDeviceBox"
 import {AudioSinkDeviceBox} from "./audio-effects/AudioSinkDeviceBox"
 
@@ -160,6 +161,7 @@ export const DeviceDefinitions = [
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
     FrequencySplitBox,
+    MidSideCompositeBox,
     AudioSinkDeviceBox,
     SurgeonDeviceBox
 ]

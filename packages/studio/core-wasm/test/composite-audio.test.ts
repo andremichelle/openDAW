@@ -3,7 +3,14 @@
 // entry mute, the stereo split, per-entry pan). An Apparat sine (equal L/R) drives every case.
 import {describe, expect, it} from "vitest"
 import {UUID} from "@opendaw/lib-std"
-import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, ReverbDeviceBox, StereoCompositeBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
+import {
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    MidSideCompositeBox,
+    ReverbDeviceBox,
+    StereoCompositeBox,
+    StereoToolDeviceBox
+} from "@opendaw/studio-boxes"
 import type {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Box, BoxGraph} from "@opendaw/lib-box"
 import {buildEffectProject, renderEffect, renderEffectToggling, peakOf, allFinite} from "./helpers/effect-harness"
@@ -269,5 +276,86 @@ describe("AudioComposite (audible)", () => {
         const [left, right] = channelPeaks(out)
         expect(left).toBeGreaterThan(0.1) // the left branch (entry 0) still sounds
         expect(right).toBeLessThan(1e-3)  // muting the right branch (entry 1) silenced the right channel
+    }, 30000)
+
+    // The sine is mono (pure mid). A StereoTool inverting the right channel in front turns it into pure side.
+    const midSide = (antiPhase: boolean, mutedEntry: number): BoxGraph =>
+        buildEffectProject(0.3, (source: BoxGraph, unit: AudioUnitBox): Box => {
+            StereoToolDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.volume.setValue(0.0)
+                box.panning.setValue(0.0)
+                box.stereo.setValue(0.0)
+                box.invertR.setValue(antiPhase)
+            })
+            const composite = MidSideCompositeBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(1)
+            })
+            for (const index of [0, 1]) {
+                AudioEffectCompositeCellBox.create(source, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(index)
+                    box.mute.setValue(index === mutedEntry)
+                })
+            }
+            return composite
+        })
+
+    it("a MID/SIDE split passes a mono signal through the mid entry only", async () => {
+        const [keptLeft, keptRight] = channelPeaks(await renderEffect(midSide(false, 1)))
+        expect(keptLeft).toBeGreaterThan(0.1)
+        expect(keptRight).toBeGreaterThan(0.1)
+        const [mutedLeft, mutedRight] = channelPeaks(await renderEffect(midSide(false, 0)))
+        expect(mutedLeft).toBeLessThan(1e-3)
+        expect(mutedRight).toBeLessThan(1e-3)
+    }, 30000)
+
+    it("a MID/SIDE split passes an anti phase signal through the side entry only", async () => {
+        const [keptLeft, keptRight] = channelPeaks(await renderEffect(midSide(true, 0)))
+        expect(keptLeft).toBeGreaterThan(0.1)
+        expect(keptRight).toBeGreaterThan(0.1)
+        const [mutedLeft, mutedRight] = channelPeaks(await renderEffect(midSide(true, 1)))
+        expect(mutedLeft).toBeLessThan(1e-3)
+        expect(mutedRight).toBeLessThan(1e-3)
+    }, 30000)
+
+    it("an untouched MID/SIDE split renders the same as no split", async () => {
+        const reference = await renderEffect(buildEffectProject(0.3, (source: BoxGraph, unit: AudioUnitBox): Box =>
+            StereoToolDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.volume.setValue(0.0)
+                box.panning.setValue(-0.5)
+                box.stereo.setValue(0.0)
+            })))
+        const split = await renderEffect(buildEffectProject(0.3, (source: BoxGraph, unit: AudioUnitBox): Box => {
+            StereoToolDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.volume.setValue(0.0)
+                box.panning.setValue(-0.5)
+                box.stereo.setValue(0.0)
+            })
+            const composite = MidSideCompositeBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(1)
+            })
+            for (const index of [0, 1]) {
+                AudioEffectCompositeCellBox.create(source, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(index)
+                })
+            }
+            return composite
+        }))
+        expect(split.length).toBe(reference.length)
+        expect(peakOf(reference)).toBeGreaterThan(0.1)
+        let maxError = 0
+        for (let index = 0; index < reference.length; index++) {
+            maxError = Math.max(maxError, Math.abs(split[index] - reference[index]))
+        }
+        expect(maxError).toBeLessThan(1e-6)
     }, 30000)
 })

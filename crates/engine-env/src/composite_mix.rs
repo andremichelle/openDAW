@@ -47,7 +47,9 @@ pub enum DistributorMode {
     Stereo,
     /// Multiband split: entry `i` reads frequency band `i` (low to high), separated by Linkwitz-Riley crossovers
     /// with allpass phase-compensation, so the untouched bands recombine to a flat-magnitude allpass of the input.
-    Frequency
+    Frequency,
+    /// Mid/side split: entry 0 reads `(M, M)`, entry 1 reads `(S, -S)` with `M = (L + R) / 2`, `S = (L - R) / 2`.
+    MidSide
 }
 
 /// Copies the composite's input into a tap it OWNS, and presents one source buffer per entry.
@@ -74,7 +76,7 @@ impl DistributorProcessor {
         let tap = shared_audio_buffer();
         // Broadcast hands every entry the tap itself; a stereo split needs one buffer per channel.
         let branches = match mode {
-            DistributorMode::Stereo => alloc::vec![shared_audio_buffer(), shared_audio_buffer()],
+            DistributorMode::Stereo | DistributorMode::MidSide => alloc::vec![shared_audio_buffer(), shared_audio_buffer()],
             _ => Vec::new()
         };
         let frequency = match mode {
@@ -108,7 +110,7 @@ impl DistributorProcessor {
     pub fn branch(&self, index: usize) -> SharedAudioBuffer {
         match self.mode {
             DistributorMode::Broadcast => self.tap.clone(),
-            DistributorMode::Stereo => self.branches.get(index).unwrap_or(&self.silent).clone(),
+            DistributorMode::Stereo | DistributorMode::MidSide => self.branches.get(index).unwrap_or(&self.silent).clone(),
             DistributorMode::Frequency => self.frequency.as_ref()
                 .map_or_else(|| self.silent.clone(), |splitter| splitter.band(index))
         }
@@ -187,6 +189,18 @@ impl Processor for DistributorProcessor {
                     left.right[index] = 0.0;
                     right.left[index] = 0.0;
                     right.right[index] = tap.right[index];
+                }
+            } else if self.mode == DistributorMode::MidSide {
+                let mut mid = self.branches[0].borrow_mut();
+                let mut side = self.branches[1].borrow_mut();
+                for index in 0..RENDER_QUANTUM {
+                    let (left, right) = (tap.left[index], tap.right[index]);
+                    let mid_value = (left + right) * 0.5;
+                    let side_value = (left - right) * 0.5;
+                    mid.left[index] = mid_value;
+                    mid.right[index] = mid_value;
+                    side.left[index] = side_value;
+                    side.right[index] = -side_value;
                 }
             }
         }

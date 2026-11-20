@@ -13,7 +13,8 @@ if (!await openDAW.hasProject()) {
     const add = (name: string, amount: number = 1) => count.set(name, (count.get(name) ?? 0) + amount)
 
     const entriesOf = (effect: AnyAudioEffect): ReadonlyArray<AudioEffectCompositeEntry> =>
-        effect.key === "Composite" || effect.key === "StereoSplit" || effect.key === "FrequencySplit" ? effect.entries : []
+        effect.key === "Composite" || effect.key === "StereoSplit" || effect.key === "MidSideSplit"
+            || effect.key === "FrequencySplit" ? effect.entries : []
 
     const countHost = (owner: string, host: AudioEffectHost & Partial<MIDIEffectHost>) => {
         host.midiEffects?.forEach(effect => add(`${owner} MIDI effect ${effect.key}`))
