@@ -66,16 +66,17 @@ One preset at a time, André checks every one before anything reaches the cloud 
    library with `openDAW.addSample` and builds the Sampler in a new project "<Name> Audition". Nothing is in the
    cloud yet.
 3. **Sound OK.** André listens. Changes are made in the audition until he approves.
-4. **Upload.** André runs `scripts/sampler-library/upload.sh <stage dir> <slug>` (it reads the access code from the
+4. **Upload.** `scripts/sampler-library/upload.sh <stage dir> <slug>` (it reads the access code from the
    `api.opendaw.studio` checkout), which calls `scripts/upload-samples.mjs --bpm 0 --origin openDAW --results
    <stage dir>/<slug>/results.json`. Names already in the cloud are skipped, the uuids are looked up by name through
    `list.php` (all VCSL file names are unique) and written into `results.json`.
 5. **Build.** The same script builds the Sampler again from the cloud samples, `encodePreset()` returns the
-   `preset.odp`, which comes out of the agent result as base64. A scan checks that every sample in the file is one
-   of the uploaded uuids.
+   `preset.odp`, which comes out of the agent result as base64. `scripts/sampler-library/check.mts <stage
+   dir>/<slug>`, run from `../opendaw-commons-main/tools`, checks that the file uses exactly the uploaded uuids.
 6. **Meta OK.** André sees the composed `meta.json` before the PR: name, description with the recorded range,
    author Versilian Studios, CC0, credits to VCSL, device Sampler, folder.
-7. **Commons.** Pull request into `dev/presets/sampler/<slug>/`, merged once the check passes, the deploy lists it
+7. **Commons.** `scripts/sampler-library/publish.sh <stage dir> <slug> "<Name>"` opens the pull request into
+   `dev/presets/sampler/<slug>/`, merged once the check passes, the deploy lists it
    on dev.opendaw.studio with its download size. This runs in the background while the next preset is staged and
    auditioned. A push that only touches presets deploys in about a minute.
 
@@ -98,33 +99,33 @@ Release 0.8 s for struck instruments.
 | Vibraphone Bowed | dropped, recorded too quiet, and enough vibraphones |
 | Marimba | dropped, recorded too quiet (loudest -14.8 dB, soft layer down to -68 dB) |
 | Glockenspiel | dropped, recorded too quiet (loudest -23.4 dB) |
-| Xylophone Medium, Hard, Soft Mallets | live or publishing |
-| Tubular Bells, Tubular Glockenspiel, Balafon Hard Mallet | publishing |
+| Xylophone Medium, Hard, Soft Mallets | live on DEV |
+| Tubular Bells, Tubular Glockenspiel, Balafon Hard Mallet | live on DEV |
 | Balafon Traditional Mallet | skipped, too close to Balafon Hard Mallet |
 | Kalimba, Tanzania | dropped after audition, Kalimba Kenya skipped with it |
-| Folk Harp | publishing |
+| Folk Harp | live on DEV |
 | Strumstick | dropped after audition |
 | Harmonica Super64 | dropped after audition, the other harmonicas skipped with it |
 | Didgeridoo | dropped after audition |
 | Upright Piano, Yamaha | live on DEV, 16 bit, 132 MB |
 | Harpsichord, Italian | dropped after audition, the other harpsichords skipped with it |
 | Grand Piano Kawai, Steinway B, Upright Knight | skipped, enough pianos |
-| Renaissance Organ, Pipe Organ Pedal | publishing |
+| Renaissance Organ, Pipe Organ Pedal | live on DEV |
 | Tenor Saxophone, Saxello | dropped after audition (the first sax audition was mistuned by my 44.1 kHz assumption on 48 kHz files) |
-| Ocarina | publishing |
+| Ocarina | live on DEV |
 | Baroque Recorders | skipped, very uneven levels (-8 to -34 dB) |
 | Pipe Organ Pedal | live on DEV, 22.9 MB |
 | Dan Tranh | dropped after audition, the other Dan Tranh styles skipped with it |
 | Snare Drum, Ocarina | live on DEV |
-| Cajon, Darbuka, Bongos | publishing |
+| Cajon, Darbuka, Bongos | live on DEV |
 | Bass Drum 2 | dropped after audition |
-| Hi-Hat, Toms, Suspended Cymbal, Clash Cymbals, Gong | publishing |
+| Hi-Hat, Toms, Suspended Cymbal, Clash Cymbals, Gong | live on DEV |
 | Timpani 1 (hits and rolls) | dropped after audition, Timpani 2 skipped with it |
-| Conga, Frame Drum, Cowbells | publishing |
-| Percussion Kit (Woodblock, Claps, Shaker Large, Slapstick, Anvil, Brake Drum) | publishing, Brake Drum 2 bowed dropped |
+| Conga, Frame Drum, Cowbells | live on DEV |
+| Percussion Kit (Woodblock, Claps, Shaker Large, Slapstick, Anvil, Brake Drum) | live on DEV, Brake Drum 2 bowed dropped |
 | Mbira | dropped after audition, Nyunga Nyunga skipped with it |
 | Bass Drum 1 | dropped after audition |
-| Concert Harp | publishing, 68 MB |
+| Concert Harp | live on DEV, 71 MB |
 | Snare Drum Modern 2 and 3, Rope Tension, Suspended Cymbal 2, Tubular Bells 2, Ocarina SusVib | skipped, second takes |
 
 The survey (`plans/sampler-library-survey.md`) drops every folder whose loudest file stays below -12 dB: 92 presets
