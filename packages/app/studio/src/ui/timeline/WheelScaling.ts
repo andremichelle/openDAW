@@ -12,7 +12,11 @@ export namespace WheelScaling {
     // magnitude (decaying between gestures) and express any event as a fraction of it.
     const calibration = {quantum: 0.0, time: 0.0}
 
-    export const pixelsOf = (event: WheelEvent): number =>
+    export const isFlStudioMode = (): boolean => StudioPreferences.settings.pointer["fl-studio-keybinds"]
+
+    export const isZoomGesture = (event: WheelEvent): boolean => isFlStudioMode() ? event.ctrlKey : event.shiftKey
+
+    export const pixelsOf =(event: WheelEvent): number =>
         event.deltaY * (DeltaModeToPixels.at(event.deltaMode) ?? 1.0)
 
     export const scaleOf = (event: WheelEvent): number => {

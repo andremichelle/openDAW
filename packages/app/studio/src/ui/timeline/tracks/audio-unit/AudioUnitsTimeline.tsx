@@ -31,6 +31,7 @@ import {NewInstrumentRegion} from "@/ui/timeline/NewInstrumentRegion"
 import {CreateTrackButtons} from "@/ui/browse/CreateTrackButtons"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {PanDragging} from "@/ui/timeline/PanDragging"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -236,6 +237,10 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             service.project.audioUnitSelection.deselectAll()
         }, {capture: true}),
         Events.subscribe(element, "wheel",(event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
+        PanDragging.install(element, (deltaX, deltaY) => {
+            range.moveUnitBy(-deltaX * range.unitsPerPixel)
+            scrollModel.position -= deltaY
+        }),
         scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
         Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop),
         installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY,

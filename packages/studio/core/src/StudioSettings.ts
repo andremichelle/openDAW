@@ -70,11 +70,13 @@ export const StudioSettingsSchema = z.object({
     "pointer": z.object({
         "dragging-use-pointer-lock": z.boolean(),
         "modifying-controls-wheel": z.boolean(),
-        "wheel-zoom-speed": z.number().catch(100)
+        "wheel-zoom-speed": z.number().catch(100),
+        "fl-studio-keybinds": z.boolean().catch(false)
     }).default({
         "dragging-use-pointer-lock": false,
         "modifying-controls-wheel": false,
-        "wheel-zoom-speed": 100
+        "wheel-zoom-speed": 100,
+        "fl-studio-keybinds": false
     }),
     "editing": z.object({
         "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
