@@ -12,10 +12,13 @@ import {
     Procedure,
     Selection,
     unitValue,
+    Terminator,
     UUID
 } from "@opendaw/lib-std"
+import {PanDragging} from "@/ui/timeline/PanDragging"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, ContextMenu, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {PitchPositioner} from "./PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -38,7 +41,7 @@ import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContext
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {Browser, CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Surface} from "@/ui/surface/Surface"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
@@ -99,8 +102,82 @@ export const PitchEditor = ({
             uuid: reader.trackBoxAdapter.unwrap("trackBoxAdapter").audioUnit.address.uuid, pitch, duration, velocity
         })
     }
+    const createNoteAt = (clientX: number, clientY: number): Option<NoteEventBoxAdapter> => {
+        const rect = canvas.getBoundingClientRect()
+        const pulse = snapping.floor(range.xToUnit(clientX - rect.left)) - reader.offset
+        const pitch = positioner.yToPitch(clientY - rect.top)
+        const duration = NoteDrawDefaults.durationOr(snapping.value(reader.position + pulse))
+        const velocity = NoteDrawDefaults.velocity
+        // Create AND select in one modify so the selection lands in the same undo entry as the create (#208)
+        const adapterOpt = editing.modify(() => {
+            const box = NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
+                box.position.setValue(pulse)
+                box.pitch.setValue(pitch)
+                box.duration.setValue(duration)
+                box.velocity.setValue(velocity)
+                box.events.refer(reader.content.box.events)
+            })
+            const adapter = boxAdapters.adapterFor(box, NoteEventBoxAdapter)
+            selection.deselectAll()
+            selection.select(adapter)
+            return adapter
+        })
+        if (adapterOpt.nonEmpty()) {auditionNote(pitch, duration, velocity)}
+        return adapterOpt
+    }
+    const deleteDragging = (event: PointerEvent): void => {
+        let deletedAny = false
+        let lastX = event.clientX, lastY = event.clientY
+        const deleteAt = (clientX: number, clientY: number): void => {
+            const target = capturing.captureEvent({clientX, clientY})
+            if (target?.type !== "note-position" && target?.type !== "note-end") {return}
+            const deletion = () => target.event.box.delete()
+            if (deletedAny) {editing.append(deletion)} else {editing.modify(deletion)}
+            deletedAny = true
+        }
+        deleteAt(lastX, lastY)
+        const gesture = new Terminator()
+        gesture.ownAll(
+            Events.subscribe(window, "pointermove", (move: PointerEvent) => {
+                if ((move.buttons & 2) === 0) {return gesture.terminate()}
+                const steps = Math.max(1, Math.ceil(Math.hypot(move.clientX - lastX, move.clientY - lastY) / 2))
+                for (let step = 1; step <= steps; step++) {
+                    deleteAt(lastX + (move.clientX - lastX) * step / steps, lastY + (move.clientY - lastY) * step / steps)
+                }
+                lastX = move.clientX
+                lastY = move.clientY
+            }),
+            Events.subscribe(window, "pointerup", () => gesture.terminate()),
+            Events.subscribe(window, "pointercancel", () => gesture.terminate())
+        )
+    }
+    let flMenuRequested = false
     // before selection
     lifecycle.ownAll(
+        Events.subscribe(canvas, "pointerdown", (event: PointerEvent) => {
+            if (!WheelScaling.isFlStudioMode()) {return}
+            const target = capturing.captureEvent(event)
+            const onNote = target?.type === "note-position" || target?.type === "note-end"
+            if (event.button === 2) {
+                deleteDragging(event)
+            } else if (event.button === 0 && event.ctrlKey && onNote) {
+                event.preventDefault()
+                flMenuRequested = true
+                if (!Browser.isMacOS()) {
+                    canvas.dispatchEvent(new MouseEvent("contextmenu", {
+                        bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY, ctrlKey: true
+                    }))
+                }
+            }
+        }),
+        PanDragging.install(canvas, (deltaX, deltaY) => {
+            range.moveUnitBy(-deltaX * range.unitsPerPixel)
+            positioner.moveBy(-deltaY)
+        }),
+        Events.subscribeAny(canvas, ContextMenu.CONTEXT_MENU_EVENT_TYPE, (event: Event) => {
+            if (WheelScaling.isFlStudioMode() && !flMenuRequested) {event.stopImmediatePropagation()}
+            flMenuRequested = false
+        }, {capture: true}),
         installAutoScroll(canvas, (_deltaX, deltaY) => {
             // A create drag reads the vertical distance as velocity and keeps the pitch it started on
             if (modifyContext.modifier.mapOr(modifier => isInstanceOf(modifier, NoteCreateModifier), false)) {return}
@@ -136,6 +213,25 @@ export const PitchEditor = ({
             })
             auditionNote(pitch, modifier.note.duration, modifier.note.velocity)
             return modifyContext.startModifier(modifier)
+        }, {permanentUpdates: true}),
+        Dragging.attach(canvas, event => {
+            if (!WheelScaling.isFlStudioMode() || event.ctrlKey || event.altKey || event.shiftKey) {return Option.None}
+            if (capturing.captureEvent(event) !== null) {return Option.None}
+            return createNoteAt(event.clientX, event.clientY).flatMap(adapter => {
+                const clientRect = canvas.getBoundingClientRect()
+                const modifier = NoteMoveModifier.create({
+                    editing,
+                    element: canvas,
+                    selection,
+                    positioner,
+                    pointerPulse: range.xToUnit(event.clientX - clientRect.left),
+                    pointerPitch: positioner.yToPitch(event.clientY - clientRect.top),
+                    snapping,
+                    reference: adapter
+                })
+                modifier.subscribePitchChanged(pitch => auditionNote(pitch, adapter.duration, adapter.velocity))
+                return modifyContext.startModifier(modifier)
+            })
         }, {permanentUpdates: true}))
     const selectionRectangle = (
         <SelectionRectangle lifecycle={lifecycle}
@@ -208,41 +304,15 @@ export const PitchEditor = ({
         }),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
-            if (event.shiftKey || event.altKey) {return}
+            if (WheelScaling.isZoomGesture(event) || event.altKey) {return}
             event.preventDefault()
             positioner.scrollModel.moveBy(event.deltaY)
         }, {passive: false}),
         Events.subscribeDblDwn(canvas, event => {
+            if (WheelScaling.isFlStudioMode()) {return}
             const target = capturing.captureEvent(event)
             if (target === null) {
-                const rect = canvas.getBoundingClientRect()
-                const clientX = event.clientX - rect.left
-                const clientY = event.clientY - rect.top
-                const pulse = snapping.floor(range.xToUnit(clientX)) - reader.offset
-                const pitch = positioner.yToPitch(clientY)
-                const absolutePulse = reader.position + pulse
-                const duration = NoteDrawDefaults.durationOr(snapping.value(absolutePulse))
-                const velocity = NoteDrawDefaults.velocity
-                // Create AND select in one modify so the selection is captured in the same undo entry as the create
-                // (#208): a trailing select in its own mark=false modify would be a phantom second history step (two
-                // undos for one note). With the pre-flush removed, any leading SelectionRectangle deselect folds into
-                // this entry too, so the whole placement is a single undo step.
-                const adapterOpt = editing.modify(() => {
-                    const box = NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
-                        box.position.setValue(pulse)
-                        box.pitch.setValue(pitch)
-                        box.duration.setValue(duration)
-                        box.velocity.setValue(velocity)
-                        box.events.refer(reader.content.box.events)
-                    })
-                    const adapter = boxAdapters.adapterFor(box, NoteEventBoxAdapter)
-                    selection.deselectAll()
-                    selection.select(adapter)
-                    return adapter
-                })
-                if (adapterOpt.nonEmpty()) {
-                    auditionNote(pitch, duration, velocity)
-                }
+                createNoteAt(event.clientX, event.clientY)
             } else if (target.type !== "loop-duration") {
                 editing.modify(() => target.event.box.delete())
             }
