@@ -25,17 +25,18 @@ export namespace StageClient {
     const ChunksInFlight = 4
     const MaxBytes = 1 << 30
 
-    const isCredentials = (value: unknown): value is Credentials =>
-        typeof value === "object" && isDefined(value)
-        && typeof Reflect.get(value, "url") === "string" && typeof Reflect.get(value, "token") === "string"
-
-    export const read = (): Option<Credentials> => {
+    // the token lives in the password manager only, older versions stored it here as well
+    export const readUrl = (): Option<string> => {
         const result = tryCatch(() => JSON.parse(localStorage.getItem(StorageKey) ?? "null") as unknown)
-        return result.status === "success" && isCredentials(result.value) ? Option.wrap(result.value) : Option.None
+        if (result.status === "failure" || typeof result.value !== "object" || !isDefined(result.value)) {return Option.None}
+        const url: unknown = Reflect.get(result.value, "url")
+        if (typeof url !== "string") {return Option.None}
+        if (isDefined(Reflect.get(result.value, "token"))) {writeUrl(url)}
+        return Option.wrap(url)
     }
 
-    export const write = (credentials: Credentials): void => {
-        tryCatch(() => localStorage.setItem(StorageKey, JSON.stringify(credentials)))
+    export const writeUrl = (url: string): void => {
+        tryCatch(() => localStorage.setItem(StorageKey, JSON.stringify({url})))
     }
 
     export const forget = (): void => {tryCatch(() => localStorage.removeItem(StorageKey))}

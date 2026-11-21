@@ -14,6 +14,7 @@ import {openManual} from "@/ui/manuals"
 import {CustomServerFile} from "@/custom-server/CustomServerFile"
 import {StageClient} from "@/stage/StageClient"
 import {StagePublish} from "@/stage/StagePublish"
+import {StagePasswords} from "@/stage/StagePasswords"
 
 const className = Html.adoptStyleSheet(css, "StageDialog")
 
@@ -57,18 +58,20 @@ export namespace StageDialog {
     }
 
     export const open = (profile: ProjectProfile): void => {
-        const stored = StageClient.read()
+        const stored = StageClient.readUrl()
         const lifecycle = new Terminator()
         const includeProject = new DefaultObservableValue(true)
         const allowMixdownDownload = new DefaultObservableValue(false)
         let busy = false
+        // with the credential API the fields must not look like a login, or Chrome lists every opendaw login
+        const managed = StagePasswords.isSupported()
         const inputUrl: HTMLInputElement = (
-            <input className="default input" type="url" autocomplete="username" spellcheck={false}
-                   placeholder="https://example.com/stage/" value={stored.mapOr(({url}) => url, "")}/>
+            <input className="default input" type="url" autocomplete={managed ? "off" : "username"} spellcheck={false}
+                   placeholder="https://example.com/stage/" value={stored.unwrapOrElse("")}/>
         )
         const inputToken: HTMLInputElement = (
-            <input className="default input" type="password" autocomplete="current-password"
-                   placeholder="Paste or create" value={stored.mapOr(({token}) => token, "")}/>
+            <input className={managed ? "default input masked" : "default input"} type={managed ? "text" : "password"}
+                   autocomplete={managed ? "off" : "current-password"} spellcheck={false} placeholder="Paste or create"/>
         )
         const status: HTMLElement = <div className="status"/>
         const setStatus = (text: string, isError: boolean) => {
@@ -133,7 +136,8 @@ export namespace StageDialog {
                 setStatus(alive.error instanceof Error ? alive.error.message : String(alive.error), true)
                 return
             }
-            StageClient.write(connection.unwrap())
+            StageClient.writeUrl(connection.unwrap().url)
+            StagePasswords.remember(connection.unwrap()).finally()
             close()
             await run(connection.unwrap(), profile, {
                 includeProject: includeProject.getValue(),
@@ -196,10 +200,18 @@ export namespace StageDialog {
         dialog.addEventListener("close", () => lifecycle.terminate())
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()
-        if (stored.nonEmpty()) {
-            check().finally()
-        } else {
-            setStatus("Create a token, set up your stage, then enter its address.", false)
+        const restore = async () => {
+            const recalled = await StagePasswords.recall()
+            if (recalled.nonEmpty()) {
+                const {url, token} = recalled.unwrap()
+                inputUrl.value = url
+                inputToken.value = token
+                return check()
+            }
+            setStatus(stored.nonEmpty()
+                ? "Enter the token of your stage."
+                : "Create a token, set up your stage, then enter its address.", false)
         }
+        restore().finally()
     }
 }

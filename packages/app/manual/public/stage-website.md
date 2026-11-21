@@ -55,7 +55,7 @@ and info are updated, and the comments show "Updated". openDAW says **Republishe
 
 ## Change or forget the website
 
-The dialog remembers the address and token in this browser. **Forget** removes them. Your website stays as it
+The dialog remembers the address in this browser, the token is kept by your password manager only. After a publish the browser offers to save both. **Forget** removes the address. Your website stays as it
 is. To use a new token, click **Create**, then enter the new token on the admin page of your website under
 **Settings**.
 

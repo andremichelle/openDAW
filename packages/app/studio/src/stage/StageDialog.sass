@@ -3,6 +3,9 @@
 component
   @include mixins.server-dialog-form(1fr auto auto)
 
+  .masked
+    -webkit-text-security: disc
+
   > .fields > .toggle
     display: flex
     align-items: center
