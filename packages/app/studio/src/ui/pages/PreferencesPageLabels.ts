@@ -25,7 +25,8 @@ export namespace PreferencesPageLabels {
                 "key": "Show key track",
                 "chords": "Show chords track",
                 "clips": "Show clips",
-                "follow-cursor": "Follow cursor"
+                "follow-cursor": "Follow cursor",
+                "click-to-seek": "Click anywhere in timeline or editor to move playhead"
             }
         },
         "appearance": {
