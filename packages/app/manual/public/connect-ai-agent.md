@@ -18,6 +18,11 @@ The agent sees what you work on: the device you edit, the region open in the edi
 
 An agent can write notes, build sounds and arrange a song. What it cannot bring is what you hear in your head, the odd idea from somewhere else, the rule you break on purpose. Start from your own idea, take what comes back as a draft, and change it until it sounds like you. Play a part in yourself, tweak a sound, move a section. The more you shape it, the more it is your music.
 
+## Building Your Own Plugins
+
+An agent can also build new devices for openDAW from your description, without a connection to the studio. See
+[Create a WebCLAP with AI](/manuals/create-webclap-with-ai).
+
 ## Connecting
 
 Open the openDAW menu and choose **Connect Agent...**. Pick how the agent reaches your studio:

@@ -43,6 +43,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
             {type: "page", label: "Connect AI Agent", path: "/manuals/connect-ai-agent"},
             {type: "page", label: "Connect MIDI Device", path: "/manuals/connect-midi-device"},
+            {type: "page", label: "Create a WebCLAP with AI", path: "/manuals/create-webclap-with-ai"},
             {type: "page", label: "Custom Server", path: "/manuals/custom-server"},
             {type: "page", label: "Delay Compensation", path: "/manuals/delay-compensation"},
             {type: "page", label: "Device Browser", path: "/manuals/device-browser"},

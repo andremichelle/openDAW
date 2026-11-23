@@ -15,6 +15,9 @@ The source code and history of every plugin are in its folder on GitHub.
 
 ## Sharing your own plugin
 
+No plugin yet? [Create a WebCLAP with AI](/manuals/create-webclap-with-ai) shows how an AI agent builds one from your
+description, tests it with you and opens the pull request for you.
+
 WebCLAP plugins are shared as source code, never as a built file. The check builds every plugin with a fixed
 toolchain, so the plugin people load always matches the code that was reviewed. You need a free
 [GitHub](https://github.com/) account and a plugin that builds with Emscripten.
