@@ -1,3 +1,5 @@
 export * from "./MidiDevices"
 export * from "./MIDILearning"
+export * from "./MIDIMappingPreset"
+export * from "./MIDIMappingTransform"
 export * from "./MIDIReceiver"

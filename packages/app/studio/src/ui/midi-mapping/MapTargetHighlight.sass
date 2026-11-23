@@ -1,0 +1,22 @@
+component
+  &.midi-map-assignable
+    border-radius: 0.125em
+    outline: 2px solid var(--color-purple)
+    outline-offset: 1px
+    background-color: hsla(314, 100%, 78%, 0.12)
+    cursor: crosshair
+
+  &.midi-map-assignable.midi-map-mapped
+    outline-color: var(--color-orange)
+    background-color: hsla(31, 100%, 73%, 0.22)
+
+  &.midi-map-assignable.midi-map-target
+    outline: 3px solid var(--color-yellow)
+    outline-offset: 2px
+    animation: map-target-pulse 1s ease-in-out infinite alternate
+
+  @keyframes map-target-pulse
+    from
+      outline-color: var(--color-yellow)
+    to
+      outline-color: transparent

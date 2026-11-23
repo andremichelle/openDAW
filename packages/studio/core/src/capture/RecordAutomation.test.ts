@@ -643,16 +643,7 @@ describe("RecordAutomation", () => {
     describe("midi", () => {
         it("records a take driven by a MIDI controller", async () => {
             const {project, parameter, record, regions, events} = await setup({createTrackUpfront: true})
-            const {MidiDevices} = await import("../midi/MidiDevices")
             const {MIDIControllerBox} = await import("@opendaw/studio-boxes")
-            if (!isDefined(Reflect.get(globalThis, "MIDIInput"))) {
-                Reflect.set(globalThis, "MIDIInput", class {})
-            }
-            const observers: Array<(event: MIDIMessageEvent) => void> = []
-            vi.spyOn(MidiDevices, "subscribeMessageEvents").mockImplementation(observer => {
-                observers.push(observer)
-                return Terminable.Empty
-            })
             project.editing.modify(() => MIDIControllerBox.create(project.boxGraph, UUID.generate(), box => {
                 box.controllers.refer(project.userInterfaceBoxes[0].midiControllers)
                 box.parameter.refer(parameter.field as PrimitiveField<PrimitiveValues, Pointers.MIDIControl | Pointers>)
@@ -660,9 +651,9 @@ describe("RecordAutomation", () => {
                 box.deviceChannel.setValue(-1)
                 box.controlId.setValue(7)
             }))
-            expect(observers.length).toBe(1)
+            expect(project.midiLearning.numberOfConnections).toBe(1)
             record(true)
-            observers[0]({data: new Uint8Array([0xB0, 7, 127]), target: null} as unknown as MIDIMessageEvent)
+            project.midiLearning.receive(new Uint8Array([0xB0, 7, 127]), "")
             expect(regions().length).toBe(1)
             expect(events()[events().length - 1].value).toBeCloseTo(1.0)
         })
