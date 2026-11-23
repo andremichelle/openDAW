@@ -23,6 +23,7 @@ import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
 import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
 import {ScreenRecordButton} from "@/ui/header/ScreenRecordButton"
+import {MidiMapModeButton} from "@/ui/header/MidiMapModeButton"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {Checkbox} from "@/ui/components/Checkbox"
 
@@ -105,6 +106,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             <div style={{display: "flex", columnGap: "4px"}}
                  onInit={element => TourAnchors.register(lifecycle, element, "midi")}>
                 <MidiAccessButton lifecycle={lifecycle}/>
+                <MidiMapModeButton lifecycle={lifecycle} service={service}/>
                 <CaptureMidiButton lifecycle={lifecycle} service={service}/>
             </div>
             <hr/>
