@@ -230,9 +230,28 @@ describe("MIDILearning map mode", () => {
         expect(panningBoxes(project)[0]).toBe(first)
     })
 
-    it("re-binds the target to another CC", async () => {
+    // UAT F-3: the learned control must stop pulsing as the target
+    it("clears the target after binding but stays in map mode", async () => {
         const project = await enterMapMode()
         project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        expect(project.midiLearning.mapTarget.isEmpty()).toBe(true)
+        expect(project.midiLearning.mapMode.getValue()).toBe(true)
+    })
+
+    // UAT B-03: moving another controller after binding must not steal the binding
+    it("does not re-bind when another controller moves after binding", async () => {
+        const project = await enterMapMode()
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        project.midiLearning.receive(MidiData.control(0, 22, 64), "")
+        const boxes = panningBoxes(project)
+        expect(boxes.length).toBe(1)
+        expect(boxes[0].controlId.getValue()).toBe(21)
+    })
+
+    it("re-binds the target to another CC when it is selected again", async () => {
+        const project = await enterMapMode()
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        project.midiLearning.mapTarget.wrap(panningOf(project))
         project.midiLearning.receive(MidiData.control(0, 22, 64), "")
         const boxes = panningBoxes(project)
         expect(boxes.length).toBe(1)

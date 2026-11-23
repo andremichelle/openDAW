@@ -25,6 +25,7 @@ export const MidiMapModeButton = ({lifecycle, service}: Construct) => {
                 onClick={() => service.runIfProject(({midiLearning: {mapMode}}) =>
                     mapMode.setValue(!mapMode.getValue()))}>
             <Icon symbol={IconSymbol.Dial}/>
+            <span style={{fontSize: "0.625em", fontWeight: "600", letterSpacing: "0.05em"}}>MAP</span>
         </Button>)
     const projectLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {

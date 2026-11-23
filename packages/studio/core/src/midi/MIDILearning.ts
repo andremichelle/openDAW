@@ -105,6 +105,7 @@ export class MIDILearning implements Terminable {
                 const bound = this.#findConnectionByParameterAddress(field.address).mapOr(({box}) =>
                     box.controlId.getValue() === controlId && box.deviceChannel.getValue() === channel, false)
                 if (!bound) {this.#bind(field, deviceId, channel, controlId)}
+                this.mapTarget.clear()
             })
         }
         this.#connections.values().forEach(({box, deliver}) => {

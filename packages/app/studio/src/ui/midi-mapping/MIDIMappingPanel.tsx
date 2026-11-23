@@ -26,7 +26,6 @@ import {
     MIDITakeover
 } from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
-import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {SearchInput} from "@/ui/components/SearchInput.tsx"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -77,6 +76,12 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
     const rowsLifecycle = lifecycle.own(new Terminator())
     const body: HTMLElement = <div className="rows"/>
     const targetLabel: HTMLElement = <span className="target-label"/>
+    const updateTargetLabel = () => targetLabel.textContent = midiLearning.mapMode.getValue()
+        ? midiLearning.mapTarget
+            .flatMap(field => parameterFieldAdapters.opt(field.address))
+            .mapOr(adapter => `Target: ${adapter.name}. Move a controller to assign it.`,
+                "Click a control to select a target")
+        : "Turn on Map Mode in the header to assign controls"
     const nothingSelected = new DefaultObservableValue<boolean>(true)
     const deleteButton: HTMLElement = (
         <Button lifecycle={lifecycle}
@@ -191,7 +196,7 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
         updateSelectionState()
         if (boxes.length === 0) {
             body.append(<div className="placeholder">
-                No MIDI mappings yet. Enable Map Mode, click a control and move a knob on your controller.
+                No MIDI mappings yet. Turn on Map Mode in the header, click a control and move a knob on your controller.
             </div>)
             return
         }
@@ -270,17 +275,14 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
         search.subscribe(render),
         sortColumn.subscribe(render),
         ascending.subscribe(render),
-        midiLearning.mapTarget.catchupAndSubscribe(option => targetLabel.textContent = option
-            .flatMap(field => parameterFieldAdapters.opt(field.address))
-            .mapOr(adapter => `Target: ${adapter.name}`, "Click a control to select a target"))
+        midiLearning.mapMode.subscribe(updateTargetLabel),
+        midiLearning.mapTarget.subscribe(updateTargetLabel)
     )
+    updateTargetLabel()
     render()
     return (
         <div className={className}>
             <div className="toolbar">
-                <Checkbox lifecycle={lifecycle} model={midiLearning.mapMode} appearance={{framed: true}}>
-                    <Icon symbol={IconSymbol.Midi}/><span>Map Mode</span>
-                </Checkbox>
                 {targetLabel}
                 <SearchInput lifecycle={lifecycle} model={search} placeholder="Search mappings"/>
                 <Button lifecycle={lifecycle}
