@@ -51,10 +51,10 @@ Manual acceptance test with a real MIDI controller. Covers the whole feature on 
 
 | ID   | Steps                                                                                                                   | Expected                                                                                                                    | Result |
 | ---- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ |
-| D-01 | Takeover = Jump. Put K2 at its minimum. Drag the fader with the mouse to about -6 dB. Turn K2 slightly.                 | Fader jumps to K2's position.                                                                                               |        |
-| D-02 | Takeover = Pickup. K2 at minimum, fader dragged to about -6 dB with the mouse. Turn K2 up slowly.                       | Fader does not move until K2 passes the fader's position, then it follows.                                                  |        |
-| D-03 | Pickup again: after pickup, drag the fader with the mouse to another value, then turn K2.                               | Fader waits again until K2 crosses the new value.                                                                           |        |
-| D-04 | Takeover = Scaling. K2 at about 25 %, fader at about 75 % (mouse). Turn K2 up to its maximum, then down to its minimum. | No jump. The fader moves proportionally and reaches its maximum exactly when K2 does, and its minimum exactly when K2 does. |        |
+| D-01 | Takeover = Jump. Put K2 at its minimum. Drag the fader with the mouse to about -6 dB. Turn K2 slightly.                 | Fader jumps to K2's position.                                                                                               | Ok     |
+| D-02 | Takeover = Pickup. K2 at minimum, fader dragged to about -6 dB with the mouse. Turn K2 up slowly.                       | Fader does not move until K2 passes the fader's position, then it follows.                                                  | Ok     |
+| D-03 | Pickup again: after pickup, drag the fader with the mouse to another value, then turn K2.                               | Fader waits again until K2 crosses the new value.                                                                           | Ok     |
+| D-04 | Takeover = Scaling. K2 at about 25 %, fader at about 75 % (mouse). Turn K2 up to its maximum, then down to its minimum. | No jump. The fader moves proportionally and reaches its maximum exactly when K2 does, and its minimum exactly when K2 does. | Ok     |
 
 ### E. Endless encoder (only with E1)
 
