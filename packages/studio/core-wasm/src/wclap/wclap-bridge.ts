@@ -265,6 +265,8 @@ export class WclapBridges {
     }
 
     #hasPanel(loaded: Loaded): boolean {return loaded.panel !== 0 && loaded.webview !== 0}
+    // a plugin with a device panel but no clap.gui is its panel alone, it has no window to open
+    #hasWindow(loaded: Loaded): boolean {return loaded.webview !== 0 && (loaded.gui !== 0 || !this.#hasPanel(loaded))}
 
     // clap.gui create, get_size, set_parent, show on the first session, the size of the created gui after
     #showGui(loaded: Loaded): Omit<WclapGuiInfo, "uri"> {
@@ -419,7 +421,7 @@ export class WclapBridges {
                 plugin.loading = false
                 this.#publishParams(plugin, loaded)
                 this.#host.sendStatus(plugin.uuid,
-                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0, panel: this.#hasPanel(loaded)})
+                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: this.#hasWindow(loaded), panel: this.#hasPanel(loaded)})
             }, error => {
                 if (plugin.generation !== generation) {return}
                 plugin.loading = false

@@ -6,7 +6,8 @@ the agent what to change. When you like it, you use it in openDAW like any other
 every openDAW user.
 
 Your plugin is a [WebCLAP](/manuals/devices/audio/wclap): it shows its controls in the device panel like openDAW's own
-devices, opens a larger window, and you can automate every control.
+devices, and you can automate every control. If your idea needs more room, a large display or a detailed editor, the
+agent asks whether you want a bigger window for it, opened with a Big View button on the device.
 
 ## What You Need
 
@@ -53,7 +54,7 @@ the plugin and checks it.
 ## 3. Try It
 
 The agent opens a preview in your browser on the [open-webclap](https://webclap.opendaw.studio) site. It runs your
-plugin in openDAW's engine and shows the device panel above the plugin window.
+plugin in openDAW's engine and shows the device panel, and the window below it if your plugin has one.
 
 1. Click **Start audio**.
 2. For an effect, pick an **Input**: a test tone, noise, an audio file or your microphone.

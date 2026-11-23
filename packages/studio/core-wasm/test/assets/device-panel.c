@@ -2,7 +2,8 @@
 // emcc device-panel.c -O2 -I<clap>/include -o device-panel.wasm -sSTANDALONE_WASM=1 --no-entry
 //      -sEXPORTED_FUNCTIONS=_malloc,_free -Wl,--export=clap_entry -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=4MB
 //      -sSTACK_SIZE=256KB -sALLOW_TABLE_GROWTH=1 -sERROR_ON_UNDEFINED_SYMBOLS=1
-// and with -DOMIT_PANEL_EXTENSION into device-panel-no-extension.wasm: the feature listed, the extension missing.
+// and with -DOMIT_PANEL_EXTENSION into device-panel-no-extension.wasm: the feature listed, the extension missing,
+// and with -DOMIT_GUI into device-panel-no-gui.wasm: a panel-only plugin, no clap.gui.
 // Page messages: 1 poll (answered with a 16 byte status), 5 request_show, 6 request_hide, 7 param-hovered.
 
 #include <clap/clap.h>
@@ -506,7 +507,9 @@ static const void *sine_get_extension(const clap_plugin_t *plugin, const char *i
     if (strcmp(id, CLAP_EXT_NOTE_PORTS) == 0) {return &note_ports;}
     if (strcmp(id, CLAP_EXT_PARAMS) == 0) {return &params;}
     if (strcmp(id, CLAP_EXT_WEBVIEW) == 0) {return &webview;}
+#ifndef OMIT_GUI
     if (strcmp(id, CLAP_EXT_GUI) == 0) {return &gui;}
+#endif
 #ifndef OMIT_PANEL_EXTENSION
     if (strcmp(id, OPENDAW_EXT_DEVICE_PANEL) == 0) {return &device_panel;}
 #endif

@@ -54,6 +54,7 @@ const wasmBundle = (name: string): WclapBundle =>
     ({files: [{path: "module.wasm", bytes: new Uint8Array(readFileSync(path.resolve(__dirname, "assets", name)))}]})
 const devicePanelBundle = wasmBundle("device-panel.wasm")
 const devicePanelNoExtensionBundle = wasmBundle("device-panel-no-extension.wasm")
+const devicePanelNoGuiBundle = wasmBundle("device-panel-no-gui.wasm")
 const DEVICE_PANEL = "studio.opendaw.commons.device-panel-demo"
 const wetChorusBundle = wasmBundle("wet-chorus.wasm")
 const WET_CHORUS = "studio.opendaw.commons.wet-chorus"
@@ -593,6 +594,11 @@ describe("wclap bridge", () => {
             const plain = createHost()
             await ready(plain, load(plain))
             expect(plain.statuses.at(-1)).toMatchObject({state: "ready", editor: true, panel: false})
+        })
+
+        it("reports a panel without clap.gui as a plugin without a window", async () => {
+            const [host] = await loadPanel(devicePanelNoGuiBundle)
+            expect(host.statuses.at(-1)).toMatchObject({state: "ready", editor: false, panel: true})
         })
 
         it("opens the panel page with its width as a gui session, the window page stays the webview's", async () => {
