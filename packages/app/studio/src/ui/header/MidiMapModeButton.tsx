@@ -1,9 +1,8 @@
-import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Button} from "@/ui/components/Button.tsx"
 import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors} from "@opendaw/studio-enums"
 import {ProjectProfile} from "@opendaw/studio-core"
 
 type Construct = {
@@ -24,7 +23,6 @@ export const MidiMapModeButton = ({lifecycle, service}: Construct) => {
                 }}
                 onClick={() => service.runIfProject(({midiLearning: {mapMode}}) =>
                     mapMode.setValue(!mapMode.getValue()))}>
-            <Icon symbol={IconSymbol.Dial}/>
             <span style={{fontSize: "0.625em", fontWeight: "600", letterSpacing: "0.05em"}}>MAP</span>
         </Button>)
     const projectLifecycle = lifecycle.own(new Terminator())

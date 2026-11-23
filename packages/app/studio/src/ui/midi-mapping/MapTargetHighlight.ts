@@ -41,7 +41,7 @@ export const installMapTarget = (midiLearning: MIDILearning,
         midiLearning.mapTarget.subscribe(update),
         midiLearning.subscribeChanges(update),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-            if (!midiLearning.mapMode.getValue()) {return}
+            if (!midiLearning.mapMode.getValue() || event.button !== 0) {return}
             event.preventDefault()
             event.stopImmediatePropagation()
             midiLearning.mapTarget.wrap(field)

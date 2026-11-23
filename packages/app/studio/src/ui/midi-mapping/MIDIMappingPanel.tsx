@@ -237,12 +237,14 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
                                  model={EditWrapper.forValue(editing, box.min)}
                                  mapper={valueMapper(parameter)}
                                  maxChars={6}
-                                 step={0.01}/>
+                                 step={0.01}
+                                 decimal={true}/>
                     <NumberInput lifecycle={rowsLifecycle}
                                  model={EditWrapper.forValue(editing, box.max)}
                                  mapper={valueMapper(parameter)}
                                  maxChars={6}
-                                 step={0.01}/>
+                                 step={0.01}
+                                 decimal={true}/>
                     <MenuButton root={choiceMenu(TakeoverLabels, box.takeover)} appearance={{framed: true}}>
                         {takeoverLabel}
                     </MenuButton>
