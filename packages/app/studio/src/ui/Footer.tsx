@@ -155,10 +155,15 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                             `${megabytes(values[0])}/${megabytes(values[2])}M`))
                             }))
                         }}>N/A</FooterItem>
-            <FooterItem title="Storage" minWidth="6ch"
+            <FooterItem title="Storage" minWidth="11ch"
                         onInit={({component, value}) => {
-                            lifecycle.ownAll(
-                                StorageUsage.observable().catchupAndSubscribe(option => option.match({
+                            const render = () => {
+                                if (StorageUsage.isScanning().getValue()) {
+                                    value.textContent = "scanning..."
+                                    value.style.color = ""
+                                    return
+                                }
+                                StorageUsage.observable().match({
                                     none: () => {
                                         value.textContent = "N/A"
                                         value.style.color = ""
@@ -167,7 +172,11 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                         value.textContent = StorageUsage.format(bytes)
                                         value.style.color = bytes > StorageUsage.WarnBytes ? Colors.red.toString() : ""
                                     }
-                                })),
+                                })
+                            }
+                            lifecycle.ownAll(
+                                StorageUsage.observable().catchupAndSubscribe(render),
+                                StorageUsage.isScanning().subscribe(render),
                                 Runtime.scheduleInterval(() => {
                                     if (document.visibilityState === "visible") {StorageUsage.refresh().finally()}
                                 }, 60_000),
