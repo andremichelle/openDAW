@@ -1,9 +1,11 @@
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Button} from "@/ui/components/Button.tsx"
-import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
+import {Events} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {ProjectProfile} from "@opendaw/studio-core"
+import {Surface} from "@/ui/surface/Surface"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -19,7 +21,7 @@ export const MidiMapModeButton = ({lifecycle, service}: Construct) => {
                 appearance={{
                     color: Colors.gray,
                     activeColor: Colors.purple,
-                    tooltip: "MIDI Map Mode: click a control, then move a controller"
+                    tooltip: "MIDI Map Mode: click a control, then move a controller (Esc to leave)"
                 }}
                 onClick={() => service.runIfProject(({midiLearning: {mapMode}}) =>
                     mapMode.setValue(!mapMode.getValue()))}>
@@ -30,8 +32,14 @@ export const MidiMapModeButton = ({lifecycle, service}: Construct) => {
         projectLifecycle.terminate()
         button.classList.remove("active")
         disabled.setValue(optProfile.isEmpty())
-        optProfile.ifSome(({project}) => projectLifecycle.own(project.midiLearning.mapMode
-            .catchupAndSubscribe(owner => button.classList.toggle("active", owner.getValue()))))
+        optProfile.ifSome(({project: {midiLearning: {mapMode}}}) => projectLifecycle.ownAll(
+            mapMode.catchupAndSubscribe(owner => button.classList.toggle("active", owner.getValue())),
+            Surface.subscribeKeyboard("keydown", event => {
+                if (event.code !== "Escape" || !mapMode.getValue() || Events.isTextInput(event.target)
+                    || isDefined(document.querySelector("dialog[open]"))) {return}
+                event.preventDefault()
+                mapMode.setValue(false)
+            })))
     }))
     return button
 }

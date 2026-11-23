@@ -58,21 +58,26 @@ Manual acceptance test with a real MIDI controller. Covers the whole feature on 
 
 ### E. Endless encoder (only with E1)
 
-| ID   | Steps                                                                                                                | Expected                                                                                                                     | Result |
-| ---- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
-| E-01 | Map E1 to a pan knob. Try Encoding "Relative (2's compl.)", then "Relative (offset 64)", then "Relative (sign bit)". | Exactly one encoding makes the knob step smoothly in both directions. Note which one fits E1.                                |        |
-| E-02 | With the fitting encoding, turn E1 a full revolution.                                                                | Note how much of the range one revolution covers (step is 1/128 of the range per tick). Judge if it is too slow or too fast. |        |
-| E-03 | Set Min/Max of that row to a narrow range, turn E1 far in both directions.                                           | Value stays clamped inside Min/Max.                                                                                          |        |
+Not testable with the UC-33: its knobs are potentiometers with end stops and send absolute values
+(0–127), not relative steps. Decoding of all three encodings and clamping to Min/Max are covered by unit
+tests (`MIDIMappingTransform.test.ts`, "relative"). Open for hardware: whether a step of 1/128 of the
+range per tick feels right.
+
+| ID   | Steps                                                                                                                | Expected                                                                                                                     | Result                                                   |
+| ---- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| E-01 | Map E1 to a pan knob. Try Encoding "Relative (2's compl.)", then "Relative (offset 64)", then "Relative (sign bit)". | Exactly one encoding makes the knob step smoothly in both directions. Note which one fits E1.                                | Not tested: no endless encoder (UC-33 has absolute pots) |
+| E-02 | With the fitting encoding, turn E1 a full revolution.                                                                | Note how much of the range one revolution covers (step is 1/128 of the range per tick). Judge if it is too slow or too fast. | Not tested: no endless encoder (UC-33 has absolute pots) |
+| E-03 | Set Min/Max of that row to a narrow range, turn E1 far in both directions.                                           | Value stays clamped inside Min/Max.                                                                                          | Not tested: no endless encoder (UC-33 has absolute pots) |
 
 ### F. Mapping list
 
 | ID   | Steps                                                                                      | Expected                                                                                                              | Result |
 | ---- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------ |
-| F-01 | Create at least three bindings. Click the column headers CC, Track, Parameter, twice each. | Sorts ascending, then descending; the arrow shows the direction.                                                      |        |
-| F-02 | Type a parameter name (e.g. `mute`) into "Search mappings".                                | Only matching rows remain; clearing the field shows all again.                                                        |        |
-| F-03 | Open "Audio Track 2" in Devices, then click "Audio Track" in a row.                        | Devices switches to "Audio Track".                                                                                    |        |
-| F-04 | Tick two rows, click "Delete selected".                                                    | Both rows disappear without an error dialog; the controls lose their orange frame; the hardware no longer moves them. |        |
-| F-05 | Delete a single row with its trash icon.                                                   | Row disappears.                                                                                                       |        |
+| F-01 | Create at least three bindings. Click the column headers CC, Track, Parameter, twice each. | Sorts ascending, then descending; the arrow shows the direction.                                                      | Ok     |
+| F-02 | Type a parameter name (e.g. `mute`) into "Search mappings".                                | Only matching rows remain; clearing the field shows all again.                                                        | Ok     |
+| F-03 | Open "Audio Track 2" in Devices, then click "Audio Track" in a row.                        | Devices switches to "Audio Track".                                                                                    | Ok     |
+| F-04 | Tick two rows, click "Delete selected".                                                    | Both rows disappear without an error dialog; the controls lose their orange frame; the hardware no longer moves them. | Ok     |
+| F-05 | Delete a single row with its trash icon.                                                   | Row disappears.                                                                                                       | Ok     |
 
 ### G. Persistence and presets
 
@@ -92,18 +97,20 @@ Manual acceptance test with a real MIDI controller. Covers the whole feature on 
 - Script device views and WCLAP plugin parameters are not highlighted in map mode; right-click learn
   works there.
 - Locate selects the track/device, it does not scroll to or flash the single control.
+- Relative encoders (section E) are verified by unit tests only; no hardware with endless encoders was
+  available.
 
 ## Result summary
 
-| Section | Pass | Fail | Not tested | Notes |
-| ------- | ---- | ---- | ---------- | ----- |
-| A       |      |      |            |       |
-| B       |      |      |            |       |
-| C       |      |      |            |       |
-| D       |      |      |            |       |
-| E       |      |      |            |       |
-| F       |      |      |            |       |
-| G       |      |      |            |       |
+| Section | Pass | Fail | Not tested | Notes                                                                      |
+| ------- | ---- | ---- | ---------- | -------------------------------------------------------------------------- |
+| A       |      |      |            |                                                                            |
+| B       |      |      |            |                                                                            |
+| C       |      |      |            |                                                                            |
+| D       |      |      |            |                                                                            |
+| E       | 0    | 0    | 3          | No endless encoder available; relative encoders covered by unit tests only |
+| F       |      |      |            |                                                                            |
+| G       |      |      |            |                                                                            |
 
 ## Findings
 
@@ -125,3 +132,4 @@ to the finding here (e.g. "Fail, see F-1"), so the details live in one place.
 | F-6 | C-03       | Right-click "Reset Value" resets only the parameter (e.g. fader to 0 dB); the MIDI mapping range keeps its Min/Max. Open question: rename it to "Reset Values" and, for a mapped control, also reset the mapping range to its defaults (Min = parameter minimum, e.g. -inf; Max = parameter maximum, e.g. 6 dB) | Idea | low      | open, ask maintainer: "Reset Value" is shared by every parameter (automation, modulation, MIDI); changing its name or scope affects all of them |
 | F-7 | C-01, C-02 | A minus could not be typed into Min/Max. NumberInput filtered keys by physical position (`event.code`); on a German layout the minus key reports `Slash`. Affects every number field in openDAW on non-US layouts                                                                                               | Bug  | high     | fixed: NumberInput accepts the minus by its character (`event.key`); Min/Max also accept decimals                                               |
 | F-8 | —          | Found while checking "Reset Value": in map mode a right-click also selected the control as target, so the next controller movement could bind it unintentionally                                                                                                                                                | Bug  | medium   | fixed: map mode only reacts to the left mouse button; the context menu works as before                                                          |
+| F-9 | —          | I want to exit mapping mode with escape                                                                                                                                                                                                                                                                         | UX   | medium   | fixed: Escape leaves map mode (also clears the target); ignored while typing in a text field or with a dialog open; tooltip mentions Esc |
