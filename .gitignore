@@ -4,6 +4,7 @@
 .cache
 *.log
 *.local
+CLAUDE.local.md
 node_modules
 dist
 dist-ssr

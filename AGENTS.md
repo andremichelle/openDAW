@@ -21,7 +21,8 @@ Pull requests are reviewed against these rules. Check every new or touched file 
   - `MutableObservableOption<T>` instead of `DefaultObservableValue<Nullable<T>>`, with `wrap(value)` and `clear()`.
 - `Array<T>` and `ReadonlyArray<T>`, never `T[]`. An empty `ReadonlyArray` return is `Arrays.empty()`.
 - Use the real type from its source. Never invent ad-hoc structural types like `{in: number, out: number}` when an adapter, box or named type already exists.
-- No `as any`, no `as` casts on JSX (type the binding: `const button: HTMLButtonElement = <button/>`), no `!` definite assignment assertions.
+- No `as` casts that force a type (`as any`, `as unknown as T`, `value as SomeEnum`). Fix the types or narrow with a type guard. `as const` is fine.
+- No `as` casts on JSX (type the binding: `const button: HTMLButtonElement = <button/>`), no `!` definite assignment assertions.
 
 ### Checks and control flow
 
@@ -31,6 +32,8 @@ Pull requests are reviewed against these rules. Check every new or touched file 
 - Prefer `const` over `let`. For mutable state use a `const` holder or `MutableObservableOption<T>`.
 - An `Option.unwrap()` that is not guarded by `nonEmpty()` takes a short tag naming the expression: `region.optCollection.unwrap("optCollection")`.
 - Never `Set` or `Map` keyed by `UUID.Bytes`, use `UUID.newSet` / `UUID.newMap`.
+- Never drop an error silently. Ignore only the expected case (a cancelled file dialog, `Errors.isAbort(error)`) and report or rethrow everything else.
+- One user action is one `editing.modify` transaction, so it is one undo step. Never call `modify` once per item in a loop.
 
 ### Structure
 
@@ -39,6 +42,12 @@ Pull requests are reviewed against these rules. Check every new or touched file 
 - Complex field initialisation goes into the constructor, not into inline field initialisers.
 - Keep element references as `const` and test with `contains` instead of DOM lookups like `closest()`.
 - Hide elements with the `.hidden` CSS class, never `style.display = "none"`.
+
+### UI
+
+- No inline `style={{...}}` in JSX. Styles go into the component's sass file.
+- Use the existing components (`Button`, `Checkbox`, `NumberInput`, `MenuButton`, `SearchInput`) instead of raw form elements.
+- A new keyboard shortcut is registered in `GlobalShortcuts`, so it is listed and can be rebound.
 
 ### Styles (sass)
 
@@ -49,17 +58,14 @@ Pull requests are reviewed against these rules. Check every new or touched file 
 ## Pull Requests
 
 - Target `next-release` and merge it into your branch before opening the PR.
+- Keep pull requests small and focused, large ones are not reviewed. Split a big feature into parts that each keep the app working.
+- An unrelated fix goes into its own commit or pull request.
+- AI-assisted work is welcome. Document the process (design, plan, acceptance test) in `plans/`. Every contributor must understand every line they submit.
 - Fix every sibling call site with the same problem in one pass, not only the one that was reported.
 - Behaviour that already exists must stay identical. Schema fields are never reused with another type.
-- Type-check with `--noEmit` and run the tests of every package you touched.
 
-<!-- BEGIN:turborepo-agent-rules -->
+## Checks before opening a pull request
 
-# This is NOT the Turborepo you know
-
-Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
-
-Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
-
-This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
-<!-- END:turborepo-agent-rules -->
+- Type-check every package you touched: `npx tsc --noEmit -p packages/<path>` (for example `packages/studio/core`, `packages/app/studio`).
+- Run the tests of every package you touched: `npx turbo run test --filter=@opendaw/<package>` (for example `@opendaw/studio-core`). Turbo builds the dependencies first.
+- After a box schema change in `packages/studio/forge-boxes`, run `npm run build`. It regenerates the boxes and the Rust registry in `crates/studio-boxes/src/registry.rs`, commit both.

@@ -55,6 +55,9 @@ in [`/plans`](https://github.com/andremichelle/openDAW/tree/main/plans). Keep pu
 PRs will not be reviewed. Split big contributions into smaller commits that add requirements gradually and maintain
 operations of the app.
 
+Pull requests are reviewed against the code style and pull request rules in [`AGENTS.md`](AGENTS.md). Point your AI
+tools at it and check every new or touched file against it before opening a pull request.
+
 If you are interested in helping, here are areas where we need support:
 
 1. **Offline App** — e.g. wrapping openDAW with [Tauri](https://tauri.app/) for a native desktop experience
