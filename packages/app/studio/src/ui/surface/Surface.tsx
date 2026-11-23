@@ -14,8 +14,7 @@ import {
     Subscription,
     Terminable,
     TerminableOwner,
-    Terminator,
-    tryCatch
+    Terminator
 } from "@opendaw/lib-std"
 import {createElement, DomElement} from "@opendaw/lib-jsx"
 import {IconLibrary} from "@/ui/IconLibrary.tsx"
@@ -165,17 +164,7 @@ export class Surface implements TerminableOwner {
     get floating(): DomElement {return this.#floating}
     get hasFlyout(): boolean {return this.#layers.hasFlyout}
     get owner(): Window {return this.#owner}
-    get width(): number {
-        // Firefox throws NS_ERROR_UNEXPECTED reading innerWidth off a stale WindowProxy (#1073), and the
-        // reported crash stack shows only this getter. Capture the caller chain, then rethrow (diagnostics only,
-        // no behaviour change) so the next occurrence reveals who reads a dead surface's width.
-        const {status, value, error} = tryCatch(() => this.#owner.innerWidth)
-        if (status === "failure") {
-            console.debug("Surface.width read failed", error, new Error("Surface.width caller").stack)
-            throw error
-        }
-        return value
-    }
+    get width(): number {return this.#owner.innerWidth}
     get height(): number {return this.#owner.innerHeight}
     get textTooltip(): TextTooltip {return this.#layers.textTooltip}
     get valueTooltip(): ValueTooltip {return this.#layers.valueTooltip}
@@ -309,6 +298,8 @@ export class Surface implements TerminableOwner {
                     }
                 }
                 Surface.#surfacesByWindow.delete(this.#owner)
+                this.#layers.textTooltip.forceHide()
+                this.#layers.valueTooltip.forceHide()
                 this.#terminator.terminate()
                 this.#adoptAnimationFrame()
             }, {capture: true, once: true}),
