@@ -21,31 +21,31 @@ Manual acceptance test with a real MIDI controller. Covers the whole feature on 
 
 ### A. Map mode and highlighting
 
-| ID   | Steps                                                                  | Expected                                                                                                                | Result |
-| ---- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------ |
+| ID   | Steps                                                                   | Expected                                                                                                                | Result |
+| ---- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------ |
 | A-01 | Click the MAP button in the header (between "Midi Access" and Capture). | Button turns purple. Every assignable control (track header knobs, M/S, fader in Devices) gets a purple frame.          | Ok     |
-| A-02 | Switch views with Shift+1, Shift+2 (mixer), Shift+9 (MIDI Mapping).    | Map mode stays on in every view; mixer pan knobs and faders are framed too.                                             | Ok     |
-| A-03 | Click the header button again.                                         | All frames disappear, button is no longer purple.                                                                       | Ok     |
-| A-04 | Map mode on, click the volume fader of "Audio Track".                  | Fader frame turns yellow and pulses. The fader value does **not** change. The MIDI Mapping view shows "Target: Volume". | Ok     |
+| A-02 | Switch views with Shift+1, Shift+2 (mixer), Shift+9 (MIDI Mapping).     | Map mode stays on in every view; mixer pan knobs and faders are framed too.                                             | Ok     |
+| A-03 | Click the header button again.                                          | All frames disappear, button is no longer purple.                                                                       | Ok     |
+| A-04 | Map mode on, click the volume fader of "Audio Track".                   | Fader frame turns yellow and pulses. The fader value does **not** change. The MIDI Mapping view shows "Target: Volume". | Ok     |
 
 ### B. Binding
 
-| ID   | Steps                                                                                                 | Expected                                                                                                                                              | Result                                                                                    |
-| ---- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| ID   | Steps                                                                                                 | Expected                                                                                                                                                                          | Result                                                                                                          |
+| ---- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | B-01 | Target = volume of "Audio Track" (A-04). Turn K1.                                                     | Binding is created immediately; the target is released, the frame turns orange; the fader follows K1. Row in MIDI Mapping: your port name, channel, K1's CC, Audio Track, Volume. | learning works, but it doesn't turn orange - stays pulsating, see findings from section A. Fixed in F-3, retest |
-| B-02 | After B-01, turn K1 again several times.                                                               | Still exactly one row for Volume (no duplicates).                                                                                                     | Ok                                                                                        |
-| B-03 | Turn K2 first (nothing may change), then click the fader again and turn K2.                           | Turning K2 alone leaves the binding on K1. After re-selecting the fader, the Volume row shows K2's CC; K1 no longer moves the fader.                  | Only after leaving, the old control doenst move the fader anymore. Fixed in F-4, retest   |
-| B-04 | Click the pan knob of "Audio Track", turn K1. Turn K1 to its middle detent (or as close as possible). | Pan follows K1; at the hardware centre the pan reads centre (0 / C). Note the value if it is off by one step.                                         | Ok                                                                                        |
-| B-05 | Click Mute of "Audio Track 2", press B1.                                                              | Mute follows the button (on at 127, off at 0). Note whether B1 sends toggle or momentary.                                                             | Ok                                                                                        |
-| B-06 | Map mode off. Right-click a control, "Learn Midi Control...", move F1.                                | Classic learn still works and the binding appears in the list. "Forget Midi" removes it.                                                              | Ok                                                                                        |
+| B-02 | After B-01, turn K1 again several times.                                                              | Still exactly one row for Volume (no duplicates).                                                                                                                                 | Ok                                                                                                              |
+| B-03 | Turn K2 first (nothing may change), then click the fader again and turn K2.                           | Turning K2 alone leaves the binding on K1. After re-selecting the fader, the Volume row shows K2's CC; K1 no longer moves the fader.                                              | Only after leaving, the old control doenst move the fader anymore. Fixed in F-4, retest                         |
+| B-04 | Click the pan knob of "Audio Track", turn K1. Turn K1 to its middle detent (or as close as possible). | Pan follows K1; at the hardware centre the pan reads centre (0 / C). Note the value if it is off by one step.                                                                     | Ok                                                                                                              |
+| B-05 | Click Mute of "Audio Track 2", press B1.                                                              | Mute follows the button (on at 127, off at 0). Note whether B1 sends toggle or momentary.                                                                                         | Ok                                                                                                              |
+| B-06 | Map mode off. Right-click a control, "Learn Midi Control...", move F1.                                | Classic learn still works and the binding appears in the list. "Forget Midi" removes it.                                                                                          | Ok                                                                                                              |
 
 ### C. Range and inversion
 
-| ID   | Steps                                                             | Expected                                     | Result |
-| ---- | ----------------------------------------------------------------- | -------------------------------------------- | ------ |
-| C-01 | In the Volume row set Max to `-12` (dB), Enter. Turn K2 fully up. | Max shows -12.00; the fader stops at -12 dB. |        |
-| C-02 | Set Min to `0` (dB), i.e. Min > Max. Turn K2 from down to up.     | Inverted: K2 down → 0 dB, K2 up → -12 dB.    |        |
-| C-03 | Reset Min to `-inf` (type a very low value) and Max to `6`.       | Full range again.                            |        |
+| ID   | Steps                                                             | Expected                                     | Result                                                          |
+| ---- | ----------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------- |
+| C-01 | In the Volume row set Max to `-12` (dB), Enter. Turn K2 fully up. | Max shows -12.00; the fader stops at -12 dB. | Value seems to be unsigned? - not possible to put a minus there |
+| C-02 | Set Min to `0` (dB), i.e. Min > Max. Turn K2 from down to up.     | Inverted: K2 down → 0 dB, K2 up → -12 dB.    | No negative values possible, inversion worked with min 6 max 0  |
+| C-03 | Reset Min to `-inf` (type a very low value) and Max to `6`.       | Full range again.                            | Ok, but see F-6                                                 |
 
 ### D. Takeover
 
@@ -115,9 +115,11 @@ to the finding here (e.g. "Fail, see F-1"), so the details live in one place.
 - **Severity:** high (blocks use) / medium (annoying, workaround exists) / low (cosmetic)
 - **Decision:** open / fix on this branch / fixed / later / ask maintainer / rejected
 
-| ID  | Case | Observation                                       | Type | Severity | Decision |
-| --- | ---- | ------------------------------------------------- | ---- | -------- | -------- |
-| F-1 | A-01 | Midi button nicht sofort erkennbar als map | UX | medium | fixed: header button shows the label "MAP" next to the knob icon |
-| F-2 | A-02 | Map Mode im MIDI-Modus entfernen | UX | low | fixed: toggle removed from the MIDI Mapping panel, the panel shows a hint to use the header button |
-| F-3 | A-04, B-01 | Nach lernen blinkt das zugewiesene Control weiter | Bug | medium | fixed: the target is released after binding, the control turns orange |
-| F-4 | B-03 | While the target stayed selected, every moved controller re-bound it, so the old control kept moving the fader until map mode was left | Bug | high | fixed: same change as F-3; re-binding needs the control to be selected again |
+| ID  | Case       | Observation                                                                                                                            | Type | Severity | Decision                                                                                           |
+| --- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---- | -------- | -------------------------------------------------------------------------------------------------- |
+| F-1 | A-01       | Midi button nicht sofort erkennbar als map                                                                                             | UX   | medium   | fixed: header button shows the label "MAP" next to the knob icon                                   |
+| F-2 | A-02       | Map Mode im MIDI-Modus entfernen                                                                                                       | UX   | low      | fixed: toggle removed from the MIDI Mapping panel, the panel shows a hint to use the header button |
+| F-3 | A-04, B-01 | Nach lernen blinkt das zugewiesene Control weiter                                                                                      | Bug  | medium   | fixed: the target is released after binding, the control turns orange                              |
+| F-4 | B-03       | While the target stayed selected, every moved controller re-bound it, so the old control kept moving the fader until map mode was left | Bug  | high     | fixed: same change as F-3; re-binding needs the control to be selected again                       |
+| F-5 | B-03       | Remove knob icon from the header. MAP right next to the MIDI icon is sufficient for indicating map mode                                | UX   | low      |                                                                                                    |
+| F-6 | C-03       | Reset Min to `0.00` and Max to `0.00`, wanted behaviour: Min to `-inf` and Max to `6`.                                                 | Bug  | medium   | Out of scope. Needs probably a fix in the value reset logic for other cases as well                |
