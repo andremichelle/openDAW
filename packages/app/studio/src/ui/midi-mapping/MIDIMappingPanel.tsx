@@ -94,11 +94,29 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
                 }}>
             <Icon symbol={IconSymbol.Delete}/><span>Delete selected</span>
         </Button>)
-    const updateSelectionState = () => nothingSelected.setValue(selection.size() === 0)
+    let visibleBoxes: ReadonlyArray<MIDIControllerBox> = []
+    const selectAll: HTMLInputElement = (
+        <input type="checkbox"
+               title="Select all visible mappings"
+               oninput={() => {
+                   visibleBoxes.forEach(box => selectAll.checked ? selection.add(box) : selection.removeByKey(box.address))
+                   render()
+               }}/>)
+    const updateSelectionState = () => {
+        const selectedVisible = visibleBoxes.filter(box => selection.hasKey(box.address)).length
+        nothingSelected.setValue(selection.size() === 0)
+        selectAll.checked = visibleBoxes.length > 0 && selectedVisible === visibleBoxes.length
+        selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleBoxes.length
+    }
+    const projectName = (): string => {
+        const name = service.projectProfileService.getValue()
+            .mapOr(profile => profile.meta.name.trim().replace(/[\\/:*?"<>|]/g, "-"), "")
+        return name.length > 0 ? name : "midi-mappings"
+    }
     const exportPreset = async () => {
         const text = JSON.stringify(MIDIMappingPreset.create(project), null, 2)
         await Promises.tryCatch(Files.save(new TextEncoder().encode(text).buffer, {
-            suggestedName: "midi-mappings.json",
+            suggestedName: `${projectName()}.json`,
             types: [FilePickerAcceptTypes.JsonFileType]
         }))
     }
@@ -193,6 +211,8 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
         Html.empty(body)
         const boxes = midiLearning.controllerBoxes()
         selection.values().filter(box => !boxes.includes(box)).forEach(box => selection.removeByKey(box.address))
+        const rows = boxes.map(toRow).filter(matches).sort(compare)
+        visibleBoxes = rows.map(({box}) => box)
         updateSelectionState()
         if (boxes.length === 0) {
             body.append(<div className="placeholder">
@@ -200,7 +220,6 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
             </div>)
             return
         }
-        const rows = boxes.map(toRow).filter(matches).sort(compare)
         if (rows.length === 0) {
             body.append(<div className="placeholder">No mapping matches the search.</div>)
             return
@@ -301,7 +320,7 @@ export const MIDIMappingPanel = ({lifecycle, service}: Construct): HTMLElement =
             </div>
             <div className="table">
                 <div className="header">
-                    <span/>
+                    <span>{selectAll}</span>
                     {header("Port / Ch", "port")}
                     {header("CC", "cc")}
                     {header("Track", "track")}
