@@ -6,7 +6,7 @@ if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
     window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
 }
 import {App} from "@/ui/App.tsx"
-import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {EmptyExec, isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -84,6 +84,17 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
+    if (context.sampleRate < 44100) {
+        context.close().catch(EmptyExec)
+        document.querySelector("#preloader")?.remove()
+        Dialogs.show({
+            headline: "Unsupported Sample Rate",
+            content: `Your browser runs audio at ${context.sampleRate} Hz. openDAW does not support sample rates below 44100 Hz.`,
+            excludeOk: true,
+            cancelable: false
+        }).catch(EmptyExec)
+        return
+    }
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
     // purge identifiers written by the old client-side counting (§25 TDDDG)
     localStorage.removeItem("__id__")
