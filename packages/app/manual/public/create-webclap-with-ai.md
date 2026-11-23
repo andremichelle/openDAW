@@ -11,26 +11,27 @@ agent asks whether you want a bigger window for it, opened with a Big View butto
 
 ## What You Need
 
-1. A coding agent that works with files on your computer, for example [Claude Code](https://claude.com/claude-code),
-   Codex or Cursor.
-2. [Node.js](https://nodejs.org) 20 or newer.
-3. A Mac or Linux computer. On Windows, run the agent inside
-   [WSL](https://learn.microsoft.com/windows/wsl/install).
-4. A free [GitHub](https://github.com/signup) account, only if you want to share your plugin.
+1. A coding agent, for example [Claude Code](https://claude.com/claude-code), Codex or Cursor.
+2. A Mac or Linux computer. On Windows, run the agent in [WSL](https://learn.microsoft.com/windows/wsl/install).
+3. A free [GitHub](https://github.com/signup) account, only to share your plugin.
 
-The agent installs everything else itself. The first plugin takes a few minutes longer: the agent downloads the tools
-that build plugins (about 1 GB), once.
+The agent installs everything else.
 
 ## 1. Teach Your Agent
 
-Open a terminal and run this line once:
+You do not install anything yourself. Copy this message into your agent's chat, once, and send it:
 
 ```
-npx skills add https://webclap.opendaw.studio -g
+Please set up the openDAW WebCLAP skill on this computer.
+If Node.js is not installed yet, install it for me first.
+Then run: npx skills add https://webclap.opendaw.studio -g
 ```
 
-It installs the openDAW WebCLAP skill for your agents. The skill teaches them how openDAW plugins are built, how they
-look and behave in the device panel, and how to test and share them.
+The agent installs Node.js if your computer does not have it yet, then the skill. If your computer asks for your
+password while it does, type it in, that is the only thing you do. The skill teaches the agent how openDAW plugins are
+built, how they look and behave in the device panel, and how to test and share them. When the agent says it is done,
+start a new chat with it, so it uses the skill. Your first plugin takes a few minutes longer, the agent downloads its
+build tools (about 1 GB) once.
 
 ## 2. Describe Your Plugin
 
