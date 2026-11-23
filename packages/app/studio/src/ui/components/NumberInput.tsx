@@ -77,6 +77,8 @@ export const NumberInput = ({
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {return}
             const target = event.target
             if (!isInstanceOf(target, HTMLElement)) {return}
+            // the minus sits on another physical key in non-US layouts (German: "Slash")
+            if (event.key === "-") {return}
             switch (event.code) {
                 case "ArrowUp": {
                     event.preventDefault()

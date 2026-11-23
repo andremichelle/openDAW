@@ -26,10 +26,11 @@ import {Project} from "../project"
 import {MidiDevices} from "./MidiDevices"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {MIDIControllerBox} from "@opendaw/studio-boxes"
+import {MIDIMappingState, MIDIMappingTransform} from "./MIDIMappingTransform"
 
 interface MIDIConnection {
     box: MIDIControllerBox
-    deliver: Procedure<unitValue>
+    deliver: Procedure<int>
     subscription: Subscription
 }
 
@@ -98,6 +99,7 @@ export class MIDILearning implements Terminable {
         if (!MidiData.isController(data)) {return}
         const channel = MidiData.readChannel(data)
         const controlId = MidiData.readParam1(data)
+        const value = MidiData.readParam2(data)
         if (this.mapMode.getValue()) {
             this.mapTarget.ifSome(field => {
                 const bound = this.#findConnectionByParameterAddress(field.address).mapOr(({box}) =>
@@ -111,7 +113,7 @@ export class MIDILearning implements Terminable {
             const boxChannel = box.deviceChannel.getValue()
             if (boxChannel !== AnyChannel && boxChannel !== channel) {return}
             if (respectDeviceID && box.deviceId.getValue() !== deviceId) {return}
-            deliver(MidiData.asValue(data))
+            deliver(value)
         })
     }
 
@@ -180,25 +182,38 @@ export class MIDILearning implements Terminable {
         })
     }
 
-    #registerMIDIControllerBox(box: MIDIControllerBox): {subscription: Subscription, deliver: Procedure<unitValue>} {
+    #registerMIDIControllerBox(box: MIDIControllerBox): {subscription: Subscription, deliver: Procedure<int>} {
         const address = box.parameter.targetAddress.unwrap("No parameter address")
         const adapter = this.#project.parameterFieldAdapters.get(address)
         const {editing} = this.#project
         const registration = adapter.registerMidiControl()
+        const state = new MIDIMappingState()
         let pendingValue: Nullable<unitValue> = null
-        const update = (value: unitValue) => editing.modify(() => adapter.setUnitValue(value), false)
-        const deliver = (value: unitValue) => {
-            if (isDefined(pendingValue)) {
-                pendingValue = value
-                return
-            }
-            update(value)
-            pendingValue = value
-            AnimationFrame.once(() => {
+        const update = (value: unitValue) => {
+            editing.modify(() => adapter.setUnitValue(value), false)
+            // the stored value may be quantised, pickup compares against what was actually written
+            state.lastApplied = adapter.getUnitValue()
+        }
+        const deliver = (value: int) => {
+            const current = pendingValue ?? adapter.getUnitValue()
+            MIDIMappingTransform.apply({
+                min: box.min.getValue(),
+                max: box.max.getValue(),
+                takeover: box.takeover.getValue(),
+                encoding: box.encoding.getValue()
+            }, state, value, current).ifSome(next => {
                 if (isDefined(pendingValue)) {
-                    update(pendingValue)
-                    pendingValue = null
+                    pendingValue = next
+                    return
                 }
+                update(next)
+                pendingValue = next
+                AnimationFrame.once(() => {
+                    if (isDefined(pendingValue)) {
+                        update(pendingValue)
+                        pendingValue = null
+                    }
+                })
             })
         }
         return {

@@ -21,6 +21,7 @@ import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
 import {CompositeOverviewPanel} from "@/ui/composite-overview/CompositeOverviewPanel"
 import {TapTempo} from "@/ui/pages/TapTempo"
 import {AnalysisPanel} from "@/ui/analysis/AnalysisPanel"
+import {MIDIMappingPanel} from "@/ui/midi-mapping/MIDIMappingPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -64,6 +65,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<TapTempo lifecycle={lifecycle} service={service}/>)
             case PanelType.Analysis:
                 return (<AnalysisPanel lifecycle={lifecycle} service={service}/>)
+            case PanelType.MIDIMapping:
+                return (<MIDIMappingPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:
