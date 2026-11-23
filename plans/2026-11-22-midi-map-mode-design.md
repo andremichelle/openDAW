@@ -1,6 +1,6 @@
 # Design: MIDI Map Mode & MIDI Mapping view (`MIDI-CORE-02`, MIDI only)
 
-Branch: `feat/midi-map-mode`. Source: `plans/midi-feature-roadmap.md`, `MIDI-CORE-02`.
+Branch: `feat/midi-map-mode`. Source: [plans/midi-feature-roadmap.md](https://github.com/BLyndon/openDAW/blob/midi-roadmap/plans/midi-feature-roadmap.md), `MIDI-CORE-02`.
 
 ## Intent
 
@@ -81,12 +81,12 @@ latter (one place, no call-site changes).
 
 ### Schema (`MIDIControllerBox`, new fields, defaults keep old behaviour)
 
-| key | name        | type    | default | meaning                                                   |
-|-----|-------------|---------|---------|-----------------------------------------------------------|
-| 6   | `min`       | float32 | 0.0     | unit value at controller minimum                          |
-| 7   | `max`       | float32 | 1.0     | unit value at controller maximum; `min > max` inverts     |
-| 8   | `takeover`  | int32   | 0       | 0 Jump, 1 Pickup, 2 Value Scaling (absolute only)         |
-| 9   | `encoding`  | int32   | 0       | 0 absolute, 1 relative two's complement, 2 relative binary offset, 3 relative sign bit |
+| key | name       | type    | default | meaning                                                                                |
+| --- | ---------- | ------- | ------- | -------------------------------------------------------------------------------------- |
+| 6   | `min`      | float32 | 0.0     | unit value at controller minimum                                                       |
+| 7   | `max`      | float32 | 1.0     | unit value at controller maximum; `min > max` inverts                                  |
+| 8   | `takeover` | int32   | 0       | 0 Jump, 1 Pickup, 2 Value Scaling (absolute only)                                      |
+| 9   | `encoding` | int32   | 0       | 0 absolute, 1 relative two's complement, 2 relative binary offset, 3 relative sign bit |
 
 The builder verifies that a project saved before the change decodes the missing
 fields with these defaults; if not, a migration sets them on load.
@@ -106,7 +106,7 @@ A small module next to `MIDILearning`, e.g. `MIDIMappingTransform`, no DOM, no b
   Without a known last controller value the first message only records it.
 - Relative: decode a signed tick delta per encoding (two's complement: 1..63 up, 127..65 down;
   binary offset: 65.. up, 63.. down; sign bit: 1..63 up, 65..127 down), `next = clamp(current + delta *
-  step * (max - min))`, clamped between `min` and `max`, step = 1/128. Takeover does not apply.
+step * (max - min))`, clamped between `min` and `max`, step = 1/128. Takeover does not apply.
 - "current" is the parameter's unit value via `adapter.getUnitValue()`. Per-binding state (`last`
   controller value, picked-up flag) lives in the connection, not in the box.
 
