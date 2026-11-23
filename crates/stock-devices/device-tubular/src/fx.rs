@@ -118,7 +118,8 @@ impl PluginFx {
         if self.ui_cutoff != self.p_cutoff || self.ui_reso != self.p_reso {
             self.r_reso = (0.991 - logsc(1.0 - self.ui_reso, 0.0, 0.991) as f64) as f32;
             self.r24 = (3.5 * self.r_reso as f64) as f32;
-            let cutoff_norm = logsc(self.ui_cutoff, 60.0, 19000.0);
+            // Dexed assumes 44.1 kHz or more, below that 19 kHz lies past Nyquist and the ladder diverges
+            let cutoff_norm = logsc(self.ui_cutoff, 60.0, 19000.0).min(self.sample_rate * 0.49);
             self.r_cutoff = libm::tan((cutoff_norm * self.sample_rate_inv * PI) as f64) as f32;
             self.p_cutoff = self.ui_cutoff;
             self.p_reso = self.ui_reso;
@@ -140,6 +141,37 @@ impl PluginFx {
             let y4 = tptpc(&mut self.s4, y3, g);
             let mc = y4;
             *sample = (mc as f64 * (1.0 + self.r24 as f64 * 0.45)) as f32;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PluginFx;
+
+    fn run(sample_rate: i32, cutoff: f32) -> Vec<f32> {
+        let mut fx = PluginFx::default();
+        fx.init(sample_rate);
+        fx.ui_cutoff = cutoff;
+        fx.ui_reso = 0.5;
+        let mut out = Vec::new();
+        for block in 0..(sample_rate as usize / 128) {
+            let mut work: Vec<f32> = (0..128).map(|index| ((block * 128 + index) as f32 * 0.05).sin() * 0.5).collect();
+            fx.process(&mut work);
+            out.extend_from_slice(&work);
+        }
+        out
+    }
+
+    // live errors 1316 to 1329: Firefox at 32 kHz, cutoff above Nyquist
+    #[test]
+    fn cutoff_above_nyquist_stays_finite() {
+        for sample_rate in [22050, 32000, 44100, 48000, 96000] {
+            for cutoff in [0.9, 0.94, 0.95, 0.97, 0.99, 0.9999] {
+                let out = run(sample_rate, cutoff);
+                assert!(out.iter().all(|sample| sample.is_finite() && sample.abs() < 16.0),
+                    "sample rate {sample_rate}, cutoff {cutoff}");
+            }
         }
     }
 }
