@@ -1,4 +1,4 @@
-import {byte, Comparator, int, safeExecute} from "@opendaw/lib-std"
+import {byte, Comparator, int, safeExecute, unitValue} from "@opendaw/lib-std"
 import {Event} from "./Event"
 import {ControlType} from "./ControlType"
 import {MidiEventVisitor} from "./MidiEventVisitor"
@@ -7,7 +7,8 @@ import {MidiFileDecoder} from "./MidiFileDecoder"
 export class ControlEvent implements Event<ControlType> {
     static readonly Comparator: Comparator<ControlEvent> = (a, b) => a.ticks - b.ticks
 
-    constructor(readonly ticks: int, readonly type: ControlType, readonly param0: byte, readonly param1: byte) {}
+    constructor(readonly ticks: int, readonly type: ControlType, readonly param0: byte, readonly param1: byte,
+                readonly noteOnVelocity?: unitValue) {}
 
     static decode(decoder: MidiFileDecoder, type: int, ticks: int): ControlEvent | null {
         switch (type) {
@@ -35,7 +36,9 @@ export class ControlEvent implements Event<ControlType> {
     accept(visitor: MidiEventVisitor): void {
         switch (this.type) {
             case ControlType.NOTE_ON: {
-                if (0 === this.param1) {
+                if (this.noteOnVelocity !== undefined) {
+                    safeExecute(visitor.noteOn, this.param0, this.noteOnVelocity)
+                } else if (0 === this.param1) {
                     safeExecute(visitor.noteOff, this.param0)
                 } else {
                     safeExecute(visitor.noteOn, this.param0, this.param1 / 127.0)

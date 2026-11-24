@@ -2,6 +2,7 @@ import {byte, ByteArrayInput, int} from "@opendaw/lib-std"
 import {MidiFileFormat} from "./MidiFileFormat"
 import {Chunk} from "./Chunk"
 import {MidiTrack} from "./MidiTrack"
+import {MidiClipFileDecoder} from "./MidiClipFileDecoder"
 
 export class MidiFileDecoder {
     readonly input: ByteArrayInput
@@ -14,6 +15,9 @@ export class MidiFileDecoder {
     decode(): MidiFileFormat {
         this.input.littleEndian = false
         const header = this.input.readInt()
+        if (header === 0x534d4632 && this.input.available(4) && this.input.readInt() === 0x434c4950) {
+            return new MidiClipFileDecoder(this.input).decode()
+        }
         if (header === Chunk.MTHD) {
             if (this.input.readInt() !== 6) {
                 throw new Error("2nd int in header must be 6")
