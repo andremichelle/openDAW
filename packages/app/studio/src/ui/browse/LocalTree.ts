@@ -119,7 +119,6 @@ export class LocalTree<T> {
             trash: this.#structure.trash.filter(entry => !uuids.includes(entry.uuid))
         }
         for (const {uuid, path} of restoring) {
-            this.#ensureFolder(path)
             await this.move([uuid], path)
         }
     }
@@ -186,6 +185,7 @@ export class LocalTree<T> {
     // The root is the empty path and has no entry of its own: not being named anywhere IS being at the root.
     async move(uuids: ReadonlyArray<UUID.String>, path: string): Promise<void> {
         if (uuids.length === 0) {return}
+        this.#ensureFolder(path)
         const moving = new Set(uuids)
         const strip = (folder: ResourceStructureFolder): ResourceStructureFolder => ({
             ...folder,

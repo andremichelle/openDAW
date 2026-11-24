@@ -38,8 +38,9 @@ import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 import {LocalTree} from "@/ui/browse/LocalTree"
 import {ResourceMenus} from "@/ui/browse/ResourceMenus"
+import {FolderImport} from "@/ui/browse/FolderImport"
 import {DragAndDrop} from "@/ui/DragAndDrop"
-import {AnyDragData} from "@/ui/AnyDragData"
+import {AnyDragData, DragFile} from "@/ui/AnyDragData"
 import {Surface} from "@/ui/surface/Surface"
 
 type Construct<T> = {
@@ -160,18 +161,52 @@ export const ResourceBrowser = <T, >({
                                     return selected.includes(uuid) ? selected : [uuid]
                                 }
                                 const importInto = async (local: LocalTree<T>,
-                                                          files: ReadonlyArray<File>,
+                                                          sources: ReadonlyArray<FolderImport.Entry>,
                                                           path: string): Promise<void> => {
+                                    if (sources.length === 0) {return}
                                     importing.setValue(true)
-                                    const result = await Promises.tryCatch(config.importFiles(files))
+                                    const folders = FolderImport.byFolder(sources)
+                                    const result = await Promises.tryCatch(
+                                        config.importGroups(folders.map(([, files]) => files)))
+                                    if (result.status === "rejected") {
+                                        importing.setValue(false)
+                                        return panic(result.error)
+                                    }
+                                    // identical audio is one item, it stays in the first folder it is found in
+                                    const placed = new Set<UUID.String>()
+                                    for (const [index, [folder]] of folders.entries()) {
+                                        const uuids = (result.value[index] ?? Arrays.empty())
+                                            .map(config.resolveEntryUuid)
+                                            .filter(uuid => !placed.has(uuid))
+                                        uuids.forEach(uuid => placed.add(uuid))
+                                        await local.move(uuids, folder.length === 0 ? path : LocalTree.path(path, folder))
+                                    }
                                     importing.setValue(false)
-                                    if (result.status === "rejected") {return panic(result.error)}
-                                    return local.move(result.value.map(config.resolveEntryUuid), path)
+                                    if (placed.size === 0) {
+                                        Surface.get(entries).toast(`No ${config.name.toLowerCase()} found`, IconSymbol.Warning)
+                                    }
+                                }
+                                const importDropped = async (local: LocalTree<T>,
+                                                             {files, entries: dropped}: DragFile,
+                                                             path: string): Promise<void> => {
+                                    if (!FolderImport.hasFolder(dropped)) {
+                                        return importInto(local, files.map(file => ({file, folder: ""})), path)
+                                    }
+                                    const read = await Promises.tryCatch(FolderImport.fromEntries(dropped))
+                                    if (read.status === "rejected") {
+                                        Surface.get(entries).toast("The dropped folder could not be read", IconSymbol.Warning)
+                                        return
+                                    }
+                                    return importInto(local, read.value, path)
+                                }
+                                const importPicked = async (local: LocalTree<T>, path: string): Promise<void> => {
+                                    await importInto(local, await FolderImport.pick(), path)
+                                    refresh()
                                 }
                                 const installDropTarget = (target: HTMLElement, {accepts, apply, importTo, within = () => true}: {
                                     accepts: Predicate<ReadonlyArray<UUID.String>>
                                     apply: Func<ReadonlyArray<UUID.String>, Promise<void>>
-                                    importTo: Option<Func<ReadonlyArray<File>, Promise<void>>>
+                                    importTo: Option<Func<DragFile, Promise<void>>>
                                     within?: Predicate<DragEvent>
                                 }): Terminable => {
                                     const clear = () => target.classList.remove("drag-over")
@@ -184,7 +219,7 @@ export const ResourceBrowser = <T, >({
                                                 event.stopPropagation()
                                                 clear()
                                                 if (data.type === "file") {
-                                                    importTo.ifSome(importer => importer(data.files).then(refresh))
+                                                    importTo.ifSome(importer => importer(data).then(refresh))
                                                 } else {
                                                     apply(draggedUuids(data)).then(refresh)
                                                 }
@@ -239,10 +274,10 @@ export const ResourceBrowser = <T, >({
                                             accepts: uuids => uuids.some(uuid => local.isTrashed(uuid)
                                                 || local.pathOf(uuid) !== path),
                                             apply: uuids => local.move(uuids, path),
-                                            importTo: Option.wrap(files => importInto(local, files, path))
+                                            importTo: Option.wrap(data => importDropped(local, data, path))
                                         }),
                                         ContextMenu.subscribe(header, collector =>
-                                            collector.addItems(...ResourceMenus.folder(local, path, refresh)))
+                                            collector.addItems(...ResourceMenus.folder(local, path, refresh, () => importPicked(local, path))))
                                     )
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
@@ -285,13 +320,13 @@ export const ResourceBrowser = <T, >({
                                                 accepts: uuids => uuids.some(uuid => local.isTrashed(uuid)
                                                     || local.pathOf(uuid).length > 0),
                                                 apply: uuids => local.move(uuids, ""),
-                                                importTo: Option.wrap(files => importInto(local, files, "")),
+                                                importTo: Option.wrap(data => importDropped(local, data, "")),
                                                 within: event => !(event.target instanceof Element) || isBlank(event.target)
                                             }),
                                             ContextMenu.subscribe(entries, collector => {
                                                 const {clientX, clientY} = collector.client
                                                 if (!isBlank(document.elementFromPoint(clientX, clientY))) {return}
-                                                collector.addItems(...ResourceMenus.root(local, refresh))
+                                                collector.addItems(...ResourceMenus.root(local, refresh, () => importPicked(local, "")))
                                             }))
                                     })
                                     const query = filter.getValue().toLowerCase()
