@@ -110,6 +110,7 @@ export namespace MIDIMappingPreset {
             none: () => ({...result, skipped: result.skipped + 1}),
             some: adapter => {
                 const replaced = midiLearning.hasMidiConnection(adapter.address)
+                    || midiLearning.hasKeyConnection(adapter.address)
                 midiLearning.createMapping(adapter.field, box => {
                     box.deviceId.setValue(entry.deviceId)
                     box.filterDeviceId.setValue(entry.filterDeviceId)

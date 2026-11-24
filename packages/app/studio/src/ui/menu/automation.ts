@@ -1,4 +1,4 @@
-import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, MIDILearning, MIDIMappableField} from "@opendaw/studio-core"
 import {
     AudioUnitTracks,
     AutomatableParameterFieldAdapter,
@@ -40,17 +40,7 @@ export const parameterContextItems = <T extends PrimitiveValues>(editing: Editin
                 .setTriggerProcedure(() => editing.modify(() =>
                     parameter.track.ifSome(track => tracks.delete(track)))),
         modulationMenu(editing, parameter, disableAutomation),
-        MenuItem.default({
-            label: midiDevices.hasMidiConnection(field.address)
-                ? "Forget Midi"
-                : "Learn Midi Control..."
-        }).setTriggerProcedure(() => {
-            if (midiDevices.hasMidiConnection(field.address)) {
-                midiDevices.forgetMidiConnection(field.address)
-            } else {
-                midiDevices.learnMIDIControls(field).then()
-            }
-        }),
+        ...controlItems(midiDevices, field),
         MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
@@ -71,15 +61,7 @@ const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,
             : MenuItem.default({label: "Remove Automation"})
                 .setTriggerProcedure(() => editing.modify(() =>
                     automation.ifSome(track => owner.unwrap("no lane owner").delete(track)))),
-        MenuItem.default({
-            label: midiDevices.hasMidiConnection(field.address) ? "Forget Midi" : "Learn Midi Control..."
-        }).setTriggerProcedure(() => {
-            if (midiDevices.hasMidiConnection(field.address)) {
-                midiDevices.forgetMidiConnection(field.address)
-            } else {
-                midiDevices.learnMIDIControls(field).then()
-            }
-        }),
+        ...controlItems(midiDevices, field),
         MenuItem.default({label: "Reset Value", checked: field.equals(field.clamp(parameter.resetValue))})
             .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
     ]
@@ -106,6 +88,23 @@ export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
             modulationMenu(editing, parameter)
         )),
         MapTarget.select(midiDevices, parameter.field, element))
+
+const controlItems = (midiDevices: MIDILearning, field: MIDIMappableField): ReadonlyArray<MenuItem> => {
+    if (midiDevices.hasKeyConnection(field.address)) {
+        return [MenuItem.default({label: "Forget Key"})
+            .setTriggerProcedure(() => midiDevices.forgetKeyConnection(field.address))]
+    }
+    if (midiDevices.hasMidiConnection(field.address)) {
+        return [MenuItem.default({label: "Forget Midi"})
+            .setTriggerProcedure(() => midiDevices.forgetMidiConnection(field.address))]
+    }
+    return [
+        MenuItem.default({label: "Learn Midi Control..."})
+            .setTriggerProcedure(() => midiDevices.learnMIDIControls(field).then()),
+        MenuItem.default({label: "Learn Key..."})
+            .setTriggerProcedure(() => midiDevices.learnKey(field).then())
+    ]
+}
 
 const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
                                                    parameter: AutomatableParameterFieldAdapter<T>,

@@ -338,6 +338,100 @@ describe("MIDILearning map mode", () => {
     })
 })
 
+describe("MIDILearning keys", () => {
+    afterEach(() => lifecycle.terminate())
+
+    const panningOf = (project: Project): MappableField =>
+        project.primaryAudioUnitBox.panning as unknown as MappableField
+
+    const panningUnitValue = (project: Project): number =>
+        project.parameterFieldAdapters.get(project.primaryAudioUnitBox.panning.address).getUnitValue()
+
+    const createKeyProject = async (): Promise<Project> => {
+        const project = await createLearnedProject()
+        project.midiLearning.bindKey(panningOf(project), "KeyQ")
+        return project
+    }
+
+    // Values within one animation frame are coalesced and no frame runs in tests, so each case sends once.
+    it("sends 127 when the key is pressed", async () => {
+        const project = await createKeyProject()
+        expect(project.midiLearning.receiveKey("KeyQ", true)).toBe(true)
+        expect(panningUnitValue(project)).toBeCloseTo(1.0, 6)
+    })
+
+    it("sends 0 when the key is released", async () => {
+        const project = await createKeyProject()
+        expect(project.midiLearning.receiveKey("KeyQ", false)).toBe(true)
+        expect(panningUnitValue(project)).toBeCloseTo(0.0, 6)
+    })
+
+    it("ignores another key", async () => {
+        const project = await createKeyProject()
+        const before = panningUnitValue(project)
+        expect(project.midiLearning.receiveKey("KeyW", true)).toBe(false)
+        expect(panningUnitValue(project)).toBe(before)
+    })
+
+    it("reports a key mapping as key, not as midi", async () => {
+        const project = await createKeyProject()
+        const {panning, volume} = project.primaryAudioUnitBox
+        expect(project.midiLearning.hasKeyConnection(panning.address)).toBe(true)
+        expect(project.midiLearning.hasMidiConnection(panning.address)).toBe(false)
+        expect(project.midiLearning.hasKeyConnection(volume.address)).toBe(false)
+        expect(project.midiLearning.numberOfConnections).toBe(1)
+        expect(project.midiLearning.controllerBoxes().length).toBe(1)
+    })
+
+    it("does not trigger a key mapping with a MIDI CC", async () => {
+        const project = await createKeyProject()
+        const box = asInstanceOf(project.boxGraph.boxes().find(box =>
+            box instanceof MIDIControllerBox && box.keyCode.getValue() === "KeyQ"), MIDIControllerBox)
+        const before = panningUnitValue(project)
+        project.midiLearning.receive(MidiData.control(0, box.controlId.getValue(), 127), "")
+        expect(panningUnitValue(project)).toBe(before)
+    })
+
+    it("does not trigger a MIDI mapping with a key", async () => {
+        const project = await createKeyProject()
+        const before = volumeUnitValue(project)
+        project.midiLearning.receiveKey("KeyQ", true)
+        expect(volumeUnitValue(project)).toBe(before)
+    })
+
+    it("forgets a key mapping", async () => {
+        const project = await createKeyProject()
+        project.midiLearning.forgetKeyConnection(project.primaryAudioUnitBox.panning.address)
+        expect(project.midiLearning.hasKeyConnection(project.primaryAudioUnitBox.panning.address)).toBe(false)
+        expect(project.midiLearning.receiveKey("KeyQ", true)).toBe(false)
+    })
+
+    it("recognises a key mapping after the project is reloaded", async () => {
+        const reloaded = await reload(await createKeyProject())
+        expect(reloaded.midiLearning.hasKeyConnection(reloaded.primaryAudioUnitBox.panning.address)).toBe(true)
+        expect(reloaded.midiLearning.receiveKey("KeyQ", true)).toBe(true)
+    })
+
+    it("turns a key mapping into a MIDI mapping when learned in map mode", async () => {
+        const project = await createKeyProject()
+        project.midiLearning.mapMode.setValue(true)
+        project.midiLearning.mapTarget.wrap(panningOf(project))
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        expect(project.midiLearning.hasMidiConnection(project.primaryAudioUnitBox.panning.address)).toBe(true)
+        expect(project.midiLearning.receiveKey("KeyQ", true)).toBe(false)
+    })
+
+    it("turns a MIDI mapping into a key mapping when a key is bound", async () => {
+        const project = await createLearnedProject()
+        project.midiLearning.bindKey(project.primaryAudioUnitBox.volume as unknown as MappableField, "KeyE")
+        const {volume} = project.primaryAudioUnitBox
+        expect(project.midiLearning.hasKeyConnection(volume.address)).toBe(true)
+        const before = volumeUnitValue(project)
+        project.midiLearning.receive(MidiData.control(0, 7, 0), "")
+        expect(volumeUnitValue(project)).toBe(before)
+    })
+})
+
 type MappableField = PrimitiveField<PrimitiveValues, Pointers.MIDIControl | Pointers>
 
 const volumeUnitValue = (project: Project): number =>
