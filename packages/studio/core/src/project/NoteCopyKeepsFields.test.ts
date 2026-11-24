@@ -165,6 +165,20 @@ describe("copying a note keeps all of its settings", () => {
         hits.forEach(hit => expect(settingsOf(hit)).toEqual({...Source, playCount: 1, playCurve: 0}))
         project.terminate()
     })
+    it("Duplicating notes and selecting the copies is one undo step", async () => {
+        const {project, note, region} = await buildProject()
+        project.selection.select(note.box)
+        const count = () => region.optCollection.unwrap("collection").events.asArray().length
+        project.editing.modify(() => {
+            const copies = project.api.duplicateNotes([note])
+            project.selection.deselectAll()
+            copies.forEach(copy => project.selection.select(copy.box))
+        })
+        expect(count()).toBe(2)
+        project.editing.undo()
+        expect(count()).toBe(1)
+        project.terminate()
+    })
     it("Consolidating a grouped play-count note keeps its hits in the same group", async () => {
         const {project, note} = await buildProject()
         const group = project.editing.modify(() =>

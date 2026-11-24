@@ -30,10 +30,12 @@ export const createPitchMenu = ({editing, snapping, selection, events, stepRecor
         }).setTriggerProcedure(() => {
             const selected = selection.selected()
             if (selected.length === 0) {return}
-            const copies = editing.modify(() => api.duplicateNotes(selected)).unwrap("duplicateNotes")
-            if (copies.length === 0) {return}
-            selection.deselectAll()
-            copies.forEach(adapter => selection.select(adapter))
+            editing.modify(() => {
+                const copies = api.duplicateNotes(selected)
+                if (copies.length === 0) {return}
+                selection.deselectAll()
+                copies.forEach(adapter => selection.select(adapter))
+            })
         }),
         MenuItem.default({
             label: "Step Recording",

@@ -240,11 +240,15 @@ export const NoteEditor =
             shortcuts.register(NoteEditorShortcuts["duplicate-notes"].shortcut, () => {
                 const selected = selection.selected()
                 if (selected.length === 0) {return false}
-                const copies = editing.modify(() => project.api.duplicateNotes(selected)).unwrap("duplicateNotes")
-                if (copies.length === 0) {return false}
-                selection.deselectAll()
-                copies.forEach(adapter => selection.select(adapter))
-                return true
+                const copies = editing.modify(() => {
+                    const duplicates = project.api.duplicateNotes(selected)
+                    if (duplicates.length > 0) {
+                        selection.deselectAll()
+                        duplicates.forEach(adapter => selection.select(adapter))
+                    }
+                    return duplicates
+                }).unwrap("duplicateNotes")
+                return copies.length > 0
             }),
             stepRecording.catchupAndSubscribe(owner => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
