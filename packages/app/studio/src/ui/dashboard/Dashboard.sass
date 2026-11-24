@@ -51,7 +51,6 @@ component
           color: var(--color-shadow)
 
     > .main
-      flex: 1
       margin-top: 1.5em
       display: grid
       grid-template-columns: repeat(5, minmax($col-min, 1fr))
@@ -60,20 +59,21 @@ component
       // zero height keeps the project list out of the row measurement, so the rail alone defines the
       // minimum and never gets clipped; min-height stretches the panel back over the whole row
       > .panel
-        grid-column: span 3
+        grid-column: span 2
         height: 0
         min-height: 100%
         display: flex
         flex-direction: column
-        padding: 1em 1.25em
-        border-radius: 8px
-        border: 1px solid rgba(white, 0.08)
-        background: rgba(white, 0.01)
 
       > .rail
-        grid-column: span 2
+        grid-column: span 3
         display: grid
         grid-template-columns: subgrid
-        row-gap: 0.5em
         min-width: 0
         align-content: start
+
+        > .column
+          display: flex
+          flex-direction: column
+          row-gap: 1.5em
+          min-width: 0

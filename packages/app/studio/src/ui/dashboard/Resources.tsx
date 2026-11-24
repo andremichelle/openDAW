@@ -29,6 +29,7 @@ export const Resources = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <RadioGroup lifecycle={lifecycle}
+                        className="tabs"
                         style={{columnGap: "1em"}}
                         appearance={{activeColor: Colors.orange}}
                         model={scope}

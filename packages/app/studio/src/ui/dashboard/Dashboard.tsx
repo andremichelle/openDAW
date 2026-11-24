@@ -36,12 +36,18 @@ export const Dashboard = ({lifecycle, service}: Construct) => (
                     <Resources lifecycle={lifecycle} service={service}/>
                 </div>
                 <div className="rail">
-                    <HelpFeedback/>
-                    <Backup service={service}/>
-                    <Links/>
-                    <Sponsors/>
-                    <SampleProviders/>
-                    <Contributors/>
+                    <div className="column">
+                        <HelpFeedback/>
+                        <Backup service={service}/>
+                    </div>
+                    <div className="column">
+                        <Links/>
+                        <SampleProviders/>
+                    </div>
+                    <div className="column">
+                        <Sponsors/>
+                        <Contributors/>
+                    </div>
                 </div>
             </div>
             <IntroTiles/>
