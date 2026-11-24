@@ -51,6 +51,9 @@ component
           color: var(--color-shadow)
 
     > .main
+      flex: 1 0 auto
+      min-height: min-content
+      max-height: $main-max-height
       margin-top: 1.5em
       display: grid
       grid-template-columns: repeat(5, minmax($col-min, 1fr))
