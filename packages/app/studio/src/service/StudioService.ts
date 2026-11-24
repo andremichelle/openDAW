@@ -80,6 +80,7 @@ import {
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {PresetService} from "@/ui/browse/PresetService"
 import {AudioFileBox, AudioUnitBox} from "@opendaw/studio-boxes"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -534,7 +535,9 @@ export class StudioService implements ProjectEnv {
                         this.switchScreen(screen)
                     },
                     failedToStart: (event: unknown) => {
-                        if (event instanceof Event) {this.engineErrors.notify(event)}
+                        WasmEngine.probe(this.audioContext)
+                            .catch(reason => console.warn("[WorkletProbe] failed", reason))
+                            .finally(() => {if (event instanceof Event) {this.engineErrors.notify(event)}})
                         this.switchScreen(null)
                         this.engine.releaseWorklet()
                         Dialogs.show({

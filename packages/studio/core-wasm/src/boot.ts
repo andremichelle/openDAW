@@ -12,7 +12,7 @@ import {NamBridges} from "./nam-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
 import {simplifySoundfont} from "./soundfont-simplify"
 
-const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
+export const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
 
 export type WasmEngineModules = {
     engineModule: WebAssembly.Module

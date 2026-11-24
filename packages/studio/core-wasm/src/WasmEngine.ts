@@ -11,6 +11,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project, SampleLoadEvent} from "@opendaw/studio-core"
 import {EngineModules, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
+import {WorkletProbe} from "./WorkletProbe"
 import {createSyncLoopback} from "./sync/loopback"
 import {UpdateHistory} from "./sync/update-history"
 import {
@@ -57,6 +58,16 @@ export namespace WasmEngine {
         }
         modules.wrap(value)
         return true
+    }
+
+    // Logs which step of a worklet start fails on this machine, for the report after a failed engine start.
+    export const probe = async (context: BaseAudioContext): Promise<void> => {
+        if (modules.isEmpty()) {
+            console.warn("[WorkletProbe] engine modules not loaded")
+            return
+        }
+        const {engineModule, deviceModules} = modules.unwrap()
+        return WorkletProbe.run(context, engineModule, deviceModules)
     }
 
     export const install = (urls: WasmEngineUrls): void => {
