@@ -19,6 +19,7 @@ const MAX_SCHEDULED_NOTES = 128
 // the consumer matches a note-off to its voice by id, and a collision would stop the wrong note.
 const GENERATED_ID_BASE = 0x4000_0000
 const GENERATED_ID_MASK = 0x3fff_ffff
+const FLAG_TRANSPORTING = 1 // mirrors abi `BlockFlags::TRANSPORTING`
 const FLAG_DISCONTINUOUS = 1 << 1 // mirrors abi `BlockFlags::DISCONTINUOUS`: a loop wrap or a seek
 
 type ScheduledNote = {position: number, duration: number, pitch: number, velocity: number, cent: number}
@@ -31,6 +32,7 @@ export class SpielwerkRuntime {
     readonly retained: RetainedNote[] = []   // emitted notes awaiting their note-off (position + duration reached)
     readonly scheduled: ScheduledNote[] = [] // notes the script placed in a future block
     readonly sourceToOutput = new Map<number, Set<number>>() // upstream note-on id -> emitted output ids it spawned
+    transporting: boolean = false
 
     reset(): void {
         this.retained.length = 0
@@ -110,7 +112,11 @@ export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: Array
     // A transport JUMP (loop wrap / seek) releases EVERYTHING held, at `from` — the contract the engine's own
     // note source honours (`NoteSequencer::process_notes`). Without it a note whose span reaches past the loop
     // end never sees its end position again and the downstream instrument holds that voice forever.
-    if ((flags & FLAG_DISCONTINUOUS) !== 0) {
+    // a stopped transport counts its own positions, so held note ends would never come due (#573)
+    const transporting = (flags & FLAG_TRANSPORTING) !== 0
+    const stopped = runtime.transporting && !transporting
+    runtime.transporting = transporting
+    if ((flags & FLAG_DISCONTINUOUS) !== 0 || stopped) {
         releaseHeld(runtime, from, emit)
         proc.reset?.()
     }
