@@ -1,4 +1,5 @@
 import {
+    Arrays,
     Class,
     DefaultObservableValue,
     Errors,
@@ -122,31 +123,43 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     }
 
     async importFiles(dropped: ReadonlyArray<File>): Promise<ReadonlyArray<T>> {
-        const files = dropped.filter(file => this.acceptsFile(file))
-        if (files.length === 0) {return []}
+        return (await this.importGroups([dropped])).flat()
+    }
+
+    // One progress dialog and one issue report for all groups, the result keeps the grouping.
+    async importGroups(groups: ReadonlyArray<ReadonlyArray<File>>): Promise<ReadonlyArray<ReadonlyArray<T>>> {
+        const accepted = groups.map(files => files.filter(file => this.acceptsFile(file)))
+        const total = accepted.reduce((sum, files) => sum + files.length, 0)
+        if (total === 0) {return accepted.map(() => Arrays.empty())}
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
-            headline: `Importing ${files.length === 1 ? this.nameSingular : this.namePlural}...`, progress
+            headline: `Importing ${total === 1 ? this.nameSingular : this.namePlural}...`, progress
         })
-        const progressHandler = Progress.split(value => progress.setValue(value), files.length)
+        const progressHandler = Progress.split(value => progress.setValue(value), total)
         const rejected: Array<string> = []
-        const imported: Array<T> = []
-        for (const [index, file] of files.entries()) {
-            const readResult = await Promises.tryCatch(file.arrayBuffer())
-            if (readResult.status === "rejected") {
-                rejected.push(`'${file.name}' could not be read`)
-                continue
+        const imported: Array<ReadonlyArray<T>> = []
+        let index = 0
+        for (const files of accepted) {
+            const group: Array<T> = []
+            for (const file of files) {
+                const handler = progressHandler[index++]
+                const readResult = await Promises.tryCatch(file.arrayBuffer())
+                if (readResult.status === "rejected") {
+                    rejected.push(`'${file.name}' could not be read`)
+                    continue
+                }
+                const {status, value, error} = await Promises.tryCatch(this.importFile({
+                    name: file.name,
+                    arrayBuffer: readResult.value,
+                    progressHandler: handler
+                }))
+                if (status === "resolved") {
+                    group.push(value)
+                } else if (!Errors.isAbort(error)) {
+                    rejected.push(String(error))
+                }
             }
-            const {status, value, error} = await Promises.tryCatch(this.importFile({
-                name: file.name,
-                arrayBuffer: readResult.value,
-                progressHandler: progressHandler[index]
-            }))
-            if (status === "resolved") {
-                imported.push(value)
-            } else if (!Errors.isAbort(error)) {
-                rejected.push(String(error))
-            }
+            imported.push(group)
         }
         dialog.terminate()
         if (rejected.length > 0) {
