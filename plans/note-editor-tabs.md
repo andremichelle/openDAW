@@ -2,7 +2,7 @@
 
 ## Goal
 
-The note editor header gets four tabs (Basic, Random, Scale, Split). `NoteEventBox` keeps only what every note has. Everything else is an aux box that points to the note through the existing `Pointers.NoteEventFeature`. A note without aux boxes plays exactly like a plain note today.
+The note editor header gets four tabs (Basic, Random, Scale, Split). `NoteEventBox` keeps only what every note has. Everything else is an aux box that points to its own field hub on the note (`random`, `split`). A note without aux boxes plays exactly like a plain note today.
 
 Chance gets groups: all members of a group play together or not at all (chords). Split (today "play count" and "play curve") gets room for more features, starting with velocity fades.
 
@@ -18,21 +18,24 @@ Chance gets groups: all members of a group play together or not at all (chords).
 
 1. `NoteEventBox`
    1. Keeps events, position, duration, pitch, velocity, cent.
-   2. Fields 22, 23 and 25 become `deprecated`. Their keys are never reused.
+   2. Fields 22, 23 and 25 become `deprecated` in the step that also migrates and switches the engine (phase 3). Deprecated fields are left out of the Rust registry, so deprecating them earlier would silence ratchets and chance. Their keys are never reused.
+   3. `30 random`: field hub, accepts `NoteEventChance`, exclusive.
+   4. `31 split`: field hub, accepts `NoteEventRepeat`, exclusive.
 2. `NoteEventChanceBox` (new)
-   1. `1 event`: pointer `NoteEventFeature`, mandatory.
-   2. `2 chance`: int32, 1 to 100, default 100.
+   1. `1 event`: pointer `NoteEventChance` to the note's `random` hub, mandatory.
+   2. `2 chance`: int32, 0 to 100 (the range of the old field, so nothing is clamped), default 100.
    3. `3 group`: pointer `NoteEventChanceGroup`, optional.
 3. `NoteEventChanceGroupBox` (new)
-   1. `1 chance`: int32, 1 to 100. While a note is in a group, the group's chance decides and the note's own chance is kept but not used.
-   2. Accepts `NoteEventChanceGroup` pointers, mandatory incoming, so a group never exists without members.
-   3. No owner pointer. Copying notes copies their group as a dependency, so a pasted or duplicated chord becomes a new group of its own.
+   1. `1 chance`: int32, 0 to 100. While a note is in a group, the group's chance decides and the note's own chance is kept but not used.
+   2. `2 mode`: int32, 0 = Play All (all members play or none), 1 = Play One (if the group plays, exactly one member plays).
+   3. Accepts `NoteEventChanceGroup` pointers, mandatory incoming. The box graph deletes the group with its last member, and a group without members fails the transaction (tested).
+   4. No owner pointer. Copying notes copies their group as a dependency, so a pasted or duplicated chord becomes a new group of its own.
 4. `NoteEventRepeatBox` (existing, filled in, shown as "Split")
-   1. `1 event`, `2 count`, `3 curve`, `4 length` stay as they are.
+   1. `1 event` now points to the note's `split` hub (`NoteEventRepeat`). `2 count`, `3 curve`, `4 length` stay as they are.
    2. `4 length`: gate of each split part (1.0 = full part, today's behaviour).
    3. `5 velocity-fade`: float32, bipolar, 0 = none. Negative fades out over the parts, positive fades in.
    4. Further split features get the next keys in this box.
-5. One aux box per kind per note, enforced with `exclusive` pointer rules on the kind's own pointer type if the shared `NoteEventFeature` hub cannot express it.
+5. One aux box per kind per note, enforced by the `exclusive` hubs (tested).
 6. Aux boxes are created on the first edit away from the default. A "Clear" action per tab deletes the box of every selected note. Boxes are not deleted automatically when a value returns to the default (dragging through the default would churn boxes).
 
 ## Seed and the play decision
@@ -51,6 +54,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
 3. No stream anymore. The decision is a pure function, computed when a note start is reached:
    1. Ungrouped note: `plays = hash(seed, noteKey, start) < chance`. `start` is the global position (ppqn) of this occurrence of the note. `noteKey` is derived from the note box uuid.
    2. Grouped note: `plays = hash(seed, groupKey, passStart) < groupChance`. `passStart` is the global position where the current pass of the region begins (the region start, or the start of the loop cycle). `groupKey` is derived from the group box uuid. Every member in the same pass computes the same value, so all play or none, even if the members start at different positions.
+   3. Play One: the group plays by the rule above, then `pick = hash(seed, groupKey, passStart, 1)` chooses one member, the members ordered by note uuid. Only the picked note plays in that pass.
 4. The same project, seed and position always give the same result, independent of block size and playback start. Changing the seed gives a new variation.
 5. This changes which notes of existing projects play (the old outcome was not reproducible anyway). Approved.
 
@@ -94,19 +98,18 @@ Chance gets groups: all members of a group play together or not at all (chords).
 4. Scale: root key selector, scale configurator, scale menu, follow project key. Moved out of the always visible row.
 5. Split: count, curve, length, velocity fade, Consolidate, Clear.
 6. Mixed values across the selection show `invalid` like today. All inputs of one edit run in one `editing.modify`.
-7. Piano roll: grouped notes get a subtle shared marker, split parts paint with their length and fade.
+7. Groups like Ableton Live 12: grouped notes show a small triangle in their upper-left corner, hovering one note highlights its whole group, the chance lane shows one marker per group (diamond for Play All, triangle for Play One) instead of one per note. Split parts paint with their length and fade.
 8. The property lanes stay (velocity, cent, chance) and write chance through `NoteEventFeatures`.
 
 ## Phases
 
 1. ~~UI tabs on the current fields: Basic, Random (chance), Scale, Split (count, curve). Nothing else changes, so this ships on its own.~~ Consolidate stays in the Edit menu.
-2. Schema: new boxes, `seed` on `TimelineBox`, deprecations, `npm run build` (boxes and Rust registry). Verify group box lifetime when its last member note is deleted.
-3. Adapters, `NoteEventFeatures`, migration, copy paths, tests in studio-adapters and studio-core. The tabs switch to the aux boxes.
-4. Engine: `HostRandom` with the base seed, bindings read aux boxes only, play decision, groups, length, fade, Rust tests.
-5. Random tab: groups, seed, piano roll marker.
-6. Split tab: length, velocity fade.
-7. Scripting API additions and declaration file.
-8. Later, separate plans: seed tracks (resolved inside `HostRandom`), devices on `HostRandom`.
+2. ~~Schema: new boxes, `random` and `split` hubs, `seed` on `TimelineBox`, `npm run build`, `all-boxes.od` regenerated. Tests: old fields, new boxes and seed survive save and load, aux boxes go with their note, one box per hub, group lifetime.~~
+3. One step, so nothing is ever half switched: deprecate the old fields, migration, adapters, `NoteEventFeatures`, copy paths, tabs on the aux boxes, engine (`HostRandom` with the base seed, bindings read aux boxes only, play decision, groups, length, fade). Tests in studio-adapters, studio-core and Rust.
+4. Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.
+5. Split tab: length, velocity fade.
+6. Scripting API additions and declaration file.
+7. Later, separate plans: seed tracks (resolved inside `HostRandom`), devices on `HostRandom`.
 
 ## Acceptance
 
