@@ -118,7 +118,10 @@ export namespace NoteEventFeatures {
             box.chance.setValue(chance)
             box.mode.setValue(mode)
         })
-        notes.forEach(note => note.group.refer(target))
+        notes.forEach(note => {
+            clearRandom(note)
+            note.group.refer(target)
+        })
         previous.forEach(deleteIfEmpty)
         return Option.wrap(target)
     }

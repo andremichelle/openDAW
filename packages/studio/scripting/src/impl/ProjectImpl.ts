@@ -2,7 +2,7 @@ import {AudioUnitBox, ProjectMetaBox} from "@opendaw/studio-boxes"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Grooves, ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
-import {asInstanceOf, clamp, float, isDefined, isNull, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, clamp, float, int, isDefined, isNull, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioUnit,
     AnyModulator,
@@ -124,6 +124,7 @@ export class ProjectImpl implements Project {
 
     declare bpm: number
     declare baseFrequency: float
+    declare seed: int
     declare duration: ppqn
     declare readonly loop: LoopArea
 
@@ -141,6 +142,7 @@ export class ProjectImpl implements Project {
         Fields.bind(this.#context, this, {
             bpm: timelineBox.bpm,
             baseFrequency: rootBox.baseFrequency,
+            seed: timelineBox.seed,
             duration: timelineBox.durationInPulses,
             loop: {enabled: timelineBox.loopArea.enabled, from: timelineBox.loopArea.from, to: timelineBox.loopArea.to}
         })

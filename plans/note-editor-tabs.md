@@ -26,7 +26,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
    1. `1 event`: pointer `NoteEventChance` to the note's `random` hub, mandatory.
    2. `2 chance`: int32, 0 to 100 (the range of the old field, so nothing is clamped), default 100.
 3. `NoteEventGroupBox` (new, renamed from `NoteEventChanceGroupBox` before any release, later group features become its fields)
-   1. `1 chance`: int32, 0 to 100. While a note is in a group, the group's chance decides and the note's own chance is kept but not used.
+   1. `1 chance`: int32, 0 to 100. Grouping deletes the members' own chance boxes and the group takes the chance of the first note. A note that leaves its group plays with chance 100. On load, a chance box of a grouped note is removed.
    2. `2 mode`: int32, 0 = Play All (all members play or none), 1 = Play One (if the group plays, exactly one member plays).
    3. Accepts `NoteEventGroup` pointers, mandatory incoming. The box graph deletes the group with its last member, and a group without members fails the transaction (tested).
    4. No owner pointer. Copying notes copies their group as a dependency, so a pasted or duplicated chord becomes a new group of its own.
@@ -113,7 +113,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
    5. A composite layer with its own Zeitgeist now decides chance like its siblings (`plans/instrument-composite.md`, manual page updated).
 4. ~~Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.~~ The shortcuts live in `NoteEditorShortcuts` (listed and rebindable), they win over the global track grouping while the note editor has focus.
 5. ~~Split tab: length, velocity fade.~~ Both apply only when a note repeats more than once, in the engine, Consolidate and the piano roll (parts shortened, their line fades).
-6. Scripting API additions and declaration file.
+6. ~~Scripting API additions and declaration file.~~ `NoteEvent.repeatLength`, `velocityFade`, `group`, `leaveGroup()`, `NoteGroup` (chance, mode, events, ungroup), `NoteEventOwner.groupEvents(events, mode)`, `Project.seed`.
 7. Later, separate plans: seed tracks (resolved inside `HostRandom`), devices on `HostRandom`.
 
 ## Acceptance
