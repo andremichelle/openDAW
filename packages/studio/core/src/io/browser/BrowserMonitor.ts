@@ -15,6 +15,10 @@ export class BrowserMonitor implements MonitorPort {
     readonly #engine: Engine
     readonly #uuid: UUID.Bytes
     readonly #gainNode: GainNode
+    readonly #splitter: ChannelSplitterNode
+    readonly #leftGain: GainNode
+    readonly #rightGain: GainNode
+    readonly #merger: ChannelMergerNode
     readonly #panNode: StereoPannerNode
 
     #mode: MonitoringMode = "off"
@@ -32,9 +36,25 @@ export class BrowserMonitor implements MonitorPort {
         this.#uuid = uuid
         this.#gainNode = context.createGain()
         this.#gainNode.gain.value = dbToGain(this.#volumeDb)
+        this.#gainNode.channelCount = 2
+        this.#gainNode.channelCountMode = "explicit"
+        this.#gainNode.channelInterpretation = "speakers"
+        this.#splitter = context.createChannelSplitter(2)
+        this.#leftGain = context.createGain()
+        this.#rightGain = context.createGain()
+        this.#merger = context.createChannelMerger(2)
+        // stays at pan 0 (passes two channels through), so it remains the chain's public output
         this.#panNode = context.createStereoPanner()
-        this.#panNode.pan.value = this.#pan
-        this.#gainNode.connect(this.#panNode)
+        this.#panNode.pan.value = 0.0
+        this.#panNode.channelCount = 2
+        this.#panNode.channelCountMode = "explicit"
+        this.#gainNode.connect(this.#splitter)
+        this.#splitter.connect(this.#leftGain, 0)
+        this.#splitter.connect(this.#rightGain, 1)
+        this.#leftGain.connect(this.#merger, 0, 0)
+        this.#rightGain.connect(this.#merger, 0, 1)
+        this.#merger.connect(this.#panNode)
+        this.#applyBalance()
     }
 
     get gainNode(): GainNode {return this.#gainNode}
@@ -55,7 +75,7 @@ export class BrowserMonitor implements MonitorPort {
     get pan(): number {return this.#pan}
     set pan(value: number) {
         this.#pan = value
-        this.#panNode.pan.value = value
+        this.#applyBalance()
     }
     get muted(): boolean {return this.#muted}
     set muted(value: boolean) {
@@ -117,19 +137,29 @@ export class BrowserMonitor implements MonitorPort {
             this.#audioElement.srcObject = null
         }
         this.#gainNode.disconnect()
+        this.#splitter.disconnect()
+        this.#leftGain.disconnect()
+        this.#rightGain.disconnect()
+        this.#merger.disconnect()
         this.#panNode.disconnect()
+    }
+
+    // the channel strip's balance law (channel_strip.rs)
+    #applyBalance(): void {
+        this.#leftGain.gain.value = 1.0 - Math.max(this.#pan, 0.0)
+        this.#rightGain.gain.value = 1.0 + Math.min(this.#pan, 0.0)
     }
 
     #destination(): AudioNode {return this.#streamDestination ?? this.#context.destination}
 
     #connect(): void {
         if (!isDefined(this.#chain)) {return}
-        const {sourceNode, monitorMixdown, channelCount} = this.#chain
+        const {monitorMixdown, channelCount} = this.#chain
         switch (this.#mode) {
             case "off":
                 break
             case "direct":
-                sourceNode.connect(this.#gainNode)
+                monitorMixdown.connect(this.#gainNode)
                 this.#panNode.connect(this.#destination())
                 break
             case "effects":
@@ -145,7 +175,7 @@ export class BrowserMonitor implements MonitorPort {
             case "off":
                 break
             case "direct":
-                this.#chain.sourceNode.disconnect(this.#gainNode)
+                this.#chain.monitorMixdown.disconnect(this.#gainNode)
                 this.#panNode.disconnect(this.#destination())
                 break
             case "effects":

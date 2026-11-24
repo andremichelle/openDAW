@@ -61,7 +61,7 @@ import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine, RecordingStart, RecordingStop} from "./Engine"
 import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, SampleLoadEvent} from "./EngineVariant"
-import {MonitoringRouter} from "./MonitoringRouter"
+import {MAX_MONITORING_CHANNELS, MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
 import {HRClockWorker} from "./HRClockWorker"
@@ -145,7 +145,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         super(context, variant.processorName, {
                 numberOfInputs: 1,
                 numberOfOutputs: 2,
-                outputChannelCount: [numberOfChannels, 8],
+                outputChannelCount: [numberOfChannels, MAX_MONITORING_CHANNELS],
                 processorOptions: {
                     syncStreamBuffer: reader.buffer,
                     controlFlagsBuffer: controlFlagsSAB,

@@ -44,6 +44,11 @@ export namespace RuntimeNotification {
         install(notifier: Notifier): void
     }
 
+    // without an installed notifier nobody is asked: approve answers yes, retry offers try once
+    export interface Status {
+        get installed(): boolean
+    }
+
     export interface Notifier {
         info(request: InfoRequest): Promise<void>
         approve(request: ApproveRequest): Promise<boolean>
@@ -52,9 +57,10 @@ export namespace RuntimeNotification {
     }
 }
 
-export const RuntimeNotifier: RuntimeNotification.Notifier & RuntimeNotification.Installer = (() => {
+export const RuntimeNotifier: RuntimeNotification.Notifier & RuntimeNotification.Installer & RuntimeNotification.Status = (() => {
     let notifierOption: Option<RuntimeNotification.Notifier> = Option.None
     return ({
+        get installed(): boolean {return notifierOption.nonEmpty()},
         info: (request: RuntimeNotification.InfoRequest): Promise<void> => notifierOption.match({
             none: () => Promise.resolve(),
             some: notifier => notifier.info(request)

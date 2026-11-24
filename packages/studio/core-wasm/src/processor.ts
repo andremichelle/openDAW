@@ -58,6 +58,7 @@ import {
 import {createEngineMemory} from "./engine-modules"
 
 const GONIO_PAIRS = 512
+const MonitorChannels = 16 // matches the engine's MONITOR_CHANNELS and MonitoringRouter
 
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
@@ -437,12 +438,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         if (monitoring.length > 0) {
             const input = inputs[0] ?? []
             const inputPtr = engine.monitor_input_ptr()
-            const staging = new Float32Array(this.#memory.buffer, inputPtr, 8 * RenderQuantum)
+            const staging = new Float32Array(this.#memory.buffer, inputPtr, MonitorChannels * RenderQuantum)
             staging.fill(0.0)
             for (const {channels} of monitoring) {
                 for (const channel of channels) {
                     const source = input[channel]
-                    if (source !== undefined && channel < 8) {staging.set(source, channel * RenderQuantum)}
+                    if (source !== undefined && channel < MonitorChannels) {staging.set(source, channel * RenderQuantum)}
                 }
             }
         }
@@ -454,11 +455,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         takeNotices(engine, this.#memory).forEach(notice => this.#engineToClient.notice(notice))
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
-            const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)
+            const staged = new Float32Array(this.#memory.buffer, outputPtr, MonitorChannels * RenderQuantum)
             for (const {channels} of monitoring) {
                 for (const channel of channels) {
                     const target = monitorOutput[channel]
-                    if (target !== undefined && channel < 8) {target.set(staged.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))}
+                    if (target !== undefined && channel < MonitorChannels) {target.set(staged.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))}
                 }
             }
         }

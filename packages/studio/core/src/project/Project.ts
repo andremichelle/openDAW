@@ -2,6 +2,8 @@ import {AudioUnitLayoutState} from "./AudioUnitLayoutState"
 import {
     asInstanceOf,
     Editing,
+    EmptyExec,
+    Errors,
     Func,
     isAbsent,
     isDefined,
@@ -385,7 +387,12 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     startRecording(countIn: boolean = true) {
         this.engine.assertWorklet()
         if (this.recordingSession.isRecording) {return}
-        Recording.start(this, countIn).finally()
+        Recording.start(this, countIn).catch(reason => {
+            if (Errors.isAbort(reason)) {return}
+            if (!isInstanceOf(reason, Errors.Warning)) {throw reason}
+            console.warn(reason.message)
+            RuntimeNotifier.info({headline: "Warning", message: reason.message}).then(EmptyExec)
+        })
     }
 
     stopRecording(): void {

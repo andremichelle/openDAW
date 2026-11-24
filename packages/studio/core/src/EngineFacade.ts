@@ -10,6 +10,7 @@ import {
     Option,
     Procedure,
     panic,
+    SortedSet,
     Subscription,
     Terminable,
     Terminator,
@@ -34,6 +35,7 @@ import {
 import {AudioContexts} from "./AudioContexts"
 import {Engine, RecordingStart, RecordingStop, TransportLock} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
+import {MonitoringSource} from "./MonitoringRouter"
 import {Project} from "./project"
 import {Preferences} from "@opendaw/lib-fusion"
 
@@ -58,10 +60,13 @@ export class EngineFacade implements Engine {
     readonly #transportLocked: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
+    readonly #monitoringSources: SortedSet<UUID.Bytes, MonitoringSource>
+
     #worklet: Option<EngineWorklet> = Option.None
 
     constructor() {
         this.#preferencesFacade = Preferences.facade("engine-preferences", EngineSettingsSchema)
+        this.#monitoringSources = UUID.newSet<MonitoringSource>(source => source.uuid)
     }
 
     setWorklet(worklet: EngineWorklet) {
@@ -86,6 +91,8 @@ export class EngineFacade implements Engine {
             worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue())),
             worklet.subscribeTransportAnchors(anchors => this.#transportAnchors.notify(anchors))
         )
+        this.#monitoringSources.forEach(({uuid, sourceNode, numChannels, destinationNode}) =>
+            worklet.registerMonitoringSource(uuid, sourceNode, numChannels, destinationNode))
         this.#workletChanged.notify()
     }
 
@@ -237,10 +244,13 @@ export class EngineFacade implements Engine {
     subscribeWclapStatus(uuid: string, listener: Procedure<WclapStatus>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeWclapStatus").subscribeWclapStatus(uuid, listener)
     }
+    // kept to register them again with a new worklet after a restart
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void {
+        this.#monitoringSources.add({uuid, sourceNode: node, numChannels, destinationNode}, true)
         this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels, destinationNode))
     }
     unregisterMonitoringSource(uuid: UUID.Bytes): void {
+        this.#monitoringSources.removeByKeyIfExist(uuid)
         this.#worklet.ifSome(worklet => worklet.unregisterMonitoringSource(uuid))
     }
 

@@ -1,4 +1,18 @@
-import {Exec, Func, MutableObservableOption, Observer, Option, Provider, Subscription, Terminable, VitalSigns} from "@opendaw/lib-std"
+import {
+    EmptyExec,
+    Errors,
+    Exec,
+    Func,
+    isInstanceOf,
+    MutableObservableOption,
+    Observer,
+    Option,
+    Provider,
+    RuntimeNotifier,
+    Subscription,
+    Terminable,
+    VitalSigns
+} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
 import {Capture} from "./Capture"
@@ -37,7 +51,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             this.#mapping = left === 0 && right === 0 ? Option.None : Option.wrap({left, right})
             this.#input.rechannel()
             if (this.armed.getValue()) {
-                await this.#streamGenerator()
+                await this.#openArmed()
             }
         }
         this.ownAll(
@@ -55,13 +69,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             }),
             captureAudioBox.deviceId.catchupAndSubscribe(async () => {
                 if (this.armed.getValue()) {
-                    await this.#streamGenerator()
+                    await this.#openArmed()
                 }
             }),
             this.armed.catchupAndSubscribe(async owner => {
                 const armed = owner.getValue()
                 if (armed) {
-                    await this.#streamGenerator()
+                    await this.#openArmed()
                 } else {
                     this.#input.close()
                 }
@@ -120,7 +134,15 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     setMonitorOutputDevice(deviceId: Option<string>): Promise<void> {return this.#input.monitor.setOutputDevice(deviceId)}
 
-    prepareRecording(): Promise<void> {return this.#input.prepareRecording(() => this.#streamGenerator())}
+    // the recording start reports a refused input, an abort means it was reported already
+    prepareRecording(): Promise<void> {
+        return this.#input.prepareRecording(() => this.#streamGenerator().then(() => {
+            if (!this.armed.getValue()) {throw Errors.AbortError}
+        }, reason => {
+            this.#disarmOnRefusal(reason)
+            throw reason
+        }))
+    }
 
     // the measured round trip replaces both reported latencies, unless this track overrides its input latency
     get roundTrip(): Option<RoundTrip.Entry> {return this.#input.roundTrip}
@@ -133,7 +155,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             return Promise.reject("Stop the transport to measure the latency.")
         }
         this.armed.setValue(true)
-        await this.#streamGenerator()
+        await this.#openArmed()
+        // a refused input was reported and disarmed already
+        if (!this.armed.getValue()) {return Promise.reject(Errors.AbortError)}
         return this.#input.measureRoundTrip(options)
     }
 
@@ -154,6 +178,21 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                     this.captureBox.inputLatency.getValue() <= InputLatency.Inherit)
             })
         })
+    }
+
+    // a refused input (Errors.Warning) disarms and is reported, anything else is rethrown
+    #openArmed(): Promise<void> {
+        return this.#streamGenerator().catch(reason => {
+            if (!isInstanceOf(reason, Errors.Warning)) {throw reason}
+            if (!this.armed.getValue()) {return}
+            console.warn(reason.message)
+            this.#disarmOnRefusal(reason)
+            RuntimeNotifier.info({headline: "Warning", message: reason.message}).then(EmptyExec)
+        })
+    }
+
+    #disarmOnRefusal(reason: unknown): void {
+        if (isInstanceOf(reason, Errors.Warning)) {this.armed.setValue(false)}
     }
 
     #request(): Option<AudioInputRequest> {

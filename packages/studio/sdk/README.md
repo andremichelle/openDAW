@@ -94,9 +94,31 @@ const subscription = capture.subscribeRoundTrip(() => updateLabel(capture.roundT
 5. One measurement runs at a time. A second call on the same capture gets the running measurement, a call on
    another capture rejects until it is done.
 6. A silent input, such as a disabled track, gives "no-signal" and stores nothing.
+7. A refused input (microphone permission denied) disarms the capture, reports it through the `RuntimeNotifier` and
+   rejects with `Errors.AbortError`.
 
 The end-user explanation is the manual page
 [Latency Calibration](https://opendaw.studio/manuals/latency-calibration).
+
+## Notifications
+
+The SDK asks the user and reports through `RuntimeNotifier` from `@opendaw/lib-std`: a recording that could not be
+stored, a refused microphone, a failed cloud upload. Install your own once at startup to show them:
+
+```ts
+import {RuntimeNotifier} from "@opendaw/lib-std"
+
+RuntimeNotifier.install({
+    info: ({headline, message}) => showMessage(headline, message), // resolves when the user closed it
+    approve: ({headline, message, approveText, cancelText}) => askUser(headline, message), // resolves true or false
+    progress: ({headline}) => showProgress(headline), // returns {message, terminate}
+    notify: ({message}) => showToast(message)
+})
+```
+
+Without one nobody is asked: `approve` answers yes, `info` and `notify` do nothing, and an offer to retry (download
+an unsaved recording, retry an upload) makes one attempt and then gives up. `RuntimeNotifier.installed` tells
+whether a notifier is installed.
 
 ## Dual-Licensing Model
 

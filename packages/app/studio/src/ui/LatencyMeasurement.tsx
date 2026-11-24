@@ -1,4 +1,4 @@
-import {EmptyExec} from "@opendaw/lib-std"
+import {EmptyExec, Errors} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {CaptureAudio, RoundTrip} from "@opendaw/studio-core"
@@ -42,6 +42,7 @@ export namespace LatencyMeasurement {
         }).catch(EmptyExec)
         const measured = await Promises.tryCatch(capture.measureRoundTrip({store: false}))
         listening.abort()
+        if (measured.status === "rejected" && Errors.isAbort(measured.error)) {return}
         if (measured.status === "resolved") {capture.storeRoundTrip(measured.value)}
         await Dialogs.info({
             headline: "Measure Latency",

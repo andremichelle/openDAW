@@ -1,5 +1,5 @@
-import {Editing, EmptyExec, Errors, Exec, int, Maybe, Observer, Option, Subscription, SyncProvider, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
-import {Promises, Runtime} from "@opendaw/lib-runtime"
+import {Editing, EmptyExec, Errors, Exec, int, isAbsent, isInstanceOf, Maybe, Observer, Option, Subscription, SyncProvider, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Runtime} from "@opendaw/lib-runtime"
 import {ppqn} from "@opendaw/lib-dsp"
 import {TransportAnchor} from "@opendaw/studio-adapters"
 import {Project} from "../project"
@@ -106,13 +106,16 @@ export class RecordingSession {
         const take = new TakeScope(project.editing, layer, () => layer.ifSome(layer => RoomTake.settle(project, layer)))
         this.#take = Option.wrap(take)
         if (captures.length > 0) {
-            const {status, error} =
-                await Promises.tryCatch(Promise.all(captures.map(capture => capture.prepareRecording())))
-            if (status === "rejected") {
+            const settled = await Promise.allSettled(captures.map(capture => capture.prepareRecording()))
+            const failures = settled.flatMap(result => result.status === "rejected" ? [result.reason] : [])
+            if (failures.length > 0) {
                 layer.ifSome(layer => layer.terminate())
                 this.#take = Option.None
                 this.#setRecording(false)
-                return Errors.warn(String(error))
+                // an abort was reported already or cancelled by the user, any other failure is shown
+                const error = failures.find(reason => !Errors.isAbort(reason))
+                if (isAbsent(error)) {return Promise.reject(failures[0])}
+                return Errors.warn(isInstanceOf(error, Error) ? error.message : String(error))
             }
             captures.forEach(capture => capture.clearRecordedRegions())
             terminator.ownAll(...captures.map(capture => capture.startRecording()))

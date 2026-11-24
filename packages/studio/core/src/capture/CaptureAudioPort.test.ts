@@ -79,7 +79,7 @@ const setup = async () => {
     // the project's own capture devices build a browser input for the box as well
     const node = () => ({connect: () => {}, disconnect: () => {}, gain: {value: 0}, pan: {value: 0}})
     const env = {
-        audioContext: {createGain: node, createStereoPanner: node, sampleRate: 48_000},
+        audioContext: {createGain: node, createStereoPanner: node, createChannelSplitter: node, createChannelMerger: node, sampleRate: 48_000},
         sampleManager: {record: () => {}, remove: () => {}}
     } as unknown as ProjectEnv
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})

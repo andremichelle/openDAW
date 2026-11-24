@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
-import {int, isDefined, Option, UUID} from "@opendaw/lib-std"
+import {Errors, int, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "../project/ProjectEnv"
@@ -175,6 +175,9 @@ const setup = async ({
     }).unwrap()
     const manager = {project} as unknown as CaptureDevices
     const capture = new CaptureAudio(manager, primaryAudioUnitBox, captureBox)
+    // the monitors build their own balance splitter and merger, only the input chain's count below
+    createdSplitters.length = 0
+    createdMergers.length = 0
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
     const getUserMediaCalls = (): int => mediaDevices.calls
@@ -455,6 +458,60 @@ describe("CaptureAudio", () => {
             expect(getUserMediaCalls()).toBe(1)
             expect(createdSourceNodes.length).toBe(0)
             expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        // #579: a refused input must not leave the capture armed without a stream
+        it("disarms and reports once when the input is refused", async () => {
+            const {capture, getUserMediaCalls, rejectStreams, releaseStreams} = await setup({holdStreams: true})
+            const info = vi.spyOn(RuntimeNotifier, "info").mockImplementation(async () => {})
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            capture.monitoringMode = "direct"
+            await flushMicrotasks()
+            rejectStreams()
+            await flushMicrotasks()
+            rejectStreams()
+            await flushMicrotasks()
+            expect(capture.armed.getValue()).toBe(false)
+            expect(capture.stream.isEmpty()).toBe(true)
+            expect(capture.monitoringMode).toBe("direct")
+            expect(info).toHaveBeenCalledTimes(1)
+            const calls = getUserMediaCalls()
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(calls + 1)
+            expect(capture.stream.nonEmpty()).toBe(true)
+            info.mockRestore()
+            warn.mockRestore()
+        })
+
+        it("stays silent when the input is refused after the capture was disarmed", async () => {
+            const {capture, rejectStreams} = await setup({holdStreams: true})
+            const info = vi.spyOn(RuntimeNotifier, "info").mockImplementation(async () => {})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            capture.armed.setValue(false)
+            rejectStreams()
+            await flushMicrotasks()
+            expect(info).not.toHaveBeenCalled()
+            info.mockRestore()
+        })
+
+        it("rejects a latency measurement with an abort when the input is refused", async () => {
+            const {capture, rejectStreams} = await setup({holdStreams: true})
+            const info = vi.spyOn(RuntimeNotifier, "info").mockImplementation(async () => {})
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            const measured = capture.measureRoundTrip()
+            await flushMicrotasks()
+            rejectStreams()
+            await flushMicrotasks()
+            rejectStreams()
+            await expect(measured).rejects.toBe(Errors.AbortError)
+            expect(capture.armed.getValue()).toBe(false)
+            expect(info).toHaveBeenCalledTimes(1)
+            info.mockRestore()
+            warn.mockRestore()
         })
 
         it("keeps the stream of a request that was pending across a disarm and re-arm", async () => {

@@ -2,16 +2,23 @@
 
 All 422 GitHub issues (pull requests excluded), fetched 2026-11-09. Open issues have one file each with summary, analysis and a possible solution. Closed issues are listed below only.
 
-## Open (46)
+## Open (53)
 
-Complexity: small 9, medium 17, large 17, unknown 3
+Complexity: small 15, medium 18, large 17, unknown 3
 
-Status: probably-fixed 1, ready 17, partially-done 11, discussion 10, needs-info 5, blocked 2
+Status: fixed 7, probably-fixed 1, ready 17, partially-done 11, discussion 10, needs-info 5, blocked 2
 
-Sorted by status (probably fixed and ready first), then complexity.
+Sorted by status (fixed, probably fixed and ready first), then complexity.
 
 | # | Title | Type | Area | Status | Complexity | Summary |
 |---|---|---|---|---|---|---|
+| [573](0573.md) | Spielwerk with arpeggiator continues on stop | bug | scripting | fixed | small | An Arpeggio after a Spielwerk script went on playing the script's notes after the transport stopped. |
+| [574](0574.md) | Without a RuntimeNotifier, the WAV download offer for an unstored recording requests the save picker again after every refused save | bug | sdk | fixed | small | Without an installed RuntimeNotifier, approve answers yes, so the download offer and the upload retries loop forever. |
+| [575](0575.md) | "With Effects" monitoring of a one-channel source returns the strip's left channel on both sides | bug | monitoring | fixed | medium | A mono source monitored with effects got only the strip's left output back, so panned right it was silent. |
+| [576](0576.md) | After the engine worklet is replaced, a source monitored "With Effects" is silent until it is registered again | bug | monitoring | fixed | small | After the engine restarts itself, effects monitoring stays silent because the new worklet has no monitoring sources. |
+| [577](0577.md) | A capture's monitor pan follows a different law from the channel strip's: hard left or right is +6 dB for a mono input | bug | monitoring | fixed | small | The monitor pan used a StereoPannerNode, +6 dB at hard pan for a mono input in Chrome, a different law per browser. |
+| [578](0578.md) | With requestChannels 1 and a two-channel stream, direct monitoring is not mixed down | bug | monitoring | fixed | small | Direct monitoring tapped the raw input, not the mono mixdown that is recorded and effects-monitored. |
+| [579](0579.md) | Arming a capture whose input is refused leaves it armed with no stream | bug | recording | fixed | small | A refused microphone left the capture armed without a stream, the only signal was an unhandled rejection. |
 | [325](0325.md) | Shared transport / synced listening for Live Rooms | feature | live room | probably-fixed | small | Live room participants want to listen to the project together, roughly in sync, by sharing transport play, stop and position. |
 | [84](0084.md) | Store project's editing progress in IndexedDB | feature | project storage | ready | small | Keep a backup of unsaved project edits when the tab is closed anyway, and offer to restore it on the next start. |
 | [464](0464.md) | Need support for sf2 files | bug | soundfont | ready | small | Importing some .sf2 files fails with "Missing required 'INAM' sub-chunk" because the file has an empty name chunk. |

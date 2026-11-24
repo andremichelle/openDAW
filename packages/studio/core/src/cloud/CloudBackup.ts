@@ -53,6 +53,7 @@ export namespace CloudBackup {
                 const {status, error} = await Promises.tryCatch(CloudBackup.backupWithHandler(handler, service))
                 if (status === "resolved") {break}
                 if (Errors.isAbort(error)) {return}
+                if (!RuntimeNotifier.installed) {return Promise.reject(error)}
                 console.warn(error)
                 const retry = await RuntimeNotifier.approve({
                     headline: "Cloud sync failed",

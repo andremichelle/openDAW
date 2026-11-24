@@ -13,7 +13,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use engine_env::RENDER_QUANTUM;
 
-pub const MONITOR_CHANNELS: usize = 8; // TS MonitoringRouter.MAX_MONITORING_CHANNELS
+pub const MONITOR_CHANNELS: usize = 16; // TS MonitoringRouter.MAX_MONITORING_CHANNELS
 
 /// One monitoring map entry (TS `MonitoringMapEntry`): the unit's uuid and its staged input channel
 /// indices (`right` = -1 for a mono source, which then feeds both target channels).

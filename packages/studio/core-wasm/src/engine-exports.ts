@@ -89,7 +89,7 @@ export type EngineExports = {
     suspend_automation: () => void
     // EFFECTS monitoring (TS EngineCommands.updateMonitoringMap): `set_monitoring_map` reads `count`
     // records of [unit uuid 16][left ch i32 LE][right ch i32 LE] (right -1 = mono) from the input scratch;
-    // the worklet stages live input channels at `monitor_input_ptr` (8 x 128 f32, channel-planar) BEFORE
+    // the worklet stages live input channels at `monitor_input_ptr` (16 x 128 f32, channel-planar) BEFORE
     // each render and forwards each mapped unit's strip output from `monitor_output_ptr` on its 2nd output.
     set_monitoring_map: (count: number) => void
     monitor_input_ptr: () => number

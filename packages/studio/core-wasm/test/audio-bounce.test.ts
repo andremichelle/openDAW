@@ -49,7 +49,9 @@ const createEnv = (): ProjectEnv => ({
     audioContext: {
         currentTime: 0, sampleRate: SampleRate,
         createGain: () => ({connect: () => {}, disconnect: () => {}, gain: {value: 1}}),
-        createStereoPanner: () => ({connect: () => {}, disconnect: () => {}, pan: {value: 0}})
+        createStereoPanner: () => ({connect: () => {}, disconnect: () => {}, pan: {value: 0}}),
+        createChannelSplitter: () => ({connect: () => {}, disconnect: () => {}}),
+        createChannelMerger: () => ({connect: () => {}, disconnect: () => {}})
     },
     audioWorklets: undefined,
     sampleManager: {

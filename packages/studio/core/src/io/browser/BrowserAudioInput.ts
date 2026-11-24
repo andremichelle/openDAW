@@ -168,7 +168,7 @@ export class BrowserAudioInput implements AudioInputPort, AudioInputNodes {
         // a prepared worklet that startRecording never consumed stays connected and buffering forever
         this.#discardPreparedWorklet()
         if (!await BrowserRecordingLatency.approveMissing(audioContext)) {
-            return Promise.reject("Recording cancelled")
+            return Promise.reject(Errors.AbortError)
         }
         await AudioContexts.resume(audioContext)
         if (audioContext.state !== "running") {

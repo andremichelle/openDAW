@@ -17,6 +17,10 @@ export namespace UnstoredRecording {
                 types: [{description: "Wav File", accept: {"audio/wav": [".wav"]}}]
             }))
             if (saved.status === "resolved") {return true}
+            if (!RuntimeNotifier.installed) {
+                console.warn(saved.error)
+                return false
+            }
         }
         return false
     }

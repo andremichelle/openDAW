@@ -35,6 +35,9 @@ const createFakeWorklet = () => {
         scheduleClipPlay: () => calls.push("clipPlay"),
         scheduleClipStop: () => calls.push("clipStop"),
         panic: () => calls.push("panic"),
+        registerMonitoringSource: (uuid: UUID.Bytes, _node: AudioNode, numChannels: 1 | 2) =>
+            calls.push(`monitor:${UUID.toString(uuid)}:${numChannels}`),
+        unregisterMonitoringSource: (uuid: UUID.Bytes) => calls.push(`unmonitor:${UUID.toString(uuid)}`),
         terminate: () => {}
     }
     return worklet
@@ -133,5 +136,24 @@ describe("EngineFacade transport lock", () => {
         first.terminate()
         expect(facade.transportLocked.getValue()).toBe(true)
         second.terminate()
+    })
+})
+
+// #576: a restarted engine starts with an empty monitoring router
+describe("EngineFacade monitoring sources", () => {
+    it("registers the monitored sources again with a new worklet", () => {
+        const {facade, worklet} = createFacade()
+        const kept = UUID.generate()
+        const dropped = UUID.generate()
+        const node = {} as AudioNode
+        facade.registerMonitoringSource(kept, node, 1, node)
+        facade.registerMonitoringSource(dropped, node, 2, node)
+        facade.unregisterMonitoringSource(dropped)
+        expect(worklet.calls).toEqual([`monitor:${UUID.toString(kept)}:1`, `monitor:${UUID.toString(dropped)}:2`,
+            `unmonitor:${UUID.toString(dropped)}`])
+        facade.releaseWorklet()
+        const restarted = createFakeWorklet()
+        facade.setWorklet(restarted as unknown as EngineWorklet)
+        expect(restarted.calls).toEqual([`monitor:${UUID.toString(kept)}:1`])
     })
 })

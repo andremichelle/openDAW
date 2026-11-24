@@ -94,7 +94,7 @@ export namespace Promises {
             try {
                 return await factory()
             } catch (reason) {
-                if (await RuntimeNotifier.approve(approve(reason))) {
+                if (RuntimeNotifier.installed && await RuntimeNotifier.approve(approve(reason))) {
                     return attempt()
                 }
                 throw reason
