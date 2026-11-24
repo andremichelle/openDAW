@@ -1,4 +1,4 @@
-import {ContextMenu, MenuItem, MIDILearning, MIDIMappableField} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, MIDIKeyMode, MIDILearning, MIDIMappableField} from "@opendaw/studio-core"
 import {
     AudioUnitTracks,
     AutomatableParameterFieldAdapter,
@@ -91,8 +91,15 @@ export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
 
 const controlItems = (midiDevices: MIDILearning, field: MIDIMappableField): ReadonlyArray<MenuItem> => {
     if (midiDevices.hasKeyConnection(field.address)) {
-        return [MenuItem.default({label: "Forget Key"})
-            .setTriggerProcedure(() => midiDevices.forgetKeyConnection(field.address))]
+        const modeItem = (label: string, mode: MIDIKeyMode) =>
+            MenuItem.default({label, checked: midiDevices.keyMode(field.address).contains(mode)})
+                .setTriggerProcedure(() => midiDevices.setKeyMode(field.address, mode))
+        return [
+            MenuItem.default({label: "Forget Key"})
+                .setTriggerProcedure(() => midiDevices.forgetKeyConnection(field.address)),
+            MenuItem.default({label: "Key Mode"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                modeItem("Toggle", MIDIKeyMode.Toggle), modeItem("Momentary", MIDIKeyMode.Momentary)))
+        ]
     }
     if (midiDevices.hasMidiConnection(field.address)) {
         return [MenuItem.default({label: "Forget Midi"})

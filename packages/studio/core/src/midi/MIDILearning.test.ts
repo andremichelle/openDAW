@@ -9,6 +9,7 @@ import {PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {MIDIEncoding} from "./MIDIEncoding"
 import {MIDITakeover} from "./MIDITakeover"
+import {MIDIKeyMode} from "./MIDIKeyMode"
 
 // jsdom lacks AudioWorkletNode, which EngineWorklet extends at module-eval time.
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
@@ -347,6 +348,10 @@ describe("MIDILearning keys", () => {
     const panningUnitValue = (project: Project): number =>
         project.parameterFieldAdapters.get(project.primaryAudioUnitBox.panning.address).getUnitValue()
 
+    const keyBox = (project: Project): MIDIControllerBox =>
+        asInstanceOf(project.boxGraph.boxes().find(box =>
+            box instanceof MIDIControllerBox && box.keyCode.getValue() === "KeyQ"), MIDIControllerBox)
+
     const createKeyProject = async (): Promise<Project> => {
         const project = await createLearnedProject()
         project.midiLearning.bindKey(panningOf(project), "KeyQ")
@@ -360,10 +365,69 @@ describe("MIDILearning keys", () => {
         expect(panningUnitValue(project)).toBeCloseTo(1.0, 6)
     })
 
-    it("sends 0 when the key is released", async () => {
+    it("toggles by default", async () => {
         const project = await createKeyProject()
+        expect(project.midiLearning.keyMode(project.primaryAudioUnitBox.panning.address))
+            .toEqual(Option.wrap(MIDIKeyMode.Toggle))
+    })
+
+    it("ignores the release in toggle mode", async () => {
+        const project = await createKeyProject()
+        project.midiLearning.receiveKey("KeyQ", true)
+        expect(project.midiLearning.receiveKey("KeyQ", false)).toBe(true)
+        expect(panningUnitValue(project)).toBeCloseTo(1.0, 6)
+    })
+
+    it("switches to min when the parameter is closer to max in toggle mode", async () => {
+        const project = await createKeyProject()
+        project.editing.modify(() => project.primaryAudioUnitBox.panning.setValue(0.8))
+        project.midiLearning.receiveKey("KeyQ", true)
+        expect(panningUnitValue(project)).toBeCloseTo(0.0, 6)
+    })
+
+    it("toggles between the mapped min and max", async () => {
+        const project = await createKeyProject()
+        const box = keyBox(project)
+        project.editing.modify(() => {
+            box.min.setValue(0.2)
+            box.max.setValue(0.4)
+        })
+        project.midiLearning.receiveKey("KeyQ", true)
+        expect(panningUnitValue(project)).toBeCloseTo(0.2, 6)
+    })
+
+    it("sends 0 when the key is released in momentary mode", async () => {
+        const project = await createKeyProject()
+        project.midiLearning.setKeyMode(project.primaryAudioUnitBox.panning.address, MIDIKeyMode.Momentary)
         expect(project.midiLearning.receiveKey("KeyQ", false)).toBe(true)
         expect(panningUnitValue(project)).toBeCloseTo(0.0, 6)
+    })
+
+    it("changes the key mode in one undo step and keeps it after reload", async () => {
+        const project = await createKeyProject()
+        const {address} = project.primaryAudioUnitBox.panning
+        project.midiLearning.setKeyMode(address, MIDIKeyMode.Momentary)
+        const reloaded = await reload(project)
+        expect(reloaded.midiLearning.keyMode(reloaded.primaryAudioUnitBox.panning.address))
+            .toEqual(Option.wrap(MIDIKeyMode.Momentary))
+        project.editing.undo()
+        expect(project.midiLearning.keyMode(address)).toEqual(Option.wrap(MIDIKeyMode.Toggle))
+    })
+
+    it("reports no key mode for a MIDI mapping", async () => {
+        const project = await createKeyProject()
+        expect(project.midiLearning.keyMode(project.primaryAudioUnitBox.volume.address).isEmpty()).toBe(true)
+    })
+
+    it("resets takeover and encoding when a MIDI mapping becomes a key mapping", async () => {
+        const project = await createLearnedProject()
+        project.editing.modify(() => {
+            controllerBox(project).takeover.setValue(MIDITakeover.Pickup)
+            controllerBox(project).encoding.setValue(MIDIEncoding.TwosComplement)
+        })
+        project.midiLearning.bindKey(project.primaryAudioUnitBox.volume as unknown as MappableField, "KeyE")
+        expect(controllerBox(project).takeover.getValue()).toBe(MIDITakeover.Jump)
+        expect(controllerBox(project).encoding.getValue()).toBe(MIDIEncoding.Absolute)
     })
 
     it("ignores another key", async () => {
@@ -385,8 +449,7 @@ describe("MIDILearning keys", () => {
 
     it("does not trigger a key mapping with a MIDI CC", async () => {
         const project = await createKeyProject()
-        const box = asInstanceOf(project.boxGraph.boxes().find(box =>
-            box instanceof MIDIControllerBox && box.keyCode.getValue() === "KeyQ"), MIDIControllerBox)
+        const box = keyBox(project)
         const before = panningUnitValue(project)
         project.midiLearning.receive(MidiData.control(0, box.controlId.getValue(), 127), "")
         expect(panningUnitValue(project)).toBe(before)

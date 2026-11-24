@@ -1,6 +1,7 @@
 export * from "./MidiDevices"
 export * from "./MIDILearning"
 export * from "./MIDIEncoding"
+export * from "./MIDIKeyMode"
 export * from "./MIDIMappingPreset"
 export * from "./MIDIMappingState"
 export * from "./MIDIMappingTransform"
